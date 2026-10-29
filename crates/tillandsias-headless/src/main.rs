@@ -82,6 +82,8 @@ mod image_build_scope;
 mod imagegen_models;
 mod imagegen_placement;
 mod imagegen_tiers;
+#[cfg(feature = "host-services")]
+mod imagegen_tool;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -9752,6 +9754,21 @@ fn build_opencode_forge_args(
             "--env".into(),
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
+        // 1874-kkrc: image.generate's shared scratch dir, empty per forge.
+        #[cfg(feature = "host-services")]
+        if let Some(dir) = imagegen_tool::forge_scratch_mount(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=bind,source={},target={}",
+                    dir.display(),
+                    imagegen_tool::FORGE_SCRATCH
+                ),
+            ]);
+        }
     }
     // Order 1859-v5iv: the tray run that launched this forge, so a tray start
     // after that run died reaps it (dead_run.rs).
@@ -19655,6 +19672,18 @@ fn build_forge_agent_run_args_with_vault(
                 "TILLANDSIAS_CONTROL_SOCKET",
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
+        // 1874-kkrc: image.generate's shared scratch dir, empty per forge.
+        #[cfg(feature = "host-services")]
+        if let Some(dir) = imagegen_tool::forge_scratch_mount(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            spec = spec.bind_mount(
+                dir.display().to_string(),
+                imagegen_tool::FORGE_SCRATCH,
+                false,
+            );
+        }
     }
     // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
     if let Some(run) = dead_run::run_label_value() {
