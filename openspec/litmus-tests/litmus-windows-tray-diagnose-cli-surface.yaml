@@ -114,8 +114,11 @@ critical_path:
   # self-check" and moved the os_version / wsl_version / build_commit lines to
   # the install log via Log. The check itself is intact, so the pin now names
   # the -eq 1 branch directly plus the new wording, keeping it narrow.
+  #
+  # 1247-ert9 (bfe95af5b) moved the exit code out of the Die line into the Log
+  # line above it and added a next step; 1923-nkwu pins both halves.
   - step: "install-windows.ps1 contains the post-install --version + --diagnose sanity checks AND surfaces OS + WSL versions"
-    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'if ($DiagExit -eq 1) {' scripts/install-windows.ps1 && grep -F 'failed its self-check (exit $DiagExit)' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
+    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'if ($DiagExit -eq 1) {' scripts/install-windows.ps1 && grep -F 'hard-failed (exit $DiagExit)' scripts/install-windows.ps1 && grep -F 'failed its self-check. Restart Windows' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
     expected_behavior: "grep succeeds"
     assert_exit: 0
     timeout_ms: 3000
