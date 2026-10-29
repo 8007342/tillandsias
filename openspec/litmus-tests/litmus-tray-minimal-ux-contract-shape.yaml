@@ -14,6 +14,11 @@ critical_path:
     command: "grep -F '@trace spec:tray-minimal-ux' openspec/specs/tray-minimal-ux/spec.md crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Seedlings' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'ov_str(agent.display_name())' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Maintenance' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Stop' crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 5000
 
+  - step: "NEGATIVE CONTROL: a tray without the per-project agent items must FAIL the menu contract pin"
+    command: "T=$(mktemp -d); sed 's/ov_str(agent.display_name())/ov_str(\"Attach Here\")/' crates/tillandsias-headless/src/tray/mod.rs > \"$T/mod.rs\"; if cmp -s crates/tillandsias-headless/src/tray/mod.rs \"$T/mod.rs\"; then rm -rf \"$T\"; echo 'FAIL: the mutation did not reach tray/mod.rs'; exit 1; fi; if grep -qF 'ov_str(agent.display_name())' \"$T/mod.rs\"; then rm -rf \"$T\"; echo 'FAIL: per-project agent item pin blind to its removal'; exit 1; fi; rm -rf \"$T\"; echo 'ok: per-project agent item pin fails when the item is gone'"
+    timeout_ms: 10000
+    expected_behavior: "ok: per-project agent item pin fails when the item is gone"
+
   - step: "confirm tray spec tombstones launch and cleanup ownership"
     command: "grep -F 'MUST_NOT' openspec/specs/tray-minimal-ux/spec.md && grep -F 'browser-isolation-tray-integration' openspec/specs/tray-minimal-ux/spec.md && grep -F 'tray/runtime lifecycle' openspec/specs/tray-minimal-ux/spec.md"
     timeout_ms: 5000
