@@ -302,6 +302,16 @@ _metrics_default_log() { metrics_default_log "$1" "$REPO_ROOT"; }
 USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-$(_metrics_default_log forge-expert-usage.jsonl)}"
 FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-$(_metrics_default_log tillandsias-cycle-flow.jsonl)}"
 TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-$(_metrics_default_log tillandsias-timing.jsonl)}"
+# ORDER 1915-gtph. ONE GATE RUN, ONE ID. build.sh --check exports
+# TILLANDSIAS_TIMING_RUN_ID for its whole run, so its build-check total row,
+# every phase row and every row its children write can be grouped without
+# joining on a flush timestamp or a host field the toolbox renames. Only a
+# plain token is written; anything else writes no key (absence never reads as
+# an id).
+case "${TILLANDSIAS_TIMING_RUN_ID:-}" in
+    '' | *[!A-Za-z0-9._:-]*) TIMING_RUN_ID_FIELD="" ;;
+    *) TIMING_RUN_ID_FIELD=",\"run_id\":\"${TILLANDSIAS_TIMING_RUN_ID}\"" ;;
+esac
 # ORDER 1119-6wn6. Beside the flow log, by the operator's directive: the loop has
 # CPU-time instruments and no token instrument, so nothing could say WHICH
 # repeated work is token-expensive. A 42-agent read-only sweep cost 4,480,590
@@ -462,7 +472,7 @@ if [ "${1:-}" = "--emit-timing" ]; then
         et_root_fields="$(metrics_root_fields "$TIMING_LOG" 2>/dev/null || true)"
         printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s%s%s}\n' \
             "$et_ts" "$et_host" "$et_step" "$et_phase" \
-            "$et_duration_ms" "$et_exit" "$et_root_fields" "$et_repro_field" \
+            "$et_duration_ms" "$et_exit" "$et_root_fields" "${et_repro_field}${TIMING_RUN_ID_FIELD}" \
             >>"$TIMING_LOG"
     } 2>/dev/null || true
     exit 0
@@ -528,7 +538,7 @@ if [ "${1:-}" = "--emit-timing-batch" ]; then
     {
         etb_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
         etb_root_fields="$(metrics_root_fields "$TIMING_LOG" 2>/dev/null || true)"
-        awk -F'\t' -v ts="$etb_ts" -v rootf="$etb_root_fields" '
+        awk -F'\t' -v ts="$etb_ts" -v rootf="$etb_root_fields" -v runf="$TIMING_RUN_ID_FIELD" '
             NF >= 3 && $1 != "" {
                 step = $1; phase = $2; dur = $3; ec = $4; host = $5
                 if (dur !~ /^[0-9]+$/) dur = 0
@@ -554,6 +564,10 @@ if [ "${1:-}" = "--emit-timing-batch" ]; then
                 if ($9 ~ /^[a-z0-9_-]+$/) extra = extra ",\"regime\":\"" $9 "\""
                 if ($10 ~ /^[A-Za-z0-9_.-]+$/) extra = extra ",\"spec\":\"" $10 "\""
                 if ($11 ~ /^[0-9a-f]+$/ && length($11) == 64) extra = extra ",\"spec_digest\":\"" $11 "\""
+                # ORDER 1915-gtph: column 12 = the phase wall clock (banner to
+                # banner) beside duration_ms, which prefers the measured work.
+                if ($12 ~ /^[0-9]+$/) extra = extra ",\"wall_ms\":" $12
+                extra = extra runf
                 printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d%s%s}\n", \
                     ts, host, step, phase, dur, ec, rootf, extra
             }' >>"$TIMING_LOG"

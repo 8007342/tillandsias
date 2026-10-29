@@ -1171,13 +1171,24 @@ _phase_emit_timing() {
                 # banners. Same `step:` family either way, so the finest-grain
                 # slowest= preference keeps seeing every phase.
                 if ($2 >= 0) { dur = $2; prov = "build" } else { dur = $1; prov = "build-span" }
-                printf "step:%s\t%s\t%s\t0\t%s\n", name, prov, dur, host
+                # 1915-gtph: column 12 carries the wall clock (span) as wall_ms.
+                printf "step:%s\t%s\t%s\t0\t%s\t\t\t\t\t\t\t%s\n", name, prov, dur, host, $1
             }' | bash "$SCRIPT_DIR/scripts/cycle-metrics.sh" --emit-timing-batch
     } 2>/dev/null || true
     # Consume on flush: combined dispatches (--ci-full --install) flush once
     # per stage, so a later flush emits only the phases closed since this one.
     _PHASE_LOG=""
     return 0
+}
+
+# ORDER 1915-gtph: mint ONE id for this gate run and export it, so the
+# build-check total row, every phase row flushed above and every timing row a
+# child writes carry the same "run_id" (scripts/cycle-metrics.sh writes it).
+# Without it ~400 phase rows per gate could be tied to their total only by a
+# flush timestamp, and their host field differs from the total's in a toolbox.
+_gate_run_id_begin() {
+    TILLANDSIAS_TIMING_RUN_ID="gate-$(_now_ms)-$$"
+    export TILLANDSIAS_TIMING_RUN_ID
 }
 
 # ---------------------------------------------------------------------------
@@ -3229,9 +3240,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # and combined-flag runs do not over-count. NEVER alters the gate's exit.
     # 765-uti9: emit the preamble duration first — best-effort per the
     # 682-emvg contract, never alters the gate's exit.
+    _gate_run_id_begin
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
-    trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
+    # 1915-gtph: a FAILED gate flushes its phase rows too — the gate that died
+    # at minute 20 is the one whose minutes most need attributing.
+    trap '_gate_rc=$?; _phase_emit_timing; timing_emit build-check check "$_CHECK_T0" "$_gate_rc"' EXIT
     # 1826-gi8e: hold the coordinator lane marker while the gate runs, so the
     # `coord heartbeat` stands down. The reader checks the pid, so an aborted
     # gate leaves a marker that no longer holds anything, and the EXIT trap
