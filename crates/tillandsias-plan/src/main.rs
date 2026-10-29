@@ -7709,10 +7709,13 @@ fn main() {
                 }
             }
             if !args.iter().any(|a| a == "--quiet") {
+                // 1874-4sqt wrote this advisory. It cites no order of its own:
+                // a real token beside the minted one gets copied as the new
+                // packet's order (1903-sj5t).
                 eprintln!(
                     "next-order: the suffix is random on every call, so repeated calls \
                  return different suffixes for the same prefix; that is expected. \
-                 Use one token per packet (1874-4sqt)."
+                 Use one token per packet."
                 );
                 let since_flag = args
                     .iter()
@@ -7818,6 +7821,20 @@ fn main() {
                 eprintln!(
                     "refusing (--strict-fragments): {} tier field(s) outside the vocabulary (1437-khnx)",
                     tier_violations.len()
+                );
+                std::process::exit(1);
+            }
+            // ORDER 1903-sj5t — one order token on two packet_ids is a misfile:
+            // every by-order verb (status, set-field, append-event) then
+            // resolves to whichever packet it meets first.
+            let duplicate_orders = ledger.duplicate_order_tokens();
+            for d in &duplicate_orders {
+                eprintln!("refused:duplicate-order: {d}");
+            }
+            if strict_fragments && !duplicate_orders.is_empty() {
+                eprintln!(
+                    "refusing (--strict-fragments): {} order token(s) name more than one packet_id (1903-sj5t)",
+                    duplicate_orders.len()
                 );
                 std::process::exit(1);
             }
