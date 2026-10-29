@@ -4641,30 +4641,9 @@ pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
 pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
 
-/// 1919-hlth: each enclave image's HEALTHCHECK `CMD`, verbatim. The images
-/// probe every 30 s steady (operator-approved); podman ignores the Containerfile
-/// `--start-interval`, so a first probe that runs before the service is up would
-/// leave the container `starting` for 30 s and stall `podman wait
-/// --condition=healthy` (vault). The launcher therefore adds a STARTUP
-/// healthcheck with the same command on a 2 s interval; once it passes podman
-/// switches to the 30 s one. `enclave_health_cmds_match_the_containerfiles`
-/// pins these to the images.
-pub(crate) const VAULT_HEALTH_CMD: &str = "curl --cacert /run/secrets/tillandsias-vault-tls-ca -fsS https://127.0.0.1:8200/v1/sys/health?standbyok=true || exit 1";
-pub(crate) const PROXY_HEALTH_CMD: &str = "nc -z 127.0.0.1 3128 || exit 1";
-pub(crate) const GIT_HEALTH_CMD: &str = "/usr/local/share/git-service/healthcheck || exit 1";
-pub(crate) const INFERENCE_HEALTH_CMD: &str = "curl -sf http://127.0.0.1:11434/api/version >/dev/null && test -x /home/ollama/.ollama/models/.tools/lib/ollama/llama-server || exit 1";
-
+// 1919-hlth: enclave HEALTHCHECKs run as a numeric user at a 30 s interval.
 #[cfg(test)]
 mod enclave_healthcheck_tests;
-
-/// 1919-hlth: `podman run` flags for a 2 s startup healthcheck running `cmd`.
-/// No `--health-startup-retries`: its default 0 never restarts the container.
-pub(crate) fn startup_health_args(cmd: &str) -> [String; 2] {
-    [
-        format!("--health-startup-cmd={cmd}"),
-        "--health-startup-interval=2s".to_string(),
-    ]
-}
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
@@ -4707,7 +4686,6 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         args.push("--label".into());
         args.push(format!("{PROXY_CA_GENERATION_LABEL}={generation}"));
     }
-    args.extend(startup_health_args(PROXY_HEALTH_CMD));
     args.push(image.into());
     args
 }
@@ -5987,7 +5965,6 @@ fn build_git_run_args(
         "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
         certs_dir.join("intermediate.crt").display()
     ));
-    args.extend(startup_health_args(GIT_HEALTH_CMD));
     args.push(image.into());
     // Image ENTRYPOINT is /usr/local/bin/entrypoint.sh which runs the right
     // `git daemon` invocation (base-path /srv/git, --enable=receive-pack,
@@ -7236,9 +7213,6 @@ fn build_inference_run_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
-    ]);
-    args.extend(startup_health_args(INFERENCE_HEALTH_CMD));
-    args.extend([
         // Order 524: no container command follows the image. The previous
         // `/usr/bin/ollama serve` was dead weight AND a latent failure: the
         // image is ENTRYPOINT-only (images/inference/Containerfile) and

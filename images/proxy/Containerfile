@@ -74,8 +74,8 @@ USER 1000:1000
 EXPOSE 3128 3129
 
 # @trace spec:proxy-container, spec:socket-container-orchestration
-# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800); the
-# launcher adds a 2 s --health-startup-cmd so first-ready is not delayed.
+# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800). No startup
+# probe: readiness reaches the launcher as an event (2026-10-28 ruling).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD nc -z 127.0.0.1 3128 || exit 1
 

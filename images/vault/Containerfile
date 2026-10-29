@@ -52,9 +52,8 @@ USER 100:1000
 
 EXPOSE 8200
 
-# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800); the
-# launcher adds --health-startup-cmd with a 2 s startup interval so first-ready
-# is not delayed (vault_health_startup_args).
+# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800). No startup
+# probe: readiness reaches the launcher as an event (2026-10-28 ruling).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD curl --cacert /run/secrets/tillandsias-vault-tls-ca -fsS https://127.0.0.1:8200/v1/sys/health?standbyok=true || exit 1
 

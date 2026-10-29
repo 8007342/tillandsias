@@ -155,8 +155,8 @@ EXPOSE 11434
 # A real generate would be the strongest assertion but is far too expensive at a
 # 30s interval; the entrypoint does that capability check once at startup and
 # refuses to come up without it.
-# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 720); the
-# launcher adds a 2 s --health-startup-cmd so first-ready is not delayed.
+# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 720). No startup
+# probe: readiness reaches the launcher as an event (2026-10-28 ruling).
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -sf http://127.0.0.1:11434/api/version >/dev/null \
         && test -x /home/ollama/.ollama/models/.tools/lib/ollama/llama-server \

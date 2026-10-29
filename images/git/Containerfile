@@ -179,8 +179,8 @@ EXPOSE 9418
 # @trace spec:git-mirror-service, spec:socket-container-orchestration
 # Order 1310-rec6: the probe speaks the git protocol (see healthcheck.sh); the
 # old bare `nc` made git-daemon log a fatal line every 2 s.
-# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800); the
-# launcher adds a 2 s --health-startup-cmd so first-ready is not delayed.
+# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800). No startup
+# probe: readiness reaches the launcher as an event (2026-10-28 ruling).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=3s --retries=3 \
     CMD /usr/local/share/git-service/healthcheck || exit 1
 
