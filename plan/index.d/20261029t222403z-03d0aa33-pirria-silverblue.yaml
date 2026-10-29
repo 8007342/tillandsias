@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-rs-assets-move-to-an-embed-crate
+    field: next_action
+    value: 'Measured on pirria (work/1916-embd 1e1e2b319): moving the assets into crates/tillandsias-embed drops headless build.rs rerun lines 544->1, but touching one cheatsheet still recompiles headless (9.8 s before, 9.3 s after; --timings: embed 0.14 s, headless 9.71 s), because cargo has no early cutoff. Awaiting coordinator choice: (A) split headless into lib + thin bin that depends on embed, (B) land as is, (C) re-scope.'
+    ts: "2026-10-29T22:24:03Z"
+    host: pirria-silverblue
+    replaces_sha256: "e9514059fc46c9a8b9402613745c9d2185c24c8e481ae97f17f87e709a229884"
+
+events:
+  - packet_id: build-rs-assets-move-to-an-embed-crate
+    event:
+      type: note
+      ts: "2026-10-29T22:24:03Z"
+      host: pirria-silverblue
+      summary: |-
+        measured, decision needed
