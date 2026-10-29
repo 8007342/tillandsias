@@ -168,6 +168,40 @@ TILLANDSIAS_DEV_BUILD_FEATURES=""
 if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
     TILLANDSIAS_DEV_BUILD_FEATURES="--features tillandsias-headless/assets-from-source"
 fi
+# The dev regime's linker (1916-dvlp). Linking was 3.9 of 5.7 s of a warm
+# one-line headless edit on pirria (-Z time-passes, 2026-10-29), and lld cut
+# the edit from ~6.2 s to ~2.5 s. mold first, then ld.lld, only when one
+# resolves; nothing is installed. Set for the HOST target only
+# (CARGO_TARGET_<HOST>_RUSTFLAGS), so the musl and Windows rustflags in
+# .cargo/config.toml are untouched; an explicit RUSTFLAGS wins over target
+# rustflags in cargo, so it is left alone. Gate and release never see this.
+TILLANDSIAS_DEV_LINKER=""
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    _dev_linker_why=""
+    if [[ -n "${RUSTFLAGS:-}" ]]; then
+        _dev_linker_why="RUSTFLAGS is set, and cargo would ignore target rustflags beside it"
+    elif command -v mold >/dev/null 2>&1; then
+        TILLANDSIAS_DEV_LINKER=mold
+    elif command -v ld.lld >/dev/null 2>&1; then
+        TILLANDSIAS_DEV_LINKER=lld
+    else
+        _dev_linker_why="neither mold nor ld.lld on PATH"
+    fi
+    _dev_host="$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')"
+    if [[ -n "$TILLANDSIAS_DEV_LINKER" && "$_dev_host" != *-linux-* ]]; then
+        _dev_linker_why="host ${_dev_host:-unknown} is not Linux"
+        TILLANDSIAS_DEV_LINKER=""
+    fi
+    if [[ -n "$TILLANDSIAS_DEV_LINKER" ]]; then
+        _dev_var="CARGO_TARGET_$(tr 'a-z.-' 'A-Z__' <<<"$_dev_host")_RUSTFLAGS"
+        export "$_dev_var=${!_dev_var:+${!_dev_var} }-C link-arg=-fuse-ld=$TILLANDSIAS_DEV_LINKER"
+        echo "linker: $TILLANDSIAS_DEV_LINKER (dev regime; $_dev_var)" >&2
+        unset _dev_var
+    else
+        echo "linker: default ($_dev_linker_why)" >&2
+    fi
+    unset _dev_linker_why _dev_host
+fi
 if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
     : # the dev regime: the off line below says why
 elif [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
