@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by hand on the LWW `status:` channel (corrects any field, 642-fedr).
+status:
+  - packet_id: lua-proc-grandchild-liveness-test-treats-missing-linux-proc-as-dead-on-darwin
+    field: status
+    value: in_progress
+    ts: "2026-10-08T18:17:27Z"
+    host: tlatoanis-macbook-air
+  - packet_id: lua-proc-grandchild-liveness-test-treats-missing-linux-proc-as-dead-on-darwin
+    field: verifiable_closure
+    value: >
+      cargo test -p tillandsias-plan --test lua_proc, with two arms.
+      (1) liveness_sees_a_known_live_scratch_process_and_its_death: the live
+      control. With the pre-fix /proc observation on darwin it FAILS ("a live
+      scratch process 61337 was not seen alive"); post-fix it passes.
+      (2) a_grandchild_neither_times_out_nor_outlives_proc_run, run under a
+      cleanup-disabled mutant (tillandsias-exec reap_group returns at once).
+      Pre-fix it PASSED falsely while the grandchild sleep 30 (pid 61460) was
+      still running. Post-fix it FAILS with "grandchild 61658 outlived
+      proc.run". Without the mutant it passes. Receipts and the mutant diff are
+      in plan/issues/evidence/1543-f44v-darwin-20261008/.
+    ts: "2026-10-08T18:17:27Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: lua-proc-grandchild-liveness-test-treats-missing-linux-proc-as-dead-on-darwin
+    event:
+      type: note
+      ts: "2026-10-08T18:17:27Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        Claimed and fixed by macbookair-macos on coordinator assignment (1538 has completed, so lua_proc.rs is free). Test-only change, as the row authorises; no runtime change.
+        A named native helper, liveness(pid) -> Alive | Zombie | Gone | Unobservable(why), in tests/lua_proc.rs. Existence comes from kill(pid, 0): ESRCH is the only Gone, while success and EPERM mean the pid exists. The state then separates Zombie from Alive (/proc on Linux, ps -o stat= elsewhere). A failed or empty observation re-checks existence and is otherwise Unobservable, which the grandchild arm PANICS on rather than reading as dead.
+        Measured on darwin (macOS 27.0.1 arm64): the old observation reports a live sleep as dead; the cleanup-disabled mutant was a false green before the fix and is red after it. Full lua_proc suite 12/12, strict clippy (-D warnings -A clippy::double_must_use) 0, fmt clean.
+        Noted, not changed (outside owned_files): tillandsias-exec tests/group_exit.rs alive() maps a failed ps spawn to dead (Err(_) => false), the same hazard in a smaller form.
