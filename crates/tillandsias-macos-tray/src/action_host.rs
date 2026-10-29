@@ -2406,6 +2406,9 @@ impl TrayActionHost {
             }
             *busy = true;
         }
+        // Order 1919-keyc: a booting guest holds no credentials yet, so the
+        // next status poll must deliver them rather than skip the Keychain.
+        crate::installation_uuid::note_vm_boot();
         // Idempotency: if we already hold a live VM handle, just log
         // and bail (without touching the busy flag race).
         if ivars.vm.lock().unwrap().is_some() {

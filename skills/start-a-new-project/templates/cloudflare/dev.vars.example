@@ -1,0 +1,5 @@
+# Settings your app reads while you preview it locally.
+# Copy this file to .dev.vars and fill in your own values.
+# Never commit .dev.vars: it is listed in .gitignore.
+# Example (delete or rename it):
+# GREETING="hello"

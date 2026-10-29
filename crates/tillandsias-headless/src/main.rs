@@ -4644,6 +4644,10 @@ pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
 pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
 
+// 1919-hlth: enclave HEALTHCHECKs run as a numeric user at a 30 s interval.
+#[cfg(test)]
+mod enclave_healthcheck_tests;
+
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--detach".into(),
@@ -13552,6 +13556,20 @@ fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
     None
 }
 
+/// ORDER 1909-t9y2. How long a device sign-in step may wait on the PERSON.
+/// Codex prints "expires in 15 minutes" for its one-time code, but the step
+/// ran under the 300 s container budget, so an unfinished sign-in was killed
+/// at minute 5 with ten minutes left on the code (measured 2026-10-28:
+/// exec 03:58:07, `podman rm -f` 04:03:07). The budget is the provider's
+/// window plus a minute, so the provider, not us, decides when it expired.
+fn device_sign_in_budget(provider: &ProviderId) -> std::time::Duration {
+    const SLACK: std::time::Duration = std::time::Duration::from_secs(60);
+    match provider {
+        ProviderId::Codex => std::time::Duration::from_secs(15 * 60) + SLACK,
+        _ => tillandsias_podman::OperationKind::Container.default_budget(),
+    }
+}
+
 /// Stream Codex's own device instructions byte-for-byte and add a QR only when
 /// the complete, code-free verification URI appears. The existing bounded
 /// Podman stream keeps the container PTY and its deadline; Codex needs no stdin
@@ -13570,7 +13588,7 @@ fn run_codex_device_login_with_qr(
     let status = login
         .status_bounded_with_stdin_streaming(
             &[],
-            tillandsias_podman::OperationKind::Container.default_budget(),
+            device_sign_in_budget(&ProviderId::Codex),
             move |chunk| {
                 let mut out = std::io::stdout().lock();
                 let _ = out.write_all(chunk);
@@ -16579,6 +16597,21 @@ fn run_opencode_mode(
                 )
                 .await
                 .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
+        }
+
+        // Order 1910-a1m8: the same mirror readiness gate as
+        // ensure_enclave_for_project. Without it the forge cloned a mirror
+        // whose seed had not run yet and gave up after its ~40 s of clone
+        // retries (macOS cold cloud launch, 2026-10-28).
+        if project_remote_url.is_some() {
+            wait_for_git_mirror_ready(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                debug,
+            )
+            .await?;
         }
 
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
@@ -26962,6 +26995,20 @@ mod tests {
         }
     }
 
+    /// ORDER 1909-t9y2. A Codex device code is valid for 15 minutes; the step
+    /// that waits on it must not be cut off sooner (it was 300 s).
+    #[test]
+    fn codex_device_sign_in_budget_covers_the_code_window() {
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex) >= std::time::Duration::from_secs(15 * 60),
+            "the Codex sign-in step must outlive its 15-minute code"
+        );
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex)
+                > tillandsias_podman::OperationKind::Container.default_budget()
+        );
+    }
+
     /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
     /// what to do, and carries no flag, variable or podman text.
     #[test]
@@ -27729,6 +27776,298 @@ mod tests {
             !qr.contains('\u{2580}') && !qr.contains('\u{2584}'),
             "no half-block glyphs"
         );
+    }
+
+    /// The vault stubs store what they were sent (base64); decode it here so
+    /// the stub scripts carry no decode-to-file idiom.
+    #[cfg(unix)]
+    fn decode_vaulted(path: &std::path::Path) -> String {
+        let Ok(encoded) = std::fs::read(path) else {
+            return String::new();
+        };
+        let mut child = match std::process::Command::new("base64")
+            .arg("-d")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => return String::new(),
+        };
+        {
+            use std::io::Write as _;
+            let _ = child.stdin.take().unwrap().write_all(&encoded);
+        }
+        child
+            .wait_with_output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    }
+
+    /// Order 1914-twan: Codex refresh tokens are single-use. An oomd or
+    /// `podman kill` takes the whole container, watcher included, so a
+    /// rotation is lost unless it was copied before the kill. Kill the whole
+    /// process group 1.2 s after a rotation: the old 2 s poll had not copied
+    /// it yet. Shape-only token values; nothing real.
+    #[cfg(unix)]
+    #[test]
+    fn codex_rotation_reaches_vault_before_a_container_kill() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::os::unix::process::CommandExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let images = std::path::Path::new(&manifest).join("../../images/default");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let vaulted = dir.path().join("vaulted");
+        let auth = dir.path().join("auth.json");
+        let rotated = dir.path().join("rotated");
+        std::fs::write(&auth, "{\"refresh_token\":\"shape-old\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        // Vault stub: keep the last document written, decoded.
+        write_exec(
+            &bin.join("vault-cli.sh"),
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        // A host without inotify-tools (macOS) gets a stand-in that prints
+        // the file name when its content changes, as inotifywait would; on a
+        // Linux gate host the real inotifywait is exercised.
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/auth.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo auth.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let agent = dir.path().join("agent");
+        write_exec(
+            &agent,
+            format!(
+                "printf '{{\"refresh_token\":\"shape-rotated\"}}\\n' >'{a}'\n: >'{r}'\nsleep 30",
+                a = auth.display(),
+                r = rotated.display()
+            ),
+        );
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(images.join("codex-oauth-session.sh"))
+            .arg("--")
+            .arg(&agent)
+            .env("PATH", &path)
+            .env(
+                "TILLANDSIAS_CODEX_VAULT_HELPER",
+                images.join("codex-oauth-vault.sh"),
+            )
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_AUTH_FILE", &auth)
+            .env(
+                "TILLANDSIAS_LIFECYCLE_LOG",
+                dir.path().join("lifecycle.log"),
+            )
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .process_group(0)
+            .spawn()
+            .expect("spawn wrapper");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !rotated.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(rotated.exists(), "stub agent never rotated the document");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        // The whole group, as a container kill would: no EXIT trap, no watcher.
+        let _ = std::process::Command::new("kill")
+            .args(["-KILL", "--", &format!("-{}", child.id())])
+            .status();
+        let _ = child.wait();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("shape-rotated") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(
+            held.contains("shape-rotated"),
+            "Vault must hold the rotated token after a container kill; it held: {held:?}"
+        );
+    }
+
+    /// Order 1914-twan (operator approval 2026-10-28): the Claude approvals
+    /// watcher copies a config write to Vault on the write's event, well
+    /// inside the 3 s poll it replaces.
+    #[cfg(unix)]
+    #[test]
+    fn claude_approvals_reach_vault_on_the_write_event() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let script =
+            std::path::Path::new(&manifest).join("../../images/default/claude-approvals-vault.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let cfg = dir.path().join("claude.json");
+        let vaulted = dir.path().join("vaulted");
+        std::fs::write(&cfg, "{\"theme\":\"dark\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        let vault_cli = bin.join("vault-cli");
+        write_exec(
+            &vault_cli,
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            // macOS stand-in printing what inotifywait prints on a write.
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/claude.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo claude.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let holder = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn holder");
+        let mut watcher = std::process::Command::new("bash")
+            .arg(&script)
+            .arg("watch")
+            .arg(holder.id().to_string())
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
+            .env("CLAUDE_CONFIG_FILE", &cfg)
+            .env("TILLANDSIAS_VAULT_CLI", &vault_cli)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn watcher");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::fs::write(&cfg, "{\"theme\":\"light\"}\n").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("light") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let _ = watcher.kill();
+        let _ = watcher.wait();
+        let mut holder = holder;
+        let _ = holder.kill();
+        let _ = holder.wait();
+        assert!(
+            held.contains("light"),
+            "the approval write must reach Vault within 1.5 s; Vault held {held:?}"
+        );
+    }
+
+    /// Order 1914-twan: a Codex lane whose agent exits on an expired sign-in
+    /// ("account/read failed ... unauthorized (401)") offers the device
+    /// sign-in in the same window and relaunches, instead of ending the lane.
+    /// Runs the real wrapper with a stub agent, vault helper and login helper.
+    #[cfg(unix)]
+    #[test]
+    fn codex_lane_offers_relogin_on_unauthorized() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let wrapper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-session.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write_stub = |name: &str, body: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        let marks = dir.path().join("marks");
+        let vault = write_stub("vault", "[ \"$1\" = digest ] && echo missing; exit 0");
+        let login = write_stub(
+            "login",
+            &format!("echo login >>'{}'; exit 0", marks.display()),
+        );
+        let agent = write_stub(
+            "agent",
+            &format!(
+                "echo run >>'{m}'\n\
+                 if [ \"$(grep -c run '{m}')\" = 1 ]; then\n\
+                 echo 'Error: account/read failed during TUI bootstrap: account/read failed: \
+                 workspace routing discovery unauthorized (401) (code -32603)' >&2; exit 1; fi\n\
+                 exit 0",
+                m = marks.display()
+            ),
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(&wrapper)
+            .arg("--")
+            .arg(&agent)
+            .env("TILLANDSIAS_CODEX_VAULT_HELPER", &vault)
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_RELOGIN_HELPER", &login)
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn wrapper");
+        child.stdin.take().unwrap().write_all(b"\n").unwrap();
+        let out = child.wait_with_output().expect("wrapper output");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("sign-in has expired. Sign in again now?"),
+            "the 401 exit must offer re-login; stderr was: {stderr}"
+        );
+        let marks = std::fs::read_to_string(&marks).unwrap_or_default();
+        assert_eq!(
+            marks.lines().collect::<Vec<_>>(),
+            ["run", "login", "run"],
+            "expected run, device login, relaunch"
+        );
+        assert!(out.status.success(), "the relaunched agent exited 0");
     }
 
     #[test]
@@ -33288,6 +33627,24 @@ esac
                     .contains("launch_images::launch_images(launch_images::LaunchSite::Opencode)"),
             "OpenCode CLI lane must build the router image before ensure_router_running \
              (order-327 class; macOS cold-forge live repro 2026-07-15)"
+        );
+    }
+
+    #[test]
+    fn opencode_mode_waits_for_the_mirror_before_the_forge_clones() {
+        let manifest_dir = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        );
+        let source =
+            std::fs::read_to_string(manifest_dir.join("src/main.rs")).expect("main.rs is readable");
+        let window = source_window(&source, "fn run_opencode_mode(");
+        // source-pin-ok: the ORDER of the gate and the forge start is the contract (1910-a1m8).
+        let gate = window.find("wait_for_git_mirror_ready(");
+        let forge = window.find("run_agent_container_attached(");
+        assert!(
+            matches!((gate, forge), (Some(g), Some(f)) if g < f),
+            "the OpenCode lane must wait for a cloneable mirror before starting the \
+             forge, or a cold launch clones an unseeded mirror (1910-a1m8)"
         );
     }
 

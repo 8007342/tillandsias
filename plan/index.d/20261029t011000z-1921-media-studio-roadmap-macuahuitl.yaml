@@ -1,0 +1,639 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at the operator request, 2026-10-28. Story: 1921 media studio roadmap.
+# Distilled from five research reports; roadmap in plan/issues/media-studio-roadmap-2026-10-28.md.
+# Release map: R1 local imagegen = v0.6 (where 1874-4b88 already sits); R2 ComfyUI studio,
+# shared launcher, music/SFX service, deterministic asset checker = v0.7; R3 interactive
+# co-editing (comfyui MCP + websocket bridge, vision MCP, GPU lease arbiter, music models) = v0.8.
+# Only gaps are filed here; existing rows (1860-auhm, 1861-1866, 1859-57mi, 1874-*, 1913-ebv8)
+# are reused and named in blocked_by / context.
+packets:
+- packet_id: media-studio-roadmap-local-imagegen-then-comfyui-studio-then-agent-and-user-co-editing
+  order: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.6
+  pickup_role: any
+  capability_tags: [imagegen, studio, media, story]
+  estimated_hours: 2
+  title: 'Media studio roadmap story: local imagegen (v0.6), then a ComfyUI studio with music/SFX and asset checks (v0.7), then agent and user co-editing (v0.8)'
+  context: 'Story row for order 1921. Reuses 1874-4b88 (imagegen epic), 1860-auhm (studio launcher), 1861-1866 (studio rows), 1859-57mi (choice prompt), 1874-zry8 (ComfyUI image), 1913-ebv8 (oomd slice). Children are the gaps the 2026-10-28 research found. Licence rule (operator 2026-10-25): free licence only, no revenue cap, no non-commercial weights, no gated repos.'
+  exit_criteria:
+  - 'Every row with parent 1921-9fa7 is completed and plan/issues/media-studio-roadmap-2026-10-28.md names each release exit as met with evidence. Pre-fix result: FAILS, no child is done.'
+  verifiable_closure: 'tillandsias-plan query shows every 1921 child completed. Pre-fix result: FAILS.'
+  unscoreable: 'story row: closes on its children.'
+  next_action: 'Nothing is built. Left: start R1 children (gated-source fix, licence register, HF CDN allowlist, transparent output) alongside 1874-4b88.'
+  provenance: operator request 2026-10-28; scratch/research reports kumbia-imagegen-pipeline, comfyui-local-secure, studio-coediting-roadmap, music-models, vision-models (macuahuitl, 2026-10-28).
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed story from the operator-requested media research (2026-10-28)
+
+# ---------------- R1: local imagegen (v0.6) ----------------
+- packet_id: imagegen-flux-tiers-fetch-from-an-ungated-apache-mirror-because-the-black-forest-labs-repo-is-gated
+  order: 1921-qqfz
+  parent: 1921-9fa7
+  status: ready
+  kind: defect
+  priority: p1
+  desired_release: v0.6
+  pickup_role: any
+  capability_tags: [imagegen, licence, models]
+  estimated_hours: 2
+  title: 'Imagegen tiers I2 and I3 name FLUX.1-schnell from black-forest-labs, a gated repo; they must point at an ungated Apache-2.0 GGUF mirror or be dropped'
+  context: 'Verified 2026-10-28 on the Hugging Face API: black-forest-labs/FLUX.1-schnell is apache-2.0 but gated:auto (login and accept), and the fetcher holds no token (no plaintext credentials at rest), so a gated row cannot be fetched. city96/FLUX.1-schnell-gguf and second-state/FLUX.1-schnell-GGUF are apache-2.0 and gated:false. The FLUX VAE (ae.safetensors) and T5-XXL encoder need the same check. Reports had FLUX.1-schnell as OK; this is the one verdict change.'
+  exit_criteria:
+  - 'A tier-table check refuses any row whose licence_source repo reports gated != false; run on today''s images/imagegen/tiers.tsv it fails on I2 and I3 (licence_source black-forest-labs/FLUX.1-schnell); after the fix the rows name an ungated repo with a pinned revision for the transformer, VAE and T5, and the check passes.'
+  verifiable_closure: 'Check output before and after attached. Pre-fix result: FAILS on I2 and I3.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the check lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: write the gated-source check first, then repoint I2/I3 (or drop FLUX and promote SDXL-Lightning) and pin revisions in the 1874-h9ns manifest.'
+  provenance: licence verification 2026-10-28 (HF API gated flag) for the 1921 story.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p1, FLUX.1-schnell upstream repo is gated
+- packet_id: one-media-model-licence-register-refuses-non-commercial-revenue-capped-gated-or-unknown-weights-for-image-studio-vision-and-audio
+  order: 1921-h4gv
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.6
+  pickup_role: any
+  capability_tags: [licence, models, imagegen, vision, audio]
+  estimated_hours: 4
+  title: 'One model licence register (repo, revision, file, sha256, SPDX, gated, card URL) is consulted by every media fetch and image build, and refuses non-commercial, revenue-capped, gated or unknown rows'
+  context: 'Today tiers.tsv carries a licence column read by people; nothing refuses a bad row at fetch or build. The studio, vision and music lanes add more weights. Deny list verified 2026-10-28: FLUX.1-dev (NC, gated), SD3 medium and SD3.5 (Stability community, gated), SDXL-Turbo/SD-Turbo (NC), BRIA RMBG-1.4/2.0 (custom NC), Qwen2.5-VL-3B (qwen-research), Qwen2.5-VL-72B (qwen licence, MAU cap), Gemma 3 (gated, custom terms), MiniCPM-V 2.6 (gated), DINOv3 (gated, custom), Stable Audio Open 1.0/Small (gated, community licence), AudioLDM2 (CC-BY-NC-SA), AudioGen (CC-BY-NC), InsightFace-based IP-Adapter. Allowed SPDX: Apache-2.0, MIT, BSD-3-Clause, Unlicense, openrail++, creativeml-openrail-m. Extends 1874-h9ns, does not replace it.'
+  exit_criteria:
+  - 'A fixture feeds the register one row each for FLUX.1-dev, SD3.5-large, RMBG-2.0, AudioLDM2, stable-audio-open-1.0, gemma-3-4b-it, Qwen2.5-VL-3B and an unknown licence, and each is refused with a distinct reason; Qwen3-VL-4B, BiRefNet, SDXS and music-medium-800k pass. Pre-fix result: FAILS, no register or check exists.'
+  verifiable_closure: 'Fixture transcript attached; the imagegen fetch path calls the register. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: register format, check (Rust or Lua, no jq, no python), wire into the 1874-h9ns fetcher.'
+  provenance: research reports comfyui-local-secure (item 8), vision-models (item 1), music-models (item 6); licence verification 2026-10-28.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p1 from the media research (2026-10-28)
+- packet_id: the-egress-allowlist-admits-the-hugging-face-lfs-and-xet-cdn-hosts-so-a-pinned-model-fetch-completes-through-the-proxy
+  order: 1921-xt97
+  parent: 1921-9fa7
+  status: ready
+  kind: defect
+  priority: p1
+  desired_release: v0.6
+  pickup_role: linux
+  capability_tags: [proxy, models, imagegen]
+  estimated_hours: 2
+  title: 'A pinned model fetch through the proxy reaches the Hugging Face LFS and Xet CDN hosts (*.hf.co), which the .huggingface.co allowlist entry does not cover'
+  context: 'images/proxy/allowlist.txt has .huggingface.co only. HF serves large files by redirect to cdn-lfs*.hf.co and cas-bridge.xethub.hf.co. Unmeasured: a real download has not been tried through squid. Admit only the CDN hosts, not a wider wildcard.'
+  exit_criteria:
+  - 'A litmus fetches the pinned SDXS-512-0.9 weights through the enclave proxy and checks sha256; on today''s allowlist the squid log shows TCP_DENIED for a *.hf.co host and the fetch fails; after the fix it completes and civitai.com is still denied.'
+  verifiable_closure: 'Squid log excerpt before and after. Pre-fix result: FAILS (expected TCP_DENIED; if the fetch already passes, close as not-a-defect with the log).'
+  unscoreable: 'unpinnable-until-the-guard-exists: the litmus lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: run one real fetch to confirm the redirect hosts, then narrow allowlist entries and the litmus.'
+  provenance: research report comfyui-local-secure section 2 and item 5.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p1 from the media research (2026-10-28)
+- packet_id: image-generate-transparent-returns-an-rgba-sprite-matted-by-birefnet-with-no-edge-glow
+  order: 1921-83bd
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.6
+  pickup_role: any
+  capability_tags: [imagegen, mcp, cpu-ok]
+  estimated_hours: 6
+  title: 'image.generate with transparent:true generates on a flat key colour, mattes with BiRefNet (MIT) and returns an RGBA PNG whose edges carry no soft glow'
+  context: 'Kumbia sprites asked the cloud tool for transparency in words and got soft alpha glow on every sprite. Locally: key colour, BiRefNet (ZhengPeng7, MIT, ungated) via ONNX on CPU or GPU, then erode/defringe. Never RMBG (non-commercial). Builds on 1874-kkrc.'
+  exit_criteria:
+  - 'A fixture calls image.generate with transparent:true on the I0 tier and asserts the PNG is RGBA, all four corners alpha 0, and fewer than 1% of foreground-boundary pixels have 0 < alpha < 255 beyond a 2 px band. Pre-fix result: FAILS, image.generate has no transparent parameter.'
+  verifiable_closure: 'Fixture output attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 1874-kkrc, add the matte step and the fixture.'
+  provenance: research report kumbia-imagegen-pipeline sections 5-6.
+  blocked_by: [1874-kkrc]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+
+# ---------------- R2: ComfyUI studio, music/SFX, asset checker (v0.7) ----------------
+- packet_id: comfyui-studio-places-a-one-step-generation-on-cuda-inside-a-rootless-sibling-and-refuses-a-silent-cpu-fallback
+  order: 1921-vkrr
+  parent: 1921-9fa7
+  status: ready
+  kind: research
+  priority: p2
+  desired_release: v0.7
+  pickup_role: linux
+  capability_tags: [comfyui, studio, nvidia-gpu, cdi]
+  estimated_hours: 3
+  title: 'A probe proves the ComfyUI studio places a one-step generation on CUDA in a rootless CDI sibling, and exits nonzero when it silently falls back to CPU'
+  context: 'ComfyUI is realistically NVIDIA-first (ROCm second, no Vulkan). The studio is offered only where placement is proven, not where device nodes exist (917-zkge lesson). Hosts with duplicate CDI specs in /etc/cdi and /var/run/cdi must pick one.'
+  exit_criteria:
+  - 'The probe prints backend=cuda after a 1-step SDXL-Lightning generation inside the 1874-zry8 image on an NVIDIA host, and exits nonzero with backend=cpu when run with CUDA_VISIBLE_DEVICES empty. Pre-fix result: FAILS, no probe or studio image exists.'
+  verifiable_closure: 'Both runs attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the probe lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for the 1874-zry8 image, write the probe, record the result per platform.'
+  provenance: research report comfyui-local-secure section 4 and item 1.
+  blocked_by: [1874-zry8]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: comfyui-custom-nodes-come-only-from-a-pinned-reviewed-manifest-and-the-image-carries-no-manager
+  order: 1921-7aa5
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [comfyui, studio, supply-chain, images]
+  estimated_hours: 4
+  title: 'ComfyUI custom nodes come only from a manifest (repo, commit SHA, licence, hashed pip lock); the image has no ComfyUI-Manager and custom_nodes is read-only'
+  context: 'Custom nodes are arbitrary Python run in-process; Manager installs from git/pip at runtime. Start with core nodes plus ComfyUI-GGUF (Apache-2.0). Each new node needs a review row. ComfyUI is GPL-3.0, run unmodified as a separate container, with its notice in the image.'
+  exit_criteria:
+  - 'A build-time fixture fails when the image holds a custom_nodes dir not in the manifest, a node at a different commit, or any ComfyUI-Manager path, and passes on the manifest set; podman run --network none serves /system_stats. Pre-fix result: FAILS, no manifest or check exists.'
+  verifiable_closure: 'Fixture arms attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: manifest format, fixture, then the image build reads it.'
+  provenance: research report comfyui-local-secure section 3 and items 2-3.
+  blocked_by: [1874-zry8]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: comfyui-studio-row-on-the-generic-launcher-is-reachable-only-through-the-authenticated-enclave-route
+  order: 1921-2krx
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: linux
+  capability_tags: [comfyui, studio, router, security]
+  estimated_hours: 5
+  title: 'ComfyUI is a registry row on the 1860-auhm launcher, reachable only through the OTP router route: no host listener, 401 without the session token, models mounted read-only'
+  context: 'Pattern is run_opencode_web_mode (OTP session via issue_session, RouterRoute upsert, framework window after an authenticated 2xx). Root fs read-only, cap-drop all, no-new-privileges, keep-id. Proves the launcher is generic together with 1861-nmpp (GrapesJS).'
+  exit_criteria:
+  - 'A litmus launches the comfyui studio row and asserts: ss on the host shows no ComfyUI listener, a request without the token gets 401, the window opens only after an authenticated 2xx, and the model mount is read-only. Pre-fix result: FAILS, no comfyui studio row exists.'
+  verifiable_closure: 'Litmus transcript attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the litmus lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 1860-auhm and 1874-zry8, then add the row and the litmus.'
+  provenance: research reports comfyui-local-secure section 1 and item 4, studio-coediting-roadmap gap 1.
+  blocked_by: [1860-auhm, 1874-zry8]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: a-studio-sibling-gets-a-memory-budget-from-host-ram-and-is-killed-before-the-forge
+  order: 1921-q7q3
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: linux
+  capability_tags: [studio, cgroup, memory, oomd]
+  estimated_hours: 4
+  title: 'A studio sibling gets memory.high and memory.max computed from host RAM at launch and a high oom_score_adj, so memory pressure kills the studio and never the forge'
+  context: 'Builds on 1913-ebv8 (forge slice that oomd avoids) and 1911-3dqo (oomd killed a forge). Defaults from research: high about 60% of free RAM, max about 75%, swap equal to memory, half the cores. WSL computes from the guest.'
+  exit_criteria:
+  - 'A fixture runs a synthetic allocation in a studio container next to a forge; the studio is throttled at memory.high then killed, and the forge process survives; the limits printed at launch derive from host RAM. Pre-fix result: FAILS, studio containers get no limit.'
+  verifiable_closure: 'Fixture transcript attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 1913-ebv8, then compute and apply limits in the launcher.'
+  provenance: research report comfyui-local-secure section 5 and item 6; studio-coediting-roadmap gap 9.
+  blocked_by: [1913-ebv8, 1860-auhm]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: a-studio-sibling-exits-on-an-idle-timer-armed-by-router-request-events-and-its-output-and-history-die-with-the-forge
+  order: 1921-ju86
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: linux
+  capability_tags: [studio, comfyui, events, teardown]
+  estimated_hours: 4
+  title: 'A studio sibling stops after N idle minutes on a timer re-armed by router request events (no polling), and its output dir, history and input tmpfs are gone after forge teardown, clean or kill -9'
+  context: 'Operator 2026-10-28: no new polling; events over faster polls. Output follows the sd.cpp contract (/work/tmp/imagegen, ephemeral). ComfyUI user/ and input/ hold prompts (PII per the forge-log ruling). Reuses 1799-haat (router last-request per route) as the event source and 1800-465n (per-class idle reaper) as the mechanism; this row adds the studio class, VRAM release and ephemeral teardown.'
+  exit_criteria:
+  - 'A fixture with a short idle window asserts the studio container exits after the window with no request, the timer source is the router event (a check finds no sleep loop or interval in the reap path), and after forge kill -9 the output dir and tmpfs are gone and nvidia-smi shows VRAM at baseline on a GPU host. Pre-fix result: FAILS, no studio reap exists.'
+  verifiable_closure: 'Fixture transcript attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 2krx, then the event-armed timer and teardown wiring.'
+  provenance: research report comfyui-local-secure sections 5-6 and items 7, 10.
+  blocked_by: [1921-2krx, 1799-haat, 1800-465n]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: local-web-preview-spec-and-browser-allowlist-admit-studio-routes
+  order: 1921-x5dk
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [openspec, browser, studio, router]
+  estimated_hours: 3
+  title: 'The local-web-preview spec is amended and the browser allowlist admits studio.<label> routes, which today admit only the preview TLS port'
+  context: 'openspec/specs/local-web-preview (draft) says it does not approve a chromium sibling or tray change; the browser-mcp allowlist widens only through with_preview_tls_port.'
+  exit_criteria:
+  - 'A browser-mcp allowlist test admits a registered studio.<label> route and refuses an unregistered one; the spec delta validates with openspec. Pre-fix result: FAILS, the allowlist refuses studio routes.'
+  verifiable_closure: 'Test and openspec validate output. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the test lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: spec delta, allowlist method, test.'
+  provenance: research report studio-coediting-roadmap gap 6.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: music-score-schema-v1-is-a-shared-contract-and-music-validate-gives-a-distinct-code-per-structural-fault
+  order: 1921-6kqv
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [music, mcp, cpu-ok]
+  estimated_hours: 5
+  title: 'The kumbia-kombat score schema v1 becomes a shared JSON Schema contract, and music_validate returns a distinct code per fault (out-of-key note, tempo mismatch, unbalanced note-off, bad loop seam, tier not a superset)'
+  context: 'The reference project already authors music as data (score JSON plus MIDI). An agent iterates on structure without listening; a human listen stays an operator step.'
+  exit_criteria:
+  - 'music_validate passes the 14 reference scores unchanged and fails each of five corrupted fixtures with its own code. Pre-fix result: FAILS, no schema or validator exists.'
+  verifiable_closure: 'Fixture output attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: copy the schema with provenance, write the validator (no python), fixtures.'
+  provenance: research report music-models items 1 and 3.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: a-cpu-only-music-service-composes-tiered-scores-and-makes-zzfx-sfx-deterministically-from-a-seed
+  order: 1921-3mvy
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [music, sfx, mcp, images, cpu-ok]
+  estimated_hours: 8
+  title: 'A CPU-only music-service sibling (under 1 GB, no torch) offers music_compose (procedural) and sfx_make (ZzFX MIT, jsfxr Unlicense), and the same seed gives byte-identical output'
+  context: 'Baseline tier for every platform, macOS and Windows included. Model engines are R3 (1921-ynar). Private network only, no egress.'
+  exit_criteria:
+  - 'Given spec bpm 100, A minor, 16 bars, 5 tiers, music_compose returns a score that passes music_validate with tier N a superset of N-1, and two runs with one seed are byte-identical; sfx_make produces parameter JSON and a WAV for blip, hit, whoosh, riser and coin; engine:"aria" returns a typed unsupported. Pre-fix result: FAILS, no music service exists.'
+  verifiable_closure: 'Fixture output and image size attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 6kqv, then the image, the two tools and the fixture.'
+  provenance: research report music-models items 2, 5 and 8.
+  blocked_by: [1921-6kqv]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: music-preview-plays-every-tier-in-a-tone-js-page-and-renders-a-checked-wav-with-fluidsynth
+  order: 1921-d2iw
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [music, browser, cpu-ok]
+  estimated_hours: 5
+  title: 'music_render publishes a Tone.js (MIT) preview page with tier buttons and a FluidSynth (LGPL-2.1, run as a process) WAV using the GeneralUser GS soundfont'
+  context: 'GeneralUser GS licence (custom permissive, commercial use allowed) verified 2026-10-28; FluidR3_GM was not verified from a primary source, so it is not the default.'
+  exit_criteria:
+  - 'The preview URL plays every tier in a headless browser with no console errors, and the WAV is non-silent, unclipped and within 50 ms of the length implied by bars and bpm. Pre-fix result: FAILS, no renderer exists.'
+  verifiable_closure: 'Console log and WAV stats attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 3mvy.'
+  provenance: research report music-models item 4.
+  blocked_by: [1921-3mvy]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p3 from the media research (2026-10-28)
+- packet_id: a-deterministic-asset-checker-flags-off-grid-size-missing-alpha-edge-glow-gutters-and-frame-count-against-the-manifest
+  order: 1921-ga2q
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [assets, imagegen, cpu-ok]
+  estimated_hours: 6
+  title: 'A model-free asset checker (no python) reads an art manifest and flags size off the native grid, missing or soft alpha, edge glow, gutters, palette count and frame count'
+  context: 'Most art rules are exact; every flaw so far was caught by eye. Kumbia manifests carry id, file, size, format, status, anchor. This is the first gate before any vision model (R3).'
+  exit_criteria:
+  - 'Run on the kumbia-kombat bar and garden manifests it flags the 1024x1536 starters as off-grid and the gatekeeper sprite edge glow; one known-bad PNG per rule fails with its own code and a clean fixture passes. Pre-fix result: FAILS, no checker exists.'
+  verifiable_closure: 'Checker output attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixtures land with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: rule set, fixtures, CLI.'
+  provenance: research reports kumbia-imagegen-pipeline item 6, vision-models item 2.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: a-deterministic-rectify-tool-downscales-sprites-to-the-native-grid-and-packs-an-atlas-with-pivots
+  order: 1921-6is2
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [assets, imagegen, cpu-ok]
+  estimated_hours: 6
+  title: 'A model-free rectify tool crops to bbox, downscales nearest to 32x40 or 48x64, quantises to a named palette, adds 2 px gutters and writes an atlas plus frame JSON with pivots'
+  context: 'The largest unfinished art work in the reference project is not AI. Pixel art needs a downscale, not an upscaler.'
+  exit_criteria:
+  - 'A 28-frame atlas builds from a folder of sprites and passes the 1921-ga2q checker; re-running gives identical bytes. Pre-fix result: FAILS, no tool exists.'
+  verifiable_closure: 'Atlas, JSON and checker output attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for ga2q.'
+  provenance: research report kumbia-imagegen-pipeline item 7.
+  blocked_by: [1921-ga2q]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p3 from the media research (2026-10-28)
+
+# ---------------- R3: interactive co-editing (v0.8) ----------------
+- packet_id: comfyui-mcp-tools-and-a-websocket-event-bridge-let-an-agent-run-a-workflow-without-a-status-loop
+  order: 1921-vebq
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.8
+  pickup_role: linux
+  capability_tags: [comfyui, mcp, events, studio]
+  estimated_hours: 10
+  title: 'A comfyui MCP (queue, cancel, list_nodes, outputs, save_workflow) plus one sidecar holding the ComfyUI /ws websocket re-emits progress, executed and execution_error on the event stream, so no tool loops on status'
+  context: 'Operator 2026-10-28: no new polling, events instead. Outputs return paths plus 1871-47ex metadata, never inline images. The sidecar dies with the studio.'
+  exit_criteria:
+  - 'Against a fake ComfyUI websocket, an agent queues a workflow and receives progress and executed events with stable ids; the fixture counts zero calls to /history or a status tool during the run, and the sidecar is gone after studio stop. Pre-fix result: FAILS, no comfyui MCP exists.'
+  verifiable_closure: 'Fixture transcript with the call count. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 2krx; fake websocket fixture first.'
+  provenance: research reports studio-coediting-roadmap section 2.2 and gap 2, kumbia-imagegen-pipeline section 7.
+  blocked_by: [1921-2krx]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: agent-saved-comfyui-workflows-persist-as-scrubbed-api-and-ui-json-and-replay-to-identical-pixels
+  order: 1921-hih9
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.8
+  pickup_role: any
+  capability_tags: [comfyui, studio, provenance]
+  estimated_hours: 5
+  title: 'comfy_save_workflow writes API and UI JSON under workflows/ through the write guard with a version pin and scrubbed metadata, and a replay on a fixed seed gives identical pixels on the CPU tier'
+  context: 'Replaces "exact prompt in README" with a reproducible record compatible with the kumbia manifest (prompt, workflow hash, seed, model hashes). PNG metadata embeds the workflow; scrub before commit.'
+  exit_criteria:
+  - 'A fixture saves a workflow, the file appears as a diff in the checkout, a traversal name is refused and evented, and a replay on the CPU tier reproduces the same pixel hash. Pre-fix result: FAILS, no workflow persistence exists.'
+  verifiable_closure: 'Fixture transcript. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for vebq.'
+  provenance: research reports studio-coediting-roadmap gap 3, kumbia-imagegen-pipeline item 5.
+  blocked_by: [1921-vebq]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: agent-and-user-edits-on-one-studio-canvas-resolve-last-saved-wins-with-an-evented-diff-and-a-visible-agent-is-looking-marker
+  order: 1921-nbxz
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.8
+  pickup_role: linux
+  capability_tags: [studio, browser, events]
+  estimated_hours: 6
+  title: 'Agent and user act on one studio canvas: concurrent saves resolve last-saved-wins with an evented diff, studio.* events reach the tray line and transcript, and a canvas screenshot shows an agent-is-looking marker in the user window'
+  context: 'comfy_canvas_screenshot delegates to browser.screenshot on the same window id the user sees. Observation is never silent.'
+  exit_criteria:
+  - 'A fixture interleaves a user save and an agent save on one canvas and asserts the later save wins, a studio.saved event carries the diff of the overwritten one, and during an agent screenshot the window title carries the marker. Pre-fix result: FAILS, no studio events or marker exist.'
+  verifiable_closure: 'Fixture transcript. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for vebq.'
+  provenance: research report studio-coediting-roadmap section 2.3 and gaps 4, 7.
+  blocked_by: [1921-vebq]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: a-vision-mcp-validates-assets-with-a-typed-checklist-labelling-each-verdict-deterministic-embedding-or-vlm
+  order: 1921-s4bh
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.8
+  pickup_role: any
+  capability_tags: [vision, mcp, llama-cpp, cpu-ok]
+  estimated_hours: 12
+  title: 'A vision MCP (llama.cpp Qwen3-VL-4B default, Qwen3-VL-2B or SmolVLM2 floor; aux Florence-2, SigLIP2, DINOv2-small, BiRefNet) offers validate_asset, caption, similarity and review_screenshot, and labels every verdict by method and tier_used'
+  context: 'All named weights verified Apache-2.0 or MIT and ungated on 2026-10-28. Excluded: Qwen2.5-VL-3B and 72B, Gemma 3, MiniCPM-V, DINOv3. Deterministic checklist kinds call the 1921-ga2q checker and never reach a VLM. Floor tier on macOS and Windows reports tier_used so a floor verdict is not read as a default one.'
+  exit_criteria:
+  - 'On a golden set of about 20 good and bad assets (extra tail, missing alpha, baked text, off-style), validate_asset reaches the agreed recall on bad ones, every check carries method and tier_used, and a dimensions check produces no VLM call. Pre-fix result: FAILS, no vision MCP exists.'
+  verifiable_closure: 'Golden-set report attached. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the golden set lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for ga2q and h4gv; llama.cpp vision container, aux sidecar, MCP.'
+  provenance: research report vision-models items 3-7, 9, 11.
+  blocked_by: [1921-ga2q, 1921-h4gv]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: a-gpu-lease-arbiter-in-the-launcher-shares-vram-between-imagegen-studio-vision-music-and-llm-without-oom
+  order: 1921-yxki
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.8
+  pickup_role: linux
+  capability_tags: [gpu, nvidia-gpu, scheduler, events]
+  estimated_hours: 10
+  title: 'A GPU lease arbiter in the launcher (acquire service, vram_mb, priority) measures VRAM by NVML, gives imagegen an exclusive lease, evicts idle vision models, and drops a queued validate to the floor tier instead of blocking'
+  context: 'One 24 GB card cannot hold imagegen, vision, music and an LLM hot. Lease grants and evictions are events; nothing polls. VRAM is measured by the launcher, not self-reported.'
+  exit_criteria:
+  - 'A fixture runs a generation and a vision request concurrently; neither OOMs, the vision call returns tier_used=floor, the lease log shows the eviction order, and vision returns to default after the lease ends. Pre-fix result: FAILS, no arbiter exists.'
+  verifiable_closure: 'Lease log and fixture output. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: lease API and its events, then wire imagegen and vision.'
+  provenance: research report vision-models GPU section and item 10.
+  blocked_by: [1921-s4bh]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p2 from the media research (2026-10-28)
+- packet_id: an-optional-music-models-layer-runs-the-anticipatory-music-transformer-for-infill-behind-the-licence-register
+  order: 1921-ynar
+  parent: 1921-9fa7
+  status: ready
+  kind: research
+  priority: p3
+  desired_release: v0.8
+  pickup_role: any
+  capability_tags: [music, models, gpu]
+  estimated_hours: 8
+  title: 'An optional music-models layer runs the Anticipatory Music Transformer (Apache-2.0 code and weights) to infill one track; after key-snap and quantise it passes music_validate, and a keep-or-drop verdict is recorded'
+  context: 'Verified 2026-10-28: stanford-crfm/music-medium-800k and jthickstun/anticipation are Apache-2.0, ungated. Excluded audio models: Stable Audio Open (gated, community licence), AudioLDM2 (CC-BY-NC-SA), AudioGen (CC-BY-NC). Weights in a volume, never in the image; pulled through the 1921-h4gv register.'
+  exit_criteria:
+  - 'On a GPU host, infill one added track for a reference score; the post-processed score passes music_validate; VRAM, seconds per bar and a human listening note are recorded; with the layer absent the engine returns a typed unsupported. Pre-fix result: FAILS, no model engine exists.'
+  verifiable_closure: 'Measurement record and verdict in the research store. Pre-fix result: FAILS.'
+  unscoreable: 'research row: closes on a recorded verdict.'
+  next_action: 'Nothing is built. Left: wait for 3mvy and h4gv.'
+  provenance: research report music-models items 7-8.
+  blocked_by: [1921-3mvy, 1921-h4gv]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:10:00Z'
+    host: macuahuitl
+    summary: filed p3 from the media research (2026-10-28)
+
+# ---------------- Operator additions 2026-10-29 (relayed by the coordinator) ----------------
+- packet_id: open-this-project-in-a-tool-is-a-launch-verb-listed-from-the-launcher-registry-to-the-agent-and-the-user
+  order: 1921-idyv
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [studio, launcher, mcp, tray]
+  estimated_hours: 6
+  title: 'A user or agent can say "open this project in <tool>": every launcher registry row (ComfyUI, the website editors, later others) gets a launch verb, and the available set is listed to the agent (MCP) and the user (tray) from the registry'
+  context: 'Operator addition 2026-10-29. The list is derived from the 1860-auhm registry, never hand-kept; 1859-57mi supplies the "N options, one Recommended" shape. Adding a row adds a verb with no launcher code change.'
+  exit_criteria:
+  - 'A fixture registers a dummy studio row and asserts it appears in the agent tool listing and the tray menu model with no code change, and that "open <project> in dummy" launches it; an unregistered tool name returns a typed unknown-tool listing the available set. Pre-fix result: FAILS, no launch verb or registry listing exists.'
+  verifiable_closure: 'Fixture transcript. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 1860-auhm, then derive verbs and listings from the registry.'
+  provenance: operator addition 2026-10-29 relayed by the coordinator for story 1921.
+  blocked_by: [1860-auhm]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:30:00Z'
+    host: macuahuitl
+    summary: filed p2 from the operator addition (2026-10-29)
+- packet_id: expensive-launches-go-through-a-queue-that-emits-queued-building-downloading-ready-and-failed-with-retry-after-events
+  order: 1921-8up3
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.7
+  pickup_role: any
+  capability_tags: [launcher, events, images, models]
+  estimated_hours: 8
+  title: 'Expensive launches (a cold container build or a model download) go through one queue whose observable event stream carries queued, building, downloading with byte progress, ready, and failed with retry_after; nothing polls'
+  context: 'Operator addition 2026-10-29, consistent with the image-build retry ruling (automatic backoff, agents get retry_after, one status line). Subscribers are the agent (MCP notifications) and the tray. Covers studio images, music-service and model fetches through the 1921-h4gv register.'
+  exit_criteria:
+  - 'A fixture enqueues two cold launches against a fake builder and a fake fetcher and asserts the ordered event sequence per job (queued, building or downloading with increasing byte counts, ready), a forced failure emits failed with retry_after, and a check finds no sleep or interval loop in any subscriber path. Pre-fix result: FAILS, no launch queue or event vocabulary exists.'
+  verifiable_closure: 'Event transcript. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: event vocabulary, queue, fixture; then route 1921-idyv launches through it.'
+  provenance: operator addition 2026-10-29 relayed by the coordinator for story 1921.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:30:00Z'
+    host: macuahuitl
+    summary: filed p2 from the operator addition (2026-10-29)
+- packet_id: on-macos-the-comfyui-studio-runs-cpu-only-in-the-vm-in-a-reduced-mode-of-small-models-and-static-images
+  order: 1921-f5ty
+  parent: 1921-9fa7
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.7
+  pickup_role: macos
+  capability_tags: [comfyui, studio, macos-vm, cpu-ok]
+  estimated_hours: 6
+  title: 'On macOS the ComfyUI studio runs CPU-only inside the Linux VM in a reduced mode (I0/I1 small models, static images only), says so in one curated sentence, and refuses larger tiers'
+  context: 'Operator addition 2026-10-29. The VM has no GPU passthrough today. Native host MPS ComfyUI stays pending an operator decision and is not filed. GPU in the VM is the 1921-xkhw spike.'
+  exit_criteria:
+  - 'On a macOS host, opening a project in comfyui starts the studio in the VM, an SDXS 1-step static image completes on CPU, a larger tier or a video workflow is refused with the curated reduced-mode sentence, and the reported mode is reduced-cpu. Pre-fix result: FAILS, the studio is not offered on macOS.'
+  verifiable_closure: 'Run transcript from a macOS host. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the probe lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built. Left: wait for 1921-2krx, then the reduced-mode profile.'
+  provenance: operator addition 2026-10-29 relayed by the coordinator for story 1921.
+  blocked_by: [1921-2krx]
+  events:
+  - type: filed
+    ts: '2026-10-29T01:30:00Z'
+    host: macuahuitl
+    summary: filed p3 from the operator addition (2026-10-29)
+- packet_id: spike-sd-cpp-on-vulkan-through-libkrun-virtio-gpu-venus-inside-the-macos-vm
+  order: 1921-xkhw
+  parent: 1921-9fa7
+  status: ready
+  kind: research
+  priority: p3
+  desired_release: v0.7
+  pickup_role: macos
+  capability_tags: [imagegen, macos-vm, vulkan, gpu]
+  estimated_hours: 6
+  title: 'Spike: sd.cpp on Vulkan via libkrun virtio-gpu Venus inside the macOS VM; record whether it places on the GPU, and its seconds per image against CPU'
+  context: 'Operator addition 2026-10-29. 1653-77bt (completed) recorded the Venus-in-VM versus host-Metal decision; this measures the imagegen case. 1874-qyfv (host-native Metal helper) is unchanged. Native host MPS ComfyUI stays pending an operator decision.'
+  exit_criteria:
+  - 'A recorded measurement on a macOS host runs one I0 and one I1 generation with sd.cpp Vulkan in the VM and states backend placed (vulkan or cpu fallback) and seconds per image versus the CPU baseline; verdict keep or drop written to the research store. Pre-fix result: FAILS, no measurement exists.'
+  verifiable_closure: 'Measurement record. Pre-fix result: FAILS.'
+  unscoreable: 'research row: closes on a recorded verdict.'
+  next_action: 'Nothing is built. Left: build sd.cpp with Vulkan in the VM image, run both tiers, record.'
+  provenance: operator addition 2026-10-29 relayed by the coordinator for story 1921.
+  events:
+  - type: filed
+    ts: '2026-10-29T01:30:00Z'
+    host: macuahuitl
+    summary: filed p3 from the operator addition (2026-10-29)
+
+events:
+- packet_id: grapesjs-and-silex-studio-lanes-for-static-html
+  event:
+    type: note
+    ts: '2026-10-29T01:30:00Z'
+    host: macuahuitl
+    summary: 'Silex stays out for now (2026-10-25 ruling). The operator is re-checking that ruling (2026-10-29); do not add a Silex lane unless the operator re-admits it.'

@@ -14,7 +14,7 @@
 # @trace spec:project-bootstrap-readme
 set -euo pipefail
 
-name="" summary="" stack="other" specs=1 dir="." deploy="none" runtime="" port="8080"
+name="" summary="" stack="other" specs=1 dir="." deploy="" runtime="" port="8080"
 while [ $# -gt 0 ]; do
     case "$1" in
         --name) name="${2:-}"; shift 2 ;;
@@ -33,6 +33,7 @@ if [ -z "$name" ] || [ -z "$summary" ]; then
     exit 2
 fi
 case "$stack" in flutter|flutter-flame|web|other) ;; *) echo "unknown --stack: $stack" >&2; exit 2 ;; esac
+if [ -z "$deploy" ]; then case "$stack" in web|flutter) deploy=cloudflare ;; *) deploy=none ;; esac; fi
 case "$deploy" in cloudflare|gcp-dockerfile|gcp-buildpacks|none) ;; *) echo "unknown --deploy: $deploy" >&2; exit 2 ;; esac
 case "$runtime" in ""|node|python|go|static) ;; *) echo "unknown --runtime: $runtime" >&2; exit 2 ;; esac
 case "$port" in ''|*[!0-9]*) echo "--port must be a number: $port" >&2; exit 2 ;; esac
@@ -55,9 +56,6 @@ case "$runtime" in node) gcp_runtime=nodejs ;; *) gcp_runtime="$runtime" ;; esac
 case "$deploy:$runtime" in
     gcp-buildpacks:static)
         echo "Google Cloud's buildpacks cannot serve a static or Flutter web app yet; use --deploy gcp-dockerfile." >&2
-        exit 3 ;;
-    cloudflare:*)
-        echo "Cloudflare setup is not available in this version yet." >&2
         exit 3 ;;
 esac
 
@@ -181,10 +179,32 @@ render() {
     text="${text//\{\{SLUG\}\}/$slug}"
     text="${text//\{\{PORT\}\}/$port}"
     text="${text//\{\{RUNTIME\}\}/$gcp_runtime}"
+    text="${text//\{\{COMPAT_DATE\}\}/$compat_date}"
     write_new "$2" <<<"$text"
 }
+# Today's date, from bash itself: the skill's own test runs with a bare PATH.
+# bash 3.2 (macOS) has no %()T, so fall back to date by absolute path.
+if ! printf -v compat_date '%(%Y-%m-%d)T' -1 2>/dev/null; then
+    compat_date="$(/bin/date +%Y-%m-%d)"
+fi
 
 case "$deploy" in
+    cloudflare)
+        if [ "$stack" = flutter ]; then
+            render cloudflare/wrangler.spa.jsonc wrangler.jsonc
+        else
+            render cloudflare/wrangler.static.jsonc wrangler.jsonc
+            render cloudflare/index.html public/index.html
+        fi
+        render cloudflare/dev.vars.example .dev.vars.example
+        # Local-only settings never reach git; an existing line is left alone.
+        if [ ! -f .gitignore ]; then
+            write_new .gitignore <<<".dev.vars"
+        elif ! grep -qx '.dev.vars' .gitignore; then
+            printf '.dev.vars\n' >>.gitignore
+            echo "updated: .gitignore"
+        fi
+        ;;
     gcp-dockerfile)
         render "gcp/Dockerfile.$runtime" Dockerfile
         render gcp/dockerignore .dockerignore

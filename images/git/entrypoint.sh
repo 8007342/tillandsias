@@ -311,6 +311,9 @@ retry_msg() {
 # implementation this entrypoint runs (same pattern as RELAY_REF below).
 # Exit 3 (no heads yet — still seeding) is expected and non-fatal.
 ENSURE_HEAD="${ENSURE_HEAD:-/usr/local/share/git-service/ensure-mirror-head}"
+# 1910-nb6m: the empty-mirror seed, with transport retries (same override
+# pattern, so fixtures run the exact script).
+SEED_MIRROR="${SEED_MIRROR:-/usr/local/share/git-service/seed-mirror}"
 ensure_mirror_head() {
     OUT="$("$ENSURE_HEAD" "$1" 2>&1)" && rc=0 || rc=$?
     [ -n "$OUT" ] && retry_msg "[git-mirror] $OUT"
@@ -621,7 +624,8 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
         # leave a fresh mirror with no cloneable heads/tags. This one-time seed
         # writes local heads and tags directly so clones over the git daemon see
         # them; subsequent reconcile fetches use the safe tracking refspec.
-        if ! FETCH_OUTPUT="$(git -C "$mirror" fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' 2>&1)"; then
+        # 1910-nb6m: seed-mirror retries a transport failure with backoff.
+        if ! FETCH_OUTPUT="$("$SEED_MIRROR" "$mirror" 2>&1)"; then
             case "$FETCH_OUTPUT" in
                 # @trace spec:git-mirror-service
                 # 777-i7hf/731-eupn honesty: an auth refusal must never read
