@@ -60,10 +60,12 @@ critical_path:
 
   # SOURCE PIN, read on the file directly so a fixture that stopped looking
   # cannot hide the regression. The defect was LANE_CMD ending in the bare
-  # ${PROJECT}; this asserts the line derives from the checkout instead.
-  - step: "SOURCE PIN: LANE_CMD derives its path from the checkout, not from a bare project name"
-    command: "l=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}ROOT' scripts/check-bare-metal-host-initialized.sh || true) && b=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}PROJECT' scripts/check-bare-metal-host-initialized.sh || true) && test \"$l\" -eq 1 && test \"$b\" -eq 0 && echo \"ok: lane-cmd-from-root=$l bare-project=$b\""
+  # ${PROJECT}. 776-jcf3 (1923-88x7) retired host-checkout launches, so the
+  # line is now the cloud form, owner/repo derived from the checkout origin;
+  # nothing may follow --bash, neither a bare name nor a host path.
+  - step: "SOURCE PIN: LANE_CMD is the cloud form from the checkout origin, never --bash with a bare project name or path"
+    command: "l=$(grep -cF 'LANE_CMD=\"tillandsias --cloud ${_nwo} --bash\"' scripts/check-bare-metal-host-initialized.sh || true) && b=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}\\(PROJECT\\|ROOT\\)' scripts/check-bare-metal-host-initialized.sh || true) && test \"$l\" -eq 1 && test \"$b\" -eq 0 && echo \"ok: lane-cmd-cloud-form=$l bare-project=$b\""
     timeout_ms: 15000
-    expected_behavior: "ok: lane-cmd-from-root=1 bare-project=0"
+    expected_behavior: "ok: lane-cmd-cloud-form=1 bare-project=0"
     assert_exit: 0
     assert_output_contains: "bare-project=0"
