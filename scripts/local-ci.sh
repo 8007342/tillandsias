@@ -1198,7 +1198,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     log_section "Rust Code Quality (fmt, clippy, tests)"
 
     # Stage the router sidecar before the first cargo invocation (723-wd8i).
-    # crates/tillandsias-headless/build.rs:93 lists
+    # crates/tillandsias-embed/build.rs lists
     # images/router/tillandsias-router-sidecar among its REQUIRED runtime assets
     # and panics at build.rs:104 when it is absent. Order 710-w9kc un-committed
     # that file and taught build.sh and scripts/build-image.sh to produce it,

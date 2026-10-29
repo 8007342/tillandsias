@@ -3178,7 +3178,7 @@ main() {
     # ORDER 871-wrmv: STAGE THE ROUTER SIDECAR BEFORE ANY STEP COMPILES RUST.
     #
     # `images/router/tillandsias-router-sidecar` is a BUILD ARTIFACT, gitignored
-    # and never committed (710-w9kc), and tillandsias-headless/build.rs
+    # and never committed (710-w9kc), and crates/tillandsias-embed/build.rs
     # hard-panics when it is absent. 29 litmus files invoke cargo against that
     # crate, so on a fresh clone — or any host whose target/ was wiped — each of
     # them fails for a reason that has nothing to do with what it tests.

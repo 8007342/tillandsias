@@ -158,7 +158,7 @@ jobs:
           # to read "the router sidecar + runtime assets are git-tracked, so nix
           # embeds them from the checked-out tree". That sentence stopped being
           # true the moment the blob was removed, and nothing here noticed:
-          # crates/tillandsias-headless/build.rs:93 still lists the file among
+          # crates/tillandsias-embed/build.rs still lists the file among
           # its REQUIRED runtime assets and panics at build.rs:104 without it,
           # so the two headless builds below would fail on a clean CI checkout.
           # It has never been exercised — the last release predates the removal.

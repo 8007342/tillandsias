@@ -119,6 +119,11 @@ listen-vsock = ["host-services", "tokio-vsock", "tillandsias-control-wire/vsock"
 # No crates of its own; it exists so the guest gets them without the desktop
 # tray (zbus, image) that `tray` brings.
 host-services = []
+# ORDER 1916-embd: the DEV loop. Embed no runtime assets and read them from
+# this checkout at runtime (TILLANDSIAS_ASSET_SOURCE_ROOT overrides), so an
+# asset edit costs no rustc work. Off by default: every release path embeds
+# without having to remember a flag. Never ship a binary built with it.
+assets-from-source = ["tillandsias-embed/from-source"]
 # @trace spec:tillandsias-vault — Phase 6 default-on.
 vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs", "keyring"]
 
