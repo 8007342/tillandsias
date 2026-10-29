@@ -205,7 +205,8 @@ fn main() {
         .unwrap();
     }
 
-    writeln!(file, "];").unwrap();}
+    writeln!(file, "];").unwrap();
+}
 
 // @trace spec:observatorium-dashboard
 // The embedded legacy page is independent of the Flutter dashboard. Never
