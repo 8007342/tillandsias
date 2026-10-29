@@ -4229,7 +4229,8 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 }
 
 /// The passwd home of this user, which HOME cannot fake.
-#[cfg(all(test, unix))]
+#[cfg(test)]
+#[cfg(unix)]
 fn passwd_home() -> Option<PathBuf> {
     // SAFETY: getpwuid returns a pointer into static storage or null; it is
     // read at once, under env_lock in every test caller.
