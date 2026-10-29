@@ -13,7 +13,7 @@ preconditions:
 
 critical_path:
   - step: "the timer, its ledger row shape, the per-step call-site pins and the real attached-launch forge-start report pass"
-    command: "RUSTUP_HOME=\"${RUSTUP_HOME:-$HOME/.rustup}\" CARGO_HOME=\"${CARGO_HOME:-$HOME/.cargo}\" cargo test -q -p tillandsias-headless --bin tillandsias -- bringup_timer delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap 2>&1 | tail -3"
+    command: "RUSTUP_HOME=\"${RUSTUP_HOME:-$HOME/.rustup}\" CARGO_HOME=\"${CARGO_HOME:-$HOME/.cargo}\" cargo test -q -p tillandsias-headless --bin tillandsias -- bringup_timer delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap 2>&1"
     timeout_ms: 600000
     expected_behavior: "test result: ok."
 
