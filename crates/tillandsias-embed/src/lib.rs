@@ -67,7 +67,9 @@ mod tests {
         // SAFETY: this crate's tests are the only readers of this variable.
         unsafe { std::env::set_var("TILLANDSIAS_ASSET_SOURCE_ROOT", "/nonexistent/1916-embd") };
         let served = runtime_assets();
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root =
+            Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"))
+                .join("../..");
         let want = collect::collect_all(&root);
         assert!(ASSETS_EMBEDDED);
         assert_eq!(
@@ -108,7 +110,9 @@ mod tests {
     fn from_source_regime_embeds_nothing_and_reads_the_tree() {
         assert!(!ASSETS_EMBEDDED);
         assert!(EMBEDDED_RUNTIME_ASSETS.is_empty());
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root =
+            Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"))
+                .join("../..");
         assert_eq!(runtime_assets().len(), collect::collect_all(&root).len());
         println!("ok:from-source-assets:{}", runtime_assets().len());
     }
