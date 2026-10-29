@@ -27761,6 +27761,144 @@ mod tests {
         );
     }
 
+    /// The vault stubs store what they were sent (base64); decode it here so
+    /// the stub scripts carry no decode-to-file idiom.
+    #[cfg(unix)]
+    fn decode_vaulted(path: &std::path::Path) -> String {
+        let Ok(encoded) = std::fs::read(path) else {
+            return String::new();
+        };
+        let mut child = match std::process::Command::new("base64")
+            .arg("-d")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => return String::new(),
+        };
+        {
+            use std::io::Write as _;
+            let _ = child.stdin.take().unwrap().write_all(&encoded);
+        }
+        child
+            .wait_with_output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    }
+
+    /// Order 1914-twan: Codex refresh tokens are single-use. An oomd or
+    /// `podman kill` takes the whole container, watcher included, so a
+    /// rotation is lost unless it was copied before the kill. Kill the whole
+    /// process group 1.2 s after a rotation: the old 2 s poll had not copied
+    /// it yet. Shape-only token values; nothing real.
+    #[cfg(unix)]
+    #[test]
+    fn codex_rotation_reaches_vault_before_a_container_kill() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::os::unix::process::CommandExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let images = std::path::Path::new(&manifest).join("../../images/default");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let vaulted = dir.path().join("vaulted");
+        let auth = dir.path().join("auth.json");
+        let rotated = dir.path().join("rotated");
+        std::fs::write(&auth, "{\"refresh_token\":\"shape-old\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        // Vault stub: keep the last document written, decoded.
+        write_exec(
+            &bin.join("vault-cli.sh"),
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        // A host without inotify-tools (macOS) gets a stand-in that prints
+        // the file name when its content changes, as inotifywait would; on a
+        // Linux gate host the real inotifywait is exercised.
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/auth.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo auth.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let agent = dir.path().join("agent");
+        write_exec(
+            &agent,
+            format!(
+                "printf '{{\"refresh_token\":\"shape-rotated\"}}\\n' >'{a}'\n: >'{r}'\nsleep 30",
+                a = auth.display(),
+                r = rotated.display()
+            ),
+        );
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(images.join("codex-oauth-session.sh"))
+            .arg("--")
+            .arg(&agent)
+            .env("PATH", &path)
+            .env(
+                "TILLANDSIAS_CODEX_VAULT_HELPER",
+                images.join("codex-oauth-vault.sh"),
+            )
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_AUTH_FILE", &auth)
+            .env(
+                "TILLANDSIAS_LIFECYCLE_LOG",
+                dir.path().join("lifecycle.log"),
+            )
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .process_group(0)
+            .spawn()
+            .expect("spawn wrapper");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !rotated.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(rotated.exists(), "stub agent never rotated the document");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        // The whole group, as a container kill would: no EXIT trap, no watcher.
+        let _ = std::process::Command::new("kill")
+            .args(["-KILL", "--", &format!("-{}", child.id())])
+            .status();
+        let _ = child.wait();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("shape-rotated") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(
+            held.contains("shape-rotated"),
+            "Vault must hold the rotated token after a container kill; it held: {held:?}"
+        );
+    }
+
     /// Order 1914-twan: a Codex lane whose agent exits on an expired sign-in
     /// ("account/read failed ... unauthorized (401)") offers the device
     /// sign-in in the same window and relaunches, instead of ending the lane.
