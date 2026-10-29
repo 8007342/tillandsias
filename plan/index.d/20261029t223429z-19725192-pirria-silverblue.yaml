@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-rs-assets-move-to-an-embed-crate
+    field: next_action
+    value: 'Option D pushed on work/1916-embd: feature tillandsias-headless/assets-from-source embeds nothing and reads the tree at runtime; embedding stays default for every release path. Cheatsheet touch, cargo build -p tillandsias-headless (pirria, dev, warm): 9.8 s before -> 0.23-0.32 s with the feature (embed and headless Fresh). Fixture: cargo test --release -p tillandsias-embed -> ok:embedded-assets-serve-without-source:538. Left: land; 1916-dvlp wires the feature into build.sh''s dev loop.'
+    ts: "2026-10-29T22:34:29Z"
+    host: pirria-silverblue
+    replaces_sha256: "630caa1379fbc7c399e87ffc01a7ad1d46d6c8148767109316a447f80fa93dcf"
+
+events:
+  - packet_id: build-rs-assets-move-to-an-embed-crate
+    event:
+      type: note
+      ts: "2026-10-29T22:34:29Z"
+      host: pirria-silverblue
+      summary: |-
+        option D pushed
