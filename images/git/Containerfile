@@ -84,6 +84,10 @@ COPY ensure-mirror-head.sh /usr/local/share/git-service/ensure-mirror-head
 # agents on a stale mirror between launches.
 COPY reconcile-exported-heads.sh /usr/local/share/git-service/reconcile-exported-heads
 
+# Order 1910-nb6m: the empty-mirror seed, retrying a transport failure with
+# backoff; the entrypoint runs it and offline fixtures exec the same file.
+COPY seed-mirror.sh /usr/local/share/git-service/seed-mirror
+
 # @trace spec:git-mirror-service, spec:meta-orchestration
 # Order 756-2jnj: non-mutating upstream WRITE-authorization probe — publishes
 # refs/tillandsias/upstream-auth/<state>/<epoch> at startup and on every
@@ -110,7 +114,8 @@ RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
     /usr/local/share/git-service/probe-upstream-auth \
     /usr/local/share/git-service/publish-sync-state \
     /usr/local/share/git-service/publish-relay-state \
-    /usr/local/share/git-service/publish-discipline
+    /usr/local/share/git-service/publish-discipline \
+    /usr/local/share/git-service/seed-mirror
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli

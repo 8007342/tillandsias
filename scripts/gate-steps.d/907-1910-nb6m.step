@@ -1,0 +1,11 @@
+# Gate step 1910-nb6m — data, not code (order 1072-b7eq).
+#
+# WHAT IT GUARDS. On a cold enclave the mirror's seed fetch met a transient
+# proxy 503 and was single-shot, so a fresh mirror stayed empty until the
+# reconciler's next tick, 120 s later. The fixture drives seed-mirror.sh
+# through a fake git that fails the first fetch, with a no-retry control.
+STEP_DESC="Checking the empty-mirror seed retries a transport failure (1910-nb6m)"
+STEP_LUA="scripts/lua/test-git-mirror-seed-retries-transport-failure.lua"
+STEP_ERROR="the mirror seed no longer survives a transient transport failure, or retries an auth refusal (1910-nb6m); see the arm lines above"
+STEP_OK="Mirror seed retry fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-28 darwin ok:git-mirror-seed-retries-transport-failure:4"
