@@ -183,7 +183,10 @@ render() {
     write_new "$2" <<<"$text"
 }
 # Today's date, from bash itself: the skill's own test runs with a bare PATH.
-printf -v compat_date '%(%Y-%m-%d)T' -1
+# bash 3.2 (macOS) has no %()T, so fall back to date by absolute path.
+if ! printf -v compat_date '%(%Y-%m-%d)T' -1 2>/dev/null; then
+    compat_date="$(/bin/date +%Y-%m-%d)"
+fi
 
 case "$deploy" in
     cloudflare)
