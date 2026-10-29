@@ -154,9 +154,23 @@ fi
 # Opt out with TILLANDSIAS_NO_SCCACHE=1; an explicit RUSTC_WRAPPER wins.
 # The cache dir is a fixed, bind-mountable path so the operator can put it
 # on the fast build root without any env change (1805-relo).
+# ORDER 1916-dvlp — TWO REGIMES. sccache refuses an incremental unit
+# ("incremental compilation is prohibited"), so the wrapper and a dev
+# incremental loop exclude each other. CARGO_INCREMENTAL=1 (or
+# TILLANDSIAS_CARGO_INCREMENTAL=1) is the DEV regime: no wrapper, and the
+# default debug build reads headless's runtime assets from this checkout
+# (assets-from-source, 1916-embd) so an asset edit costs no rustc work. The
+# gate regime (CARGO_INCREMENTAL=0 or unset) keeps the wrapper and embeds.
+# Pinned by scripts/lua/test-build-sccache-regimes.lua.
 # BEGIN-SCCACHE
 _sccache_bin=""
-if [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
+TILLANDSIAS_DEV_BUILD_FEATURES=""
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    TILLANDSIAS_DEV_BUILD_FEATURES="--features tillandsias-headless/assets-from-source"
+fi
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    : # the dev regime: the off line below says why
+elif [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
     _sccache_bin="$(command -v sccache 2>/dev/null || true)"
 fi
 if [[ -n "$_sccache_bin" ]]; then
@@ -169,6 +183,7 @@ else
     _sccache_why="no sccache on PATH; install one into ~/.cargo/bin"
     [[ -n "${TILLANDSIAS_NO_SCCACHE:-}" ]] && _sccache_why="TILLANDSIAS_NO_SCCACHE set"
     [[ -n "${RUSTC_WRAPPER:-}" ]] && _sccache_why="RUSTC_WRAPPER already set to $RUSTC_WRAPPER"
+    [[ "${CARGO_INCREMENTAL:-}" == "1" ]] && _sccache_why="CARGO_INCREMENTAL=1: the dev regime; sccache refuses incremental units (1916-dvlp)"
     echo "sccache: off ($_sccache_why)" >&2
     unset _sccache_why
 fi
@@ -6829,8 +6844,9 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
     _bump_build_version
     _check_trace_coverage
-    _step "Building workspace (debug)..."
-    _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    _step "Building workspace (debug)${TILLANDSIAS_DEV_BUILD_FEATURES:+, dev regime: assets from source}..."
+    # shellcheck disable=SC2086 # the features word list is split on purpose
+    _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" $TILLANDSIAS_DEV_BUILD_FEATURES 2>&1
     _info "Debug build complete"
 
     # Prune dangling images accumulated during the build

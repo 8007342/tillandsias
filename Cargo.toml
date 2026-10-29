@@ -124,6 +124,13 @@ tillandsias-podman = { path = "crates/tillandsias-podman" }
 tillandsias-scanner = { path = "crates/tillandsias-scanner" }
 tillandsias-secure-channel = { path = "crates/tillandsias-secure-channel" }
 
+# ORDER 1916-dvlp. The dev loop's debuginfo: line tables are enough for a
+# backtrace with file:line, and unpacked split debuginfo leaves it in the
+# object files instead of copying it into every linked binary.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
 [profile.release]
 lto = true
 strip = true
