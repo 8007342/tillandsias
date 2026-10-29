@@ -10,14 +10,8 @@ use tillandsias_core::image_builder::{
     ImageBuildIdentity, ImageBuildSpec, image_build_identity as compute_image_build_identity,
 };
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct EmbeddedRuntimeAsset {
-    pub(crate) path: &'static str,
-    pub(crate) bytes: &'static [u8],
-    pub(crate) executable: bool,
-}
-
-include!(concat!(env!("OUT_DIR"), "/runtime_assets_generated.rs"));
+// ORDER 1916-embd: generated and embedded by the tillandsias-embed crate.
+pub(crate) use tillandsias_embed::{EMBEDDED_RUNTIME_ASSETS, EmbeddedRuntimeAsset};
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RuntimeAssetManifest {

@@ -13,6 +13,9 @@ path = "src/main.rs"
 
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
+# Order 1916-embd: the embedded runtime assets, in their own crate so an asset
+# edit does not rerun this crate's build script.
+tillandsias-embed = { path = "../tillandsias-embed" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 # Order 1420-2pav: the tillandsia palette and colour-tier detection for the
 # QR login screen (the renderer crate is 1420-9vpk).

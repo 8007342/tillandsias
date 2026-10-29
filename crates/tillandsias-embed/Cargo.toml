@@ -1,0 +1,12 @@
+[package]
+name = "tillandsias-embed"
+version = "56.10.20"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Runtime assets (images/, skills/, research/, observatorium, scripts) embedded into the headless binary"
+publish = false
+
+# ORDER 1916-embd. The asset tree's rerun-if-changed lines live in THIS crate's
+# build.rs, so a cheatsheet edit reruns this small build script and recompiles
+# this one-file crate instead of rerunning tillandsias-headless's build script.

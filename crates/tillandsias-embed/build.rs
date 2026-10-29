@@ -1,0 +1,370 @@
+// @trace spec:user-runtime-lifecycle, spec:linux-native-portable-executable, spec:init-command
+// ORDER 1916-embd: moved from crates/tillandsias-headless/build.rs so that the
+// asset tree's rerun-if-changed lines invalidate this crate, not headless.
+use std::fs;
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Asset {
+    source: PathBuf,
+    dest: String,
+}
+
+fn main() {
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(Path::parent)
+        .expect("crate lives under repo_root/crates/tillandsias-embed");
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let generated = out_dir.join("runtime_assets_generated.rs");
+
+    let mut assets = Vec::new();
+    collect_assets(
+        &repo_root.join("images"),
+        &repo_root.join("images"),
+        repo_root,
+        "",
+        &mut assets,
+    );
+    collect_legacy_observatorium(repo_root, &mut assets);
+    collect_assets(
+        &repo_root.join("skills"),
+        &repo_root.join("skills"),
+        repo_root,
+        "images/default/skills",
+        &mut assets,
+    );
+    // Research library (spec:research-records): repo-root research/ is staged
+    // into images/default/research by build-image.sh, exactly like skills/.
+    collect_assets(
+        &repo_root.join("research"),
+        &repo_root.join("research"),
+        repo_root,
+        "images/default/research",
+        &mut assets,
+    );
+
+    for rel in ["scripts/manage-cache.sh", "scripts/run-observatorium.sh"] {
+        let path = repo_root.join(rel);
+        if path.is_file() {
+            assets.push(Asset {
+                source: path.clone(),
+                dest: rel.to_string(),
+            });
+        } else {
+            panic!("required runtime asset missing: {}", path.display());
+        }
+    }
+
+    assets.sort_by(|a, b| a.dest.cmp(&b.dest));
+
+    for asset in &assets {
+        println!("cargo:rerun-if-changed={}", asset.source.display());
+    }
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("images").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("skills").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("research").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("scripts/manage-cache.sh").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("scripts/run-observatorium.sh").display()
+    );
+
+    let required = [
+        "images/default/Containerfile.base",
+        "images/default/Containerfile",
+        "images/proxy/Containerfile",
+        "images/proxy/allowlist.txt",
+        "images/git/Containerfile",
+        "images/inference/Containerfile",
+        "images/router/Containerfile",
+        "images/router/base.Caddyfile",
+        "images/router/tillandsias-router-sidecar",
+        "images/chromium/Containerfile.core",
+        "images/chromium/Containerfile.framework",
+        "images/web/Containerfile",
+        "images/web-wrangler/Containerfile",
+        "images/web-wrangler/package.json",
+        "images/web-wrangler/package-lock.json",
+        "images/web-wrangler/wrangler.lock.json",
+        "images/web-wrangler/entrypoint.sh",
+        "images/webkit/Containerfile",
+        "images/webkit/webkit-window.js",
+        "observatorium/index.html",
+        "scripts/manage-cache.sh",
+        "scripts/run-observatorium.sh",
+        "skills/advance-work-from-plan/SKILL.md",
+        "research/INDEX.md",
+    ];
+    for rel in required {
+        if !repo_root.join(rel).is_file() {
+            // Every other entry in `required` is a tracked file: if it is gone,
+            // the checkout is broken and the path alone says so. The router
+            // sidecar is the one BUILD ARTIFACT in the list (order 710-w9kc
+            // un-committed it), so its absence is the normal state of a fresh
+            // clone and means "a build step has not run yet", not "your tree is
+            // corrupt". Naming the remedy here is what separates those two.
+            //
+            // This message is the whole reason the gap survived: three
+            // entrypoints compiled this crate without staging the sidecar
+            // first, and each failed with a bare path to a file the reader had
+            // never heard of and could not restore from git (723-wd8i).
+            // ORDER 1269-6fcn. The sidecar is a LINUX musl binary for the
+            // router CONTAINER. A non-Linux TARGET (the Windows or macOS host
+            // build) never runs a container lane natively, so a missing sidecar
+            // there must not refuse the build: v56.9.19.1's Windows release job
+            // died here. It is skipped with a named warning and simply not
+            // embedded. A Linux target still refuses below, so the container
+            // lane can never be handed an empty embed.
+            if rel == "images/router/tillandsias-router-sidecar"
+                && std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os != "linux")
+            {
+                println!(
+                    "cargo:warning=router sidecar absent: not embedded for target_os={} \
+                     (a Linux container-lane artifact; only Linux targets require it; 1269-6fcn)",
+                    std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default()
+                );
+                continue;
+            }
+            if rel == "images/router/tillandsias-router-sidecar" {
+                panic!(
+                    "required runtime asset missing: {}\n\
+                     \n\
+                     This is a BUILD ARTIFACT, not a tracked file — it is built \
+                     from crates/tillandsias-router-sidecar, never committed \
+                     (order 710-w9kc). A fresh clone will not have it.\n\
+                     \n\
+                     Produce it, then rebuild:\n    \
+                     bash scripts/build-sidecar.sh\n\
+                     \n\
+                     If you hit this from a build script, that script is missing \
+                     the staging call that build.sh and scripts/build-image.sh \
+                     already make.",
+                    repo_root.join(rel).display()
+                );
+            }
+            panic!(
+                "required runtime asset missing: {}",
+                repo_root.join(rel).display()
+            );
+        }
+    }
+
+    // ORDER 1750-a4re. The forge image's Bash command-policy decider is a
+    // build artifact (scripts/build-forge-plan-bin.sh), like the sidecar, but
+    // it is NOT required: a host with no musl C toolchain cannot produce it,
+    // and the forge image builds without it (policy-bin/ is a tracked dir).
+    // Such a forge refuses every Claude Bash command, so say so at build time
+    // for every target whose guest builds a forge. The release's nix build
+    // always stages it.
+    if std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "linux")
+        && !repo_root
+            .join("images/default/policy-bin/tillandsias-plan")
+            .is_file()
+    {
+        println!(
+            "cargo:warning=forge policy decider absent: images/default/policy-bin/tillandsias-plan \
+             not staged, so a forge built from this binary refuses every Claude Bash command \
+             (1750-a4re). Stage it: bash scripts/build-forge-plan-bin.sh"
+        );
+    }
+
+    let mut file = fs::File::create(&generated).unwrap();
+    writeln!(file, "// Auto-generated by build.rs; do not edit.").unwrap();
+    writeln!(file).unwrap();
+    writeln!(
+        file,
+        "pub const EMBEDDED_RUNTIME_ASSETS: &[EmbeddedRuntimeAsset] = &["
+    )
+    .unwrap();
+
+    for asset in assets {
+        let abs = asset.source.to_string_lossy();
+        let executable = is_executable(&asset.source);
+        writeln!(
+            file,
+            "    EmbeddedRuntimeAsset {{ path: {:?}, bytes: include_bytes!({:?}), executable: {} }},",
+            asset.dest, abs, executable
+        )
+        .unwrap();
+    }
+
+    writeln!(file, "];").unwrap();}
+
+// @trace spec:observatorium-dashboard
+// The embedded legacy page is independent of the Flutter dashboard. Never
+// recursively package its SDK caches, dependencies or generated web artifact.
+fn collect_legacy_observatorium(repo_root: &Path, out: &mut Vec<Asset>) {
+    for directory in ["observatorium", "observatorium/lib"] {
+        let path = repo_root.join(directory);
+        let meta = fs::symlink_metadata(&path)
+            .unwrap_or_else(|e| panic!("metadata {}: {e}", path.display()));
+        assert!(
+            meta.is_dir() && !meta.file_type().is_symlink(),
+            "runtime asset directory must be a real directory: {}",
+            path.display()
+        );
+    }
+    for rel in [
+        "observatorium/index.html",
+        "observatorium/lib/chart.umd.js",
+        "observatorium/lib/highlight.min.css",
+        "observatorium/lib/highlight.min.js",
+    ] {
+        let path = repo_root.join(rel);
+        let meta = fs::symlink_metadata(&path)
+            .unwrap_or_else(|e| panic!("metadata {}: {e}", path.display()));
+        assert!(
+            meta.is_file() && !meta.file_type().is_symlink(),
+            "runtime asset must be a regular file, not a symlink: {}",
+            path.display()
+        );
+        out.push(Asset {
+            source: path,
+            dest: rel.to_string(),
+        });
+    }
+}
+
+fn collect_assets(
+    dir: &Path,
+    collection_root: &Path,
+    repo_root: &Path,
+    dest_prefix: &str,
+    out: &mut Vec<Asset>,
+) {
+    if !dir.is_dir() {
+        panic!(
+            "required runtime asset directory missing: {}",
+            dir.display()
+        );
+    }
+
+    let mut entries = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
+        .map(|entry| entry.unwrap().path())
+        .collect::<Vec<_>>();
+    entries.sort();
+
+    for path in entries {
+        let meta = fs::symlink_metadata(&path)
+            .unwrap_or_else(|e| panic!("metadata {}: {e}", path.display()));
+        if meta.file_type().is_symlink() {
+            panic!(
+                "runtime assets must not contain symlinks: {}",
+                path.display()
+            );
+        }
+
+        let rel_repo = path
+            .strip_prefix(repo_root)
+            .expect("asset under repo root")
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        // Skip images/default/skills if we are collecting the images/ directory recursively.
+        // Same for images/default/research (staged copy of repo-root research/).
+        if dest_prefix.is_empty()
+            && (rel_repo.starts_with("images/default/skills")
+                || rel_repo.starts_with("images/default/research"))
+        {
+            continue;
+        }
+
+        if meta.is_dir() {
+            collect_assets(&path, collection_root, repo_root, dest_prefix, out);
+        } else if meta.is_file() {
+            let dest = if !dest_prefix.is_empty() {
+                let sub_rel = path
+                    .strip_prefix(collection_root)
+                    .expect("sub-asset under collection root")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                format!("{dest_prefix}/{sub_rel}")
+            } else {
+                rel_repo.clone()
+            };
+
+            out.push(Asset { source: path, dest });
+        }
+    }
+}
+
+fn is_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        fs::metadata(path)
+            .map(|m| m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        false
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::symlink;
+
+    #[test]
+    fn legacy_assets_ignore_dashboard_dependencies_but_reject_selected_symlinks() {
+        let root = std::env::temp_dir().join(format!(
+            "observatorium-embed-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("observatorium/lib")).unwrap();
+        fs::create_dir_all(root.join("observatorium/node_modules/.bin")).unwrap();
+        for rel in [
+            "index.html",
+            "lib/chart.umd.js",
+            "lib/highlight.min.css",
+            "lib/highlight.min.js",
+        ] {
+            fs::write(root.join("observatorium").join(rel), "legacy asset").unwrap();
+        }
+        symlink(
+            "../wrangler/bin/wrangler.js",
+            root.join("observatorium/node_modules/.bin/wrangler"),
+        )
+        .unwrap();
+        let mut assets = Vec::new();
+        collect_legacy_observatorium(&root, &mut assets);
+        assert_eq!(assets.len(), 4);
+        assert!(
+            assets
+                .iter()
+                .all(|asset| !asset.dest.contains("node_modules"))
+        );
+        let selected = root.join("observatorium/lib/chart.umd.js");
+        fs::remove_file(&selected).unwrap();
+        symlink("highlight.min.js", &selected).unwrap();
+        assert!(
+            std::panic::catch_unwind(|| collect_legacy_observatorium(&root, &mut Vec::new()))
+                .is_err()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+}
