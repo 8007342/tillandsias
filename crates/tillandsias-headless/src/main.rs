@@ -1303,8 +1303,9 @@ fn main() {
             run_rejoin(project, debug)
         };
         #[cfg(not(feature = "host-services"))]
-        let result: Result<(), String> =
-            Err("--rejoin needs a binary built with host services".to_string());
+        let result: Result<(), String> = Err(format!(
+            "--rejoin {project} needs a binary built with host services"
+        ));
         if let Err(e) = result {
             eprintln!("Error: {e}");
             std::process::exit(1);
@@ -9519,6 +9520,7 @@ fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debu
 /// rejoin re-attaches to, across every agent mode. A forge outlives its
 /// launcher (conmon owns it), so the launcher's death leaves exactly this
 /// container running with nobody attached.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 fn rejoin_target(
     project: &str,
     instance: Option<&str>,
@@ -9548,6 +9550,7 @@ fn rejoin_target(
     }
 }
 
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 fn rejoin_attach_args(container: &str) -> Vec<String> {
     vec!["attach".to_string(), container.to_string()]
 }
@@ -9557,9 +9560,9 @@ fn rejoin_attach_args(container: &str) -> Vec<String> {
 #[cfg(feature = "host-services")]
 fn run_rejoin(project: &str, debug: bool) -> Result<(), String> {
     let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
-    let out = std::process::Command::new("podman")
+    let out = podman_command()
         .args(["ps", "--format", "{{.Names}}"])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("podman ps failed: {e}"))?;
     if !out.status.success() {
         return Err(format!("podman ps exited {}", out.status));
@@ -9575,9 +9578,11 @@ fn run_rejoin(project: &str, debug: bool) -> Result<(), String> {
     if debug {
         eprintln!("[tillandsias] lane {project}-{lane} serves; attaching {container}");
     }
-    let status = std::process::Command::new("podman")
+    // Caller-owned: an interactive attach lasts as long as its operator.
+    let status = podman_command()
         .args(rejoin_attach_args(&container))
-        .status()
+        .spawn_caller_owned_lifetime()
+        .and_then(|mut child| child.wait())
         .map_err(|e| format!("podman attach failed: {e}"))?;
     if status.success() {
         Ok(())

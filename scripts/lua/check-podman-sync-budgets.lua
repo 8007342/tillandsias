@@ -13,8 +13,10 @@ local raw_allowed = env.get("PODMAN_SYNC_ESCAPE_HATCHES")
 --   3. imagegen_models.rs run_streamed (1874-h9ns): a model fetch or an
 --      image generation, whose progress is read from its own output stream
 --      (events, not polling) and which ends when the process exits.
--- A third needs the same justification here, in the same commit.
-if raw_allowed == nil or raw_allowed == "" then raw_allowed = "3" end
+--   4. main.rs run_rejoin (1911-3dqo): `podman attach` to a running forge,
+--      an interactive session that ends when its operator detaches or exits.
+-- A fifth needs the same justification here, in the same commit.
+if raw_allowed == nil or raw_allowed == "" then raw_allowed = "4" end
 if not text.is_match(raw_allowed, "^-?[0-9]+$") then
     verdict.emit("blocked:podman-sync-bounded:invalid-escape-hatches:" .. raw_allowed, 2)
 end
