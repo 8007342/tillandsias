@@ -162,6 +162,14 @@ fi
 # (assets-from-source, 1916-embd) so an asset edit costs no rustc work. The
 # gate regime (CARGO_INCREMENTAL=0 or unset) keeps the wrapper and embeds.
 # Pinned by scripts/lua/test-build-sccache-regimes.lua.
+# ORDER 1916-dvlp. Linux dev builds keep debuginfo in the object files
+# (split-debuginfo=unpacked) instead of copying it into every linked binary.
+# Linux only: on darwin "unpacked" piled up 1.2M loose .o files (104 GB) and
+# stalled every CoreFoundation test process; darwin sets its own value. An
+# explicit CARGO_PROFILE_DEV_SPLIT_DEBUGINFO wins.
+if [[ "$(uname -s)" == "Linux" ]]; then
+    export CARGO_PROFILE_DEV_SPLIT_DEBUGINFO="${CARGO_PROFILE_DEV_SPLIT_DEBUGINFO:-unpacked}"
+fi
 # BEGIN-SCCACHE
 _sccache_bin=""
 TILLANDSIAS_DEV_BUILD_FEATURES=""
