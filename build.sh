@@ -2555,15 +2555,60 @@ _run() {
 _gs_exec_step() {
     _step_rc=0
     _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
+    # 1924-dcoy: `cmd > >(tee)` leaves bash's process-substitution fd (63)
+    # open in cmd, so EVERY background job a step starts held the pipe, even
+    # one redirected to /dev/null. Open the tee on its own fd, hand the step
+    # only its stdout and stderr, and close that fd in the step. fd 8, not
+    # {var}: darwin's /bin/bash 3.2 has no named-fd allocation.
+    local _gs_tee
+    exec 8> >(tee "$_step_out")
+    _gs_tee=$!
     if [ -n "$STEP_LUA" ]; then
         # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
         # preflight-door contract (1570-mxcg), so a fixture that must ask the
         # plan binary finds one in the land queue's clean env too.
-        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" >&8 2>&1 8>&- || _step_rc=$?
     else
-        _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        _run bash "$_gs_root/$STEP_SCRIPT" >&8 2>&1 8>&- || _step_rc=$?
     fi
-    wait "$!" 2>/dev/null || true
+    exec 8>&-
+    _gs_await_step_pipe "$_gs_tee"
+}
+
+# ORDER 1924-dcoy — THE STEP'S PIPE CLOSES WHEN THE STEP DOES. tee ends at EOF,
+# and EOF comes only when every writer is gone: a background job the fixture
+# left on its stdout (a `sleep 60 &` decoy, or the sleep under a killed flock)
+# kept the gate waiting ~248 s per run for steps that work ~11 s. Wait at most
+# _GS_PIPE_GRACE_DS tenths of a second, then refuse the step, naming the
+# holders where /proc can, and stop waiting. The fix is in the fixture:
+# `</dev/null >/dev/null 2>&1` on the job and a kill in its EXIT trap.
+_GS_PIPE_GRACE_DS="${TILLANDSIAS_GATE_PIPE_GRACE_DS:-20}"
+_gs_await_step_pipe() {
+    local _tee="$1" _i=0 _pipe _holders="" _seen=" " _fd _p
+    while kill -0 "$_tee" 2>/dev/null && [ "$_i" -lt "$_GS_PIPE_GRACE_DS" ]; do
+        sleep 0.1; _i=$((_i + 1))
+    done
+    if ! kill -0 "$_tee" 2>/dev/null; then
+        wait "$_tee" 2>/dev/null || true
+        return 0
+    fi
+    _pipe="$(readlink "/proc/$_tee/fd/0" 2>/dev/null || true)"
+    if [ -n "$_pipe" ]; then
+        for _fd in /proc/[0-9]*/fd/*; do
+            [ "$(readlink "$_fd" 2>/dev/null)" = "$_pipe" ] || continue
+            _p="${_fd#/proc/}"; _p="${_p%%/*}"
+            [ "$_p" = "$_tee" ] && continue
+            case "$_seen" in *" $_p "*) continue ;; esac
+            _seen="$_seen$_p "
+            _holders="${_holders:+$_holders }$_p($(tr '\0' ' ' < "/proc/$_p/cmdline" 2>/dev/null | cut -c1-60))"
+        done
+    fi
+    printf 'refused:gate-step:background-job-holds-pipe:%s holders=%s\n' \
+        "${STEP_SCRIPT:-$STEP_LUA}" "${_holders:-unknown}" | tee -a "$_step_out" >&2
+    _afford "a background job the step started still holds its stdout pipe, so the gate would wait for it to exit (1924-dcoy)" \
+        "give the job </dev/null >/dev/null 2>&1 and kill it in the fixture's EXIT trap"
+    [ "$_step_rc" -ne 0 ] || _step_rc=1
+    kill "$_tee" 2>/dev/null || true
 }
 
 # _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
