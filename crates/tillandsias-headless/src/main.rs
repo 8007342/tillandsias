@@ -16230,6 +16230,23 @@ async fn run_delegated_agent_container(
     }
 }
 
+/// ORDER 1911-3dqo. The argv an attached forge launch hands podman: a tty
+/// session gets `--sig-proxy=false`, so a hangup or signal that reaches the
+/// `podman run` client (its launcher was SIGKILLed and the pty closed) ends
+/// the client and leaves the forge running under conmon for `--rejoin`.
+/// Ctrl-C still reaches the forge as a byte on the tty. An explicit
+/// `--sig-proxy` setting is left as given.
+fn attached_run_args(args: &[String]) -> Vec<String> {
+    let tty = args.iter().any(|a| a == "--tty" || a == "-t" || a == "-it");
+    let explicit = args.iter().any(|a| a.starts_with("--sig-proxy"));
+    let mut out = Vec::with_capacity(args.len() + 1);
+    if tty && !explicit {
+        out.push("--sig-proxy=false".to_string());
+    }
+    out.extend_from_slice(args);
+    out
+}
+
 async fn run_agent_container_attached(
     client: &PodmanClient,
     stage: &str,
@@ -16382,9 +16399,10 @@ async fn run_agent_container_attached(
 
     bringup_timer::report("forge-start", forge_started.elapsed().as_millis(), 0);
 
+    let attached = attached_run_args(args);
     let Some(config) = delegated else {
         return client
-            .run_container_attached_observed(stage, container_name, args, debug)
+            .run_container_attached_observed(stage, container_name, &attached, debug)
             .await;
     };
 
@@ -25927,6 +25945,27 @@ mod tests {
     /// Order 427: two workers on one project must not collide. Before the
     /// instance component existed, both got `tillandsias-<project>-forge-<mode>`
     /// and `--replace` made worker 2 destroy worker 1.
+    /// ORDER 1911-3dqo, measured on yoga 2026-10-30: SIGKILL of the launcher
+    /// hung up its pty, the attached `podman run` client proxied the hangup
+    /// as `container kill` (journal: kill event from the run client's own
+    /// pid, 2 ms before died), and `--rm` removed the forge. A tty session
+    /// carries Ctrl-C as a byte, so it needs no signal proxy.
+    #[test]
+    fn a_tty_forge_launch_does_not_proxy_the_launchers_signals() {
+        let tty: Vec<String> = ["--rm", "--interactive", "--tty", "img"]
+            .map(String::from)
+            .to_vec();
+        let out = attached_run_args(&tty);
+        assert_eq!(out.first().map(String::as_str), Some("--sig-proxy=false"));
+        assert_eq!(&out[1..], &tty[..]);
+        let piped: Vec<String> = ["--rm", "img"].map(String::from).to_vec();
+        assert_eq!(attached_run_args(&piped), piped);
+        let explicit: Vec<String> = ["--sig-proxy=true", "--tty", "img"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(attached_run_args(&explicit), explicit);
+    }
+
     /// ORDER 1911-3dqo: a rejoin finds the one running forge of a project,
     /// whatever its agent mode, and re-attaches its pty with `podman attach`.
     #[test]
