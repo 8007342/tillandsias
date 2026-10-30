@@ -29,6 +29,7 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
+use crate::imagegen_consent;
 use crate::imagegen_models::{self, FetchEvent};
 use crate::imagegen_tiers::{self, TierRow};
 
@@ -64,7 +65,8 @@ pub fn descriptor() -> Value {
                 "steps": { "type": "integer", "minimum": 1, "maximum": 50 },
                 "seed": { "type": "integer", "minimum": 0 },
                 "count": { "type": "integer", "minimum": 1, "maximum": MAX_COUNT, "default": 1 },
-                "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"], "description": "Omit to use the smallest model." }
+                "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"], "description": "Omit to use the smallest model." },
+                "consent_token": { "type": "string", "description": "From a bigger_tier_offer, only after the user said yes to its ask." }
             },
             "required": ["prompt"]
         }
@@ -298,6 +300,22 @@ fn forge_path(host: &Path) -> String {
     )
 }
 
+fn tier_index(ladder: &[TierRow], tier: &str) -> usize {
+    ladder.iter().position(|t| t.tier == tier).unwrap_or(0)
+}
+
+/// Whether every pinned file of `tier` is already in the model cache, which
+/// picks the honest ask (no download vs a download first).
+fn tier_cached(tier: &TierRow) -> bool {
+    let files = imagegen_models::files_for_tier(&imagegen_models::manifest(), &tier.tier);
+    let dir = imagegen_models::models_dir().join(&tier.tier);
+    !files.is_empty() && files.iter().all(|m| dir.join(m.cache_name()).is_file())
+}
+
+/// Serialises tests that install the process-wide seam.
+#[cfg(test)]
+pub static SEAM_TEST_LOCK: Mutex<()> = Mutex::new(());
+
 /// The tool call. `progress` receives each event as it happens.
 pub fn call(
     project: &str,
@@ -324,6 +342,19 @@ pub fn call(
     };
     let job = parse_job(args, &ladder, &ceiling, false)?;
     let mut job = job;
+    // 1874-p8w7: a tier above what this lane accepted runs only on a token.
+    let lane = imagegen_consent::lane_key(project, instance);
+    let request = imagegen_consent::request_hash(args);
+    let idx = tier_index(&ladder, &job.tier.tier);
+    let accepted = imagegen_consent::accepted_index(&lane);
+    if idx > accepted {
+        let token = args.get("consent_token").and_then(Value::as_str);
+        if let Err(refusal) = imagegen_consent::redeem(token, &lane, &job.tier, idx, &request) {
+            let next = &ladder[(accepted + 1).min(idx)];
+            let offer = imagegen_consent::offer(&lane, &request, next, tier_cached(next));
+            return Ok(imagegen_consent::consent_required(offer, refusal));
+        }
+    }
     let out_dir = lane_scratch_dir(project, instance)?;
     job.out_volume = Some(lane_volume(project, instance));
     let stamp = std::time::SystemTime::now()
@@ -353,6 +384,13 @@ pub fn call(
         }));
     }
     let first = images[0].clone();
+    let ceil = tier_index(&ladder, &ceiling);
+    let bigger = if idx < ceil {
+        let next = &ladder[idx + 1];
+        imagegen_consent::offer(&lane, &request, next, tier_cached(next))
+    } else {
+        Value::Null
+    };
     Ok(json!({
         "path": first["path"],
         "width": first["width"],
@@ -374,8 +412,7 @@ pub fn call(
         })),
         "ephemeral": true,
         "note": EPHEMERAL_NOTE,
-        // 1874-p8w7 fills this with the one-tier-up offer.
-        "bigger_tier_offer": Value::Null,
+        "bigger_tier_offer": bigger,
     }))
 }
 
@@ -717,5 +754,127 @@ mod tests {
         assert!(a.contains(&"--network=none".to_string()));
         assert!(a.contains(&"/models/I0/sdxs09.safetensors".to_string()));
         assert!(a.contains(&"/out/img-1-2-%d.png".to_string()));
+    }
+
+    /// Counts engine runs, so a fixture can prove a refusal ran nothing.
+    struct Counting(std::sync::atomic::AtomicUsize);
+    impl Engine for Counting {
+        fn generate(
+            &self,
+            job: &Job,
+            out_dir: &Path,
+            names: &[String],
+            _progress: &mut dyn FnMut(Progress),
+        ) -> Result<EngineOut, String> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            for n in names {
+                image::RgbImage::new(job.width, job.height)
+                    .save(out_dir.join(n))
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(EngineOut {
+                backend: "cuda".into(),
+                first_use: false,
+            })
+        }
+    }
+
+    /// 1874-p8w7 verifiable closure. Pre-fix: FAILS (bigger_tier_offer is
+    /// always null and an I1 request runs without any consent).
+    #[test]
+    fn smallest_first_one_tier_up_on_a_single_use_token() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        imagegen_consent::reset_for_test();
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let engine = Arc::new(Counting(Default::default()));
+        install_seam(Some(Seam {
+            engine: engine.clone(),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I3".into(),
+        }));
+        let runs = || engine.0.load(std::sync::atomic::Ordering::SeqCst);
+        let (p, i) = ("p8w7-proj", "a");
+        let mut sink = |_: Progress| {};
+
+        // An I0 result on an I3-ceiling host offers I1 only, with a token.
+        let r = call(
+            p,
+            i,
+            &json!({"prompt":"a fox","width":64,"height":64}),
+            &mut sink,
+        )
+        .unwrap();
+        assert_eq!(r["tier"], "I0");
+        let offer = &r["bigger_tier_offer"];
+        assert_eq!(offer["tier"], "I1", "the next tier only: {offer}");
+        let token = offer["consent_token"]
+            .as_str()
+            .expect("a token")
+            .to_string();
+        let ask = offer["ask"].as_str().unwrap();
+        let lower = ask.to_ascii_lowercase();
+        assert!(
+            !ask.chars().any(|c| c.is_ascii_digit())
+                && !["gb", "mb", "byte", "second"]
+                    .iter()
+                    .any(|w| lower.contains(w)),
+            "the ask carries no size or time figure: {ask}"
+        );
+        assert_eq!(runs(), 1);
+
+        // I1 without the token: consent_required, the engine is not invoked.
+        let r = call(p, i, &json!({"prompt":"a fox","tier":"I1"}), &mut sink).unwrap();
+        assert_eq!(r["status"], "consent_required", "{r}");
+        assert_eq!(r["bigger_tier_offer"]["tier"], "I1");
+        assert_eq!(runs(), 1, "a refusal runs nothing");
+
+        // A jump of two is never offered: I2 asks for I1 first.
+        let r = call(p, i, &json!({"prompt":"a fox","tier":"I2"}), &mut sink).unwrap();
+        assert_eq!(r["bigger_tier_offer"]["tier"], "I1");
+
+        // With the token it runs, and the next offer is I2.
+        let args =
+            json!({"prompt":"a fox","tier":"I1","consent_token":token,"width":64,"height":64});
+        let r = call(p, i, &args, &mut sink).unwrap();
+        assert_eq!(r["tier"], "I1", "{r}");
+        assert_eq!(r["bigger_tier_offer"]["tier"], "I2");
+        assert_eq!(runs(), 2);
+
+        // The spent token is refused on reuse.
+        let ladder = imagegen_tiers::ladder();
+        assert_eq!(
+            imagegen_consent::redeem(
+                Some(&token),
+                &imagegen_consent::lane_key(p, i),
+                &ladder[1],
+                1,
+                &imagegen_consent::request_hash(&args),
+            ),
+            Err(imagegen_consent::Refusal::Unknown)
+        );
+        // A token is bound to its picture: an offer for one prompt does not
+        // buy a bigger model for another.
+        let r = call(
+            p,
+            i,
+            &json!({"prompt":"a fox","tier":"I2","width":64,"height":64}),
+            &mut sink,
+        )
+        .unwrap();
+        let t2 = r["bigger_tier_offer"]["consent_token"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let r = call(
+            p,
+            i,
+            &json!({"prompt":"a cat","tier":"I2","consent_token":t2}),
+            &mut sink,
+        )
+        .unwrap();
+        assert_eq!(r["status"], "consent_required", "{r}");
+        assert_eq!(runs(), 2);
+        install_seam(None);
     }
 }

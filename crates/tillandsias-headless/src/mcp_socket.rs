@@ -1585,6 +1585,9 @@ mod image_generate_fixtures {
 
     #[test]
     fn image_generate_is_listed_and_returns_files_with_metadata_and_progress() {
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let scratch =
             tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
         install_seam(Some(Seam {
