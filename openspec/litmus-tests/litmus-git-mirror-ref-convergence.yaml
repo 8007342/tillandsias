@@ -36,7 +36,7 @@ critical_path:
     expected_behavior: "ok: safe reconcile refspec configured"
 
   - step: "entrypoint seeds empty mirrors with an explicit heads/tags refspec"
-    command: "grep -Fq \"fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'\" images/git/entrypoint.sh && echo 'ok: explicit empty-mirror seed'"
+    command: "grep -Fq \"fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'\" images/git/seed-mirror.sh && grep -qF 'FETCH_OUTPUT=\"$(\"$SEED_MIRROR\" \"$mirror\"' images/git/entrypoint.sh && echo 'ok: explicit empty-mirror seed'"
     timeout_ms: 10000
     expected_behavior: "ok: explicit empty-mirror seed"
 
@@ -44,6 +44,11 @@ critical_path:
     command: "awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /remote\\.origin\\.fetch[^#]*\\+refs\\/\\*:refs\\/\\*/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'ok: no unsafe all-refs mapping'"
     timeout_ms: 10000
     expected_behavior: "ok: no unsafe all-refs mapping"
+
+  - step: "NEGATIVE CONTROL: a seed-mirror whose seed writes only tracking refs must FAIL the empty-mirror seed pin"
+    command: "T=$(mktemp -d); sed \"s|'+refs/heads/\\*:refs/heads/\\*' '+refs/tags/\\*:refs/tags/\\*'|'+refs/heads/*:refs/remotes/origin/*'|\" images/git/seed-mirror.sh > \"$T/seed-mirror.sh\"; if cmp -s images/git/seed-mirror.sh \"$T/seed-mirror.sh\"; then rm -rf \"$T\"; echo 'FAIL: the mutation did not reach seed-mirror.sh'; exit 1; fi; if grep -Fq \"fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'\" \"$T/seed-mirror.sh\"; then rm -rf \"$T\"; echo 'FAIL: seed pin blind to a tracking-only seed'; exit 1; fi; rm -rf \"$T\"; echo 'ok: seed pin fails on a tracking-only seed'"
+    timeout_ms: 10000
+    expected_behavior: "ok: seed pin fails on a tracking-only seed"
 
 observability:
   traces:
