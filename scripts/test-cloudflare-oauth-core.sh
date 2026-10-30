@@ -63,7 +63,7 @@ if ! cargo build -p tillandsias-headless --bin tillandsias-fake-cloudflare >"$WO
     echo "fail:cloudflare-oauth-core:build-fake"
     exit 1
 fi
-FAKE_BIN="$ROOT/target/debug/tillandsias-fake-cloudflare"
+FAKE_BIN="${CARGO_TARGET_DIR:-$ROOT/target}/debug/tillandsias-fake-cloudflare"
 if [ ! -x "$FAKE_BIN" ]; then
     echo "fail:cloudflare-oauth-core:fake-binary-missing:$FAKE_BIN"
     exit 1

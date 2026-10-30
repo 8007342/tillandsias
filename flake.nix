@@ -100,7 +100,7 @@
         # ORDER 723-sazx. The sidecar must be a BUILD-GRAPH INPUT, not a file
         # someone remembered to stage.
         #
-        # crates/tillandsias-headless/build.rs:93 lists
+        # crates/tillandsias-embed/build.rs lists
         # images/router/tillandsias-router-sidecar among its REQUIRED runtime
         # assets and panics at :116 without it. Order 710-w9kc un-committed that
         # blob — correctly — and `.gitignore:79` now ignores it. But `nix build
@@ -131,7 +131,7 @@
         '';
 
         # ORDER 1750-a4re. The forge image's Bash command-policy decider: a
-        # static musl tillandsias-plan that tillandsias-headless/build.rs embeds
+        # static musl tillandsias-plan that crates/tillandsias-embed/build.rs embeds
         # (images/default/policy-bin/, a tracked dir the forge Containerfile
         # copies) and images/default/bash-policy-hook runs. That hook FAILS
         # CLOSED, so a release built without it would refuse every Claude Bash

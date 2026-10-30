@@ -1259,6 +1259,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-metrics-shape
+  - litmus:runtime-bringup-step-timers
   - litmus:guest-container-metrics-wire-shape
   coverage_ratio: 100
   last_verified: '2026-05-29'

@@ -1,7 +1,7 @@
 name: litmus:sidecar-is-a-build-graph-input
 spec: ci-release
 description: >
-  Order 723-sazx. crates/tillandsias-headless/build.rs lists
+  Order 723-sazx. crates/tillandsias-embed/build.rs lists
   images/router/tillandsias-router-sidecar among its REQUIRED runtime assets and
   panics without it. Order 710-w9kc un-committed that blob and .gitignore now
   ignores it — correctly, it is a build artifact. But `nix build .#…` resolves
@@ -23,7 +23,7 @@ phase: pre-build
 
 preconditions:
   - workspace contains flake.nix
-  - workspace contains crates/tillandsias-headless/build.rs
+  - workspace contains crates/tillandsias-embed/build.rs
 
 critical_path:
   - step: "the sidecar is still a REQUIRED asset (if this stops being true, the rest is moot)"
@@ -31,7 +31,7 @@ critical_path:
     # NOT match. Without it this step would pass against any file that merely
     # contains the string somewhere, and could not tell "build.rs requires this"
     # from "grep found a comment".
-    command: "grep -qF 'images/router/tillandsias-router-sidecar' crates/tillandsias-headless/build.rs || { echo 'FAIL: sidecar no longer listed as a required asset'; exit 1; }; grep -qF 'images/router/tillandsias-router-sidecar-does-not-exist' crates/tillandsias-headless/build.rs && { echo 'FAIL: negative control matched — this grep does not discriminate'; exit 1; }; echo 'ok: sidecar is a required runtime asset'"
+    command: "grep -qF 'images/router/tillandsias-router-sidecar' crates/tillandsias-embed/build.rs || { echo 'FAIL: sidecar no longer listed as a required asset'; exit 1; }; grep -qF 'images/router/tillandsias-router-sidecar-does-not-exist' crates/tillandsias-embed/build.rs && { echo 'FAIL: negative control matched — this grep does not discriminate'; exit 1; }; echo 'ok: sidecar is a required runtime asset'"
     timeout_ms: 3000
     expected_behavior: "ok: sidecar is a required runtime asset"
 
@@ -71,7 +71,7 @@ observability:
   log_fields:
     spec: "ci-release"
     test: "sidecar-is-a-build-graph-input"
-    artifact: "flake.nix + crates/tillandsias-headless/build.rs"
+    artifact: "flake.nix + crates/tillandsias-embed/build.rs"
 
 rollback:
   on_failure: "inspect flake.nix stageRouterSidecar and the preBuild attributes on each buildPackage that passes --bin tillandsias"

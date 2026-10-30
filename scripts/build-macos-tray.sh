@@ -79,7 +79,7 @@ MIN_MACOS="14.0"
 say "version: $VERSION  label: $BUILD_LABEL  short: $VERSION_SHORT  min_macos: $MIN_MACOS"
 
 # ── 3b. Stage the router sidecar ────────────────────────────────────────
-# MUST run before the first cargo invocation. tillandsias-headless/build.rs
+# MUST run before the first cargo invocation. crates/tillandsias-embed/build.rs
 # lists images/router/tillandsias-router-sidecar in its `required` runtime
 # assets (build.rs:93) and panics at build.rs:104 when it is absent.
 #
@@ -91,7 +91,7 @@ say "version: $VERSION  label: $BUILD_LABEL  short: $VERSION_SHORT  min_macos: $
 # break is invisible locally and certain on a fresh clone.
 #
 # Reproduced on this host 2026-08-13 by moving the artifact aside:
-#   thread 'main' panicked at crates/tillandsias-headless/build.rs:104:13:
+#   thread 'main' panicked at crates/tillandsias-embed/build.rs:13:
 #   required runtime asset missing: .../images/router/tillandsias-router-sidecar
 # — an error naming a runtime asset, for what is really a missing build step.
 #

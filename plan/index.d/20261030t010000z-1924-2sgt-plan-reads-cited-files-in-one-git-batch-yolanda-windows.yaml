@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows at the coordinator's direction, 2026-10-29 (operator directive: cut build/validate time by orders of magnitude).
+packets:
+- packet_id: plan-answer-reads-cited-files-at-their-frame-in-one-git-batch
+  order: 1924-2sgt
+  status: ready
+  kind: perf
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - plan
+  - gate
+  - performance
+  estimated_hours: 1
+  title: tillandsias-plan reads every cited file at its frame through one git cat-file --batch instead of one git show per file
+  context: 'Measured on yolanda 2026-10-29 with a PATH shim logging every git spawn, from an ext4 clone: test-memo-hit-observability made 1,157 git spawns, 1,088 of them `git show <sha>:<path>`; test-metrics-log-path-agreement made 581, 544 of them `git show`. The source is answer::relate (1233-jqp4 already dedups per (path, frame) pair), which still spawns one git show per distinct pair through GitView::file_at. Over 9p each spawn is about 10x slower.'
+  exit_criteria:
+  - 'GitView::files_at answers many (commit, path) pairs through one git cat-file --batch, with the same per-pair contract as file_at; a test against a real repo asserts pair-by-pair agreement across present, absent, unfetched, tree, a 300 KB blob and a protocol-unsafe path.'
+  - 'answer::relate uses it; the existing answer tests stay green.'
+  - 'Measured before and after on the same ext4 clone: spawns and wall time for both fixtures.'
+  verifiable_closure: 'files_at_matches_file_at_pair_by_pair passes in the gate; before/after numbers recorded on the row.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the test lands with the fix (1136-n8sh).'
+  next_action: 'Implemented on work/1924-2sgt by yolanda-windows: test-memo-hit-observability 1,157 -> 113 git spawns, 9.8 s -> 7.6 s; test-metrics-log-path-agreement 7.0 s -> 6.1 s (ext4 clone, warm, two runs each).'
+  provenance: 'Coordinator direction 2026-10-29 (macuahuitl-fedora); measurements by yolanda-windows.'
+  events:
+  - type: filed
+    ts: '2026-10-30T01:00:00Z'
+    host: yolanda-windows
+    summary: filed from the yolanda git-spawn trace at the coordinator's direction
