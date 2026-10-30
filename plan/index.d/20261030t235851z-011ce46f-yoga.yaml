@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-agents-generate-images-locally-through-one-mcp-tool-on-stable-diffusion-cpp-sized-to-the-host
+    event:
+      type: progress
+      ts: "2026-10-30T23:58:51Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        Measurement, yoga (Radeon 840M iGPU, gfx1152), 2026-10-30, via image.generate over the lane MCP socket (scratchpad imagegen-time.sh: alpine/socat client, tray+forge from work/1911-3dqo debug build). Tier I0 SDXS-512-0.9, 512x512, steps=1, backend=vulkan: first_use=true 308.17 s (model fetch + image build, one-time); warm per-image elapsed_s 2.87 and 2.88 (client wall 3.27 / 3.11 s incl. socat container start). SD1.5 512px could NOT be timed: no SD1.5 row exists in images/imagegen/tiers.tsv (I1 is SDXL-Lightning 1024x768), and I1 is refused here anyway: "tier_unavailable: I1 is above what this computer can run (I0)". If an SD1.5 timing is still wanted it needs a ladder row first.
