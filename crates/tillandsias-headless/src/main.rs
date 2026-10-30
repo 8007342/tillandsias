@@ -4883,6 +4883,8 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
                 if debug {
                     eprintln!("[tillandsias] enclave proxy already running");
                 }
+                // 1922-gate: reused, so no new ready event will come.
+                tillandsias_podman::readiness::mark_reused("tillandsias-proxy");
                 return Ok(());
             }
         }
@@ -6458,6 +6460,83 @@ fn last_seed_failure(lines: &[String]) -> Option<String> {
     let from = line.find(GIT_MIRROR_SEED_FAILURE_MARKER).unwrap_or(0);
     let text: String = line[from..].trim().chars().take(400).collect();
     Some(text)
+}
+
+/// ORDER 1922-gate: the forge starts only when its hard requirements have each
+/// reported ready (operator ruling 2026-10-28: forges never wait on or poll
+/// siblings). Vault, proxy and, for a project with an upstream, the mirror are
+/// awaited on the readiness board their launches publish to (#738); a timeout
+/// is one `event:service_ready_failed` carrying `retry_after` and no forge.
+/// Optional siblings (inference, the studio) are started beside this and never
+/// awaited here.
+///
+/// A mirror this process neither launched nor reused has no event to wait on
+/// (another process started it), so it keeps the bounded seeded-probe until
+/// 1922-unwt retires it; once it passes, the mirror is marked reused.
+/// @trace order:1922-gate, spec:podman-orchestration
+async fn gate_forge_launch(
+    client: &PodmanClient,
+    git_container_name: &str,
+    project_name: &str,
+    expected_branch: Option<&str>,
+    gate_mirror: bool,
+    debug: bool,
+) -> Result<(), String> {
+    gate_forge_launch_within(
+        client,
+        git_container_name,
+        project_name,
+        expected_branch,
+        gate_mirror,
+        debug,
+        tillandsias_podman::readiness::gate_deadline,
+    )
+    .await
+}
+
+/// [`gate_forge_launch`] with the per-service deadline injected (the
+/// acceptance fixture holds a service unready for milliseconds, not minutes).
+async fn gate_forge_launch_within(
+    client: &PodmanClient,
+    git_container_name: &str,
+    project_name: &str,
+    expected_branch: Option<&str>,
+    gate_mirror: bool,
+    debug: bool,
+    deadline: impl Fn(&str) -> Duration,
+) -> Result<(), String> {
+    use tillandsias_podman::readiness;
+    #[cfg_attr(not(feature = "vault"), allow(unused_mut))]
+    let mut hard: Vec<&str> = vec!["tillandsias-proxy"];
+    #[cfg(feature = "vault")]
+    hard.push(crate::vault_bootstrap::VAULT_CONTAINER_NAME);
+    if gate_mirror {
+        if readiness::is_tracked(git_container_name) {
+            hard.push(git_container_name);
+        } else {
+            wait_for_git_mirror_ready(
+                client,
+                git_container_name,
+                project_name,
+                expected_branch,
+                debug,
+            )
+            .await?;
+            readiness::mark_reused(git_container_name);
+        }
+    }
+    // The headless launches containers only inside a Linux host, VM or WSL
+    // distro, where every launch binds its notify socket; a non-unix build has
+    // no socket, so nothing would ever be published.
+    if cfg!(not(unix)) {
+        return Ok(());
+    }
+    if debug {
+        eprintln!("[tillandsias] [forge-launch] readiness gate: awaiting {hard:?}");
+    }
+    readiness::gate_within(&hard, deadline)
+        .await
+        .map_err(|e| format!("{e}. The forge was not started; launch again after retry_after."))
 }
 
 async fn wait_for_git_mirror_ready(
@@ -16746,16 +16825,15 @@ fn run_opencode_mode(
         // ensure_enclave_for_project. Without it the forge cloned a mirror
         // whose seed had not run yet and gave up after its ~40 s of clone
         // retries (macOS cold cloud launch, 2026-10-28).
-        if project_remote_url.is_some() {
-            wait_for_git_mirror_ready(
-                &client,
-                &git_container_name,
-                project_name,
-                project_default_branch.as_deref(),
-                debug,
-            )
-            .await?;
-        }
+        gate_forge_launch(
+            &client,
+            &git_container_name,
+            project_name,
+            project_default_branch.as_deref(),
+            project_remote_url.is_some(),
+            debug,
+        )
+        .await?;
 
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
         // terminal (run_container_attached_observed below). Tailing the SUPPORT
@@ -18679,7 +18757,12 @@ pub(crate) fn ensure_enclave_for_project(
         // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
-        report_inference_readiness(&client, debug).await;
+        // 1922-gate: inference is an optional sibling. Its readiness is
+        // reported beside the launch, never awaited by it.
+        let inference_client = client.clone();
+        tokio::spawn(async move {
+            report_inference_readiness(&inference_client, debug).await;
+        });
         // 1874-zry8: the ComfyUI studio sibling, only for a project that opted in.
         crate::imagegen_studio::ensure_if_enabled(
             &client,
@@ -18698,19 +18781,18 @@ pub(crate) fn ensure_enclave_for_project(
         // remote: their mirror fills from forge pushes, not an origin seed,
         // so an empty mirror there is a legitimate cold state the guest
         // handles fail-loud rather than a seed-in-progress worth waiting on.
-        if project_remote_url.is_some() {
-            bringup_timer::timed_async(
-                "mirror-seed",
-                wait_for_git_mirror_ready(
-                    &client,
-                    &git_container_name,
-                    project_name,
-                    project_default_branch.as_deref(),
-                    debug,
-                ),
-            )
-            .await?;
-        }
+        bringup_timer::timed_async(
+            "mirror-seed",
+            gate_forge_launch(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                project_remote_url.is_some(),
+                debug,
+            ),
+        )
+        .await?;
         Ok::<Option<String>, String>(mirror_identity)
     })?;
 
@@ -24326,57 +24408,92 @@ mod tests {
     /// ORDER 1922-accp — acceptance fixture for the event-driven readiness gate
     /// (operator ruling 2026-10-28: forges never wait on or poll siblings).
     ///
-    /// The fixture owns the mirror's readiness: the fake podman reports the
-    /// mirror unready for two probes and seeded on the third, and the fixture's
-    /// event source emits the mirror READY event only AFTER the launch chain's
-    /// mirror gate returns. Two arms, both named in the output:
+    /// The fixture stands in for conmon: it owns the mirror's READY event on
+    /// the readiness board and the fake podman would answer any probe. Two arms,
+    /// each named in the output when red:
     ///   forge-before-ready — the gate let the launch reach forge creation
-    ///                        before the READY event was emitted;
-    ///   polls=N            — the gate probed the sibling N > 0 times.
-    /// RED on linux-next as of 2026-10-28 (wait_for_git_mirror_ready polls
-    /// probe_git_mirror_seeded once a second and returns on a probe, not an
-    /// event). It goes green when 1922-gate and 1922-unwt land; 1922-gate
-    /// repoints the `gate` call below at its ReadinessGate and drops #[ignore].
-    /// Run: cargo test -p tillandsias-headless --bin tillandsias \
-    ///        readiness_acceptance -- --ignored --nocapture
+    ///                        before the mirror's READY event was published;
+    ///   polls=N            — the gate probed the sibling N > 0 times;
+    ///   held-unready-...   — with the mirror held unready, the gate did not
+    ///                        refuse with one failure carrying retry_after.
+    /// Red on linux-next until 1922-gate (wait_for_git_mirror_ready polled
+    /// once a second and returned on a probe, not an event).
+    /// Run: cargo test -p tillandsias-headless --bin tillandsias readiness_acceptance
     #[tokio::test]
-    #[ignore = "1922-accp: red by design until 1922-gate and 1922-unwt land"]
     async fn readiness_acceptance_forge_never_starts_before_mirror_ready_and_counts_no_polls() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use tillandsias_podman::readiness::{self, ReadyOutcome};
+
         let backend = Arc::new(FakeBackend::default());
-        // Unready, unready, then seeded (HEAD + concrete branch).
-        backend.push(Err(fake_podman_failure(128)));
-        backend.push(Err(fake_podman_failure(128)));
+        // Were the gate to probe, the mirror would look seeded at once.
         backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
         backend.push(Ok(fake_podman_output(0, "")));
         let client = PodmanClient::with_backend(backend.clone());
+        let mirror = "tillandsias-git-accp-fixture";
+        let short = |_: &str| Duration::from_millis(300);
 
-        // The fake event source: the fixture holds the sender and emits READY
-        // only after the gate has returned. Today's chain never subscribes.
-        let (ready_tx, _ready_rx) = tokio::sync::watch::channel(false);
+        // Vault and proxy have reported; the mirror's launch has begun.
+        readiness::mark_reused("tillandsias-proxy");
+        readiness::mark_reused("tillandsias-vault");
+        let mut red = Vec::new();
 
-        let gate = wait_for_git_mirror_ready(
+        // Arm 1: the mirror is held unready. No forge, one failure, retry_after.
+        readiness::begin(mirror);
+        let held = gate_forge_launch_within(
             &client,
-            "tillandsias-git-fixture",
-            "fixture",
+            mirror,
+            "accp-fixture",
             Some("trunk"),
+            true,
             false,
+            short,
+        )
+        .await;
+        match &held {
+            Err(e) if e.contains(mirror) && e.contains("retry_after=5s") => {}
+            other => red.push(format!("held-unready-not-refused:{other:?}")),
+        }
+
+        // Arm 2: READY arrives later; the gate returns only after it.
+        readiness::begin(mirror);
+        let emitted = Arc::new(AtomicBool::new(false));
+        let flag = emitted.clone();
+        let source = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            flag.store(true, Ordering::SeqCst);
+            readiness::publish(
+                mirror,
+                ReadyOutcome::Ready {
+                    status: Some("mirror seeded (1)".into()),
+                },
+            );
+        });
+        let gate = gate_forge_launch_within(
+            &client,
+            mirror,
+            "accp-fixture",
+            Some("trunk"),
+            true,
+            false,
+            |_: &str| Duration::from_secs(10),
         )
         .await;
         // Reaching here with Ok is the point the launch chain creates the forge.
         let forge_started = gate.is_ok();
-        let ready_emitted_before_forge = *ready_tx.borrow();
-        ready_tx.send_replace(true);
+        let ready_emitted_before_forge = emitted.load(Ordering::SeqCst);
+        source.await.unwrap();
 
         let polls = backend
             .seen()
             .iter()
             .filter(|(_, argv)| {
-                argv.first().map(String::as_str) == Some("exec")
-                    && argv.iter().any(|a| a == "tillandsias-git-fixture")
+                argv.first().map(String::as_str) == Some("exec") && argv.iter().any(|a| a == mirror)
             })
             .count();
 
-        let mut red = Vec::new();
+        if !forge_started {
+            red.push(format!("forge-never-started:{gate:?}"));
+        }
         if forge_started && !ready_emitted_before_forge {
             red.push("forge-before-ready".to_string());
         }
@@ -33919,7 +34036,7 @@ esac
             std::fs::read_to_string(manifest_dir.join("src/main.rs")).expect("main.rs is readable");
         let window = source_window(&source, "fn run_opencode_mode(");
         // source-pin-ok: the ORDER of the gate and the forge start is the contract (1910-a1m8).
-        let gate = window.find("wait_for_git_mirror_ready(");
+        let gate = window.find("gate_forge_launch(");
         let forge = window.find("run_agent_container_attached(");
         assert!(
             matches!((gate, forge), (Some(g), Some(f)) if g < f),

@@ -28,7 +28,7 @@ use tillandsias_podman::{PodmanClient, podman_cmd_sync};
 use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, VaultError, auto_unseal};
 use zeroize::Zeroize;
 
-const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
+pub(crate) const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
 
 const VAULT_UNSEAL_SECRET: &str = "tillandsias-vault-unseal";
 const VAULT_TLS_CERT_SECRET: &str = "tillandsias-vault-tls-cert";
@@ -964,6 +964,9 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                     rt.block_on(load_policies(&client, debug))?;
                     rt.block_on(provision_approle_roles(&client, debug))?;
                 }
+                // 1922-gate: accepted as running and unsealed; no new READY=1
+                // will come, so the forge's readiness gate is told here.
+                tillandsias_podman::readiness::mark_reused(VAULT_CONTAINER_NAME);
                 return Ok(());
             }
             Err(e) => {

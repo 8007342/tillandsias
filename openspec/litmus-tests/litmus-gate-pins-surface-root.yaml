@@ -1,0 +1,24 @@
+# @trace spec:methodology-accountability
+# @trace order:1925-ided
+name: litmus:gate-pins-surface-root
+spec: methodology-accountability
+phase: pre-build
+description: >
+  The gate (build.sh and scripts/local-ci.sh) exports
+  TILLANDSIAS_SURFACE_ROOT=<the gating checkout>, respecting a caller's value,
+  so a shared CARGO_TARGET_DIR inside a different, older checkout cannot make
+  the plan binary's cwd walk read that checkout as its validator surface and
+  refuse every fixture push through the hook as STALE (claims-fleet-visible
+  9/22 in the v56.10.30.1 cut). The reproducer arm proves the refusal without
+  the pin; the fix arms evaluate the gate's own export lines.
+severity: high
+size: quick
+preconditions:
+  - workspace contains scripts/test-gate-pins-surface-root.sh
+  - workspace contains scripts/test-claims-fleet-visible.sh
+
+critical_path:
+  - step: "a shared target inside an older checkout refuses unpinned, and the gate's pin makes claims-fleet-visible pass"
+    command: "bash scripts/test-gate-pins-surface-root.sh"
+    timeout_ms: 600000
+    expected_behavior: "PASS: gate-pins-surface-root"
