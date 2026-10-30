@@ -135,6 +135,21 @@ pub trait PodmanBackend: Send + Sync {
         argv: &[String],
         budget: Duration,
     ) -> Result<CommandOutput, CommandFailure>;
+
+    /// [`Self::execute`] with extra environment for the podman PROCESS, not
+    /// the container (1922-rann: `NOTIFY_SOCKET` is read by podman itself, which
+    /// relays a `--sdnotify=container` READY to it). Fakes and replays record
+    /// argv only, so the default ignores `env`.
+    async fn execute_with_env(
+        &self,
+        operation: OperationKind,
+        argv: &[String],
+        env: &[(String, String)],
+        budget: Duration,
+    ) -> Result<CommandOutput, CommandFailure> {
+        let _ = env;
+        self.execute(operation, argv, budget).await
+    }
 }
 
 /// Real backend backed by the actual `podman` binary.
@@ -149,9 +164,20 @@ impl PodmanBackend for RealBackend {
         argv: &[String],
         budget: Duration,
     ) -> Result<CommandOutput, CommandFailure> {
+        self.execute_with_env(operation, argv, &[], budget).await
+    }
+
+    async fn execute_with_env(
+        &self,
+        operation: OperationKind,
+        argv: &[String],
+        env: &[(String, String)],
+        budget: Duration,
+    ) -> Result<CommandOutput, CommandFailure> {
         let started = Instant::now();
         let mut cmd = crate::podman_cmd();
         cmd.args(argv);
+        cmd.envs(env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         // Backend calls are frequently wrapped in bounded timeouts. Ensure
         // cancelling such a future cannot strand the Podman CLI process.
         cmd.kill_on_drop(true);

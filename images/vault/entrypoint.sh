@@ -23,6 +23,12 @@
 # All stderr is duplicated to /vault/audit/entrypoint.log for tray-side
 # tailing, then re-emitted on stdout so `podman logs` and the
 # `--log-enclave` stream both capture it.
+# 1922-rann: keep the launcher's notify socket for notify_ready ONLY, and hide it
+# from every child. Vault and Vault Agent sd_notify READY=1 on their own start
+# (measured: an event before unseal, and a mirror event before its seed), which
+# would announce this service before it is ready.
+TILLANDSIAS_NOTIFY_SOCKET="${NOTIFY_SOCKET:-}"
+unset NOTIFY_SOCKET
 
 set -euo pipefail
 
@@ -165,6 +171,16 @@ _vault_wait_and_exit() {
     exit "$rc"
 }
 
+# 1922-rann: announce readiness to the launcher. The launcher runs this
+# container with `--sdnotify=container` and its own NOTIFY_SOCKET; podman/conmon
+# relay this datagram there, so readiness is an event, not a probe. socat because
+# BusyBox nc has no unix-socket mode. No socket = an older launcher.
+notify_ready() {
+    [ -n "$TILLANDSIAS_NOTIFY_SOCKET" ] || return 0
+    printf 'READY=1\nSTATUS=%s' "$1" | socat -t1 - "UNIX-SENDTO:$TILLANDSIAS_NOTIFY_SOCKET" 2>/dev/null \
+        || echo "[tillandsias] READY=1 not delivered to $TILLANDSIAS_NOTIFY_SOCKET" >&2
+}
+
 # Wait for the API to respond.
 i=0
 until curl -fsS "$VAULT_ADDR/v1/sys/health?standbyok=true&sealedcode=200&uninitcode=200" >/dev/null 2>&1; do
@@ -262,6 +278,7 @@ fi
 # unnecessary. Skip straight to serving.
 if [ -z "$ROOT_TOKEN" ]; then
     log "vault is unsealed and serving (provisioning persisted from a prior boot)"
+    notify_ready "vault unsealed"
     _vault_wait_and_exit
 fi
 
@@ -340,4 +357,5 @@ log "vault is fully configured (unsealed, policies loaded, approle+kv2+audit+ssh
 # ---------------------------------------------------------------------------
 unset VAULT_TOKEN UNSEAL_KEY_HEX UNSEAL_HEX ROOT_TOKEN ENVELOPED_HEX SHAMIR_KEY_HEX
 
+notify_ready "vault unsealed and provisioned"
 _vault_wait_and_exit

@@ -129,6 +129,9 @@ fn build_kill_args(name: &str, signal: Option<&str>) -> Vec<String> {
 #[derive(Clone)]
 pub struct PodmanClient {
     backend: BackendRef,
+    /// Extra environment for every podman process this client spawns
+    /// (1922-rann: `NOTIFY_SOCKET` for a `--sdnotify=container` launch).
+    process_env: Arc<Vec<(String, String)>>,
 }
 
 impl std::fmt::Debug for PodmanClient {
@@ -141,11 +144,24 @@ impl PodmanClient {
     pub fn new() -> Self {
         Self {
             backend: Arc::new(RealBackend),
+            process_env: Arc::default(),
         }
     }
 
     pub fn with_backend(backend: BackendRef) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            process_env: Arc::default(),
+        }
+    }
+
+    /// This client with `env` set on the podman processes it spawns. Used for
+    /// one launch: [`crate::readiness::ReadyListener::podman_env`].
+    pub fn with_process_env(&self, env: Vec<(String, String)>) -> Self {
+        Self {
+            backend: self.backend.clone(),
+            process_env: Arc::new(env),
+        }
     }
 
     /// Run one podman command under the operation class's DECLARED budget
@@ -157,7 +173,12 @@ impl PodmanClient {
         argv: &[String],
     ) -> Result<crate::CommandOutput, CommandFailure> {
         self.backend
-            .execute(operation, argv, operation.default_budget())
+            .execute_with_env(
+                operation,
+                argv,
+                &self.process_env,
+                operation.default_budget(),
+            )
             .await
     }
 
@@ -171,7 +192,9 @@ impl PodmanClient {
         argv: &[String],
         budget: std::time::Duration,
     ) -> Result<crate::CommandOutput, CommandFailure> {
-        self.backend.execute(operation, argv, budget).await
+        self.backend
+            .execute_with_env(operation, argv, &self.process_env, budget)
+            .await
     }
 
     /// Check if podman is available in PATH.
@@ -1072,9 +1095,25 @@ impl PodmanClient {
     ) -> Result<String, String> {
         let _ = exemption;
         emit_launch_event(debug_enabled, stage, container_name, "starting", None);
-        match self.run_container(args).await {
+        // 1922-rann: a launch that opts in with `--sdnotify=container` gets its
+        // own notify socket bound BEFORE podman runs, so a READY sent at once is
+        // queued, not lost; the one outcome is announced after the run returns.
+        #[cfg(unix)]
+        let ready = crate::readiness::bind_for_launch(container_name, args);
+        #[cfg(unix)]
+        let launcher = match &ready {
+            Some(l) => self.with_process_env(l.podman_env()),
+            None => self.clone(),
+        };
+        #[cfg(not(unix))]
+        let launcher = self.clone();
+        match launcher.run_container(args).await {
             Ok(output) => {
                 emit_launch_event(debug_enabled, stage, container_name, "running", None);
+                #[cfg(unix)]
+                if let Some(l) = ready {
+                    crate::readiness::announce_launch(l, container_name);
+                }
                 Ok(output)
             }
             Err(err) => {

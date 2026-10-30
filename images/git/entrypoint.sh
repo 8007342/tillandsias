@@ -1,4 +1,10 @@
 #!/bin/bash
+# 1922-rann: keep the launcher's notify socket for notify_ready ONLY, and hide it
+# from every child. Vault and Vault Agent sd_notify READY=1 on their own start
+# (measured: an event before unseal, and a mirror event before its seed), which
+# would announce this service before it is ready.
+TILLANDSIAS_NOTIFY_SOCKET="${NOTIFY_SOCKET:-}"
+unset NOTIFY_SOCKET
 set -e
 # @trace spec:git-mirror-service
 # Entrypoint for the Tillandsias git service container.
@@ -764,6 +770,34 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
 done
 
 echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"
+
+# 1922-rann: announce readiness to the launcher. The launcher runs this
+# container with `--sdnotify=container` and its own NOTIFY_SOCKET; podman/conmon
+# relay this datagram there, so readiness is an event, not a probe. socat because
+# BusyBox nc has no unix-socket mode. No socket = an older launcher.
+notify_ready() {
+    [ -n "$TILLANDSIAS_NOTIFY_SOCKET" ] || return 0
+    printf 'READY=1\nSTATUS=%s' "$1" | socat -t1 - "UNIX-SENDTO:$TILLANDSIAS_NOTIFY_SOCKET" 2>/dev/null \
+        || echo "[tillandsias] READY=1 not delivered to $TILLANDSIAS_NOTIFY_SOCKET" >&2
+}
+
+# Ready means seeded: every mirror resolves HEAD and holds a concrete branch.
+# An unseeded mirror sends nothing; the launcher's deadline turns that into one
+# failed event with retry_after, never a forge cloning an empty mirror.
+_mirrors_seeded=1
+_mirror_count=0
+for mirror in "$GIT_SERVICE_ROOT"/*; do
+    [ -d "$mirror" ] || continue
+    _mirror_count=$((_mirror_count + 1))
+    if ! git -C "$mirror" rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
+        || [ -z "$(git -C "$mirror" for-each-ref --count=1 --format='%(refname)' refs/heads 2>/dev/null)" ]; then
+        _mirrors_seeded=0
+        echo "$(date -Is) [git-service] not ready: $mirror has no resolvable HEAD or branch" >> "$SLOG"
+    fi
+done
+if [ "$_mirrors_seeded" -eq 1 ] && [ "$_mirror_count" -gt 0 ]; then
+    notify_ready "mirror seeded ($_mirror_count)"
+fi
 
 # The git daemon, Vault Agent, and shutdown trap were all started ABOVE, before
 # the startup sweep, so clones are served the instant the container is up (order
