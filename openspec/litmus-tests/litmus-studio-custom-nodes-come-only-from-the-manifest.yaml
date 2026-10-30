@@ -1,0 +1,30 @@
+# @trace order:1921-7aa5 (local-image-generation change, not yet archived; rebind to image-generation when archived)
+name: litmus:studio-custom-nodes-come-only-from-the-manifest
+spec: accel-capability-probe
+phase: pre-build
+description: The studio's build-time custom-node check passes on exactly the manifest set and fails on an unlisted node, a node at another commit, a missing node, or any ComfyUI-Manager path
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/imagegen-studio/custom-nodes.py and images/imagegen-studio/custom-nodes.toml
+  - python3 (3.11+, for tomllib) is available in PATH
+
+critical_path:
+  - step: "six arms: the manifest set passes; unlisted node, other commit, missing node, ComfyUI-Manager in custom_nodes, and comfyui_manager elsewhere in the image each fail with their own violation"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-studio-custom-nodes.lua"
+    timeout_ms: 120000
+    expected_behavior: "ok:studio-custom-nodes:6-arms"
+
+observability:
+  traces:
+    - "@trace order:1921-7aa5"
+  expected_log: "ok:studio-custom-nodes:6-arms"
+  log_fields:
+    spec: "accel-capability-probe"
+    test: "studio-custom-nodes-come-only-from-the-manifest"
+    artifact: "images/imagegen-studio/custom-nodes.py + custom-nodes.toml + locks/ + scripts/lua/test-studio-custom-nodes.lua"
+
+rollback:
+  on_failure: "inspect images/imagegen-studio/custom-nodes.py verify and custom-nodes.toml; the Containerfile RUN must call install then verify"
+  command: "cat images/imagegen-studio/custom-nodes.toml"
