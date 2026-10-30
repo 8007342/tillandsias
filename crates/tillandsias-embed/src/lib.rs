@@ -8,6 +8,12 @@
 //! (the same [`collect`] rules) from the source tree at first use. The root is
 //! `TILLANDSIAS_ASSET_SOURCE_ROOT`, else the checkout this crate was built in.
 
+// The embedded regime reads nothing at runtime: collect is build.rs's (by
+// #[path]) and, here, only the from-source reader's and the tests'. Without
+// the cfg every non-test build warns dead_code, which clippy -D warnings
+// refuses (x86_64-pc-windows-gnu cross gate, 1916-embd). collect.rs carries
+// its own allow(dead_code) for the tests, which use collect_all only.
+#[cfg(any(test, feature = "from-source"))]
 mod collect;
 
 #[derive(Clone, Copy, Debug)]
@@ -71,7 +77,7 @@ mod tests {
             Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"))
                 .join("../..");
         let want = collect::collect_all(&root);
-        assert!(ASSETS_EMBEDDED);
+        const { assert!(ASSETS_EMBEDDED) };
         assert_eq!(
             served.len(),
             want.len(),
@@ -108,7 +114,7 @@ mod tests {
     #[cfg(feature = "from-source")]
     #[test]
     fn from_source_regime_embeds_nothing_and_reads_the_tree() {
-        assert!(!ASSETS_EMBEDDED);
+        const { assert!(!ASSETS_EMBEDDED) };
         assert!(EMBEDDED_RUNTIME_ASSETS.is_empty());
         let root =
             Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"))
