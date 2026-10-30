@@ -4939,15 +4939,31 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     if let Some(publish) = host_publish_arg {
         run_args.extend(["-p".into(), publish]);
     }
+    // 1922-rann: vault announces readiness (READY=1 once unsealed). Bound
+    // before the run so a fast READY is queued, not lost.
+    run_args.push(tillandsias_podman::readiness::SDNOTIFY_FLAG.into());
+    #[cfg(unix)]
+    let ready = tillandsias_podman::readiness::bind_for_launch(VAULT_CONTAINER_NAME, &run_args);
     run_args.push(image_tag.to_string());
-    let status = podman_cmd_sync()
-        .args(&run_args)
+    let mut cmd = podman_cmd_sync();
+    cmd.args(&run_args);
+    #[cfg(unix)]
+    if let Some(l) = &ready {
+        for (k, v) in l.podman_env() {
+            cmd.env(k, v);
+        }
+    }
+    let status = cmd
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
         .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("spawn podman run: {e}"))?;
     if !status.success() {
         return Err(format!("podman run vault failed: {}", status));
+    }
+    #[cfg(unix)]
+    if let Some(l) = ready {
+        tillandsias_podman::readiness::announce_launch(l, VAULT_CONTAINER_NAME);
     }
     Ok(())
 }

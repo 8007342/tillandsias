@@ -1,4 +1,10 @@
 #!/bin/bash
+# 1922-rann: keep the launcher's notify socket for notify_ready ONLY, and hide it
+# from every child. Vault and Vault Agent sd_notify READY=1 on their own start
+# (measured: an event before unseal, and a mirror event before its seed), which
+# would announce this service before it is ready.
+TILLANDSIAS_NOTIFY_SOCKET="${NOTIFY_SOCKET:-}"
+unset NOTIFY_SOCKET
 set -e
 # @trace spec:proxy-container
 # Entrypoint for the Tillandsias MITM caching proxy container.
@@ -94,4 +100,33 @@ squid -k parse
 #     death were the same Exited(139). The supervisor names that teardown
 #     crash separately and normalises its exit code to 0, which is what makes
 #     a future Exited(139) on this container mean something again.
+# 1922-rann: announce readiness to the launcher. The launcher runs this
+# container with `--sdnotify=container` and its own NOTIFY_SOCKET; podman/conmon
+# relay this datagram there, so readiness is an event, not a probe. socat because
+# BusyBox nc has no unix-socket mode. No socket = an older launcher.
+notify_ready() {
+    [ -n "$TILLANDSIAS_NOTIFY_SOCKET" ] || return 0
+    printf 'READY=1\nSTATUS=%s' "$1" | socat -t1 - "UNIX-SENDTO:$TILLANDSIAS_NOTIFY_SOCKET" 2>/dev/null \
+        || echo "[tillandsias] READY=1 not delivered to $TILLANDSIAS_NOTIFY_SOCKET" >&2
+}
+
+# squid has no notify hook, so a one-shot watcher reads the kernel's listen
+# table (no connection, nothing in squid's log) and announces once, then exits.
+# Bounded at 60 s; past that it sends nothing and the launcher's deadline speaks.
+(
+    port_hex="$(printf '%04X' 3128)"
+    i=0
+    while [ "$i" -lt 300 ]; do
+        for table in /proc/net/tcp /proc/net/tcp6; do
+            [ -r "$table" ] || continue
+            if awk -v p=":$port_hex" '$4 == "0A" && substr($2, length($2) - 4) == p { f = 1 } END { exit f ? 0 : 1 }' "$table"; then
+                notify_ready "proxy listening"
+                exit 0
+            fi
+        done
+        i=$((i + 1))
+        sleep 0.2
+    done
+) &
+
 exec /usr/local/bin/squid-supervisor squid squid -N
