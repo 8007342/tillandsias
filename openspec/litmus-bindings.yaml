@@ -750,6 +750,7 @@ specs:
   litmus_tests:
   - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
+  - litmus:gate-pins-surface-root
   - litmus:release-freeze-holds-code
   - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
