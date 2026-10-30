@@ -8,4 +8,4 @@ STEP_DESC="Checking the darwin stale-object prune keeps what binaries read (1924
 STEP_SCRIPT="scripts/test-prune-darwin-stale-objects.sh"
 STEP_ERROR="the darwin stale-object prune removed a linked executable's objects, kept a stale group, or touched a non-object file (1924-dobj) — see the FAIL lines above"
 STEP_OK="Darwin stale-object prune fixture passed"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-29 darwin ok:prune-darwin-stale-objects:5"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-29 darwin ok:prune-darwin-stale-objects:7"

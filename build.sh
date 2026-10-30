@@ -178,6 +178,13 @@ elif [[ "$(uname -s)" == "Darwin" ]]; then
     # prunes the objects no linked binary can read (~0.1 s steady state).
     _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
     "$SCRIPT_DIR/scripts/prune-darwin-stale-objects.sh" "$_deps_dir" >&2 || true
+    # Hold a SHARED lock for the rest of this run, so another build.sh's
+    # prune skips while this one's cargo writes into the target. fd 7 stays
+    # open in this shell and every cargo it spawns; the lock goes with it.
+    mkdir -p "$_deps_dir/../.."
+    exec 7>>"$_deps_dir/../../.tillandsias-prune.lock"
+    perl -MFcntl=:flock -e 'open(my $fh, ">>&=", 7) or exit 2; flock($fh, LOCK_SH) or exit 1' \
+        || echo "warn:darwin-prune-lock:could not take the shared build lock" >&2
     # Backstop above the prune: refuse a deps dir that still grew past the
     # bound rather than run every test 3-16 s slow. One clean darwin build
     # is ~13-16k entries; 1.24M stalled each CoreFoundation process 3 s

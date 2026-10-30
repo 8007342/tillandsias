@@ -2,7 +2,8 @@
 # Fixture for scripts/prune-darwin-stale-objects.sh (order 1924-dobj).
 # A loose .o group with its executable beside it is kept; a group with no
 # executable (a library, whose code is in its rlib) is pruned; nothing that
-# is not a .rcgu.o is touched; a second run prunes nothing.
+# is not a .rcgu.o is touched; a second run prunes nothing; and a build
+# holding the shared lock makes the prune skip.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,8 +33,26 @@ check "rlib, rmeta and dep-info are untouched" '[[ -f "$deps/lib$lib.rlib" && -f
 again="$("$prune" "$deps")"
 check "a second run prunes nothing" '[[ "$again" == "pruned:darwin-stale-objects:files=0 groups=0 kept=1" ]]'
 
+# A build that holds the shared lock makes the prune skip and keep its files.
+: >"$deps/$lib.cgu9.s2.rcgu.o"
+lockfile="$work/.tillandsias-prune.lock"
+(
+    exec 9>>"$lockfile"
+    perl -MFcntl=:flock -e 'open(my $fh, ">>&=", 9) or exit 2; flock($fh, LOCK_SH) or exit 1' || exit 3
+    : >"$work/held"
+    exec sleep 3
+) &
+holder=$!
+for _ in $(seq 50); do [[ -f "$work/held" ]] && break; sleep 0.05; done
+held="$("$prune" "$deps")"
+check "a concurrent shared holder makes the prune skip" '[[ "$held" == skipped:darwin-stale-objects:* && -f "$deps/$lib.cgu9.s2.rcgu.o" ]]'
+kill "$holder" 2>/dev/null || true
+wait "$holder" 2>/dev/null || true
+after="$("$prune" "$deps")"
+check "once the holder is gone the prune runs" '[[ "$after" == "pruned:darwin-stale-objects:files=1 groups=1 kept=1" ]]'
+
 if (( fail )); then
     echo "FAIL: prune-darwin-stale-objects fixture (1924-dobj)"
     exit 1
 fi
-echo "ok:prune-darwin-stale-objects:5"
+echo "ok:prune-darwin-stale-objects:7"

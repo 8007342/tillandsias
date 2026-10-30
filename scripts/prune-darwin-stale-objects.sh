@@ -19,6 +19,19 @@ set -euo pipefail
 deps="${1:?usage: prune-darwin-stale-objects.sh <deps-dir>}"
 [[ -d "$deps" ]] || { echo "pruned:darwin-stale-objects:files=0 groups=0 kept=0 (no $deps)"; exit 0; }
 
+# Fleet hosts share one target dir across worktrees, so another build.sh may
+# be compiling into it right now; a library mid-compile has loose objects and
+# no rlib yet. Every build.sh holds a SHARED lock on this file while it runs
+# cargo; the prune takes it EXCLUSIVE and non-blocking, and skips if any
+# build holds it. darwin has no flock(1), so perl's flock() locks the fd this
+# shell keeps open (a BSD lock lives on the open file, not the process).
+lock="$deps/../../.tillandsias-prune.lock"
+exec 8>>"$lock"
+if ! perl -MFcntl=:flock -e 'open(my $fh, ">>&=", 8) or exit 2; flock($fh, LOCK_EX | LOCK_NB) or exit 1'; then
+    echo "skipped:darwin-stale-objects:a build holds $lock (shared); pruning next time"
+    exit 0
+fi
+
 # One listing, one awk pass: names with no dot that end in a 16-hex hash are
 # the executables; a .rcgu.o whose prefix is not one of them is stale.
 list="$(ls -f "$deps")"
