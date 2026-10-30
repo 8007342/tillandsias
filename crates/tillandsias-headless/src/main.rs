@@ -84,6 +84,8 @@ mod imagegen_models;
 mod imagegen_placement;
 mod imagegen_studio;
 mod imagegen_tiers;
+#[cfg(feature = "host-services")]
+mod imagegen_tool;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -9764,6 +9766,20 @@ fn build_opencode_forge_args(
             "--env".into(),
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=volume,source={volume},target={}",
+                    imagegen_tool::FORGE_SCRATCH
+                ),
+            ]);
+        }
     }
     // Order 1859-v5iv: the tray run that launched this forge, so a tray start
     // after that run died reaps it (dead_run.rs).
@@ -19169,6 +19185,9 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     }
     #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+    // 1874-kkrc: image.generate's scratch volume goes with the forge.
+    #[cfg(feature = "host-services")]
+    imagegen_tool::remove_lane_volume(project, instance);
     remove_source_volume_if_present(&volume, debug)
 }
 
@@ -19690,6 +19709,14 @@ fn build_forge_agent_run_args_with_vault(
                 "TILLANDSIAS_CONTROL_SOCKET",
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            spec = spec.volume(volume, imagegen_tool::FORGE_SCRATCH, MountMode::ReadWrite);
+        }
     }
     // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
     if let Some(run) = dead_run::run_label_value() {
