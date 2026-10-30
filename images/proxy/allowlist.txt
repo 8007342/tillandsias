@@ -144,6 +144,15 @@ tmaproduction.blob.core.windows.net
 .ollama.ai
 .r2.cloudflarestorage.com
 .huggingface.co
+# Hugging Face serves a pinned file by redirect to its CDN (order 1874-h9ns,
+# 1921-xt97). Measured 2026-10-29 on macuahuitl through this proxy: the
+# akleine/sdxs-09 resolve URL redirects to us.aws.cdn.hf.co and squid reset
+# the CONNECT. Only the CDN hosts, never the whole of .hf.co.
+.cdn.hf.co
+cas-bridge.xethub.hf.co
+cdn-lfs.hf.co
+cdn-lfs-us-1.hf.co
+cdn-lfs-eu-1.hf.co
 .openai.com
 .anthropic.com
 .chatgpt.com
