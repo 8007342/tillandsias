@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1j) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: one-expert-client-library-replaces-the-drifted-front-ends-tellme-forge-plan-spec-answer-mcp-pipeline-cli-and-expert-serve
+    order: 1823-4kwh
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, rust, bash, mcp, refactor]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-plan/src/pipeline.rs
+      - crates/tillandsias-plan/src/expert_serve.rs
+      - crates/tillandsias-plan/src/main.rs
+      - images/default/config-overlay/mcp/forge-plan.sh
+      - images/default/cli/tellme
+    title: |
+      One expert client — a single Rust entry (library function + `tillandsias-plan ask` CLI) that every front-end calls — replaces the drifted copies in tellme, forge-plan.sh spec_answer, the MCP tools, the pipeline CLI and expert-serve, so pack, budget, cache, refusal and model selection are decided in one place
+    context: |
+      Five front-ends reach the experts today and each carries its own
+      endpoint resolution, model choice, prompt and refusal handling:
+      images/default/cli/tellme (bash, ungrounded until 1814-x78v),
+      images/default/config-overlay/mcp/forge-plan.sh `spec_answer` (shell
+      fallback chain), the MCP server tools, `tillandsias-plan pipeline`, and
+      expert_serve.rs. Phase-1 fixes (context pack 1815-tei4, num_ctx/budget
+      1818-uiar, answer cache 1819-njan, margin refusal 1820-m2kq) would each
+      have to be repeated per front-end. After this packet the shell
+      front-ends are thin callers of one binary entry and a guard refuses a
+      new direct `/chat/completions` or `/api/generate` call outside it.
+    exit_criteria:
+      - 'grep over images/default and scripts finds no direct /api/generate or /chat/completions call outside the one client (an allowlisted fallback in tellme excepted until the client is on PATH in every forge) (pre-fix result: FAILS — tellme and forge-plan.sh each post directly)'
+      - 'the same question through tellme, spec_answer and expert-serve returns the same envelope (same citations, same confidence) on one index (pre-fix result: FAILS — tellme is ungrounded)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/check-single-expert-client.sh
+      (new) refuses direct inference HTTP calls outside the client; and
+      scripts/test-expert-front-ends-agree.sh (new) asserts envelope equality
+      across the three front-ends on a fixture index.
+    depends_on: [tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt, a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical]
+    related: [1813-54df]
+    next_action: >
+      Inventory the five front-ends' endpoint/model/prompt/refusal code; pick
+      the pipeline entry as the library; add `ask`; convert tellme and
+      spec_answer to call it; add the guard.
+    notes: |
+      size: M
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:11:38Z"
+        host: macuahuitl
+        summary: |-
+          p3 1j: one expert client library for every front-end.

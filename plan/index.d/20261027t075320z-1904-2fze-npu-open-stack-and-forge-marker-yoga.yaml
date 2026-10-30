@@ -1,0 +1,184 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga (linux-yoga-claude-20261027t070947z), 2026-10-27, at the
+# operator's direction "squeeze those NPUs where possible", after the NPU
+# research notes on 1874-4b88 (linux-next 94a6a1ce5). Operator rulings of the
+# same session bind every row: no sudo and no rpm-ostree layering on a host,
+# every runtime in a toolbox or podman container, and no licence accepted
+# without the operator. Code is cited by symbol, never by line.
+packets:
+  - packet_id: a-rootless-podman-image-built-from-open-sources-runs-xrt-smi-validate-on-the-xdna-npu
+    order: 1904-2fze
+    parent: 1874-4b88
+    depends_on: []
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [npu, xdna, accel, container, research]
+    estimated_hours: 4
+    size: M
+    implementer_tier: opus
+    owned_files:
+      - images/npu-xrt/
+      - scripts/probe-npu-container.sh
+    title: "A rootless podman image built only from open sources (XRT, xdna-driver userspace) runs xrt-smi validate against /dev/accel/accel0 on an XDNA2 host, with nothing installed on the host"
+    context: |
+      Measured on yoga 2026-10-27 (Krackan, PCI 1022:17F0, kernel
+      7.2.12-200.fc44): the in-tree amdxdna module is loaded, dmesg shows
+      "Initialized amdxdna_accel_driver 0.10.0" loading amdnpu/17f0_10/npu_7.sbin,
+      /dev/accel/accel0 exists, ulimit -l is unlimited. Fedora 44 has no xrt
+      package (dnf search in a fresh fedora-toolbox:44 returned nothing).
+      accel_probe.rs `fn derive_npu_usability` already reports the NPU with
+      usable=false; this row produces the evidence that would let it say true.
+      Container shape from the FastFlowLM portable bundle and ZimaOS notes:
+      --device /dev/accel/accel0 --ulimit memlock=-1:-1, SELinux label to be
+      measured (the node is device_t). Build XRT and the xdna-driver shim from
+      their Apache-2.0 sources in the image; firmware comes from the host
+      kernel, nothing is layered. Open question to measure: the PCI revision
+      reads 0x20 while the driver loads the 17f0_10 firmware.
+    exit_criteria:
+      - "scripts/probe-npu-container.sh on an XDNA2 Linux host prints ok:npu-container:xrt-smi-validate:<device-name> after building the image and running xrt-smi validate in rootless podman, and on a host without /dev/accel/accel0 prints skip:npu-container:no-accel-device with rc 0. Pre-fix result: FAILS, the script and image do not exist."
+      - "The image build installs nothing whose licence is not OSI-approved; the script prints the licence of each built component. Pre-fix result: FAILS, no image exists."
+    verifiable_closure: "scripts/probe-npu-container.sh prints ok:npu-container:xrt-smi-validate on yoga and skip:npu-container:no-accel-device on a host without the node. Pre-fix result: FAILS, the script does not exist."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the probe script named in the exit criterion in the same commit (1136-n8sh); the ok arm needs XDNA2 hardware (yoga, yolanda under WSL is out of scope).
+    next_action: >
+      Nothing is built. Write the probe script with its skip arm first, then the Containerfile building XRT from source.
+    provenance: |
+      Operator direction 2026-10-27 on yoga; research notes on 1874-4b88 the same day.
+    events:
+      - type: filed
+        ts: "2026-10-27T07:53:20Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27 (squeeze the NPU)"
+
+  - packet_id: operator-decides-whether-the-fastflowlm-proprietary-npu-kernel-licence-is-acceptable-for-fleet-npu-workloads
+    order: 1904-8q5i
+    parent: 1874-4b88
+    depends_on: []
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [npu, licence, operator, decision]
+    estimated_hours: 0.5
+    owned_files:
+      - plan/issues/npu-fastflowlm-licence-decision-2026-10-27.md
+    title: "OPERATOR DECISION — is the FastFlowLM Proprietary Binary License v2.0 acceptable for NPU LLM, whisper and embedding workloads in fleet containers, or does the fleet stay on open stacks only"
+    context: |
+      FastFlowLM (via Lemonade 10+) is the only shipped Linux NPU stack found
+      on 2026-10-27; it lists Krackan and needs kernel 7.0 or later. Its code
+      and CLI are MIT but the NPU kernels are fetched separately under the
+      FastFlowLM Proprietary Binary License v2.0
+      (github.com/FastFlowLM/FastFlowLM LICENSE_BINARY.txt). As summarised by
+      research and NOT yet read in full by an agent, the licence allows free use
+      including commercial and unmodified redistribution, with attribution asked.
+      The packaged installer `flm-fetch-kernels` asks for acceptance at an
+      interactive prompt and needs root, so it cannot be used as shipped. An
+      agent never accepts this licence (operator ruling 2026-10-27). The open
+      alternative is 1904-2fze then 1904-pehj.
+    exit_criteria:
+      - "An event on this row records the operator's decision (accept, reject, or defer) with the reasoning, and the decision note names which NPU workload rows it unblocks or closes. Pre-fix result: FAILS, no decision recorded."
+    unscoreable: "operator-gated decision: closes on the operator's recorded ruling, not on a fixture"
+    next_action: >
+      Put the licence text and this row in front of the operator as one plain ask; do not fetch the kernels.
+    provenance: |
+      Operator direction 2026-10-27 on yoga: "I won't accept any license without discussing".
+    events:
+      - type: filed
+        ts: "2026-10-27T07:53:20Z"
+        host: yoga
+        summary: "filed ready as an operator decision from the 2026-10-27 NPU research"
+
+  - packet_id: an-open-mlir-aie-or-iree-amd-aie-kernel-runs-on-the-xdna2-npu-in-a-container-and-the-open-workload-path-is-re-measured
+    order: 1904-pehj
+    parent: 1874-4b88
+    depends_on:
+      - a-rootless-podman-image-built-from-open-sources-runs-xrt-smi-validate-on-the-xdna-npu
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [npu, xdna, mlir-aie, iree, research]
+    estimated_hours: 6
+    size: L
+    implementer_tier: opus
+    owned_files:
+      - plan/issues/research/npu-open-kernel-path-measured-2026-10-27.md
+    title: "An open (Apache-2.0) mlir-aie/IRON or iree-amd-aie kernel compiled for XDNA2 runs on the NPU inside the 1904-2fze container, and the open path to embeddings or whisper is re-measured"
+    context: |
+      2026-10-27 research: iree-amd-aie calls itself early-phase (last push
+      2025-12); MLIR-AIE 1.3 added a C++ compiler; the only openly built
+      xclbins found target Phoenix (NPU1) and their author says they do not
+      load on Krackan; a Strix Halo report says the Linux XDNA2 stack failed
+      validation on firmware/driver/runtime version mismatch. No diffusion
+      model runs on any open NPU stack. This row measures the smallest open
+      kernel (an IRON GEMM example) and records whether an embedding model
+      (nomic-embed class, used by the host experts) is in reach.
+    exit_criteria:
+      - "plan/issues/research/npu-open-kernel-path-measured-2026-10-27.md records the command, the device, the kernel's result checked against a CPU reference, and its wall time, for one open kernel run on the yoga NPU in the 1904-2fze container; or the exact refusal with its versions when it cannot run. Pre-fix result: FAILS, no open kernel has been run on any fleet NPU."
+    unscoreable: "research measurement on XDNA2 hardware; closes on the recorded note, not on a fixture"
+    next_action: >
+      Blocked on 1904-2fze. Then build mlir-aie from source in the same image and run its smallest XDNA2 example.
+    provenance: |
+      Operator direction 2026-10-27 on yoga.
+    events:
+      - type: filed
+        ts: "2026-10-27T07:53:20Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-10-27 (squeeze the NPU)"
+
+  - packet_id: a-stale-forge-startup-context-file-in-a-bare-metal-checkout-makes-fleet-membership-agent-identity-and-capability-row-call-the-host-a-forge
+    order: 1904-rmci
+    depends_on: []
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [identity, fleet, host-kind]
+    estimated_hours: 3
+    size: M
+    implementer_tier: opus
+    related: [1467-c8qg]
+    owned_files:
+      - scripts/host-kind-evidence.sh
+      - scripts/test-host-kind-evidence-not-from-checkout-marker.sh
+    title: "A stale .forge-startup-context.md in a bare-metal checkout makes check-fleet-membership, agent-identity and check-capability-row call the host a forge"
+    context: |
+      Measured on yoga 2026-10-27 (bare-metal Silverblue, /run/ostree-booted
+      present, no /run/.containerenv): scripts/check-fleet-membership.sh printed
+      session-name yoga-tillandsias-forge with regime forge, and
+      `scripts/agent-identity.sh id claude` answered forge-yoga-claude-…, so a
+      ledger write would have carried a forge identity. Cause: a gitignored
+      .forge-startup-context.md dated 2026-10-17 left in the checkout by a forge
+      that bind-mounted it. All three scripts treat that file's presence as forge
+      evidence. 1467-c8qg already fixed the same hole in the command policy
+      (forge evidence = /run/.containerenv naming the forge image), pinned by
+      scripts/test-host-kind-evidence-not-from-workspace.sh; these three
+      scripts were not moved to that rule. Workaround used:
+      TILLANDSIAS_FORGE_CONTEXT=/nonexistent for agent-identity.
+      Independently schedulable (arrival routing): the open rows owning these
+      three scripts are about a forge's session name from the container
+      hostname, experts-down during first build, per-harness git identity,
+      claim-host agreement, and capability-row freshness. None is about
+      workspace-marker evidence on bare metal. The fix lives in a new shared
+      helper (scripts/host-kind-evidence.sh) that the three scripts source, so
+      it touches each of them in one place only.
+    exit_criteria:
+      - "A fixture plants .forge-startup-context.md in a checkout on a host with no forge /run/.containerenv and asserts check-fleet-membership.sh reports a non-forge regime, agent-identity.sh id claude does not begin forge-, and check-capability-row.sh does not take its forge branch. Pre-fix result: FAILS, all three answer forge."
+    verifiable_closure: "A fixture planting .forge-startup-context.md on a non-forge host asserts none of the three scripts answers forge. Pre-fix result: FAILS, all three answer forge on yoga 2026-10-27."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Reuse the 1467-c8qg forge-evidence rule rather than inventing a second one; write the fixture first.
+    provenance: |
+      Coordinator macuahuitl-fedora asked for it to be filed 2026-10-27.
+    events:
+      - type: filed
+        ts: "2026-10-27T07:53:20Z"
+        host: yoga
+        summary: "filed ready from a measurement on yoga 2026-10-27"

@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: linux-first-use-download-window-states-the-size-and-shows-a-statvfs-storage-bar-with-tillandsias-needed-and-removable-share
+  order: 1885-2r2f
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - linux
+  estimated_hours: 6
+  depends_on:
+  - linux-approval-dialog-shows-macron-doing-the-action-with-curated-calm-sentences-before-the-os-check
+  title: Before a large first download on Linux, a window says how much will download and shows the disk with Tillandsias' share
+  context: 'Design D9 of openspec/changes/os-verified-approval-gates. Reads the download manifest specified in PR #650''s change (forge-storage-single-root-and-disk-discipline): needed items (forge and web images) versus removable ones (models, caches, recreated on demand). Storage bar from statvfs on the storage root; segments the platform cannot measure fold into Other. Download starts only on Approve. Blocked until the manifest exists.'
+  exit_criteria:
+  - 'A fixture with a manifest of 5.5 GB (4 GB needed, 1.5 GB removable) and a stubbed statvfs asserts the window model says ''about 5.5 GB'', lists removable items separately with sizes, draws no backups segment, and a fake fetcher records zero requests before Approve. Pre-fix result: FAILS, first-use image pulls start without any window.'
+  verifiable_closure: 'A fixture with a manifest of 5.5 GB (4 GB needed, 1.5 GB removable) and a stubbed statvfs asserts the window model says ''about 5.5 GB'', lists removable items separately with sizes, draws no backups segment, and a fake fetcher records zero requests before Approve. Pre-fix result: FAILS, first-use image pulls start without any window.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

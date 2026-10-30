@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-optional-comfyui-imagegen-studio-image-shares-the-model-cache-and-is-never-built-unless-a-project-enables-it
+    field: context
+    value: Later packet (operator ruling 2026-10-25). Shortlist in design.md section 7, open licences only (OSI or OpenRAIL without revenue caps). Own Fedora-based image; community images are reference recipes only. No RMBG, InsightFace weights or FLUX.1-dev.
+    ts: "2026-10-25T21:18:24Z"
+    host: macuahuitl
+    replaces_sha256: "8707b0b3ad2f35426a6353550fe0ca984d5f1e03ac5b185e9c5773978a694b81"
+
+events:
+  - packet_id: an-optional-comfyui-imagegen-studio-image-shares-the-model-cache-and-is-never-built-unless-a-project-enables-it
+    event:
+      type: note
+      ts: "2026-10-25T21:18:24Z"
+      host: macuahuitl
+      summary: |-
+        operator-rulings-2026-10-25

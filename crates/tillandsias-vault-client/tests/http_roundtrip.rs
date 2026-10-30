@@ -11,6 +11,52 @@ use tillandsias_vault_client::{VaultClient, VaultError};
 use wiremock::matchers::{body_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
+/// Order 1924-vprx: the default reqwest builder looks up the host's proxy
+/// settings, ~3 s per process on macOS (~16 s under `taskpolicy -b`), so
+/// every test here took 68-85 s in a parallel suite. A test client skips the
+/// lookup and fails its test if the test outlives this bound.
+const TEST_BUDGET: std::time::Duration = std::time::Duration::from_secs(2);
+
+struct Timed {
+    client: VaultClient,
+    start: std::time::Instant,
+}
+
+impl std::ops::Deref for Timed {
+    type Target = VaultClient;
+    fn deref(&self) -> &VaultClient {
+        &self.client
+    }
+}
+
+impl Drop for Timed {
+    fn drop(&mut self) {
+        let took = self.start.elapsed();
+        if !std::thread::panicking() {
+            assert!(took < TEST_BUDGET, "vault client test took {took:?}");
+        }
+    }
+}
+
+fn test_client(base_url: impl Into<String>, token: impl Into<String>) -> Timed {
+    Timed {
+        client: VaultClient::new_without_system_proxy(base_url, token),
+        start: std::time::Instant::now(),
+    }
+}
+
+#[test]
+fn test_budget_fails_a_slow_test() {
+    let slow = std::panic::catch_unwind(|| {
+        let _c = test_client("http://127.0.0.1:9", "t");
+        std::thread::sleep(TEST_BUDGET + std::time::Duration::from_millis(50));
+    });
+    assert!(
+        slow.is_err(),
+        "a test client must fail a test past its bound"
+    );
+}
+
 #[tokio::test]
 async fn read_secret_parses_data_field() {
     let server = MockServer::start().await;
@@ -30,7 +76,7 @@ async fn read_secret_parses_data_field() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     let v = client
         .read_secret("secret/github/token")
         .await
@@ -47,7 +93,7 @@ async fn read_secret_handles_404_as_not_found() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     let err = client
         .read_secret("secret/missing")
         .await
@@ -67,7 +113,7 @@ async fn read_secret_handles_403_as_unauthorized() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "forge-token");
+    let client = test_client(server.uri(), "forge-token");
     let err = client
         .read_secret("secret/github/token")
         .await
@@ -89,7 +135,7 @@ async fn write_secret_wraps_in_data_envelope() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     client
         .write_secret("secret/test/key", json!({ "hello": "world" }))
         .await
@@ -119,7 +165,7 @@ async fn delete_secret_all_versions_hits_metadata_path() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     client
         .delete_secret_all_versions("secret/cloudflare/token")
         .await
@@ -167,7 +213,7 @@ async fn issue_approle_token_returns_client_token_field() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     let token = client
         .issue_approle_token("git-mirror")
         .await
@@ -209,7 +255,7 @@ async fn issue_approle_credentials_returns_reauth_material_without_logging_in() 
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     let credentials = client
         .issue_approle_credentials("git-mirror")
         .await
@@ -240,7 +286,7 @@ async fn malformed_approle_response_never_echoes_secret_id() {
         .mount(&server)
         .await;
 
-    let error = match VaultClient::new(server.uri(), "tray-root")
+    let error = match test_client(server.uri(), "tray-root")
         .issue_approle_credentials("git-mirror")
         .await
     {
@@ -274,7 +320,7 @@ async fn destroy_approle_secret_id_accessor_posts_accessor_with_root_auth() {
         .mount(&server)
         .await;
 
-    VaultClient::new(server.uri(), "tray-root")
+    test_client(server.uri(), "tray-root")
         .destroy_approle_secret_id_accessor("git-mirror", "sid-accessor-agent")
         .await
         .expect("accessor destruction should accept Vault's 204");
@@ -289,7 +335,7 @@ async fn revoke_token_handles_204_no_content() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     client
         .revoke_token("hvs.some-token")
         .await
@@ -306,7 +352,7 @@ async fn write_policy_uses_acl_endpoint() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     client
         .write_policy(
             "git-mirror-policy",
@@ -330,7 +376,7 @@ async fn enable_approle_swallows_already_in_use_400() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     client
         .enable_approle()
         .await
@@ -356,7 +402,7 @@ async fn create_approle_role_posts_policies_and_ttls() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     client
         .create_approle_role("git-mirror", &["git-mirror-policy"], 3_600, 86_400)
         .await
@@ -382,7 +428,7 @@ async fn create_approle_agent_role_posts_reusable_secret_id_lifecycle() {
         .mount(&server)
         .await;
 
-    VaultClient::new(server.uri(), "tray-root")
+    test_client(server.uri(), "tray-root")
         .create_approle_agent_role("git-mirror-agent", &["git-mirror-policy"], 3_600, 86_400)
         .await
         .expect("long-running Agent role should accept 204");
@@ -402,7 +448,7 @@ async fn health_reports_sealed_state() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     let h = client.health().await.expect("health should succeed");
     assert!(h.initialized);
     assert!(!h.sealed);
@@ -420,7 +466,7 @@ async fn approle_role_exists_returns_true_when_exists() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     let exists = client
         .approle_role_exists("git-mirror")
         .await
@@ -437,7 +483,7 @@ async fn approle_role_exists_returns_false_when_not_found() {
         .mount(&server)
         .await;
 
-    let client = VaultClient::new(server.uri(), "tray-root");
+    let client = test_client(server.uri(), "tray-root");
     let exists = client
         .approle_role_exists("git-mirror")
         .await

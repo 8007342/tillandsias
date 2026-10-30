@@ -1,6 +1,7 @@
 // @trace spec:runtime-logging
 /// Order 998-qrwu — the enclave CA bundle directory, declared once and shared
 /// by every crate that binds it.
+pub mod approval_sentences;
 pub mod ca_path;
 pub mod cache_root;
 pub mod cache_validation;

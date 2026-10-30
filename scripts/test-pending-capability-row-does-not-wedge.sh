@@ -93,9 +93,13 @@ PEND="plan/index.d/20990101t000000z-1128-probe-pending.yaml"
 BAD="plan/index.d/20990101t000001z-1128-probe-malformed.yaml"
 NOID="plan/index.d/20990101t000002z-1128-probe-noid.yaml"
 cleanup() { rm -f "$S/$PEND" "$S/$BAD" "$S/$NOID"; }
-trap 'rm -rf "$S"' EXIT
-trap 'rm -rf "$S"; exit 143' TERM
-trap 'rm -rf "$S"; exit 130' INT
+# hold_pid: arm 1's background sleep in a child run (arms 7-8). Every trap
+# kills it, so a TERMed child does not leave it on the gate step's pipe
+# (1924-dcoy).
+hold_pid=""
+trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$S"' EXIT
+trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$S"; exit 143' TERM
+trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$S"; exit 130' INT
 cleanup
 
 # A WELL-FORMED row for a host+locus the base cannot carry. The host name is
@@ -133,8 +137,8 @@ write_pending
 # the background so a TERM runs its trap at once (a foreground sleep defers it).
 if [ -n "${TILLANDSIAS_1320_HOLD_FILE:-}" ]; then
     : > "$TILLANDSIAS_1320_HOLD_FILE"
-    sleep 60 &
-    wait $!
+    sleep 60 </dev/null >/dev/null 2>&1 & hold_pid=$!
+    wait "$hold_pid"
 fi
 v="$(verdict)"; cleanup
 case "$v" in

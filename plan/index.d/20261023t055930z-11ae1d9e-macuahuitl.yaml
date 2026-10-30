@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+    field: next_action
+    value: 'PR #620 (work/1822-dmwz, 05cc0869b; contains #612 #607) implements BM25+RRF and chunk hygiene: do not reimplement. Recall@5 in-corpus 50.0% -> 67.5% (r@1 22.5 -> 45.0), near-miss false supports 0; forge-run-container-here-no-docker moved pending -> gated (35/35). Left: identifier recall flat at 60% on a 10-question set (criterion not met); Fine-tier reranker not done; the two remaining pending cases need forge context / semantic matching.'
+    ts: "2026-10-23T05:59:30Z"
+    host: macuahuitl
+    replaces_sha256: "a6da728e06509ef92d4851b3b1ae54e2f6024277951167ada5f870ce33e18e6a"
+
+events:
+  - packet_id: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+    event:
+      type: note
+      ts: "2026-10-23T05:59:30Z"
+      host: macuahuitl
+      summary: |-
+        handoff

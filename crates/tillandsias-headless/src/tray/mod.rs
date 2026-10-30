@@ -21,7 +21,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
@@ -34,7 +34,6 @@ use zbus::object_server::SignalContext;
 use zbus::{Connection, ConnectionBuilder, fdo, interface};
 use zvariant::{OwnedObjectPath, OwnedValue, Value};
 
-use crate::enclave_no_proxy;
 use crate::remote_projects;
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
@@ -42,10 +41,7 @@ use tillandsias_control_wire::{
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
 use tillandsias_host_shell::menu_state as shared_menu;
-use tillandsias_podman::{
-    ContainerSpec, MountMode, container_exists_sync, image_exists_sync, podman_available_sync,
-    stop_container_sync,
-};
+use tillandsias_podman::{image_exists_sync, podman_available_sync};
 
 const ITEM_PATH: &str = "/StatusNotifierItem";
 const MENU_PATH: &str = "/Menu";
@@ -344,7 +340,6 @@ struct TrayUiState {
     version: String,
     status_text: String,
     tray_icon_state: TrayIconState,
-    projects: Vec<ProjectEntry>,
     /// Cloud-side projects (e.g. GitHub repos) the user can attach to.
     /// Populated by [`cloud::refresh_cloud_projects_if_stale`] which shells
     /// out to `gh` with a 5-minute TTL.
@@ -410,9 +405,6 @@ struct TrayUiState {
     cloudflare_login: shared_menu::CloudflareLoginState,
     enclave_status: EnclaveStatus,
     revision: u32,
-    /// Hash of projects list to detect when menu needs rebuild.
-    #[allow(dead_code)] // retained for the project-list rebuild guard contract
-    projects_hash: u64,
 }
 
 type IconPixmap = (i32, i32, Vec<u8>);
@@ -423,12 +415,23 @@ type GroupProperties = Vec<(i32, HashMap<String, OwnedValue>)>;
 // @trace gap:TR-005
 /// Async task executor for offloading long-running operations from the GTK event loop.
 /// Prevents UI blocking by spawning tasks in a dedicated thread pool.
+///
+/// 1919-exec: workers BLOCK in `recv()` and stop when the sender is dropped
+/// (`Disconnected`). They used to wake every 100 ms in `recv_timeout` to
+/// re-read an `is_running` flag — about 144,000 idle wakeups/h for 4 workers.
 #[derive(Debug)]
 struct AsyncTaskExecutor {
-    /// Send channel for queueing tasks
-    sender: mpsc::SyncSender<Box<dyn FnOnce() + Send>>,
-    /// Flag indicating if the executor thread is still running
-    is_running: Arc<AtomicBool>,
+    /// Send channel for queueing tasks. `None` once shut down: dropping it is
+    /// what wakes and stops the workers.
+    sender: Option<mpsc::SyncSender<Box<dyn FnOnce() + Send>>>,
+    /// Set before the sender is dropped, so a worker never STARTS a task that
+    /// was still queued at shutdown (the pre-1919-exec behaviour). Read only
+    /// after a task arrives — never polled.
+    shutting_down: Arc<AtomicBool>,
+    /// Worker threads, joinable by `shutdown_and_join`. Production never
+    /// joins (Drop must not block), so only tests read it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    workers: Vec<std::thread::JoinHandle<()>>,
 }
 
 /// Number of worker threads draining the task queue. This MUST be > 1: a
@@ -447,39 +450,64 @@ impl AsyncTaskExecutor {
     /// @trace gap:TR-005
     fn new(queue_size: usize) -> Self {
         let (sender, receiver) = mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(queue_size);
-        let is_running = Arc::new(AtomicBool::new(true));
+        let shutting_down = Arc::new(AtomicBool::new(false));
         // The receiver is shared across workers behind a mutex; each worker
-        // briefly locks to dequeue one task, then releases the lock *before*
-        // running it so peers can pick up the next task concurrently.
+        // locks to dequeue one task (the lock holder blocks in recv(), the
+        // others block on the lock — no thread wakes while idle), then
+        // releases the lock *before* running it so peers can pick up the next
+        // task concurrently.
         let receiver = Arc::new(Mutex::new(receiver));
 
-        for worker in 0..ASYNC_EXECUTOR_WORKERS {
-            let is_running_clone = is_running.clone();
-            let receiver = receiver.clone();
-            std::thread::spawn(move || {
-                let span = span!(Level::TRACE, "async_task_executor", worker);
-                let _guard = span.enter();
+        let workers = (0..ASYNC_EXECUTOR_WORKERS)
+            .map(|worker| {
+                let shutting_down = shutting_down.clone();
+                let receiver = receiver.clone();
+                std::thread::spawn(move || {
+                    let span = span!(Level::TRACE, "async_task_executor", worker);
+                    let _guard = span.enter();
 
-                while is_running_clone.load(Ordering::Relaxed) {
-                    let next = {
-                        let rx = match receiver.lock() {
-                            Ok(rx) => rx,
-                            Err(_) => break, // poisoned — bail this worker
+                    loop {
+                        let next = {
+                            let rx = match receiver.lock() {
+                                Ok(rx) => rx,
+                                Err(_) => break, // poisoned — bail this worker
+                            };
+                            rx.recv()
                         };
-                        rx.recv_timeout(std::time::Duration::from_millis(100))
-                    };
-                    match next {
-                        Ok(task) => {
-                            task();
+                        match next {
+                            // A task still queued at shutdown is dropped, not run.
+                            Ok(_) if shutting_down.load(Ordering::Acquire) => break,
+                            Ok(task) => task(),
+                            // Every sender is gone: the executor shut down.
+                            Err(mpsc::RecvError) => break,
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => continue,
-                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
                     }
-                }
-            });
-        }
+                })
+            })
+            .collect();
 
-        Self { sender, is_running }
+        Self {
+            sender: Some(sender),
+            shutting_down,
+            workers,
+        }
+    }
+
+    /// Stop the executor and wait for every worker to exit. Workers finish the
+    /// task they are running; queued tasks are dropped.
+    #[cfg(test)]
+    fn shutdown_and_join(mut self) {
+        self.shut_down();
+        for worker in std::mem::take(&mut self.workers) {
+            let _ = worker.join();
+        }
+    }
+
+    /// Flag shutdown, then drop the sender: the drop wakes every worker
+    /// blocked in `recv()` with `Disconnected`.
+    fn shut_down(&mut self) {
+        self.shutting_down.store(true, Ordering::Release);
+        self.sender = None;
     }
 
     /// Spawn a non-blocking task. Returns error if queue is full.
@@ -488,13 +516,18 @@ impl AsyncTaskExecutor {
     where
         F: FnOnce() + Send + 'static,
     {
-        self.sender.try_send(Box::new(task))
+        match &self.sender {
+            Some(sender) => sender.try_send(Box::new(task)),
+            None => Err(mpsc::TrySendError::Disconnected(Box::new(task))),
+        }
     }
 }
 
 impl Drop for AsyncTaskExecutor {
+    /// Non-blocking, as before: workers are told to stop but not joined, so a
+    /// long task (a 60 s cloud fetch) cannot stall whoever drops the executor.
     fn drop(&mut self) {
-        self.is_running.store(false, Ordering::Release);
+        self.shut_down();
     }
 }
 
@@ -1020,33 +1053,48 @@ pub(crate) fn await_github_login_confirmation(
     }
 }
 
-/// Bind the NDJSON MCP tool sockets for all discovered local projects (order 505).
+/// Bind the tray's startup NDJSON MCP tool socket (order 505).
+///
+/// 776-jcf3: the per-project sockets used to be built from a `~/src` scan.
+/// That scan is removed; at startup the tray binds only the `default` lane,
+/// and a launched lane binds its own socket when it is launched.
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub fn start_mcp_socket_server() -> Result<(), String> {
-    let names: Vec<String> = discover_projects().into_iter().map(|p| p.name).collect();
     let reserved_value = std::env::var(crate::mcp_socket::TRAY_RESERVED_LANE_ENV).ok();
     let reserved = crate::mcp_socket::reserved_lane_from(reserved_value.as_deref());
-    for (project, instance) in startup_lanes(&names, reserved.as_ref()) {
+    for (project, instance) in startup_lanes(reserved.as_ref()) {
         let _ = start_mcp_socket_server_for_lane(&project, &instance);
     }
+    spawn_lane_adoption();
     Ok(())
 }
 
-/// The lanes a tray binds at startup: every discovered project's default
-/// lane (the `default` lane when there are none), minus the lane a CLI
-/// launch reserved when it spawned this tray as its companion (1798-nwpg).
+/// 1863-eckw: the tray binds every lane a launcher handed it (a web-mode
+/// forge outlives its CLI) and rebinds one whose owner died, so a forge's
+/// lane socket answers for the forge's whole life, across tray restarts too.
+fn spawn_lane_adoption() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        crate::mcp_socket::adopt_marked_lanes();
+        let _ = std::thread::Builder::new()
+            .name("lane-adoption".into())
+            .spawn(|| {
+                loop {
+                    std::thread::sleep(crate::mcp_socket::LANE_ADOPT_TICK);
+                    crate::mcp_socket::adopt_marked_lanes();
+                }
+            });
+    });
+}
+
+/// The lanes a tray binds at startup: the `default` lane only (776-jcf3: no
+/// project names come from `~/src`), minus the lane a CLI launch reserved when
+/// it spawned this tray as its companion (1798-nwpg).
 fn startup_lanes(
-    project_names: &[String],
     reserved: Option<&crate::mcp_socket::LaneListenerKey>,
 ) -> Vec<crate::mcp_socket::LaneListenerKey> {
-    let mut lanes: Vec<_> = project_names
-        .iter()
-        .map(|name| (name.clone(), "default".to_string()))
-        .collect();
-    if lanes.is_empty() {
-        lanes.push(("default".to_string(), "default".to_string()));
-    }
+    let mut lanes = vec![("default".to_string(), "default".to_string())];
     lanes.retain(|lane| Some(lane) != reserved);
     lanes
 }
@@ -1461,16 +1509,13 @@ struct DbusMenuIface(Arc<TrayService>);
 
 impl TrayUiState {
     #[allow(dead_code)] // retained for the cloud.rs unit-test fixture
-    fn new(root: PathBuf, version: String, projects: Vec<ProjectEntry>) -> Self {
-        Self::new_with_debug(root, version, projects, false)
+    fn new(root: PathBuf, version: String) -> Self {
+        Self::new_with_debug(root, version, false)
     }
 
-    fn new_with_debug(
-        root: PathBuf,
-        version: String,
-        projects: Vec<ProjectEntry>,
-        debug: bool,
-    ) -> Self {
+    // 776-jcf3: the always-empty local `projects` list (and its rebuild-guard
+    // hash) is gone; cloud_projects is the only project list the tray holds.
+    fn new_with_debug(root: PathBuf, version: String, debug: bool) -> Self {
         let podman_available = podman_available();
         let selected_agent = config::load_global_config().agent.selected;
         let forge_image = format!("tillandsias-forge:v{version}");
@@ -1493,9 +1538,6 @@ impl TrayUiState {
             status_label(&enclave_status_to_stage(enclave_status))
         };
 
-        // Compute hash of projects list for change detection
-        let projects_hash = Self::hash_projects(&projects);
-
         // @trace spec:tillandsias-vault, spec:tray-minimal-ux
         // Default to false at launch — a background probe (spawned in
         // run_tray_mode_with_debug) asynchronously checks Vault and bumps
@@ -1508,7 +1550,6 @@ impl TrayUiState {
             version,
             status_text,
             tray_icon_state,
-            projects,
             cloud_projects: Vec::new(),
             last_fetched: None,
             cloud_refresh_in_flight: false,
@@ -1525,30 +1566,12 @@ impl TrayUiState {
             cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
             enclave_status,
             revision: 1,
-            projects_hash,
         }
     }
 
     fn bump_revision(&mut self) -> u32 {
         self.revision = self.revision.saturating_add(1);
         self.revision
-    }
-
-    /// Simple hash of projects list for detecting menu-relevant changes
-    fn hash_projects(projects: &[ProjectEntry]) -> u64 {
-        let mut hash = 0u64;
-        for (i, project) in projects.iter().enumerate() {
-            hash = hash
-                .wrapping_mul(31)
-                .wrapping_add((i as u64) ^ (project.name.len() as u64));
-        }
-        hash
-    }
-
-    /// Check if projects list has changed since last menu build
-    #[allow(dead_code)] // retained for the project-list rebuild guard contract
-    fn projects_changed(&self, new_projects: &[ProjectEntry]) -> bool {
-        Self::hash_projects(new_projects) != self.projects_hash
     }
 }
 
@@ -1607,27 +1630,6 @@ impl TrayService {
     fn with_state<T>(&self, f: impl FnOnce(&mut TrayUiState) -> T) -> T {
         let mut state = self.state.lock().expect("tray state lock poisoned");
         f(&mut state)
-    }
-
-    /// Re-scan `~/src` and store the result into `state.projects`.
-    ///
-    /// `state.projects` (the `🏠 ~/src` submenu source) is otherwise seeded
-    /// only once at startup, so a freshly cloned checkout never appears in the
-    /// live menu. This is the missing post-startup writer: any path that
-    /// changes the on-disk `~/src` contents (clone today, fs-watch later)
-    /// calls this, then `rebuild_after_state_change`, to surface the change
-    /// without a tray restart.
-    ///
-    /// @trace spec:tray-ux, spec:remote-projects
-    /// @trace plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md
-    #[allow(dead_code)]
-    fn refresh_local_projects(&self) {
-        let projects = discover_projects();
-        self.with_state(|state| {
-            state.projects_hash = TrayUiState::hash_projects(&projects);
-            state.projects = projects;
-            state.bump_revision();
-        });
     }
 
     fn refresh_snapshot(&self) -> TrayUiState {
@@ -1797,15 +1799,6 @@ impl TrayService {
             .into_iter()
             .find(|project| project.name == name)
     }
-
-    #[allow(dead_code)]
-    fn launch_selected_agent_for_project(&self, _project: &ProjectEntry) -> LaunchKind {
-        match self.selected_agent() {
-            SelectedAgent::OpenCode => LaunchKind::OpenCode,
-            SelectedAgent::Claude => LaunchKind::Claude,
-            SelectedAgent::OpenCodeWeb => LaunchKind::OpenCodeWeb,
-        }
-    }
 }
 
 /// @trace spec:tray-icon-lifecycle
@@ -1832,67 +1825,6 @@ fn podman_available() -> bool {
 
 fn image_exists(image_tag: &str) -> bool {
     image_exists_sync(image_tag)
-}
-
-fn discover_projects() -> Vec<ProjectEntry> {
-    // 920-mvgp: the tray scan hardcoded $HOME/src, so a forge/enclave host that
-    // remounts the project root elsewhere (TILLANDSIAS_HOST_PROJECT_ROOT) never
-    // listed its projects. Route through the canonical resolver, which honors
-    // the env var and defaults to $HOME/src when unset — identical behavior on
-    // a plain workstation, correct roots everywhere else.
-    let root = crate::local_projects::host_project_root();
-    discover_projects_in(&root)
-}
-
-/// Scan a project-root directory (e.g. `~/src`) and return one
-/// [`ProjectEntry`] per immediate subdirectory, sorted by name.
-///
-/// Factored out of [`discover_projects`] so the scan-and-sort contract that
-/// backs the post-clone local refresh can be unit-tested against a temp dir
-/// without mutating the process-global `HOME`.
-fn discover_projects_in(src: &Path) -> Vec<ProjectEntry> {
-    let mut projects = Vec::new();
-    let entries = match std::fs::read_dir(src) {
-        Ok(entries) => entries,
-        Err(_) => return Vec::new(),
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-        let Some(name) = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .map(|s| s.to_string())
-        else {
-            continue;
-        };
-        projects.push(ProjectEntry {
-            name,
-            path,
-            full_name: None,
-        });
-    }
-
-    projects.sort_by(|a, b| a.name.cmp(&b.name));
-    projects
-}
-
-// Used by legacy `build_launch_spec` and tests; the new per-project launch
-// flow goes through `super::launch_forge_agent` instead.
-#[allow(dead_code)]
-fn action_slug(kind: LaunchKind) -> &'static str {
-    match kind {
-        LaunchKind::OpenCode => "opencode",
-        LaunchKind::OpenCodeWeb => "opencode-web",
-        LaunchKind::Observatorium => "observatorium",
-        LaunchKind::Claude => "claude",
-        LaunchKind::Codex => "codex",
-        LaunchKind::Antigravity => "antigravity",
-        LaunchKind::Maintenance => "terminal",
-    }
 }
 
 fn ov(value: Value<'_>) -> OwnedValue {
@@ -1942,132 +1874,6 @@ fn tray_icon_tooltip(snapshot: &TrayUiState) -> (String, Vec<IconPixmap>, String
         snapshot.status_text.clone(),
         "Tillandsias".to_string(),
     )
-}
-
-// Legacy single-container spec builder for the pre-`launch_forge_agent` flow.
-// The new per-project launch path calls `super::build_forge_agent_run_argv`
-// after bringing up the proxy/git/inference enclave; this helper is retained
-// for the legacy `run_root_terminal` path and the build-spec unit tests.
-#[allow(dead_code)]
-fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> ContainerSpec {
-    let project_name = &project.name;
-    let project_path = project
-        .path
-        .canonicalize()
-        .unwrap_or_else(|_| project.path.clone());
-    let ca_cert = PathBuf::from(tillandsias_core::ca_path::ca_dir()).join("intermediate.crt");
-    let no_proxy = enclave_no_proxy();
-
-    let mut spec = ContainerSpec::new(image.to_string())
-        .name(format!(
-            "tillandsias-{}-{}",
-            project_name,
-            action_slug(kind)
-        ))
-        .hostname(super::sanitize_hostname(&format!("forge-{project_name}")))
-        .network("tillandsias-enclave")
-        // 4096, not 512 — same 667-se87/959-fpc5 rationale as the live
-        // launcher (main.rs build_forge_agent_run_args_with_vault): 512 is
-        // reachable by one tool-install fork storm on floor hardware. This
-        // legacy path stays value-aligned with the live one.
-        // ORDER 1375-xxzj: the forge cgroup budget (the 4096 pids floor is its clamp).
-        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host())
-        .volume(
-            project_path.display().to_string(),
-            format!("/home/forge/src/{project_name}"),
-            MountMode::ReadWrite,
-        )
-        .env("HOME", "/home/forge")
-        .env("USER", "forge")
-        .env("PROJECT", project_name)
-        .env("http_proxy", "http://proxy:3128")
-        .env("https_proxy", "http://proxy:3128")
-        .env("HTTP_PROXY", "http://proxy:3128")
-        .env("HTTPS_PROXY", "http://proxy:3128")
-        .env("no_proxy", no_proxy.clone())
-        .env("NO_PROXY", no_proxy)
-        .env("PATH", "/usr/local/bin:/usr/bin");
-
-    // Order 570: this legacy path remains reachable by the root maintenance
-    // terminal and in tests. Keep its harness identity aligned with the live
-    // per-project launch path; Observatorium is not an agent harness.
-    spec = match kind {
-        LaunchKind::OpenCode => spec.env("TILLANDSIAS_AGENT", "opencode"),
-        LaunchKind::OpenCodeWeb => spec.env("TILLANDSIAS_AGENT", "opencode-web"),
-        LaunchKind::Claude => spec.env("TILLANDSIAS_AGENT", "claude"),
-        LaunchKind::Codex => spec.env("TILLANDSIAS_AGENT", "codex"),
-        LaunchKind::Antigravity => spec.env("TILLANDSIAS_AGENT", "antigravity"),
-        LaunchKind::Maintenance => spec.env("TILLANDSIAS_AGENT", "terminal"),
-        LaunchKind::Observatorium => spec,
-    };
-
-    if ca_cert.exists() {
-        spec = spec.bind_mount(
-            ca_cert.display().to_string(),
-            "/etc/tillandsias/ca.crt",
-            true,
-        );
-    }
-
-    let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
-    let instance = raw_instance.as_deref().unwrap_or("default");
-    let mcp_dir = mcp_socket_host_dir_for_lane(project_name, instance);
-    if std::fs::create_dir_all(&mcp_dir).is_ok() {
-        let _ = start_mcp_socket_server_for_lane(project_name, instance);
-        spec = spec
-            .bind_mount(
-                mcp_dir.display().to_string(),
-                "/run/host/tillandsias-mcp",
-                true,
-            )
-            .env(
-                "TILLANDSIAS_CONTROL_SOCKET",
-                "/run/host/tillandsias-mcp/mcp.sock",
-            );
-    }
-    // ORDER 1506-q7ab: the lane mailbox, value-aligned with the live launcher
-    // (main.rs build_forge_agent_run_args_with_vault).
-    if let Some(lane) = crate::msg_serve::prepare_forge_lane(project_name, Some(instance)) {
-        spec = spec
-            .bind_mount(
-                lane.source.display().to_string(),
-                tillandsias_msg::store::FORGE_LANE_MOUNT,
-                false,
-            )
-            .env("TILLANDSIAS_MSG_LANE", lane.lane)
-            .env("TILLANDSIAS_MSG_HOST", lane.host);
-    }
-
-    match kind {
-        LaunchKind::OpenCode => spec
-            .interactive()
-            .tty()
-            .entrypoint("/usr/local/bin/entrypoint-forge-opencode.sh"),
-        LaunchKind::OpenCodeWeb => spec
-            .detached()
-            .persistent()
-            .entrypoint("/usr/local/bin/entrypoint-forge-opencode-web.sh"),
-        LaunchKind::Observatorium => spec
-            .detached()
-            .persistent()
-            .entrypoint("/usr/local/bin/entrypoint.sh"),
-        LaunchKind::Claude => spec
-            .interactive()
-            .tty()
-            .entrypoint("/usr/local/bin/entrypoint-forge-claude.sh"),
-        LaunchKind::Codex => spec
-            .interactive()
-            .tty()
-            .entrypoint("/usr/local/bin/entrypoint-forge-codex.sh"),
-        LaunchKind::Antigravity => spec
-            .interactive()
-            .tty()
-            .entrypoint("/usr/local/bin/entrypoint-forge-antigravity.sh"),
-        LaunchKind::Maintenance => spec
-            .interactive()
-            .tty()
-            .entrypoint("/usr/local/bin/entrypoint-terminal.sh"),
-    }
 }
 
 // Tray-initiated interactive flows (GitHub login, root maintenance shell) must
@@ -2163,80 +1969,6 @@ fn terminal_present(candidate: &str) -> bool {
     }
 
     false
-}
-
-#[allow(dead_code)]
-fn launch_project_action(
-    project: ProjectEntry,
-    kind: LaunchKind,
-    _version: String,
-    debug: bool,
-) -> Result<(), String> {
-    match kind {
-        LaunchKind::OpenCodeWeb => {
-            // OpenCode Web is already wired and brings its own enclave +
-            // browser surface. Untouched per the per-project-action contract.
-            let project_path = project.path.display().to_string();
-            super::run_opencode_web_mode(&project_path, false, None, None, debug)
-        }
-        LaunchKind::Observatorium => {
-            let project_path = project.path.display().to_string();
-            super::run_observatorium_mode(&project_path, false, None, debug)
-        }
-        LaunchKind::Claude
-        | LaunchKind::Codex
-        | LaunchKind::OpenCode
-        | LaunchKind::Antigravity
-        | LaunchKind::Maintenance => {
-            // @trace spec:tray-ux, spec:browser-isolation-tray-integration
-            // Interactive forge launches go through the host's default
-            // terminal emulator. The enclave (proxy + git + inference) is
-            // brought up via the idiomatic tillandsias-podman layer, then a
-            // single `podman run -it ... forge <entrypoint>` argv is handed
-            // to the terminal as the user-facing TTY surface.
-            let mode = match kind {
-                LaunchKind::Claude => super::ForgeAgentMode::Claude,
-                LaunchKind::Codex => super::ForgeAgentMode::Codex,
-                LaunchKind::OpenCode => super::ForgeAgentMode::OpenCode,
-                LaunchKind::Antigravity => super::ForgeAgentMode::Antigravity,
-                LaunchKind::Maintenance => super::ForgeAgentMode::Maintenance,
-                _ => unreachable!("non-interactive kinds branched above"),
-            };
-            super::launch_forge_agent(&project.name, &project.path, mode, debug)
-        }
-    }
-}
-
-#[allow(dead_code)]
-fn run_init_action() -> Result<(), String> {
-    super::run_init(false, false)
-}
-
-// Legacy root-checkout terminal launcher. The new flow launches per-project
-// shells through `super::launch_forge_agent(ForgeAgentMode::Maintenance, ...)`.
-#[allow(dead_code)]
-fn run_root_terminal(root: &Path, version: &str) -> Result<(), String> {
-    let image = format!("tillandsias-forge:v{}", version);
-    let project = ProjectEntry {
-        name: root
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("tillandsias")
-            .to_string(),
-        path: root.to_path_buf(),
-        full_name: None,
-    };
-    let spec = build_launch_spec(&project, LaunchKind::Maintenance, &image);
-    // ORDER 972-6vaj: REFUSE rather than launch. `build_run_argv` validates the
-    // immutable hardening envelope in every profile now; before this it was a
-    // `debug_assert!`, compiled out of release, so a root maintenance shell
-    // whose argv had lost `--cap-drop=ALL` or `--userns=keep-id` would have
-    // launched from a shipped binary with nothing said. This is the container
-    // that least deserves a silent downgrade: it is the ROOT terminal.
-    let argv = spec
-        .build_run_argv()
-        .map_err(|e| format!("refusing to launch the root terminal: {e}"))?;
-    launch_in_terminal("Tillandsias - Root", "podman", &argv)
 }
 
 // Legacy seedling-selector handler. The new menu drives agent selection
@@ -2387,109 +2119,6 @@ fn try_build_forge_image_on_demand(service: &Arc<TrayService>, snapshot: &TrayUi
             eprintln!("error: forge image build failed: {err}");
             false
         }
-    }
-}
-
-#[allow(dead_code)]
-fn handle_launch_project(service: Arc<TrayService>, project: ProjectEntry, kind: LaunchKind) {
-    let snapshot = service.snapshot();
-    let version = snapshot.version.clone();
-    let debug = snapshot.debug;
-    let service_for_emit = service.clone();
-    // @trace gap:TR-005, spec:menu-action-error-handling
-    // Offload project launch and UI refresh to async executor (non-blocking)
-
-    // Always emit a click-receipt to stderr so the user sees something the
-    // moment they invoke a menu item. Silent menus look broken on Fedora
-    // Silverblue when nothing surfaces in the user's terminal.
-    // @trace spec:tray-ux
-    eprintln!(
-        "[tillandsias] tray: launching {:?} for project '{}' (path={})",
-        kind,
-        project.name,
-        project.path.display()
-    );
-
-    // Guard checks: validate preconditions before launching
-    if project.name.is_empty() {
-        eprintln!("error: cannot launch project with empty name");
-        return;
-    }
-
-    if !project.path.exists() {
-        eprintln!(
-            "error: project path does not exist: {}",
-            project.path.display()
-        );
-        return;
-    }
-
-    // Verify podman + forge image availability with a LIVE re-probe when
-    // the snapshot says no (see recheck_environment_if_stale — a tray
-    // started during a version handover cached false forever and every
-    // launch died silently; operator dead-on-arrival repro 2026-07-16).
-    let (podman_ready, mut forge_ready) = recheck_environment_if_stale(&service, &snapshot);
-    if !forge_ready {
-        // Order 411: a missing forge image after a `--install` version bump is
-        // NOT "initialization in progress" — nothing is building on its own.
-        // Try to build it on demand before refusing with an actionable message.
-        forge_ready = try_build_forge_image_on_demand(&service, &snapshot);
-    }
-    if !forge_ready {
-        let msg = forge_missing_actionable_message(&snapshot.version, &project.name);
-        eprintln!("error: {msg}");
-        // Refusals must be visible in the tray, not just the journal.
-        // @trace spec:menu-action-error-handling, spec:tray-ux
-        let _ = futures::executor::block_on(service.set_status(
-            format!("🥀 {msg}"),
-            TrayIconState::Dried,
-            None,
-        ));
-        return;
-    }
-
-    if !podman_ready {
-        let msg = format!(
-            "podman is not available; cannot launch project '{}'",
-            project.name
-        );
-        eprintln!("error: {msg}");
-        let _ = futures::executor::block_on(service.set_status(
-            format!("🥀 {msg}"),
-            TrayIconState::Dried,
-            None,
-        ));
-        return;
-    }
-
-    let project_name = project.name.clone();
-    if service
-        .task_executor
-        .spawn_task(move || {
-            let result = launch_project_action(project.clone(), kind, version, debug);
-            if let Err(err) = result {
-                eprintln!(
-                    "error: project launch failed for '{}': {}",
-                    project.name, err
-                );
-                // Surface the failure on the tray icon/status so the user
-                // sees feedback in addition to the stderr line (which is
-                // invisible when the tray is launched from a .desktop entry).
-                // @trace spec:tray-ux, spec:menu-action-error-handling
-                let _ = futures::executor::block_on(service_for_emit.set_status(
-                    format!("🥀 Launch failed: {}", err),
-                    TrayIconState::Dried,
-                    None,
-                ));
-            }
-            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-        })
-        .is_err()
-    {
-        eprintln!(
-            "error: task queue full; cannot launch project '{}' (too many concurrent operations)",
-            project_name
-        );
     }
 }
 
@@ -2664,41 +2293,6 @@ fn handle_cloud_overflow_click(state: &TrayUiState) {
     );
 }
 
-// Legacy init handler. The new minimal-UX menu drops the "Initialize images"
-// item; init is auto-triggered by the tray startup probe. Retained for tests.
-#[allow(dead_code)]
-fn handle_init(service: Arc<TrayService>) {
-    let service_for_emit = service.clone();
-    // @trace gap:TR-005: Offload initialization and UI updates to async executor (non-blocking)
-    if service
-        .task_executor
-        .spawn_task(move || {
-            let _ = futures::executor::block_on(service_for_emit.set_status(
-                "⏳ Building images ...",
-                TrayIconState::Building,
-                None,
-            ));
-            let result = run_init_action();
-            let (text, icon, forge_available) = if result.is_ok() {
-                ("✅ Ready", TrayIconState::Mature, Some(true))
-            } else {
-                ("🥀 Setup failed", TrayIconState::Dried, Some(false))
-            };
-            if let Err(err) = result {
-                warn!("initialization failed: {err}");
-            }
-            let _ = futures::executor::block_on(service_for_emit.set_status(
-                text,
-                icon,
-                forge_available,
-            ));
-        })
-        .is_err()
-    {
-        warn!("task queue full: skipping initialization");
-    }
-}
-
 /// Order 1719-83po: open a terminal running `tillandsias --cloudflare-login`.
 /// On a Linux desktop the login's default receiver is loopback (a browser
 /// opener exists), so nothing is pasted.
@@ -2756,136 +2350,6 @@ fn handle_github_login(service: Arc<TrayService>) {
         .is_err()
     {
         warn!("task queue full: skipping GitHub login");
-    }
-}
-
-// @trace spec:remote-projects, gap:TR-005
-// Legacy clone-project handler. The new cloud-side flow lives in
-// `handle_launch_cloud_project` (clone-then-launch). Retained for callers.
-#[allow(dead_code)]
-fn handle_clone_project(service: Arc<TrayService>, repo_url: String, repo_name: String) {
-    let service_for_emit = service.clone();
-    // @trace gap:TR-005: Offload project cloning to async executor (non-blocking)
-    if service
-        .task_executor
-        .spawn_task(move || {
-            let home = match std::env::var("HOME") {
-                Ok(h) => PathBuf::from(h),
-                Err(_) => {
-                    warn!("clone_project: HOME not set");
-                    return;
-                }
-            };
-            let target_path = home.join("src").join(&repo_name);
-
-            // Update status to show cloning
-            let _ = futures::executor::block_on(service_for_emit.set_status(
-                format!("⏳ Cloning {} ...", repo_name),
-                TrayIconState::Building,
-                None,
-            ));
-
-            // Clone the project
-            match remote_projects::clone_project_from_github(&repo_url, &target_path) {
-                Ok(()) => {
-                    info!(
-                        "clone_project: successfully cloned {} to {:?}",
-                        repo_name, target_path
-                    );
-                    let _ = futures::executor::block_on(service_for_emit.set_status(
-                        format!("✓ Cloned {}", repo_name),
-                        TrayIconState::Mature,
-                        None,
-                    ));
-                }
-                Err(err) => {
-                    warn!("clone_project: failed to clone {}: {}", repo_name, err);
-                    let _ = futures::executor::block_on(service_for_emit.set_status(
-                        format!("🥀 Clone failed: {}", err),
-                        TrayIconState::Dried,
-                        None,
-                    ));
-                }
-            }
-
-            // Refresh menu after a short delay to show results
-            std::thread::sleep(std::time::Duration::from_secs(2));
-            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-        })
-        .is_err()
-    {
-        warn!("task queue full: skipping project clone");
-    }
-}
-
-// Legacy root-checkout terminal handler. The new menu surfaces every project
-// (including the repo root) as a per-project leaf using Maintenance mode.
-#[allow(dead_code)]
-fn handle_root_terminal(service: Arc<TrayService>, root: PathBuf, version: String) {
-    let service_for_emit = service.clone();
-    // @trace gap:TR-005: Offload terminal launch to async executor (non-blocking)
-    if service
-        .task_executor
-        .spawn_task(move || {
-            if let Err(err) = run_root_terminal(&root, &version) {
-                warn!("root terminal launch failed: {err}");
-            }
-            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-        })
-        .is_err()
-    {
-        warn!("task queue full: skipping root terminal");
-    }
-}
-
-// Legacy stop handler. The new menu does not currently surface a Stop leaf;
-// the action-wiring agent may resurrect it as a per-project Stop action.
-#[allow(dead_code)]
-fn handle_stop_project(service: Arc<TrayService>, project: String) {
-    let service_for_emit = service.clone();
-    // @trace gap:TR-005, spec:menu-action-error-handling
-    // Offload container stop to async executor (non-blocking)
-    // Guard checks: validate project name and container existence
-    if project.is_empty() {
-        eprintln!("error: cannot stop project with empty name");
-        return;
-    }
-
-    // Verify podman is available before attempting stop
-    let snapshot = service.snapshot();
-    if !snapshot.podman_available {
-        eprintln!(
-            "error: podman is not available; cannot stop project '{}'",
-            project
-        );
-        return;
-    }
-
-    let project_name = project.clone();
-    if service
-        .task_executor
-        .spawn_task(move || {
-            let container_name = format!("tillandsias-{}-forge", project);
-            if !container_exists_sync(&container_name) {
-                eprintln!(
-                    "error: container '{}' not found; cannot stop",
-                    container_name
-                );
-            } else if let Err(e) = stop_container_sync(&container_name, 10) {
-                eprintln!(
-                    "error: failed to stop container '{}': {}",
-                    container_name, e
-                );
-            }
-
-            let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
-        })
-        .is_err()
-    {
-        eprintln!(
-            "error: task queue full; cannot stop project '{}'",
-            project_name
-        );
     }
 }
 
@@ -3411,75 +2875,6 @@ fn build_clone_project_submenu(state: &TrayUiState) -> MenuNode {
         ]),
         children,
     )
-}
-
-#[allow(dead_code)]
-// @trace spec:tray-ux, spec:tray-minimal-ux
-/// LEGACY (pre-minimal-ux): Build a project submenu with runtime state detection.
-fn build_project_submenu_legacy(state: &TrayUiState, project: &ProjectEntry) -> MenuNode {
-    build_project_submenu_with_running(state, project, podman_running_web_container(&project.name))
-}
-
-#[allow(dead_code)]
-// @trace spec:tray-ux, spec:tray-minimal-ux
-/// LEGACY (pre-minimal-ux): Build a project submenu with explicit running state.
-fn build_project_submenu_with_running(
-    state: &TrayUiState,
-    project: &ProjectEntry,
-    running_web: bool,
-) -> MenuNode {
-    let mut children = Vec::new();
-    let attach_enabled = state.forge_available && state.podman_available;
-    let maintenance_enabled = state.forge_available && state.podman_available;
-
-    children.push(child(node(
-        stable_project_item_id(&project.name, "attach-here"),
-        props(vec![
-            ("label".to_string(), ov_str("Attach Here")),
-            ("enabled".to_string(), ov(Value::from(attach_enabled))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    children.push(child(node(
-        stable_project_item_id(&project.name, "maintenance"),
-        props(vec![
-            ("label".to_string(), ov_str("Maintenance")),
-            ("enabled".to_string(), ov(Value::from(maintenance_enabled))),
-            ("visible".to_string(), ov(Value::from(true))),
-        ]),
-        Vec::new(),
-    )));
-
-    if running_web {
-        children.push(child(node(
-            stable_project_item_id(&project.name, "stop"),
-            props(vec![
-                ("label".to_string(), ov_str("Stop")),
-                ("enabled".to_string(), ov(Value::from(true))),
-                ("visible".to_string(), ov(Value::from(true))),
-            ]),
-            Vec::new(),
-        )));
-    }
-
-    node(
-        stable_project_item_id(&project.name, "submenu"),
-        props(vec![
-            ("label".to_string(), ov_str(project.name.clone())),
-            ("enabled".to_string(), ov(Value::from(true))),
-            ("visible".to_string(), ov(Value::from(true))),
-            ("children-display".to_string(), ov_str("submenu")),
-        ]),
-        children,
-    )
-}
-
-#[allow(dead_code)]
-fn podman_running_web_container(project_name: &str) -> bool {
-    let container_name = format!("tillandsias-{project_name}-forge");
-    container_exists_sync(&container_name)
 }
 
 #[allow(dead_code)]
@@ -4426,25 +3821,6 @@ fn flatten_layout(node: &MenuNode, out: &mut Vec<(i32, HashMap<String, OwnedValu
 }
 
 #[allow(dead_code)]
-fn project_from_id(state: &TrayUiState, id: i32) -> Option<(String, String)> {
-    for project in &state.projects {
-        let attach = stable_project_item_id(&project.name, "attach-here");
-        let maintenance = stable_project_item_id(&project.name, "maintenance");
-        let stop = stable_project_item_id(&project.name, "stop");
-        if id == attach {
-            return Some((project.name.clone(), "attach-here".to_string()));
-        }
-        if id == maintenance {
-            return Some((project.name.clone(), "maintenance".to_string()));
-        }
-        if id == stop {
-            return Some((project.name.clone(), "stop".to_string()));
-        }
-    }
-    None
-}
-
-#[allow(dead_code)]
 fn parse_seedling_label(label: &str) -> Option<SelectedAgent> {
     match label {
         "OpenCode Web" => Some(SelectedAgent::OpenCodeWeb),
@@ -4512,6 +3888,37 @@ async fn register_with_watcher(connection: &Connection, service_name: &str) {
     }
 }
 
+/// Claim the run marker and, when the previous tray run died uncleanly, stop
+/// and remove what it launched (order 1859-v5iv). Bounded by the reap's stop
+/// timeout; a failure here never blocks the tray from starting.
+fn reap_previous_run_if_dead(run_id: &str) {
+    let Some(me) = crate::dead_run::RunMarker::current(run_id) else {
+        return;
+    };
+    let Some(dead) = crate::dead_run::claim_run(&crate::dead_run::marker_path(), &me) else {
+        return;
+    };
+    info!(spec = "graceful-shutdown", run = %dead, "previous tray run exited uncleanly; reaping it");
+    let reaped = std::thread::spawn(move || {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map(|rt| {
+                rt.block_on(crate::dead_run::reap_dead_run(
+                    &tillandsias_podman::PodmanClient::new(),
+                    &dead,
+                ))
+            })
+    })
+    .join();
+    if !matches!(reaped, Ok(Ok(_))) {
+        warn!(
+            spec = "graceful-shutdown",
+            "reaping the dead tray run failed; continuing"
+        );
+    }
+}
+
 /// Run native tray mode using a pure D-Bus StatusNotifierItem path.
 ///
 /// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
@@ -4567,11 +3974,15 @@ fn ensure_desktop_icon() {
 }
 
 pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
+    // Order 1859-v5iv: mint and export this run's id before any thread exists
+    // (forges launched under it carry it as a label), then reap the previous
+    // run if it died without its graceful exit — before anything launches.
+    let run_id = crate::dead_run::mint_run_id();
+    reap_previous_run_if_dead(&run_id);
     ensure_desktop_icon();
     let version = super::VERSION.trim().to_string();
     let root = super::resolve_runtime_asset_root(&version, debug)?;
-    let state =
-        TrayUiState::new_with_debug(root.clone(), version.clone(), discover_projects(), debug);
+    let state = TrayUiState::new_with_debug(root.clone(), version.clone(), debug);
     let service = Arc::new(TrayService::new(state));
 
     // Install SIGTERM/SIGINT handlers BEFORE binding the control socket
@@ -4820,6 +4231,10 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
             Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
             Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
         }
+        // Order 1859-v5iv: a clean exit leaves no run for the next start to reap.
+        if let Some(run) = crate::dead_run::run_label_value() {
+            crate::dead_run::release_run(&crate::dead_run::marker_path(), &run);
+        }
 
         // @trace spec:tillandsias-vault — revoke per-container AppRole
         // tokens before exit so vault audit reflects clean shutdown.
@@ -4848,31 +4263,34 @@ mod tests {
     use super::*;
 
     /// 1798-nwpg: a tray spawned as a CLI launch's companion leaves the
-    /// reserved lane unbound and still binds every other project's lane. With
-    /// nothing reserved (an operator-started tray) it binds them all, as before.
+    /// reserved lane unbound; with nothing reserved it binds the default lane.
     #[test]
     fn companion_tray_leaves_the_reserved_lane_unbound() {
-        let names = vec!["alpha".to_string(), "rf3c-smoke".to_string()];
         let lane = |p: &str| (p.to_string(), "default".to_string());
+        assert_eq!(startup_lanes(None), vec![lane("default")]);
+        let reserved = crate::mcp_socket::reserved_lane_from(Some("default/default"));
+        assert!(startup_lanes(reserved.as_ref()).is_empty());
+        let other = crate::mcp_socket::reserved_lane_from(Some("rf3c-smoke/default"));
+        assert_eq!(startup_lanes(other.as_ref()), vec![lane("default")]);
+    }
 
-        let reserved = crate::mcp_socket::reserved_lane_from(Some("rf3c-smoke/default"));
-        assert_eq!(
-            startup_lanes(&names, reserved.as_ref()),
-            vec![lane("alpha")]
-        );
-
-        assert_eq!(
-            startup_lanes(&names, None),
-            vec![lane("alpha"), lane("rf3c-smoke")],
-            "an operator-started tray binds every lane"
-        );
-        let other_instance = crate::mcp_socket::reserved_lane_from(Some("rf3c-smoke/w2"));
-        assert_eq!(
-            startup_lanes(&names, other_instance.as_ref()).len(),
-            2,
-            "a reservation on another instance leaves the default lanes bound"
-        );
-        assert_eq!(startup_lanes(&[], None), vec![lane("default")]);
+    /// 776-jcf3 (operator yes 2026-10-23): the tray no longer reads `~/src`.
+    /// Pre-fix, `start_mcp_socket_server` and the startup `TrayUiState` were
+    /// fed by a `~/src` scan through the project-root resolver; neither the scan
+    /// helper nor that resolver may appear in this module again.
+    #[test]
+    fn tray_does_not_scan_the_host_src_checkout() {
+        let source = include_str!("mod.rs");
+        for needle in [
+            concat!("discover_", "projects"),
+            concat!("host_project_", "root()"),
+            concat!("scan_project_", "root"),
+        ] {
+            assert!(
+                !source.contains(needle),
+                "tray/mod.rs still reaches the ~/src scan via `{needle}`"
+            );
+        }
     }
 
     /// Order 828-r2ek NEGATIVE CONTROL, and the reason this site needed care
@@ -5485,10 +4903,15 @@ mod tests {
             crate::cloudflare_mcp::TOOLS.len() + 1,
             "{tools:?}"
         );
+        // 1874-kkrc: image.generate joins deliberately, by name.
+        assert!(
+            tools.contains(&"image.generate"),
+            "image.generate is advertised (1874-kkrc): {tools:?}"
+        );
         assert_eq!(
             tools.len() - cloudflare,
-            19,
-            "lifecycle tools + service_logs + toolchain_prepare + browser family + cloudflare family, nothing else"
+            20,
+            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + cloudflare family, nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5558,10 +4981,11 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                19,
-                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765) + thirteen browser tools, got {tools:?}"
+                20,
+                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc) + thirteen browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
+            assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
 
             // A disallowed URL must come back as a typed JSON-RPC error from the
             // composed server — proving browser.* actually ROUTED there rather
@@ -5899,10 +5323,8 @@ mod tests {
         ));
         let _ = std::fs::create_dir_all(&dir);
         let cache = dir.join("known-cloud-projects");
-        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
         let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
         unsafe {
-            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
             std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
         }
         // `alpha` alongside `demo` because the forged-environ test attributes to
@@ -5912,10 +5334,6 @@ mod tests {
             crate::local_projects::persist_cloud_labels(&["demo".to_string(), "alpha".to_string()]);
         let out = f();
         unsafe {
-            match prev_root {
-                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
-                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
-            }
             match prev_cache {
                 Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
                 None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
@@ -5935,18 +5353,12 @@ mod tests {
         let _ = std::fs::create_dir_all(&dir);
         let cache = dir.join("absent-cache");
         let _ = std::fs::remove_file(&cache);
-        let prev_root = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
         let prev_cache = std::env::var_os(crate::local_projects::CLOUD_LABEL_CACHE_ENV);
         unsafe {
-            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
             std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, &cache);
         }
         let out = f();
         unsafe {
-            match prev_root {
-                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
-                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
-            }
             match prev_cache {
                 Some(v) => std::env::set_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV, v),
                 None => std::env::remove_var(crate::local_projects::CLOUD_LABEL_CACHE_ENV),
@@ -6055,7 +5467,9 @@ mod tests {
                 .count();
             #[cfg(feature = "vault")]
             assert_eq!(cloudflare, crate::cloudflare_mcp::TOOLS.len() + 1);
-            assert_eq!(tools.len() - cloudflare, 19);
+            // 1874-kkrc: image.generate, by name.
+            assert!(tools.iter().any(|t| t["name"] == "image.generate"));
+            assert_eq!(tools.len() - cloudflare, 20);
 
             drop(writer);
             drop(lines);
@@ -6805,12 +6219,6 @@ mod tests {
         } else {
             EnclaveStatus::Verifying
         };
-        let projects = vec![ProjectEntry {
-            name: "alpha".to_string(),
-            path: PathBuf::from("/tmp/alpha"),
-            full_name: None,
-        }];
-        let projects_hash = TrayUiState::hash_projects(&projects);
         TrayUiState {
             root: PathBuf::from("/tmp/tillandsias-test-root"),
             version: "0.1.260506.6".to_string(),
@@ -6820,7 +6228,6 @@ mod tests {
             } else {
                 TrayIconState::Pup
             },
-            projects,
             cloud_projects: Vec::new(),
             last_fetched: None,
             cloud_refresh_in_flight: false,
@@ -6839,7 +6246,6 @@ mod tests {
             cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
             enclave_status,
             revision: 1,
-            projects_hash,
         }
     }
 
@@ -6892,7 +6298,6 @@ mod tests {
         login_observed: bool,
         login_in_progress: bool,
         enclave_status: EnclaveStatus,
-        projects: Vec<ProjectEntry>,
         cloud_projects: Vec<ProjectEntry>,
         last_fetched: Option<Instant>,
     }
@@ -6910,11 +6315,6 @@ mod tests {
                 login_observed: true,
                 login_in_progress: false,
                 enclave_status: EnclaveStatus::Verifying,
-                projects: vec![ProjectEntry {
-                    name: "test-project".to_string(),
-                    path: std::path::PathBuf::from("/tmp/test-project"),
-                    full_name: None,
-                }],
                 cloud_projects: Vec::new(),
                 last_fetched: None,
             }
@@ -6927,11 +6327,6 @@ mod tests {
 
         fn enclave_status(mut self, status: EnclaveStatus) -> Self {
             self.enclave_status = status;
-            self
-        }
-
-        fn projects(mut self, projects: Vec<ProjectEntry>) -> Self {
-            self.projects = projects;
             self
         }
 
@@ -6974,7 +6369,6 @@ mod tests {
             } else {
                 status_label(&TrayStatusStage::PodmanMissing)
             };
-            let projects_hash = TrayUiState::hash_projects(&self.projects);
             // @trace spec:tray-icon-lifecycle
             // Icon should reflect enclave status, not just forge_available
             let tray_icon_state = enclave_status_to_icon(self.enclave_status);
@@ -6983,7 +6377,6 @@ mod tests {
                 version: "0.1.260506.6".to_string(),
                 status_text,
                 tray_icon_state,
-                projects: self.projects,
                 cloud_projects: self.cloud_projects,
                 last_fetched: self.last_fetched,
                 cloud_refresh_in_flight: false,
@@ -7001,7 +6394,6 @@ mod tests {
                 cloudflare_login: shared_menu::CloudflareLoginState::Unknown,
                 enclave_status: self.enclave_status,
                 revision: 1,
-                projects_hash,
             }
         }
     }
@@ -7515,11 +6907,6 @@ mod tests {
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
             .authenticated(true)
-            .projects(vec![ProjectEntry {
-                name: "tillandsias".to_string(),
-                path: PathBuf::from("/home/x/src/tillandsias"),
-                full_name: None,
-            }])
             .cloud_projects(vec![ProjectEntry {
                 name: "tillandsias".to_string(),
                 path: PathBuf::new(),
@@ -7791,7 +7178,6 @@ mod tests {
             .forge_available(true)
             .authenticated(true)
             .enclave_status(EnclaveStatus::AllHealthy)
-            .projects(vec![project.clone()])
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
@@ -7822,7 +7208,6 @@ mod tests {
             .podman_available(false)
             .authenticated(true)
             .enclave_status(EnclaveStatus::Failed)
-            .projects(vec![project.clone()])
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
@@ -7840,125 +7225,6 @@ mod tests {
                 .unwrap_or(true);
             assert!(!enabled, "leaf id={} should be disabled", id);
         }
-    }
-
-    #[test]
-    fn launch_command_targets_the_forge_image_and_project_mount() {
-        let project = ProjectEntry {
-            name: "alpha".to_string(),
-            path: PathBuf::from("/tmp/alpha"),
-            full_name: None,
-        };
-        let spec = build_launch_spec(
-            &project,
-            LaunchKind::Claude,
-            "tillandsias-forge:v0.1.260506.6",
-        );
-        let args = spec
-            .build_run_argv()
-            .expect("the tray launch spec must satisfy the hardening envelope (972-6vaj)");
-
-        assert_eq!(args[0], "run");
-        assert!(args.contains(&"--rm".to_string()));
-        assert!(args.contains(&"--init".to_string()));
-        assert!(args.contains(&"--name".to_string()));
-        assert!(args.contains(&"tillandsias-alpha-claude".to_string()));
-        assert!(args.contains(&"TILLANDSIAS_AGENT=claude".to_string()));
-        assert!(args.contains(&"--hostname".to_string()));
-        assert!(args.contains(&"forge-alpha".to_string()));
-        assert!(args.contains(&"--entrypoint".to_string()));
-        assert!(args.contains(&"/usr/local/bin/entrypoint-forge-claude.sh".to_string()));
-        assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
-        // ORDER 1506-q7ab: this legacy path mounts the lane mailbox like the
-        // live launcher — read-write, only its own lane — with the lane label.
-        let lane = crate::msg_serve::store_root().join("lanes/alpha-default");
-        let want = format!(
-            "type=bind,source={},target=/run/host/tillandsias-msg,relabel=shared",
-            lane.display()
-        );
-        assert!(args.contains(&want), "missing {want}; argv={args:?}");
-        assert!(args.contains(&"TILLANDSIAS_MSG_LANE=alpha-default".to_string()));
-    }
-
-    // @trace spec:tray-ux, spec:browser-isolation-tray-integration
-    // Regression: tray launch clicks were silently failing on Fedora
-    // Silverblue because `--debug` was hardcoded `false` at every tray
-    // launch-site, which suppressed every `[tillandsias] launch_forge_agent:
-    // ...` log line. Once the user reported a silent failure there was no
-    // log trail to debug from. Pin that:
-    //   1. `launch_project_action` accepts a `debug` flag,
-    //   2. `handle_launch_project` reads `snapshot.debug` and forwards it.
-    #[test]
-    fn tray_launch_threads_debug_flag_into_launch_helpers() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/tray/mod.rs"));
-
-        // launch_project_action must take a debug parameter and forward it
-        // into super::launch_forge_agent / run_opencode_web_mode /
-        // run_observatorium_mode (not hardcoded `false`).
-        assert!(
-            source.contains("fn launch_project_action(") && source.contains("    debug: bool,"),
-            "launch_project_action must take debug: bool"
-        );
-        assert!(
-            source.contains("super::launch_forge_agent(&project.name, &project.path, mode, debug)"),
-            "launch_project_action must forward debug to launch_forge_agent (not false)"
-        );
-        assert!(
-            source
-                .contains("super::run_opencode_web_mode(&project_path, false, None, None, debug)"),
-            "launch_project_action must forward debug to run_opencode_web_mode (not false)"
-        );
-        assert!(
-            source.contains("super::run_observatorium_mode(&project_path, false, None, debug)"),
-            "launch_project_action must forward debug to run_observatorium_mode (not false)"
-        );
-
-        // handle_launch_project must read debug from the tray snapshot —
-        // otherwise --debug on the binary never reaches the launchers.
-        assert!(
-            source.contains("let debug = snapshot.debug;"),
-            "handle_launch_project must read debug from tray snapshot"
-        );
-
-        // Click-receipt and failure-status: the user must see SOMETHING on
-        // every click and a tray-visible status when the spawn fails.
-        assert!(
-            source.contains("[tillandsias] tray: launching"),
-            "handle_launch_project must emit a click-receipt to stderr"
-        );
-        assert!(
-            source.contains("🥀 Launch failed:"),
-            "handle_launch_project must surface launch failures via tray status"
-        );
-    }
-
-    #[test]
-    fn launch_command_opencode_web_is_detached_and_persistent() {
-        let project = ProjectEntry {
-            name: "alpha".to_string(),
-            path: PathBuf::from("/tmp/alpha"),
-            full_name: None,
-        };
-        let spec = build_launch_spec(
-            &project,
-            LaunchKind::OpenCodeWeb,
-            "tillandsias-forge:v0.1.260506.6",
-        );
-        let args = spec
-            .build_run_argv()
-            .expect("the tray launch spec must satisfy the hardening envelope (972-6vaj)");
-
-        assert_eq!(args[0], "run");
-        assert!(args.contains(&"-d".to_string()));
-        assert!(!args.contains(&"--rm".to_string()));
-        assert!(!args.contains(&"--interactive".to_string()));
-        assert!(!args.contains(&"--tty".to_string()));
-        assert!(args.contains(&"--init".to_string()));
-        assert!(args.contains(&"--entrypoint".to_string()));
-        assert!(args.contains(&"/usr/local/bin/entrypoint-forge-opencode-web.sh".to_string()));
-        assert!(args.contains(&"TILLANDSIAS_AGENT=opencode-web".to_string()));
-        assert!(args.contains(&"--security-opt=label=disable".to_string()));
-        assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
     }
 
     // @trace spec:tray-progress-and-icon-states, spec:tray-app
@@ -8216,11 +7482,6 @@ mod tests {
             .forge_available(false)
             .enclave_status(EnclaveStatus::Verifying)
             .authenticated(false)
-            .projects(vec![ProjectEntry {
-                name: "project-alpha".to_string(),
-                path: PathBuf::from("/tmp/project-alpha"),
-                full_name: None,
-            }])
             .build();
 
         let menu = build_menu(&state);
@@ -8243,11 +7504,6 @@ mod tests {
             .forge_available(true)
             .enclave_status(EnclaveStatus::Failed)
             .authenticated(true)
-            .projects(vec![ProjectEntry {
-                name: "project-beta".to_string(),
-                path: PathBuf::from("/tmp/project-beta"),
-                full_name: None,
-            }])
             .build();
 
         let menu = build_menu(&state);
@@ -8283,11 +7539,6 @@ mod tests {
             .forge_available(true)
             .enclave_status(EnclaveStatus::AllHealthy)
             .authenticated(true)
-            .projects(vec![ProjectEntry {
-                name: "test-proj".to_string(),
-                path: PathBuf::from("/tmp/test-proj"),
-                full_name: None,
-            }])
             .build();
 
         let menu = build_menu(&state);
@@ -8418,6 +7669,58 @@ mod tests {
         }
     }
 
+    /// 1919-exec: shutdown is the sender drop. Every worker blocked in recv()
+    /// must wake on Disconnected and JOIN — no timeout is involved, so the
+    /// join returns well inside a bound the old 100 ms poll could also meet;
+    /// the assertion that matters is that the workers are joinable at all and
+    /// exit on the drop alone. A queued task is dropped, never run.
+    #[test]
+    fn async_executor_stops_by_dropping_the_sender_and_workers_join() {
+        let executor = AsyncTaskExecutor::new(10);
+        let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let r = ran.clone();
+        executor
+            .spawn_task(move || {
+                r.fetch_add(1, Ordering::SeqCst);
+            })
+            .expect("queue accepts a task");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while ran.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
+            std::thread::yield_now();
+        }
+        assert_eq!(ran.load(Ordering::SeqCst), 1, "the task ran");
+        assert_eq!(executor.workers.len(), ASYNC_EXECUTOR_WORKERS);
+
+        let (done_tx, done_rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            executor.shutdown_and_join();
+            let _ = done_tx.send(());
+        });
+        done_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("every worker joins once the sender is dropped");
+    }
+
+    /// 1919-exec structural arm: the executor's workers never poll. Fails on
+    /// the pre-fix `recv_timeout(100 ms)` loop over an `is_running` flag.
+    #[test]
+    fn async_executor_workers_block_instead_of_polling() {
+        let src = include_str!("mod.rs");
+        let start = src.find("impl AsyncTaskExecutor {").expect("executor impl");
+        let end = start + src[start..].find("type ControlSubscribers").expect("end");
+        let body = &src[start..end];
+        let poll = ["recv_", "timeout("].concat();
+        // source-pin-ok: the absence of a timed poll IS the contract (1919-exec); behaviour is pinned by the join test above
+        assert!(
+            !body.contains(&poll),
+            "AsyncTaskExecutor must not poll with {poll}"
+        );
+        // source-pin-ok: the blocking call is the subject of the structural arm
+        assert!(body.contains("rx.recv()"), "workers block in recv()");
+        let flag = ["is_", "running"].concat();
+        assert!(!body.contains(&flag), "no polled {flag} flag");
+    }
+
     // @trace gap:TR-005: Unit tests for AsyncTaskExecutor non-blocking behavior
     #[test]
     fn async_executor_spawn_task_non_blocking() {
@@ -8514,63 +7817,6 @@ mod tests {
         assert!(result.is_ok(), "TrayService executor should be ready");
     }
 
-    /// Regression: a freshly cloned checkout must appear in `~/src` without a
-    /// tray restart. `refresh_local_projects` is the post-startup writer that
-    /// re-scans the project root into `state.projects`; before the fix for
-    /// plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md there was no such
-    /// writer, so the `🏠 ~/src` submenu stayed frozen at its startup snapshot.
-    ///
-    /// This exercises the scan-and-store contract (`discover_projects_in` +
-    /// store + revision bump) the clone-success path relies on, against a temp
-    /// dir so we never mutate the process-global `HOME`.
-    /// @trace spec:tray-ux, spec:remote-projects
-    #[test]
-    fn refresh_local_projects_picks_up_new_checkout() {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let src = tmp.path();
-
-        // Initial scan: one existing checkout.
-        std::fs::create_dir(src.join("alpha")).expect("mkdir alpha");
-        let initial = discover_projects_in(src);
-        assert_eq!(initial.len(), 1);
-        assert_eq!(initial[0].name, "alpha");
-
-        // Seed a TrayService whose state reflects the initial scan, then
-        // simulate a clone landing a second checkout on disk.
-        let mut state = test_state(SelectedAgent::OpenCode, true);
-        state.projects = initial;
-        state.projects_hash = TrayUiState::hash_projects(&state.projects);
-        let service = TrayService::new(state);
-        let rev_before = service.snapshot().revision;
-
-        std::fs::create_dir(src.join("beta")).expect("mkdir beta");
-
-        // The runtime helper scans $HOME/src; here we replicate its body
-        // against the temp root to assert the store + revision-bump contract
-        // without touching HOME.
-        let rescanned = discover_projects_in(src);
-        service.with_state(|st| {
-            st.projects_hash = TrayUiState::hash_projects(&rescanned);
-            st.projects = rescanned;
-            st.bump_revision();
-        });
-
-        let after = service.snapshot();
-        assert_eq!(
-            after
-                .projects
-                .iter()
-                .map(|p| p.name.as_str())
-                .collect::<Vec<_>>(),
-            vec!["alpha", "beta"],
-            "rescan must surface the newly cloned checkout, sorted"
-        );
-        assert!(
-            after.revision > rev_before,
-            "refresh must bump the menu revision so the submenu re-renders"
-        );
-    }
-
     /// Order 1719-83po: the Linux tray renders its own Cloudflare state.
     /// Signed in to GitHub with no Cloudflare login, the row is an enabled
     /// item (id 23 on the bus); once a login is stored it is gone.
@@ -8665,45 +7911,5 @@ mod tests {
             shared_id_to_int(ids::CLOUD_PROJECTS_OVERFLOW),
             CLOUD_OVERFLOW_ID
         );
-    }
-}
-
-/// ORDER 1469-q2r3 — the tray's forge launch argv carries the ForgeBudget flags
-/// for every launch kind (the budget is asserted on the argv, not the helper).
-#[cfg(test)]
-mod forge_budget_argv_tests {
-    use super::*;
-
-    #[test]
-    fn every_tray_launch_kind_argv_carries_the_budget() {
-        let budget = tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args();
-        assert!(
-            budget.iter().any(|a| a.starts_with("--memory=")),
-            "{budget:?}"
-        );
-        let project = ProjectEntry {
-            name: "alpha".to_string(),
-            path: PathBuf::from("/tmp/alpha"),
-            full_name: None,
-        };
-        for kind in [
-            LaunchKind::OpenCode,
-            LaunchKind::OpenCodeWeb,
-            LaunchKind::Observatorium,
-            LaunchKind::Claude,
-            LaunchKind::Codex,
-            LaunchKind::Antigravity,
-            LaunchKind::Maintenance,
-        ] {
-            let args = build_launch_spec(&project, kind, "tillandsias-forge:v0.1.260506.6")
-                .build_run_argv()
-                .expect("hardening envelope");
-            for flag in &budget {
-                assert!(
-                    args.contains(flag),
-                    "tray {kind:?} launch argv is missing budget flag {flag}; argv={args:?}"
-                );
-            }
-        }
     }
 }

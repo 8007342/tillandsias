@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt
+    field: next_action
+    value: 'PR #606 (work/1814-x78v, 11c501bcb) implements this: do not reimplement. Land it, then close by order with the landed SHA. Remaining after landing: gate-bind scripts/test-tellme-routes-to-expert-serve.sh (needs a darwin/msys STEP_SECOND_REGIME) and a live tellme run inside a forge.'
+    ts: "2026-10-23T01:40:45Z"
+    host: macuahuitl
+    replaces_sha256: "ffab0fead1c0835726d2c2240c5171e3a46ee212f8ba2bde1e38e73ea151f733"
+
+events:
+  - packet_id: tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt
+    event:
+      type: note
+      ts: "2026-10-23T01:40:45Z"
+      host: macuahuitl
+      summary: |-
+        cycle handoff

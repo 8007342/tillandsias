@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: tray-warns-loudly-when-the-host-has-no-disk-backed-swap-for-the-forge-ram-layers
+    event:
+      type: list-replace
+      ts: "2026-10-25T21:18:37Z"
+      agent_id: linux-macuahuitl-claude-20261025t211837z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "A tray startup test feeds a /proc/swaps with only /dev/zram0, and one with no swap, and asserts the tray refuses to start and prints instructions naming 'tillandsias --swap on'; a third arm with a 16 GiB file swap asserts startup proceeds. Pre-fix result: FAILS, the tray starts with no swap check."
+      summary: |-
+        operator rulings 2026-10-25 (PR 650 amendment)

@@ -176,6 +176,26 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "ok: groundtruth-green-at-head"
 
+  # ── ORDER 1821-xcwc: FORGE-AWARENESS SET, WITH A KNOWN-RED RATCHET ──────────
+  # The set pins a real defect (container questions inside a forge are not
+  # answered from cheatsheets/runtime/forge-constraints.md; measured 2026-10-23:
+  # cheatsheet.ask cites the sheet's TITLE chunk, not the rule, for the docker
+  # question and an unrelated sheet for the image-build and dockerd questions).
+  # The product fix is 1814-x78v / 1815-tei4. Until then those three cases are
+  # RED BY DESIGN, and a gate that reds on a known defect trains everyone to
+  # ignore red, so the step is a RATCHET instead of a pass/fail:
+  #   * a case that fails and is NOT in KNOWN_RED  -> FAIL (a regression);
+  #   * a case in KNOWN_RED that now PASSES         -> FAIL (remove it from the
+  #     list: the bar only goes up, and a stale list hides the next regression);
+  #   * the foreign-project case must be green and the set must keep 4 cases.
+  # ORDER 1822-dmwz: the docker case went green (title-card fold + BM25/RRF in
+  # cheatsheet.ask) and moved into the gated file; KNOWN_RED holds the two
+  # cases still red, pending/ holds 2, and the gated step asserts the moved one.
+  - step: "ORDER 1821-xcwc: forge-awareness sets — gated file green; in pending/ only the KNOWN-RED cases may fail, and a fixed one must leave the list"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); KNOWN_RED='forge-build-image-in-forge-no-nested-podman forge-start-dockerd-is-refused-by-the-rule'; \"$PB\" grade --root . openspec/litmus-tests/groundtruth/pending/expert-groundtruth-forge-awareness-pending.yaml > /tmp/.litmus-394d-fa.txt 2>&1; rc=$?; test \"$rc\" -le 1 || { echo \"FAIL: harness error rc=$rc\"; cat /tmp/.litmus-394d-fa.txt; exit 1; }; r=$(grep '^groundtruth-result:' /tmp/.litmus-394d-fa.txt); n=$(sed -n 's/^groundtruth-result:.*total=\\([0-9]*\\).*/\\1/p' /tmp/.litmus-394d-fa.txt); test \"$n\" = '2' || { echo \"FAIL: pending forge-awareness set has $n cases, expected 2: $r\"; exit 1; }; \"$PB\" grade --root . openspec/litmus-tests/groundtruth/expert-groundtruth-forge-awareness.yaml > /tmp/.litmus-394d-fg.txt 2>&1 || { echo 'FAIL: the gated forge-awareness set (foreign-project case) is red'; cat /tmp/.litmus-394d-fg.txt; exit 1; }; grep -q '^PASS  foreign-project-push-uses-its-own-flow-not-tillandsias-rules' /tmp/.litmus-394d-fg.txt || { echo 'FAIL: the foreign-project case did not run'; exit 1; }; grep -q '^PASS  forge-run-container-here-no-docker' /tmp/.litmus-394d-fg.txt || { echo 'FAIL: the docker case (moved out of pending/ by 1822-dmwz) is not green in the gated set'; exit 1; }; for id in $(sed -n 's/^FAIL  \\([^ ]*\\) .*/\\1/p' /tmp/.litmus-394d-fa.txt); do case \" $KNOWN_RED \" in *\" $id \"*) : ;; *) echo \"FAIL: $id is red and is not a known-red case (regression)\"; exit 1 ;; esac; done; for id in $KNOWN_RED; do grep -q \"^PASS  $id \" /tmp/.litmus-394d-fa.txt && { echo \"FAIL: $id now PASSES — remove it from KNOWN_RED so the bar ratchets up\"; exit 1; }; done; echo \"ok: forge-awareness-ratchet $r\""
+    timeout_ms: 120000
+    expected_behavior: "ok: forge-awareness-ratchet"
+
   # ── EXIT (i): THE 60s IN-FORGE BUDGET ────────────────────────────────────
   - step: "EXIT (i): the harness runs inside the forge budget — under 60s, measured twice"
     # Measured two independent ways on purpose: the WALL CLOCK around the
@@ -470,7 +490,14 @@ critical_path:
     # STRUCTURALLY — the grader spawns no process at all — because a word-grep
     # would fire on the query set's own honest text (one of its cases is
     # literally "is Python allowed in a committed script?").
-    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
+    #
+    # WHY reqwest (1923-pu9a): order 1826-gi8e added `tillandsias-plan coord`, an
+    # HTTPS client for the fleet coordinator Worker. The workspace reqwest is
+    # already linked by headless, vault-client and vm-layer, so no new
+    # third-party code entered the tree. It is pinned to coordinator_client.rs:
+    # the methodology engine and the grader still reach no network and spawn
+    # no process.
+    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex reqwest serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -rlw reqwest crates/tillandsias-plan/src | tr '\\n' ' ')\" = 'crates/tillandsias-plan/src/coordinator_client.rs ' || { echo 'FAIL: reqwest escaped the coordinator client'; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
     timeout_ms: 15000
     expected_behavior: "ok: no-new-dependency-data-only-query-set"
 

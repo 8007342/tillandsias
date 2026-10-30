@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-land-queue-discards-its-own-push-output-so-a-green-candidate-whose-push-is-refused-after-a-plan-only-adopt-is-requeued-with-no-cause
+    order: 1839-fuvg
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [instrument, land-queue, fail-loud, fleet]
+    estimated_hours: 2
+    owned_files:
+      - scripts/land-queue.sh
+      - scripts/test-land-queue.sh
+    title: |
+      scripts/land-queue.sh pushes with `git push ... >/dev/null 2>&1`, so when a candidate gated green, adopted over a plan-only move, and then had its push refused, the queue printed only push-did-not-land:rc=1 and re-queued it — a full gate (~17 min) lost with no recorded cause
+    context: |
+      MEASURED macuahuitl 2026-10-23, land-queue run 2. #602 (work/1235-rfub)
+      gated green on base c7e2e7df3; trunk then moved by plan-ledger fragments
+      only (this host's plan-lane pushes); the queue printed
+        adopt:land-queue:602:plan-only-move:gated-on=51825e16e classes=plan-ledger
+        requeue:land-queue:602:push-did-not-land:rc=1 — the remote does not have b69a72d52
+      and b69a72d52 is on no remote branch. The next three candidates (#603,
+      #604, #605) landed in the same run, so credentials, network and the
+      branch are not the cause. Either the push raced a further plan push, or
+      the pre-push hook refuses the ADOPTED merge (its tree differs from the
+      gated one by plan fragments only, which the stamp may not accept). The
+      push's stderr — the only thing that tells these apart — went to
+      /dev/null. The script's own header already names this exact ambiguity
+      ("push-did-not-land:rc=1, which is the same line a blocked credential
+      helper, a lost network and a protected branch produce").
+    exit_criteria:
+      - 'a refused push prints the push command''s own refusal lines (at least the hook verdict line or git''s rejection reason) beside push-did-not-land, and the PR comment carries them (pre-fix result: FAILS — output is discarded)'
+      - 'a candidate that adopted over a plan-only move and is refused by the pre-push hook for that reason is pushable: either the hook accepts a tree that differs from the stamped one only in plan/index.d fragments, or the queue re-stamps after the adopt without re-gating (pre-fix result: unknown — reproduce first with a test-land-queue.sh arm whose scaffold trunk gains a fragment mid-gate)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the pin is a new arm in
+      scripts/test-land-queue.sh — a stub remote whose pre-push hook refuses
+      with a named line; the queue's output must contain that line (pre-fix:
+      FAILS). A second arm adds a plan fragment to the scaffold trunk mid-gate
+      and asserts the adopted merge lands.
+    provenance: |
+      Filed by macuahuitl (claude, operator-prompted drain) 2026-10-23 from land-queue run 2.
+    events:
+      - type: filed
+        ts: "2026-10-23T03:37:03Z"
+        host: macuahuitl
+        summary: |-
+          p1: land-queue discards push output; #602 requeued after a green gate and plan-only adopt with no recorded cause.

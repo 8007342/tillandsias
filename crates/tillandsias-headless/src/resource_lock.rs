@@ -32,8 +32,16 @@ pub struct ResourceLockGuard {
     _file: File,
 }
 
-fn lock_dir() -> PathBuf {
-    if let Ok(dir) = std::env::var("XDG_RUNTIME_DIR") {
+// @trace order:1845-8iqu
+/// Pure resolution of the lock directory from an `XDG_RUNTIME_DIR` value.
+/// Kept env-free so the fallback rules are testable without touching the
+/// process environment.
+// A non-unix TEST build has no caller: production lock_dir() is cfg(not(test))
+// and this function's own test is cfg(all(test, unix)) — so the windows-gnu
+// cross-target clippy (-D warnings) saw dead code and evicted #629.
+#[cfg_attr(all(test, not(unix)), allow(dead_code))]
+fn lock_dir_from(xdg_runtime_dir: Option<&str>) -> PathBuf {
+    if let Some(dir) = xdg_runtime_dir {
         let trimmed = dir.trim();
         if !trimmed.is_empty() {
             return PathBuf::from(trimmed).join("tillandsias-locks");
@@ -46,6 +54,23 @@ fn lock_dir() -> PathBuf {
     #[cfg(not(unix))]
     let uid = 0u32;
     std::env::temp_dir().join(format!("tillandsias-locks-{uid}"))
+}
+
+#[cfg(not(test))]
+fn lock_dir() -> PathBuf {
+    lock_dir_from(std::env::var("XDG_RUNTIME_DIR").ok().as_deref())
+}
+
+/// Test builds never read the process env for the lock dir (order 1845-8iqu).
+/// Many tests set `XDG_RUNTIME_DIR` to a scratch dir under `env_lock()` and
+/// delete it afterwards; any test that took a resource lock without holding
+/// that mutex (the token-rotation tests) could resolve the scratch dir and
+/// then find it gone (`resource-lock: open ...: No such file`). A
+/// process-private dir makes every test in the crate immune, present and
+/// future, while all of them still contend on the same files with each other.
+#[cfg(test)]
+fn lock_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("tillandsias-locks-test-{}", std::process::id()))
 }
 
 /// Lock-file name prefix/suffix shared by `lock_path` and the
@@ -258,6 +283,25 @@ mod tests {
     // full parallel run and passed 3/3 alone (1242-4x53). Each test takes
     // crate::test_support::env_lock() (order 1437-5czv) for its duration.
 
+    // @trace order:1845-8iqu
+    /// Test builds ignore the env (see `lock_dir`); the production rules live
+    /// in `lock_dir_from` and are pinned here without touching the env.
+    #[test]
+    fn lock_dir_from_follows_xdg_then_falls_back_per_uid() {
+        assert_eq!(
+            lock_dir_from(Some(" /run/user/1000 ")),
+            PathBuf::from("/run/user/1000/tillandsias-locks")
+        );
+        for unset in [None, Some(""), Some("  ")] {
+            let d = lock_dir_from(unset);
+            assert!(
+                d.to_string_lossy().contains("tillandsias-locks-"),
+                "fallback must be a per-uid temp dir, got {}",
+                d.display()
+            );
+        }
+    }
+
     /// Two threads contending for the same resource serialize: the critical
     /// sections never overlap.
     #[test]
@@ -366,7 +410,18 @@ mod tests {
             "held resource must probe as held from the same process"
         );
         drop(guard);
-        assert!(!is_held(&resource), "dropped guard must release the probe");
+        // A sibling test's Command::spawn can fork while our fd is open; the
+        // child holds the open-file-description until its exec closes the
+        // CLOEXEC fd, so the probe may read "held" for a few ms after drop.
+        let mut released = false;
+        for _ in 0..200 {
+            if !is_held(&resource) {
+                released = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert!(released, "dropped guard must release the probe");
     }
 
     /// The prefix scanner returns only currently-HELD resources matching the

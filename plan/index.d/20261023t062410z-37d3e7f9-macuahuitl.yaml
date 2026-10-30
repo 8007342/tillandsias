@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt
+    field: status
+    value: completed
+    ts: "2026-10-23T06:24:10Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt
+    event:
+      type: completed
+      ts: "2026-10-23T06:24:10Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 7b2a057b2 land(610) carries 11c501bcb; scripts/test-tellme-routes-to-expert-serve.sh 5/5 (pre-fix 0/4), darwin 4/4 on macbookair
+  - packet_id: tellme-howto-and-freeform-about-route-to-expert-serve-grounded-pipeline-and-the-keyword-grep-path-becomes-a-fallback-without-the-general-knowledge-prompt
+    event:
+      type: note
+      ts: "2026-10-23T06:24:10Z"
+      host: macuahuitl
+      summary: |-
+        closed: tellme howto/about route to expert-serve; grep path is an UNGROUNDED fallback without the general-knowledge prompt; TILLANDSIAS_INFERENCE_MODEL honoured

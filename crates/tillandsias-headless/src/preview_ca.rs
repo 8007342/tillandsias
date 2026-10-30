@@ -43,6 +43,9 @@ fn usable(dir: &Path, margin_secs: u64) -> bool {
 /// less than `margin_secs`. Launch passes `CERT_MIN_REMAINING_SECS`; a publish
 /// passes 0. Returns whether it minted.
 pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
+    // 1118-fqfk slice 2b: the key is a link into tmpfs, refilled from the
+    // keyring after a reboot; plaintext is deleted and the CA minted again.
+    crate::ca_key_store::materialize(&dir.join(KEY), &dir.join(CRT), true);
     if usable(dir, margin_secs) {
         return Ok(false);
     }
@@ -57,7 +60,8 @@ pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
     // longer than the second rename.
     let staging = tempfile::tempdir_in(dir)
         .map_err(|_| "router_not_ready: preview CA staging unavailable")?;
-    let (crt, key) = (staging.path().join(CRT), staging.path().join(KEY));
+    let crt = staging.path().join(CRT);
+    let key = crate::ca_key_store::staging_path(&dir.join(KEY), &std::process::id().to_string());
     let status = Command::new("openssl")
         .args([
             "req",
@@ -66,8 +70,10 @@ pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
             "ec",
             "-pkeyopt",
             "ec_paramgen_curve:prime256v1",
-            "-nodes",
         ])
+        // 1898-hyhf: `-nodes` only onto the tmpfs store; elsewhere encrypted.
+        .args(crate::ca_key_store::key_out_args())
+        .envs(crate::ca_key_store::pass_env())
         .arg("-keyout")
         .arg(&key)
         .arg("-out")
@@ -91,7 +97,9 @@ pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
         std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o600))
             .map_err(|_| "router_not_ready: preview CA key permissions failed")?;
     }
-    std::fs::rename(&key, dir.join(KEY))
+    let crt_bytes =
+        std::fs::read(&crt).map_err(|_| "router_not_ready: preview CA unreadable after mint")?;
+    crate::ca_key_store::seal(&key, &dir.join(KEY), &crt_bytes, true)
         .map_err(|_| "router_not_ready: preview CA key publication failed")?;
     std::fs::rename(&crt, dir.join(CRT))
         .map_err(|_| "router_not_ready: preview CA publication failed")?;
@@ -166,6 +174,8 @@ mod tests {
                 .arg(dir.join(CRT))
                 .arg("-CAkey")
                 .arg(dir.join(KEY))
+                .args(crate::ca_key_store::key_in_args())
+                .envs(crate::ca_key_store::pass_env())
                 .arg("-extfile")
                 .arg(&ext)
                 .arg("-out")

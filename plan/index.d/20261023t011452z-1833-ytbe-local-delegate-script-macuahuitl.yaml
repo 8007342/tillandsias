@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 3 child (3b) of 1831-74sf; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: scripts-local-delegate-implements-a-packet-against-the-local-inference-endpoint-bounded-to-owned-files-and-runs-its-closure-without-committing
+    order: 1833-ytbe
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [delegation, inference, bash, plan-tool]
+    estimated_hours: 8
+    owned_files:
+      - scripts/local-delegate.sh
+      - scripts/test-local-delegate.sh
+    title: |
+      scripts/local-delegate.sh implement <order> — reads the row, builds a prompt from the context pack + goal + exit_criteria + owned_files + idiom retrieval, runs an OpenAI-compatible tool loop against TILLANDSIAS_INFERENCE_ENDPOINT, refuses any edit outside owned_files (post-run `git diff --name-only` check, reverting strays), runs the packet's closure command, and never commits — the frontier session verifies and commits
+    context: |
+      Sibling of scripts/claude-delegate.sh (same argument shape and verdict
+      style). Row fields come from `tillandsias-plan json get` /
+      `yaml-get` — NO jq (the jq ratchet counts every new site) and NO python.
+      The prompt leads with the expert context pack (1815-tei4) so the local
+      model knows the forge's constraints; "idiom retrieval" asks the expert
+      for the 3–5 nearest existing code chunks to each owned file. The tool
+      loop exposes read_file, write_file (owned_files only), run_closure and
+      finish; it is bounded by turns and wall time. Verdict line on stdout:
+      local-delegate:<order>:<ok|closure-red|out-of-scope|timeout|no-endpoint>.
+      The outcome token (3c) is written by the frontier session after it
+      accepts or rejects, not by this script.
+    exit_criteria:
+      - 'against a stub OpenAI-compatible endpoint scripted to edit one owned file and one non-owned file, the script reverts the non-owned edit, prints out-of-scope, and leaves no commit (pre-fix result: FAILS — script absent)'
+      - 'against a stub scripted to make the closure pass, the script prints ok, runs the closure command exactly once at the end, and `git log -1` is unchanged (pre-fix result: FAILS — script absent)'
+      - 'with no endpoint reachable it prints no-endpoint and exits non-zero without touching the tree'
+      - 'grep finds no jq or python in the script'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-local-delegate.sh (new)
+      runs the script in a scratch repo under the toolbox against a bash stub
+      endpoint and asserts the four arms above.
+    depends_on: [implementer-tier-local-is-a-routing-floor-below-haiku-in-model-tier-routing-and-the-batch-selector]
+    related: [1831-74sf, 1815-tei4]
+    next_action: >
+      Read scripts/claude-delegate.sh for the argument/verdict shape; write
+      the stub-endpoint fixture first; then the loop.
+    notes: |
+      size: M
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:14:52Z"
+        host: macuahuitl
+        summary: |-
+          Phase 3 3b: local-delegate.sh bounded to owned_files, runs closure, never commits.

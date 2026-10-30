@@ -1,0 +1,347 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora at the operator request, 2026-10-28 (operator-requested audit 2026-10-28). Story: idle polling to events.
+packets:
+- packet_id: enclave-healthchecks-run-as-the-right-user-and-at-minute-intervals
+  order: 1919-hlth
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - images
+  - podman
+  - healthcheck
+  estimated_hours: 3
+  title: Vault, proxy and git HEALTHCHECKs run as a user that exists in the container and fire every 30-60 s steady, not every 2 s
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-scripts-images.md section "Measured on this host" and fix 2. vault, proxy and git-tillandsias show Up 3 days (unhealthy): podman healthcheck run returns rc=125 "unable to find user vault|proxy|git", FailingStreak 84,367 (about 47 h of a failed exec every 2 s; 5,400 failing execs/h across the enclave, 6,120 with inference). Cause unverified (name lookup under userns=private at exec time). Fix the user AND the interval; the inference HEALTHCHECK (5 s, weak) moves to 30 s too. Covers rows 1-3 and 7. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - '`podman healthcheck run` returns rc=0 for vault, proxy and git-tillandsias; today rc=125.'
+  - '`podman inspect` shows Healthcheck.Interval >= 30 s with --health-startup-interval 2s for all four images, and `podman ps` shows them healthy; today Interval is 2 s and status is unhealthy.'
+  verifiable_closure: A litmus step that starts the enclave and asserts rc=0 and interval >= 30 s; it failed before the change.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: reproduce rc=125 and find the real cause (user lookup under userns=private versus a missing user), fix the user or use a numeric uid, set interval 30-60 s with startup-interval 2 s in the four Containerfiles, write the litmus first and record its red, then attach podman ps output after a rebuild.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-scripts-images.md section "Measured on this host" and fix 2 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the operator-requested audit (2026-10-28)
+- packet_id: linux-tray-executor-blocks-on-recv-instead-of-100-ms-timeout
+  order: 1919-exec
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - headless
+  - tray
+  - polling
+  estimated_hours: 2
+  title: AsyncTaskExecutor workers block on recv() and stop by dropping the sender, removing 144,000 wakeups/h
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-rust.md row 1 and fix 1. AsyncTaskExecutor::new in headless tray/mod.rs uses recv_timeout(100ms) on 4 workers: about 144,000 wakeups/h idle to re-read an is_running bool. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - '`strace -f -e trace=futex -p <idle Linux tray>` for 60 s shows fewer than 20 ETIMEDOUT; today about 2,400 (estimate).'
+  - A unit test shuts the executor down by dropping the sender and asserts all workers join without a timeout.
+  verifiable_closure: The strace count is attached from a real idle tray and the shutdown test passes.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: replace recv_timeout with recv, stop by dropping the sender, write the shutdown test first, then attach a 60 s strace before and after.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-rust.md row 1 and fix 1 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the operator-requested audit (2026-10-28)
+- packet_id: macos-status-poll-stops-reading-the-keychain-twice-per-tick-and-root-token-memo-is-memory-only
+  order: 1919-keyc
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - macos
+  - vault
+  - keychain
+  - security
+  estimated_hours: 4
+  title: macOS status poll no longer spawns security find-generic-password twice per tick; Vault root token is memoized in memory only and zeroized
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/caching-audit.md rows 4 and 5, fix 3. installation_uuid::deliver_and_handover_in runs from the action_host status poll, so every tick spawns security find-generic-password twice (share + token) and logs "recovered root token"; read_and_handover_root_token has 18 call sites with no memo (50 ms to several s each). Fix: a per-process "handover delivered for guest boot-id" flag (cache the flag, never the secret) plus an in-process OnceLock<Mutex<Option<Zeroizing<String>>>> root-token memo cleared on heal_stale_root_token / persist_healed_root_token. Sensitive: memory only, zeroize, never disk. The fallback_vault-root-token-v1 plaintext file is a separate concern for the no-plaintext-credentials ruling, not this packet. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - A 10-minute idle macOS tray run under fs_usage/execsnoop shows 0 security spawns from the status poll after the first delivery; today 2 per tick.
+  - '`tillandsias --debug` launch log has at most one "recovered root token" line per process; today one per Vault op, up to 18.'
+  - A test asserts the memo is zeroized on drop and never written to disk.
+  verifiable_closure: Log and spawn counts attached from a macOS host plus the zeroize test passing.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: add the delivered-flag keyed on guest boot-id, add the zeroizing memo with invalidation on heal paths, write the log-count test first, then measure on a macOS host.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/caching-audit.md rows 4 and 5, fix 3 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the operator-requested audit (2026-10-28)
+- packet_id: lane-adoption-watches-the-socket-dir-not-a-500-ms-tick
+  order: 1919-lane
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - headless
+  - tray
+  - polling
+  - inotify
+  estimated_hours: 3
+  title: spawn_lane_adoption reacts to socket-dir events and listener errors instead of a 500 ms tick
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-rust.md row 4 and fix 3. LANE_ADOPT_TICK is 500 ms: 7,200 wakeups/h each doing read_dir, a marker read and a connect() against a refusing socket (the 0.5 s file poll, 1863-eckw). The notify crate is already a dependency. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - '`strace -f -e trace=connect -p <tray>` for 60 s idle shows 0 lane-socket connects; today 120.'
+  - A fixture creating then unlinking the marker triggers rebind within 1 s with no tick; fails on today code.
+  verifiable_closure: Idle strace shows 0 connects and the fixture passes.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: watch the socket dir (marker create / socket unlink), rebind on the listener own error, write the fixture first, attach before/after strace.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-rust.md row 4 and fix 3 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: mover-outbox-scan-uses-inotify-with-a-30-s-sweep
+  order: 1919-mvr
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - headless
+  - msg
+  - polling
+  - inotify
+  estimated_hours: 3
+  title: Mover::serve watches lanes/*/outbox/new with inotify and keeps only a 30 s sweep
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-rust.md row 2 and fix 2. msg_serve.rs Mover::serve runs a 250 ms pass with 50 ms naps: about 72,000 naps and 14,400 passes/h, each a read_dir of lanes plus per-lane listing of outbox/new. The WakeHub socket is outbound only. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - '`strace -f -e trace=getdents64 -p <tray>` for 60 s idle counts fewer than 5; today about 480+.'
+  - A fixture drops a message in outbox/new and asserts delivery within 1 s.
+  verifiable_closure: Idle getdents64 count attached and fixture green.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: watch lanes/*/outbox/new and the lanes root with notify, keep a 30 s sweep timer, fixture first, then strace.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-rust.md row 2 and fix 2 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: web-preview-and-browser-lifetime-use-podman-wait-or-events
+  order: 1919-prev
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - headless
+  - podman
+  - polling
+  estimated_hours: 3
+  title: watch_source_lifetime and monitor_and_cleanup_browser use podman wait or the events stream instead of podman ps every 2 s and podman inspect every 1 s
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-rust.md rows 5 and 6 and fix 4. local_web_preview.rs watch_source_lifetime spawns podman ps every 2 s (1,800 spawns/h, the costliest tick); main.rs monitor_and_cleanup_browser spawns podman inspect at 100 ms to 1 s (3,600 spawns/h while a browser runs; its own comment admits wait/events would do). tillandsias-podman events.rs already offers an events stream. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - With one preview open and idle 10 min, execsnoop shows 0 podman processes spawned by the tray; today about 300 + 600.
+  - A fixture ends the container and asserts cleanup fires within 2 s with no periodic spawn.
+  verifiable_closure: execsnoop count of 0 attached and fixture green.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: switch both sites to podman wait or the events stream, fixture first, then execsnoop before/after.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-rust.md rows 5 and 6 and fix 4 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: windows-tray-pump-wakes-on-demand-not-every-100-ms
+  order: 1919-wpmp
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags:
+  - windows
+  - tray
+  - polling
+  estimated_hours: 4
+  title: notify_icon.rs drains the tokio LocalSet from a waker that PostMessageW posts a WM_APP, retiring the 100 ms SetTimer
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-rust.md row 3 and fix 5. notify_icon.rs pump SetTimer(...,100) is 36,000 wakeups/h always on. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - '`grep -n ''TOKIO_DRAIN_TIMER_ID, 100'' crates/tillandsias-windows-tray/src/notify_icon.rs` is empty; today it matches.'
+  - Idle tray 60 s context-switch delta is under 60; today at least 600 (estimate).
+  verifiable_closure: The grep is empty and a Windows idle measurement is attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: add a tokio waker that posts WM_APP, KillTimer the drain timer, then measure on a Windows host.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-rust.md row 3 and fix 5 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: claude-approvals-watcher-has-no-3-s-jq-poll
+  order: 1919-apvl
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - images
+  - forge
+  - polling
+  - inotify
+  estimated_hours: 2
+  title: claude-approvals-vault.sh watch_approvals uses inotify or exit-only harvest instead of a 3 s jq over a 90 KB .claude.json
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-scripts-images.md row 6 and fix 3. watch_approvals polls every 3 s: 1,200 wakeups/h per forge, 5 forks each including jq. Approvals change about 0 times/h. This is new and not part of the Codex watcher redesign (PR #696, 1914-twan, owned by the macOS host; not duplicated here). With the credential watchers an idle Claude forge costs about 3,000 wakeups/h and 13,000 forks/h. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - In a forge idle 60 s, 0 jq spawns (per-second `pgrep -c -f jq` sums to 0); today 20.
+  - A stub edit of ~/.claude.json is harvested to Vault within 1 s or on exit.
+  verifiable_closure: Zero-jq measurement attached and the stub-edit fixture passes.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: choose inotify on ~/.claude.json or exit-only harvest, fixture first, measure an idle forge.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-scripts-images.md row 6 and fix 3 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: provider-oauth-watcher-uses-inotify-and-codex-watcher-defers-to-1914-twan
+  order: 1919-cred
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - images
+  - forge
+  - polling
+  - inotify
+  estimated_hours: 2
+  title: 'provider-oauth-vault.sh watch_auth harvests on inotify events; the Codex watcher is tracked in 1914-twan (PR #696)'
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-scripts-images.md rows 4-5, section "The Codex credential loop", fix 1. provider-oauth-vault.sh polls sha256 every 2 s (1,800 wakeups/h per forge). codex-oauth-vault.sh is the same shape but is being redesigned in PR #696 under 1914-twan by the macOS host: this packet only REFERENCES it. The audit recommends inotifywait -m -e close_write,moved_to on the credential dir, keeping the EXIT-trap harvest, adding inotify-tools to images/default/Containerfile, falling back to the 2 s poll only loudly, and closing the podman kill race with podman stop. PR #696 poll at 0.5 s would raise idle wakeups to 7,200/h for an event that happens 1-2x/h; flag that to the 1914-twan owner. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - In a forge idle 60 s, per-second `pgrep -c -f sha256sum` sums to 0 and a stub rotation reaches Vault within 1 s; today about 30 spawns/min.
+  verifiable_closure: Idle measurement and rotation fixture attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: coordinate with 1914-twan, add inotify-tools to the image, convert provider-oauth-vault.sh, fixture first.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-scripts-images.md rows 4-5, section "The Codex credential loop", fix 1 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  blocked_by:
+  - 1914-twan
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)
+- packet_id: mirror-reconciler-auth-probe-carries-a-ttl
+  order: 1919-mrec
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - images
+  - git
+  - mirror
+  - polling
+  estimated_hours: 2
+  title: start_mirror_reconciler runs probe-upstream-auth only when the verdict is older than 600 s
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-scripts-images.md row 9 and fix 4. images/git/entrypoint.sh start_mirror_reconciler runs every 120 s with about 30 git forks and 2 network calls (fetch, push --dry-run). The fetch is justified (no inbound webhook); the dry-run auth probe is not (the guard allows 900 s). Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - At most 2 `upstream-auth` log lines per idle 10 min; today 5.
+  - A fixture advances a fake clock and asserts the probe is skipped inside the TTL.
+  verifiable_closure: Log line count and fixture attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: record the verdict timestamp, gate the probe on age > 600 s, fixture first.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-scripts-images.md row 9 and fix 4 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: polling-guard-covers-images-shell-scripts
+  order: 1919-gshp
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - guard
+  - lua
+  - polling
+  estimated_hours: 3
+  title: Extend scripts/lua/check-tray-refresh-no-polling.lua to images/**/*.sh
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-scripts-images.md fix 5. The guard (order 147) covers Rust tray code only. Extend it to refuse `while kill -0 ... sleep N` with N < 10 s unless a `# polling-justified:` comment is present, and state the operator rule in the guard message. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - On today tree the guard names codex-oauth-vault.sh, provider-oauth-vault.sh and claude-approvals-vault.sh; after 1919-apvl, 1919-cred and 1914-twan it names nothing.
+  verifiable_closure: Guard output on today tree names the three scripts, recorded as the red.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: extend the lua guard, record the red on today tree, wire it into the existing gate, annotate justified sleeps.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-scripts-images.md fix 5 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-requested audit (2026-10-28)
+- packet_id: otp-evictor-and-metrics-sampler-and-resource-lock-cadences
+  order: 1919-otpe
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - otp
+  - metrics
+  - polling
+  estimated_hours: 3
+  title: OTP evictor sleeps to the earliest expiry, metrics sampler slows to 30-60 s without subscribers, resource_lock uses flock
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-rust.md rows 7, 8, 9, 10, 16 and secondary list. otp spawn_eviction_task wakes every 1 s (3,600/h) on a usually-empty map; metrics collect_continuous 5 s (720/h); resource_lock::acquire polls 100 ms contended (36,000/h contended). Also: login_probe 2 s stat could use inotify (row 8) and the build-status poller 200 ms stop-naps (row 10) should use a stop channel. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - Idle strace of 60 s shows under 5 timer wakeups from the otp task; today 60.
+  - Idle metrics sampler wakes at most 2 times per minute with no subscribers; today 12.
+  verifiable_closure: Counts attached from idle runs.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: sleep-to-expiry in otp, subscriber-aware sampler interval, flock in resource_lock, each with a fixture first.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-rust.md rows 7, 8, 9, 10, 16 and secondary list (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)
+- packet_id: remaining-script-and-unit-polls-use-events
+  order: 1919-misc
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - scripts
+  - polling
+  estimated_hours: 3
+  title: Remaining shell polls (swap-gc timer, litmus waits, smoke watch, gpu watchdog, inference healthcheck) move to events
+  context: 'operator-requested audit 2026-10-28. Source: scratch/research/polling-audit-scripts-images.md rows 7-8 and 10-15. gpu-stall-watchdog.sh 10 s tick only while a runner exists; tillandsias-swap-gc.timer 2 min -> podman events died; litmus-git-delta-wait.sh 5 s -> post-receive marker; forge-liveness-probe.sh 10 s -> podman events; smoke-agent-watch.sh 30 s -> podman logs -f; lib-common.sh spec-index wait 20 s -> pull marker. Mostly litmus/startup so low idle impact. Rule: any new cadence or interval needs operator approval with its wakeups/hour; prefer event sources.'
+  exit_criteria:
+  - '`grep -nE ''sleep (5|10|30)'' scripts/litmus-git-delta-wait.sh scripts/forge-liveness-probe.sh scripts/smoke-agent-watch.sh` finds nothing; today it matches each.'
+  verifiable_closure: The grep is empty and the litmus using them still passes.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: convert each wait to its event source, one fixture each.'
+  provenance: operator-requested audit 2026-10-28; research report scratch/research/polling-audit-scripts-images.md rows 7-8 and 10-15 (macuahuitl, 2026-10-28). Operator asked for the audit; priorities set by the filing request.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:00:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-requested audit (2026-10-28)

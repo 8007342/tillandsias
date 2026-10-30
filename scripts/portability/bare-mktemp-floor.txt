@@ -39,7 +39,7 @@ scripts/hooks/pre-push-local-gate.sh 2
 scripts/install-chromium.sh 1
 scripts/install-macos.sh 1
 scripts/install.sh 1
-scripts/land-queue.sh 5
+scripts/land-queue.sh 4
 scripts/litmus-covering-specs.sh 3
 scripts/local-ci.sh 6
 scripts/materialize-macos-tar-to-img.sh 1

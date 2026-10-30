@@ -1,0 +1,39 @@
+# @trace order:1921-h4gv, order:1874-h9ns
+# THE MEDIA MODEL LICENCE REGISTER. One row per fetched FILE. Every media fetch
+# and image build consults it (scripts/lua/check-model-licence-register.lua);
+# a file not listed here is not fetched. TAB-separated, no interpreter.
+#
+# Columns:
+#   name      short model name (matches the tier table's model column parts)
+#   repo      Hugging Face owner/name
+#   revision  pinned commit sha, never a branch
+#   file      path inside the repo
+#   sha256    the file's LFS sha256, read from the Hub API (?blobs=true)
+#   spdx      licence id from the card; allowed: apache-2.0 mit bsd-3-clause
+#             unlicense openrail++ creativeml-openrail-m
+#   gated     the Hub's gated flag; must be false (the fetcher holds no token)
+#   card      the model card URL the licence was read from
+#
+# Refused, verified 2026-10-28: FLUX.1-dev (non-commercial, gated), SD3 medium
+# and SD3.5 (Stability community, revenue cap, gated), SDXL-Turbo and SD-Turbo
+# (non-commercial), BRIA RMBG-1.4/2.0 (custom non-commercial), Qwen2.5-VL-3B
+# (qwen-research), Qwen2.5-VL-72B (MAU cap), Gemma 3 and MiniCPM-V 2.6 and
+# DINOv3 (gated, custom), Stable Audio Open (gated, community), AudioLDM2
+# (CC-BY-NC-SA), AudioGen (CC-BY-NC), InsightFace-based IP-Adapter.
+#
+# Rows read from the Hub on 2026-10-29. The SDXL base text encoders and VAE
+# that SDXL-Lightning needs are added with the 1874-h9ns fetcher.
+#name	repo	revision	file	sha256	spdx	gated	card
+SDXS-512-0.9	IDKiro/sdxs-512-0.9	c332f05f60eb4b453de513be52c2a18c48d8cfe6	unet/diffusion_pytorch_model.safetensors	c2afb7dbea11b64d0bfbc4d1a45854aa65408b8a74a732438225d3f2ec85c71c	openrail++	false	https://huggingface.co/IDKiro/sdxs-512-0.9
+SDXS-512-0.9	IDKiro/sdxs-512-0.9	c332f05f60eb4b453de513be52c2a18c48d8cfe6	vae/diffusion_pytorch_model.safetensors	d7956d561b1efbd861ad9b03fd8f01510f9e87eddc07bdfd20837009433f6ee5	openrail++	false	https://huggingface.co/IDKiro/sdxs-512-0.9
+SDXS-512-0.9	IDKiro/sdxs-512-0.9	c332f05f60eb4b453de513be52c2a18c48d8cfe6	text_encoder/model.safetensors	cce6febb0b6d876ee5eb24af35e27e764eb4f9b1d0b7c026c8c3333d4cfc916c	openrail++	false	https://huggingface.co/IDKiro/sdxs-512-0.9
+SDXL-Lightning-4step	ByteDance/SDXL-Lightning	c9a24f48e1c025556787b0c58dd67a091ece2e44	sdxl_lightning_4step_unet.safetensors	39a90a8a2a25c1372633c1e8eb1a96f85eab937bcb58cfc6ec9baf66242ec23c	openrail++	false	https://huggingface.co/ByteDance/SDXL-Lightning
+FLUX.1-schnell-Q4_0	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	flux1-schnell-Q4_0.gguf	b338a7ab5c81600a54be46c4cf950edb3761a52ae163e419beafd250976fb566	apache-2.0	false	https://huggingface.co/second-state/FLUX.1-schnell-GGUF
+FLUX.1-schnell-Q8_0	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	flux1-schnell-Q8_0.gguf	7ccdc568ef7d33f37943302c80450a94a59370b48d62440fc2e5a3bf8520bf35	apache-2.0	false	https://huggingface.co/second-state/FLUX.1-schnell-GGUF
+ae	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	ae.safetensors	afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38	apache-2.0	false	https://huggingface.co/second-state/FLUX.1-schnell-GGUF
+T5-XXL-Q4_K	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	t5xxl-Q4_K.gguf	8b465525114b89011303969a035ef7e335821f13a32c4f31212912fb6511e128	apache-2.0	false	https://huggingface.co/second-state/FLUX.1-schnell-GGUF
+T5-XXL-Q8_0	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	t5xxl-Q8_0.gguf	fc07757bf7ad40eaf612acc7ed0c0a7ab71189979e0b8b4d14601017baca22de	apache-2.0	false	https://huggingface.co/second-state/FLUX.1-schnell-GGUF
+clip_l-Q8_0	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	clip_l-Q8_0.gguf	59cbe002c3e75d2b89d38787e81d12fb4e512fd76176884c470737ad87a1d309	apache-2.0	false	https://huggingface.co/second-state/FLUX.1-schnell-GGUF
+# 1874-h9ns: the single files sd.cpp loads for I0 and I1 (docs/distilled_sd.md names akleine/sdxs-09; the full 4-step checkpoint carries SDXL's text encoders and VAE). Read from the Hub 2026-10-29; both downloaded through the enclave proxy and sha256-verified on macuahuitl.
+SDXS-512-0.9-single	akleine/sdxs-09	baed838f4d9dadf5ac369570d45ddc72c1cb1ad4	sdxs09.safetensors	2618f142ad9f3884785884216d41fdcc033fde529f30a180f50ea6a05de6a89c	openrail++	false	https://huggingface.co/akleine/sdxs-09
+SDXL-Lightning-4step-full	ByteDance/SDXL-Lightning	c9a24f48e1c025556787b0c58dd67a091ece2e44	sdxl_lightning_4step.safetensors	e0d996ee0013e79d9d3561f50fcafb9a17e3ff07b780358e3b66d67932c4d490	openrail++	false	https://huggingface.co/ByteDance/SDXL-Lightning

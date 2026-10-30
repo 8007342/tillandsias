@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 3 child (3f, DEFERRED) of 1831-74sf; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: ledger-to-sft-extractor-and-qlora-for-local-coding-experts-only-if-rung-3-stalls-below-80-percent
+    order: 1837-t4ry
+    status: pending
+    kind: research
+    priority: p3
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [inference, training, gpu, delegation, research]
+    estimated_hours: 12
+    owned_files:
+      - scripts/local-delegate-sft-extract.sh
+    title: |
+      DEFERRED — a ledger→SFT extractor (accepted local-delegate outcomes + their landed diffs as instruction/response pairs) and a QLoRA run on macuahuitl, started ONLY if the ladder aggregator shows rung R3 stalled below 80% acceptance for the best local model
+    context: |
+      Conditional work: fine-tuning costs GPU time and maintenance and is not
+      worth it while an off-the-shelf model can climb the ladder. Trigger:
+      scripts/local-delegate-ladder.sh (3c) reports the best (model, quant)
+      below 80% acceptance over ≥ 50 outcomes after the replay set and live
+      use. The extractor would pair the row's prompt (context pack + goal +
+      exit criteria + owned files) with the accepted landed diff; rejected
+      and reverted outcomes are negatives. Stays `pending` until the trigger
+      is recorded as an event on 1831-74sf.
+    exit_criteria:
+      - 'the trigger condition is recorded (aggregator output with regime) before any work starts (pre-fix result: no aggregator)'
+      - 'if triggered: the fine-tuned adapter''s acceptance on a held-out half of the replay set exceeds the base model''s by ≥ 10 points (pre-fix result: n/a)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: conditional row; if triggered, the
+      pin is scripts/local-delegate-replay/ held-out acceptance measured by
+      scripts/local-delegate-ladder.sh before and after the adapter.
+    depends_on: [local-delegate-outcome-ledger-tokens-and-an-aggregator-computing-rung-promotion]
+    related: [1831-74sf]
+    next_action: >
+      Do nothing until the aggregator shows R3 stalled < 80%; then design the
+      extractor and file the measured trigger first.
+    notes: |
+      size: L
+      implementer_tier: opus
+      deferred: starts only on the recorded rung-3 stall trigger.
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:15:48Z"
+        host: macuahuitl
+        summary: |-
+          Phase 3 3f (deferred): ledger→SFT + QLoRA only if rung 3 stalls below 80%.

@@ -32,6 +32,8 @@ serde_json = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 # 1420-inak: dup2 for the GUI-mode tray log (src/tray_log.rs). Already in the lock.
 libc = "0.2"
+# 1886-hf9j: SSHSIG armor for the approval signer.
+base64 = { workspace = true }
 objc2 = "0.5"
 block2 = "0.5"
 objc2-app-kit = { version = "0.2", features = [

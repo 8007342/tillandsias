@@ -13,8 +13,11 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
+  - litmus:imagegen-tier-ladder-from-the-envelope
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
+  - litmus:imagegen-image-is-first-use-and-placement-is-read-from-the-log
+  - litmus:studio-custom-nodes-come-only-from-the-manifest
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
@@ -147,6 +150,12 @@ specs:
   - litmus:cheatsheet-host-image-sync
   coverage_ratio: 100
   last_verified: '2026-06-04'
+- spec_id: research-records
+  status: active
+  litmus_tests:
+  - litmus:research-records-shape
+  coverage_ratio: 80
+  last_verified: '2026-10-26'
 - spec_id: cheatsheets-license-tiered
   status: active
   litmus_tests:
@@ -277,6 +286,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:cli-mode-shape
+  - litmus:headless-cloud-one-shot-backstop
   - litmus:podman-idiomatic-launch-routing
   coverage_ratio: 67
   last_verified: '2026-05-16'
@@ -441,6 +451,7 @@ specs:
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
+  - litmus:tillandsias-doctor-names-every-fault
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
   - litmus:forge-entrypoints-source-agent-profile
@@ -740,6 +751,7 @@ specs:
   litmus_tests:
   - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
+  - litmus:gate-pins-surface-root
   - litmus:release-freeze-holds-code
   - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
@@ -936,6 +948,8 @@ specs:
   - litmus:project-bootstrap-readme-shape
   - litmus:skills-canonical-and-mcp-first-shape
   - litmus:onboarding-cold-start-discovery
+  - litmus:start-a-new-project-google-cloud-deploy-targets
+  - litmus:start-a-new-project-cloudflare-by-default
   coverage_ratio: 75
   last_verified: '2026-05-14'
 - spec_id: project-summarizers
@@ -1053,11 +1067,14 @@ specs:
   status: active
   litmus_tests:
   - litmus:browser-isolation-e2e
+  - litmus:in-forge-localhost-reaches-the-router
   coverage_ratio: 60
   last_verified: '2026-05-14'
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:flutter-shim-falls-back-or-refuses-typed
+  - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
@@ -1222,6 +1239,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:host-browser-mcp-lane-socket-shape
+  - litmus:lane-socket-survives-launcher-exit
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: mcp-on-demand
@@ -1243,6 +1261,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-metrics-shape
+  - litmus:runtime-bringup-step-timers
   - litmus:guest-container-metrics-wire-shape
   coverage_ratio: 100
   last_verified: '2026-05-29'
@@ -1290,6 +1309,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
+  - litmus:dead-tray-run-is-reaped
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: ephemeral-guarantee

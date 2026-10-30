@@ -1,0 +1,109 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos-tlatoanis-macbook-air-claude-20261012t100000z at the request of macuahuitl-fedora, 2026-10-28.
+packets:
+- packet_id: forge-clones-the-mirror-before-the-readiness-gate-sees-a-resolvable-head
+  order: 1910-a1m8
+  status: claimed
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - git-mirror
+  estimated_hours: 4
+  title: A cold cloud launch starts the forge clone before the mirror has a resolvable HEAD
+  context: 'Measured on macOS 2026-10-28 (local build v56.10.20.1, cold VM, guest boot c660e7fb). The launch ran tillandsias-headless --cloud 8007342/tillandsias --opencode. The git container started at 18:24:41. The forge began cloning git://git-…/tillandsias at 18:25:04, but the mirror''s first seed attempt only ran at 18:25:17. The clone got an empty repository 12 times, then FATAL "unborn-HEAD mirror". wait_for_git_mirror_ready should block while git rev-parse --verify HEAD fails, so the gate was either skipped or passed wrongly. No "waiting for git mirror" line was printed.'
+  exit_criteria:
+  - 'A fixture reproduces a launch whose mirror HEAD is unresolvable and asserts that no forge clone is attempted before the gate passes; it FAILS on today''s code.'
+  - 'A cold cloud launch on macOS waits for the seed or refuses with the mirror''s own seed failure, and never clones an empty mirror.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --features tray,listen-vsock cloud_launch_waits_for_mirror_head'
+  next_action: 'Trace why the gate did not hold on the cloud path, write the failing fixture, then fix.'
+  provenance: 'Live cold repro by macbookair-macos 2026-10-28; assigned by macuahuitl-fedora.'
+  events:
+  - type: filed
+    ts: '2026-10-28T18:30:16Z'
+    host: tlatoanis-macbook-air
+    summary: filed and claimed from a live cold repro (forge cloned before the mirror seeded)
+- packet_id: mirror-seed-fetch-hits-a-proxy-503-on-a-cold-enclave
+  order: 1910-nb6m
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - git-mirror
+  - proxy
+  estimated_hours: 3
+  title: On a cold enclave the mirror's seed fetch gets a proxy 503 for github.com and is not retried
+  context: 'Platform-neutral. Seen on macOS 2026-10-28, cold VM, boot c660e7fb. The seed ran 36 s after the git container started. git said "unable to access https://github.com/8007342/tillandsias.git/: TLS connect error: wrong version number". Squid logged "NONE_NONE/200 CONNECT github.com:443" followed by "TCP_TUNNEL/503 CONNECT github.com:443 HIER_NONE", which points at egress or DNS not being ready yet. The mirror then published upstream-auth/error/no-local-heads. Check whether images/git/entrypoint.sh retries the seed with backoff or fails once.'
+  exit_criteria:
+  - 'The cause of the 503 is named (egress or DNS readiness, or something else) with evidence.'
+  - 'The seed fetch retries a transport failure with bounded backoff, and a fixture that fails once and then succeeds ends with seeded heads; it FAILS on today''s code if the seed is single-shot.'
+  verifiable_closure: 'A litmus step runs the seed against an upstream that fails once and asserts that refs/heads exist afterwards.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the retry litmus (future litmus-git-mirror-seed-retries-transport-failure.yaml) lands with the fix (1136-n8sh).
+
+    '
+  next_action: 'Read the seed path in images/git/entrypoint.sh for retry behaviour; reproduce the 503 on a cold enclave.'
+  provenance: 'Live cold repro by macbookair-macos 2026-10-28; filed per macuahuitl-fedora.'
+  events:
+  - type: filed
+    ts: '2026-10-28T18:30:16Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready (cold-enclave proxy 503 on the mirror seed)
+- packet_id: cloudflare-oauth-client-lacks-the-device-code-grant
+  order: 1910-ydnq
+  status: blocked
+  kind: operator-action
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - auth
+  - cloudflare
+  estimated_hours: 1
+  title: The Cloudflare OAuth client refuses the device grant, so sign-in falls back to pasting a URL
+  context: 'Cloudflare discovery lists urn:ietf:params:oauth:grant-type:device_code (endpoint https://dash.cloudflare.com/oauth2/device/auth). A device-authorization request for client d9d13037… returned 400 invalid_grant: "The requested OAuth 2.0 Client does not have the urn:ietf:params:oauth:grant-type:device_code grant." The login therefore falls back to the relay paste flow, which the operator called an unacceptable flow for a user (2026-10-28). The code already prefers the device grant (1758-wdvf), so the fix is enabling that grant on the operator''s own Cloudflare OAuth app.'
+  exit_criteria:
+  - 'The operator enables the device_code grant on the Tillandsias OAuth client.'
+  - 'A --cloudflare-login run shows a code and a link and needs no pasted URL.'
+  verifiable_closure: 'A device-authorization POST for the client returns a device_code instead of invalid_grant.'
+  unscoreable: 'operator-action: a dashboard setting on the operator''s account; nothing in the repo to pin.
+
+    '
+  blocked_by: operator
+  next_action: 'Held for the operator; macuahuitl-fedora queues the dashboard toggle.'
+  provenance: 'Live probe by macbookair-macos 2026-10-28.'
+  events:
+  - type: filed
+    ts: '2026-10-28T18:30:16Z'
+    host: tlatoanis-macbook-air
+    summary: filed as an operator action (enable the device grant)
+- packet_id: cloudflare-login-no-tray-notified-note-reads-as-an-error
+  order: 1910-2den
+  status: blocked
+  kind: ux
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - auth
+  - cloudflare
+  estimated_hours: 1
+  title: After a successful Cloudflare sign-in, a missing tray socket prints a line that reads like an error
+  context: 'Seen on macOS 2026-10-28: after "ok:cloudflare-login:stored" the login printed "note:cloudflare-login:no-tray-notified:/run/user/0/tillandsias/control.sock: No such file or directory (os error 2)". The sign-in had worked; the tray was quitting. The operator read it as a failure. Writer: cloudflare_login.rs ~1539. The wording is user-facing, so it is held for the operator.'
+  exit_criteria:
+  - 'The operator approves new wording, and the note no longer reads like a failure after a successful store.'
+  verifiable_closure: 'A test pins the approved wording of the no-tray note.'
+  unscoreable: 'held-for-operator-wording: the text is user-facing.
+
+    '
+  blocked_by: operator
+  next_action: 'Held for operator wording via macuahuitl-fedora.'
+  provenance: 'Operator report and live output, 2026-10-28.'
+  events:
+  - type: filed
+    ts: '2026-10-28T18:30:16Z'
+    host: tlatoanis-macbook-air
+    summary: filed, held for operator wording

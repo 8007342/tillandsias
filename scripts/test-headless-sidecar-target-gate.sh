@@ -51,7 +51,7 @@ trap cleanup EXIT
 trap 'exit 130' INT; trap 'exit 143' TERM; trap 'exit 129' HUP
 git -C "$ROOT" worktree add -q --detach "$wt" HEAD 2>/dev/null || { bad "could not create a scratch worktree"; exit 1; }
 # Carry this tree's uncommitted build.rs, so the fixture tests what is on disk.
-cp "$ROOT/crates/tillandsias-headless/build.rs" "$wt/crates/tillandsias-headless/build.rs"
+mkdir -p "$wt/crates/tillandsias-embed/src"; cp "$ROOT/crates/tillandsias-embed/build.rs" "$wt/crates/tillandsias-embed/build.rs"; cp "$ROOT/crates/tillandsias-embed/src/collect.rs" "$wt/crates/tillandsias-embed/src/collect.rs"
 [ ! -e "$wt/images/router/tillandsias-router-sidecar" ] || { bad "scratch worktree unexpectedly has a sidecar"; exit 1; }
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 

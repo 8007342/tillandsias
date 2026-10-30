@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 3 child (3d) of 1831-74sf; operator-approved redesign 2026-10-23
+# (pulling Qwen3-Coder-30B-A3B Q5 on macuahuitl is approved).
+packets:
+  - packet_id: bench-local-coding-models-qwen3-coder-30b-a3b-and-devstral-small-2-with-a-tool-call-round-trip-arm-and-a-20-packet-replay-set
+    order: 1835-v7vx
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [inference, ollama, bench, gpu, delegation]
+    estimated_hours: 6
+    owned_files:
+      - scripts/bench-inference-floor.sh
+      - scripts/local-delegate-replay/
+    title: |
+      Bench local coding models — Qwen3-Coder-30B-A3B (Q5) on macuahuitl and Devstral Small 2 on a Mac — with a tool-call round-trip arm in scripts/bench-inference-floor.sh and a replay set of 20 already-landed size:S packets (pre-fix tree + closure command) for local-delegate acceptance
+    context: |
+      The ladder (1831-74sf) needs a model that can drive a tool loop at all.
+      bench-inference-floor.sh measures throughput/latency but has no arm that
+      checks a model returns a well-formed OpenAI tool call and consumes the
+      tool result. The replay set is 20 landed size:S packets each recorded
+      as (pre-fix commit = merge parent, owned_files, closure command, the
+      landed diff for reference only); the replay runs local-delegate.sh on
+      the pre-fix tree and scores closure green / scope respected. Pull of
+      Qwen3-Coder-30B-A3B Q5 on macuahuitl is operator-approved; Devstral
+      Small 2 runs on a Mac (Metal) — that arm is a peer hand-off with a
+      condition, not a local SHA. Every measurement records its regime
+      (host, GPU, quant, ollama version).
+    exit_criteria:
+      - 'bench-inference-floor.sh --tool-call prints tool_call_roundtrip=ok|malformed|none and latency for a model id (pre-fix result: FAILS — no such arm)'
+      - 'scripts/local-delegate-replay/ lists 20 landed size:S packets with pre-fix commit, owned_files and closure command, and each closure command FAILS on its pre-fix commit (pre-fix result: set absent)'
+      - 'a results event with regime on this row for Qwen3-Coder-30B-A3B Q5 on macuahuitl (tool-call arm + replay acceptance once 3b exists) and for Devstral Small 2 on a Mac'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/local-delegate-replay/verify-set.sh
+      (new) asserts each listed closure fails on its pre-fix commit and passes
+      on its landed commit; the model numbers are measurements recorded as
+      events with their regime.
+    depends_on: []
+    related: [1831-74sf]
+    next_action: >
+      Pull Qwen3-Coder-30B-A3B Q5 on macuahuitl; add the tool-call arm;
+      assemble the replay set with verify-set.sh; hand the Devstral arm to a
+      Mac host as a condition-shaped message.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:15:21Z"
+        host: macuahuitl
+        summary: |-
+          Phase 3 3d: bench Qwen3-Coder-30B-A3B and Devstral Small 2; tool-call arm; 20-packet replay set.

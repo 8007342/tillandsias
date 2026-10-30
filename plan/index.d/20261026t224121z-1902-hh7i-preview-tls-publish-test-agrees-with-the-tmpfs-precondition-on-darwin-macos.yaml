@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air at the coordinator's request 2026-10-26. Code is cited by symbol, never by line.
+packets:
+- packet_id: preview-tls-publish-test-agrees-with-the-tmpfs-precondition-on-darwin
+  order: 1902-hh7i
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - tests
+  - darwin
+  - local-web-preview
+  estimated_hours: 1
+  related:
+  - 1901-bnif
+  - 1794-rf3a
+  title: The preview TLS publish test agrees with the tmpfs precondition, so it passes on macOS and stays strict on Linux
+  context: 'local_web_preview::tests::source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only asserted that build_router_run_args publishes 127.0.0.1:18443:8443 whenever the uid is not root. Since 1901-bnif, build_router_run_args publishes only when preview_tls_dir() is Ok, and that needs a tmpfs router dir or /dev/shm. Darwin has neither, so the test failed on every darwin full gate (3/3 isolated runs, 2026-10-26). Production is unaffected, because on macOS the router runs in the Linux guest. The fix asserts publish == (!root && preview_tls_dir().is_ok()), and on Linux it also asserts preview_tls_dir().is_ok(), so a Linux run that loses tmpfs fails loudly instead of skipping the loopback check.'
+  exit_criteria:
+  - 'cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias source_tuple_names_do_not_alias passes on darwin and on Linux, and on Linux the publish branch is exercised (preview_tls_dir() is Ok). Pre-fix result: FAILS on darwin, assertion left false right true.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias source_tuple_names_do_not_alias passes on darwin and on Linux, and on Linux the publish branch is exercised (preview_tls_dir() is Ok). Pre-fix result: FAILS on darwin, assertion left false right true.'
+  provenance: 'Filed at the coordinator (macuahuitl-fedora) request 2026-10-26, after the darwin confirmation gate for #674 failed on this trunk test.'
+  events:
+  - type: filed
+    ts: '2026-10-26T22:41:21Z'
+    host: tlatoanis-macbook-air
+    summary: filed and claimed in_progress on work/1902-hh7i

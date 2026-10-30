@@ -3,7 +3,7 @@
 # Build tillandsias-plan as a static musl binary and stage it at
 # images/default/policy-bin/tillandsias-plan, the forge image's Bash command-policy
 # decider (/usr/local/lib/tillandsias/policy-bin/tillandsias-plan, run by
-# images/default/bash-policy-hook). tillandsias-headless/build.rs embeds it with
+# images/default/bash-policy-hook). crates/tillandsias-embed/build.rs embeds it with
 # the rest of images/, so every guest builds a forge that ships it.
 #
 # Called by scripts/build-sidecar.sh, so every lane that stages the router
@@ -22,6 +22,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TARGET="$(bash "$SCRIPT_DIR/build-sidecar.sh" --print-target)"
+# 1804-sccl: these are release + LTO musl cross builds whose bytes are
+# stamp-digested and staged into images. Land run 181 died here with
+# "sccache ... (exit status: 254)" on `-C linker-plugin-lto --target
+# x86_64-unknown-linux-musl`, refusing build-sidecar. A cache wrapper buys little
+# (two small crates, one target dir) and a wrapper failure is not a compile
+# failure, so the ambient wrapper is scoped out. TILLANDSIAS_SIDECAR_SCCACHE=1 opts in.
+[ "${TILLANDSIAS_SIDECAR_SCCACHE:-0}" = 1 ] || unset RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC_WRAPPER
 DEST="$ROOT/images/default/policy-bin/tillandsias-plan"
 STAMP="$ROOT/images/default/policy-bin/.stamp"
 if [ -n "${TILLANDSIAS_SIDECAR_TARGET_DIR:-}" ]; then
@@ -137,7 +144,7 @@ case "$mode" in
         # …/target-musl: no such file or directory"), which on a fresh checkout
         # with no musl gcc aborted build-sidecar.sh under set -e, so the router
         # sidecar was never staged and every cargo build panicked in
-        # tillandsias-headless/build.rs (measured, lenovinha, 2026-10-17).
+        # crates/tillandsias-embed/build.rs (measured, lenovinha, 2026-10-17).
         mkdir -p "$registry" "$TDIR"
         echo "[build-forge-plan-bin] no musl C toolchain on this host: building in ${image} (musl-tools)"
         if ! podman run --rm --security-opt label=disable \

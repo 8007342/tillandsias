@@ -93,6 +93,18 @@ case "\$url" in
         # 100 prompt tokens in 1s => 100 tok/s; 200 eval tokens in 10s => 20 tok/s
         printf '{"prompt_eval_count":100,"prompt_eval_duration":1000000000,"eval_count":200,"eval_duration":10000000000,"load_duration":1000000,"total_duration":11000000000}'
         exit 0 ;;
+    */v1/chat/completions)
+        # 1835-v7vx tool-call arm. STUB_TC_MODE: ok (default) | none | ignore
+        if printf '%s' "\$data" | grep -q '"role":"tool"'; then
+            n=\$(printf '%s' "\$data" | grep -o 'build [0-9][0-9]*' | head -1)
+            [ "\${STUB_TC_MODE:-ok}" = ignore ] && n="nothing useful"
+            printf '{"choices":[{"message":{"role":"assistant","content":"The current %s."}}]}' "\$n"
+        elif [ "\${STUB_TC_MODE:-ok}" = none ]; then
+            printf '{"choices":[{"message":{"role":"assistant","content":"I do not need a tool."}}]}'
+        else
+            printf '{"choices":[{"message":{"role":"assistant","content":"","tool_calls":[{"id":"c1","type":"function","function":{"name":"get_build_number","arguments":"{\\\\"project\\\\":\\\\"tillandsias\\\\"}"}}]}}]}'
+        fi
+        exit 0 ;;
 esac
 exit 1
 STUB
@@ -143,6 +155,33 @@ ck "prefill_n reports the kept sample size" "3" \
 # multiply a stale constant (the second half of 858-ihcb).
 ck "projection declines without a measured chunk count" "skipped:no-measured-corpus-chunk-count" \
    "$(printf '%s\n' "$out" | sed -n 's/.*full_rebuild=\([a-z:-]*\).*/\1/p')"
+
+# ---- order 1835-v7vx: the --tool-call round-trip arm ------------------------
+# @trace order:1835-v7vx
+# Pre-fix (no such arm) the script rejects the flag and prints none of these
+# lines, so every ck below fails. The stub answers a well-formed tool call and
+# then an answer containing the trial-unique build number; the two degraded
+# stub modes prove the arm can say "none" and "malformed" instead of only "ok".
+tc() { # tc <STUB_TC_MODE>
+    (cd "$TMPD" && env PATH="$TMPD/bin:$PATH" STUB_TC_MODE="$1" \
+        BENCH_ENDPOINT="http://stub" BENCH_MODELS="stubmodel=T0" \
+        BENCH_TOOLCALL_TRIALS=2 bash "$SUT" --tool-call 2>/dev/null)
+}
+tc_ok="$(tc ok)"
+ck "tool-call ok: roundtrip verdict" "ok" \
+   "$(printf '%s\n' "$tc_ok" | sed -n 's/^toolcall: .*trial=1 tool_call_roundtrip=\([a-z]*\).*/\1/p')"
+ck "tool-call ok: final answer used the tool result" "used" \
+   "$(printf '%s\n' "$tc_ok" | sed -n 's/^toolcall: .*trial=1 .*final=\([a-z]*\).*/\1/p')"
+ck "tool-call ok: summary pass_rate" "1.00" \
+   "$(printf '%s\n' "$tc_ok" | sed -n 's/^toolcall_summary: .*pass_rate=\([0-9.]*\).*/\1/p')"
+ck "tool-call ok: latency is reported on every trial" "2" \
+   "$(printf '%s\n' "$tc_ok" | grep -c '^toolcall: .* turn1_ms=[0-9]* turn2_ms=[0-9]* total_ms=[0-9]*$')"
+ck "tool-call none: model that never calls a tool" "none" \
+   "$(tc none | sed -n 's/^toolcall: .*trial=1 tool_call_roundtrip=\([a-z]*\).*/\1/p')"
+ck "tool-call ignore: answer that drops the tool result is malformed" "malformed" \
+   "$(tc ignore | sed -n 's/^toolcall: .*trial=1 tool_call_roundtrip=\([a-z]*\).*/\1/p')"
+ck "tool-call replaces the throughput sweep" "0" \
+   "$(printf '%s\n' "$tc_ok" | grep -c '^gen:')"
 
 printf 'bench-prompt-uniqueness: %d passed, %d failed\n' "$pass" "$fail"
 if [ "$fail" -eq 0 ]; then

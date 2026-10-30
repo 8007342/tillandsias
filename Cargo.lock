@@ -3339,6 +3339,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-embed"
+version = "56.10.20"
+
+[[package]]
 name = "tillandsias-exec"
 version = "0.1.0"
 dependencies = [
@@ -3383,6 +3387,7 @@ dependencies = [
  "tillandsias-browser-mcp",
  "tillandsias-control-wire",
  "tillandsias-core",
+ "tillandsias-embed",
  "tillandsias-host-shell",
  "tillandsias-logging",
  "tillandsias-metrics",
@@ -3466,6 +3471,7 @@ dependencies = [
 name = "tillandsias-macos-tray"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "block2",
  "futures-util",
  "libc",
@@ -3540,6 +3546,7 @@ dependencies = [
  "proptest",
  "redb",
  "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "serde_yaml",

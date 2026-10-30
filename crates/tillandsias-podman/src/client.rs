@@ -129,6 +129,13 @@ fn build_kill_args(name: &str, signal: Option<&str>) -> Vec<String> {
 #[derive(Clone)]
 pub struct PodmanClient {
     backend: BackendRef,
+    /// Extra environment for every podman process this client spawns
+    /// (1922-rann: `NOTIFY_SOCKET` for a `--sdnotify=container` launch).
+    process_env: Arc<Vec<(String, String)>>,
+    /// 1922-rann: only a client on the real podman binds a notify socket for an
+    /// opted-in launch. A fake or replay backend never runs a container, so a
+    /// test must not create sockets under the host's runtime dir.
+    announces_readiness: bool,
 }
 
 impl std::fmt::Debug for PodmanClient {
@@ -141,11 +148,27 @@ impl PodmanClient {
     pub fn new() -> Self {
         Self {
             backend: Arc::new(RealBackend),
+            process_env: Arc::default(),
+            announces_readiness: true,
         }
     }
 
     pub fn with_backend(backend: BackendRef) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            process_env: Arc::default(),
+            announces_readiness: false,
+        }
+    }
+
+    /// This client with `env` set on the podman processes it spawns. Used for
+    /// one launch: [`crate::readiness::ReadyListener::podman_env`].
+    pub fn with_process_env(&self, env: Vec<(String, String)>) -> Self {
+        Self {
+            backend: self.backend.clone(),
+            process_env: Arc::new(env),
+            announces_readiness: self.announces_readiness,
+        }
     }
 
     /// Run one podman command under the operation class's DECLARED budget
@@ -157,7 +180,12 @@ impl PodmanClient {
         argv: &[String],
     ) -> Result<crate::CommandOutput, CommandFailure> {
         self.backend
-            .execute(operation, argv, operation.default_budget())
+            .execute_with_env(
+                operation,
+                argv,
+                &self.process_env,
+                operation.default_budget(),
+            )
             .await
     }
 
@@ -171,7 +199,9 @@ impl PodmanClient {
         argv: &[String],
         budget: std::time::Duration,
     ) -> Result<crate::CommandOutput, CommandFailure> {
-        self.backend.execute(operation, argv, budget).await
+        self.backend
+            .execute_with_env(operation, argv, &self.process_env, budget)
+            .await
     }
 
     /// Check if podman is available in PATH.
@@ -1021,6 +1051,15 @@ impl PodmanClient {
     /// diagnostics on failure.
     ///
     /// @trace spec:podman-idiomatic-patterns, spec:runtime-diagnostics-stream
+    ///
+    /// The argv (with the `run` this client prepends) must pass
+    /// [`crate::policy::validate_launch_argv`] or no podman process is spawned
+    /// (order 1118-zzs4): the stack launches (proxy, git mirror, router,
+    /// inference, observatorium, browser, status/web forge, ssh-lane sidecar)
+    /// built raw argvs, so the envelope held only while every builder happened
+    /// to keep it. A launch that cannot carry the envelope goes through
+    /// [`Self::run_container_observed_exempt`] and names why.
+    // @trace order:1118-zzs4, spec:podman-orchestration, spec:security-privacy-isolation
     pub async fn run_container_observed(
         &self,
         stage: &str,
@@ -1028,10 +1067,63 @@ impl PodmanClient {
         args: &[String],
         debug_enabled: bool,
     ) -> Result<String, String> {
+        let mut full = Vec::with_capacity(args.len() + 1);
+        full.push("run".to_string());
+        full.extend_from_slice(args);
+        if let Err(err) = crate::policy::validate_launch_argv(&full) {
+            let detail = format!(
+                "[security] refusing to launch {container_name}: {err}; the launch argv \
+                 lost part of the immutable hardening envelope \
+                 (crates/tillandsias-podman/src/policy.rs MANDATORY_HARDENING_FLAGS)"
+            );
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "failed",
+                Some(summary_line(&detail)),
+            );
+            return Err(detail);
+        }
+        self.run_container_observed_exempt(stage, container_name, args, debug_enabled, "")
+            .await
+    }
+
+    /// [`Self::run_container_observed`] WITHOUT the hardening-envelope check.
+    /// `exemption` is the caller's stated reason; it exists so every exempt
+    /// site is greppable and reviewed, not to be read at runtime.
+    pub async fn run_container_observed_exempt(
+        &self,
+        stage: &str,
+        container_name: &str,
+        args: &[String],
+        debug_enabled: bool,
+        exemption: &str,
+    ) -> Result<String, String> {
+        let _ = exemption;
         emit_launch_event(debug_enabled, stage, container_name, "starting", None);
-        match self.run_container(args).await {
+        // 1922-rann: a launch that opts in with `--sdnotify=container` gets its
+        // own notify socket bound BEFORE podman runs, so a READY sent at once is
+        // queued, not lost; the one outcome is announced after the run returns.
+        #[cfg(unix)]
+        let ready = self
+            .announces_readiness
+            .then(|| crate::readiness::bind_for_launch(container_name, args))
+            .flatten();
+        #[cfg(unix)]
+        let launcher = match &ready {
+            Some(l) => self.with_process_env(l.podman_env()),
+            None => self.clone(),
+        };
+        #[cfg(not(unix))]
+        let launcher = self.clone();
+        match launcher.run_container(args).await {
             Ok(output) => {
                 emit_launch_event(debug_enabled, stage, container_name, "running", None);
+                #[cfg(unix)]
+                if let Some(l) = ready {
+                    crate::readiness::announce_launch(l, container_name);
+                }
                 Ok(output)
             }
             Err(err) => {

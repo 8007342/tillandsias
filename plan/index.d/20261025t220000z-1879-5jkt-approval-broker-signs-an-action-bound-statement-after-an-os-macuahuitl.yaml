@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  order: 1879-5jkt
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - linux
+  estimated_hours: 8
+  depends_on: []
+  title: The host can turn a request for a costly action into a signed, action-bound approval record
+  context: 'Design D3/D4 of openspec/changes/os-verified-approval-gates. Adds an approval broker module to tillandsias-headless and a `tillandsias approval request|verify` subcommand. The statement is canonical text (action, project, target, from, to, detail, host, strength, nonce, issued, expires) signed as SSHSIG with namespace tillandsias-approval@v1. Git actions are recorded as a note under refs/notes/tillandsias/approvals with a hash-free first-line sentence; merges made by host tools also get an Approved-by: trailer. Non-git actions go to a host approvals journal.'
+  exit_criteria:
+  - 'A fixture runs `tillandsias approval request` with a test ed25519 signer standing in for the hardware key, then asserts: `ssh-keygen -Y verify -n tillandsias-approval@v1` accepts the statement; changing any one field (target, to, expires, nonce) makes verify fail; a second use of the same nonce is refused; the note''s first line contains no 7+ character hex run. Pre-fix result: FAILS, the headless binary has no approval subcommand.'
+  verifiable_closure: 'A fixture runs `tillandsias approval request` with a test ed25519 signer standing in for the hardware key, then asserts: `ssh-keygen -Y verify -n tillandsias-approval@v1` accepts the statement; changing any one field (target, to, expires, nonce) makes verify fail; a second use of the same nonce is refused; the note''s first line contains no 7+ character hex run. Pre-fix result: FAILS, the headless binary has no approval subcommand.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

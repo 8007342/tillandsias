@@ -1,0 +1,137 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora at the operator's request, 2026-10-28 (operator-approved 2026-10-28). Snapshot ladder packets from the snapshot-warm-start research report. Reset stays the baseline; rungs sit above it. Vault is on no rung.
+packets:
+- packet_id: forge-warm-layer-is-committed-and-preferred
+  order: 1918-wfrg
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - images
+  - podman
+  - runtime
+  estimated_hours: 6
+  title: After the first-run tool install, the forge is committed as tillandsias-forge-warm:<key> and later launches prefer it
+  context: 'operator-approved 2026-10-28. Source: scratch/research/snapshot-warm-start.md sections 3 (L2) and 6.2. Rung L2, keyed on the L1 image digest plus tool pins plus arch. Agent credentials and /run/secrets are never captured. Expected to cut a post-version-bump rebuild from 3-8 min to under 1 min (estimated). Measure with 1915-brst once it lands.'
+  exit_criteria:
+  - A launch after a VERSION bump with unchanged pins runs no install_archive; today it rebuilds.
+  - The warm image contains no file under /run/secrets and no agent credential; a litmus inspects it.
+  verifiable_closure: A litmus that bumps VERSION with fixed pins, launches, and asserts no install_archive line.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: define the key, commit after first-run install, prefer the warm tag on launch, write the litmus and the no-secrets check.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/snapshot-warm-start.md sections 3 (L2) and 6.2 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: inference-image-bakes-the-default-model
+  order: 1918-bmdl
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - images
+  - inference
+  estimated_hours: 4
+  title: The inference image is built with the default model in /opt/baked-models, keyed on its digest, so a cold start does not pull it
+  context: 'operator-approved 2026-10-28. Source: scratch/research/snapshot-warm-start.md sections 1, 3 (L3) and 6.3. preload-policy.sh eagerly pulls qwen2.5:0.5b (about 400 MB) at start. Inside the macOS and Windows guests the page cache dies with the VM, so the pull repeats.'
+  exit_criteria:
+  - 'A cold start logs ''preload: ... models=-'' (nothing to pull); today it pulls.'
+  - The image key changes when the model digest changes; a fixture asserts it.
+  verifiable_closure: A litmus that cold-starts inference with networking to the registry blocked and asserts the model answers.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: add the bake step to the inference image build keyed on the model digest, make preload skip baked models, add the litmus.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/snapshot-warm-start.md sections 1, 3 (L3) and 6.3 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: macos-vz-save-restore-is-probed-in-diagnose
+  order: 1918-vzsr
+  status: ready
+  kind: spike
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - macos
+  - vm-layer
+  - runtime
+  estimated_hours: 8
+  title: On macOS, --diagnose prints a save-restore verdict from validateSaveRestoreSupport(), and restore-to-podman-info is timed
+  context: 'operator-approved 2026-10-28. Source: scratch/research/snapshot-warm-start.md sections 1 (VZ), 3 (M3) and 6.4. VZ save and restore exist from macOS 14; validateSaveRestoreSupport() is the only oracle. Our config has a virtio-entropy device that Tart drops for suspendable VMs (hypothesis: ours validates once entropy is behind a flag). Never save while Vault runs. The clock is about 3.5 min off after a pause (1503-qrgz).'
+  exit_criteria:
+  - --diagnose on macOS prints a 'save-restore:' verdict line; today there is none.
+  - A save is refused while Vault is running; a test asserts the refusal.
+  - Restore-to-podman-info time is recorded with its regime (macOS version, hardware).
+  verifiable_closure: The --diagnose output line and the Vault-running refusal test.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: call validateSaveRestoreSupport() from vz.rs, put the entropy device behind a flag, add the Vault guard, time one restore.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/snapshot-warm-start.md sections 1 (VZ), 3 (M3) and 6.4 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: wsl-distro-recovers-from-a-vhdx-rung
+  order: 1918-wslv
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags:
+  - windows
+  - wsl
+  - vm-layer
+  estimated_hours: 8
+  title: On Windows, a VHDX copy is taken after builds and a distro that fails to start is restored from it with --import-in-place
+  context: 'operator-approved 2026-10-28. Source: scratch/research/snapshot-warm-start.md sections 1 (WSL2), 3 (W2) and 6.5. WSL2 has no live state save. Copy the VHDX only after wsl --shutdown, beside a key file (W1 plus image digests). The Vault store is never captured.'
+  exit_criteria:
+  - A deliberately corrupted distro recovers with no 'building missing image' line; today it rebuilds.
+  - The rung is deleted, not retried, when its key does not match current inputs; a test asserts it.
+  verifiable_closure: A Windows litmus that corrupts the distro, launches, and asserts recovery without image builds.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: take the copy after builds in wsl.rs, write the key file, restore on a failed start, add the litmus.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/snapshot-warm-start.md sections 1 (WSL2), 3 (W2) and 6.5 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: snapshot-ladder-driver-restores-before-it-wipes
+  order: 1918-ladr
+  status: pending
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - runtime
+  - headless
+  - vm-layer
+  estimated_hours: 8
+  title: One ladder function tries valid snapshots newest-first, at most two, before the full wipe, behind all three resets
+  context: 'operator-approved 2026-10-28. Source: scratch/research/snapshot-warm-start.md section 4 and 6.6. Stale-key rungs are deleted; a failed rung is deleted, never retried; then today''s SOFT reset as the baseline. Needs the step timer to show savings and at least one rung to restore.'
+  exit_criteria:
+  - A fixture with two stale snapshots and one good one shows one restore and no wipe; today no such path exists.
+  - A fixture where every rung fails probes shows at most two restores, then the wipe.
+  verifiable_closure: Both ladder fixtures pass in the gate and failed before the change.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Waiting on 1915-brst, 1918-wfrg and 1918-bmdl. Left once they land: write the driver from report section 4 with the per-kind probes, wire it behind the three resets, add both fixtures.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/snapshot-warm-start.md section 4 and 6.6 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1915-brst
+  - 1918-wfrg
+  - 1918-bmdl
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25 (web studio lanes). Code is cited by symbol, never by line.
+packets:
+  - packet_id: launch-option-choice-prompt-we-have-n-options-with-one-recommended
+    order: 1859-57mi
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [ux, agent, tray, lua]
+    estimated_hours: 4
+    title: "A reusable launch prompt, 'we have N options for this:' with a one-line brief per option and one [Recommended] tag, remembered per project"
+    context: |
+      Operator direction 2026-10-25: "I want to author this website interactively" opens a visual web studio window on the live site, with live saves into the forge checkout and the agent co-editing; every studio is offered as a choice with one [Recommended]. Publishing goes through the 1853-qr4h deploy tool, deploy branch only, on explicit request; no build on push. Spec: openspec/changes/web-studio-lanes. Reuses run_opencode_web_mode plumbing (RouterRoute, tillandsias_otp::issue_session, send_issue_web_session, launch_opencode_web_browser, ensure_versioned_images, sse-keepalive-proxy.js, local_web_preview::publish).
+    exit_criteria:
+      - "A fixture feeds a two-option and a six-option registry to the choice renderer and asserts: the header reads 'we have N options for this:'; there is one line per option; exactly one line carries [Recommended], the detector's pick; a degraded option is never recommended; a one-option registry launches without a prompt; and a second launch reuses the stored choice. Pre-fix result: FAILS, no choice renderer or option registry exists."
+    verifiable_closure: "A fixture feeds a two-option and a six-option registry to the choice renderer and asserts: the header reads 'we have N options for this:'; there is one line per option; exactly one line carries [Recommended], the detector's pick; a degraded option is never recommended; a one-option registry launches without a prompt; and a second launch reuses the stored choice. Pre-fix result: FAILS, no choice renderer or option registry exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-25.
+    events:
+      - type: filed
+        ts: "2026-10-25T16:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator direction of 2026-10-25"

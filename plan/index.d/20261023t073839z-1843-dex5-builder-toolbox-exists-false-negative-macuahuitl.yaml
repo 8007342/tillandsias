@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-builder-reads-a-transient-toolbox-list-failure-as-an-absent-container-and-dies-recreating-it
+    order: 1843-dex5
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build, toolbox, instrument, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/with-tillandsias-builder.sh
+      - scripts/test-builder-toolbox-exists.sh
+      - scripts/gate-steps.d/292-1843-dex5.step
+    title: |
+      with-tillandsias-builder.sh treats a failed `toolbox list` as "no builder" and runs `toolbox create`, which dies "container tillandsias-builder already exists" and fails the gate
+    context: |
+      MEASURED macuahuitl 2026-10-23, land-queue run 4: #612 was evicted with
+        [tillandsias-builder] Creating 'tillandsias-builder' toolbox (first run)...
+        Error: container tillandsias-builder already exists
+      while `podman ps -a` showed the builder Up 43 hours. _toolbox_exists piped
+      `toolbox list --containers 2>/dev/null` through awk and grep, so any
+      transient list failure read as absence. Fix: ask `podman container
+      exists` first, keep the toolbox-list path as the fallback.
+    exit_criteria:
+      - 'with toolbox list failing and podman reporting the container, _toolbox_exists answers exists (pre-fix result: FAILS — absent; ARM 1 of scripts/test-builder-toolbox-exists.sh, measured macuahuitl 2026-10-23)'
+      - 'an absent container still reads absent and the toolbox-list fallback still finds a listed one (ARMS 2, 3)'
+    verifiable_closure: |
+      scripts/test-builder-toolbox-exists.sh 3/3 (pre-fix arm 1 FAIL), bound by scripts/gate-steps.d/292-1843-dex5.step.
+    provenance: |
+      Filed by macuahuitl (claude, coordinator) 2026-10-23 from the #612 eviction in land-queue run 4.
+    events:
+      - type: filed
+        ts: "2026-10-23T07:38:39Z"
+        host: macuahuitl
+        summary: |-
+          p1: a transient toolbox-list failure made the builder try to recreate itself and fail the gate.

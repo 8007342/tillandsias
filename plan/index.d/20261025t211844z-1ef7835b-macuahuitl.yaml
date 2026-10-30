@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-declarative-imagegen-tier-table-maps-the-accel-envelope-to-a-default-and-a-quality-model-with-licences
+    event:
+      type: list-replace
+      ts: "2026-10-25T21:18:44Z"
+      agent_id: linux-macuahuitl-claude-20261025t211844z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "A fixture classifies four envelopes (cpu-only 8 GB RAM, cpu-only 32 GB RAM, 8 GB VRAM GPU, 24 GB VRAM GPU) to CEILINGS I0, I1, I2, I3, asserts the starting tier is I0 for all four, and asserts no row's licence is non-commercial or revenue-capped (Stability Community rejected). Pre-fix result: FAILS, no imagegen tier table exists."
+      summary: |-
+        operator-rulings-2026-10-25

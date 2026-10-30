@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-no-read-only-guest-exec-while-the-tray-owns-the-vm
+    field: status
+    value: implemented
+    ts: "2026-10-27T21:35:05Z"
+    host: lenovinha
+
+events:
+  - packet_id: macos-no-read-only-guest-exec-while-the-tray-owns-the-vm
+    event:
+      type: progress
+      ts: "2026-10-27T21:35:05Z"
+      host: lenovinha
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: b1ea30e2cfb65610e9ff0a0f1b0952abbfa24544
+  - packet_id: macos-no-read-only-guest-exec-while-the-tray-owns-the-vm
+    event:
+      type: note
+      ts: "2026-10-27T21:35:05Z"
+      host: lenovinha
+      summary: |-
+        landed-but-open triage 2026-10-27: b1ea30e2c routes --exec-guest through the running tray; remains: the 6.5 df check recorded on a Mac

@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 2 child (2f) of fleet-coordinator-warm-cache-milestone (1824-58bm).
+packets:
+  - packet_id: vault-provisions-cloudflare-access-service-tokens-for-hosts-and-forges-from-cloudflare-login
+    order: 1829-guit
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [vault, cloudflare, rust, credentials, coordinator]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-headless/src/cloudflare_oauth.rs
+      - crates/tillandsias-headless/src/cloudflare_access_tokens.rs
+    title: |
+      After `--cloudflare-login`, Tillandsias creates (or reuses) a Cloudflare Access service token for this host on the operator's account and stores its client id/secret only in the vault; forges receive it through the existing vault injection path; nothing is stored on Cloudflare beyond the service token Access itself holds, and nothing is written in plaintext at rest
+    context: |
+      Milestone decision 1: hosts and forges authenticate to the
+      coordinator's Access application with service tokens held client-side
+      in the vault. `--cloudflare-login` (crates/tillandsias-headless/src/cloudflare_oauth.rs,
+      change cloudflare-login-and-fleet-vpn, 1505-sm2j) yields an account
+      OAuth token; with it the host calls the Access service-tokens API
+      (accounts/{account_id}/access/service_tokens) once, names the token
+      `tillandsias-<host>`, and stores {client_id, client_secret, expires_at}
+      at a vault path. OPERATOR RULINGS that bind this: no plaintext
+      credentials at rest (an unopenable vault is wiped and re-logged-in, not
+      recovered); never weaken a fail-closed credential gate for a test.
+      Adding the token to the Access application's policy is the operator's
+      deploy step (1824-58bm's operator-gated child), not this packet.
+      An outward call with the operator's identity needs their consent: the
+      token-create call happens only inside the operator-initiated
+      --cloudflare-login flow.
+    exit_criteria:
+      - 'a unit test with a mocked Cloudflare API asserts one service-token create call named tillandsias-<host>, and that the returned secret is written only through the vault client (no file write) (pre-fix result: FAILS — no such call)'
+      - 'a second login with a valid stored token makes no create call (pre-fix result: FAILS)'
+      - 'grep of the module finds no write of the secret to disk or logs (pre-fix result: n/a)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: cargo test -p tillandsias-headless
+      cloudflare_access_service_token (written with the change; mocked API
+      and a recording vault client) asserts the arms above.
+    depends_on: []
+    related: [1824-58bm, 1505-sm2j]
+    next_action: >
+      Read cloudflare_oauth.rs's token result and the vault client API;
+      add cloudflare_access_tokens.rs with an injectable HTTP client; wire it
+      at the end of the login flow behind the coordinator feature flag.
+    notes: |
+      size: M
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:13:45Z"
+        host: macuahuitl
+        summary: |-
+          Phase 2 2f: Access service tokens provisioned from --cloudflare-login, held in the vault.

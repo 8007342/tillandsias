@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 2 child (2d) of fleet-coordinator-warm-cache-milestone (1824-58bm).
+packets:
+  - packet_id: git-mirror-post-push-hook-sends-the-new-head-sha-staleness-bump-and-optional-overview-to-the-coordinator-after-a-github-push
+    order: 1827-3rj4
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [git-mirror, coordinator, vault, bash, cloudflare]
+    estimated_hours: 4
+    owned_files:
+      - images/git/post-receive-hook.sh
+      - images/git/vault-cli.sh
+      - scripts/test-mirror-coordinator-bump.sh
+    title: |
+      After the git mirror's upstream relay to GitHub succeeds, its post-receive hook sends the project namespace's new head SHA and a staleness bump (and an optional client-folded overview) to the coordinator, with the Access service token injected from the vault; failure is logged and never affects the push
+    context: |
+      images/git/pre-receive-hook.sh performs the must-succeed relay to
+      GitHub; images/git/post-receive-hook.sh runs only after that verified
+      transaction and "cannot affect receive-pack's result" — the correct
+      place for a best-effort cache update. No GitHub webhook (milestone
+      decision 3). The token comes from the vault via vault-cli.sh at hook
+      time, lives only in the hook's environment, and is never logged. The
+      call is backgrounded with a short timeout so a slow or absent
+      coordinator never delays the client's push. When the coordinator is
+      not configured (no token in vault), the hook does nothing and logs one
+      line.
+    exit_criteria:
+      - 'with a stub coordinator on a local port and a stub vault token, a push through a test mirror results in exactly one POST carrying the new head SHA for the project namespace (pre-fix result: FAILS — no request is made)'
+      - 'with the stub coordinator down, the push still exits 0 and the hook logs one coordinator-unreachable line; the token never appears in the push log (pre-fix result: the push exits 0; no coordinator line)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: scripts/test-mirror-coordinator-bump.sh
+      (new) runs a bare repo with the hook, a bash/nc stub coordinator and a
+      stub vault-cli, and asserts the POST body, the down-coordinator exit 0,
+      and the token's absence from logs.
+    depends_on: [tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool, vault-provisions-cloudflare-access-service-tokens-for-hosts-and-forges-from-cloudflare-login]
+    related: [1824-58bm]
+    next_action: >
+      Prefer calling the 2c client binary from the hook (one client);
+      fall back to curl only if the mirror image lacks it, and record why.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:13:16Z"
+        host: macuahuitl
+        summary: |-
+          Phase 2 2d: mirror post-receive pushes head SHA + staleness bump to the coordinator.

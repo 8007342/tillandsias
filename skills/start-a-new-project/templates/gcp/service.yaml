@@ -1,0 +1,14 @@
+# {{NAME}}: the Cloud Run service, declared. Apply with
+#   gcloud run services replace service.yaml --region REGION
+# after replacing IMAGE with the built image's path.
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: {{SLUG}}
+spec:
+  template:
+    spec:
+      containers:
+      - image: IMAGE
+        ports:
+        - containerPort: {{PORT}}

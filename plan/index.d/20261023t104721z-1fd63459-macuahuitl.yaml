@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: land-queue-gates-build-without-incremental-compilation-so-a-mixed-incremental-cache-cannot-evict-a-clean-candidate
+    field: status
+    value: completed
+    ts: "2026-10-23T10:47:21Z"
+    host: macuahuitl
+
+events:
+  - packet_id: land-queue-gates-build-without-incremental-compilation-so-a-mixed-incremental-cache-cannot-evict-a-clean-candidate
+    event:
+      type: completed
+      ts: "2026-10-23T10:47:21Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 07124304d land(626) + land-queue run 8 on macuahuitl gated three consecutive tillandsias-plan-rebuilding candidates with no link eviction: land(612) e1820d47b, land(613) 966b4db43, land(614) 38b9456d4 (each had failed at link before)
+  - packet_id: land-queue-gates-build-without-incremental-compilation-so-a-mixed-incremental-cache-cannot-evict-a-clean-candidate
+    event:
+      type: note
+      ts: "2026-10-23T10:47:21Z"
+      host: macuahuitl
+      summary: |-
+        closed: queue gates build with CARGO_INCREMENTAL=0 via TILLANDSIAS_CARGO_INCREMENTAL; criterion 2 of the row (root cause of the mixed cache) stays as a follow-up observation

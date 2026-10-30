@@ -28,7 +28,7 @@ use tillandsias_podman::{PodmanClient, podman_cmd_sync};
 use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, VaultError, auto_unseal};
 use zeroize::Zeroize;
 
-const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
+pub(crate) const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
 
 const VAULT_UNSEAL_SECRET: &str = "tillandsias-vault-unseal";
 const VAULT_TLS_CERT_SECRET: &str = "tillandsias-vault-tls-cert";
@@ -96,61 +96,20 @@ pub(crate) fn vault_store_root_from(
     Ok(root)
 }
 
-/// 1642-cc54. The guest's credential fallbacks (`fallback_vault-shamir-share-v1`,
-/// `fallback_vault-root-token-v1`, `installation_anchor`) are WRITTEN beside
-/// the store they open, so they survive a fresh rootfs with it.
-///
-/// MEASURED (live, 2026-10-13): with only the store on the identity disk, the
-/// rebuilt guest found the store, found no fallback (it had been on the
-/// rootfs), checked before the tray's delivery arrived, and the partial-init
-/// guard WIPED the surviving store ("the unseal share … is in neither the
-/// keyring nor its fallback file").
-fn credential_write_dir() -> Result<PathBuf, String> {
-    vault_store_root()
-}
-
-/// Where a fallback is READ: the store root first, then the cache dir. A guest
-/// that moved its store before its fallbacks followed (or whose headless runs
-/// before provisioning re-runs) still has them on the rootfs. A share present
-/// in EITHER place counts, so no migration state can read as "no share" and
-/// trigger the partial-init wipe.
-fn credential_read_dirs() -> Vec<PathBuf> {
-    let dirs = credential_read_dirs_from(vault_store_root(), crate::init_cache_dir());
-    if let [store_root, cache_dir] = dirs.as_slice() {
-        settle_fallbacks_onto_store_root(store_root, cache_dir);
-    }
-    dirs
-}
-
-/// The guest's credential fallback files.
+/// 1909-aryk. The plaintext credential files a guest used to keep beside its
+/// store (1642-cc54) and on its rootfs. Operator ruling 2026-10-28: "Yes sign
+/// in the unsecure files wipe that causes a re-login". Nothing writes or reads
+/// them now; these names exist only so the purge can delete what an older
+/// build left behind.
 const CREDENTIAL_FALLBACKS: [&str; 3] = [
     "fallback_vault-shamir-share-v1",
     "fallback_vault-root-token-v1",
     "installation_anchor",
 ];
 
-/// Copy each fallback that exists ONLY in the cache dir onto the store root,
-/// never over one already there. MEASURED (live, 2026-10-13, second run):
-/// reading the rootfs copy was not enough. Nothing in that session WROTE a
-/// fallback (the tray delivers credentials from its polls, which the push
-/// subscription demotes), so the copies stayed on the rootfs, the next
-/// rebuild destroyed them, and the partial-init guard wiped the surviving
-/// store again. The first read now completes the move. Best effort: a failed
-/// copy leaves the rootfs copy, which is still read.
-fn settle_fallbacks_onto_store_root(store_root: &Path, cache_dir: &Path) {
-    for name in CREDENTIAL_FALLBACKS {
-        let (src, dst) = (cache_dir.join(name), store_root.join(name));
-        if src.is_file() && !dst.exists() && fs::copy(&src, &dst).is_ok() {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&dst, fs::Permissions::from_mode(0o600));
-            }
-        }
-    }
-}
-
-fn credential_read_dirs_from(
+/// The directories an older guest wrote credential files into: the store root
+/// (the persistent identity disk) and the init cache dir (the rootfs).
+fn credential_purge_dirs_from(
     store_root: Result<PathBuf, String>,
     cache_dir: Result<PathBuf, String>,
 ) -> Vec<PathBuf> {
@@ -163,13 +122,40 @@ fn credential_read_dirs_from(
     dirs
 }
 
-/// The first readable fallback file `name` in [`credential_read_dirs`] order.
-fn read_credential_fallback(name: &str) -> Option<PathBuf> {
-    read_credential_fallback_in(credential_read_dirs(), name)
+/// 1909-aryk. Zero-fill and unlink every [`CREDENTIAL_FALLBACKS`] file in
+/// `dirs`, without reading it. Idempotent, so it runs at every start and needs
+/// no marker. Returns the paths it removed. The one-time re-login that follows
+/// on an existing guest is accepted by the operator.
+pub(crate) fn purge_credential_fallbacks_in(dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut removed = Vec::new();
+    for dir in dirs {
+        for name in CREDENTIAL_FALLBACKS {
+            let path = dir.join(name);
+            let Ok(meta) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if meta.is_file() {
+                let _ = fs::write(&path, vec![0u8; meta.len() as usize]);
+            }
+            let gone = if meta.is_dir() {
+                fs::remove_dir_all(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+            if gone.is_ok() {
+                removed.push(path);
+            }
+        }
+    }
+    removed
 }
 
-fn read_credential_fallback_in(dirs: Vec<PathBuf>, name: &str) -> Option<PathBuf> {
-    dirs.into_iter().map(|d| d.join(name)).find(|p| p.is_file())
+/// The live purge: both directories an older guest wrote into.
+pub(crate) fn purge_credential_fallbacks() -> Vec<PathBuf> {
+    purge_credential_fallbacks_in(&credential_purge_dirs_from(
+        vault_store_root(),
+        crate::init_cache_dir(),
+    ))
 }
 
 #[cfg(feature = "vault")]
@@ -202,16 +188,16 @@ pub(crate) enum DeliveredShareCheck {
     /// The delivery carried no share (token-only): nothing to check.
     NoShare,
     /// Not base64, or not exactly 32 key bytes. `ensure_unseal_key` would
-    /// silently skip it and fall through to the fallback file or a derived
-    /// dummy key, so adopting it only puts a useless share on disk.
+    /// silently skip it and fall through to a derived dummy key, so adopting
+    /// it only stores a useless share.
     Malformed(String),
     /// Well-formed, but different from this guest's own
     /// `tillandsias-vault-unseal` podman secret. NOT A REJECTION (1200-ih38
     /// review): the podman secret is a STAND-IN for the vault, and in the
     /// documented dummy-key state it is the wrong one, so refusing on it would
-    /// manufacture a rejection (888-miiy); and refusing skipped the fallback
-    /// write that keeps has_shamir_share_in_keyring true, so a guest with a
-    /// missing share file would WIPE vault-data on its next launch. The share is
+    /// manufacture a rejection (888-miiy); and refusing it would leave the
+    /// partial-init guard with no delivered share, so it would WIPE
+    /// vault-data. The share is
     /// therefore stored exactly as before; rejecting on LIVE evidence (the vault
     /// observed unsealed with the own secret) is a follow-up row.
     DiffersFromOwnSecret,
@@ -284,12 +270,10 @@ fn own_unseal_secret_for_delivery_check() -> Option<Vec<u8>> {
 /// The unit return was the whole defect at this end: every path through this
 /// function looked identical to its caller, so `vsock_server` had nothing to
 /// build a reply from and hardcoded `success: true`. Two of those paths are
-/// not success. The early return below drops the delivery on the floor, and a
-/// failed fallback write leaves the guest without the share it was just told
-/// it had.
+/// not success. The early return below drops the delivery on the floor.
 ///
-/// `Accepted` here means STORED AND PERSISTED — in memory, and to the fallback
-/// file when a cache dir exists — AND (1200-ih38) the share is a well-formed
+/// `Accepted` here means STORED IN MEMORY, and nowhere else (1909-aryk: no
+/// file holds a delivered credential) — AND (1200-ih38) the share is a well-formed
 /// 32-byte key; a malformed share is REJECTED BEFORE anything is stored. A
 /// well-formed share that differs from this guest's own unseal secret is still
 /// stored (see DiffersFromOwnSecret: refusing it could wipe vault-data), so
@@ -302,7 +286,7 @@ pub fn set_in_vm_credentials(
 ) -> DeliverCredentialsOutcome {
     // If we have a pending fresh handover, the VM's state is strictly newer than
     // whatever the host tray just delivered. Ignore the stale delivery to prevent
-    // clobbering the fresh token in memory and the fallback file.
+    // clobbering the fresh token in memory.
     //
     // 890-y72v: this return is CORRECT and was SILENT. The host was told
     // success=true for a delivery this guest deliberately discarded, so a tray
@@ -346,55 +330,16 @@ pub fn set_in_vm_credentials(
         | DeliveredShareCheck::Unverifiable => {}
     }
 
-    let share_for_disk = unseal_share_b64.clone();
     let cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
         *guard = Some(InVmCredentials {
             unseal_share_b64,
             installation_uuid,
-            root_token: root_token.clone(),
+            root_token,
         });
     }
-
-    // 701-se6x: persist BOTH, not just the token. This function used to write
-    // `fallback_vault-root-token-v1` and drop the delivered share on the floor —
-    // the identical asymmetry 694-mhz8 fixed at the fresh-init site, surviving
-    // here. It matters because `has_shamir_share_in_keyring` (the predicate the
-    // partial-init WIPE turns on) consults an OS keychain, absent in this guest,
-    // and then this file. So a guest that had lost only its share file would be
-    // handed a perfectly good share by the host, use it in memory, still fail
-    // the predicate, and have its intact Vault wiped on the next launch — the
-    // host had the evidence and the guest threw it away.
-    // 701-se6x criterion 2: surface a failed write instead of discarding it.
-    // The `Err` arm of init_cache_dir was silent too — same consequence, since
-    // no cache dir means no share file either.
-    match credential_write_dir() {
-        Ok(cache_dir) => {
-            if let Err(e) = write_vm_credential_fallbacks(
-                &cache_dir,
-                root_token.as_deref(),
-                share_for_disk.as_deref(),
-            ) {
-                report_fallback_write_failure("host delivery into the guest", &e.to_string());
-                // 890-y72v: the in-memory copy survives this process and the
-                // file does not, so the next launch has nothing. Reporting
-                // success here is how a guest tells the host it holds a
-                // credential it will have forgotten by morning.
-                return DeliverCredentialsOutcome::Rejected {
-                    reason: format!("fallback write failed: {e}"),
-                };
-            }
-        }
-        Err(e) => {
-            report_fallback_write_failure(
-                "host delivery into the guest",
-                &format!("cache dir unavailable: {e}"),
-            );
-            return DeliverCredentialsOutcome::Rejected {
-                reason: format!("cache dir unavailable: {e}"),
-            };
-        }
-    }
+    // 1909-aryk: memory only. The host's secure storage is the durable copy and
+    // it delivers again on every connection.
     DeliverCredentialsOutcome::Accepted
 }
 
@@ -811,11 +756,17 @@ fn vault_tls_leaf_needs_refresh(
     }
 }
 
-fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(), String> {
+pub(crate) fn ensure_vault_tls_leaf(
+    certs_dir: &std::path::Path,
+    debug: bool,
+) -> Result<(), String> {
     let ca_cert = certs_dir.join("intermediate.crt");
     let ca_key = certs_dir.join("intermediate.key");
     let cert = vault_tls_cert(certs_dir);
     let key = vault_tls_key(certs_dir);
+    // 1118-fqfk slice 2b: the leaf key lives on tmpfs only, with no keyring
+    // copy; after a reboot (or over a legacy plaintext key) it is minted again.
+    crate::ca_key_store::materialize(&key, &cert, false);
     if !vault_tls_leaf_needs_refresh(&ca_cert, &cert, &key) {
         return Ok(());
     }
@@ -855,7 +806,7 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
     );
     let csr = certs_dir.join(format!("vault.csr.{unique}.tmp"));
     let tmp_cert = certs_dir.join(format!("vault.crt.{unique}.tmp"));
-    let tmp_key = certs_dir.join(format!("vault.key.{unique}.tmp"));
+    let tmp_key = crate::ca_key_store::staging_path(&key, &unique);
     let vault_san = "subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1";
     if debug {
         eprintln!(
@@ -865,7 +816,11 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
     }
 
     let req_status = Command::new("openssl")
-        .args(["req", "-newkey", "rsa:2048", "-nodes", "-keyout"])
+        .args(["req", "-newkey", "rsa:2048"])
+        // 1898-hyhf: `-nodes` only onto the tmpfs store; elsewhere encrypted.
+        .args(crate::ca_key_store::key_out_args())
+        .envs(crate::ca_key_store::pass_env())
+        .arg("-keyout")
         .arg(&tmp_key)
         .arg("-out")
         .arg(&csr)
@@ -891,6 +846,8 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         .arg(&ca_cert)
         .arg("-CAkey")
         .arg(&ca_key)
+        .args(crate::ca_key_store::key_in_args())
+        .envs(crate::ca_key_store::pass_env())
         .args([
             "-CAcreateserial",
             "-days",
@@ -924,7 +881,8 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         fs::set_permissions(&tmp_key, fs::Permissions::from_mode(0o600))
             .map_err(|e| format!("set Vault TLS key permissions: {e}"))?;
     }
-    fs::rename(&tmp_key, &key).map_err(|e| format!("publish Vault TLS key: {e}"))?;
+    crate::ca_key_store::seal(&tmp_key, &key, &[], false)
+        .map_err(|e| format!("publish Vault TLS key: {e}"))?;
     fs::rename(&tmp_cert, &cert).map_err(|e| format!("publish Vault TLS cert: {e}"))?;
     Ok(())
 }
@@ -1006,6 +964,9 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                     rt.block_on(load_policies(&client, debug))?;
                     rt.block_on(provision_approle_roles(&client, debug))?;
                 }
+                // 1922-gate: accepted as running and unsealed; no new READY=1
+                // will come, so the forge's readiness gate is told here.
+                tillandsias_podman::readiness::mark_reused(VAULT_CONTAINER_NAME);
                 return Ok(());
             }
             Err(e) => {
@@ -3140,75 +3101,8 @@ fn vault_data_volume_exists() -> bool {
     vault_store_root().is_ok_and(|root| root.join("vault-data").exists())
 }
 
-/// Persist the in-VM credential fallback files.
-///
-/// Inside the VM there is no OS keychain, so these files are the only durable
-/// record that `operator init` completed and the host-visible handover was
-/// produced. Each value is written only when present: a caller that has the
-/// token but not the share writes only the token, which keeps a genuine
-/// partial init detectable (694-mhz8).
-///
-/// Best-effort by design — a failure here must not abort a successful init;
-/// the worst case is the pre-694 behavior.
-/// 701-se6x criterion 2. Both writes used to be `let _ = fs::write(...)`.
-///
-/// That is a credential-destroying silence, not a cosmetic one. The share file
-/// is the ONLY evidence inside the guest that `operator init` ever completed —
-/// `has_shamir_share_in_keyring` consults an OS keychain the guest does not
-/// have, then this file — and its answer is what the partial-init WIPE turns
-/// on. So a single failed 30-byte write (ENOSPC, a non-writable cache dir, a
-/// write lost to an unclean VM stop) leaves the predicate false with a healthy
-/// Vault on disk, and the next launch wipes it, taking the stored GitHub token
-/// with it. That is exactly the 694-mhz8 failure, re-armed by an error nobody
-/// looked at. 694 removed the PERMANENT failure; it did not make the remaining
-/// single point of evidence robust or loud.
-///
-/// Returns Err naming every artifact that failed, so callers can surface it.
-/// BOTH writes are always ATTEMPTED — a token failure must never skip the
-/// share, because the share is the half that arms the wipe.
-fn write_vm_credential_fallbacks(
-    cache_dir: &std::path::Path,
-    token: Option<&str>,
-    share_b64: Option<&str>,
-) -> std::io::Result<()> {
-    let mut failures: Vec<String> = Vec::new();
-
-    if let Some(token) = token
-        && let Err(e) = fs::write(cache_dir.join("fallback_vault-root-token-v1"), token)
-    {
-        failures.push(format!("fallback_vault-root-token-v1: {e}"));
-    }
-
-    // Deliberately NOT an early return above: see the doc comment.
-    if let Some(share_b64) = share_b64
-        && let Err(e) = fs::write(
-            cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")),
-            share_b64,
-        )
-    {
-        failures.push(format!("fallback_{VAULT_SHAMIR_SHARE_V1}: {e}"));
-    }
-
-    if failures.is_empty() {
-        return Ok(());
-    }
-    Err(std::io::Error::other(failures.join("; ")))
-}
-
-/// The one place that turns a failed fallback write into something a human or a
-/// log scraper can act on. Kept as a helper so the two call sites cannot drift
-/// into reporting it differently — which is how the original asymmetry between
-/// them arose in the first place (694-mhz8 fixed one site, 701-se6x the other).
-#[cfg(feature = "vault")]
-fn report_fallback_write_failure(context: &str, detail: &str) {
-    eprintln!("[tillandsias-vault] CREDENTIAL FALLBACK WRITE FAILED ({context}): {detail}");
-    eprintln!(
-        "[tillandsias-vault]   the Shamir share may not be on disk. \
-         has_shamir_share_in_keyring() will then read false, and the NEXT launch \
-         can classify this initialized Vault as a crashed partial init and WIPE it \
-         (694-mhz8 / 701-se6x). Free space / fix permissions on the cache dir before relaunching."
-    );
-}
+// 1909-aryk: the in-VM credential files and their writer are gone. A guest
+// holds the share and root token in memory only, as the host delivered them.
 
 // 1658-6ca6: `has_shamir_share_in_keyring()` (keychain, then fallback file) was
 // the partial-init guard's only predicate. It is replaced by share_check_now(),
@@ -3238,7 +3132,7 @@ pub fn probe_keyring_share() -> KeyringShare {
     use base64::Engine;
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let answer = match Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) {
+        let answer = match keyring_entry(VAULT_SHAMIR_SHARE_V1) {
             Err(_) => KeyringShare::Unreachable,
             Ok(entry) => match entry.get_password() {
                 Ok(encoded) => {
@@ -3324,25 +3218,6 @@ pub fn reset_vault_disposition(keyring: KeyringShare) -> ResetVaultDisposition {
         KeyringShare::Unreachable => ResetVaultDisposition::UnverifiedKeep,
         KeyringShare::Absent => ResetVaultDisposition::AbsentReinitAtInit,
     }
-}
-
-/// The FALLBACK half of has_shamir_share_in_keyring: the whole predicate inside
-/// a guest, which has no keychain. Split out (1200-ih38 review) so a test can
-/// assert it hermetically: on a host whose own keyring holds a share, the full
-/// predicate is already true and a test through it proves nothing.
-#[cfg(feature = "vault")]
-fn fallback_share_counts(cache_dir: &Path) -> bool {
-    use base64::Engine;
-    fs::read_to_string(cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1)))
-        .map(|encoded| {
-            let encoded = encoded.trim();
-            !encoded.is_empty()
-                && base64::engine::general_purpose::STANDARD
-                    .decode(encoded)
-                    .map(|v| v.len() == 32)
-                    .unwrap_or(false)
-        })
-        .unwrap_or(false)
 }
 
 /// UNREACHABLE BY CONSTRUCTION — and this comment is the point (701-iu9b).
@@ -3797,9 +3672,7 @@ pub fn clear_host_vault_credentials(debug: bool) -> (Vec<String>, Vec<String>) {
         // stringifies the error, and keyring::Error::NoEntry displays as "No
         // matching entry found in secure storage", which a text match missed.
         let res = with_keyring_timeout(move || {
-            classify_keyring_delete(
-                Entry::new(KEYCHAIN_SERVICE, &a).and_then(|e| e.delete_credential()),
-            )
+            classify_keyring_delete(keyring_entry(&a).and_then(|e| e.delete_credential()))
         });
         match res {
             Ok(true) => cleared.push(format!("keychain:{attr}")),
@@ -3889,6 +3762,23 @@ pub fn clear_vault_store_and_fallbacks() -> (Vec<String>, Vec<String>) {
     (cleared, failed)
 }
 
+/// The ONE place a keyring entry is made (1118-fqfk). Under `cargo test` the
+/// process uses the keyring crate's in-memory mock, so no test can read,
+/// write or delete the operator's real credential store: a first run of slice
+/// 2b sealed a test CA into the real keyring through a production path. The
+/// source scan `no_keyring_entry_is_made_outside_keyring_entry` keeps every
+/// other call site out.
+fn keyring_entry(user: &str) -> keyring::Result<Entry> {
+    #[cfg(test)]
+    {
+        static MOCK: std::sync::Once = std::sync::Once::new();
+        MOCK.call_once(|| {
+            keyring::set_default_credential_builder(keyring::mock::default_credential_builder())
+        });
+    }
+    Entry::new(KEYCHAIN_SERVICE, user)
+}
+
 /// A missing entry is CLEARED, not failed — the post-condition is absence, and
 /// an already-absent item satisfies it. `Ok(true)` = deleted, `Ok(false)` =
 /// already absent; any other error is a real failure and passes through.
@@ -3947,7 +3837,6 @@ enum KeySource {
 #[cfg_attr(not(feature = "vault"), allow(dead_code))]
 fn unseal_key_source(
     keyring: KeyringAnswer,
-    fallback_file: Option<String>,
     vault_data_initialized: bool,
 ) -> Result<KeySource, String> {
     use base64::Engine;
@@ -3960,9 +3849,6 @@ fn unseal_key_source(
     if let KeyringAnswer::Share(encoded) = &keyring
         && let Some(key) = decode(encoded)
     {
-        return Ok(KeySource::Share(key));
-    }
-    if let Some(key) = fallback_file.as_deref().and_then(decode) {
         return Ok(KeySource::Share(key));
     }
     match keyring {
@@ -4014,26 +3900,10 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
             key.copy_from_slice(&key_vec);
             return Ok(key);
         }
-        // Host didn't deliver a Shamir share. Try the local fallback file before
-        // deriving the dummy key — the fallback was written during the initial
-        // vault-init run and lets the headless self-recover when the Windows tray
-        // hasn't received the GetVaultHandover handover yet.
-        let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
-            .unwrap_or_default();
-        if fallback_file.is_file()
-            && let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
-            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
-            && key_vec.len() == 32
-        {
-            if debug {
-                eprintln!("[tillandsias-vault] recovered Shamir share from VM fallback file");
-            }
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&key_vec);
-            return Ok(key);
-        }
-        // No fallback share found — derive a first-boot dummy key. The vault
-        // container will generate the real share during init.
+        // The host delivered no share (1909-aryk: no file is consulted) —
+        // derive a first-boot dummy key. On an empty store the vault container
+        // generates the real share during init; on an initialized store the
+        // partial-init guard has already wiped it, which forces the re-login.
         if debug {
             eprintln!(
                 "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
@@ -4048,7 +3918,7 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     }
 
     // 1. Try to get the Shamir share from the keychain
-    let entry = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+    let entry = keyring_entry(VAULT_SHAMIR_SHARE_V1)
         .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
 
     let keyring = match with_keyring_timeout(move || match entry.get_password() {
@@ -4060,23 +3930,15 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
         Ok(None) => KeyringAnswer::NoEntry,
         Err(e) => {
             if debug {
-                eprintln!(
-                    "[tillandsias-vault] keyring Shamir share get failed/timed out ({e}); checking file fallback"
-                );
+                eprintln!("[tillandsias-vault] keyring Shamir share get failed/timed out ({e})");
             }
             KeyringAnswer::Unreachable(e)
         }
     };
-    let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
-        .filter(|f| f.is_file())
-        .and_then(|f| fs::read_to_string(f).ok());
-
-    if let KeySource::Share(key) =
-        unseal_key_source(keyring, fallback_file, vault_data_initialized())?
-    {
+    if let KeySource::Share(key) = unseal_key_source(keyring, vault_data_initialized())? {
         if debug {
             eprintln!(
-                "[tillandsias-vault] recovered Shamir unseal share from host keychain or fallback (v1, base64)"
+                "[tillandsias-vault] recovered Shamir unseal share from host keychain (v1, base64)"
             );
         }
         return Ok(key);
@@ -4109,7 +3971,7 @@ fn ensure_unseal_key(_debug: bool) -> Result<[u8; 32], String> {
 #[cfg(feature = "vault")]
 fn sanitize_keychain(debug: bool) {
     // Delete the legacy unseal key v1 (which held the derived HKDF key rather than the Shamir share)
-    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, "vault-unseal-v1") {
+    if let Ok(entry) = keyring_entry("vault-unseal-v1") {
         let delete_res = with_keyring_timeout(move || entry.delete_credential());
         match delete_res {
             Err(e) => {
@@ -4165,7 +4027,7 @@ fn unseal_key_file_path() -> PathBuf {
 /// True when `path` is on tmpfs. Off Linux nothing can be asked, so the
 /// caller's runtime dir is trusted.
 #[cfg(unix)]
-fn path_is_tmpfs(path: &std::path::Path) -> bool {
+pub(crate) fn path_is_tmpfs(path: &std::path::Path) -> bool {
     #[cfg(target_os = "linux")]
     {
         use std::os::unix::ffi::OsStrExt;
@@ -4246,6 +4108,18 @@ fn scrub_unseal_key_file() {
         let _ = fs::write(&path, vec![0u8; len]);
         let _ = fs::remove_file(&path);
     }
+}
+
+/// `$XDG_RUNTIME_DIR/tillandsias`: the per-session tmpfs root that holds the
+/// unseal key, the runtime secrets and (slice 2b) the CA key bytes. Unused
+/// under test, where the CA key store stays off its real home.
+#[cfg_attr(any(test, not(unix)), allow(dead_code))]
+pub(crate) fn runtime_dir_tillandsias() -> PathBuf {
+    unseal_key_file_path()
+        .parent()
+        .and_then(|d| d.parent())
+        .expect("the runtime dir has a tillandsias directory")
+        .to_path_buf()
 }
 
 /// 1118-fqfk slice 2a: where per-container credentials live for a container's
@@ -4370,8 +4244,8 @@ fn legacy_secret_names(listing: &str) -> Vec<String> {
 
 /// 1118-fqfk: remove the plaintext credentials earlier releases left at rest
 /// on a host: the file-driver podman secret, and the cache dir's fallback and
-/// anchor files. Contents are never read. A guest keeps its fallbacks until
-/// its own slice moves them.
+/// anchor files. Contents are never read. 1909-aryk: a guest's go too, from
+/// the store root and the cache dir alike.
 #[cfg(feature = "vault")]
 fn remove_legacy_plaintext_credentials(debug: bool) {
     // 1118-fqfk 2a: no tillandsias credential is a podman secret any more, so
@@ -4395,25 +4269,11 @@ fn remove_legacy_plaintext_credentials(debug: bool) {
             }
         }
     }
-    if is_running_in_vm() {
-        return;
-    }
-    for dir in credential_read_dirs() {
-        for name in CREDENTIAL_FALLBACKS {
-            let path = dir.join(name);
-            if path.is_file() {
-                let len = fs::metadata(&path).map(|m| m.len() as usize).unwrap_or(0);
-                let _ = fs::write(&path, vec![0u8; len]);
-                if fs::remove_file(&path).is_ok() {
-                    eprintln!(
-                        "[tillandsias-vault] removed plaintext credential file {} (1118-fqfk)",
-                        path.display()
-                    );
-                } else if debug {
-                    eprintln!("[tillandsias-vault] could not remove {}", path.display());
-                }
-            }
-        }
+    for path in purge_credential_fallbacks() {
+        eprintln!(
+            "[tillandsias-vault] removed plaintext credential file {} (1118-fqfk, 1909-aryk)",
+            path.display()
+        );
     }
 }
 
@@ -4469,8 +4329,9 @@ pub(crate) fn create_file_runtime_secret(
     path: &std::path::Path,
     debug: bool,
 ) -> Result<(), String> {
-    let mut contents =
-        fs::read(path).map_err(|e| format!("read secret source {}: {e}", path.display()))?;
+    // 1898-hyhf: a key resting encrypted is decrypted in memory only.
+    let mut contents = crate::ca_key_store::read_key(path)
+        .map_err(|e| format!("read secret source {}: {e}", path.display()))?;
     if debug {
         eprintln!(
             "[tillandsias-vault] writing runtime secret {name} from {}",
@@ -4709,34 +4570,43 @@ pub(crate) const SHARE_WAIT_DEADLINE: Duration = Duration::from_secs(90);
 const SHARE_WAIT_POLL: Duration = Duration::from_millis(500);
 
 /// Every source the partial-init guard consults, and what each said.
+///
+/// 1909-aryk: there is no file source any more. A guest's only source is the
+/// host's delivery, held in memory, so "not delivered yet" is its own state:
+/// `delivered: None`. A locked host keyring sends nothing (the tray's read
+/// fails and the delivery is not sent), so it stays `None` and can never read
+/// as a delivery without a share.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ShareCheck {
     pub keychain: bool,
-    pub fallbacks: Vec<(PathBuf, bool)>,
-    pub delivered: bool,
+    /// `None`: no delivery has arrived. `Some(ok)`: the host delivered, and
+    /// `ok` says whether that delivery carried a well-formed share.
+    pub delivered: Option<bool>,
+    /// True inside a guest VM, where only the host's delivery can settle the
+    /// question and an undelivered state must never become a wipe.
+    pub in_vm: bool,
 }
 
 impl ShareCheck {
     fn found(&self) -> bool {
-        self.keychain || self.delivered || self.fallbacks.iter().any(|(_, ok)| *ok)
+        self.keychain || self.delivered == Some(true)
+    }
+
+    /// A guest without a delivery does not know yet, however long it waits:
+    /// the host may be asleep, or its keyring locked (1909-aryk).
+    fn must_wait_for_host(&self) -> bool {
+        self.in_vm && self.delivered.is_none()
     }
 
     /// One clause per source, so a wipe explains which places were empty.
     fn describe(&self) -> String {
         let yn = |b: bool| if b { "present" } else { "absent" };
-        let mut parts = vec![format!("keychain: {}", yn(self.keychain))];
-        for (p, ok) in &self.fallbacks {
-            parts.push(format!("fallback {}: {}", p.display(), yn(*ok)));
-        }
-        parts.push(format!(
-            "host delivery: {}",
-            if self.delivered {
-                "received"
-            } else {
-                "none received"
-            }
-        ));
-        parts.join("; ")
+        let delivery = match self.delivered {
+            None => "none received",
+            Some(true) => "received with a share",
+            Some(false) => "received without a share",
+        };
+        format!("keychain: {}; host delivery: {delivery}", yn(self.keychain))
     }
 }
 
@@ -4748,6 +4618,9 @@ pub(crate) enum PartialInitVerdict {
     Keep(ShareCheck),
     /// No source produced a share before the deadline: the store is unopenable.
     Wipe { last: ShareCheck, waited: Duration },
+    /// 1909-aryk. A guest whose host has not delivered yet: keep the store and
+    /// do not start Vault; the delivery starts it.
+    WaitForHost(ShareCheck),
 }
 
 /// 1658-6ca6. The partial-init decision, with the clock, the sleep and the
@@ -4775,6 +4648,9 @@ pub(crate) fn decide_partial_init(
         }
         let waited = now().saturating_duration_since(start);
         if waited >= deadline {
+            if c.must_wait_for_host() {
+                return PartialInitVerdict::WaitForHost(c);
+            }
             return PartialInitVerdict::Wipe { last: c, waited };
         }
         if !announced {
@@ -4785,9 +4661,8 @@ pub(crate) fn decide_partial_init(
     }
 }
 
-/// The real sources: the OS keychain, every fallback path headless reads
-/// (store root, then cache dir), and the share the host delivered into memory
-/// over the control wire, which the pre-1658 guard never consulted.
+/// The real sources: the OS keychain and the share the host delivered into
+/// memory over the control wire. No file is consulted (1909-aryk).
 fn share_check_now() -> ShareCheck {
     use base64::Engine;
     let valid = |encoded: &str| {
@@ -4798,29 +4673,19 @@ fn share_check_now() -> ShareCheck {
                 .map(|v| v.len() == 32)
                 .unwrap_or(false)
     };
-    let keychain = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+    let keychain = keyring_entry(VAULT_SHAMIR_SHARE_V1)
         .ok()
         .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok())
         .is_some_and(|s| valid(&s));
-    let fallbacks = credential_read_dirs()
-        .into_iter()
-        .map(|d| {
-            let ok = fallback_share_counts(&d);
-            (d.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")), ok)
-        })
-        .collect();
-    let delivered = IN_VM_CREDENTIALS
-        .get()
-        .and_then(|cell| {
-            cell.lock()
-                .ok()
-                .and_then(|g| g.as_ref()?.unseal_share_b64.clone())
-        })
-        .is_some_and(|s| valid(&s));
+    let delivered = IN_VM_CREDENTIALS.get().and_then(|cell| {
+        let guard = cell.lock().ok()?;
+        let creds = guard.as_ref()?;
+        Some(creds.unseal_share_b64.as_deref().is_some_and(valid))
+    });
     ShareCheck {
         keychain,
-        fallbacks,
         delivered,
+        in_vm: is_running_in_vm(),
     }
 }
 
@@ -4850,9 +4715,23 @@ fn chrono_like_utc_now() -> String {
 fn partial_init_wipe_line(vault_dir: &std::path::Path) -> String {
     format!(
         "[tillandsias-vault] WIPING {}: the unseal share {VAULT_SHAMIR_SHARE_V1} is in neither \
-         the keyring nor its fallback file, so this store cannot be opened; every credential \
+         the keyring nor the host's delivery, so this store cannot be opened; every credential \
          stored in it is lost and Vault will be initialised afresh",
         vault_dir.display()
+    )
+}
+
+/// 1909-aryk. The error a guest's Vault start returns while it waits for the
+/// host's delivery. Not a failure of the store: nothing was wiped.
+pub(crate) const WAITING_FOR_HOST: &str = "waiting for the host to unlock the vault";
+
+/// The one status line a waiting guest prints: what it waits for, that the
+/// store is kept, and the usual cause, so a wait is never a silent hang.
+fn wait_for_host_line(last: &ShareCheck) -> String {
+    format!(
+        "[tillandsias-vault] {WAITING_FOR_HOST}: the store is kept and Vault starts when the \
+         host delivers its unseal share (if the host keyring is locked, unlock it) — {}",
+        last.describe()
     )
 }
 
@@ -4898,6 +4777,12 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
             )
         },
     );
+    // 1909-aryk: a guest with no delivery keeps its store and does not start
+    // Vault; the host's delivery starts it. Said once, never a silent hang.
+    if let PartialInitVerdict::WaitForHost(last) = &verdict {
+        eprintln!("{}", wait_for_host_line(last));
+        return Err(WAITING_FOR_HOST.to_string());
+    }
     let is_partial_init = matches!(verdict, PartialInitVerdict::Wipe { .. });
     if is_partial_init {
         let vault_dir = vault_store_root()
@@ -5057,15 +4942,31 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     if let Some(publish) = host_publish_arg {
         run_args.extend(["-p".into(), publish]);
     }
+    // 1922-rann: vault announces readiness (READY=1 once unsealed). Bound
+    // before the run so a fast READY is queued, not lost.
+    run_args.push(tillandsias_podman::readiness::SDNOTIFY_FLAG.into());
+    #[cfg(unix)]
+    let ready = tillandsias_podman::readiness::bind_for_launch(VAULT_CONTAINER_NAME, &run_args);
     run_args.push(image_tag.to_string());
-    let status = podman_cmd_sync()
-        .args(&run_args)
+    let mut cmd = podman_cmd_sync();
+    cmd.args(&run_args);
+    #[cfg(unix)]
+    if let Some(l) = &ready {
+        for (k, v) in l.podman_env() {
+            cmd.env(k, v);
+        }
+    }
+    let status = cmd
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
         .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("spawn podman run: {e}"))?;
     if !status.success() {
         return Err(format!("podman run vault failed: {}", status));
+    }
+    #[cfg(unix)]
+    if let Some(l) = ready {
+        tillandsias_podman::readiness::announce_launch(l, VAULT_CONTAINER_NAME);
     }
     Ok(())
 }
@@ -5329,39 +5230,35 @@ fn read_handover_file(name: &str) -> Option<String> {
     if value.is_empty() { None } else { Some(value) }
 }
 
+/// Read a host keychain entry on its own thread, bounded like every keyring
+/// call. `Ok(None)` is an answered "no entry"; `Err` is a keyring that could
+/// not be asked (locked, absent, timed out).
+#[cfg(feature = "vault")]
+#[cfg_attr(any(test, not(unix)), allow(dead_code))]
+pub(crate) fn keyring_get_blocking(user: &str) -> Result<Option<String>, String> {
+    let entry = keyring_entry(user).map_err(|e| format!("keyring entry {user}: {e}"))?;
+    with_keyring_timeout(move || match entry.get_password() {
+        Ok(value) => Ok(Some(value)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(e),
+    })
+}
+
 /// Write (or overwrite) a host keychain entry, isolating the (potentially
 /// blocking, runtime-using) secret-service call on its own thread.
 #[cfg(feature = "vault")]
-fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
-    let entry =
-        Entry::new(KEYCHAIN_SERVICE, user).map_err(|e| format!("keyring entry {user}: {e}"))?;
+pub(crate) fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
+    let entry = keyring_entry(user).map_err(|e| format!("keyring entry {user}: {e}"))?;
     let value = value.to_string();
     let value_clone = value.clone();
     match with_keyring_timeout(move || entry.set_password(&value_clone)) {
         Ok(()) => Ok(()),
-        Err(e) if !is_running_in_vm() => Err(format!(
+        Err(e) => Err(format!(
             "refused:keyring-unavailable:{user}: the OS keyring did not take {user} ({e}), \
-             and it is not written anywhere else (1118-fqfk)\n  \
+             and it is not written anywhere else (1118-fqfk, 1909-aryk)\n  \
              why: a credential outside the encrypted keyring would be plaintext on disk\n  \
              remedy: unlock the OS keyring (the login keyring), then relaunch tillandsias"
         )),
-        Err(e) => {
-            eprintln!(
-                "[tillandsias-vault] note: OS keyring unavailable for {user} ({e}); \
-                 using fallback file (expected in VM guest and headless environments)"
-            );
-            let cache_dir =
-                credential_write_dir().map_err(|err| format!("credential dir: {err}"))?;
-            let fallback_file = cache_dir.join(format!("fallback_{}", user));
-            fs::write(&fallback_file, &value)
-                .map_err(|err| format!("write fallback file: {err}"))?;
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = fs::set_permissions(&fallback_file, fs::Permissions::from_mode(0o600));
-            }
-            Ok(())
-        }
     }
 }
 
@@ -5461,10 +5358,10 @@ fn push_share_candidate(
 
 /// Ordered, validated, deduplicated Shamir-share candidates for the
 /// generate-root self-heal: the guest's OWN podman secret first, then
-/// host-delivered credentials, host keychain, and the guest-local fallback
-/// file. The sources can legitimately disagree after a storage re-init — e.g.
-/// the host keychain pinned to a previous vault-data epoch while the guest
-/// fallback file tracks the current one (the 2026-07-28 Windows login wedge) —
+/// host-delivered credentials, then the host keychain (1909-aryk: no file).
+/// The sources can legitimately disagree after a storage re-init — e.g.
+/// the host keychain pinned to a previous vault-data epoch while the guest's
+/// own secret tracks the current one (the 2026-07-28 Windows login wedge) —
 /// so the heal must be able to fall through to the next source when
 /// generate-root rejects one.
 ///
@@ -5497,14 +5394,12 @@ fn assemble_share_candidates(
     guest_podman_secret: Option<String>,
     host_delivered: Option<String>,
     host_keychain: Option<String>,
-    fallback_file: Option<String>,
 ) -> Vec<(&'static str, String)> {
     let mut candidates: Vec<(&'static str, String)> = Vec::new();
     for (label, value) in [
         ("guest podman secret", guest_podman_secret),
         ("host-delivered credentials", host_delivered),
         ("host keychain", host_keychain),
-        ("fallback file", fallback_file),
     ] {
         if let Some(v) = value {
             push_share_candidate(&mut candidates, label, v.trim().to_string());
@@ -5535,19 +5430,11 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
         None
     };
 
-    let host_keychain = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+    let host_keychain = keyring_entry(VAULT_SHAMIR_SHARE_V1)
         .ok()
         .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok());
 
-    let fallback_file = read_credential_fallback(&format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
-        .and_then(|p| fs::read_to_string(p).ok());
-
-    assemble_share_candidates(
-        guest_podman_secret,
-        host_delivered,
-        host_keychain,
-        fallback_file,
-    )
+    assemble_share_candidates(guest_podman_secret, host_delivered, host_keychain)
 }
 
 /// Persist a freshly minted (healed) root token to the same stores the
@@ -5555,6 +5442,8 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
 /// sees the healed value.
 #[cfg(feature = "vault")]
 fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Result<(), String> {
+    // Order 1919-keyc: the memoized token is the stale one being replaced.
+    root_token_memo_clear();
     if is_running_in_vm() {
         let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
         if let Ok(mut guard) = cell.lock() {
@@ -5579,27 +5468,12 @@ fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Resul
                 });
             }
         }
-        let cache_dir = credential_write_dir().map_err(|err| format!("credential dir: {err}"))?;
-        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
-        fs::write(&fallback_file, token).map_err(|err| format!("write fallback file: {err}"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&fallback_file, fs::Permissions::from_mode(0o600));
-        }
-        // Persist the winning share alongside the token so the next boot's
-        // partial-init check and self-heal read the storage-matching share
-        // even if it originally came from a host-delivered source.
-        let share_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
-        fs::write(&share_file, share_b64)
-            .map_err(|err| format!("write share fallback file: {err}"))?;
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&share_file, fs::Permissions::from_mode(0o600));
-        }
+        // 1909-aryk: memory only; the host collects it with GetVaultHandover
+        // and keeps it in its own secure storage.
         if debug {
-            eprintln!("[tillandsias-vault] heal: persisted fresh root token to VM stores");
+            eprintln!(
+                "[tillandsias-vault] heal: fresh root token held in memory for the host's handover"
+            );
         }
         return Ok(());
     }
@@ -5626,12 +5500,14 @@ fn heal_stale_root_token(
     base_url: &str,
     debug: bool,
 ) -> Result<String, String> {
+    // Order 1919-keyc: the vault rejected the token; never serve it again.
+    root_token_memo_clear();
     let candidates = shamir_share_candidates();
     if candidates.is_empty() {
         return Err(
             "OPERATOR ACTION REQUIRED: vault rejects the cached root token and no valid \
              Shamir share is available to self-heal (no valid 32-byte base64 Shamir share in \
-             the guest podman secret, VM credentials, host keychain, or fallback file). Vault \
+             the guest podman secret, VM credentials, or host keychain). Vault \
              storage was left untouched — it may hold real secrets. Recover the share, or \
              perform an attended storage-preserving re-init. Do NOT wipe the vault-data volume."
                 .to_string(),
@@ -5643,7 +5519,7 @@ fn heal_stale_root_token(
     );
     let anon = vault_client(base_url, "", debug)?;
     // The share sources can disagree after a storage re-init (stale host
-    // keychain vs current guest fallback file); try each candidate until
+    // keychain vs the guest's current secret); try each candidate until
     // one authenticates generate-root against the current storage epoch.
     let mut rejections: Vec<String> = Vec::new();
     for (source, share_b64) in &candidates {
@@ -5792,6 +5668,48 @@ fn validated_root_token(
 /// unseal the NEW volume ("cipher: message authentication failed", HTTP 400) —
 /// an unrecoverable brick. Capturing handover-first makes a fresh init always
 /// re-pair the keychain with the live volume.
+/// Order 1919-keyc: the root token read from the host keychain, kept for the
+/// life of this process so the up-to-18 Vault operations of one launch do not
+/// each spawn a keychain read (50 ms to several seconds each). Memory only:
+/// `Zeroizing` wipes the buffer when it is replaced or cleared, and nothing
+/// here writes it anywhere. Cleared whenever a heal mints a new token.
+#[cfg(feature = "vault")]
+static ROOT_TOKEN_MEMO: OnceLock<Mutex<Option<zeroize::Zeroizing<String>>>> = OnceLock::new();
+
+/// One "recovered root token" line per process, not one per Vault operation.
+#[cfg(feature = "vault")]
+static ROOT_TOKEN_RECOVERY_LOGGED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(feature = "vault")]
+fn root_token_memo_get() -> Option<String> {
+    let guard = ROOT_TOKEN_MEMO.get()?.lock().ok()?;
+    guard.as_ref().map(|t| t.as_str().to_string())
+}
+
+#[cfg(feature = "vault")]
+fn root_token_memo_set(token: &str) {
+    if let Ok(mut guard) = ROOT_TOKEN_MEMO.get_or_init(|| Mutex::new(None)).lock() {
+        *guard = Some(zeroize::Zeroizing::new(token.to_string()));
+    }
+}
+
+#[cfg(feature = "vault")]
+fn root_token_memo_clear() {
+    if let Some(cell) = ROOT_TOKEN_MEMO.get()
+        && let Ok(mut guard) = cell.lock()
+    {
+        *guard = None;
+    }
+}
+
+#[cfg(feature = "vault")]
+fn log_root_token_recovery(debug: bool, source: &str) {
+    if debug && !ROOT_TOKEN_RECOVERY_LOGGED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+        eprintln!("[tillandsias-vault] recovered root token from {source}");
+    }
+}
+
 #[cfg(feature = "vault")]
 fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     // 1. Fresh-init handover takes precedence over any stale keychain state.
@@ -5833,45 +5751,9 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 });
             }
 
-            // Also proactively update the fallback files so child processes (like
-            // GithubLogin) running right after init can use the fresh credentials
-            // before the host re-delivers them.
-            //
-            // 694-mhz8: the SHARE write is not a convenience — it is what keeps the
-            // next bootstrap from destroying this Vault. `has_shamir_share_in_keyring`
-            // decides `is_partial_init` (see the wipe branch below) by looking for an
-            // OS keychain entry and then this file. Inside the VM there is no OS
-            // keychain, so this file is the ONLY evidence that the share was ever
-            // captured. Writing only the token — as this block did until now — left
-            // the predicate permanently false, so every subsequent bootstrap
-            // classified a healthy initialized Vault as a crashed partial init and
-            // wiped it, taking the stored GitHub token with it. Observed live on
-            // macOS 2026-08-11: `--github-login` succeeded and verified its own
-            // Vault write, and the secret was 404 on the next boot.
-            //
-            // Writing it here (rather than relaxing the predicate) preserves the
-            // genuine partial-init case: if init crashes before reaching this line,
-            // the file is absent, the predicate is false, and the wipe still fires —
-            // which is exactly what it is for.
-            // 701-se6x criterion 2: this site had the same discarded error. It
-            // is the MORE dangerous of the two, because it runs immediately
-            // after `operator init` — the moment the share exists and nothing
-            // else on the host has a copy.
-            match credential_write_dir() {
-                Ok(cache_dir) => {
-                    if let Err(e) =
-                        write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64))
-                    {
-                        report_fallback_write_failure("in-VM fresh init", &e.to_string());
-                    }
-                }
-                Err(e) => {
-                    report_fallback_write_failure(
-                        "in-VM fresh init",
-                        &format!("cache dir unavailable: {e}"),
-                    );
-                }
-            }
+            // 1909-aryk: nothing is written to disk. The host collects the
+            // token and share with GetVaultHandover into its secure storage,
+            // and the partial-init guard asks the host's delivery, not a file.
 
             // Update in-memory credentials so the current process has the new token.
             let creds_cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
@@ -5890,6 +5772,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         } else {
             keychain_set_blocking("vault-root-token-v1", &token)?;
             keychain_set_blocking(VAULT_SHAMIR_SHARE_V1, &share_b64)?;
+            root_token_memo_set(&token);
         }
 
         // @trace spec:tillandsias-vault — Secure Artifact Cleanup
@@ -5924,70 +5807,46 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     }
 
     // 2. Subsequent boot (no fresh handover): use the keychain root token.
+    // Order 1919-keyc: once per process on the keychain path; the in-VM path
+    // below already reads memory, and a host re-delivery must win there.
+    if !is_running_in_vm()
+        && let Some(token) = root_token_memo_get()
+    {
+        return Ok(token);
+    }
     if is_running_in_vm() {
         if let Some(cell) = IN_VM_CREDENTIALS.get()
             && let Ok(guard) = cell.lock()
             && let Some(creds) = &*guard
             && let Some(token) = &creds.root_token
         {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] recovered root token from host-delivered credentials"
-                );
-            }
+            log_root_token_recovery(debug, "host-delivered credentials");
             return Ok(token.clone());
-        }
-        // Host didn't deliver a root token. Try the local fallback file
-        // (written by the vault-init bootstrap on first run and by any
-        // explicit `--store-vault-root-token` path). This keeps the headless
-        // self-sufficient when the Windows tray's Credential Manager hasn't
-        // received the handover yet (e.g. after a GetVaultHandover failure).
-        let fallback_file =
-            read_credential_fallback("fallback_vault-root-token-v1").unwrap_or_default();
-        if fallback_file.is_file()
-            && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
-            && !t.is_empty()
-        {
-            if debug {
-                eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
-            }
-            return Ok(t);
         }
         return Err("running in VM but no root token delivered from host".to_string());
     }
 
-    let entry_token = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
+    let entry_token = keyring_entry("vault-root-token-v1")
         .map_err(|e| format!("keyring entry for root token: {e}"))?;
     let token_res = with_keyring_timeout(move || entry_token.get_password());
     let token = match token_res {
         Ok(t) => t,
         Err(e) => {
             if debug {
-                eprintln!(
-                    "[tillandsias-vault] keyring root token get failed/timed out ({e}); checking file fallback"
-                );
+                eprintln!("[tillandsias-vault] keyring root token get failed/timed out ({e})");
             }
-            let fallback_file =
-                read_credential_fallback("fallback_vault-root-token-v1").unwrap_or_default();
-            if fallback_file.is_file() {
-                fs::read_to_string(&fallback_file)
-                    .map(|s| s.trim().to_string())
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            }
+            String::new()
         }
     };
     if !token.is_empty() {
-        if debug {
-            eprintln!("[tillandsias-vault] recovered root token from host keychain or fallback");
-        }
+        log_root_token_recovery(debug, "host keychain");
+        root_token_memo_set(&token);
         return Ok(token);
     }
 
     Err(
         "vault is initialized but no first-boot handover is present and the host \
-         keychain has no root token or fallback — the keychain and the data directory are out of \
+         keychain has no root token — the keychain and the data directory are out of \
          sync. Reset by removing the `<cache>/vault-data` directory (this loses every credential) \
          and re-run `tillandsias --init` to re-bootstrap."
             .to_string(),
@@ -6855,6 +6714,96 @@ pub async fn ensure_mirror_identity_provisioned(
 
 #[cfg(test)]
 mod tests {
+
+    /// Order 1919-keyc: the root-token memo lives in memory only, wipes its
+    /// buffer when dropped, and a heal clears it.
+    #[cfg(feature = "vault")]
+    #[test]
+    fn root_token_memo_is_memory_only_and_zeroized_on_drop() {
+        // Compiles only while the memo holds `Zeroizing<String>`, whose Drop
+        // overwrites the buffer: replacing or clearing it wipes the token.
+        fn holds_zeroizing(_: &OnceLock<Mutex<Option<zeroize::Zeroizing<String>>>>) {}
+        holds_zeroizing(&ROOT_TOKEN_MEMO);
+
+        root_token_memo_set("shape-root-token");
+        assert_eq!(root_token_memo_get().as_deref(), Some("shape-root-token"));
+        root_token_memo_clear();
+        assert_eq!(root_token_memo_get(), None, "a heal must clear the memo");
+
+        // Never written to disk: the memo's own functions touch no file API.
+        // source-pin-ok: asserts the absence of persistence in the memo helpers
+        let source = std::fs::read_to_string(
+            std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join("src/vault_bootstrap.rs"),
+        )
+        .unwrap();
+        let start = source.find("fn root_token_memo_get()").unwrap();
+        let end = source[start..].find("fn log_root_token_recovery(").unwrap() + start;
+        let helpers = &source[start..end];
+        for api in [
+            "fs::",
+            "File",
+            "write_vm_credential",
+            "keychain_set",
+            "fallback",
+        ] {
+            assert!(
+                !helpers.contains(api),
+                "the root-token memo must stay in memory; its helpers use {api}"
+            );
+        }
+    }
+
+    /// 1118-fqfk: a test must never reach the operator's real keyring.
+    #[test]
+    fn a_keyring_entry_under_test_is_the_in_memory_mock() {
+        let entry = keyring_entry("test-probe-never-real").expect("mock entry");
+        assert!(
+            entry
+                .get_credential()
+                .downcast_ref::<keyring::mock::MockCredential>()
+                .is_some(),
+            "under cfg(test) keyring_entry must build a mock credential"
+        );
+        entry.set_password("x").expect("the mock takes a write");
+    }
+
+    /// 1118-fqfk: every keyring entry goes through keyring_entry, so the mock
+    /// above covers every read, write and delete. Any other entry constructor
+    /// anywhere in this crate's sources would bypass it.
+    #[test]
+    fn no_keyring_entry_is_made_outside_keyring_entry() {
+        // cargo test runs from the package root; a runtime path, not the
+        // compile-time manifest dir (the shared-target hazard).
+        let src = std::path::PathBuf::from("src");
+        assert!(
+            src.join("vault_bootstrap.rs").is_file(),
+            "run from the package root"
+        );
+        let mut offenders = Vec::new();
+        let mut stack = vec![src];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(&dir).unwrap().flatten() {
+                let path = e.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if path.extension().is_some_and(|x| x == "rs") {
+                    let text = std::fs::read_to_string(&path).unwrap();
+                    let needle = ["Entry", "::new("].concat();
+                    let n = text.matches(needle.as_str()).count();
+                    let allowed = usize::from(path.ends_with("vault_bootstrap.rs"));
+                    if n > allowed {
+                        offenders.push(format!("{}: {n}", path.display()));
+                    }
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "keyring entries made outside keyring_entry: {offenders:?}"
+        );
+    }
+
     use super::*;
 
     // ---- 1776-v1t4: the Vault image goes through the one seam -----------------
@@ -7027,90 +6976,68 @@ mod tests {
         assert!(err.contains(IDENTITY_DISK_MARKER), "{err}");
     }
 
-    /// The live 2026-10-13 failure: the store survived on the identity disk,
-    /// the share's fallback did not, and the partial-init guard wiped the
-    /// store. Fallbacks are now read from the store root first, then the
-    /// cache dir, so the upgrade state (fallback still on the rootfs) and the
-    /// steady state (fallback beside the store) both find the share.
+    /// 1909-aryk migration arm. An older guest left the token and share in
+    /// plaintext beside the store AND on the rootfs; the purge removes every
+    /// one from both, a directory squatting a name included, and is a no-op
+    /// the second time. Shape-only values: nothing here is a real credential.
     #[test]
-    fn a_fallback_share_is_found_beside_the_store_or_still_on_the_rootfs() {
-        let s = identity_scratch("fallback-read");
-        let (disk, cache) = (s.join("identity"), s.join("cache"));
-        fs::create_dir_all(&disk).unwrap();
-        fs::create_dir_all(&cache).unwrap();
-        let name = format!("fallback_{VAULT_SHAMIR_SHARE_V1}");
-        let dirs = || credential_read_dirs_from(Ok(disk.clone()), Ok(cache.clone()));
-        assert_eq!(
-            dirs(),
-            vec![disk.clone(), cache.clone()],
-            "store root first"
-        );
-        assert_eq!(read_credential_fallback_in(dirs(), &name), None);
-        // Upgrade state: only the rootfs copy exists. It must still count.
-        fs::write(cache.join(&name), b"rootfs-copy").unwrap();
-        assert_eq!(
-            read_credential_fallback_in(dirs(), &name),
-            Some(cache.join(&name))
-        );
-        // Steady state: the copy beside the store wins.
-        fs::write(disk.join(&name), b"disk-copy").unwrap();
-        assert_eq!(
-            read_credential_fallback_in(dirs(), &name),
-            Some(disk.join(&name))
-        );
-    }
-
-    /// The second live failure: a fallback still on the rootfs must be MOVED
-    /// beside the store by the first read, or the next rebuild loses it. A copy
-    /// already beside the store is never overwritten.
-    #[test]
-    fn a_rootfs_fallback_is_settled_beside_the_store_and_never_overwrites_one() {
-        let s = identity_scratch("fallback-settle");
+    fn the_purge_removes_every_plaintext_credential_file_from_both_dirs() {
+        let s = identity_scratch("fallback-purge");
         let (disk, cache) = (s.join("identity"), s.join("cache"));
         fs::create_dir_all(&disk).unwrap();
         fs::create_dir_all(&cache).unwrap();
         fs::write(
-            cache.join("fallback_vault-shamir-share-v1"),
-            b"rootfs-share",
+            disk.join("fallback_vault-root-token-v1"),
+            b"planted-root-token-shape",
         )
         .unwrap();
-        fs::write(cache.join("installation_anchor"), b"rootfs-anchor").unwrap();
-        fs::write(disk.join("installation_anchor"), b"disk-anchor").unwrap();
-        settle_fallbacks_onto_store_root(&disk, &cache);
-        assert_eq!(
-            fs::read(disk.join("fallback_vault-shamir-share-v1")).unwrap(),
-            b"rootfs-share"
-        );
-        assert_eq!(
-            fs::read(disk.join("installation_anchor")).unwrap(),
-            b"disk-anchor"
+        fs::write(
+            disk.join("fallback_vault-shamir-share-v1"),
+            b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        )
+        .unwrap();
+        fs::write(disk.join("installation_anchor"), b"anchor").unwrap();
+        fs::write(
+            cache.join("fallback_vault-shamir-share-v1"),
+            b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        )
+        .unwrap();
+        fs::create_dir_all(cache.join("fallback_vault-root-token-v1")).unwrap();
+        fs::write(disk.join("vault-data-keep"), b"not a credential").unwrap();
+
+        let dirs = credential_purge_dirs_from(Ok(disk.clone()), Ok(cache.clone()));
+        let removed = purge_credential_fallbacks_in(&dirs);
+        assert_eq!(removed.len(), 5, "{removed:?}");
+        for dir in [&disk, &cache] {
+            for name in CREDENTIAL_FALLBACKS {
+                assert!(
+                    !dir.join(name).exists(),
+                    "{} survived",
+                    dir.join(name).display()
+                );
+            }
+        }
+        assert!(
+            disk.join("vault-data-keep").exists(),
+            "only the named files go"
         );
         assert!(
-            !disk.join("fallback_vault-root-token-v1").exists(),
-            "nothing to copy"
+            purge_credential_fallbacks_in(&dirs).is_empty(),
+            "idempotent"
         );
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = fs::metadata(disk.join("fallback_vault-shamir-share-v1"))
-                .unwrap()
-                .permissions()
-                .mode();
-            assert_eq!(mode & 0o777, 0o600);
-        }
     }
 
-    /// Linux, or a guest without an identity disk: one directory, read once.
-    /// An unmounted identity disk (Err) still lets the rootfs copy be read.
+    /// Linux, or a guest without an identity disk: one directory, purged once.
+    /// An unmounted identity disk (Err) still lets the rootfs copy be purged.
     #[test]
-    fn credential_read_dirs_dedupe_and_skip_an_unavailable_root() {
+    fn credential_purge_dirs_dedupe_and_skip_an_unavailable_root() {
         let p = PathBuf::from("/c");
         assert_eq!(
-            credential_read_dirs_from(Ok(p.clone()), Ok(p.clone())),
+            credential_purge_dirs_from(Ok(p.clone()), Ok(p.clone())),
             vec![p.clone()]
         );
         assert_eq!(
-            credential_read_dirs_from(Err("not mounted".into()), Ok(p.clone())),
+            credential_purge_dirs_from(Err("not mounted".into()), Ok(p.clone())),
             vec![p]
         );
     }
@@ -7866,7 +7793,7 @@ mod tests {
         // Drives the REAL assembly function, so the order asserted below is the
         // order production uses. A hand-built list would pin only intent.
         let list =
-            assemble_share_candidates(Some(b64(&live)), Some(b64(&stale)), None, Some(b64(&stale)));
+            assemble_share_candidates(Some(b64(&live)), Some(b64(&stale)), Some(b64(&stale)));
 
         assert_eq!(
             list.first().map(|(label, _)| *label),
@@ -7882,7 +7809,7 @@ mod tests {
         // A podman secret identical to the host copy must not produce two
         // entries — the heal would otherwise burn a generate-root attempt
         // proving the same key twice.
-        let same = assemble_share_candidates(Some(b64(&live)), None, Some(b64(&live)), None);
+        let same = assemble_share_candidates(Some(b64(&live)), None, Some(b64(&live)));
         assert_eq!(same.len(), 1, "one key must yield one candidate: {same:?}");
 
         // A podman that is absent, errors, or short-reads contributes NOTHING
@@ -7892,10 +7819,9 @@ mod tests {
             Some(b64(&[1u8; 16])), // short read: not 32 key bytes
             None,
             Some(b64(&stale)),
-            None,
         );
         assert!(
-            assemble_share_candidates(Some(String::new()), None, None, None).is_empty(),
+            assemble_share_candidates(Some(String::new()), None, None).is_empty(),
             "an empty podman read must contribute no candidate"
         );
         assert_eq!(
@@ -8093,7 +8019,9 @@ mod tests {
     }
 
     /// Runs `set_in_vm_credentials` against a scratch cache with the given own
-    /// secret, and returns (outcome, whether the share file was written).
+    /// secret, and returns (outcome, whether the share is HELD in memory).
+    /// 1909-aryk: it also asserts that the delivery wrote no file at all under
+    /// the scratch cache, so every delivery test is a plaintext-at-rest arm.
     fn deliver_with_own_secret(
         share: &str,
         own: Option<Vec<u8>>,
@@ -8112,56 +8040,52 @@ mod tests {
             "test-installation".to_string(),
             Some("s.token".to_string()),
         );
-        let written = cache_root
-            .join("tillandsias")
-            .join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
-            .is_file();
+        let held = held_share_is(share);
+        let files = files_under(&cache_root);
         TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = None);
         unsafe { std::env::remove_var("XDG_CACHE_HOME") };
         let _ = std::fs::remove_dir_all(&cache_root);
-        (outcome, written)
+        assert!(files.is_empty(), "a delivery wrote files: {files:?}");
+        (outcome, held)
     }
 
-    /// 1200-ih38 REVIEW (data-loss path). A share that differs from the own
-    /// secret must still be STORED: the guest's wipe predicate counts only the
-    /// fallback share file, so refusing to write it made a guest with a missing
-    /// share file WIPE vault-data on its next launch; in the 2026-08-17 shape a
-    /// healthy vault. PRE-FIX RESULT (756e30a90): FAILS: Rejected, not written,
-    /// predicate false.
+    /// Whether the in-memory delivery now holds exactly `share`.
+    fn held_share_is(share: &str) -> bool {
+        IN_VM_CREDENTIALS
+            .get()
+            .and_then(|c| c.lock().ok()?.as_ref()?.unseal_share_b64.clone())
+            .as_deref()
+            == Some(share)
+    }
+
+    /// Every regular file below `root`, recursively (names only, never contents).
+    fn files_under(root: &Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for e in fs::read_dir(&d).into_iter().flatten().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else {
+                    out.push(p);
+                }
+            }
+        }
+        out
+    }
+
+    /// 1200-ih38 REVIEW (data-loss path), restated for 1909-aryk. A share that
+    /// differs from the own secret must still be HELD: the guest's wipe
+    /// predicate counts the delivered share, so refusing it would WIPE
+    /// vault-data on the next launch. Held in memory, and written nowhere.
     #[test]
     fn a_mismatched_share_keeps_the_wipe_predicate_true() {
-        let _serialized = crate::test_support::env_lock();
-        let cache_root = std::env::temp_dir().join(format!(
-            "tillandsias-1200-wipe-{}-{}",
-            std::process::id(),
-            line!()
-        ));
-        let _ = std::fs::remove_dir_all(&cache_root);
-        std::fs::create_dir_all(&cache_root).expect("temp cache root");
-        // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole test.
-        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
-        // The GUEST's predicate is the fallback half alone (no keychain in a
-        // guest); asserting through the full predicate was vacuous on a host
-        // whose own keyring holds a share. PREMISE: no share file yet.
-        let dir = cache_root.join("tillandsias");
-        let before = fallback_share_counts(&dir);
-        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = Some((2..=33).collect()));
-        let outcome = set_in_vm_credentials(
-            Some(VALID_TEST_SHARE_B64.to_string()),
-            "test-installation".to_string(),
-            Some("s.token".to_string()),
-        );
-        let after = fallback_share_counts(&dir);
-        TEST_OWN_UNSEAL_SECRET.with(|s| *s.borrow_mut() = None);
-        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
-        let _ = std::fs::remove_dir_all(&cache_root);
-        assert!(
-            !before,
-            "premise: the wipe predicate was already true; this test proves nothing here"
-        );
+        let (outcome, held) =
+            deliver_with_own_secret(VALID_TEST_SHARE_B64, Some((2..=33).collect()), line!());
         assert_eq!(outcome, DeliverCredentialsOutcome::Accepted);
         assert!(
-            after,
+            held,
             "a mismatched share must not re-arm the vault-data wipe"
         );
     }
@@ -8207,269 +8131,67 @@ mod tests {
         assert!(uw);
     }
 
-    /// `set_in_vm_credentials` is the tray's delivery path into a running guest.
-    /// It wrote `fallback_vault-root-token-v1` and dropped the share — the exact
-    /// asymmetry 694-mhz8 fixed at the fresh-init site, surviving at this one.
-    /// The consequence is not cosmetic: a guest that has lost only its share
-    /// file gets handed a good share by the host, uses it in memory, still fails
-    /// `has_shamir_share_in_keyring`, and has its intact Vault WIPED on the next
-    /// launch. The host held the evidence and the guest discarded it.
-    ///
-    /// Exercised through `set_in_vm_credentials` ITSELF, not through the shared
-    /// writer. An earlier version of this test called the writer directly and
-    /// was VACUOUS: reverting the call site to pass `None` for the share left it
-    /// passing, because it never touched the code being fixed. That is this
-    /// project's named recurring failure — "verified where it was written is not
-    /// verified where it runs" — reproduced in the test for the fix against it.
+    /// 1909-aryk, the order's own fixture. PRE-FIX RESULT (origin/linux-next
+    /// 4855f1afe): FAILS — the delivery wrote `fallback_vault-root-token-v1`
+    /// and `fallback_vault-shamir-share-v1` in plaintext under the store root.
+    /// Now a delivery of a token-shaped and a share-shaped value leaves no file
+    /// at all under the guest's cache and store, and both values are held in
+    /// memory for this process. Shape-only values; nothing real.
     #[test]
-    fn host_delivered_share_is_persisted_not_only_the_token() {
+    fn a_delivery_writes_no_credential_shaped_file_anywhere() {
         let _serialized = crate::test_support::env_lock();
-
         let cache_root = std::env::temp_dir().join(format!(
-            "tillandsias-701-delivered-{}-{}",
+            "tillandsias-1909-delivery-{}-{}",
             std::process::id(),
             line!()
         ));
-        std::fs::create_dir_all(&cache_root).expect("temp cache root");
+        let _ = std::fs::remove_dir_all(&cache_root);
+        std::fs::create_dir_all(cache_root.join("tillandsias")).expect("temp cache root");
         // SAFETY: env mutation is serialized by crate::test_support::env_lock() for the whole test.
         unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
-
-        set_in_vm_credentials(
-            // 1200-ih38: a delivered share must now be a well-formed 32-byte
-            // key, so the placeholder ("delivered", 9 bytes) became one.
+        let token = "planted-root-token-shape";
+        let outcome = set_in_vm_credentials(
             Some(VALID_TEST_SHARE_B64.to_string()),
             "test-installation".to_string(),
-            Some("s.delivered-token".to_string()),
+            Some(token.to_string()),
         );
-
-        let dir = cache_root.join("tillandsias");
-        let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
-        assert!(
-            dir.join("fallback_vault-root-token-v1").is_file(),
-            "the token half must still be delivered (pre-701 behavior preserved)"
-        );
-        assert!(
-            share.is_file(),
-            "the DELIVERED share must be recorded where the wipe predicate reads, or \
-             the next launch destroys an intact Vault the host could have saved. \
-             This assertion must fail if set_in_vm_credentials stops passing the share."
-        );
-        assert_eq!(
-            std::fs::read_to_string(&share)
-                .expect("share readable")
-                .trim(),
-            VALID_TEST_SHARE_B64,
-            "a corrupted share cannot unseal, so it must round-trip verbatim"
-        );
-
+        let files = files_under(&cache_root);
+        let held_token = IN_VM_CREDENTIALS
+            .get()
+            .and_then(|c| c.lock().ok()?.as_ref()?.root_token.clone());
+        let held_share = held_share_is(VALID_TEST_SHARE_B64);
         unsafe { std::env::remove_var("XDG_CACHE_HOME") };
         let _ = std::fs::remove_dir_all(&cache_root);
-    }
-
-    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above, and the reason
-    /// this fix is not "always write a share file". The partial-init wipe must
-    /// still fire when NO share was ever captured — a Vault initialized with an
-    /// unknown key can never unseal, and preserving it strands the guest
-    /// permanently. A delivery carrying only a token must therefore leave the
-    /// share file absent.
-    /// 701-se6x criterion 2. A FAILED share write must be SURFACED, not
-    /// discarded. This is the assertion that makes the difference observable:
-    /// before the fix the helper returned `()`, so there was no value a test
-    /// could look at and no way for a caller to know the wipe had been re-armed.
-    ///
-    /// The failure is induced portably by making the destination an existing
-    /// DIRECTORY — `fs::write` cannot clobber one on any platform — rather than
-    /// by chmod games, which root ignores and which behave differently across
-    /// the fleet's three host kinds.
-    #[test]
-    fn a_failed_share_fallback_write_is_reported_not_discarded() {
-        let dir = std::env::temp_dir().join(format!(
-            "tillandsias-701se6x-loud-{}-{}",
-            std::process::id(),
-            line!()
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        // Occupy the share path with a directory so the write must fail.
-        std::fs::create_dir_all(dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")))
-            .expect("occupy the share path");
-
-        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
-
+        assert_eq!(outcome, DeliverCredentialsOutcome::Accepted);
         assert!(
-            res.is_err(),
-            "a share-fallback write that FAILED must be reported. Discarding it leaves \
-             has_shamir_share_in_keyring() false with a healthy Vault on disk, and the next \
-             launch wipes it (694-mhz8 re-armed)."
-        );
-        let msg = res.unwrap_err().to_string();
-        assert!(
-            msg.contains(VAULT_SHAMIR_SHARE_V1),
-            "the report must NAME the artifact that failed so an operator knows the wipe is \
-             armed; got: {msg}"
-        );
-
-        // The token half must still have been ATTEMPTED and succeeded — a
-        // failure on one artifact must not skip the other.
-        assert!(
-            dir.join("fallback_vault-root-token-v1").is_file(),
-            "the token write must still happen when the share write fails"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// NEGATIVE CONTROL for the test above. Without this, a helper that simply
-    /// returned `Err` unconditionally would satisfy every assertion there while
-    /// making the loud path fire on every healthy boot — an alarm that is always
-    /// on is one nobody reads, and it would push operators to ignore the one
-    /// message that means their Vault is about to be wiped.
-    #[test]
-    fn a_successful_fallback_write_reports_success() {
-        let dir = std::env::temp_dir().join(format!(
-            "tillandsias-701se6x-quiet-{}-{}",
-            std::process::id(),
-            line!()
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-
-        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
-
-        assert!(
-            res.is_ok(),
-            "the healthy path must stay silent — an always-firing alarm trains operators to \
-             ignore the wipe warning; got: {res:?}"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// 701-se6x criterion 2, the ORDERING property. The share is the half that
-    /// arms the wipe, so a token write that fails must not prevent it from being
-    /// attempted. An early return after the token — the obvious way to write
-    /// this with `?` — would pass both tests above and silently reintroduce the
-    /// bug for the exact host whose disk is already misbehaving.
-    #[test]
-    fn a_failed_token_write_still_attempts_the_share() {
-        let dir = std::env::temp_dir().join(format!(
-            "tillandsias-701se6x-order-{}-{}",
-            std::process::id(),
-            line!()
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        // Occupy the TOKEN path so its write fails first.
-        std::fs::create_dir_all(dir.join("fallback_vault-root-token-v1"))
-            .expect("occupy the token path");
-
-        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
-
-        assert!(res.is_err(), "the token failure must still be reported");
-        assert!(
-            dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
-                .is_file(),
-            "the SHARE must be written even though the token write failed — it is the half \
-             that decides whether the next launch wipes an initialized Vault"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn delivery_without_a_share_leaves_the_wipe_predicate_able_to_fire() {
-        let dir = std::env::temp_dir().join(format!(
-            "tillandsias-701-tokenonly-{}-{}",
-            std::process::id(),
-            line!()
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-
-        // 701-se6x: assert the write succeeded rather than discarding the
-        // Result. Silencing it with `let _ =` here would reintroduce, in the
-        // tests, precisely the habit this packet removed from the product.
-        write_vm_credential_fallbacks(&dir, Some("s.delivered-token"), None)
-            .expect("fallback write must succeed on a writable temp dir");
-
-        assert!(
-            dir.join("fallback_vault-root-token-v1").is_file(),
-            "the token half of the delivery is still recorded"
-        );
-        assert!(
-            !dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
-                .is_file(),
-            "a share that was never delivered must NOT be recorded as captured — \
-             otherwise a genuine partial init is preserved and Vault can never unseal"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// 694-mhz8. In-VM init must persist BOTH credential fallbacks. The share
-    /// file is the only evidence, inside a VM, that `operator init` completed:
-    /// `has_shamir_share_in_keyring` consults an OS keychain (absent in the
-    /// guest) and then this file, and its answer decides whether the next
-    /// bootstrap treats the data volume as a crashed partial init and WIPES it.
-    /// Writing only the token — the pre-694 behavior — made that predicate
-    /// permanently false in the guest, so every boot destroyed a healthy Vault
-    /// and the stored GitHub token with it.
-    #[test]
-    fn in_vm_init_persists_both_credential_fallbacks() {
-        let dir = std::env::temp_dir().join(format!(
-            "tillandsias-694-both-{}-{}",
-            std::process::id(),
-            line!()
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-
-        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="))
-            .expect("fallback write must succeed on a writable temp dir");
-
-        let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
-        let token = dir.join("fallback_vault-root-token-v1");
-        assert!(
-            token.is_file(),
-            "root-token fallback must still be written (pre-694 behavior preserved)"
-        );
-        assert!(
-            share.is_file(),
-            "SHAMIR SHARE fallback must be written — without it the next bootstrap \
-             classifies this initialized Vault as a partial init and wipes it (694-mhz8)"
+            files.is_empty(),
+            "no credential may be written outside the host's secure storage: {files:?}"
         );
         assert_eq!(
-            std::fs::read_to_string(&share)
-                .expect("share readable")
-                .trim(),
-            "c2hhcmU=",
-            "the share must round-trip verbatim; a corrupted share cannot unseal"
+            held_token.as_deref(),
+            Some(token),
+            "the token is held in memory"
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(held_share, "the share is held in memory");
     }
 
-    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above. The wipe branch
-    /// this fix protects must still fire on a GENUINE partial init — an init that
-    /// crashed before the share was ever captured. If the fix had instead relaxed
-    /// the predicate (or if this helper wrote a share unconditionally), a Vault
-    /// initialized with an unknown key would be preserved and could never unseal.
-    /// So: no share in hand => no share file => partial init stays detectable.
+    /// NEGATIVE CONTROL (bar-raise 634-39ik), restated for 1909-aryk. The
+    /// partial-init wipe must still fire when the host's delivery carries NO
+    /// share: a Vault initialized with an unknown key can never unseal. With
+    /// the delivery the only guest source, a token-only delivery reads as
+    /// "delivered, without a share" — never as "not delivered yet".
     #[test]
-    fn absent_share_writes_no_share_file_so_partial_init_stays_detectable() {
-        let dir = std::env::temp_dir().join(format!(
-            "tillandsias-694-partial-{}-{}",
-            std::process::id(),
-            line!()
-        ));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-
-        // Init got far enough to mint a root token, then crashed before the
-        // Shamir handover — exactly the case the wipe exists to recover.
-        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), None)
-            .expect("fallback write must succeed on a writable temp dir");
-
+    fn delivery_without_a_share_leaves_the_wipe_predicate_able_to_fire() {
+        let c = ShareCheck {
+            keychain: false,
+            delivered: Some(false),
+            in_vm: true,
+        };
+        assert!(!c.found());
         assert!(
-            dir.join("fallback_vault-root-token-v1").is_file(),
-            "token was captured in this scenario"
+            !c.must_wait_for_host(),
+            "a delivery has arrived; waiting would strand the guest"
         );
-        assert!(
-            !dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
-                .is_file(),
-            "a share that was never captured must NOT be recorded as captured — \
-             otherwise a genuine partial init is preserved and Vault can never unseal"
-        );
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -9284,7 +9006,7 @@ mod tests {
         let share = base64::engine::general_purpose::STANDARD.encode([7u8; 32]);
         let locked = || KeyringAnswer::Unreachable("keyring operation timed out after 2s".into());
 
-        let refusal = unseal_key_source(locked(), None, true)
+        let refusal = unseal_key_source(locked(), true)
             .expect_err("a locked keyring on initialized storage must not derive a key");
         assert!(
             refusal.contains("keyring locked"),
@@ -9301,23 +9023,15 @@ mod tests {
 
         // The remedy, executed: the unlocked keyring hands over the share.
         assert_eq!(
-            unseal_key_source(KeyringAnswer::Share(share.clone()), None, true),
-            Ok(KeySource::Share([7u8; 32]))
-        );
-        // A fallback file holding the share is just as good as the keyring.
-        assert_eq!(
-            unseal_key_source(locked(), Some(share), true),
+            unseal_key_source(KeyringAnswer::Share(share), true),
             Ok(KeySource::Share([7u8; 32]))
         );
         // True first boot keeps working, locked keyring or not.
         assert_eq!(
-            unseal_key_source(KeyringAnswer::NoEntry, None, false),
+            unseal_key_source(KeyringAnswer::NoEntry, false),
             Ok(KeySource::Derive)
         );
-        assert_eq!(
-            unseal_key_source(locked(), None, false),
-            Ok(KeySource::Derive)
-        );
+        assert_eq!(unseal_key_source(locked(), false), Ok(KeySource::Derive));
     }
 
     /// Order 259: the cold-VM first-login name-in-use race is closed by TWO
@@ -10040,8 +9754,8 @@ mod tests {
     fn nothing() -> ShareCheck {
         ShareCheck {
             keychain: false,
-            fallbacks: vec![(PathBuf::from("/disk/fallback_vault-shamir-share-v1"), false)],
-            delivered: false,
+            delivered: None,
+            in_vm: false,
         }
     }
 
@@ -10056,7 +9770,8 @@ mod tests {
         let v = decide_partial_init(
             true,
             || ShareCheck {
-                delivered: clock.elapsed.get() >= after,
+                delivered: (clock.elapsed.get() >= after).then_some(true),
+                in_vm: true,
                 ..nothing()
             },
             deadline,
@@ -10074,7 +9789,7 @@ mod tests {
         let (v, clock, waits) =
             decide_with_delivery_at(Duration::from_secs(12), SHARE_WAIT_DEADLINE);
         assert!(
-            matches!(&v, PartialInitVerdict::Keep(c) if c.delivered),
+            matches!(&v, PartialInitVerdict::Keep(c) if c.delivered == Some(true)),
             "{v:?}"
         );
         assert!(
@@ -10084,12 +9799,66 @@ mod tests {
         assert_eq!(waits, 1, "the wait is announced once");
     }
 
-    /// The same late delivery, decided the pre-1658 way (no wait): it WIPES.
-    /// This is what makes the test above red on trunk, measured rather than
-    /// asserted: trunk decided on the first check.
+    /// 1909-aryk. The same late delivery with no wait at all: a guest still
+    /// does not wipe. Before 1909 this WIPED (the 1658 measurement); with no
+    /// file to fall back on, "not delivered yet" must never become a wipe.
     #[test]
-    fn deciding_without_a_wait_wipes_the_same_late_delivery() {
+    fn a_guest_without_a_delivery_waits_for_the_host_and_never_wipes() {
         let (v, _, _) = decide_with_delivery_at(Duration::from_secs(12), Duration::ZERO);
+        assert!(matches!(v, PartialInitVerdict::WaitForHost(_)), "{v:?}");
+        let (v, _, _) = decide_with_delivery_at(Duration::from_secs(3600), SHARE_WAIT_DEADLINE);
+        assert!(
+            matches!(v, PartialInitVerdict::WaitForHost(_)),
+            "past the deadline, still no wipe: {v:?}"
+        );
+    }
+
+    /// 1909-aryk, the coordinator's arm. A LOCKED host keyring is the common
+    /// case: the tray's read fails and it sends no delivery, so the guest sees
+    /// exactly "nothing delivered". That must wait, say so in one line, and
+    /// never wipe; and it must not read like a delivery without a share.
+    #[test]
+    fn a_locked_host_keyring_waits_with_a_status_line_and_never_wipes() {
+        let locked_host = ShareCheck {
+            keychain: false,
+            delivered: None,
+            in_vm: true,
+        };
+        let clock = FakeClock::new();
+        let waits = std::cell::Cell::new(0u32);
+        let v = decide_partial_init(
+            true,
+            || locked_host.clone(),
+            SHARE_WAIT_DEADLINE,
+            || clock.now(),
+            |d| clock.sleep(d),
+            || waits.set(waits.get() + 1),
+        );
+        assert_eq!(v, PartialInitVerdict::WaitForHost(locked_host.clone()));
+        assert_eq!(waits.get(), 1, "the wait is announced once");
+        let line = wait_for_host_line(&locked_host);
+        assert!(
+            line.contains("waiting for the host to unlock the vault"),
+            "{line}"
+        );
+        assert!(line.contains("store is kept"), "{line}");
+        assert!(line.contains("host keyring is locked"), "{line}");
+        assert!(line.contains("host delivery: none received"), "{line}");
+
+        // Against the one state that may wipe: a delivery WITHOUT a share.
+        let delivered_empty = ShareCheck {
+            delivered: Some(false),
+            ..locked_host
+        };
+        let clock = FakeClock::new();
+        let v = decide_partial_init(
+            true,
+            || delivered_empty.clone(),
+            SHARE_WAIT_DEADLINE,
+            || clock.now(),
+            |d| clock.sleep(d),
+            || {},
+        );
         assert!(matches!(v, PartialInitVerdict::Wipe { .. }), "{v:?}");
     }
 
@@ -10134,11 +9903,8 @@ mod tests {
                 ..nothing()
             },
             ShareCheck {
-                delivered: true,
-                ..nothing()
-            },
-            ShareCheck {
-                fallbacks: vec![(PathBuf::from("/c/f"), true)],
+                delivered: Some(true),
+                in_vm: true,
                 ..nothing()
             },
         ];
@@ -10171,25 +9937,14 @@ mod tests {
     fn the_wipe_reason_names_every_source_and_the_wait() {
         let last = ShareCheck {
             keychain: false,
-            fallbacks: vec![
-                (
-                    PathBuf::from("/var/lib/tillandsias/identity/fallback_vault-shamir-share-v1"),
-                    false,
-                ),
-                (
-                    PathBuf::from("/root/.cache/tillandsias/fallback_vault-shamir-share-v1"),
-                    false,
-                ),
-            ],
-            delivered: false,
+            delivered: Some(false),
+            in_vm: true,
         };
         let r = partial_init_wipe_reason(&last, Duration::from_secs(90));
         for needle in [
             "90s",
             "keychain: absent",
-            "fallback /var/lib/tillandsias/identity/fallback_vault-shamir-share-v1: absent",
-            "fallback /root/.cache/tillandsias/fallback_vault-shamir-share-v1: absent",
-            "host delivery: none received",
+            "host delivery: received without a share",
             "checked at unix ",
         ] {
             assert!(r.contains(needle), "missing {needle:?} in {r}");

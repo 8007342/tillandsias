@@ -1,0 +1,22 @@
+# @trace order:1874-zry8 — the shared imagegen cache (cache_root()/models/imagegen),
+# mounted read-only at /models. One dir per tier, as imagegen_models lays it out.
+tillandsias:
+  base_path: /models
+  checkpoints: |
+    I0
+    I1
+  diffusion_models: |
+    I2
+    I3
+  unet: |
+    I2
+    I3
+  vae: |
+    I2
+    I3
+  text_encoders: |
+    I2
+    I3
+  clip: |
+    I2
+    I3

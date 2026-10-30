@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable
+    field: status
+    value: completed
+    ts: "2026-10-23T15:48:20Z"
+    host: macuahuitl
+
+events:
+  - packet_id: cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable
+    event:
+      type: completed
+      ts: "2026-10-23T15:48:20Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 7b2a057b2 land(610) (sheet + INDEX, check-forge-constraints-cheatsheet.lua) + 06cc55de1 land(620): groundtruth case forge-run-container-here-no-docker is gated and passing in openspec/litmus-tests/groundtruth/expert-groundtruth-forge-awareness.yaml (criterion 2: forge-constraints chunk retrieved for 'how do I run docker in the forge')
+  - packet_id: cheatsheet-runtime-forge-constraints-states-rootless-podman-no-docker-tmpfs-workspace-proxy-egress-inference-host-and-mirror-push-and-is-retrievable
+    event:
+      type: note
+      ts: "2026-10-23T15:48:20Z"
+      host: macuahuitl
+      summary: |-
+        closed: the no-docker rule is retrievable

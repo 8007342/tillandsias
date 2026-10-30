@@ -1,5 +1,5 @@
 -- @trace spec:podman-orchestration, spec:dev-build, plan 797-r6tc, order:1576-luas
--- @env PATH
+-- @env PATH XDG_RUNTIME_DIR
 --
 -- test-gate-podman-mode-configuration.lua — PORTED from
 -- test-gate-podman-mode-configuration.sh by 1576-luas, which added the one
@@ -48,8 +48,18 @@ local root = trim(proc.run{ argv = { "pwd", "-P" } }.stdout)
 local rel = "target/plan-scratch/tgpm-" .. tostring(time.now_ms())
 local sb = root .. "/" .. rel
 
+-- The socket FILE lives in the sandbox, but it is bound through a short
+-- link outside the checkout: rt/run -> sb/run. sun_path counts the path handed
+-- to bind(), and a checkout under a deep worktree path pushed the in-tree path
+-- to 117 bytes (release gate, 2026-10-30). The runtime still proves the link
+-- resolves inside the repository root, so the write sandbox is not loosened.
+local rt_base = env.get("XDG_RUNTIME_DIR")
+if rt_base == nil or rt_base == "" then rt_base = "/tmp" end
+local rt = trim(proc.run{ argv = { "mktemp", "-d", rt_base .. "/tg.XXXXXX" } }.stdout)
+
 local function finish(line, code)
     proc.run{ argv = { "rm", "-rf", sb } }
+    if rt ~= "" then proc.run{ argv = { "rm", "-rf", rt } } end
     verdict.emit(line, code)
 end
 
@@ -71,8 +81,13 @@ local function has(hay, needle) return hay:find(needle, 1, true) ~= nil end
 -- ---------------------------------------------------------------------------
 fs.mkdir(rel .. "/scripts")
 fs.mkdir(rel .. "/run/podman")
+if rt == "" or not proc.run{ argv = { "ln", "-s", sb .. "/run", rt .. "/run" } }.ok then
+    out.line("FAIL: could not create the short runtime link under " .. rt_base)
+    finish("violation:gate-podman-mode-configuration:no-short-runtime-dir", 1)
+    return
+end
 
-local sock_ok, sock = pcall(fs.listen_unix, rel .. "/run/podman/podman.sock")
+local sock_ok, sock = pcall(fs.listen_unix, rt .. "/run/podman/podman.sock")
 if not sock_ok then
     local err = tostring(sock)
     if has(err, "unsupported") then
@@ -83,7 +98,7 @@ if not sock_ok then
     finish("violation:gate-podman-mode-configuration:no-fixture-socket", 1)
     return
 end
-if not proc.run{ argv = { "test", "-S", sb .. "/run/podman/podman.sock" } }.ok then
+if not proc.run{ argv = { "test", "-S", rt .. "/run/podman/podman.sock" } }.ok then
     -- Without a real socket the fixture cannot discriminate: the old inference
     -- tested -S, so a missing socket would make scenario 1 pass for the wrong
     -- reason. Refuse rather than report a green that proves nothing.
@@ -106,7 +121,7 @@ fs.write(rel .. "/scripts/common.sh",
 -- still be in local-podman mode.
 -- ---------------------------------------------------------------------------
 local out1 = run({ "env", "-u", "TILLANDSIAS_PODMAN_REMOTE_URL", "-u", "CONTAINER_HOST",
-    "bash", sb .. "/build.sh", "--check" }, { XDG_RUNTIME_DIR = sb .. "/run" })
+    "bash", sb .. "/build.sh", "--check" }, { XDG_RUNTIME_DIR = rt .. "/run" })
 if has(out1, "handed-remote-url=[<unset>]") then
     ok("socket present + caller silent => no inferred remote mode")
 else
@@ -120,7 +135,7 @@ end
 -- ---------------------------------------------------------------------------
 local out2 = run({ "env", "-u", "CONTAINER_HOST", "bash", sb .. "/build.sh", "--check" },
     { TILLANDSIAS_PODMAN_REMOTE_URL = "unix:///caller/chosen/podman.sock",
-      XDG_RUNTIME_DIR = sb .. "/run" })
+      XDG_RUNTIME_DIR = rt .. "/run" })
 if has(out2, "handed-remote-url=[unix:///caller/chosen/podman.sock]") then
     ok("explicit remote URL survives build.sh unmodified")
 else
@@ -171,7 +186,7 @@ local wrapper_dir = sb .. "/wrapper"
 local out4 = run({ "env", "-u", "CONTAINER_HOST", "-u", "LITMUS_PODMAN_CALLS_FILE",
     "-u", "TILLANDSIAS_PODMAN_BIN", "bash", sb .. "/pinned.sh" },
     { PATH = path,
-      TILLANDSIAS_PODMAN_REMOTE_URL = "unix://" .. sb .. "/run/podman/podman.sock",
+      TILLANDSIAS_PODMAN_REMOTE_URL = "unix://" .. rt .. "/run/podman/podman.sock",
       TILLANDSIAS_PODMAN_WRAPPER_DIR = wrapper_dir })
 if has(out4, "pinned-bin=[" .. wrapper_dir .. "/podman]") then
     ok("explicit remote mode still pins the generated wrapper")
@@ -198,14 +213,14 @@ run{ "chmod", "+x", L .. "/scripts/build-image.sh", L .. "/scripts/launch-chromi
 run{ "cp", root .. "/build-forge.sh", root .. "/run-forge-standalone.sh", L .. "/" }
 run{ "cp", root .. "/scripts/run-safe-browser.sh", L .. "/scripts/" }
 
-local launch_env = { PATH = L .. "/bin:" .. path, XDG_RUNTIME_DIR = sb .. "/run" }
+local launch_env = { PATH = L .. "/bin:" .. path, XDG_RUNTIME_DIR = rt .. "/run" }
 local function launch(script, ...) -- caller silent, real socket present
     return run({ "env", "-u", "TILLANDSIAS_PODMAN_REMOTE_URL", "-u", "CONTAINER_HOST",
         "bash", script, ... }, launch_env)
 end
 local out5 = launch(L .. "/build-forge.sh")
 local out5b = run({ "env", "-u", "CONTAINER_HOST", "bash", L .. "/build-forge.sh" },
-    { PATH = L .. "/bin:" .. path, XDG_RUNTIME_DIR = sb .. "/run",
+    { PATH = L .. "/bin:" .. path, XDG_RUNTIME_DIR = rt .. "/run",
       TILLANDSIAS_PODMAN_REMOTE_URL = "unix:///caller/chosen/podman.sock" })
 if has(out5, "handed-remote-url=[<unset>]")
     and has(out5b, "handed-remote-url=[unix:///caller/chosen/podman.sock]") then

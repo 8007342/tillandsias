@@ -333,6 +333,11 @@ _ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 # flag cleared, with-tillandsias-builder.sh passes straight through inside the
 # tillandsias-build distro.
 _ENV_PREFIX="${_ENV_FORWARD}export TILLANDSIAS_SKIP_WSL2=1; . /root/.cargo/env 2>/dev/null || true;"
+# ORDER 667-kfyn — the guest's page cache, not the build, starves Windows: a
+# soft cap (memory.high, default 3G) on one shared cgroup bounds the cache the
+# build creates. It joins THIS shell before the run, so every child inherits
+# it; it never kills and never fails the run (scripts/wsl2-build-memory-cap.sh).
+_ENV_PREFIX="$_ENV_PREFIX bash scripts/wsl2-build-memory-cap.sh >&2 || true;"
 if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
     # ORDER 1129-4su6 READS THIS LINE; KEEP THE SHAPE.
     # scripts/hooks/pre-push-local-gate.sh derives this path to name the fresher
@@ -346,6 +351,10 @@ if [[ "${TILLANDSIAS_WSL2_TARGET_IN_TREE:-}" != "1" ]]; then
     # remedy that works on their host.
     _ENV_PREFIX="$_ENV_PREFIX export CARGO_TARGET_DIR=\"/root/.cache/tillandsias-wsl2-target/$REPO_BASENAME\";"
 fi
+# ORDER 667-kfyn — nothing pruned that target's debug/: it reached 164 GB and
+# filled C: through the distro's vhdx (2026-10-17). Over 40 GB (default) the
+# prune drops debug/incremental, then debug/; never fails the run.
+_ENV_PREFIX="$_ENV_PREFIX bash scripts/wsl2-build-target-prune.sh >&2 || true;"
 
 echo "[wsl2-builder] Re-execing inside '$BUILD_DISTRO' WSL2 distro..."
 
@@ -378,6 +387,67 @@ SCRIPT_REL="$(realpath --relative-to="$(pwd)" "$0")"
 # run is therefore a CHILD, not an exec, and the native plan binary is rebuilt
 # after it passes. A host that cannot build natively is told so by name
 # rather than left to discover it at push time.
+# ORDER 667-kfyn: BUILD FROM A DISTRO-NATIVE COPY OF THE CHECKOUT (
+# the default since 1924-gyff; TILLANDSIAS_WSL2_SRC_MIRROR=0 opts out). From /mnt/c every source read crosses 9p
+# onto NTFS: on yolanda the expert-groundtruth litmus timed out at its 120 s
+# budget from /mnt/c and passed from an ext4 clone of the same tree. The copy
+# lives at /srv/tillandsias-wsl2-src/<repo>, NOT under /root: gate fixtures
+# drop to an unprivileged user (runuser -u nobody) and source repo files, and
+# /root is 0700 (populate_hot_paths, 920-tqhs, red from /root, measured).
+# scripts/wsl2-src-mirror.sh
+# syncs it per run and REFUSES unless its gate-stamp digest equals the one
+# computed here on the source side, the digest the pre-push hook checks, so the
+# stamp a mirror run writes is one this checkout accepts; writeback then copies
+# the gate's .git/tillandsias-* records home. Only the read-only modes use it
+# (--check, --test, --preflight); anything else builds in-tree, and
+# TILLANDSIAS_WSL2_SRC_IN_TREE=1 forces in-tree outright.
+# ORDER 1924-gyff: the mirror is the DEFAULT, and --preflight takes it too.
+# Measured on yolanda 2026-10-29, each guard alone: test-trace-coverage 176 s
+# from /mnt/c, 1.5 s from ext4; check-added-test-is-referenced 373 s -> 2.3 s.
+# The opt-in left --preflight in-tree even with the flag set ("only
+# --check/--test run from the mirror"), so the 5 s door cut 114 of 279 guards.
+# _w2_src_mirror_wanted <script-basename> <args...> prints mirror or in-tree;
+# test-wsl2-src-mirror-default.lua runs this function itself.
+_w2_src_mirror_wanted() {
+    local script="$1" arg; shift
+    if [[ "${TILLANDSIAS_WSL2_SRC_IN_TREE:-}" == 1 || "${TILLANDSIAS_WSL2_SRC_MIRROR:-}" == 0 \
+            || "$script" != build.sh || $# -eq 0 ]]; then
+        echo in-tree; return 0
+    fi
+    for arg in "$@"; do
+        case "$arg" in --check|--test|--preflight) ;; *) echo in-tree; return 0 ;; esac
+    done
+    echo mirror
+}
+_W2_CD=""
+_w2_mirror=0
+if [[ "$(_w2_src_mirror_wanted "$(basename "$SCRIPT_REL")" "$@")" == mirror ]]; then
+    _w2_mirror=1
+elif [[ "$(basename "$SCRIPT_REL")" == build.sh && "${TILLANDSIAS_WSL2_SRC_IN_TREE:-}" != 1 \
+        && "${TILLANDSIAS_WSL2_SRC_MIRROR:-}" != 0 ]]; then
+    echo "[wsl2-builder] source mirror: only --check/--test/--preflight run from the mirror; building in-tree for: $*"
+fi
+if [[ "$_w2_mirror" == 1 ]]; then
+    _w2_src_linux="/mnt$(cygpath -u "$PWD_WIN")"
+    _w2_mirror_dir="/srv/tillandsias-wsl2-src/$REPO_BASENAME"
+    _w2_want="$(bash scripts/gate-stamp.sh compute)" || {
+        echo "[wsl2-builder] refused:wsl2-src-mirror:no-source-digest" >&2
+        echo "  why: scripts/gate-stamp.sh compute failed on this checkout, so the mirror's fidelity cannot be proven against it (667-kfyn)" >&2
+        echo "  remedy: fix what gate-stamp.sh printed above, or re-run with TILLANDSIAS_WSL2_SRC_IN_TREE=1 to build in-tree" >&2
+        exit 1
+    }
+    echo "[wsl2-builder] syncing the distro-native source mirror $_w2_mirror_dir (667-kfyn)..."
+    tillandsias_wsl_run -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+        bash -c "$_ENV_PREFIX bash $(printf '%q' "$_w2_src_linux/scripts/wsl2-src-mirror.sh") sync $(printf '%q' "$_w2_src_linux") $(printf '%q' "$_w2_mirror_dir") $(printf '%q' "$_w2_want")" \
+        || exit $?
+    _W2_CD="cd $(printf '%q' "$_w2_mirror_dir") && "
+fi
+_w2_writeback() {
+    [[ "$_w2_mirror" == 1 ]] || return 0
+    tillandsias_wsl_run -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+        bash -c "$_ENV_PREFIX bash $(printf '%q' "$_w2_src_linux/scripts/wsl2-src-mirror.sh") writeback $(printf '%q' "$_w2_mirror_dir") $(printf '%q' "$_w2_src_linux")"
+}
+
 _w2_refresh_native=0
 if [[ "$(basename "$SCRIPT_REL")" == build.sh ]]; then
     for arg in "$@"; do
@@ -387,7 +457,8 @@ fi
 if [[ "$_w2_refresh_native" == 1 && "${TILLANDSIAS_WSL2_NO_NATIVE_REFRESH:-}" != 1 ]]; then
     _w2_rc=0
     tillandsias_wsl_run -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
-        bash -c "$_ENV_PREFIX exec bash $_W2_SESSION bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED" || _w2_rc=$?
+        bash -c "$_ENV_PREFIX ${_W2_CD}exec bash $_W2_SESSION bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED" || _w2_rc=$?
+    _w2_writeback || { [[ "$_w2_rc" -ne 0 ]] || _w2_rc=1; }
     [[ "$_w2_rc" -eq 0 ]] || exit "$_w2_rc"
     echo "[wsl2-builder] gate passed in '$BUILD_DISTRO'; refreshing the native plan binary this host's lanes resolve (1267-uafx)..."
     if ! command -v cargo >/dev/null 2>&1; then
@@ -400,6 +471,14 @@ if [[ "$_w2_refresh_native" == 1 && "${TILLANDSIAS_WSL2_NO_NATIVE_REFRESH:-}" !=
     fi
     bash scripts/check-plan-binary-current.sh
     exit $?
+fi
+if [[ "$_w2_mirror" == 1 ]]; then
+    # A child, not an exec: the gate's records must come home afterwards.
+    _w2_rc=0
+    tillandsias_wsl_run -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
+        bash -c "$_ENV_PREFIX ${_W2_CD}exec bash $_W2_SESSION bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED" || _w2_rc=$?
+    _w2_writeback || { [[ "$_w2_rc" -ne 0 ]] || _w2_rc=1; }
+    exit "$_w2_rc"
 fi
 tillandsias_wsl_exec -d "$BUILD_DISTRO" -u root --cd "$PWD_WIN" -- \
     bash -c "$_ENV_PREFIX exec bash $_W2_SESSION bash $(printf '%q' "./$SCRIPT_REL") $ARGS_QUOTED"

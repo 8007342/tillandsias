@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: ghost-trace-ratchet-runs-only-at-the-end-of-the-full-gate-so-a-one-line-annotation-defect-costs-an-hour-long-eviction
+    order: 1842-2q4g
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [instrument, gate, preflight, fleet]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    title: |
+      The ghost-trace ratchet (scripts/trace-coverage.sh --gate) runs only at the end of the full gate, so a one-line trace to a missing spec is found an hour into a gate instead of in preflight
+    context: |
+      MEASURED macuahuitl 2026-10-23: #607 (1816-iyyc) was evicted after a
+      ~64 min gate for a trace annotation naming spec forge-container, which
+      does not exist. The same check over 14 merged work refs took seconds
+      each. Four other PRs carried the defect and would each have cost a gate.
+    exit_criteria:
+      - './build.sh --preflight refuses a tree that introduces a ghost trace, naming the spec (pre-fix result: FAILS — preflight passes; only the full gate refuses)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: a preflight guard (Lua decider or a
+      build.sh preflight step) plus a fixture adding a trace to an absent spec
+      in a scratch tree; preflight must refuse (pre-fix: passes).
+    provenance: |
+      Filed by macuahuitl (claude, coordinator) 2026-10-23 during land-queue run 3.
+    events:
+      - type: filed
+        ts: "2026-10-23T06:01:25Z"
+        host: macuahuitl
+        summary: |-
+          p2: run the ghost-trace ratchet in preflight; it cost #607 a full gate.

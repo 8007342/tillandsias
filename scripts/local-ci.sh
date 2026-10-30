@@ -57,6 +57,14 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/with-tillandsias-builder.s
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+# 1925-ided: PIN THE VALIDATOR SURFACE TO THE GATING CHECKOUT for every phase.
+# With a shared CARGO_TARGET_DIR (1807-shtg) the fixtures' scratch repos live
+# under ANOTHER checkout's target/plan-scratch, and the plan binary's cwd walk
+# resolved that checkout as its surface root. When it sat behind this tree the
+# hook refused every fixture push "resolved plan binary is STALE"
+# (claims-fleet-visible 9/22 in the v56.10.30.1 cut). A caller's value wins.
+export TILLANDSIAS_SURFACE_ROOT="${TILLANDSIAS_SURFACE_ROOT:-$REPO_ROOT}"
 source "$REPO_ROOT/scripts/common.sh"
 
 # RE-ASSERT THIS SCRIPT'S DECLARED OPTIONS (order 731-pc5r).
@@ -1198,7 +1206,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     log_section "Rust Code Quality (fmt, clippy, tests)"
 
     # Stage the router sidecar before the first cargo invocation (723-wd8i).
-    # crates/tillandsias-headless/build.rs:93 lists
+    # crates/tillandsias-embed/build.rs lists
     # images/router/tillandsias-router-sidecar among its REQUIRED runtime assets
     # and panics at build.rs:104 when it is absent. Order 710-w9kc un-committed
     # that file and taught build.sh and scripts/build-image.sh to produce it,

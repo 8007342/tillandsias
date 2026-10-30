@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1f) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: expert-serve-caches-answers-keyed-by-index-revision-domain-and-normalized-query
+    order: 1819-njan
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: any
+    capability_tags: [experts, rust, latency, cache]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-plan/src/expert_serve.rs
+    title: |
+      expert-serve keeps a bounded in-memory answer cache in ServerState keyed by (index entry commit or chunks mtime, domain/model id, normalized query), so a repeated question against an unchanged index returns without retrieval or synthesis, and any index refresh invalidates it
+    context: |
+      expert_serve.rs `ServerState` caches only the parsed index entry
+      (`entry_cache`); every request re-embeds, re-retrieves and re-synthesises.
+      Agents in one forge ask the same orientation questions repeatedly
+      (startup, after each push). Key includes the index revision so a
+      commit/push that refreshes the experts can never serve a stale answer.
+      Normalisation: lowercase, collapse whitespace, strip trailing
+      punctuation. Bounded (LRU or fixed cap) so a long-lived server does not
+      grow without limit. Refusals are cached too (they are answers).
+    exit_criteria:
+      - 'a test issues the same normalized query twice to expert-serve with a counting mock inference and asserts one synthesis call; after the index entry revision changes, a third call synthesises again (pre-fix result: FAILS — two synthesis calls for the identical query)'
+      - 'the cache holds at most its configured cap entries (pre-fix result: no cache)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: cargo test -p tillandsias-plan
+      expert_serve_answer_cache (written with the change) asserts the hit,
+      the invalidation on index revision change, and the cap.
+    depends_on: []
+    related: [1813-54df]
+    next_action: >
+      Add an answer cache field to ServerState beside entry_cache, key it on
+      the resolved entry's revision + model id + normalized query, consult it
+      before retrieval, insert after synthesis; write the test.
+    notes: |
+      size: S
+      implementer_tier: sonnet
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:10:25Z"
+        host: macuahuitl
+        summary: |-
+          p2 1f: expert-serve answer cache keyed by index revision, domain and normalized query.

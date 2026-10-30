@@ -1,0 +1,33 @@
+# @trace spec:local-web-preview
+name: litmus:flutter-shim-falls-back-or-refuses-typed
+spec: local-web-preview
+phase: pre-build
+status: active
+description: >
+  Order 1874-pn3s. When the host toolchain lane was down the forge's flutter
+  exited a bare 69. `flutter` is now a shell front: a ready lane runs the lane
+  client (its code is the answer, unless it says 69); otherwise a cached SDK in
+  the durable project cache runs (never one under the src tmpfs); otherwise a
+  typed `refused:flutter:<reason> remedy=...` with exit 69. No Python is needed
+  on the host to test it.
+severity: medium
+size: instant
+preconditions:
+  - workspace contains images/default/cli/flutter
+critical_path:
+  - step: "Req: lane down and no cache refuses typed with a remedy; a cached SDK in the project cache runs instead; one under the src tmpfs does not; a ready lane runs the lane client (control) and falls back only when it says 69 (pre-fix: a Python shim exiting a bare 69)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-flutter-shim-fallback.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:flutter-shim-fallback:6 arms"
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "refused:flutter:lane-stale remedy="
+  log_fields:
+    spec: "local-web-preview"
+    test: "flutter-shim-falls-back-or-refuses-typed"
+rollback:
+  on_failure: >
+    flutter again exits a bare 69 or runs an SDK from the src tmpfs. Restore
+    images/default/cli/flutter (shell front) and the flutter-lane COPY.
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-flutter-shim-fallback.lua"

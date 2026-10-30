@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: ca-and-vault-tls-keys-never-written-unencrypted-where-the-tmpfs-key-store-is-inactive-including-under-cargo-test
+    field: status
+    value: completed
+    ts: "2026-10-27T21:35:02Z"
+    host: lenovinha
+
+events:
+  - packet_id: ca-and-vault-tls-keys-never-written-unencrypted-where-the-tmpfs-key-store-is-inactive-including-under-cargo-test
+    event:
+      type: completed
+      ts: "2026-10-27T21:35:02Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 713756e72f07f6e9079abd2ad537678e72c1b2cc
+  - packet_id: ca-and-vault-tls-keys-never-written-unencrypted-where-the-tmpfs-key-store-is-inactive-including-under-cargo-test
+    event:
+      type: note
+      ts: "2026-10-27T21:35:02Z"
+      host: lenovinha
+      summary: |-
+        landed-but-open triage 2026-10-27: 713756e72 adds ca_and_vault_leaf_mints_leave_no_plaintext_key_where_the_store_is_inactive (criterion 1) and ca_mint_refuses_the_real_home_under_test (criterion 2); 53669ff1f follow-up; landed via land 656

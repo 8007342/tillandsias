@@ -1334,12 +1334,14 @@ pub(crate) fn request_graceful_quit(source: &str) -> bool {
                     Ok(()) => eprintln!("[tillandsias-tray] Quit: VM drained cleanly"),
                     Err(e) => eprintln!("[tillandsias-tray] Quit: drain failed: {e}"),
                 }
+                crate::guest_exec_relay::remove();
                 // Bypass AppKit cleanup: the VM drain is the only critical
                 // shutdown step; NSApplication owns nothing we must flush.
                 std::process::exit(0);
             });
         } else {
             eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
+            crate::guest_exec_relay::remove();
             std::process::exit(0);
         }
     });
@@ -2404,6 +2406,9 @@ impl TrayActionHost {
             }
             *busy = true;
         }
+        // Order 1919-keyc: a booting guest holds no credentials yet, so the
+        // next status poll must deliver them rather than skip the Keychain.
+        crate::installation_uuid::note_vm_boot();
         // Idempotency: if we already hold a live VM handle, just log
         // and bail (without touching the busy flag race).
         if ivars.vm.lock().unwrap().is_some() {
@@ -3893,6 +3898,34 @@ fn spawn_vm_status_poller(
     // CloudRefreshRequest); see the comment at the wait site.
     let poll_request = tokio::sync::Notify::new();
     spawn_host_clock_sync_on_wake(vz.clone());
+    // Order 1794-rf3a (b): this Mac's browser reaches a guest preview through
+    // the loopback listener and the guest's vsock relay.
+    let relay_vz = vz.clone();
+    crate::preview_relay::spawn(move || {
+        let vz = relay_vz.clone();
+        async move {
+            open_control_wire_stream(
+                &vz,
+                crate::preview_relay::PREVIEW_RELAY_VSOCK_PORT,
+                Duration::from_secs(10),
+            )
+            .await
+        }
+    });
+    // Order 1897-y7j2: `--exec-guest` reaches the guest through this tray
+    // instead of refusing while the tray owns the VM.
+    let exec_vz = vz.clone();
+    crate::guest_exec_relay::spawn(move || {
+        let vz = exec_vz.clone();
+        async move {
+            open_control_wire_stream(
+                &vz,
+                tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT,
+                Duration::from_secs(30),
+            )
+            .await
+        }
+    });
     tokio::spawn(run_push_listener(
         vz.clone(),
         status_text.clone(),

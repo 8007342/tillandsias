@@ -16,23 +16,23 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-exec-transcript-capped-in-every-driver.sh
+  - workspace contains scripts/lua/test-exec-transcript-capped-in-every-driver.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-exec-transcript-capped-in-every-driver.sh && test -x scripts/test-exec-transcript-capped-in-every-driver.sh && echo 'ok: parse'"
+  - step: "fixture exists"
+    command: "test -f scripts/lua/test-exec-transcript-capped-in-every-driver.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "every transcript accumulator passes through the cap policy"
-    command: "bash scripts/test-exec-transcript-capped-in-every-driver.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-exec-transcript-capped-in-every-driver.lua 2>&1 | tail -n 1"
     timeout_ms: 10000
-    expected_behavior: "PASS: exec-transcript-capped-in-every-driver"
+    expected_behavior: "ok:exec-transcript-capped-in-every-driver"
 
 observability:
   traces:
     - "@trace spec:host-guest-transport"
-  expected_log: "PASS: exec-transcript-capped-in-every-driver"
+  expected_log: "ok:exec-transcript-capped-in-every-driver"
   log_fields:
     spec: "host-guest-transport"
     test: "exec-transcript-capped-in-every-driver"
@@ -42,4 +42,4 @@ rollback:
   on_failure: >
     An exec driver that accumulates guest output without the cap is the defect:
     route it through retain_tail (collecting) or trim_transcript (expect).
-  command: "bash scripts/test-exec-transcript-capped-in-every-driver.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-exec-transcript-capped-in-every-driver.lua"

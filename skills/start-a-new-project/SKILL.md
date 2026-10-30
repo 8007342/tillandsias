@@ -19,6 +19,33 @@ environment works behind the scenes; just help them build their app.
 Ask one short question: what is the app, and who is it for? If they already
 said, restate it in one sentence and confirm. Do not ask a list of questions.
 
+## 1b. Start with the research
+
+Before writing specs, look for research that applies to this kind of app and
+keep it next to the project. Nothing to explain to the user yet; one short
+sentence is enough ("I'm checking what's known about <games / forms /
+onboarding> first").
+
+```bash
+lib="${TILLANDSIAS_RESEARCH:-/opt/research}"
+[ -f "$lib/INDEX.md" ] || lib="research"
+rg -i '<two or three words for the app: game, form, loading, animation>' "$lib/INDEX.md"
+```
+
+Pull each relevant record into the project: copy
+`$lib/<domain>/<slug>.md` to `research/<domain>/<slug>.md` and change
+`origin: shared` to `origin: project`. For a game, that is at least
+`games/gameflow-sweetser-wyeth-2005` and
+`psychology/flow-nakamura-csikszentmihalyi-2014`; for anything with buttons
+and waits, `interaction/fitts-law-1954` and
+`interaction/response-time-limits-nielsen-1993`. If the library has nothing
+for this kind of app, use the `find-research` skill once the first spec names
+the behaviour that matters most.
+
+When you write the specs in step 2, cite what you pulled in ("as per
+research:<id>, ... because ...") — see the `cite-research` skill. Research
+goes in `research/`; the scaffold below creates its README.
+
 ## 2. Recommend spec-driven development
 
 Suggest writing down what the app should do before writing code, as short
@@ -58,10 +85,51 @@ It creates only what is missing and never overwrites the user's files:
 
 - `openspec/` with a first spec describing the app (unless `--no-specs`),
 - `plan/` with a `README.md` and a `roadmap.md` for work that spans sessions,
+- `research/` with a `README.md` saying how records are kept and cited,
 - `README.md` with the app's name and summary.
 
 Then fill in the first spec together with the user: three to five
 requirements in their own words, each with one concrete example.
+
+## 4b. Choose where it will run (optional)
+
+For a web app, ask once whether they want it online, and offer:
+
+- **Cloudflare** (the default for a website or a Flutter app): the app is
+  served from Cloudflare's network. The setup in step 4 already added its
+  settings file, so nothing more runs now. Free, with no payment method on
+  file: a site made only of pages and pictures has no daily limit, and if it
+  later gains server code, that code gets 100,000 requests a day before
+  extra requests are turned away; nothing is ever charged. Read
+  `deploy-cloudflare.md` in this skill's directory for what each file does and
+  how the user puts the app online when they are ready.
+- **Google Cloud (Dockerfile)**: Google builds the app from a Dockerfile in
+  the project and runs it on Cloud Run. Works for every kind of web app,
+  including Flutter web and plain websites.
+- **Google Cloud (Buildpacks)**: Google works out how to build the app from
+  its own files, with no Dockerfile. Works for Node.js, Python and Go
+  servers, not for Flutter web or plain websites.
+- **Not now**: nothing more is added; they can choose later. If they pick
+  Google Cloud or say no to Cloudflare, `wrangler.jsonc` and
+  `.dev.vars.example` can simply be deleted.
+
+Before setting up either Google Cloud option, say plainly: **Google Cloud
+needs a billing account with a payment method, even for its free allowance.
+Small apps usually stay inside the free monthly allowance, but anything beyond
+it is charged to that account.** Never create a Google Cloud project, link
+billing, or start a cloud build for them; they connect the repository in
+their own Google Cloud console.
+
+Then run the same setup script with the choice:
+
+```bash
+bash "<this skill's directory>/scaffold.sh" --name "<App Name>" --summary "<one sentence>" --deploy gcp-dockerfile|gcp-buildpacks [--runtime node|python|go|static] [--port 8080]
+```
+
+It adds the deploy files filled in with the app's name, port and kind, and
+never overwrites the user's own. Read `deploy-google-cloud.md` in this
+skill's directory for what each file does and how the user connects the
+repository.
 
 ## 5. Build the first version
 

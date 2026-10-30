@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: handle-mcp-jsonrpc-consults-a-gate-table-and-returns-awaiting-approval-for-every-cost-bearing-tool-without-contacting-the-cloud
+  order: 1882-kkww
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  - linux
+  estimated_hours: 5
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  title: Host tools that would spend cloud minutes wait for the operator's approval instead of acting
+  context: Design D6 of openspec/changes/os-verified-approval-gates. A static gate table in tillandsias-headless lists cost-bearing actions (workflow dispatch, integration-branch merge or PR, remote worker creation, any Cloudflare create/refresh including 1853-qr4h's ensure_github_cloudflare_worker). handle_mcp_jsonrpc checks it before dispatch and returns state awaiting_approval with approval_id and retry_after_s; agent-supplied approval arguments are ignored. Host scripts and skills that run `gh workflow run` call `tillandsias approval request` first.
+  exit_criteria:
+  - 'A unit test enumerates tools/list from handle_mcp_jsonrpc and asserts every descriptor carries a cost marker, and a test-only cost-bearing tool called with no approval (and again with approved: true in its arguments) returns awaiting_approval while a fake HTTP client records zero requests; after a broker approval it dispatches exactly once. Pre-fix result: FAILS, descriptors have no cost marker and the dispatcher has no gate.'
+  verifiable_closure: 'A unit test enumerates tools/list from handle_mcp_jsonrpc and asserts every descriptor carries a cost marker, and a test-only cost-bearing tool called with no approval (and again with approved: true in its arguments) returns awaiting_approval while a fake HTTP client records zero requests; after a broker approval it dispatches exactly once. Pre-fix result: FAILS, descriptors have no cost marker and the dispatcher has no gate.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed at operator request 2026-10-25 (OS-verified approval gates direction).
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the operator request of 2026-10-25

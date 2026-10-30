@@ -1,0 +1,36 @@
+# @trace spec:forge-environment-discoverability, spec:mcp-tool-socket
+name: litmus:tillandsias-doctor-names-every-fault
+spec: forge-environment-discoverability
+phase: pre-build
+status: active
+description: >
+  Order 1874-6p63. One dead lane socket showed up as four unrelated faults
+  and cost an agent twelve calls to localise. tillandsias-doctor (--json)
+  reports the lane socket, every MCP server with its reason, the router
+  direct and through the proxy, the flutter toolchain, the cheatsheets, free
+  space, and that there is no in-forge renderer; the startup context points
+  to it. The fixture runs it against a dead lane socket and the real
+  host-browser bridge, with a stub MCP server that answers as the control.
+severity: medium
+size: instant
+preconditions:
+  - workspace contains images/default/cli/tillandsias-doctor
+  - jq on the host
+critical_path:
+  - step: "Req: on a dead lane the lane and host-browser rows fail with a reason, a healthy MCP server stays ok, both router rows fail with a reason, the no-in-forge-renderer line is present, and the startup context names the command (pre-fix: there is no doctor)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tillandsias-doctor.lua 2>&1"
+    timeout_ms: 180000
+    success_pattern: "ok:tillandsias-doctor:7 arms"
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "host_lane=stale"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "tillandsias-doctor-names-every-fault"
+rollback:
+  on_failure: >
+    The forge again has no single command that names a lane or MCP fault.
+    Restore images/default/cli/tillandsias-doctor, lib-lane.sh, its COPY in
+    the Containerfile and the Diagnose line in inject_startup_context.
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tillandsias-doctor.lua"

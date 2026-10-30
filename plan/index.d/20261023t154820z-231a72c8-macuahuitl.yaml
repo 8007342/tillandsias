@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+    field: next_action
+    value: 'LANDED in 06cc55de1 (land(620)): BM25+RRF, yaml breadcrumb chunks, cheatsheet.ask fusion; in-corpus recall@5 50.0 -> 67.5%. Remaining criteria: identifier-bearing questions improve (flat at 60% on a 10-question set — build a larger identifier set first); Fine-tier reranker with a counting-mock test.'
+    ts: "2026-10-23T15:48:20Z"
+    host: macuahuitl
+    replaces_sha256: "9c4d25f0f3f77170de02518c945a0295337866c8138c69ea2f39545117536dfa"
+
+events:
+  - packet_id: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+    event:
+      type: note
+      ts: "2026-10-23T15:48:20Z"
+      host: macuahuitl
+      summary: |-
+        landed

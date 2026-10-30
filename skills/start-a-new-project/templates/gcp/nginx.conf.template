@@ -1,0 +1,9 @@
+# {{NAME}}: served on Cloud Run's port; unknown paths fall back to index.html
+# so in-app links work after a reload.
+server {
+    listen ${PORT};
+    root /usr/share/nginx/html;
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

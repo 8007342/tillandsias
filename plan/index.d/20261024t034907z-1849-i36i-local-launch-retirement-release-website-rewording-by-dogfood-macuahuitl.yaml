@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story milestone (d) of the website-update-by-dogfood story.
+packets:
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    order: 1849-i36i
+    status: ready
+    kind: milestone
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [release, website, coordinator, forge, opencode]
+    estimated_hours: 2
+    owned_files: []
+    title: |
+      The release that ships 776-jcf3 (retire host-checkout local launches; PR #635 and its follow-up) carries the Website-Update trailer; its stable promotion enqueues the task; a tillandsias --cloud forge of 8007342/tillandsias.org runs it with the OpenCode lane via the update-website skill; the site PR rewording "local launches" lands; and the forge has exited — with no human or Claude edit to site text in between
+    context: |
+      Operator request 2026-10-24: tillandsias.org lists local launches as a
+      main feature, so it must be reworded once local-launch retirement
+      ships, and by then the automation must do it. This row is the
+      end-to-end proof; it owns no code.
+    exit_criteria:
+      - 'git log --format=%(trailers:key=Website-Update) <prev-stable>..<that tag> prints a reason naming local-launch retirement (pre-fix result: FAILS — no trailer exists anywhere in history)'
+      - 'promote-stable output for that tag contains a website-update enqueue line, and the coordinator namespace 8007342/tillandsias.org shows the task claimed then done (pre-fix result: FAILS — no step, no namespace)'
+      - 'the tillandsias.org PR from website/update-<tag> was authored by the forge run whose task record names lane=opencode, its diff removes or rewords the local-launch feature claim, and it passes the site checked-build (pre-fix result: FAILS — site still lists local launches)'
+      - 'after the done report, no forge container for that run remains (podman ps shows none) (pre-fix result: n/a — no run)'
+    unscoreable: |
+      end-to-end-operational-proof: no litmus can stage a real stable
+      promotion, deployed coordinator and site PR; closure is by evidence.
+      Closure cites: the release tag, the promote-stable output line, the
+      coordinator task id with claim/done timestamps and lane, the site PR
+      URL + merge SHA, and the podman ps line. A green unit test of any
+      child is not this proof.
+    depends_on:
+      - a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+      - a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+      - tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+      - operator-gated-deploy-of-the-coordinator-worker-to-coordinator-tillandsias-org-behind-a-cloudflare-access-application
+      - retire-host-src-checkout-behind-proven-transparent-push
+    related: [1824-58bm, 776-jcf3]
+    next_action: >
+      Nothing has run. Two things can happen early and are easy to miss:
+      (1) the 776-jcf3 implementation PR (or its follow-up) must carry the
+      trailer "Website-Update: local (host-checkout) launches retired" in a
+      commit message BEFORE it lands — tell its owner; a missed trailer means
+      an empty follow-up commit carrying it before the cut. (2) If 776-jcf3
+      ships to stable before 1846/1847/1848 and the deployed coordinator
+      (1830) exist, do NOT reword the site by hand to close this — that
+      defeats the dogfood; ask the operator whether to hold the site claim
+      or accept a stale site until the path exists.
+    notes: |
+      size: S (proof only)
+    provenance: |
+      Filed by macuahuitl (claude subagent) from operator request 2026-10-24 in-session.
+    events:
+      - type: filed
+        ts: "2026-10-24T03:49:07Z"
+        host: macuahuitl
+        summary: |-
+          Website-update story milestone: local-launch retirement release is the first marked release; its site rewording done by a non-Claude forge from the queue.

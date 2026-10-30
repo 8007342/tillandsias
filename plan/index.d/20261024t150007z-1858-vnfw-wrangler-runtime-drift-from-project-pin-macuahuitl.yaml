@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: forge-managed-wrangler-version-differs-from-the-project-pinned-version-with-no-visible-warning
+    order: 1858-vnfw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, wrangler, web, diagnostics]
+    estimated_hours: 4
+    title: "The preview runs a different wrangler version (4.42.0) than the one the project pins (4.151.2) and nothing says so"
+    context: |
+      Field report: host logs showed managed Wrangler 4.42.0 while the project pins 4.151.2; the bundle starts but the difference needed investigation. The managed runtime lives in images/web-wrangler (package.json, entrypoint). Either honour the pin or make the drift visible with a documented compatibility contract. Also separate the nonfatal workers.cloudflare.com DNS warning (placeholder Request.cf) from real health failures. Source: forge field report FORGE_DIAGNOSTICS.md in 8007342/arabiya.
+    exit_criteria:
+      - "A fixture with a project pinning a wrangler version different from the managed one asserts the preview either runs the pinned version or reports the drift in service_status and the startup banner. Pre-fix result: FAILS, the managed 4.42.0 runs silently against a 4.151.2 pin."
+    verifiable_closure: "A fixture with a project pinning a wrangler version different from the managed one asserts the preview either runs the pinned version or reports the drift in service_status and the startup banner. Pre-fix result: FAILS, the managed 4.42.0 runs silently against a 4.151.2 pin."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T15:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

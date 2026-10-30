@@ -489,7 +489,6 @@ scripts scripts/litmus-covering-specs.sh 9
 scripts scripts/litmus-git-delta-wait.sh 4
 scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
-scripts scripts/litmus-helper-nix-cache-size.sh 1
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
 scripts scripts/litmus-run-one.sh 4
@@ -634,7 +633,6 @@ scripts scripts/test-enclave-service-health.sh 102
 scripts scripts/test-ensure-cosign.sh 5
 scripts scripts/test-ensure-toolbox-properties.sh 23
 scripts scripts/test-env-forward-shared.sh 1
-scripts scripts/test-exec-transcript-capped-in-every-driver.sh 1
 scripts scripts/test-expert-accuracy-provenance.sh 2
 scripts scripts/test-expert-accuracy-record-shape.sh 2
 scripts scripts/test-expire-claims-list-live-rows.sh 8

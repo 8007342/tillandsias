@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at macuahuitl-fedora's request,
+# 2026-10-29 (operator directive: cut build/validate time by orders of magnitude).
+packets:
+- packet_id: vault-client-tests-skip-the-macos-proxy-lookup
+  order: 1924-vprx
+  status: in_progress
+  kind: perf
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - tests
+  - vault
+  - build-time
+  estimated_hours: 2
+  title: vault-client tests take 68-85 s each because reqwest's default builder looks up the macOS system proxy
+  context: 'Measured on tlatoanis-macbook-air 2026-10-29: every tillandsias-vault-client test took 68-85 s in the parallel darwin suite, including a pure URL-join unit test. A probe test found that reqwest Client::builder().build() takes 3.0 s per process at normal priority and 16.5 s under taskpolicy -b, while .no_proxy().build() takes under 3 ms. Only the first build in a process pays it, and nextest runs each test in its own process. The cost is the macOS system-proxy lookup; scutil --proxy itself returns in 8 ms with no proxies configured. Side measurement: the shipped macOS tray uses reqwest via tillandsias-vm-layer (fetch.rs, vz.rs) on the image-download path, so it likely pays about 3 s once per process there. That path is not the menu, and it was not changed. The tray does not link sysinfo, so 1924-smpl does not affect it (cargo tree; no sysinfo strings in the shipped binary).'
+  exit_criteria:
+  - 'Every http_roundtrip test passes in under 2 s on darwin, enforced by a Timed 2 s bound, and test_budget_fails_a_slow_test proves the bound fires.'
+  - 'Production VaultClient::new and new_with_ca_certificate are unchanged.'
+  verifiable_closure: 'cargo nextest run -p tillandsias-vault-client'
+  unscoreable: 'a timing bound, not a litmus: the Timed 2 s drop check in http_roundtrip.rs is the guard.'
+  next_action: 'Land work/1924-vprx.'
+  provenance: 'macuahuitl-fedora request 2026-10-29; probe timings from this host.'
+  events:
+  - type: filed
+    ts: '2026-10-30T02:00:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed and claimed; the cost is the macOS system-proxy lookup in reqwest's default builder

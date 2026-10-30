@@ -1,0 +1,12 @@
+# Gate step 667-kfyn — the WSL2 builder caps the guest page cache a build
+# creates: scripts/wsl2-build-memory-cap.sh joins the guest run to one cgroup
+# with memory.high (default 3G, measured), enables the controller, skips by
+# name where cgroup v2 or the memory controller is absent, and is wired into
+# with-wsl2-builder.sh's guest prefix. Driven against a constructed tree.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the WSL2 builder caps the guest page cache with a cgroup (667-kfyn)"
+STEP_LUA="scripts/lua/test-wsl2-build-memory-cap.lua"
+STEP_ERROR="scripts/wsl2-build-memory-cap.sh no longer joins the build to a memory.high cgroup, or with-wsl2-builder.sh no longer runs it (667-kfyn) — see the FAIL lines above"
+STEP_OK="WSL2 build memory cap fixture passed"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-17 msys ok:wsl2-build-memory-cap:6"

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: download-manifest-lists-every-large-tillandsias-download-with-its-size-and-class
+    order: 1891-dlmf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [host-storage, disk, downloads, manifest]
+    estimated_hours: 4
+    title: "One list names every big file Tillandsias downloads, how large it is, and whether it can be deleted and fetched again"
+    context: |
+      Design D6 of openspec/changes/forge-storage-single-root-and-disk-discipline, operator ruling 2026-10-25. Every large Tillandsias download is listed in one manifest with its approximate size and class: non-negotiable (forge image, web image, base images) or hot-deletable and recreated on demand (models, caches, studio images). The tray reads it as data; a later UX packet shows it in a disk bar.
+    exit_criteria:
+      - "A test walks every image-build and model-fetch site the tray and headless crates know and asserts each artifact appears in the download manifest with a size and a class of non-negotiable or hot-deletable. Pre-fix result: FAILS, no manifest exists."
+    verifiable_closure: "A test walks every image-build and model-fetch site the tray and headless crates know and asserts each artifact appears in the download manifest with a size and a class of non-negotiable or hot-deletable. Pre-fix result: FAILS, no manifest exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/forge-storage-single-root-and-disk-discipline design D6.
+    provenance: |
+      Filed at operator request 2026-10-25 (PR 650 amendment); spec openspec/changes/forge-storage-single-root-and-disk-discipline.
+    events:
+      - type: filed
+        ts: "2026-10-25T21:20:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator rulings of 2026-10-25"

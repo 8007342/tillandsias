@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: shared-target-without-flock-turns-the-shared-dir-off-instead-of-refusing-so-a-stock-macos-preflight-is-not-red
+    event:
+      type: progress
+      ts: "2026-10-23T06:00:07Z"
+      agent_id: linux-macuahuitl-claude-20261023t060007z
+      host: macuahuitl
+      summary: |
+        macbookair (Apple M5, no flock) on origin/work/1840-2p9v: ./build.sh --preflight rc=0 refused=0 (test-gate-step-host-state-retry and test-script-run-verb no longer refused) at d7bd27147; scripts/test-shared-target.sh at b083c751e rc=0 with arm5 ok, skip:test-shared-target:arms-1-4,6,7:no-flock, arm8 ok. Linux 9/9. Both criteria met; close after PR #619 lands.

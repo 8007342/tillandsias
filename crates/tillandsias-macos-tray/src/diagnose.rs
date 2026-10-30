@@ -1781,25 +1781,89 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
             }
         };
         let _ = vz.stop(Duration::from_secs(10)).await;
+        report_exec(result)
+    })
+}
 
-        match result {
-            Ok(out) => {
-                let signal = out
-                    .exit
-                    .signal
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "null".to_string());
-                eprintln!(
-                    "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{}}}",
-                    out.exit.code, signal,
-                );
-                out.exit.code
-            }
-            Err(e) => {
-                eprintln!("{{\"error\":\"exec: {e}\"}}");
-                1
-            }
+/// The exit line both `--exec-guest` paths print, and the exit code.
+fn report_exec(result: Result<tillandsias_vm_layer::vsock_exec::ExecOutput, String>) -> i32 {
+    match result {
+        Ok(out) => {
+            let signal = out
+                .exit
+                .signal
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "null".to_string());
+            eprintln!(
+                "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{}}}",
+                out.exit.code, signal,
+            );
+            out.exit.code
         }
+        Err(e) => {
+            eprintln!("{{\"error\":\"exec: {e}\"}}");
+            1
+        }
+    }
+}
+
+/// Order 1897-y7j2: `--exec-guest` while a tray owns the VM. The command goes
+/// through the tray's guest-exec relay (`guest_exec_relay`) over the tray's
+/// own secure channel, so the same exec protocol and the same guest allowlist
+/// apply; nothing boots or stops. `None` when the relay cannot be reached, so
+/// the caller keeps order 277's refusal.
+pub fn exec_guest_via_tray(argv: Vec<String>, required_cap: Option<&'static str>) -> Option<i32> {
+    if argv.is_empty() {
+        eprintln!("--exec-guest requires a command, e.g. --exec-guest /bin/echo HELLO");
+        return Some(2);
+    }
+    let path = crate::guest_exec_relay::socket_path_in(&crate::guest_exec_relay::socket_dir());
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
+    let stdin_bytes: Vec<u8> = read_piped_stdin_bounded(STDIN_FORWARD_TIMEOUT);
+    rt.block_on(async move {
+        let stream = match tokio::net::UnixStream::connect(&path).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!(
+                    "[exec-guest] the tray's guest-exec relay at {} is not reachable: {e}",
+                    path.display()
+                );
+                return None;
+            }
+        };
+        let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+        eprintln!("[exec-guest] running through the tray: {argv_ref:?}");
+        let on_chunk = |chunk: &[u8]| {
+            use std::io::Write;
+            let mut out = std::io::stdout().lock();
+            let _ = out.write_all(chunk);
+            let _ = out.flush();
+        };
+        let result = match required_cap {
+            Some(cap) => {
+                tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming_requiring(
+                    stream,
+                    &argv_ref,
+                    &stdin_bytes,
+                    cap,
+                    on_chunk,
+                )
+                .await
+            }
+            None => {
+                tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
+                    stream,
+                    &argv_ref,
+                    &stdin_bytes,
+                    on_chunk,
+                )
+                .await
+            }
+        };
+        Some(report_exec(result))
     })
 }
 
@@ -1822,7 +1886,10 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
 ///     requires it to exist and be writable;
 ///   * `podman rm tillandsias-proxy` — redundant with `ensure_proxy_running`'s
 ///     own `rm --ignore`, and idempotent (`|| true`);
-///   * the openssl block — first-use CA generation, genuinely needed;
+///   * (no CA mint: ORDER 1900-fkws removed the shell `openssl -nodes` block,
+///     which wrote the guest CA key in the clear. `tillandsias-headless`
+///     mints it in `ensure_ca_bundle` on every path this preamble execs, and
+///     since 1898-hyhf mints it encrypted where the tmpfs store is inactive);
 ///   * the trailing unconditional `chmod 600` — redundant since the guest gained
 ///     `CAP_PROXY_CA_KEY_HEAL` (795-zshi slice 4), and idempotent.
 ///
@@ -1857,14 +1924,6 @@ fn proxy_exec_preamble(headless_arg: &str) -> String {
          export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
          install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
          podman rm tillandsias-proxy 2>/dev/null || true; \
-         if ! test -s {ca}/intermediate.key 2>/dev/null; then \
-           mkdir -p {ca} && \
-           openssl req -x509 -newkey rsa:2048 \
-             -keyout {ca}/intermediate.key \
-             -out {ca}/intermediate.crt \
-             -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-           chmod 600 {ca}/intermediate.key || true; \
-         fi; \
          chmod 600 {ca}/intermediate.key 2>/dev/null || true; \
          exec /usr/local/bin/tillandsias-headless {headless_arg}"
     )
@@ -2558,7 +2617,7 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
         eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
         return 1;
     }
-    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    let vz = std::sync::Arc::new(tillandsias_vm_layer::vz::VzRuntime::new(3, image_root()));
     vz.set_serial_to_log(true);
     if !vz.is_provisioned() {
         eprintln!(
@@ -2582,6 +2641,21 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
         use std::time::Duration;
         use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
         use tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming;
+
+        // Order 1794-rf3a (b): a preview the forge publishes is reachable from
+        // this Mac's browser for as long as this run holds the VM.
+        let relay_vz = vz.clone();
+        crate::preview_relay::spawn(move || {
+            let vz = relay_vz.clone();
+            async move {
+                open_control_wire_stream(
+                    &vz,
+                    crate::preview_relay::PREVIEW_RELAY_VSOCK_PORT,
+                    Duration::from_secs(10),
+                )
+                .await
+            }
+        });
 
         eprintln!("[opencode] starting VM…");
         if let Err(e) = vz.start().await {
@@ -2896,8 +2970,8 @@ mod tests {
     /// Each is load-bearing for a reason recorded at `proxy_exec_preamble`: the
     /// control-wire exec env is CLEARED, so the three exports are the only way
     /// HOME / XDG_RUNTIME_DIR / the vault base URL reach the guest; the
-    /// `install -d` satisfies the DesktopUserSession gate; the openssl block is
-    /// first-use CA generation.
+    /// `install -d` satisfies the DesktopUserSession gate. There is no openssl
+    /// block: the CA is minted by the headless binary (1900-fkws).
     ///
     /// The two REDUNDANT lines (`podman rm`, the trailing `chmod 600`) are
     /// asserted present ON PURPOSE. Slice 5 was briefed to delete them behind
@@ -2906,6 +2980,23 @@ mod tests {
     /// workarounds, and removing them leaves the preamble a shell script
     /// regardless. If a later slice DOES delete them it must edit this test,
     /// which is the point: the deletion should be a decision, not a drift.
+    /// ORDER 1900-fkws: the guest CA private key is never minted by the
+    /// preamble. Its shell mint ran `openssl req ... -nodes`, an unencrypted
+    /// key at rest (operator: "a lost credential beats an unencrypted one");
+    /// the headless binary mints it instead, encrypted per 1898-hyhf.
+    #[test]
+    fn the_preamble_never_mints_a_private_key() {
+        for arg in ["--github-login", "--list-cloud-projects"] {
+            let p = super::proxy_exec_preamble(arg);
+            for mint in ["openssl", "-nodes", "-keyout", "genrsa", "genpkey"] {
+                assert!(
+                    !p.contains(mint),
+                    "{arg}: the preamble mints key material ({mint:?}): {p}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn the_preamble_keeps_every_part_that_is_load_bearing() {
         let p = super::proxy_exec_preamble("--github-login");
@@ -2914,7 +3005,6 @@ mod tests {
             "export XDG_RUNTIME_DIR=/run/user/0",
             "export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200",
             "install -d -m 0700",
-            "openssl req -x509",
             "podman rm tillandsias-proxy",
         ] {
             assert!(p.contains(needle), "preamble lost {needle:?}: {p}");
@@ -3365,16 +3455,11 @@ mod tests {
                 preamble.contains(&format!("chmod 600 {key}")),
                 "{arg}: preflight must clamp the CA private key to 0600"
             );
-            // The heal must sit OUTSIDE the `test -s` guard: an existing 0644
-            // key never reaches the openssl block.
-            let guarded = preamble
-                .split("fi; ")
-                .next()
-                .expect("preamble must contain the test -s guard block");
-            let after_guard = &preamble[guarded.len()..];
+            // 1900-fkws removed the `test -s` guard with the shell mint, so
+            // the heal is unconditional by construction.
             assert!(
-                after_guard.contains(&format!("chmod 600 {key}")),
-                "{arg}: the heal-down must run unconditionally, after the guard"
+                !preamble.contains("fi; "),
+                "{arg}: the heal-down must not sit inside a guard"
             );
         }
 

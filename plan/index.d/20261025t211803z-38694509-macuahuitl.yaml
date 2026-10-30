@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: launch-option-choice-prompt-we-have-n-options-with-one-recommended
+    field: verifiable_closure
+    value: 'A fixture asks for a studio on a Hugo fixture and asserts the prompt header, one line per option, exactly one [Recommended] (Decap CMS); after choosing, .tillandsias/config.toml in the checkout records the choice in a commit and a second launch opens without a prompt. Pre-fix result: FAILS, no choice prompt exists.'
+    ts: "2026-10-25T21:18:03Z"
+    host: macuahuitl
+    replaces_sha256: "cb6d34689c1c742955dbdc5ef9709b2e8fb3bba0cf3a00d4feb0c6435c247a6e"
+
+events:
+  - packet_id: launch-option-choice-prompt-we-have-n-options-with-one-recommended
+    event:
+      type: note
+      ts: "2026-10-25T21:18:03Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-10-25

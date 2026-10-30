@@ -20,13 +20,19 @@ mod action_host;
 #[cfg(target_os = "macos")]
 mod app_delegate;
 #[cfg(target_os = "macos")]
+mod approval_signer;
+#[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
 mod guest_binary;
 #[cfg(target_os = "macos")]
+mod guest_exec_relay;
+#[cfg(target_os = "macos")]
 mod installation_uuid;
 #[cfg(target_os = "macos")]
 mod main_thread;
+#[cfg(target_os = "macos")]
+mod preview_relay;
 #[cfg(target_os = "macos")]
 mod pty_vsock_bridge;
 // THE ATTRIBUTE IS LOAD-BEARING and every sibling above carries it. Without it
@@ -303,8 +309,28 @@ fn main() {
     // main dispatch queue from its calling thread) — exec_guest_main uses a
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+    // Order 1886-hf9j: the approval key. Enrol prints the allowed-signers
+    // line; sign asks for Touch ID and prints the SSHSIG. Neither touches the
+    // VM, so neither needs the tray quit.
+    // One key per repo slug (operator 2026-10-27).
+    if let Some(idx) = args.iter().position(|a| a == "--approval-enrol") {
+        let Some(slug) = args.get(idx + 1) else {
+            eprintln!("usage: --approval-enrol <owner/name>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::enrol_main(slug));
+    }
+    if let Some(idx) = args.iter().position(|a| a == "--approval-sign") {
+        let (Some(slug), Some(file)) = (args.get(idx + 1), args.get(idx + 2)) else {
+            eprintln!("usage: --approval-sign <owner/name> <statement-file>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::sign_main(slug, file));
+    }
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
-        require_no_live_tray("--exec-guest");
+        // 1897-y7j2: a running tray relays the command instead of refusing.
+        // The tray is asked only after the request is classified below.
+        let tray_owns_vm = live_tray_holds_singleton();
         // 795-zshi: the guest allowlist now has TWO arms, so this call site
         // DISCRIMINATES instead of flattening everything. An absolute argv[0]
         // with no shell metacharacters anywhere is sent as a verbatim argv
@@ -333,6 +359,13 @@ fn main() {
                 (vec!["/bin/bash".to_string(), "-lc".to_string(), cmd], None)
             }
         };
+        if tray_owns_vm {
+            match diagnose::exec_guest_via_tray(guest_argv, required_cap) {
+                Some(code) => std::process::exit(code),
+                None => require_no_live_tray("--exec-guest"),
+            }
+            std::process::exit(3);
+        }
         std::process::exit(diagnose::exec_guest_main(guest_argv, required_cap));
     }
     // Shared GuestTransport conformance fixtures (order 128) against the live

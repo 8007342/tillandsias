@@ -217,6 +217,13 @@ if ! is_stale; then
     exit 0
 fi
 
+# 1804-sccl: these are release + LTO musl cross builds whose bytes are
+# stamp-digested and staged into images. Land run 181 died here with
+# "sccache ... (exit status: 254)" on `-C linker-plugin-lto --target
+# x86_64-unknown-linux-musl`, refusing build-sidecar. A cache wrapper buys little
+# (two small crates, one target dir) and a wrapper failure is not a compile
+# failure, so the ambient wrapper is scoped out. TILLANDSIAS_SIDECAR_SCCACHE=1 opts in.
+[ "${TILLANDSIAS_SIDECAR_SCCACHE:-0}" = 1 ] || unset RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC_WRAPPER
 # Ensure the rustup target is installed if rustup is present.
 # If rustup is missing or target addition fails (e.g. in containerized forge environments),
 # fall back to compiling for the default host target so cargo build/check/test can proceed.
@@ -243,7 +250,7 @@ if [[ "$USE_TARGET" == true ]]; then
     #       -z --gc-sections --strip-all
     #   clang: error: linker command failed with exit code 1
     # Since 710-w9kc made this sidecar a REQUIRED build asset
-    # (tillandsias-headless/build.rs include_bytes!s it), that link failure
+    # (crates/tillandsias-embed/build.rs include_bytes!s it), that link failure
     # means `cargo build` for the whole workspace fails on macOS — not just
     # this crate. Having a `cc` is not the same as having one that can link
     # for the target.
@@ -285,7 +292,7 @@ strip "$SRC" 2>/dev/null || true
 # ASSERT THE FORMAT BEFORE STAGING (order 723-b9cn).
 #
 # This binary has exactly two consumers and both are Linux: the router
-# Containerfile COPYs it into the image, and tillandsias-headless/build.rs
+# Containerfile COPYs it into the image, and crates/tillandsias-embed/build.rs
 # include_bytes!s it as a runtime asset extracted inside the guest. The
 # host-target fallback above drops --target entirely, so on macOS it produces a
 # Mach-O and stages it under a name that says "Linux musl router sidecar".

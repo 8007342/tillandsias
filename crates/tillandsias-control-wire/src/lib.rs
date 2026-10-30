@@ -921,12 +921,10 @@ pub enum SubscriptionTopic {
 ///
 /// ORDER 997-e4v2: the wire variants that carried this
 /// (`EnumerateLocalProjects`, `LocalProjectsReply`, `LocalProjectsPush`) are
-/// GONE. The type is deliberately RETAINED because
-/// `tillandsias-headless/src/local_projects.rs` still returns it — order 505's
-/// project-label validation is fed by `scan_project_root`, and 1031-q4pb owns
-/// giving that control a source outside this crate. It is a plain struct with
-/// no discriminant, so keeping it changes no byte of the encoding. It dies with
-/// that validation, not with the wire.
+/// GONE. 776-jcf3 then deleted its last producer (`scan_project_root`, the
+/// `~/src` scan behind order 505's validation). The type remains only because
+/// other crates still name it; it is a plain struct with no discriminant, so
+/// keeping it changes no byte of the encoding.
 ///
 /// @trace spec:host-shell-architecture
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

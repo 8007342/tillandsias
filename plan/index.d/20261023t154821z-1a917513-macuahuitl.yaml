@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: one-expert-client-library-replaces-the-drifted-front-ends-tellme-forge-plan-spec-answer-mcp-pipeline-cli-and-expert-serve
+    event:
+      type: progress
+      ts: "2026-10-23T15:48:21Z"
+      agent_id: linux-macuahuitl-claude-20261023t154819z
+      host: macuahuitl
+      summary: |
+        Slice 1 LANDED in bf48edad6 (land(628), macbookair): `tillandsias-plan ask` runs run_grounded (capabilities.txt declares it); forge-plan.sh spec_answer delegates to `ask` when the binary reports it, so it inherits the context pack (610), native num_ctx (615), the answer cache (614) and the margin+lexical refusal (616); the shell fallback passes spec-floor --query. Darwin: the MCP envelope is byte-identical to `ask` direct. Next slices (macbookair): tellme onto `ask`; guard + agreement fixtures.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: vault-unseal-share-ephemerality-and-reset-hygiene
+    event:
+      type: note
+      ts: "2026-10-26T05:16:55Z"
+      agent_id: linux-lenovinha-opus5-20261026t051654z
+      host: lenovinha
+      summary: |-
+        Released to ready by the coordinator as a stale claim (no session working it; last lenovinha activity 2026-10-20). 1898-hyhf (PR 656) builds on the key store.

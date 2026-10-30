@@ -1867,9 +1867,19 @@ _tillandsias_select_warm_model() {
     # a fleet rule here — it is a preference order over what is present, so a
     # host with only 7b still warms 7b. yoga's ROCm replication (824-6qxh) is
     # what would make it a rule.
+    #
+    # CPU FLOOR IS 0.5b FIRST, AND NEVER 7b. The selected model is now also the
+    # model expert-serve SYNTHESISES with (see the export in
+    # warm_tier_model_fail_soft), so this order is a serving decision, not just
+    # a warm-up one. 0.5b is the inference image's baked default (always
+    # present), the pipeline's own default, lib-dev-env.sh's CPU tier, and the
+    # model 927-2q4w measured inside the Quick budget on the CPU floor
+    # (927-2885ms, lenovinha). The earlier order (3b, 7b, 0.5b) picked 7b on a
+    # 16GB-RAM CPU host whose inference container background-pulls T2 — a
+    # multi-GB model the floor cannot serve inside any tier budget.
     case "$_wm_class" in
         workstation-gpu|hybrid-gpu-npu) _wm_order="qwen2.5:14b qwen2.5:7b qwen2.5:3b" ;;
-        *)                              _wm_order="qwen2.5:3b qwen2.5:7b qwen2.5:0.5b" ;;
+        *)                              _wm_order="qwen2.5:0.5b qwen2.5:3b" ;;
     esac
     for _wm_cand in $_wm_order; do
         case ",${_wm_available}," in
@@ -1910,6 +1920,15 @@ warm_tier_model_fail_soft() {
     state_dir="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
     mkdir -p "$state_dir" 2>/dev/null || true
     _warm_state() { printf '%s\n' "$1" >"$state_dir/model-warm" 2>/dev/null || true; }
+    # Milliseconds since the epoch. GNU date has %N; BSD date prints a literal
+    # N, which made the arithmetic below abort under set -e (darwin gate). Fall
+    # back to whole seconds rather than a non-number.
+    _warm_ms() {
+        local t
+        t="$(date +%s%3N 2>/dev/null)" || t=""
+        case "$t" in '' | *[!0-9]*) t="$(( $(date +%s) * 1000 ))" ;; esac
+        printf '%s' "$t"
+    }
 
     ep="${TILLANDSIAS_INFERENCE_ENDPOINT:-http://inference:11434}"
     ep="${ep%/}"
@@ -1942,18 +1961,27 @@ warm_tier_model_fail_soft() {
         return 0
     fi
 
+    # HAND THE SELECTION TO THE SERVER THAT USES IT. expert-serve, started next
+    # in this same lane, synthesises with TILLANDSIAS_INFERENCE_MODEL and falls
+    # back to qwen2.5:0.5b when it is unset — and nothing in the lane set it.
+    # So a GPU forge warmed 14b and then answered every query with a cold 0.5b:
+    # the warm never reached the consumer. Exported (not a subshell) so
+    # start_expert_serve_fail_soft inherits it; an operator value was already
+    # taken as `model` above, so this never overrides one.
+    export TILLANDSIAS_INFERENCE_MODEL="$model"
+
     # ONE minimal completion. The point is the VRAM load, not the answer, so
     # ask for as few tokens as the server will emit.
-    started="$(date +%s%3N 2>/dev/null || echo 0)"
+    started="$(_warm_ms)"
     if curl -fsS -m 300 -o /dev/null \
         -H 'Content-Type: application/json' \
         -d "{\"model\":\"$model\",\"max_tokens\":1,\"messages\":[{\"role\":\"user\",\"content\":\"warm\"}]}" \
         "$ep/v1/chat/completions" 2>/dev/null; then
-        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        elapsed="$(( $(_warm_ms) - started ))"
         _warm_state "model_warm=$model warm_state=warm warm_reason=- load_ms=$elapsed"
         echo "[warm] $model loaded in ${elapsed}ms — tier budgets now measure inference, not model load (965-hz3f)"
     else
-        elapsed="$(( $(date +%s%3N 2>/dev/null || echo 0) - started ))"
+        elapsed="$(( $(_warm_ms) - started ))"
         _warm_state "model_warm=$model warm_state=failed warm_reason=request-failed load_ms=$elapsed"
         echo "[warm] warming $model failed after ${elapsed}ms (non-fatal; first real query pays the load)" >&2
     fi
@@ -4802,6 +4830,58 @@ export_ssh_env() {
     return 1
 }
 
+# ── Expert context pack (order 1815-tei4) ───────────────────
+# @trace order:1815-tei4, spec:expert-serve-grounded-pipeline
+# Writes <project>/.forge-expert-context.md: a deterministic pack of at most
+# 4800 bytes (universal forge constraints, then the project's OWN identity,
+# branch-discipline level and CLAUDE.md/AGENTS.md excerpts, then Tillandsias
+# rules only for a Tillandsias checkout). Every synthesis prompt — pipeline.rs
+# domain_synthesis_prompt via expert-serve, and tellme's tellme_context_pack —
+# starts with its exact bytes so the inference server reuses the prompt-prefix
+# cache. The generator is `tillandsias-plan expert-context-pack`
+# (crates/tillandsias-plan/src/context_pack.rs build_pack), where it is
+# unit-tested for a Tillandsias and a non-Tillandsias project.
+# FAIL-SOFT: no binary, a pre-1815 binary or a failed write leaves no pack,
+# and every prompt is then exactly what it was before. Never blocks startup:
+# the generator reads only the checkout and runs under a 10 s timeout.
+write_expert_context_pack() {
+    local project_dir="${1:-$PROJECT_DIR}" bin out
+    [[ -n "$project_dir" && -d "$project_dir" ]] || return 0
+    out="$project_dir/.forge-expert-context.md"
+    bin="$(command -v tillandsias-plan 2>/dev/null || true)"
+    [[ -n "$bin" ]] || bin="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"
+    if [[ ! -x "$bin" ]]; then
+        trace_lifecycle "expert-context-pack" "skipped (no-binary): prompts carry no pack" || true
+        return 0
+    fi
+    if timeout 10 "$bin" expert-context-pack --root "$project_dir" --out "$out" >/dev/null 2>&1; then
+        export TILLANDSIAS_EXPERT_CONTEXT_PACK="$out"
+        local gitignore="$project_dir/.gitignore"
+        if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-expert-context.md' "$gitignore"; then
+            echo '.forge-expert-context.md' >> "$gitignore"
+        fi
+        trace_lifecycle "expert-context-pack" "written to $out ($(wc -c < "$out" 2>/dev/null | tr -d ' ') bytes)" || true
+    else
+        trace_lifecycle "expert-context-pack" "skipped (generator-failed or pre-1815 binary): prompts carry no pack" || true
+    fi
+    return 0
+}
+
+# ── Host lane socket state (order 1863-eckw) ────────────────
+# lane_socket_state and wait_for_lane_socket live in lib-lane.sh so that
+# tillandsias-doctor can use them without sourcing this file (1874-6p63).
+_tlc_lane_lib="${BASH_SOURCE[0]%/*}/lib-lane.sh"
+[ -r "$_tlc_lane_lib" ] || _tlc_lane_lib=/usr/local/lib/tillandsias/lib-lane.sh
+if [ -r "$_tlc_lane_lib" ]; then
+    # shellcheck source=lib-lane.sh
+    source "$_tlc_lane_lib"
+else
+    # Fail soft: a copy of this file sourced away from its directory still
+    # starts, and names the lane `unknown` rather than dying on a missing name.
+    lane_socket_state() { echo unknown; }
+    wait_for_lane_socket() { return 0; }
+fi
+
 # ── Forge startup context injection ─────────────────────────
 # @trace spec:project-bootstrap-readme, spec:forge-environment-discoverability
 # Writes .forge-startup-context.md into the project workspace so agents know
@@ -4862,6 +4942,8 @@ inject_startup_context() {
         || _model_warm_line="model_warm=- warm_state=pending warm_reason=lifecycle-not-reached load_ms=-"
     # Order 969-nhh7: whether THIS checkout carries the guards, read live
     # rather than assumed from the fact that the installer exists.
+    local _lane_state
+    _lane_state="$(lane_socket_state)"
     local _hook_line
     _hook_line="$(forge_hook_state_line "$project_dir" 2>/dev/null)"
     [[ -n "$_hook_line" ]] || _hook_line="hooks: pre_push=unknown pre_commit=unknown dir=unresolved"
@@ -5150,6 +5232,9 @@ inject_startup_context() {
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
   - Machine-readable MODEL WARM-UP (order 965-hz3f — branch on this, do not parse the prose): \`${_model_warm_line}\`
   - This is a SEPARATE line from the tier verdicts on purpose. A tier budget is a promise about INFERENCE latency, and a cold model charges a VRAM load against it: measured on an RTX A5000, qwen2.5:7b took 23353ms cold and 938ms warm, 14b 9996ms then 1474ms — both warm figures inside the Quick tier's 3000ms, both cold ones far outside. Folding the load into a tier verdict makes "loading" and "slow" indistinguishable, which is exactly how a cold-start was once read as a model-size floor and nearly answered by raising the budget. \`warm_state\` is \`warm\` (loaded, and \`load_ms\` is what the load cost), \`failed\` (the request errored — the first real query pays the load), or \`skipped\` with a named \`warm_reason\`: \`no-curl\`, \`endpoint-unreachable\`, \`no-candidate-present\`. The budget is NOT raised to accommodate a cold model; \`TILLANDSIAS_SYNTH_BUDGET_MS\` remains the operator escape hatch for a genuinely slow lane.
+- **Host lane** — machine-readable (order 1863-eckw — branch on this, do not parse the prose): \`host_lane=${_lane_state} socket=${TILLANDSIAS_CONTROL_SOCKET:-none}\`
+  - \`publish_local\`, \`browser.open\`, the \`service_*\` tools and the host toolchains (\`flutter\`) all go over this one socket. \`ready\` means they can work. \`stale\` means the socket file exists but nothing on the host accepts on it: the process that served this lane is gone, every one of those tools fails, and an MCP server reported as failed at startup stays failed. Quit nothing; tell the operator \`host_lane=stale\`, and a running tray re-serves the lane within a second, after which a new session of the agent reconnects. \`absent\`/\`unset\` mean this forge was launched with no lane at all.
+- **Diagnose** — run \`tillandsias-doctor\` (or \`tillandsias-doctor --json\`) when a tool, the router or \`flutter\` fails: one call reports the lane socket, every MCP server with its reason, the router direct and through the proxy, the flutter toolchain, the cheatsheets and free space (order 1874-6p63). There is no in-forge renderer; previews open in the host browser.
 - **Git guards** — machine-readable (order 969-nhh7 — branch on this, do not parse the prose): \`${_hook_line}\`
   - \`pre_push=present\` means this checkout has the composed pre-push gate, so a push with no \`./build.sh --check\` stamp is REFUSED. \`pre_push=absent\` means it is not: push CI no longer exists on any working branch, so the local gate is the ONLY automated trunk protection, and without it nothing but your own discipline is checking what reaches the trunk. Run \`scripts/install-hooks.sh\` if you see \`absent\`, and treat every push until then as unguarded. This line exists because a forge carried exactly two hooks — neither a guard — for long enough that a cycle ran the gate, got a REFUSAL, and pushed anyway with nothing to stop it; the gap was found by accident while checking something else, and an unobservable guard is indistinguishable from a missing one.
 - **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.
@@ -5358,6 +5443,9 @@ CONTEXT_EOF
     if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-startup-context.md' "$gitignore"; then
         echo '.forge-startup-context.md' >> "$gitignore"
     fi
+
+    # Order 1815-tei4: the expert context pack beside this file. Fail-soft.
+    write_expert_context_pack "$project_dir" || true
 
     export FORGE_STARTUP_CONTEXT_FILE="$ctx_file"
     trace_lifecycle "startup-context" "written to $ctx_file (branch=${branch}, version=${version})"

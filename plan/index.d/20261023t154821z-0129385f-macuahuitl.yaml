@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+    field: next_action
+    value: 'LANDED in e1820d47b (land(612)); case forge-run-container-here-no-docker now gated and passing via land(620). Remaining for criterion 2: forge-build-image-in-forge-no-nested-podman and forge-start-dockerd-is-refused-by-the-rule (KNOWN_RED in pending/) — need forge context in retrieval or a Fine reranker (1822-dmwz remainder).'
+    ts: "2026-10-23T15:48:21Z"
+    host: macuahuitl
+    replaces_sha256: "fba33e06c4672d15cb7dcf3441cf8a4a063719c95338869ae4f230bf9e8d3605"
+
+events:
+  - packet_id: groundtruth-forge-awareness-cases-pin-no-docker-recommendations-and-no-tillandsias-rules-on-a-foreign-project
+    event:
+      type: note
+      ts: "2026-10-23T15:48:21Z"
+      host: macuahuitl
+      summary: |-
+        progress

@@ -24,6 +24,15 @@
 
 set -euo pipefail
 export TILLANDSIAS_NO_SINGLETON=1
+# ORDER 1844-92bz — cargo's CARGO_INCREMENTAL does not cross into the builder
+# toolbox (only TILLANDSIAS_* and a few others are forwarded), so a caller that
+# needs non-incremental builds says so through this name. The land queue sets
+# 0: its gates on macuahuitl (2026-10-23) left tillandsias-plan's incremental
+# cache holding codegen units from two sessions, and four candidates failed to
+# link ("undefined hidden symbol … .llvm.<hash>") on trees that link cleanly.
+if [ -n "${TILLANDSIAS_CARGO_INCREMENTAL:-}" ]; then
+    export CARGO_INCREMENTAL="$TILLANDSIAS_CARGO_INCREMENTAL"
+fi
 
 # ORDER 936-kdev. A SIGTERM used to kill this script SILENTLY: two ci-full
 # runs died rc=143 with every check green, and even naming the phase that was
@@ -65,6 +74,14 @@ unset _BUILDER_DIR
 # @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 1925-ided: PIN THE VALIDATOR SURFACE TO THE GATING CHECKOUT for every phase.
+# With a shared CARGO_TARGET_DIR (1807-shtg) the fixtures' scratch repos live
+# under ANOTHER checkout's target/plan-scratch, and the plan binary's cwd walk
+# resolved that checkout as its surface root. When it sat behind this tree the
+# hook refused every fixture push "resolved plan binary is STALE"
+# (claims-fleet-visible 9/22 in the v56.10.30.1 cut). A caller's value wins.
+export TILLANDSIAS_SURFACE_ROOT="${TILLANDSIAS_SURFACE_ROOT:-$SCRIPT_DIR}"
 
 # ── MEMORY-DERIVED CARGO_BUILD_JOBS CEILING (order 1047-h88p, arm 1) ─────────
 #
@@ -130,6 +147,128 @@ fi
 if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
+
+# ORDER 1804-sccl — EVERY rustc UNIT THE GATE COMPILES GOES THROUGH sccache
+# WHEN ONE RESOLVES. Each worktree under target/work/<name> has its own
+# target/, so every new worktree recompiles the ~280 registry units from
+# nothing. sccache keys a unit by its inputs, flags and compiler, so the
+# second worktree at the same toolchain gets them from the local cache.
+# Measured on macuahuitl 2026-10-20 (20 cores, cache on the NVMe RAID0):
+# cargo build --release -p tillandsias-plan in a fresh target dir, no
+# wrapper 68 s; with the cache warm the numbers are in row 1804-sccl.
+# Workspace crates in the dev/test profile are incremental and sccache
+# passes them straight through (not cacheable), so a gate's own crates are
+# untouched: this buys back the dependency build, nothing else.
+# Opt out with TILLANDSIAS_NO_SCCACHE=1; an explicit RUSTC_WRAPPER wins.
+# The cache dir is a fixed, bind-mountable path so the operator can put it
+# on the fast build root without any env change (1805-relo).
+# ORDER 1916-dvlp — TWO REGIMES. sccache refuses an incremental unit
+# ("incremental compilation is prohibited"), so the wrapper and a dev
+# incremental loop exclude each other. CARGO_INCREMENTAL=1 (or
+# TILLANDSIAS_CARGO_INCREMENTAL=1) is the DEV regime: no wrapper, and the
+# default debug build reads headless's runtime assets from this checkout
+# (assets-from-source, 1916-embd) so an asset edit costs no rustc work. The
+# gate regime (CARGO_INCREMENTAL=0 or unset) keeps the wrapper and embeds.
+# Pinned by scripts/lua/test-build-sccache-regimes.lua.
+# ORDER 1916-dvlp. Linux dev builds keep debuginfo in the object files
+# (split-debuginfo=unpacked) instead of copying it into every linked binary.
+# Linux only: on darwin "unpacked" piled up 1.2M loose .o files (104 GB) and
+# stalled every CoreFoundation test process; darwin sets its own value. An
+# explicit CARGO_PROFILE_DEV_SPLIT_DEBUGINFO wins.
+if [[ "$(uname -s)" == "Linux" ]]; then
+    export CARGO_PROFILE_DEV_SPLIT_DEBUGINFO="${CARGO_PROFILE_DEV_SPLIT_DEBUGINFO:-unpacked}"
+elif [[ "$(uname -s)" == "Darwin" ]]; then
+    # ORDER 1924-dobj. darwin keeps its default "unpacked": every build leaves
+    # its .o files in target/debug/deps for the debug map, and cargo never
+    # collects the stale ones. "packed" stops that but runs dsymutil on every
+    # link: one edit then one headless test measured 135 s packed vs 39 s
+    # unpacked (2026-10-29), so the edit loop keeps unpacked and every build
+    # prunes the objects no linked binary can read (~0.1 s steady state).
+    _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
+    "$SCRIPT_DIR/scripts/prune-darwin-stale-objects.sh" "$_deps_dir" >&2 || true
+    # Hold a SHARED lock for the rest of this run, so another build.sh's
+    # prune skips while this one's cargo writes into the target. fd 7 stays
+    # open in this shell and every cargo it spawns; the lock goes with it.
+    mkdir -p "$_deps_dir/../.."
+    exec 7>>"$_deps_dir/../../.tillandsias-prune.lock"
+    perl -MFcntl=:flock -e 'open(my $fh, ">>&=", 7) or exit 2; flock($fh, LOCK_SH) or exit 1' \
+        || echo "warn:darwin-prune-lock:could not take the shared build lock" >&2
+    # Backstop above the prune: refuse a deps dir that still grew past the
+    # bound rather than run every test 3-16 s slow. One clean darwin build
+    # is ~13-16k entries; 1.24M stalled each CoreFoundation process 3 s
+    # (measured 2026-10-29). The bound is ~7x a clean build.
+    _deps_bound=100000
+    if [[ -d "$_deps_dir" ]]; then
+        _deps_count="$(ls -f "$_deps_dir" | wc -l | tr -d ' ')"
+        if (( _deps_count > _deps_bound )); then
+            echo "refused:darwin-deps-bloat:entries=$_deps_count bound=$_deps_bound dir=$_deps_dir" >&2
+            echo "  why: past ~1M entries every test process that touches CoreFoundation stalls 3-16 s (1924-dobj)" >&2
+            echo "  remedy: cargo clean (a rebuildable cache; ~7 min to rebuild the tests), then re-run" >&2
+            exit 1
+        fi
+    fi
+fi
+# BEGIN-SCCACHE
+_sccache_bin=""
+TILLANDSIAS_DEV_BUILD_FEATURES=""
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    TILLANDSIAS_DEV_BUILD_FEATURES="--features tillandsias-headless/assets-from-source"
+fi
+# The dev regime's linker (1916-dvlp). Linking was 3.9 of 5.7 s of a warm
+# one-line headless edit on pirria (-Z time-passes, 2026-10-29), and lld cut
+# the edit from ~6.2 s to ~2.5 s. mold first, then ld.lld, only when one
+# resolves; nothing is installed. Set for the HOST target only
+# (CARGO_TARGET_<HOST>_RUSTFLAGS), so the musl and Windows rustflags in
+# .cargo/config.toml are untouched; an explicit RUSTFLAGS wins over target
+# rustflags in cargo, so it is left alone. Gate and release never see this.
+TILLANDSIAS_DEV_LINKER=""
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    _dev_linker_why=""
+    if [[ -n "${RUSTFLAGS:-}" ]]; then
+        _dev_linker_why="RUSTFLAGS is set, and cargo would ignore target rustflags beside it"
+    elif command -v mold >/dev/null 2>&1; then
+        TILLANDSIAS_DEV_LINKER=mold
+    elif command -v ld.lld >/dev/null 2>&1; then
+        TILLANDSIAS_DEV_LINKER=lld
+    else
+        _dev_linker_why="neither mold nor ld.lld on PATH"
+    fi
+    _dev_host="$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')"
+    if [[ -n "$TILLANDSIAS_DEV_LINKER" && "$_dev_host" != *-linux-* ]]; then
+        _dev_linker_why="host ${_dev_host:-unknown} is not Linux"
+        TILLANDSIAS_DEV_LINKER=""
+    fi
+    if [[ -n "$TILLANDSIAS_DEV_LINKER" ]]; then
+        _dev_var="CARGO_TARGET_$(tr 'a-z.-' 'A-Z__' <<<"$_dev_host")_RUSTFLAGS"
+        export "$_dev_var=${!_dev_var:+${!_dev_var} }-C link-arg=-fuse-ld=$TILLANDSIAS_DEV_LINKER"
+        echo "linker: $TILLANDSIAS_DEV_LINKER (dev regime; $_dev_var)" >&2
+        unset _dev_var
+    else
+        echo "linker: default ($_dev_linker_why)" >&2
+    fi
+    unset _dev_linker_why _dev_host
+fi
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    : # the dev regime: the off line below says why
+elif [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
+    _sccache_bin="$(command -v sccache 2>/dev/null || true)"
+fi
+if [[ -n "$_sccache_bin" ]]; then
+    export TILLANDSIAS_SCCACHE_BIN="$_sccache_bin"
+    export RUSTC_WRAPPER="$SCRIPT_DIR/scripts/sccache-wrapper.sh"
+    export SCCACHE_DIR="${SCCACHE_DIR:-$HOME/.cache/tillandsias/sccache}"
+    export SCCACHE_CACHE_SIZE="${SCCACHE_CACHE_SIZE:-20G}"
+    echo "sccache: on wrapper=$_sccache_bin dir=$SCCACHE_DIR size=$SCCACHE_CACHE_SIZE" >&2
+else
+    _sccache_why="no sccache on PATH; install one into ~/.cargo/bin"
+    [[ -n "${TILLANDSIAS_NO_SCCACHE:-}" ]] && _sccache_why="TILLANDSIAS_NO_SCCACHE set"
+    [[ -n "${RUSTC_WRAPPER:-}" ]] && _sccache_why="RUSTC_WRAPPER already set to $RUSTC_WRAPPER"
+    [[ "${CARGO_INCREMENTAL:-}" == "1" ]] && _sccache_why="CARGO_INCREMENTAL=1: the dev regime; sccache refuses incremental units (1916-dvlp)"
+    echo "sccache: off ($_sccache_why)" >&2
+    unset _sccache_why
+fi
+unset _sccache_bin
+# END-SCCACHE
 
 # ORDER 1803-pcap — THE GATE'S PLAN-CACHE SNAPSHOTS LIVE UNDER target/. The
 # plan binary keys its folded-ledger snapshot by the index's absolute path,
@@ -543,6 +682,11 @@ _pf_index_lock_held() {  # $1 = absolute lock path, $2 = scratch prefix; 0 = hel
             _pid="${_e#*/proc/}"; _pid="${_pid%%/*}"
             case "$_pid" in ''|*[!0-9]*) continue ;; esac
             _c="$(cat "/proc/$_pid/comm" 2>/dev/null)" || _c=""
+            # a git daemon (a mirror container's, whose fds a toolbox in
+            # another user namespace cannot readlink) serves bare repositories
+            # and never holds a worktree index.lock (1900-tm9v)
+            case "$_c" in git-daemon|git-upload-pa*|git-receive-pa*) continue ;; esac
+            case "$(tr '\0' ' ' < "/proc/$_pid/cmdline" 2>/dev/null)" in "git daemon "*) continue ;; esac
             case "$_c" in git*) rm -f "$2.lockscan"; return 0 ;; esac
         done < "$2.lockscan"
         rm -f "$2.lockscan"
@@ -1122,13 +1266,24 @@ _phase_emit_timing() {
                 # banners. Same `step:` family either way, so the finest-grain
                 # slowest= preference keeps seeing every phase.
                 if ($2 >= 0) { dur = $2; prov = "build" } else { dur = $1; prov = "build-span" }
-                printf "step:%s\t%s\t%s\t0\t%s\n", name, prov, dur, host
+                # 1915-gtph: column 12 carries the wall clock (span) as wall_ms.
+                printf "step:%s\t%s\t%s\t0\t%s\t\t\t\t\t\t\t%s\n", name, prov, dur, host, $1
             }' | bash "$SCRIPT_DIR/scripts/cycle-metrics.sh" --emit-timing-batch
     } 2>/dev/null || true
     # Consume on flush: combined dispatches (--ci-full --install) flush once
     # per stage, so a later flush emits only the phases closed since this one.
     _PHASE_LOG=""
     return 0
+}
+
+# ORDER 1915-gtph: mint ONE id for this gate run and export it, so the
+# build-check total row, every phase row flushed above and every timing row a
+# child writes carry the same "run_id" (scripts/cycle-metrics.sh writes it).
+# Without it ~400 phase rows per gate could be tied to their total only by a
+# flush timestamp, and their host field differs from the total's in a toolbox.
+_gate_run_id_begin() {
+    TILLANDSIAS_TIMING_RUN_ID="gate-$(_now_ms)-$$"
+    export TILLANDSIAS_TIMING_RUN_ID
 }
 
 # ---------------------------------------------------------------------------
@@ -1141,6 +1296,9 @@ FLAG_CHECK=false
 # exits, and NEVER compiles.
 FLAG_PREFLIGHT=false
 FLAG_PREFLIGHT_FULL=false
+# ORDER 1916-tsel — the warm-forge fast loop; see scripts/gate-changed.sh.
+FLAG_CHANGED=false
+CHANGED_BASE=""
 # ORDER 1384-bqhy — run ONLY the gate-steps.d loop over <root> (whose
 # scripts/gate-steps.d it reads). The fixture's way into the real loop over a
 # scratch tree; --check calls the same function over the checkout.
@@ -1167,6 +1325,16 @@ while [[ $# -gt 0 ]]; do
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
         --preflight)      FLAG_PREFLIGHT=true ;;
+        --changed)
+            FLAG_CHANGED=true
+            if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                CHANGED_BASE="$2"
+                shift 2
+            else
+                shift
+            fi
+            continue
+            ;;
         --gate-steps)
             GATE_STEPS_ROOT="${2:-}"
             [ -n "$GATE_STEPS_ROOT" ] || { echo "error: --gate-steps needs a root directory" >&2; exit 2; }
@@ -1271,6 +1439,10 @@ Build flags:
   --test            Run test suite (cargo test --workspace --no-fail-fast,
                     plus the tray/listen-vsock feature pass)
   --check           Type-check only (cargo check --workspace)
+  --changed [base]  Warm-forge loop: run ONLY the cargo tests and gate fixtures
+                    whose declared inputs intersect `git diff base` (default:
+                    merge-base with origin/linux-next). A guard file or an
+                    unmapped path runs the full --check. Not a land gate.
   --clean           Clean build artifacts before building
   --ci              Run local CI/CD validation (quick: spec binding, drift, version, fmt, clippy, tests)
   --ci-full         Run phased CI/CD validation (pre-build gate, post-build smoke, runtime residual litmus)
@@ -1377,6 +1549,17 @@ _freeze_gate_diff_base() {
 # --preflight fetches first, so it freezes after its own fetch.
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _freeze_gate_diff_base || exit 1; fi
 
+# ORDER 1807-shtg — ONE SHARED, LOCKED CARGO_TARGET_DIR FOR ALL WORKTREES, so
+# sccache (key includes the absolute target dir) hits across them. Takes the
+# flock and touches the tree when another checkout built last; see
+# scripts/shared-target.sh for the hazard it guards (1590-j20f, 1599-egzz).
+# BEGIN-SHARED-TARGET
+if [[ "$FLAG_PREFLIGHT" != true ]]; then
+    # shellcheck source=scripts/shared-target.sh
+    source "$SCRIPT_DIR/scripts/shared-target.sh" && shared_target_enter "$SCRIPT_DIR" || exit 1
+fi
+# END-SHARED-TARGET
+
 # ORDER 1599-egzz — EVERY GATE TOUCHES THE GATING CHECKOUT'S TRACKED FILES.
 #
 # With one CARGO_TARGET_DIR shared by several worktrees, cargo judges a path
@@ -1409,6 +1592,30 @@ if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == 
     (cd "$SCRIPT_DIR" && _touch_gating_checkout)
 fi
 # END-GATE-TOUCH
+
+# ORDER 1916-tsel — `--changed [base]`: the warm-forge fast loop. It runs here,
+# after the toolbox, sccache and diff-base preamble and WITHOUT the gate touch
+# above (that touch is what makes every --check rebuild cold), and exits.
+# scripts/gate-changed.sh derives each fixture's and crate's inputs from the
+# tree and runs only those intersecting the diff; exit 10 means it could not
+# scope the change (a guard file, an unmapped path), so the full --check runs.
+if [[ "$FLAG_CHANGED" == true ]]; then
+    if [[ -n "$CHANGED_BASE" ]]; then
+        _chg_base="$(git -C "$SCRIPT_DIR" rev-parse --verify -q "$CHANGED_BASE^{commit}")" || {
+            echo "refused:changed:bad-base:$CHANGED_BASE" >&2
+            _afford "the base does not resolve to a commit, so there is no diff to select checks from" \
+                "name a commit or ref, e.g. ./build.sh --changed origin/linux-next"
+            exit 2; }
+        export TILLANDSIAS_GATE_DIFF_BASE="$_chg_base"
+    fi
+    _chg_rc=0
+    bash "$SCRIPT_DIR/scripts/gate-changed.sh" --run ${TILLANDSIAS_GATE_DIFF_BASE:+"$TILLANDSIAS_GATE_DIFF_BASE"} || _chg_rc=$?
+    if [[ "$_chg_rc" -eq 10 ]]; then
+        echo "note:changed:full — the change could not be scoped (line above names why); running the full ./build.sh --check" >&2
+        exec bash "$SCRIPT_DIR/build.sh" --check
+    fi
+    exit "$_chg_rc"
+fi
 
 # ORDER 1802-fbld — BUILD PLACEMENT REPORT. One line saying whether target/ is
 # on the host's fast build root (TILLANDSIAS_FAST_BUILD_ROOT, default
@@ -2443,15 +2650,60 @@ _run() {
 _gs_exec_step() {
     _step_rc=0
     _step_out="$(mktemp "${TMPDIR:-/tmp}/gate-step.XXXXXX")"
+    # 1924-dcoy: `cmd > >(tee)` leaves bash's process-substitution fd (63)
+    # open in cmd, so EVERY background job a step starts held the pipe, even
+    # one redirected to /dev/null. Open the tee on its own fd, hand the step
+    # only its stdout and stderr, and close that fd in the step. fd 8, not
+    # {var}: darwin's /bin/bash 3.2 has no named-fd allocation.
+    local _gs_tee
+    exec 8> >(tee "$_step_out")
+    _gs_tee=$!
     if [ -n "$STEP_LUA" ]; then
         # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
         # preflight-door contract (1570-mxcg), so a fixture that must ask the
         # plan binary finds one in the land queue's clean env too.
-        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" >&8 2>&1 8>&- || _step_rc=$?
     else
-        _run bash "$_gs_root/$STEP_SCRIPT" > >(tee "$_step_out") 2>&1 || _step_rc=$?
+        _run bash "$_gs_root/$STEP_SCRIPT" >&8 2>&1 8>&- || _step_rc=$?
     fi
-    wait "$!" 2>/dev/null || true
+    exec 8>&-
+    _gs_await_step_pipe "$_gs_tee"
+}
+
+# ORDER 1924-dcoy — THE STEP'S PIPE CLOSES WHEN THE STEP DOES. tee ends at EOF,
+# and EOF comes only when every writer is gone: a background job the fixture
+# left on its stdout (a `sleep 60 &` decoy, or the sleep under a killed flock)
+# kept the gate waiting ~248 s per run for steps that work ~11 s. Wait at most
+# _GS_PIPE_GRACE_DS tenths of a second, then refuse the step, naming the
+# holders where /proc can, and stop waiting. The fix is in the fixture:
+# `</dev/null >/dev/null 2>&1` on the job and a kill in its EXIT trap.
+_GS_PIPE_GRACE_DS="${TILLANDSIAS_GATE_PIPE_GRACE_DS:-20}"
+_gs_await_step_pipe() {
+    local _tee="$1" _i=0 _pipe _holders="" _seen=" " _fd _p
+    while kill -0 "$_tee" 2>/dev/null && [ "$_i" -lt "$_GS_PIPE_GRACE_DS" ]; do
+        sleep 0.1; _i=$((_i + 1))
+    done
+    if ! kill -0 "$_tee" 2>/dev/null; then
+        wait "$_tee" 2>/dev/null || true
+        return 0
+    fi
+    _pipe="$(readlink "/proc/$_tee/fd/0" 2>/dev/null || true)"
+    if [ -n "$_pipe" ]; then
+        for _fd in /proc/[0-9]*/fd/*; do
+            [ "$(readlink "$_fd" 2>/dev/null)" = "$_pipe" ] || continue
+            _p="${_fd#/proc/}"; _p="${_p%%/*}"
+            [ "$_p" = "$_tee" ] && continue
+            case "$_seen" in *" $_p "*) continue ;; esac
+            _seen="$_seen$_p "
+            _holders="${_holders:+$_holders }$_p($(tr '\0' ' ' < "/proc/$_p/cmdline" 2>/dev/null | cut -c1-60))"
+        done
+    fi
+    printf 'refused:gate-step:background-job-holds-pipe:%s holders=%s\n' \
+        "${STEP_SCRIPT:-$STEP_LUA}" "${_holders:-unknown}" | tee -a "$_step_out" >&2
+    _afford "a background job the step started still holds its stdout pipe, so the gate would wait for it to exit (1924-dcoy)" \
+        "give the job </dev/null >/dev/null 2>&1 and kill it in the fixture's EXIT trap"
+    [ "$_step_rc" -ne 0 ] || _step_rc=1
+    kill "$_tee" 2>/dev/null || true
 }
 
 # _gs_verdict_token <output file> <rc> — the step's verdict as one token for a
@@ -2536,9 +2788,13 @@ _run_gate_steps() {  # $1 = root
         #
         # It also catches writers a name-based scan cannot see — a step that
         # reaches the runner indirectly, or code nobody has written yet.
+        # ORDER 1916-tsel: the shared path is overridable ONLY so the
+        # attribution fixture can drive two writers without touching the
+        # host's real fallback log.
+        _metrics_shared="${TILLANDSIAS_GATE_SHARED_TIMING_PATH:-/tmp/tillandsias-timing.jsonl}"
         _metrics_shared_before=""
-        if [ -f /tmp/tillandsias-timing.jsonl ]; then
-            _metrics_shared_before="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+        if [ -f "$_metrics_shared" ]; then
+            _metrics_shared_before="$(wc -l < "$_metrics_shared" 2>/dev/null || echo 0)"
         fi
 
         # The output streams as before AND is kept, so a refusal can be named
@@ -2564,10 +2820,19 @@ _run_gate_steps() {  # $1 = root
             fi
         fi
 
-        if [ -f /tmp/tillandsias-timing.jsonl ]; then
-            _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
-            if [ "${_metrics_shared_after:-0}" -gt "${_metrics_shared_before:-0}" ]; then
-                _error "gate step ${_step_path##*/} wrote $(( _metrics_shared_after - ${_metrics_shared_before:-0} )) record(s) into /tmp/tillandsias-timing.jsonl (1204-3s2s)"
+        # ORDER 1916-tsel — ATTRIBUTE BY RUN ID, NOT BY GROWTH. Growth alone
+        # blamed this step for records a CONCURRENT gate on the same host
+        # wrote (two land-queue evictions, 2026-10-29). Only new records
+        # stamped with THIS gate's run id are this step's; another gate's are
+        # ignored, and id-less ones are reported, not refused.
+        _metrics_ours=0
+        if [ -f "$_metrics_shared" ]; then
+            _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
+            case "$_metrics_attr" in
+                *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
+            esac
+            if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
+                _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_shared — $_metrics_attr (1204-3s2s; id-less records refuse unless another gate is live, 1916-tsel)"
                 _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
                 _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
                 _error "  refuse to publish any number, every arm driving it reads zero, and"
@@ -3169,9 +3434,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # and combined-flag runs do not over-count. NEVER alters the gate's exit.
     # 765-uti9: emit the preamble duration first — best-effort per the
     # 682-emvg contract, never alters the gate's exit.
+    _gate_run_id_begin
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
-    trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
+    # 1915-gtph: a FAILED gate flushes its phase rows too — the gate that died
+    # at minute 20 is the one whose minutes most need attributing.
+    trap '_gate_rc=$?; _phase_emit_timing; timing_emit build-check check "$_CHECK_T0" "$_gate_rc"' EXIT
+    # 1826-gi8e: hold the coordinator lane marker while the gate runs, so the
+    # `coord heartbeat` stands down. The reader checks the pid, so an aborted
+    # gate leaves a marker that no longer holds anything, and the EXIT trap
+    # above stays untouched. Best-effort: it can never fail the gate.
+    _LANE_MARKER="$SCRIPT_DIR/.cache/lane-markers/gate-$$"
+    { mkdir -p "$SCRIPT_DIR/.cache/lane-markers" && printf '%s\n' "$$" > "$_LANE_MARKER"; } 2>/dev/null || true
 
     # ── Stamp memoization (order 765-tkq2) ────────────────────────────────
     #
@@ -3525,6 +3799,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is the difference between a clean tree and a broken instrument.
     if ! _run_lua_decider "scripts/lua/check-order-citations-resolve.lua" 2>&1; then
         _error "an @trace cites an order that names no packet (1234-zade) — an invented suffix on a real order reads as legitimate and resolves to nothing; see the verdict line above"
+        exit 1
+    fi
+
+    # Order 1842-2q4g: the ghost-trace ratchet, asked in the fast lane so the
+    # preflight door (source 5 of _preflight_roster) refuses a @trace naming an
+    # absent spec in seconds. It used to run only at the end of the full gate:
+    # #607 lost ~64 minutes to `spec:forge-container`. Measured 0.3 s.
+    if ! _run_lua_decider "scripts/lua/check-ghost-traces.lua" 2>&1; then
+        _error "a @trace names a spec that does not exist, or the ghost baseline is stale (1842-2q4g) — see the spec named above"
         exit 1
     fi
 
@@ -4001,6 +4284,24 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "credential-channel fixture passed"
+
+    # ORDER 1903-djsq — gnome-keyring-daemon aborted DURING full gates
+    # (macuahuitl 2026-10-25 20:36, 20:51, 2026-10-26 02:01 PDT; lenovinha
+    # 2026-10-26 01:03 PDT; the 1265-8qr6 shape) because credential fixtures
+    # inherited the operator's session bus. This runs each against a sentinel
+    # dbus-daemon and fails on any bus event. Exit 3 = no dbus-daemon here
+    # (macOS); its static arm still fails with 1.
+    _step "Checking no keyring fixture reaches the session bus it inherited (1903-djsq)..."
+    _kfpb_rc=0
+    _run bash "$SCRIPT_DIR/scripts/test-keyring-fixtures-use-a-private-bus.sh" 2>&1 || _kfpb_rc=$?
+    if [ "$_kfpb_rc" -eq 3 ]; then
+        _info "skip: no dbus-daemon on this host; the static private-bus arm passed"
+    elif [ "$_kfpb_rc" -ne 0 ]; then
+        _error "a keyring fixture reached the session bus it inherited (1903-djsq) — on an operator host that is gnome-keyring-daemon, which aborts and restarts LOCKED (1265-8qr6); source scripts/test-support/private-session-bus.sh in the fixture named above and stub what it fell through to"
+        exit 1
+    else
+        _info "keyring fixtures stay off the inherited session bus"
+    fi
 
     _step "Checking the gate-stamp scope fixture (887-bz88)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-scope.sh" 2>&1; then
@@ -4515,12 +4816,52 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # production `script run` CLI for every retained case. Keep it unfiltered:
     # a selected count of zero would otherwise certify no production decision.
     _step "Running Lua source-agreement production integration (1484-uf29)..."
-    if ! _run cargo test -p tillandsias-plan --test lua_source_agreements \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1; then
+    # ORDER 1843-idfv — ONE RETRY, ONLY ON THE INCREMENTAL-LINK SIGNATURE. This
+    # target relinks the tillandsias-plan bin in the shared incremental cache,
+    # and that cache can hold codegen units from two compilations: rust-lld then
+    # fails "undefined hidden symbol … .llvm.<hash>" on a tree that links
+    # cleanly from scratch. Land-queue run 4 (macuahuitl 2026-10-23) evicted
+    # #608, #612, #613 and #614 this way; the same tree linked once the crate's
+    # cache was cleared. 1803-pcap met the same signature and retries without
+    # incremental; that is the remedy here. Any OTHER failure stays red.
+    _lsa_log="$(mktemp "${TMPDIR:-/tmp}/lua-source-agreements.XXXXXX")"
+    _lsa_rc=0
+    _run cargo test -p tillandsias-plan --test lua_source_agreements \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 >"$_lsa_log" 2>&1 || _lsa_rc=$?
+    cat "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ] && grep -qE 'undefined hidden symbol|collect2: error: ld returned' "$_lsa_log"; then
+        _info "retry:lua_source_agreements:incremental-link — the shared incremental cache produced a link failure; rebuilding this target once with CARGO_INCREMENTAL=0 (1843-idfv)"
+        _lsa_rc=0
+        CARGO_INCREMENTAL=0 _run cargo test -p tillandsias-plan --test lua_source_agreements \
+            --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 || _lsa_rc=$?
+    fi
+    rm -f "$_lsa_log"
+    if [ "$_lsa_rc" -ne 0 ]; then
         _error "the Lua source-agreement production integration target failed (1484-uf29)"
         exit 1
     fi
     _info "Lua source-agreement production integration passed"
+
+    # ORDER 1916-tsel — `./build.sh --changed` selects by declared input. The
+    # fixture mutates a stub tree one path at a time: an input selects its
+    # fixture and not an unrelated one, a crate selects its reverse
+    # dependents, and a guard or an unmapped path selects everything.
+    _step "Checking --changed selects checks by their inputs (1916-tsel)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-changed-selects-by-input.sh" 2>&1; then
+        _error "./build.sh --changed no longer scopes by input, or no longer fails safe to the full gate (1916-tsel)"
+        exit 1
+    fi
+    _info "--changed input-selection fixture passed"
+
+    # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
+    # records carrying ITS gate's run id; two concurrent writers prove a
+    # concurrent gate no longer gets the running step blamed and evicted.
+    _step "Checking the timing-log leak check blames only its own gate (1916-tsel)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-step-metrics-attribution.sh" 2>&1; then
+        _error "the shared-timing-log leak check attributes records by growth again, or no longer names a leaking step (1916-tsel)"
+        exit 1
+    fi
+    _info "Timing-log leak attribution fixture passed"
 
     # ORDER 1118-pifa: THIS STEP IS LOAD-BEARING. Do not skip or memoise it on
     # its run count. It tops `skippable:` on two hosts at ~95s with fail_pct=0,
@@ -6362,8 +6703,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # human grepping for the fixture name. A binding nobody can find is the
     # defect this packet is about, so the compact form was the wrong form.
     _step "Checking test-build-sh-forge-check-only (1063-nraf; 18ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-build-sh-forge-check-only.sh" 2>&1; then
-        _error "scripts/test-build-sh-forge-check-only.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-build-sh-forge-check-only.lua" 2>&1; then
+        _error "scripts/lua/test-build-sh-forge-check-only.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-check-engine-cpu-dispatch (1063-nraf; 206ms)..."
@@ -6631,6 +6972,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Normal completion: cancel the abort-trap and emit exactly one success
     # record for the whole gate. (packet 682-emvg)
     trap - EXIT
+    rm -f "${_LANE_MARKER:-/nonexistent}" 2>/dev/null || true
     _phase_report
     # 765-dfry: flush per-phase records AFTER the printed report (report reads
     # the same log; the flush consumes it).
@@ -6702,8 +7044,9 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
     _bump_build_version
     _check_trace_coverage
-    _step "Building workspace (debug)..."
-    _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    _step "Building workspace (debug)${TILLANDSIAS_DEV_BUILD_FEATURES:+, dev regime: assets from source}..."
+    # shellcheck disable=SC2086 # the features word list is split on purpose
+    _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" $TILLANDSIAS_DEV_BUILD_FEATURES 2>&1
     _info "Debug build complete"
 
     # Prune dangling images accumulated during the build

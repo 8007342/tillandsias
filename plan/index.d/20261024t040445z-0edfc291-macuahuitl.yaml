@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    event:
+      type: list-replace
+      ts: "2026-10-24T04:04:45Z"
+      agent_id: linux-macuahuitl-claude-20261024t040443z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "fixture repo with a Website-Update trailer between two stable tags + stub coordinator client: promote-stable step 5 sends exactly one message to namespace 8007342/tillandsias.org whose body starts \"update the website to <tag>\" and contains the reason text; a second run for the same tag sends no second message (pre-fix result: FAILS — no step 5, zero client calls)"
+        - "fixture range with no trailer: no message sent and no website-update line (pre-fix result: PASSES vacuously — recorded so the arm is known not to discriminate alone)"
+        - "stub client exits non-zero on send: promotion still prints promoted:<tag> and the last-but-one line is website-update:deferred:<tag>:<why> (pre-fix result: FAILS — line absent)"
+      summary: |-
+        revised: operator flow correction 2026-10-24 — stale task/enqueue wording replaced by message wording; 1847 unscoreable names the new fixture

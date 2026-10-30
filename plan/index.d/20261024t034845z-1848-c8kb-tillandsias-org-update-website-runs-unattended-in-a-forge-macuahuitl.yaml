@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story child (c) of the website-update-by-dogfood story. Work lands in the
+# tillandsias.org repository; this ledger row tracks it.
+packets:
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    order: 1848-c8kb
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    release_target: fleet-coordinator-warm-cache-milestone
+    pickup_role: linux
+    capability_tags: [website, tillandsias-org, forge, skills]
+    estimated_hours: 4
+    owned_files:
+      - tillandsias.org:skills/update-website/SKILL.md
+      - tillandsias.org:skills/update-website/scripts/release-refresh.sh
+      - tillandsias.org:skills/update-website/scripts/test-release-refresh-unattended.sh
+    title: |
+      The tillandsias.org update-website skill (release-refresh.sh + audit-site-claims for ask:judgement items) completes inside a forge with an ephemeral checkout and no operator: clone and history dirs default inside the forge's project scratch, the full-history runtime clone comes from the forge's mirror/remote, judgement items an agent can settle are settled per audit-site-claims, unsettleable ones end as a filed finding, and the result leaves the forge only as a git push through the mirror
+    context: |
+      EXISTING CAPABILITY REUSED: tillandsias.org already has
+      skills/update-website (one command, last-line grammar
+      ok:refreshed:<tag> | ask:judgement:<n> exit 3 | blocked:<why>),
+      skills/audit-site-claims and skills/file-findings. This packet makes
+      them unattended-safe; it does not write a new updater.
+      Gaps read from SKILL.md today: (1) checkouts default to
+      ~/.cache/tillandsias-org/clones and the history clone is "created once"
+      by hand — a fresh ephemeral forge has neither; (2) "Push only when the
+      operator's flow says so" and "a push to main deploys" — an unattended
+      agent needs an explicit, mechanical delivery rule; (3) "Never run this
+      on main / work in a worktree outside the checkout" must hold inside a
+      forge's single ephemeral checkout.
+      Site rule (AGENTS.md): the site is about architecture, not the fleet;
+      no host names, fleet sessions or coordinator detail may enter site
+      text as a side effect of the automated run.
+      Delivery default filed here (operator may overrule, see story's design
+      question): push to a branch website/update-<tag> and open a PR, not to
+      main; deploy stays the existing push-to-main publish.
+    exit_criteria:
+      - 'in a fixture with HOME pointed at an empty dir and no ~/.cache, `release-refresh.sh --tag <fixture-tag> --unattended` creates its clone + full history under the project scratch dir and reaches a last line in its grammar (pre-fix result: FAILS — blocked: on missing history clone / host-path default)'
+      - '--unattended never runs git push to main: a stub git on PATH records argv and the only push target is website/update-<tag> (pre-fix result: FAILS — flag absent)'
+      - 'a fixture producing ask:judgement leaves either a re-cited footnote passing checked-build or a file-findings record per item; zero items silently dropped (pre-fix result: FAILS — unattended path absent)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: tillandsias.org
+      skills/update-website/scripts/test-release-refresh-unattended.sh (new),
+      in the site repo's own check suite.
+    depends_on: []
+    related: [1846-dykd, 1847-5xv3]
+    next_action: >
+      Nothing is built. Work in the tillandsias.org repo, not this one; read
+      its AGENTS.md and skills/README.md first. Add --unattended to
+      release-refresh.sh (scratch-rooted dirs, history clone bootstrap, branch
+      push only) and an "Unattended run" section to SKILL.md that tells an
+      agent how to handle each ask: kind. Close this row from the site PR's
+      merge SHA.
+    notes: |
+      size: M
+      implementer_tier: sonnet
+      Independent of the coordinator; can start now.
+    provenance: |
+      Filed by macuahuitl (claude subagent) from operator request 2026-10-24 in-session.
+    events:
+      - type: filed
+        ts: "2026-10-24T03:48:45Z"
+        host: macuahuitl
+        summary: |-
+          Website-update story (c): site's update-website skill runs unattended in a forge, delivers via branch push through the mirror.

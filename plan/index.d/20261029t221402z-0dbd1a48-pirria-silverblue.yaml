@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-flux-tiers-fetch-from-an-ungated-apache-mirror-because-the-black-forest-labs-repo-is-gated
+    field: next_action
+    value: 'Fix pushed on work/1921-qqfz (b541658ea). I2/I3 repointed to second-state/FLUX.1-schnell-GGUF (apache-2.0, gated:false, pinned /tree/8c45a2ba; transformer, VAE ae and T5-XXL in the one repo). Check: tillandsias-plan script run scripts/lua/check-imagegen-tier-sources-ungated.lua. Before: refused I2,I3 black-forest-labs/FLUX.1-schnell gated=auto. After: ok:imagegen-tier-sources-ungated:rows=4. Left: land the ref; pin the same revision in the 1874-h9ns manifest.'
+    ts: "2026-10-29T22:14:02Z"
+    host: pirria-silverblue
+    replaces_sha256: "4c809a56a6ef1757a93aa5a734043e93758fdadc453cf523b94e1d0972e5edd5"
+
+events:
+  - packet_id: imagegen-flux-tiers-fetch-from-an-ungated-apache-mirror-because-the-black-forest-labs-repo-is-gated
+    event:
+      type: note
+      ts: "2026-10-29T22:14:02Z"
+      host: pirria-silverblue
+      summary: |-
+        fix pushed

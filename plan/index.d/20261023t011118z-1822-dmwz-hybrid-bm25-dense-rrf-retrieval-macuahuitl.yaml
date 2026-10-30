@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Phase 1 child (1i) of 1813-54df; operator-approved redesign 2026-10-23.
+packets:
+  - packet_id: expert-retrieval-goes-hybrid-bm25-plus-dense-with-reciprocal-rank-fusion-optional-fine-tier-reranker-and-breadcrumbed-yaml-chunks
+    order: 1822-dmwz
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    pickup_role: linux
+    capability_tags: [experts, retrieval, rust, inference]
+    estimated_hours: 8
+    owned_files:
+      - crates/tillandsias-plan/src/spec_index.rs
+      - crates/tillandsias-plan/src/spec.rs
+      - crates/tillandsias-plan/src/pipeline.rs
+    title: |
+      Expert retrieval fuses a BM25 lexical ranking with the dense cosine ranking by reciprocal-rank fusion, adds an optional reranker on the Fine tier only, and chunks YAML into ~800–1200-character pieces each prefixed with its heading/key breadcrumb
+    context: |
+      Retrieval is dense-only (`spec::top_k` cosine, pipeline.rs
+      `top_k_filtered`). Exact identifiers — order tokens, script names, env
+      vars, "docker" — are what agents ask with and what small embedders
+      blur; BM25 recovers them and RRF needs no score calibration between the
+      two lists. YAML chunks today can split a key from its value context; a
+      breadcrumb (e.g. `methodology/distributed-work.yaml > order_id_allocation > rule`)
+      restores it for both rankers. The reranker is Fine-only because Quick
+      and Immediate have no budget for it (see 1817-wq7y).
+    exit_criteria:
+      - 'measure-recall-at-k.sh (scripts/refusal-calibration/) on the same corpus reports recall@5 for dense-only and for hybrid RRF; hybrid is adopted only if recall@5 does not drop and identifier-bearing questions improve (pre-fix result: dense-only recall recorded as the baseline)'
+      - 'every YAML chunk the index writes is ≤ 1200 characters and starts with its breadcrumb line (pre-fix result: FAILS — no breadcrumb)'
+      - 'Quick and Immediate requests make no reranker call (unit test with a counting mock)'
+    unscoreable: |
+      unpinnable-until-the-guard-exists: cargo test -p tillandsias-plan
+      hybrid_rrf_and_chunk_breadcrumbs (written with the change) asserts RRF
+      ordering on a fixture, chunk size/breadcrumb, and no rerank on Quick;
+      the recall comparison is scripts/refusal-calibration/measure-recall-at-k.sh.
+    depends_on: []
+    related: [1813-54df, 1817-wq7y]
+    next_action: >
+      Baseline recall@5 with measure-recall-at-k.sh first; then breadcrumbed
+      chunking (re-baseline), then BM25 + RRF, then the Fine reranker.
+    notes: |
+      size: M
+      implementer_tier: opus
+    provenance: |
+      Filed by macuahuitl (claude subagent, operator-approved redesign 2026-10-23).
+    events:
+      - type: filed
+        ts: "2026-10-23T01:11:18Z"
+        host: macuahuitl
+        summary: |-
+          p3 1i: hybrid BM25+dense RRF retrieval, Fine reranker, breadcrumbed YAML chunks.

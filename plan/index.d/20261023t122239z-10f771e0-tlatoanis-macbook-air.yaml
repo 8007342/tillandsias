@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: coordinator-worker-and-sqlite-durable-object-store-and-return-project-queues-claims-and-overviews-with-local-miniflare-tests-no-deploy
+    event:
+      type: claimed
+      ts: "2026-10-23T12:22:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Claimed by coordinator assignment (2026-10-23) on work/1825-v37w: the Phase 2 coordinator Worker plus one SQLite-backed Durable Object under cloud/coordinator/, local tests only. No deploy and no Cloudflare account calls (deploy is 1830-hzsc).

@@ -1149,8 +1149,26 @@ mod tests {
                         };
                         let argv = parsed.argv.clone();
                         run_session(&frames, &req["id"], reader, &session, |i, o, e| {
-                            std::process::Command::new("sh")
-                                .arg("-c")
+                            use std::os::unix::process::CommandExt;
+                            let mut cmd = std::process::Command::new("sh");
+                            // A gate run in the background (`cmd &`, nohup)
+                            // starts this test binary with SIGINT ignored, and
+                            // an ignored-on-entry signal cannot be trapped by a
+                            // non-interactive sh: the INT trap silently never
+                            // fires and the script loops forever (1907, a
+                            // 9-hour land-queue hang). Give the fake toolchain
+                            // default dispositions, as a terminal would.
+                            // SAFETY: only async-signal-safe sigaction calls.
+                            unsafe {
+                                cmd.pre_exec(|| {
+                                    use nix::sys::signal::{SigHandler, Signal, signal};
+                                    for sig in [Signal::SIGINT, Signal::SIGTERM, Signal::SIGHUP] {
+                                        let _ = signal(sig, SigHandler::SigDfl);
+                                    }
+                                    Ok(())
+                                });
+                            }
+                            cmd.arg("-c")
                                 .arg(script)
                                 .arg("flutter")
                                 .args(&argv)
@@ -1231,7 +1249,7 @@ mod tests {
         let shim = std::path::PathBuf::from(
             std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
         )
-        .join("../../images/default/cli/flutter");
+        .join("../../images/default/cli/flutter-lane");
         let mut cmd = std::process::Command::new(python);
         cmd.arg(shim)
             .args(args)
@@ -1326,14 +1344,31 @@ mod tests {
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
+        // Hard deadline: a lost INT must fail this test, not hang the gate.
+        // Killing the shim closes its stdout (unblocking the reads below) and
+        // makes the fake host stop the toolchain.
+        let shim_pid = nix::unistd::Pid::from_raw(child.id() as i32);
+        let (done_tx, done_rx) = std::sync::mpsc::channel::<()>();
+        let watchdog = std::thread::spawn(move || {
+            if done_rx.recv_timeout(Duration::from_secs(30)).is_err() {
+                let _ = nix::sys::signal::kill(shim_pid, nix::sys::signal::Signal::SIGKILL);
+                return true;
+            }
+            false
+        });
         let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
         let mut first = String::new();
         stdout.read_line(&mut first).unwrap();
         assert_eq!(first, "ready\n");
         signal_child(&child, nix::sys::signal::Signal::SIGINT);
         let mut rest = String::new();
-        stdout.read_to_string(&mut rest).unwrap();
+        let _ = stdout.read_to_string(&mut rest);
         let status = child.wait().unwrap();
+        let _ = done_tx.send(());
+        assert!(
+            !watchdog.join().unwrap(),
+            "the toolchain never stopped on Ctrl-C within 30 s (INT lost); output: {first:?}{rest:?}"
+        );
         assert_eq!(rest, "stopped-by-int\n");
         assert_eq!(status.code(), Some(7));
     }

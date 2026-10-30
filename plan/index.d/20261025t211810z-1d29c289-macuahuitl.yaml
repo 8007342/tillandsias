@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: grapesjs-and-silex-studio-lanes-for-static-html
+    event:
+      type: list-replace
+      ts: "2026-10-25T21:18:10Z"
+      agent_id: linux-macuahuitl-claude-20261025t211810z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "A fixture opens a static HTML project in the GrapesJS lane in the dev Chromium framework browser, lets storageManager remote autosave post to the shared endpoint, and asserts that index.html in the checkout changed AND a new commit exists for it; studio_options lists no Silex lane. It also re-verifies the GrapesJS license and latest release and records them in the registry. Pre-fix result: FAILS, no studio registry entry or image exists."
+      summary: |-
+        operator ruling 2026-10-25

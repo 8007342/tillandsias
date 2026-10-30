@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the coordinator's request; follow-up to 1898-hyhf.
+packets:
+  - packet_id: the-web-preview-leaf-key-handed-to-the-router-lives-only-on-tmpfs-and-is-never-written-unencrypted-to-disk
+    order: 1901-bnif
+    status: in_progress
+    kind: security
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, router, local-web-preview, ca]
+    size: M
+    implementer_tier: sonnet
+    title: "The web-preview TLS leaf key the router serves is written only to tmpfs, never unencrypted to disk; with no tmpfs the preview refuses by name"
+    context: |
+      Follow-up to 1898-hyhf (PR 656), which covers the CA and Vault keys.
+      [S] local_web_preview.rs prepare_tls mints the per-project preview leaf
+      with `openssl req -newkey rsa:2048 -nodes -keyout <staging>/leaf.key`
+      (certificate_args) and renames it to
+      router_dir()/preview-tls/<label>.key, mode 0600, unencrypted.
+      router_dir() is main.rs router_dynamic_caddyfile_host_path():
+      $XDG_RUNTIME_DIR/tillandsias/router, else std::env::temp_dir()/tillandsias-embedded/router.
+      The runtime dir is tmpfs on a systemd Linux desktop, but nothing checks
+      that; with XDG_RUNTIME_DIR unset (the rootful VM guest that the
+      running_as_root branch serves, a service lane) the key rests in the
+      temp dir, which is disk wherever /tmp is not tmpfs. The router reads
+      the dir through build_router_args -> preview_listener_args. The unit
+      tests that mint a real leaf (the_probe_client_verifies_the_preview_leaf_at_the_dialed_address
+      and its siblings) write leaf.key under tempfile::tempdir(), on disk
+      where /tmp is disk (macOS). ca_key_store::is_tmpfs already exists.
+      STANDING RULE (operator 2026-10-19): no plaintext credentials at rest.
+    exit_criteria:
+      - "A fixture runs prepare_tls with the runtime dir pointed at a directory that is NOT tmpfs (and XDG_RUNTIME_DIR unset as a second arm) and asserts no file outside a tmpfs holds an unencrypted PEM private key afterwards: the leaf key is on tmpfs (statfs) and the router's preview-tls mount source is that same tmpfs directory, or the preview refuses with a named router_not_ready reason when no tmpfs is available. The leaf-minting unit tests write their keys under a tmpfs scratch, not tempfile::tempdir(). Pre-fix result: FAILS, the key is renamed into the non-tmpfs router dir."
+    verifiable_closure: "The fixture in the exit criterion passes, red on today's prepare_tls first."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds litmus-preview-leaf-key-only-on-tmpfs.yaml in the same commit as the change (1136-n8sh).
+    next_action: >
+      Write the fixture first (runtime dir on a non-tmpfs scratch, scan for BEGIN PRIVATE KEY off tmpfs) and watch it fail; then route prepare_tls and the router mount through one preview_tls_dir() that is tmpfs or refuses.
+    provenance: |
+      Coordinator-assigned 2026-10-26 as the leaf-key follow-up to 1898-hyhf.
+    events:
+      - type: filed
+        ts: "2026-10-26T04:57:27Z"
+        host: lenovinha
+        summary: "filed and claimed in_progress by lenovinha-silverblue (opus5)"

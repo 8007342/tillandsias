@@ -46,6 +46,7 @@ images/default/.cheatsheets-meta/
 # build-image.sh staging class as the dot-prefixed entries above; these are the
 # un-prefixed destinations it populates.
 images/default/skills/
+images/default/research/
 images/default/cheatsheets/
 images/default/cheatsheet-sources/
 
@@ -129,6 +130,7 @@ mock-release/
 *.tmp
 *.temp
 .forge-startup-context.md
+.forge-expert-context.md
 # Generated per-image build logs (build-image.sh writes build-<IMAGE>.log)
 build-*.log
 

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: opencode-forge-lane-missing-order-505-control-socket
+    event:
+      type: note
+      ts: "2026-10-25T23:03:01Z"
+      agent_id: forge-forge-tillandsias-opencode-20261025t230301z
+      host: macuahuitl
+      summary: |-
+        IN-FORGE MEASUREMENT 2026-10-25, forge-tillandsias (opencode-web lane): the lane's host-browser MCP is CONFIGURED and its bridge launches, but the socket refuses. Evidence: ~/.config/opencode/config.json declares mcp.host-browser -> /home/forge/.config-overlay/mcp/host-browser.sh (socat UNIX-CONNECT to TILLANDSIAS_CONTROL_SOCKET); ~/.local/share/opencode/log/opencode.log records 'server unavailable key=host-browser type=local status=failed' at 06:10:22.641Z (container start) and never retries; /run/host/tillandsias-mcp/mcp.sock exists as an inode (srw------- forge:forge, created 06:10) but connect() returns ConnectionRefusedError [Errno 111] when retried at 22:42Z and again after 23:00Z. Direct consequence: publish_local and browser.open are absent from the session's tool list, so no sibling static/wrangler container and no safe-chromium window can be launched; the flutter shim (/opt/agents/tillandsias-cli/bin/flutter) exits 69 against the same socket, so 'npm run build' in observatorium/ dies at 'flutter pub get'. Also: the in-forge self-test documented in images/default/config-overlay/opencode/instructions/web-services.md ('curl -fsS http://<service>.<project>.localhost/') fails here: no in-forge .localhost resolver (connection refused), and through HTTP_PROXY=http://proxy:3128 Squid answers 502 X-Squid-Error: ERR_READ_ERROR while the router on router:8080 answers normally. This is the in-forge measurement the packet has been waiting for, and it FAILS.

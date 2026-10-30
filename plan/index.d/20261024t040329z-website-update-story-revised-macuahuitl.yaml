@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-release-carries-a-website-update-trailer-and-stable-promotion-enqueues-a-website-update-task-on-the-tillandsias-org-coordinator-namespace
+    event:
+      type: revised
+      ts: "2026-10-24T04:03:29Z"
+      host: macuahuitl
+      summary: |-
+        REVISED per operator flow correction 2026-10-24 (relayed by the coordinator): the interface is an ordinary "update the website to <tag>" message on the 8007342/tillandsias.org queue (trailer + promote-stable step 5 is one producer; hand-sent also valid); the orchestrator runs tillandsias --cloud 8007342/tillandsias.org --opencode headless one-shot; the agent's natural start (1828) reads the message, picks update-website itself, posts a completion report; forge lifetime = agent lifetime, launcher wall-clock timeout posts failed:timeout and tears down; no launcher-side skill-run task type. Fields changed via set-field/list-replace fragments of this ts window.
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: revised
+      ts: "2026-10-24T04:03:29Z"
+      host: macuahuitl
+      summary: |-
+        REVISED per operator flow correction 2026-10-24 (relayed by the coordinator): the interface is an ordinary "update the website to <tag>" message on the 8007342/tillandsias.org queue (trailer + promote-stable step 5 is one producer; hand-sent also valid); the orchestrator runs tillandsias --cloud 8007342/tillandsias.org --opencode headless one-shot; the agent's natural start (1828) reads the message, picks update-website itself, posts a completion report; forge lifetime = agent lifetime, launcher wall-clock timeout posts failed:timeout and tears down; no launcher-side skill-run task type. Fields changed via set-field/list-replace fragments of this ts window.
+  - packet_id: tillandsias-org-update-website-skill-runs-unattended-inside-a-forge-with-no-host-paths-and-delivers-through-the-mirror-as-a-pushed-branch
+    event:
+      type: revised
+      ts: "2026-10-24T04:03:29Z"
+      host: macuahuitl
+      summary: |-
+        REVISED per operator flow correction 2026-10-24 (relayed by the coordinator): the interface is an ordinary "update the website to <tag>" message on the 8007342/tillandsias.org queue (trailer + promote-stable step 5 is one producer; hand-sent also valid); the orchestrator runs tillandsias --cloud 8007342/tillandsias.org --opencode headless one-shot; the agent's natural start (1828) reads the message, picks update-website itself, posts a completion report; forge lifetime = agent lifetime, launcher wall-clock timeout posts failed:timeout and tears down; no launcher-side skill-run task type. Fields changed via set-field/list-replace fragments of this ts window.
+  - packet_id: the-local-launch-retirement-release-is-the-first-website-update-marked-release-and-its-tillandsias-org-rewording-is-done-end-to-end-by-a-non-claude-forge-agent-from-the-coordinator-queue
+    event:
+      type: revised
+      ts: "2026-10-24T04:03:29Z"
+      host: macuahuitl
+      summary: |-
+        REVISED per operator flow correction 2026-10-24 (relayed by the coordinator): the interface is an ordinary "update the website to <tag>" message on the 8007342/tillandsias.org queue (trailer + promote-stable step 5 is one producer; hand-sent also valid); the orchestrator runs tillandsias --cloud 8007342/tillandsias.org --opencode headless one-shot; the agent's natural start (1828) reads the message, picks update-website itself, posts a completion report; forge lifetime = agent lifetime, launcher wall-clock timeout posts failed:timeout and tears down; no launcher-side skill-run task type. Fields changed via set-field/list-replace fragments of this ts window.

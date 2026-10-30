@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-24. Code is cited by symbol, never by line.
+packets:
+  - packet_id: exiting-tillandsias-stops-every-ephemeral-service-gracefully-then-forcibly-and-a-tray-start-after-an-unclean-exit-reaps-leftovers-before-launching
+    order: 1859-v5iv
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [podman, tray, shutdown, recovery, forge]
+    estimated_hours: 4
+    title: "Quitting Tillandsias stops everything it started, and starting after a crash cleans up the dead run before launching anything"
+    context: |
+      Evidence 2026-10-24 on macuahuitl: tillandsias-inference ignored SIGTERM and exited 137 after a 10 s stop; after crashed Codex, OpenCode Web and OpenCode lanes no further forge would launch (bad configs left live); the podman store wedged, podman volume ls and podman system reset hung, with veth unregistering in the kernel log. Required: (1) Exit stops every ephemeral service the runtime started, SIGTERM with a timeout first then forced kill, per podman best practice; (2) on tray start after an unclean exit, leftover runtime containers, networks and volumes get the same graceful-then-forced treatment before anything launches; (3) the inference service handles SIGTERM. Investigate whether the wedge is caused by forced removal racing network teardown. Operator packet relayed by the coordinator 2026-10-24.
+    exit_criteria:
+      - "A fixture starts the tray with a forge, kills the tray with kill -9, restarts it, and asserts a forge launches and no tillandsias-* container, network or volume from the dead run remains; a second arm asserts a clean Exit stops every runtime service with SIGTERM and a timeout before any forced kill, and that a service ignoring SIGTERM is killed only after the timeout. Pre-fix result: FAILS, leftovers block the next forge launch."
+    verifiable_closure: "A fixture starts the tray with a forge, kills the tray with kill -9, restarts it, and asserts a forge launches and no tillandsias-* container, network or volume from the dead run remains; a second arm asserts a clean Exit stops every runtime service with SIGTERM and a timeout before any forced kill, and that a service ignoring SIGTERM is killed only after the timeout. Pre-fix result: FAILS, leftovers block the next forge launch."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then fix.
+    provenance: |
+      Filed at operator request 2026-10-24.
+    events:
+      - type: filed
+        ts: "2026-10-24T17:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-24"

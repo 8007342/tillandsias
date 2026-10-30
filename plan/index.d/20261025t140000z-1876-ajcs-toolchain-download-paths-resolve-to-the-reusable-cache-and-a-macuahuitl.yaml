@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl at operator request 2026-10-25. Code is cited by symbol, never by line.
+packets:
+  - packet_id: toolchain-download-paths-resolve-to-the-reusable-cache-and-a-corrupted-cache-subtree-is-wiped-not-repaired
+    order: 1876-ajcs
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage-layers, cache, toolchains]
+    estimated_hours: 4
+    title: "Go, Ruby and other toolchain downloads go to the reusable cache, and a broken cache is wiped and rebuilt"
+    context: |
+      Layer L2 of openspec/changes/forge-storage-single-root-and-disk-discipline design D2. Today GOPATH and GEM_HOME are unset so they default to the container overlay (~/go, ~/.gem) and are re-downloaded every forge. Export GOPATH, GOMODCACHE, GEM_HOME, BUNDLE_PATH, PUB_CACHE under $TILLANDSIAS_PROJECT_CACHE, and add a per-subtree version stamp: mismatch or unreadable stamp wipes and recreates the subtree. Related to 1865-wv58 (ruby brew shim), which this does not fix.
+    exit_criteria:
+      - "A fixture sources the forge shell environment and asserts GOPATH, GOMODCACHE, GEM_HOME and PUB_CACHE are under $TILLANDSIAS_PROJECT_CACHE; a second arm corrupts one subtree's stamp and asserts the subtree is recreated empty. Pre-fix result: FAILS, GOPATH and GEM_HOME are unset and no per-subtree stamp exists."
+    verifiable_closure: "A fixture sources the forge shell environment and asserts GOPATH, GOMODCACHE, GEM_HOME and PUB_CACHE are under $TILLANDSIAS_PROJECT_CACHE; a second arm corrupts one subtree's stamp and asserts the subtree is recreated empty. Pre-fix result: FAILS, GOPATH and GEM_HOME are unset and no per-subtree stamp exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/forge-storage-single-root-and-disk-discipline.
+    provenance: |
+      Filed at operator request 2026-10-25 (single-root containment and disk discipline); spec openspec/changes/forge-storage-single-root-and-disk-discipline.
+    events:
+      - type: filed
+        ts: "2026-10-25T14:00:00Z"
+        host: macuahuitl
+        summary: "filed ready from the operator request of 2026-10-25"

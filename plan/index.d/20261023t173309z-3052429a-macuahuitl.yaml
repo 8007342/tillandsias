@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tillandsias-plan-run-door-strips-xdg-runtime-dir-and-the-session-bus-so-a-toolbox-gate-detached-through-it-fails-to-initialize-the-builder
+    field: status
+    value: completed
+    ts: "2026-10-23T17:33:09Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-tillandsias-plan-run-door-strips-xdg-runtime-dir-and-the-session-bus-so-a-toolbox-gate-detached-through-it-fails-to-initialize-the-builder
+    event:
+      type: completed
+      ts: "2026-10-23T17:33:09Z"
+      host: macuahuitl
+      summary: |-
+        status 'completed' with evidence_refs: 8399ab9f0 land(631) + crates/tillandsias-plan/tests/run_door_env.rs (pre-fix 0 passed 1 failed; post 1 passed; scrubbed control stays scrubbed); live probe through the door: probe_rc 1 -> 0, toolbox run --container tillandsias-builder true succeeds
+  - packet_id: the-tillandsias-plan-run-door-strips-xdg-runtime-dir-and-the-session-bus-so-a-toolbox-gate-detached-through-it-fails-to-initialize-the-builder
+    event:
+      type: note
+      ts: "2026-10-23T17:33:09Z"
+      host: macuahuitl
+      summary: |-
+        closed: the run door passes XDG_RUNTIME_DIR and DBUS_SESSION_BUS_ADDRESS when the caller has them; scrub/pass/fixed lists documented

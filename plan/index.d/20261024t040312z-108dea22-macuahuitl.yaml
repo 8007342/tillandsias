@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: list-replace
+      ts: "2026-10-24T04:03:12Z"
+      agent_id: linux-macuahuitl-claude-20261024t040257z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "headless `tillandsias --cloud <fixture-repo> --opencode` with no --prompt starts the agent with the generic \"read your queue messages and complete what they ask\" prompt (stub agent records argv) (pre-fix result: FAILS — no default prompt; verify, it may launch interactive)"
+        - "when the stub agent exits 0, the launcher returns within 30 s and podman ps shows no forge container for that run (pre-fix result: record measured result — expected PASS via the existing one-shot lane; if so this arm documents reuse)"
+        - "stub agent that never exits past the scaled wall-clock limit: launcher posts failed:timeout to the stub coordinator, removes the container, exits non-zero (pre-fix result: FAILS — no backstop)"
+        - "stub agent following the start instruction posts a completion report (done|failed + evidence line) to the stub queue before exit (pre-fix result: FAILS — no convention)"
+      summary: |-
+        revised: operator flow correction 2026-10-24 (in-session, macuahuitl via coordinator) — plain queue message, orchestrator-launched headless one-shot non-Claude forge, agent self-selects the skill, forge lifetime = agent lifetime, timeout backstop

@@ -807,6 +807,16 @@ pub async fn run_vsock_listener(
     shutdown: Arc<AtomicBool>,
     state: VmStateHandle,
 ) -> io::Result<()> {
+    // 1909-aryk: an older guest left the Vault root token and unseal share in
+    // plaintext files. Delete them before the host can connect; the next
+    // delivery from the host's secure storage is the only source now.
+    #[cfg(feature = "vault")]
+    for path in crate::vault_bootstrap::purge_credential_fallbacks() {
+        eprintln!(
+            "[vsock] removed plaintext credential file {} (1909-aryk)",
+            path.display()
+        );
+    }
     let transport = Transport::Vsock {
         cid: vmaddr_cid_any(),
         port,
@@ -845,6 +855,100 @@ pub async fn run_vsock_listener(
 /// without depending on `control-wire::transport` directly.
 #[allow(dead_code)]
 pub const DEFAULT_LISTEN_PORT: u32 = CONTROL_WIRE_VSOCK_PORT;
+
+/// Order 1794-rf3a (b): serve the preview relay on `port` until `shutdown`.
+/// Each connection is authenticated exactly as a control-wire connection is
+/// (the same handshake, the same key), then carries bytes both ways between
+/// the host tray's loopback listener and the router's preview listener. The
+/// bytes are the browser's own TLS session with the router: the relay never
+/// sees inside it.
+///
+/// @trace spec:vsock-transport, spec:local-web-preview
+pub async fn run_preview_relay_listener(port: u32, shutdown: Arc<AtomicBool>) -> io::Result<()> {
+    let transport = Transport::Vsock {
+        cid: vmaddr_cid_any(),
+        port,
+    };
+    let mut listener = bind(&transport).await?;
+    eprintln!("[tillandsias] preview relay bound port={port}");
+    serve_preview_relay(
+        &mut listener,
+        shutdown,
+        secure_control_wire_mode(),
+        || async {
+            let target =
+                tokio::task::spawn_blocking(crate::local_web_preview::preview_relay_target)
+                    .await
+                    .map_err(|e| io::Error::other(e.to_string()))?
+                    .map_err(io::Error::other)?;
+            tokio::net::TcpStream::connect(target).await
+        },
+    )
+    .await;
+    Ok(())
+}
+
+/// The relay's accept loop. The wire mode and the upstream dialer are
+/// parameters (the mode as in [`handle_connection_with_mode`]), so a test can
+/// serve it on a Unix socket against a local upstream.
+async fn serve_preview_relay<D, F, U>(
+    listener: &mut Listener,
+    shutdown: Arc<AtomicBool>,
+    mode: Result<SecureControlWireMode, String>,
+    dial: D,
+) where
+    D: Fn() -> F + Clone + Send + 'static,
+    F: std::future::Future<Output = io::Result<U>> + Send,
+    U: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+{
+    loop {
+        if shutdown.load(Ordering::SeqCst) {
+            return;
+        }
+        let accepted = tokio::select! {
+            r = listener.accept() => Some(r),
+            _ = shutdown_notify().notified() => None,
+            _ = tokio::time::sleep(SHUTDOWN_BACKSTOP) => None,
+        };
+        match accepted {
+            Some(Ok(stream)) => {
+                let (dial, mode) = (dial.clone(), mode.clone());
+                tokio::spawn(async move { relay_preview_connection(mode, stream, dial).await });
+            }
+            Some(Err(err)) => {
+                warn!(spec = "vsock-transport", error = %err, "preview relay accept failed");
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            None => {}
+        }
+    }
+}
+
+/// One relayed connection: the handshake, then the upstream dial, then bytes
+/// both ways until either side closes. A refused handshake or a failed dial
+/// closes the connection, and the host's browser sees a reset.
+async fn relay_preview_connection<D, F, U>(
+    mode: Result<SecureControlWireMode, String>,
+    raw: Box<dyn AsyncReadWrite + Unpin + Send>,
+    dial: D,
+) -> Result<(), String>
+where
+    D: FnOnce() -> F,
+    F: std::future::Future<Output = io::Result<U>>,
+    U: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let mut stream = maybe_secure_stream(mode?, raw)
+        .await
+        .map_err(|(_, e)| format!("preview relay handshake refused: {e}"))?;
+    let mut upstream = dial().await.map_err(|e| {
+        eprintln!("[tillandsias] preview relay: router unreachable: {e}");
+        format!("preview relay: router unreachable: {e}")
+    })?;
+    tokio::io::copy_bidirectional(&mut stream, &mut upstream)
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("preview relay: {e}"))
+}
 
 /// How long an idle waiter parks before re-reading the shutdown flag anyway
 /// (order 690-xeda).
@@ -2569,6 +2673,135 @@ mod tests {
             Err(broadcast::error::TryRecvError::Lagged(_)) => {}
             other => panic!("expected Lagged, got {other:?}"),
         }
+    }
+
+    /// An upstream that echoes every connection, standing in for the router.
+    async fn echo_upstream() -> std::net::SocketAddr {
+        let upstream = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = upstream.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut s, _)) = upstream.accept().await {
+                tokio::spawn(async move {
+                    let (mut r, mut w) = s.split();
+                    let _ = tokio::io::copy(&mut r, &mut w).await;
+                });
+            }
+        });
+        addr
+    }
+
+    /// Serve the REAL relay loop on a Unix socket (the `Listener` type the
+    /// vsock bind returns) against `dial`, returning the socket to connect to.
+    async fn serve_relay_on_unix<D, F, U>(tag: &str, dial: D) -> Transport
+    where
+        D: Fn() -> F + Clone + Send + 'static,
+        F: std::future::Future<Output = io::Result<U>> + Send,
+        U: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        let dir = std::env::temp_dir().join(format!("tl-relay-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let transport = Transport::Unix(dir.join("relay.sock"));
+        let mut listener = bind(&transport).await.unwrap();
+        tokio::spawn(async move {
+            let off = Ok(SecureControlWireMode::Off);
+            serve_preview_relay(&mut listener, Arc::new(AtomicBool::new(false)), off, dial).await
+        });
+        transport
+    }
+
+    /// Order 1794-rf3a (b): the relay carries a connection's bytes both ways
+    /// to the upstream, for more than one connection.
+    #[tokio::test]
+    async fn the_preview_relay_carries_bytes_both_ways_to_the_router() {
+        let addr = echo_upstream().await;
+        let transport =
+            serve_relay_on_unix("echo", move || tokio::net::TcpStream::connect(addr)).await;
+        for n in 0..2u8 {
+            let mut client = tillandsias_control_wire::transport::connect(&transport)
+                .await
+                .unwrap();
+            let hello = [b'h', b'i', n];
+            client.write_all(&hello).await.unwrap();
+            let mut back = [0u8; 3];
+            tokio::time::timeout(Duration::from_secs(5), client.read_exact(&mut back))
+                .await
+                .expect("the relay answered in time")
+                .unwrap();
+            assert_eq!(back, hello, "connection {n}");
+        }
+    }
+
+    /// Order 1794-rf3a (b): with the secure wire on, a relayed connection
+    /// needs the control wire's own handshake and key, and then carries bytes.
+    #[tokio::test]
+    async fn a_secure_preview_relay_needs_the_control_wire_handshake() {
+        let addr = echo_upstream().await;
+        let (host, guest) = tokio::io::duplex(4096);
+        let relay = tokio::spawn(relay_preview_connection(
+            Ok(SecureControlWireMode::On),
+            Box::new(guest),
+            move || tokio::net::TcpStream::connect(addr),
+        ));
+        let psk = channel_psk(
+            tillandsias_secure_channel::workspace_version(),
+            WIRE_VERSION,
+            HopId::HostGuest,
+        );
+        let mut secure = tillandsias_secure_channel::client_handshake(host, &psk)
+            .await
+            .expect("the relay accepts the control wire's key");
+        secure.write_all(b"tls bytes").await.unwrap();
+        let mut back = [0u8; 9];
+        tokio::time::timeout(Duration::from_secs(5), secure.read_exact(&mut back))
+            .await
+            .expect("relayed in time")
+            .unwrap();
+        assert_eq!(&back, b"tls bytes");
+        drop(secure);
+        let _ = tokio::time::timeout(Duration::from_secs(5), relay).await;
+
+        // The wrong key is refused before any upstream dial.
+        let dialed = Arc::new(AtomicBool::new(false));
+        let seen = dialed.clone();
+        let (host, guest) = tokio::io::duplex(4096);
+        let relay = tokio::spawn(relay_preview_connection(
+            Ok(SecureControlWireMode::On),
+            Box::new(guest),
+            move || {
+                seen.store(true, Ordering::SeqCst);
+                tokio::net::TcpStream::connect(addr)
+            },
+        ));
+        let _ = tillandsias_secure_channel::client_handshake(host, &[7u8; 32]).await;
+        let verdict = tokio::time::timeout(Duration::from_secs(5), relay)
+            .await
+            .expect("the relay decided in time")
+            .unwrap();
+        assert!(verdict.unwrap_err().contains("handshake refused"));
+        assert!(
+            !dialed.load(Ordering::SeqCst),
+            "no dial on a refused handshake"
+        );
+    }
+
+    /// Order 1794-rf3a (b): when the router cannot be reached, the relayed
+    /// connection closes instead of hanging.
+    #[tokio::test]
+    async fn an_unreachable_router_closes_the_relayed_connection() {
+        let transport = serve_relay_on_unix("dead", || async {
+            Err::<tokio::net::TcpStream, _>(io::Error::other("router has no enclave address"))
+        })
+        .await;
+        let mut client = tillandsias_control_wire::transport::connect(&transport)
+            .await
+            .unwrap();
+        let mut buf = [0u8; 1];
+        let n = tokio::time::timeout(Duration::from_secs(5), client.read(&mut buf))
+            .await
+            .expect("closed in time")
+            .unwrap_or(0);
+        assert_eq!(n, 0, "the relay closes the connection");
     }
 
     /// litmus:headless-keepalive (order 148, criterion 3): the control listener

@@ -1,0 +1,18 @@
+# {{NAME}}: build, push and deploy to Cloud Run (optional; the console's
+# Dockerfile trigger does the same without this file). Runs on Google Cloud
+# Build, which needs a billing account.
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_SERVICE_NAME:$SHORT_SHA', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_SERVICE_NAME:$SHORT_SHA']
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: ['run', 'deploy', '$_SERVICE_NAME',
+         '--image', '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_SERVICE_NAME:$SHORT_SHA',
+         '--region', '$_REGION', '--port', '{{PORT}}']
+images: ['$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPOSITORY/$_SERVICE_NAME:$SHORT_SHA']
+substitutions:
+  _REGION: us-central1
+  _REPOSITORY: cloud-run-source-deploy
+  _SERVICE_NAME: {{SLUG}}

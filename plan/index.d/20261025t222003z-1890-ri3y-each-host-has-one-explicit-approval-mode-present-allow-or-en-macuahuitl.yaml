@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl from operator rulings 2026-10-25. Code is cited by symbol, never by line.
+packets:
+- packet_id: each-host-has-one-explicit-approval-mode-present-allow-or-enforced-shown-in-the-tray-and-diagnose-and-macuahuitl-stays-in-allow
+  order: 1890-ri3y
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - approval
+  - security
+  - cost-gate
+  estimated_hours: 4
+  depends_on:
+  - approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+  related: []
+  title: Each host shows whether approvals are present, allowed (log-only) or enforced, and macuahuitl stays log-only
+  context: 'Design R4 of openspec/changes/os-verified-approval-gates. Modes: present (hardware enrolled, dialogs shown, decline stops), allow (no hardware, runs and journals ''not enforced: no approval hardware''), enforced (later, explicit operator decision only). Shown as a tray menu line and in --diagnose. Only the operator''s tray action changes it; enrolment moves a host to present, never enforced.'
+  exit_criteria:
+  - 'A test asserts: a host with no enrolled key reports allow in the tray menu model and --diagnose, and a gated action runs with a journal entry ''not enforced: no approval hardware''; enrolling a fake key yields present, never enforced; no MCP tool or CLI flag available to a forge changes the mode. Pre-fix result: FAILS, there is no approval mode and no menu line.'
+  verifiable_closure: 'A test asserts: a host with no enrolled key reports allow in the tray menu model and --diagnose, and a gated action runs with a journal entry ''not enforced: no approval hardware''; enrolling a fake key yields present, never enforced; no MCP tool or CLI flag available to a forge changes the mode. Pre-fix result: FAILS, there is no approval mode and no menu line.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today''s code, then implement per openspec/changes/os-verified-approval-gates.
+
+    '
+  provenance: 'Filed from the operator rulings on PR #651, 2026-10-25.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-25T22:20:00Z'
+    host: macuahuitl
+    summary: filed from the operator rulings of 2026-10-25

@@ -11,7 +11,7 @@
 --   3 DECOUPLED build-sidecar.sh still stages the router sidecar when the
 --               decider fails, then exits 6 naming the decider (pre-fix: under
 --               set -e the decider's failure skipped the sidecar, and every
---               cargo build panicked in tillandsias-headless/build.rs)
+--               cargo build panicked in crates/tillandsias-embed/build.rs)
 --   4 LANES     build.sh is strict (optional=0) for --install, --release and
 --               --ci-full, and passes the flag to build-sidecar.sh
 --
