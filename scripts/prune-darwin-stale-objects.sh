@@ -27,7 +27,9 @@ deps="${1:?usage: prune-darwin-stale-objects.sh <deps-dir>}"
 # shell keeps open (a BSD lock lives on the open file, not the process).
 lock="$deps/../../.tillandsias-prune.lock"
 exec 8>>"$lock"
-if ! perl -MFcntl=:flock -e 'open(my $fh, ">>&=", 8) or exit 2; flock($fh, LOCK_EX | LOCK_NB) or exit 1'; then
+lock_rc=0
+perl -MFcntl=:flock -e 'open(my $fh, ">>&=", 8) or exit 2; flock($fh, LOCK_EX | LOCK_NB) or exit 1' || lock_rc=$?
+if (( lock_rc != 0 )); then
     echo "skipped:darwin-stale-objects:a build holds $lock (shared); pruning next time"
     exit 0
 fi
