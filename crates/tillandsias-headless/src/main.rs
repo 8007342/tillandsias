@@ -74,6 +74,7 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod bringup_timer;
 mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
@@ -1296,7 +1297,7 @@ fn main() {
     }
 
     if init {
-        if let Err(e) = run_init(debug, force) {
+        if let Err(e) = bringup_timer::timed("image-ensure", || run_init(debug, force)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1306,7 +1307,9 @@ fn main() {
         #[cfg(feature = "vault")]
         if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
             // Skip Vault bootstrap in litmus/fake mode — no Vault container.
-        } else if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
+        } else if let Err(e) = bringup_timer::timed("vault-health", || {
+            vault_bootstrap::ensure_vault_running(debug)
+        }) {
             eprintln!("Error bringing Vault up: {}", e);
             std::process::exit(1);
         }
@@ -16129,6 +16132,9 @@ async fn run_agent_container_attached(
     debug: bool,
     delegated: Option<&DelegatedRunConfig>,
 ) -> Result<(), String> {
+    // 1915-brst: forge-start runs from here to the spawn of the attached run
+    // below; the session itself is not part of bring-up.
+    let forge_started = std::time::Instant::now();
     // ORDER 986-ahnc. THE FORGE ARGV IS VALIDATED HERE OR NOWHERE.
     //
     // 972-6vaj put the hardening envelope behind a real check on the
@@ -16267,6 +16273,8 @@ async fn run_agent_container_attached(
     // `swap:` line and the forge runs as before.
     #[cfg(target_os = "linux")]
     let _swap = forge_swap::acquire(container_name, debug);
+
+    bringup_timer::report("forge-start", forge_started.elapsed().as_millis(), 0);
 
     let Some(config) = delegated else {
         return client
@@ -18452,12 +18460,14 @@ pub(crate) fn ensure_enclave_for_project(
     // launch died trying to pull localhost/tillandsias-router:v<new> from a
     // nonexistent registry (same bump-window class as the order-267
     // run-observatorium finding).
-    ensure_versioned_images(
-        &root,
-        launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
-        version,
-        debug,
-    )?;
+    bringup_timer::timed("image-ensure", || {
+        ensure_versioned_images(
+            &root,
+            launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
+            version,
+            debug,
+        )
+    })?;
 
     // 776-jcf3: the mirror seeds from the cloud remote only, never from a
     // host checkout's remote.origin.url.
@@ -18555,12 +18565,15 @@ pub(crate) fn ensure_enclave_for_project(
         // so an empty mirror there is a legitimate cold state the guest
         // handles fail-loud rather than a seed-in-progress worth waiting on.
         if project_remote_url.is_some() {
-            wait_for_git_mirror_ready(
-                &client,
-                &git_container_name,
-                project_name,
-                project_default_branch.as_deref(),
-                debug,
+            bringup_timer::timed_async(
+                "mirror-seed",
+                wait_for_git_mirror_ready(
+                    &client,
+                    &git_container_name,
+                    project_name,
+                    project_default_branch.as_deref(),
+                    debug,
+                ),
             )
             .await?;
         }
@@ -18844,7 +18857,11 @@ async fn ensure_shared_git_and_inference_for_launch(
         )
         .await?;
     }
-    ensure_inference_for_launch(client, certs_dir, version, debug).await?;
+    bringup_timer::timed_async(
+        "model-preload",
+        ensure_inference_for_launch(client, certs_dir, version, debug),
+    )
+    .await?;
     Ok(mirror_identity)
 }
 
@@ -24171,6 +24188,75 @@ mod tests {
                 && seen[1].1.iter().any(|arg| arg == "refs/heads"),
             "metadata-free readiness must count concrete heads convention-neutrally"
         );
+    }
+
+    /// ORDER 1922-accp — acceptance fixture for the event-driven readiness gate
+    /// (operator ruling 2026-10-28: forges never wait on or poll siblings).
+    ///
+    /// The fixture owns the mirror's readiness: the fake podman reports the
+    /// mirror unready for two probes and seeded on the third, and the fixture's
+    /// event source emits the mirror READY event only AFTER the launch chain's
+    /// mirror gate returns. Two arms, both named in the output:
+    ///   forge-before-ready — the gate let the launch reach forge creation
+    ///                        before the READY event was emitted;
+    ///   polls=N            — the gate probed the sibling N > 0 times.
+    /// RED on linux-next as of 2026-10-28 (wait_for_git_mirror_ready polls
+    /// probe_git_mirror_seeded once a second and returns on a probe, not an
+    /// event). It goes green when 1922-gate and 1922-unwt land; 1922-gate
+    /// repoints the `gate` call below at its ReadinessGate and drops #[ignore].
+    /// Run: cargo test -p tillandsias-headless --bin tillandsias \
+    ///        readiness_acceptance -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore = "1922-accp: red by design until 1922-gate and 1922-unwt land"]
+    async fn readiness_acceptance_forge_never_starts_before_mirror_ready_and_counts_no_polls() {
+        let backend = Arc::new(FakeBackend::default());
+        // Unready, unready, then seeded (HEAD + concrete branch).
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(0, "")));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        // The fake event source: the fixture holds the sender and emits READY
+        // only after the gate has returned. Today's chain never subscribes.
+        let (ready_tx, _ready_rx) = tokio::sync::watch::channel(false);
+
+        let gate = wait_for_git_mirror_ready(
+            &client,
+            "tillandsias-git-fixture",
+            "fixture",
+            Some("trunk"),
+            false,
+        )
+        .await;
+        // Reaching here with Ok is the point the launch chain creates the forge.
+        let forge_started = gate.is_ok();
+        let ready_emitted_before_forge = *ready_tx.borrow();
+        ready_tx.send_replace(true);
+
+        let polls = backend
+            .seen()
+            .iter()
+            .filter(|(_, argv)| {
+                argv.first().map(String::as_str) == Some("exec")
+                    && argv.iter().any(|a| a == "tillandsias-git-fixture")
+            })
+            .count();
+
+        let mut red = Vec::new();
+        if forge_started && !ready_emitted_before_forge {
+            red.push("forge-before-ready".to_string());
+        }
+        if polls > 0 {
+            red.push(format!("polls={polls}"));
+        }
+        let verdict = if red.is_empty() {
+            "ok:readiness-acceptance:forge-after-ready:polls=0".to_string()
+        } else {
+            format!("refused:readiness-acceptance:{}", red.join(":"))
+        };
+        println!("{verdict}");
+        assert!(red.is_empty(), "{verdict}");
     }
 
     #[test]
@@ -30747,6 +30833,9 @@ esac
             Some(nonzero_identity),
         );
         restore.set("FAKE_PODMAN_MODE", "codex-exit-37");
+        // 1915-brst: the attached launch reports forge-start once, at the
+        // spawn, on the thread that drives it.
+        bringup_timer::capture::start();
         let nonzero_error = runtime
             .block_on(run_agent_container_attached(
                 &client,
@@ -30764,6 +30853,15 @@ esac
         assert!(
             nonzero_error.contains("FAILED") && nonzero_error.contains("37"),
             "wrapper lost the nonzero failure: {nonzero_error}"
+        );
+        let bringup = bringup_timer::capture::take();
+        assert_eq!(
+            bringup
+                .iter()
+                .filter(|l| l.starts_with("bringup: step=forge-start ms="))
+                .count(),
+            1,
+            "the attached launch must report forge-start exactly once: {bringup:?}"
         );
 
         let exact_identity = "forge-alpha-codex-20260723T070000Z";

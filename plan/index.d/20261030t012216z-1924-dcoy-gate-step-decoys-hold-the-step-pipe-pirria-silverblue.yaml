@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-silverblue at the coordinator's request (macuahuitl, 2026-10-30), from plan/issues/gate-time-profile-2026-10-29.md on work/1916-tsel.
+packets:
+- packet_id: gate-step-background-decoys-release-the-step-pipe
+  order: 1924-dcoy
+  status: ready
+  kind: defect
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - fixture
+  - gate
+  - build
+  estimated_hours: 2
+  title: Gate-step fixtures leave a background sleep decoy holding the step's stdout pipe, so the runner waits ~248 s per gate for work that takes ~11 s
+  context: 'The gate runs each step as bash STEP_SCRIPT > >(tee out) and then waits for tee. A background sleep the fixture started (or a child of one, such as the sleep under flock in the swap fixture) inherits that pipe and outlives the script, so tee sees EOF only when the sleep ends. Profiled: 1231-cbie 120 s wall / 1.6 s work, 1128-4ffr 68 / 8 s, 1376-8zdz 60 / 0.2 s, and the plan ledger check 40 / 0.8 s (untraced). Reproduced on pirria-silverblue 2026-10-30: test-forge-swap-service.sh piped to cat takes 60 s, 1 s unpiped.'
+  exit_criteria:
+  - Each named step's wall time is within about 2 s of its own work; the fixtures' assertions are unchanged.
+  - The gate step runner refuses a step that leaves a background job holding its stdout pipe, naming the holder; today it waits silently.
+  verifiable_closure: Piped wall time before and after for each fixture, and the runner's refusal on a planted fixture that backgrounds a sleep on its stdout.
+  unscoreable: 'unpinnable-until-the-guard-exists: the runner guard is the subject; its own fixture is the evidence (1136-n8sh).'
+  next_action: 'On work/1924-dcoy: decoys get </dev/null >/dev/null 2>&1 and an EXIT-trap kill; _gs_exec_step bounds its wait for tee and refuses with the holders.'
+  provenance: plan/issues/gate-time-profile-2026-10-29.md on work/1916-tsel (macuahuitl-fedora).
+  events:
+  - type: filed
+    ts: '2026-10-30T01:22:16Z'
+    host: pirria-silverblue
+    summary: filed p1 at the coordinator's request; unclaimed while pirria-silverblue is at its WIP limit
