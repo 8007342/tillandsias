@@ -39,6 +39,8 @@ RUN pip install --no-cache-dir \
     && python -c "import torch, torchvision; print('torch', torch.__version__)"
 
 COPY extra_model_paths.yaml /opt/comfyui/extra_model_paths.yaml
+# 1921-vkrr: the placement probe (backend=cuda, or exit 1 on a silent CPU fallback).
+COPY probe-placement.py /opt/tillandsias/probe-placement.py
 
 # No ComfyUI-Manager anywhere, and custom_nodes holds only what ships with
 # ComfyUI at this commit (the 1921-7aa5 manifest adds reviewed nodes later).
