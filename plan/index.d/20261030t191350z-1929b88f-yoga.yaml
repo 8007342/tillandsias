@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+    event:
+      type: progress
+      ts: "2026-10-30T19:13:50Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        yoga live arm 2026-10-30 (work/1911-3dqo at bf4d9b791, PR #691). Run 1, before the fix: SIGKILL of the `--cloud ... --bash` launcher, then the forge's own `podman run` client issued `container kill` (journal 12:08:17, client pid 75676, 2 ms before died), and --rm removed the forge. Fixed: tty launches pass --sig-proxy=false. Run 2, with the fix: the forge reads Running=true after the kill. A SECOND teardown remains, mechanism unknown: about 1 s after the kill the tray companion (pid 93619, a setsid child of the launcher, main.rs:15457) was gone, vault logged "vault exited after a forwarded termination signal", proxy/git/router/inference died, and the forge died at 12:12:09. So --rejoin found no forge. Rejoin is unit-green (pty target plus a refusing socket re-served) but not live-verified until this second teardown is found.

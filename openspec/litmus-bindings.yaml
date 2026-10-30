@@ -17,6 +17,7 @@ specs:
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
   - litmus:imagegen-image-is-first-use-and-placement-is-read-from-the-log
+  - litmus:studio-custom-nodes-come-only-from-the-manifest
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
@@ -750,6 +751,7 @@ specs:
   litmus_tests:
   - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
+  - litmus:gate-pins-surface-root
   - litmus:release-freeze-holds-code
   - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write

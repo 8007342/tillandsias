@@ -57,6 +57,14 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/with-tillandsias-builder.s
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+# 1925-ided: PIN THE VALIDATOR SURFACE TO THE GATING CHECKOUT for every phase.
+# With a shared CARGO_TARGET_DIR (1807-shtg) the fixtures' scratch repos live
+# under ANOTHER checkout's target/plan-scratch, and the plan binary's cwd walk
+# resolved that checkout as its surface root. When it sat behind this tree the
+# hook refused every fixture push "resolved plan binary is STALE"
+# (claims-fleet-visible 9/22 in the v56.10.30.1 cut). A caller's value wins.
+export TILLANDSIAS_SURFACE_ROOT="${TILLANDSIAS_SURFACE_ROOT:-$REPO_ROOT}"
 source "$REPO_ROOT/scripts/common.sh"
 
 # RE-ASSERT THIS SCRIPT'S DECLARED OPTIONS (order 731-pc5r).
