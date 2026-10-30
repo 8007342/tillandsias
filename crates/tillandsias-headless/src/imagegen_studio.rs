@@ -6,7 +6,7 @@
 //! same files image.generate fetched through the licence register) read-only,
 //! reaches no network beyond the internal enclave (no proxy is configured, so
 //! nothing egresses), and is sized to be reclaimed before the forge.
-//! @trace order:1874-zry8, spec:local-image-generation
+//! @trace order:1874-zry8 (spec: openspec/changes/local-image-generation, not yet archived)
 
 use std::path::{Path, PathBuf};
 
