@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-silverblue at the coordinator's request (macuahuitl, 2026-10-29): one of the 23 release-gate failures.
+packets:
+- packet_id: cloudflare-oauth-core-fixture-finds-the-fake-binary-under-cargo-target-dir
+  order: 1923-cfot
+  status: ready
+  kind: defect
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - fixture
+  - cloudflare
+  - build
+  estimated_hours: 1
+  title: scripts/test-cloudflare-oauth-core.sh looks for tillandsias-fake-cloudflare under $ROOT/target and fails wherever CARGO_TARGET_DIR is redirected
+  context: 'The script builds the fake with cargo, then sets FAKE_BIN="$ROOT/target/debug/tillandsias-fake-cloudflare". Every forge exports CARGO_TARGET_DIR (images/default/lib-common.sh), so the binary lands elsewhere and the fixture prints fail:cloudflare-oauth-core:fake-binary-missing although the build succeeded. Measured on pirria-silverblue 2026-10-29.'
+  exit_criteria:
+  - With CARGO_TARGET_DIR pointing outside the checkout, scripts/test-cloudflare-oauth-core.sh prints ok:cloudflare-oauth-core:5/5+note; today it prints fail:cloudflare-oauth-core:fake-binary-missing.
+  verifiable_closure: The fixture output before and after on a host with CARGO_TARGET_DIR redirected.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture is the subject; its own run is the evidence (1136-n8sh).'
+  next_action: 'Fix on work/1923-cfot: FAKE_BIN resolves under ${CARGO_TARGET_DIR:-$ROOT/target}. Left: land it.'
+  provenance: found while moving cloudflare_oauth for 1916-hspl slice 1 (pirria-silverblue, 2026-10-29).
+  events:
+  - type: filed
+    ts: '2026-10-29T23:06:56Z'
+    host: pirria-silverblue
+    summary: filed p1, release-gate failure split out of the parked 1916-hspl slice

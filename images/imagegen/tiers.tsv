@@ -25,7 +25,13 @@
 #   min_ram_gb      OR a host with at least this much RAM (CPU path)
 #   model           the model (and its text encoder, where separate)
 #   licence         licence id, from the permissive list above
-#   licence_source  the model card the licence was read from
+#   licence_source  the model card the licence was read from. It must be an
+#                   UNGATED repo (the fetcher holds no token) pinned to a
+#                   revision with /tree/<sha>, and that one repo must carry
+#                   every file the model column names (transformer, VAE 'ae',
+#                   T5): scripts/lua/check-imagegen-tier-sources-ungated.lua (1921-qqfz).
+#                   FLUX rows use second-state/FLUX.1-schnell-GGUF, not the
+#                   gated black-forest-labs/FLUX.1-schnell.
 #   size            default square edge in px for the omitted-size case
 #   cpu_size        the same, when the run is on the CPU
 #   steps           default steps
@@ -34,5 +40,5 @@
 #tier	min_vram_gb	min_unified_gb	min_ram_gb	model	licence	licence_source	size	cpu_size	steps
 I0	-	-	-	SDXS-512-0.9	openrail++	https://huggingface.co/IDKiro/sdxs-512-0.9	512	512	1
 I1	4	-	16	SDXL-Lightning-4step	openrail++	https://huggingface.co/ByteDance/SDXL-Lightning	1024	768	4
-I2	8	16	-	FLUX.1-schnell-q4_k+T5-XXL-q4	apache-2.0	https://huggingface.co/black-forest-labs/FLUX.1-schnell	1024	1024	4
-I3	16	32	-	FLUX.1-schnell-q8_0+T5-XXL-q8	apache-2.0	https://huggingface.co/black-forest-labs/FLUX.1-schnell	1024	1024	4
+I2	8	16	-	FLUX.1-schnell-Q4_0+ae+T5-XXL-Q4_K	apache-2.0	https://huggingface.co/second-state/FLUX.1-schnell-GGUF/tree/8c45a2ba25e2d02bd34230989fb54983f39e44ec	1024	1024	4
+I3	16	32	-	FLUX.1-schnell-Q8_0+ae+T5-XXL-Q8_0	apache-2.0	https://huggingface.co/second-state/FLUX.1-schnell-GGUF/tree/8c45a2ba25e2d02bd34230989fb54983f39e44ec	1024	1024	4

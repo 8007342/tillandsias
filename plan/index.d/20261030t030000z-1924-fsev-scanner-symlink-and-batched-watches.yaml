@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at macuahuitl-fedora's request,
+# 2026-10-29 (operator directive: cut build/validate time by orders of magnitude).
+packets:
+- packet_id: scanner-watches-resolve-symlinks-and-start-in-one-batch
+  order: 1924-fsev
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - scanner
+  - macos
+  - build-time
+  estimated_hours: 3
+  title: The macOS project scanner misses events under symlinked roots and pays about 3 s per project dir to start watching
+  context: 'Measured on tlatoanis-macbook-air 2026-10-29. (1) watch_detects_new_project passed on a timeout: with the strict assertion, the old code received no event within 5 s for a temp dir under /var -> /private/var, because FSEvents reports resolved paths and resolve_project_dir compared them to the configured path. With a canonical path, the event arrived in 3.6 s. (2) Each notify watcher.watch() restarts the FSEvents stream. A probe measured 3.03 s per call, every call. Registering 10 project dirs took 30.5 s one by one and 3.06 s through paths_mut() with a single commit. The tray''s host-shell scanner runs this path. Still open and host-level: FSEventStreamStart itself takes about 3 s (12 s under a parallel suite), the same constant as reqwest''s macOS proxy lookup in 1924-vprx. Cause not found; nothing about it in the system log.'
+  exit_criteria:
+  - 'watch_detects_new_project requires the event and fails on the pre-fix code.'
+  - 'watch() registers every path in one batch, so on macOS starting the watches costs one stream start, not one per project dir.'
+  - 'The about 3 s FSEventStreamStart stall is either explained or filed as its own host-level packet.'
+  verifiable_closure: 'cargo test -p tillandsias-scanner watch_detects_new_project'
+  unscoreable: 'a timing and event-delivery property of FSEvents, not a litmus; watch_detects_new_project is the guard.'
+  next_action: 'Land work/1924-fsev; then investigate the constant 3 s stall shared by FSEventStreamStart and the SCDynamicStore proxy lookup.'
+  provenance: 'macuahuitl-fedora request 2026-10-29; probe timings from this host.'
+  events:
+  - type: filed
+    ts: '2026-10-30T03:00:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed and claimed; symlinked roots missed events, and per-dir watches cost about 3 s each
