@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Claude, release agent) during the v56.10.30.1 cut.
+packets:
+- packet_id: gate-pins-validator-surface-root-to-the-gating-checkout
+  order: 1925-ided
+  status: in_progress
+  kind: bugfix
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - release-gate
+  - litmus
+  - plan-binary
+  estimated_hours: 2
+  title: Under a shared CARGO_TARGET_DIR the gate's fixture pushes were refused STALE because the plan binary took another, older checkout as its validator surface
+  context: 'Measured on macuahuitl 2026-10-30 during the v56.10.30.1 cut. ./build.sh --ci-full refused twice on litmus:claims-fleet-visible (9/22; the first run also plan-only-lane-structural 13/15) while both passed alone in the release worktree (27/27, 15/15). The gate runs with CARGO_TARGET_DIR=/home/tlatoani/claudia/tillandsias/target (shared target, 1807-shtg), so the fixtures make their scratch repos under the MAIN checkout''s target/plan-scratch. The plan binary''s surface_root() walks up from the cwd, reached the main checkout (1a9857606, behind #742''s change to crates/tillandsias-plan) and answered stale:validator-surface built-from=873e30cebfdb7d89 checkout=679e550b4125a05a; from /tmp it answers ok. The pre-push hook then refused every fixture push "the resolved plan binary is STALE". Pinning TILLANDSIAS_SURFACE_ROOT to the gating checkout made both fixtures pass under the shared target. Separately, litmus:validator-surface-currency touched Cargo.lock and rewrote crates/tillandsias-plan/Cargo.toml and the manifest in the live checkout; it now works on a scratch copy and guards the live mtimes.'
+  exit_criteria:
+  - 'build.sh and scripts/local-ci.sh export TILLANDSIAS_SURFACE_ROOT=<the gating checkout>, keeping a caller''s value.'
+  - 'litmus:gate-pins-surface-root: unpinned, a shared target inside an older checkout makes claims-fleet-visible refuse STALE; with the gate''s own export line it passes. Fails 1/4 on the pre-fix tree, 4/4 after.'
+  - 'scripts/test-validator-surface-currency.sh never touches the live checkout; its guard arm fails 9/10 on the pre-fix arms and passes 11/11 after.'
+  - 'The v56.10.30.1 cut''s ./build.sh --ci-full passes its pre-build litmus.'
+  verifiable_closure: 'litmus:gate-pins-surface-root'
+  next_action: 'Land work/1925-ided into linux-next (coordinator), then the release agent re-runs the v56.10.30.1 cut gate.'
+  provenance: 'v56.10.30.1 cut, macuahuitl, 2026-10-30; logs release-cifull.log, release-cifull2.log, cfv-shared2.log under ~/.cache/tillandsias-agent-targets/.'
+  events:
+  - type: filed
+    ts: '2026-10-30T17:45:51Z'
+    host: macuahuitl
+    summary: shared-target scratch repos under an older checkout made the plan binary read that checkout's surface; the gate now pins TILLANDSIAS_SURFACE_ROOT

@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Claude, release agent) during the v56.10.30.1 cut, at the coordinator's request.
+packets:
+- packet_id: ci-full-rebuilds-or-refuses-a-stale-release-plan-binary
+  order: 1925-77h4
+  status: ready
+  kind: bugfix
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - release-gate
+  - plan-binary
+  estimated_hours: 2
+  title: ./build.sh --ci-full must rebuild, or refuse on, a stale target/release/tillandsias-plan before the pre-build litmus
+  context: 'Measured on macuahuitl 2026-10-30, first v56.10.30.1 gate run: the release worktree''s target/release/tillandsias-plan was built 2026-10-29 16:05 PDT, before #742 (351b1793c, 2026-10-30 08:43 PDT) changed crates/tillandsias-plan, and --ci-full did not rebuild it. Fixtures that resolve the plan binary through scripts/plan-binary-probe.sh then pushed through the hook with a stale validator (claims-fleet-visible and plan-only-lane-structural failed alone until cargo build --release -p tillandsias-plan). A release worktree reused across days hits this every cut. Related root cause under a shared target: 1925-ided.'
+  exit_criteria:
+  - 'Before the pre-build litmus, --ci-full asks validator-surface-hash --check of every plan binary the probe can resolve, and rebuilds it (or refuses with the rebuild remedy) when it answers stale.'
+  - 'A fixture plants a binary whose embedded surface differs from the checkout and shows --ci-full''s pre-litmus step refusing or rebuilding it; it fails on the pre-fix code.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes scripts/test-ci-full-refreshes-stale-plan-binary.sh and its litmus in the same commit, then moves this text into verifiable_closure.'
+  next_action: 'Find where build.sh --ci-full builds the plan binary before run-litmus-test.sh, add the currency check there, and write the planted-stale fixture first so it fails on today''s code.'
+  provenance: 'v56.10.30.1 cut, macuahuitl, 2026-10-30; coordinator request.'
+  events:
+  - type: filed
+    ts: '2026-10-30T17:45:51Z'
+    host: macuahuitl
+    summary: --ci-full ran the pre-build litmus against a release plan binary older than #742's plan change
