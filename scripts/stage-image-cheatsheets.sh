@@ -14,7 +14,7 @@
 # The `.gitignore` entry keeps ad-hoc local regenerations from dirtying the
 # tree; it does NOT mean the tree is untracked, and gitignore is inert against
 # the 230 files that were already tracked when the rule landed. The tracked
-# copy is a BUILD INPUT: crates/tillandsias-headless/build.rs embeds images/
+# copy is a BUILD INPUT: crates/tillandsias-embed/build.rs embeds images/
 # recursively into the binary, ./build.sh never stages cheatsheets, and the
 # end-user lane builds the forge image from the EMBEDDED snapshot, where no
 # authored tree and no staging script exist. Untracking this tree therefore

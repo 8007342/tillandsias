@@ -60,10 +60,17 @@ critical_path:
 
   # SOURCE PIN, read on the file directly so a fixture that stopped looking
   # cannot hide the regression. The defect was LANE_CMD ending in the bare
-  # ${PROJECT}; this asserts the line derives from the checkout instead.
-  - step: "SOURCE PIN: LANE_CMD derives its path from the checkout, not from a bare project name"
-    command: "l=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}ROOT' scripts/check-bare-metal-host-initialized.sh || true) && b=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}PROJECT' scripts/check-bare-metal-host-initialized.sh || true) && test \"$l\" -eq 1 && test \"$b\" -eq 0 && echo \"ok: lane-cmd-from-root=$l bare-project=$b\""
+  # ${PROJECT}. 776-jcf3 (1923-88x7) retired host-checkout launches, so the
+  # line is now the cloud form, owner/repo derived from the checkout origin;
+  # nothing may follow --bash, neither a bare name nor a host path.
+  - step: "SOURCE PIN: LANE_CMD is the cloud form from the checkout origin, never --bash with a bare project name or path"
+    command: "l=$(grep -cF 'LANE_CMD=\"tillandsias --cloud ${_nwo} --bash\"' scripts/check-bare-metal-host-initialized.sh || true) && b=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}\\(PROJECT\\|ROOT\\)' scripts/check-bare-metal-host-initialized.sh || true) && test \"$l\" -eq 1 && test \"$b\" -eq 0 && echo \"ok: lane-cmd-cloud-form=$l bare-project=$b\""
     timeout_ms: 15000
-    expected_behavior: "ok: lane-cmd-from-root=1 bare-project=0"
+    expected_behavior: "ok: lane-cmd-cloud-form=1 bare-project=0"
     assert_exit: 0
     assert_output_contains: "bare-project=0"
+
+  - step: "NEGATIVE CONTROL: restoring the pre-1356 bare-name LANE_CMD must FAIL the source pin"
+    command: "T=$(mktemp -d); sed 's|^LANE_CMD=\"tillandsias --cloud ${_nwo} --bash\"|LANE_CMD=\"tillandsias --bash ${PROJECT}\"|' scripts/check-bare-metal-host-initialized.sh > \"$T/c.sh\"; if cmp -s scripts/check-bare-metal-host-initialized.sh \"$T/c.sh\"; then rm -rf \"$T\"; echo 'FAIL: the mutation did not reach the checker'; exit 1; fi; l=$(grep -cF 'LANE_CMD=\"tillandsias --cloud ${_nwo} --bash\"' \"$T/c.sh\" || true); b=$(grep -c 'LANE_CMD=.*--bash .\\{0,2\\}\\(PROJECT\\|ROOT\\)' \"$T/c.sh\" || true); rm -rf \"$T\"; if [ \"$l\" -eq 1 ] && [ \"$b\" -eq 0 ]; then echo 'FAIL: source pin blind to the pre-1356 bare-name line'; exit 1; fi; echo \"ok: source pin fails on the bare-name line (cloud=$l bare=$b)\""
+    timeout_ms: 10000
+    expected_behavior: "ok: source pin fails on the bare-name line"

@@ -40,6 +40,7 @@ inputs:
   - scripts/local-ci.sh
   - scripts/run-litmus-test.sh
   - scripts/test-build-step-timing-attribution.sh
+  - scripts/test-gate-phase-rows-carry-run-id.sh
   - scripts/lua/test-slowest-span-marker.lua
   - scripts/timing-log.sh
 
@@ -110,6 +111,14 @@ critical_path:
     command: "bash scripts/test-build-step-timing-attribution.sh 2>&1 | tail -1"
     timeout_ms: 60000
     expected_behavior: "ok:build-step-timing-attribution-fixture:9"
+
+  - step: "1915-gtph: one gate run's phase rows and its build-check row share a run_id"
+    # Stub gate of three phases through build.sh's real tracker: asserts three
+    # phase rows plus the total row, all carrying one run_id, and wall_ms on
+    # each phase row. Failed on the pre-fix tree (no _gate_run_id_begin).
+    command: "bash scripts/test-gate-phase-rows-carry-run-id.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:gate-phase-rows-carry-run-id-fixture:5"
 
   - step: "785-ibu9: a phase with no measurable work is labelled build-span and slowest= marks it ~span"
     # The honesty half: when there is no attributable number, the wall-clock

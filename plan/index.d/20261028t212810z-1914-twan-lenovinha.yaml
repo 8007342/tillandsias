@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the operator's request, 2026-10-28, from the kumbia-kombat Codex relaunch.
+packets:
+- packet_id: codex-lane-exits-on-a-401-account-read-without-offering-re-login
+  order: 1914-twan
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - vault
+  - forge
+  estimated_hours: 4
+  title: A Codex lane with an expired sign-in exits at startup with a 401 and never offers re-login
+  context: 'Live on lenovinha 2026-10-28. After the oomd kill (1911-3dqo), cloud relaunches of 8007342/kumbia-kombat with --codex exited at once, at 12:36:58 and again at 12:38:06, with "Error: account/read failed during TUI bootstrap: account/read failed: workspace routing discovery unauthorized (401) (code -32603)". There was no re-login prompt. The operator ran tillandsias --codex-login by hand; it succeeded, and the next launch worked and /resume restored the crashed conversation. The operator also saw token-expiry text in the Codex terminal several minutes before the 11:41 kill, so an expired sign-in may have caused the timeouts before it. The lane log shows blocked:github-token-rotation-failed:read:vault-unavailable while the vault healthchecks were starving; that is the GitHub token, and nothing shows the Codex OAuth credential being refreshed or flagged as stale. Credentials were never read for this row; only status lines.'
+  exit_criteria:
+  - 'The Codex credential''s lifecycle is named with evidence: whether tillandsias refreshes it, whether a refresh failure surfaces, and why the vaulted copy was stale.'
+  - 'A lane whose agent exits with a 401 or unauthorized account read says so in one calm line and offers --codex-login (or runs the device flow in the same window), then relaunches; a fixture with a stub harness that prints this 401 asserts the offer, and it FAILS on today''s code.'
+  - 'A refresh or rotation failure for the Codex sign-in is surfaced before launch rather than at the agent''s bootstrap.'
+  verifiable_closure: 'cargo test -p tillandsias-headless codex_lane_offers_relogin_on_unauthorized'
+  next_action: 'Trace codex-oauth-session.sh and the vault restore of auth.json for a refresh path, then add the 401 classifier arm (with 1912-n2i8) and the offer.'
+  provenance: 'Operator report plus journal lines 2026-10-28 (lenovinha).'
+  events:
+  - type: filed
+    ts: '2026-10-28T21:28:10Z'
+    host: lenovinha-silverblue
+    summary: filed urgent; an expired Codex sign-in exits the lane with no re-login offer
+- packet_id: forge-agent-sessions-survive-a-crash-for-every-agent
+  events:
+  - type: note
+    ts: '2026-10-28T21:28:10Z'
+    host: lenovinha-silverblue
+    summary: 'Codex resume measured working: after the 11:41 oomd kill, a cloud relaunch of kumbia-kombat (after re-login) and /resume restored the crashed conversation from the forge-cache volume (codex-state/default/direct/sessions). Claude and OpenCode remain open.'

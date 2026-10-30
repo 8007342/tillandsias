@@ -74,10 +74,14 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod bringup_timer;
 mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+// @trace order:1874-b9tg: where an sd.cpp run placed the model.
+mod imagegen_models;
+mod imagegen_placement;
 mod imagegen_tiers;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
@@ -1291,7 +1295,7 @@ fn main() {
     }
 
     if init {
-        if let Err(e) = run_init(debug, force) {
+        if let Err(e) = bringup_timer::timed("image-ensure", || run_init(debug, force)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1301,7 +1305,9 @@ fn main() {
         #[cfg(feature = "vault")]
         if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
             // Skip Vault bootstrap in litmus/fake mode — no Vault container.
-        } else if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
+        } else if let Err(e) = bringup_timer::timed("vault-health", || {
+            vault_bootstrap::ensure_vault_running(debug)
+        }) {
             eprintln!("Error bringing Vault up: {}", e);
             std::process::exit(1);
         }
@@ -2589,6 +2595,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1637-5765: the opt-in Flutter toolchain. Not an INIT image: built on
         // the forge's first `flutter` (toolchain_exec::prepare).
         "flutter" => "images/flutter",
+        // 1874-b9tg: local image generation. Not an INIT image: built on
+        // first use through ensure_image_exists.
+        "imagegen" => "images/imagegen",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -4224,7 +4233,8 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 }
 
 /// The passwd home of this user, which HOME cannot fake.
-#[cfg(all(test, unix))]
+#[cfg(test)]
+#[cfg(unix)]
 fn passwd_home() -> Option<PathBuf> {
     // SAFETY: getpwuid returns a pointer into static storage or null; it is
     // read at once, under env_lock in every test caller.
@@ -4635,6 +4645,10 @@ pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 /// EMPTY: owning them gives the forge an empty directory, never a credential.
 pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
 pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
+
+// 1919-hlth: enclave HEALTHCHECKs run as a numeric user at a 30 s interval.
+#[cfg(test)]
+mod enclave_healthcheck_tests;
 
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
@@ -13544,6 +13558,20 @@ fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
     None
 }
 
+/// ORDER 1909-t9y2. How long a device sign-in step may wait on the PERSON.
+/// Codex prints "expires in 15 minutes" for its one-time code, but the step
+/// ran under the 300 s container budget, so an unfinished sign-in was killed
+/// at minute 5 with ten minutes left on the code (measured 2026-10-28:
+/// exec 03:58:07, `podman rm -f` 04:03:07). The budget is the provider's
+/// window plus a minute, so the provider, not us, decides when it expired.
+fn device_sign_in_budget(provider: &ProviderId) -> std::time::Duration {
+    const SLACK: std::time::Duration = std::time::Duration::from_secs(60);
+    match provider {
+        ProviderId::Codex => std::time::Duration::from_secs(15 * 60) + SLACK,
+        _ => tillandsias_podman::OperationKind::Container.default_budget(),
+    }
+}
+
 /// Stream Codex's own device instructions byte-for-byte and add a QR only when
 /// the complete, code-free verification URI appears. The existing bounded
 /// Podman stream keeps the container PTY and its deadline; Codex needs no stdin
@@ -13562,7 +13590,7 @@ fn run_codex_device_login_with_qr(
     let status = login
         .status_bounded_with_stdin_streaming(
             &[],
-            tillandsias_podman::OperationKind::Container.default_budget(),
+            device_sign_in_budget(&ProviderId::Codex),
             move |chunk| {
                 let mut out = std::io::stdout().lock();
                 let _ = out.write_all(chunk);
@@ -16088,6 +16116,9 @@ async fn run_agent_container_attached(
     debug: bool,
     delegated: Option<&DelegatedRunConfig>,
 ) -> Result<(), String> {
+    // 1915-brst: forge-start runs from here to the spawn of the attached run
+    // below; the session itself is not part of bring-up.
+    let forge_started = std::time::Instant::now();
     // ORDER 986-ahnc. THE FORGE ARGV IS VALIDATED HERE OR NOWHERE.
     //
     // 972-6vaj put the hardening envelope behind a real check on the
@@ -16226,6 +16257,8 @@ async fn run_agent_container_attached(
     // `swap:` line and the forge runs as before.
     #[cfg(target_os = "linux")]
     let _swap = forge_swap::acquire(container_name, debug);
+
+    bringup_timer::report("forge-start", forge_started.elapsed().as_millis(), 0);
 
     let Some(config) = delegated else {
         return client
@@ -16566,6 +16599,21 @@ fn run_opencode_mode(
                 )
                 .await
                 .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
+        }
+
+        // Order 1910-a1m8: the same mirror readiness gate as
+        // ensure_enclave_for_project. Without it the forge cloned a mirror
+        // whose seed had not run yet and gave up after its ~40 s of clone
+        // retries (macOS cold cloud launch, 2026-10-28).
+        if project_remote_url.is_some() {
+            wait_for_git_mirror_ready(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                debug,
+            )
+            .await?;
         }
 
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
@@ -18396,12 +18444,14 @@ pub(crate) fn ensure_enclave_for_project(
     // launch died trying to pull localhost/tillandsias-router:v<new> from a
     // nonexistent registry (same bump-window class as the order-267
     // run-observatorium finding).
-    ensure_versioned_images(
-        &root,
-        launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
-        version,
-        debug,
-    )?;
+    bringup_timer::timed("image-ensure", || {
+        ensure_versioned_images(
+            &root,
+            launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
+            version,
+            debug,
+        )
+    })?;
 
     // 776-jcf3: the mirror seeds from the cloud remote only, never from a
     // host checkout's remote.origin.url.
@@ -18499,12 +18549,15 @@ pub(crate) fn ensure_enclave_for_project(
         // so an empty mirror there is a legitimate cold state the guest
         // handles fail-loud rather than a seed-in-progress worth waiting on.
         if project_remote_url.is_some() {
-            wait_for_git_mirror_ready(
-                &client,
-                &git_container_name,
-                project_name,
-                project_default_branch.as_deref(),
-                debug,
+            bringup_timer::timed_async(
+                "mirror-seed",
+                wait_for_git_mirror_ready(
+                    &client,
+                    &git_container_name,
+                    project_name,
+                    project_default_branch.as_deref(),
+                    debug,
+                ),
             )
             .await?;
         }
@@ -18788,7 +18841,11 @@ async fn ensure_shared_git_and_inference_for_launch(
         )
         .await?;
     }
-    ensure_inference_for_launch(client, certs_dir, version, debug).await?;
+    bringup_timer::timed_async(
+        "model-preload",
+        ensure_inference_for_launch(client, certs_dir, version, debug),
+    )
+    .await?;
     Ok(mirror_identity)
 }
 
@@ -24105,6 +24162,75 @@ mod tests {
         );
     }
 
+    /// ORDER 1922-accp — acceptance fixture for the event-driven readiness gate
+    /// (operator ruling 2026-10-28: forges never wait on or poll siblings).
+    ///
+    /// The fixture owns the mirror's readiness: the fake podman reports the
+    /// mirror unready for two probes and seeded on the third, and the fixture's
+    /// event source emits the mirror READY event only AFTER the launch chain's
+    /// mirror gate returns. Two arms, both named in the output:
+    ///   forge-before-ready — the gate let the launch reach forge creation
+    ///                        before the READY event was emitted;
+    ///   polls=N            — the gate probed the sibling N > 0 times.
+    /// RED on linux-next as of 2026-10-28 (wait_for_git_mirror_ready polls
+    /// probe_git_mirror_seeded once a second and returns on a probe, not an
+    /// event). It goes green when 1922-gate and 1922-unwt land; 1922-gate
+    /// repoints the `gate` call below at its ReadinessGate and drops #[ignore].
+    /// Run: cargo test -p tillandsias-headless --bin tillandsias \
+    ///        readiness_acceptance -- --ignored --nocapture
+    #[tokio::test]
+    #[ignore = "1922-accp: red by design until 1922-gate and 1922-unwt land"]
+    async fn readiness_acceptance_forge_never_starts_before_mirror_ready_and_counts_no_polls() {
+        let backend = Arc::new(FakeBackend::default());
+        // Unready, unready, then seeded (HEAD + concrete branch).
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(0, "")));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        // The fake event source: the fixture holds the sender and emits READY
+        // only after the gate has returned. Today's chain never subscribes.
+        let (ready_tx, _ready_rx) = tokio::sync::watch::channel(false);
+
+        let gate = wait_for_git_mirror_ready(
+            &client,
+            "tillandsias-git-fixture",
+            "fixture",
+            Some("trunk"),
+            false,
+        )
+        .await;
+        // Reaching here with Ok is the point the launch chain creates the forge.
+        let forge_started = gate.is_ok();
+        let ready_emitted_before_forge = *ready_tx.borrow();
+        ready_tx.send_replace(true);
+
+        let polls = backend
+            .seen()
+            .iter()
+            .filter(|(_, argv)| {
+                argv.first().map(String::as_str) == Some("exec")
+                    && argv.iter().any(|a| a == "tillandsias-git-fixture")
+            })
+            .count();
+
+        let mut red = Vec::new();
+        if forge_started && !ready_emitted_before_forge {
+            red.push("forge-before-ready".to_string());
+        }
+        if polls > 0 {
+            red.push(format!("polls={polls}"));
+        }
+        let verdict = if red.is_empty() {
+            "ok:readiness-acceptance:forge-after-ready:polls=0".to_string()
+        } else {
+            format!("refused:readiness-acceptance:{}", red.join(":"))
+        };
+        println!("{verdict}");
+        assert!(red.is_empty(), "{verdict}");
+    }
+
     #[test]
     fn git_mirror_readiness_budget_covers_observed_cold_seed() {
         assert_eq!(
@@ -26940,6 +27066,20 @@ mod tests {
         }
     }
 
+    /// ORDER 1909-t9y2. A Codex device code is valid for 15 minutes; the step
+    /// that waits on it must not be cut off sooner (it was 300 s).
+    #[test]
+    fn codex_device_sign_in_budget_covers_the_code_window() {
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex) >= std::time::Duration::from_secs(15 * 60),
+            "the Codex sign-in step must outlive its 15-minute code"
+        );
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex)
+                > tillandsias_podman::OperationKind::Container.default_budget()
+        );
+    }
+
     /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
     /// what to do, and carries no flag, variable or podman text.
     #[test]
@@ -27707,6 +27847,298 @@ mod tests {
             !qr.contains('\u{2580}') && !qr.contains('\u{2584}'),
             "no half-block glyphs"
         );
+    }
+
+    /// The vault stubs store what they were sent (base64); decode it here so
+    /// the stub scripts carry no decode-to-file idiom.
+    #[cfg(unix)]
+    fn decode_vaulted(path: &std::path::Path) -> String {
+        let Ok(encoded) = std::fs::read(path) else {
+            return String::new();
+        };
+        let mut child = match std::process::Command::new("base64")
+            .arg("-d")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => return String::new(),
+        };
+        {
+            use std::io::Write as _;
+            let _ = child.stdin.take().unwrap().write_all(&encoded);
+        }
+        child
+            .wait_with_output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    }
+
+    /// Order 1914-twan: Codex refresh tokens are single-use. An oomd or
+    /// `podman kill` takes the whole container, watcher included, so a
+    /// rotation is lost unless it was copied before the kill. Kill the whole
+    /// process group 1.2 s after a rotation: the old 2 s poll had not copied
+    /// it yet. Shape-only token values; nothing real.
+    #[cfg(unix)]
+    #[test]
+    fn codex_rotation_reaches_vault_before_a_container_kill() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::os::unix::process::CommandExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let images = std::path::Path::new(&manifest).join("../../images/default");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let vaulted = dir.path().join("vaulted");
+        let auth = dir.path().join("auth.json");
+        let rotated = dir.path().join("rotated");
+        std::fs::write(&auth, "{\"refresh_token\":\"shape-old\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        // Vault stub: keep the last document written, decoded.
+        write_exec(
+            &bin.join("vault-cli.sh"),
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        // A host without inotify-tools (macOS) gets a stand-in that prints
+        // the file name when its content changes, as inotifywait would; on a
+        // Linux gate host the real inotifywait is exercised.
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/auth.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo auth.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let agent = dir.path().join("agent");
+        write_exec(
+            &agent,
+            format!(
+                "printf '{{\"refresh_token\":\"shape-rotated\"}}\\n' >'{a}'\n: >'{r}'\nsleep 30",
+                a = auth.display(),
+                r = rotated.display()
+            ),
+        );
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(images.join("codex-oauth-session.sh"))
+            .arg("--")
+            .arg(&agent)
+            .env("PATH", &path)
+            .env(
+                "TILLANDSIAS_CODEX_VAULT_HELPER",
+                images.join("codex-oauth-vault.sh"),
+            )
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_AUTH_FILE", &auth)
+            .env(
+                "TILLANDSIAS_LIFECYCLE_LOG",
+                dir.path().join("lifecycle.log"),
+            )
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .process_group(0)
+            .spawn()
+            .expect("spawn wrapper");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !rotated.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(rotated.exists(), "stub agent never rotated the document");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        // The whole group, as a container kill would: no EXIT trap, no watcher.
+        let _ = std::process::Command::new("kill")
+            .args(["-KILL", "--", &format!("-{}", child.id())])
+            .status();
+        let _ = child.wait();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("shape-rotated") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(
+            held.contains("shape-rotated"),
+            "Vault must hold the rotated token after a container kill; it held: {held:?}"
+        );
+    }
+
+    /// Order 1914-twan (operator approval 2026-10-28): the Claude approvals
+    /// watcher copies a config write to Vault on the write's event, well
+    /// inside the 3 s poll it replaces.
+    #[cfg(unix)]
+    #[test]
+    fn claude_approvals_reach_vault_on_the_write_event() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let script =
+            std::path::Path::new(&manifest).join("../../images/default/claude-approvals-vault.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let cfg = dir.path().join("claude.json");
+        let vaulted = dir.path().join("vaulted");
+        std::fs::write(&cfg, "{\"theme\":\"dark\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        let vault_cli = bin.join("vault-cli");
+        write_exec(
+            &vault_cli,
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            // macOS stand-in printing what inotifywait prints on a write.
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/claude.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo claude.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let holder = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn holder");
+        let mut watcher = std::process::Command::new("bash")
+            .arg(&script)
+            .arg("watch")
+            .arg(holder.id().to_string())
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
+            .env("CLAUDE_CONFIG_FILE", &cfg)
+            .env("TILLANDSIAS_VAULT_CLI", &vault_cli)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn watcher");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::fs::write(&cfg, "{\"theme\":\"light\"}\n").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("light") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let _ = watcher.kill();
+        let _ = watcher.wait();
+        let mut holder = holder;
+        let _ = holder.kill();
+        let _ = holder.wait();
+        assert!(
+            held.contains("light"),
+            "the approval write must reach Vault within 1.5 s; Vault held {held:?}"
+        );
+    }
+
+    /// Order 1914-twan: a Codex lane whose agent exits on an expired sign-in
+    /// ("account/read failed ... unauthorized (401)") offers the device
+    /// sign-in in the same window and relaunches, instead of ending the lane.
+    /// Runs the real wrapper with a stub agent, vault helper and login helper.
+    #[cfg(unix)]
+    #[test]
+    fn codex_lane_offers_relogin_on_unauthorized() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let wrapper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-session.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write_stub = |name: &str, body: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        let marks = dir.path().join("marks");
+        let vault = write_stub("vault", "[ \"$1\" = digest ] && echo missing; exit 0");
+        let login = write_stub(
+            "login",
+            &format!("echo login >>'{}'; exit 0", marks.display()),
+        );
+        let agent = write_stub(
+            "agent",
+            &format!(
+                "echo run >>'{m}'\n\
+                 if [ \"$(grep -c run '{m}')\" = 1 ]; then\n\
+                 echo 'Error: account/read failed during TUI bootstrap: account/read failed: \
+                 workspace routing discovery unauthorized (401) (code -32603)' >&2; exit 1; fi\n\
+                 exit 0",
+                m = marks.display()
+            ),
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(&wrapper)
+            .arg("--")
+            .arg(&agent)
+            .env("TILLANDSIAS_CODEX_VAULT_HELPER", &vault)
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_RELOGIN_HELPER", &login)
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn wrapper");
+        child.stdin.take().unwrap().write_all(b"\n").unwrap();
+        let out = child.wait_with_output().expect("wrapper output");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("sign-in has expired. Sign in again now?"),
+            "the 401 exit must offer re-login; stderr was: {stderr}"
+        );
+        let marks = std::fs::read_to_string(&marks).unwrap_or_default();
+        assert_eq!(
+            marks.lines().collect::<Vec<_>>(),
+            ["run", "login", "run"],
+            "expected run, device login, relaunch"
+        );
+        assert!(out.status.success(), "the relaunched agent exited 0");
     }
 
     #[test]
@@ -30373,6 +30805,9 @@ esac
             Some(nonzero_identity),
         );
         restore.set("FAKE_PODMAN_MODE", "codex-exit-37");
+        // 1915-brst: the attached launch reports forge-start once, at the
+        // spawn, on the thread that drives it.
+        bringup_timer::capture::start();
         let nonzero_error = runtime
             .block_on(run_agent_container_attached(
                 &client,
@@ -30390,6 +30825,15 @@ esac
         assert!(
             nonzero_error.contains("FAILED") && nonzero_error.contains("37"),
             "wrapper lost the nonzero failure: {nonzero_error}"
+        );
+        let bringup = bringup_timer::capture::take();
+        assert_eq!(
+            bringup
+                .iter()
+                .filter(|l| l.starts_with("bringup: step=forge-start ms="))
+                .count(),
+            1,
+            "the attached launch must report forge-start exactly once: {bringup:?}"
         );
 
         let exact_identity = "forge-alpha-codex-20260723T070000Z";
@@ -33258,6 +33702,24 @@ esac
     }
 
     #[test]
+    fn opencode_mode_waits_for_the_mirror_before_the_forge_clones() {
+        let manifest_dir = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        );
+        let source =
+            std::fs::read_to_string(manifest_dir.join("src/main.rs")).expect("main.rs is readable");
+        let window = source_window(&source, "fn run_opencode_mode(");
+        // source-pin-ok: the ORDER of the gate and the forge start is the contract (1910-a1m8).
+        let gate = window.find("wait_for_git_mirror_ready(");
+        let forge = window.find("run_agent_container_attached(");
+        assert!(
+            matches!((gate, forge), (Some(g), Some(f)) if g < f),
+            "the OpenCode lane must wait for a cloneable mirror before starting the \
+             forge, or a cold launch clones an unseeded mirror (1910-a1m8)"
+        );
+    }
+
+    #[test]
     fn forge_launch_preflights_router_image_before_start() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "pub(crate) fn ensure_enclave_for_project(");
@@ -34347,6 +34809,47 @@ esac
 
         let tag = versioned_image_tag("chromium-framework", "0.2.100");
         assert_eq!(tag, "localhost/tillandsias-chromium-framework:v0.2.100");
+    }
+
+    /// ORDER 1874-b9tg. The imagegen image is a first-use image: the resolver
+    /// knows it, its Containerfile pins an upstream `master-<n>-<sha>` tag,
+    /// and `--init` never builds it.
+    #[test]
+    fn imagegen_resolves_with_a_pinned_sd_cpp_tag_and_is_not_an_init_image() {
+        let root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .join("../..");
+        let (containerfile, context) = image_specs(&root, "imagegen").expect("imagegen is known");
+        assert!(
+            context.ends_with("images/imagegen"),
+            "{}",
+            context.display()
+        );
+        assert_eq!(
+            runtime_assets::image_context_rel("imagegen").expect("embedded context"),
+            "images/imagegen"
+        );
+        let (identity, _) =
+            ensure_image_identity(&root, "imagegen", "1.0.0").expect("imagegen identity");
+        assert!(identity.canonical_tag.contains("tillandsias-imagegen"));
+
+        let text = fs::read_to_string(&containerfile).expect("Containerfile");
+        let tag = text
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("ARG SDCPP_TAG="))
+            .expect("Containerfile pins ARG SDCPP_TAG");
+        let parts: Vec<&str> = tag.splitn(3, '-').collect();
+        assert!(
+            parts.len() == 3
+                && parts[0] == "master"
+                && parts[1].parse::<u32>().is_ok()
+                && parts[2].len() >= 7
+                && parts[2].chars().all(|c| c.is_ascii_hexdigit()),
+            "SDCPP_TAG must be an upstream master-<n>-<sha> tag, got {tag}"
+        );
+        assert!(
+            !INIT_IMAGES.contains(&"imagegen"),
+            "imagegen is built on first use, never at init"
+        );
     }
 
     #[test]

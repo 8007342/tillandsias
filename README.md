@@ -6,96 +6,66 @@
 /_/ /___/_____/_____/_/  |_/_/ |_/_____//____/___/_/  |_/____/
 ```
 
-The Tlatoāni recommends Tillandsias as a safe runtime for your agents.
-Fedora Silverblue is our favorite OS but you can use whatever you want;
-we'll channel its inner Podman ;)
+Tillandsias runs AI coding agents in isolated, ephemeral **forge**
+containers. Your project is mounted into a throwaway container with the
+tools an agent needs; network access goes through a filtering proxy,
+credentials stay outside the forge, and when the session ends the container
+is gone. A small tray app on Linux, macOS and Windows starts, stops and
+shows everything — no container knowledge required.
 
 ## Install
 
-Everything below tracks the **stable channel** — the latest *promoted*
-release. For the newest daily build, see
-[Unstable Releases](#unstable-releases).
+Installers and per-platform instructions live at
+**[tillandsias.org/#install](https://tillandsias.org/#install)**.
 
-**Linux** — curl installer (we prefer Fedora Silverblue):
+Direct downloads, always the stable channel:
 
-```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
-```
+- Linux: `curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash`
+- macOS: `curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash`,
+  or the [Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg) disk image
+- Windows: the portable [tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip)
 
-**Windows** — portable download: **[tillandsias-tray.exe](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-tray.exe)** (single file) or **[tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip)** (zip). Run it; the tray provisions a Fedora WSL2 distro automatically.
+All binaries, checksums and signatures are attached to the
+[latest release](https://github.com/8007342/tillandsias/releases/latest);
+see [docs/VERIFICATION.md](docs/VERIFICATION.md) to verify them.
 
-**macOS** (Apple Silicon) — install with:
+## Architecture
 
-```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
-```
+- **Tray app** — a native tray (StatusNotifierItem on Linux, AppKit on
+  macOS, Win32 on Windows) that lists your projects and launches, monitors
+  and tears down their containers (`tray-app`, `macos-native-tray`,
+  `windows-native-tray`).
+- **Forge containers** — the only place agents run. Each forge is
+  ephemeral: nothing written inside it outlives the session except your
+  project's committed work (`forge-as-only-runtime`, `ephemeral-guarantee`).
+- **Enclave network** — an internal Podman network shared by the forge and
+  its supporting services. Only the proxy reaches the outside world
+  (`enclave-network`).
+- **Enclave services**
+  - *Git mirror* — a per-project bare mirror the forge clones from and
+    pushes to; pushes are relayed onward outside the forge, so the forge
+    never holds your GitHub credential (`git-mirror-service`).
+  - *Proxy* — a caching HTTP/HTTPS forward proxy with a domain allowlist
+    (`proxy-container`).
+  - *Vault* — the secrets store; long-lived credentials live here and
+    containers receive only short-lived ones (`tillandsias-vault`).
+  - *Inference* — a shared local LLM container the forge can query, so
+    prompts can stay on your machine (`inference-container`).
+- **Per-platform substrate** — rootless Podman directly on Linux; on macOS
+  a Fedora VM under Apple's Virtualization.framework, reached over vsock
+  (`vm-provisioning-lifecycle`, `vsock-transport`); on Windows a Fedora
+  WSL2 distro (`wsl-runtime`). The same Fedora-based runtime runs the
+  enclave on all three.
 
-The tray provisions a Fedora VM automatically. **Prefer this over the
-[.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg):**
-Tillandsias is signed but not yet notarized (Apple Developer enrollment is
-pending), and macOS tags anything a *browser* downloads with
-`com.apple.quarantine` — so the .dmg route hits a Gatekeeper block on first
-launch, while `curl` does not tag at all and the app opens normally. The
-installer also clears the attribute if you did take the manual route.
+The names in parentheses are specifications under
+[`openspec/specs/`](openspec/specs/). More on the design, philosophy and
+progress at **[tillandsias.org](https://tillandsias.org/)**.
 
-If you are already stuck on a quarantined copy:
+## Platform support
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Tillandsias.app
-```
-
-On macOS 15+ right-click → Open no longer bypasses the block. If macOS offers
-only "Done" / "Move to Trash", open the app once, then go to **System Settings
-→ Privacy & Security → Security → Open Anyway** — the button appears only for
-a short window after the refusal.
-
-Podman is the only host dependency on Linux (auto-detected). macOS and Windows
-provision a lightweight Fedora-based utility VM; no host Podman required.
-
-<a id="unstable-releases"></a>
-
-<details>
-<summary><b>Unstable Releases</b> — curl-install the newest daily build (Linux, Windows, macOS)</summary>
-
-The **unstable channel** is a rolling pointer at the newest daily build,
-whether or not it has been promoted to stable. It exists so we — and opt-in
-testers — can exercise a real build on real hosts *before* promotion. The URLs
-never change; the build behind them moves with every daily.
-
-**Expect breakage.** These builds have passed the local release gate but not
-the cross-platform smoke queue that gates promotion. Every installer prints an
-`UNSTABLE` banner before it touches your machine. If one breaks, that is the
-channel doing its job — file it in `plan/issues/`.
-
-Linux:
-
-```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/download/unstable/install.sh | bash -s -- --channel unstable
-```
-
-macOS:
-
-```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/download/unstable/install-macos.sh | bash -s -- --channel unstable
-```
-
-Windows (PowerShell):
-
-```powershell
-$env:TILLANDSIAS_CHANNEL='unstable'; irm https://github.com/8007342/tillandsias/releases/download/unstable/install-windows.ps1 | iex
-```
-
-Browse the artifacts directly at the
-[unstable release](https://github.com/8007342/tillandsias/releases/tag/unstable).
-
-**Promotion to stable.** A daily becomes the stable channel only when a release
-operator runs `scripts/promote-stable.sh vX.Y.YYMMDD.N`, which requires
-curl-install e2e PASS evidence in `plan/` naming that exact tag. Promotion flips
-the release off pre-release, which is what moves `/releases/latest` — and
-therefore every stable command above. Demote with
-`gh release edit <tag> --prerelease`.
-
-</details>
+- **Linux** — x86_64 and aarch64; static binary, needs only rootless Podman.
+- **macOS** — Apple Silicon.
+- **Windows** — x64 with WSL2.
 
 ## RELEASE LEDGER
 
@@ -149,68 +119,6 @@ shape: *detail on recent releases, summary on old ones.*
   edits the table.
 
 </details>
-
-## Run
-
-**Desktop (Tray Mode):**
-The installer launches the tray automatically. A tray icon appears in your
-system menu bar / notification area. Click it to view projects and container status.
-
-**Headless (CLI/Automation — Linux only):**
-```bash
-tillandsias --headless /path/to/project
-```
-
-## How it Works: The Fedora Pivot
-
-Tillandsias v0.3.0 introduced the "Fedora Pivot" architecture:
-- **Official Images**: Instead of shipping custom rootfs tarballs, we pull official, signed images directly from the Fedora Project (WSL2 for Windows, Cloud Base for macOS).
-- **Runtime Bootstrap**: The tray application provisions the VM, installs the `tillandsias-headless` agent, and materializes your local development environment on demand.
-- **Zero-Drift**: All three platforms now share the exact same Fedora-based runtime environment for your projects.
-
-## OpenCode: Analyze Code with LLM
-
-Analyze a GitHub project with local LLM inference (the repo is cloned into an ephemeral forge; prompts stay on local inference):
-
-```bash
-tillandsias --cloud owner/repo --opencode --prompt "What is the main purpose?"
-```
-
-## Platform support
-
-### Linux
-First-class support for x86_64 and aarch64. musl-static binary requires only rootless podman.
-
-### macOS
-Native AppKit tray for Apple Silicon. Uses Apple's Virtualization.framework to run a Fedora-based utility VM. Supports high-performance virtio-vsock communication and native Terminal.app integration.
-
-### Windows
-Native Win32 NotifyIcon tray. Uses WSL2 to run a Fedora-based utility VM. Supports Windows Terminal and `wsl.exe` integration.
-
-## All Downloads
-
-See the [latest release](https://github.com/8007342/tillandsias/releases/latest) for all platform binaries, checksums, and Cosign signatures.
-Release operators should run the [local release gate](docs/RELEASING.md) before dispatching the hosted signing and publishing workflow.
-
-| File | Description |
-|------|-------------|
-| [install.sh](https://github.com/8007342/tillandsias/releases/latest/download/install.sh) | Linux curl installer (`--channel stable\|unstable`) |
-| [install-macos.sh](https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh) | macOS curl installer (`--channel stable\|unstable`) |
-| [install-windows.ps1](https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1) | Windows curl installer (`$env:TILLANDSIAS_CHANNEL`) |
-| [Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg) | macOS portable disk image (Apple Silicon) — quarantined by the browser; prefer `install-macos.sh` |
-| [tillandsias-tray.exe](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-tray.exe) | Windows portable single-file tray |
-| [tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip) | Windows portable zip (tray + installer script) |
-| [SHA256SUMS](https://github.com/8007342/tillandsias/releases/latest/download/SHA256SUMS) | Checksums for all artifacts |
-| [VERIFICATION.md](docs/VERIFICATION.md) | Signature verification instructions |
-
-The Windows portable downloads are unversioned aliases of the version-stamped
-zip in the same release (byte-identical); their checksums are in the signed
-`SHA256SUMS-windows`. Swap `latest/download` for `download/unstable` on any row
-above to pull the newest daily instead.
-
-## Learn More
-
-See [README-ABOUT.md](README-ABOUT.md) for architecture, configuration, and development docs.
 
 ## License
 

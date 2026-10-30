@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos-tlatoanis-macbook-air-claude-20261012t100000z at the request of macuahuitl-fedora, 2026-10-28.
+packets:
+- packet_id: proxy-first-external-dns-lookups-hang-thirty-seconds-on-a-cold-enclave
+  order: 1910-u8jq
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - proxy
+  - dns
+  - enclave
+  estimated_hours: 4
+  title: On a cold enclave the proxy's first external DNS lookups hang about 30 s and fail with 503
+  context: 'Platform-neutral; measured on macOS 2026-10-28, cold VM, guest boot c660e7fb, build v56.10.20.1. Squid started 18:22:13 and resolves through /etc/resolv.conf (nameservers 10.0.42.1 and 10.89.0.1, aardvark-dns; no dns_nameservers line since 1863-4knc); at 18:22:44 it logged "DNS lookup for tillandsias-router failed". The first external CONNECTs arrived at 18:24:42 to 18:24:43: ollama.com from 10.0.42.6, github.com from 10.0.42.5 and 10.0.42.7, claude.ai from 10.0.42.7. All hung and ended as TCP_TUNNEL/503 HIER_NONE: ollama.com after 30024 ms at 18:25:12, github.com after 34427 ms and 34022 ms and claude.ai after 34017 ms at 18:25:17. Every later github.com CONNECT got an instant (0 ms) 503 from the negative cache. A later boot of the same VM (19:19:44) resolved github.com within 6 s of proxy start (TCP_TUNNEL/200 HIER_DIRECT). So the first upstream resolution through aardvark on a cold boot times out, and squid negative-caches it for 60 s. 1910-nb6m (PR #692) makes the mirror seed survive this; this packet is the cause.'
+  exit_criteria:
+  - 'The ~30 s first-lookup stall is explained with evidence (aardvark upstream not ready, guest resolver, or squid''s dns_timeout).'
+  - 'On a cold enclave the first external CONNECT through the proxy resolves without a 503, or the stall is bounded and squid does not negative-cache it for 60 s.'
+  verifiable_closure: 'A cold-boot probe shows the first external CONNECT through the proxy as TCP_TUNNEL/200.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the cause is unmeasured, so the probe or fixture lands with the fix (1136-n8sh).
+
+    '
+  next_action: 'On a cold VM, time dig github.com against 10.0.42.1 and 10.89.0.1 from the proxy network namespace from boot onward.'
+  provenance: 'Live cold-boot squid log, macbookair-macos 2026-10-28; filed per macuahuitl-fedora.'
+  events:
+  - type: filed
+    ts: '2026-10-28T19:36:25Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready (cold-enclave proxy DNS stall, cause of 1910-nb6m)

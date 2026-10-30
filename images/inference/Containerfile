@@ -153,9 +153,11 @@ EXPOSE 11434
 # this cannot be a start-time-only check — a concurrent prune of that volume
 # must turn this container unhealthy rather than leave it serving 500s.
 # A real generate would be the strongest assertion but is far too expensive at a
-# 5s interval; the entrypoint does that capability check once at startup and
+# 30s interval; the entrypoint does that capability check once at startup and
 # refuses to come up without it.
-HEALTHCHECK --interval=5s --timeout=10s --start-period=30s --retries=12 \
+# 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 720). No startup
+# probe: readiness reaches the launcher as an event (2026-10-28 ruling).
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -sf http://127.0.0.1:11434/api/version >/dev/null \
         && test -x /home/ollama/.ollama/models/.tools/lib/ollama/llama-server \
         || exit 1

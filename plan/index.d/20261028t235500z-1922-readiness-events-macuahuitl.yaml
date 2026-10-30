@@ -1,0 +1,152 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora at the operator request, 2026-10-28. Story: launcher readiness gate driven by events.
+# Operator ruling 2026-10-28: forges never wait on or poll sibling services. The launcher (tray/headless) starts
+# the hard requirements first (vault, git mirror, and the proxy, which is the forge's only egress: the enclave
+# network is --internal and forge HTTP_PROXY points at proxy:3128). Each service announces readiness as an event
+# (podman --sdnotify=container / sd_notify READY=1, or a health_status event) on the shared observable event
+# stream and logs. The launcher subscribes and starts the forge only after every hard requirement reports ready.
+# Optional siblings (inference, browser, preview, studios) start in parallel and the forge learns of them by event.
+# No polling, no fixed sleeps. Platforms: linux, macOS VM, WSL.
+packets:
+- packet_id: enclave-services-announce-readiness-as-events
+  order: 1922-rann
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - images
+  - podman
+  - readiness
+  - events
+  estimated_hours: 5
+  title: Vault, git mirror, proxy and optional siblings announce readiness as an event (sd_notify READY=1 under podman --sdnotify=container, or a health_status event) published on the shared event stream
+  context: 'Operator ruling 2026-10-28 (story header). Today no service announces readiness: there is no health_status subscription in the crates and the only sdnotify hit is policy.rs. Readiness is inferred by waits (podman wait --condition=healthy in PodmanClient::wait_healthy; wait_for_vault_api_ready; wait_for_git_mirror_ready). PodmanEventStream (tillandsias-podman events.rs) already runs `podman events --format json` and is the natural carrier on linux; the macOS VM and WSL hosts read the same stream from inside the guest. Mirror READY must mean seeded (the probe_git_mirror_seeded condition), not merely listening. Vault READY means initialized and unsealed.'
+  exit_criteria:
+  - '`podman events --filter event=health_status` (or the sdnotify READY record) shows exactly one ready event for each of vault, git mirror and proxy within one launch on linux; today none is emitted by the services.'
+  - The same ready events reach the headless event stream inside the macOS VM and the WSL distro.
+  verifiable_closure: A captured events log from a real launch on each of linux, macOS VM and WSL showing one ready event per hard requirement.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: pick sdnotify vs health_status per service (vault and mirror need an app-level ready, not a port), emit READY from each entrypoint, map it into PodmanEventStream records, then capture one launch per platform.'
+  provenance: operator ruling 2026-10-28 relayed by the coordinator; waits inventoried on macuahuitl 2026-10-28.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:55:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the 2026-10-28 readiness-events ruling
+- packet_id: launcher-starts-the-forge-from-a-readiness-gate-subscribed-to-events
+  order: 1922-gate
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  depends_on:
+  - enclave-services-announce-readiness-as-events
+  capability_tags:
+  - headless
+  - tray
+  - readiness
+  - events
+  estimated_hours: 8
+  title: The launcher starts vault, mirror and proxy first, subscribes to their ready events, and starts the forge only when all three are ready; a timeout is a failed event carrying retry_after, not a poll
+  context: 'Launch ordering today: container_deps.rs topo_order(Service::ForgeLaunch) through RealSatisfier.satisfy (ensure_enclave_network, ensure_vault_running, ensure_proxy_running, ensure_ca_bundle), driven by ensure_forge_launch from ensure_enclave_for_project (tray) and run_forge_agent_cli_mode (CLI); then ensure_shared_git_and_inference_for_launch starts the mirror and inference and calls wait_for_git_mirror_ready (1 s poll, 1200 s cap). The gate replaces the waits inside that chain: start hard requirements, subscribe, start optional siblings in parallel without awaiting them. A deadline expiry is published as a failed event with retry_after (image-build retry ruling), surfaced as one tray status line. The macOS tray (reset_state provision_now) and Windows tray (wsl_lifecycle provision_via_recipe) run the headless in a guest, so the gate lives in headless and both inherit it; the Windows guest-connect backoff (connect_backoff_delay, 1/2/4/8/16/30 s) is host-to-guest and out of scope here.'
+  exit_criteria:
+  - With the mirror held unready, the forge container is not created; today it is created after the 1 s poll gives up or the mirror is merely listening.
+  - A hard requirement that never reports ready yields exactly one failed event with a retry_after field and no forge start.
+  - Optional siblings (inference) start in the same tick as the hard requirements, not after them.
+  verifiable_closure: The acceptance fixture (1922-accp) passes, and a real launch on linux, macOS VM and WSL shows forge start ordered after the three ready events in the event log.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: a ReadinessGate in headless fed by PodmanEventStream, wired into ensure_forge_launch and ensure_shared_git_and_inference_for_launch; deadlines emit a failed event with retry_after; land 1922-accp red first.'
+  provenance: operator ruling 2026-10-28 relayed by the coordinator; ordering traced on macuahuitl 2026-10-28.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:55:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the 2026-10-28 readiness-events ruling
+- packet_id: forge-side-sibling-wait-loops-are-removed
+  order: 1922-unwt
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  depends_on:
+  - launcher-starts-the-forge-from-a-readiness-gate-subscribed-to-events
+  capability_tags:
+  - headless
+  - images
+  - forge
+  - polling
+  estimated_hours: 4
+  title: Once the gate lands, remove the sibling wait loops in headless and the forge entrypoints
+  context: 'Waits today: wait_for_git_mirror_ready (main.rs, probe_git_mirror_seeded every GIT_MIRROR_SEED_POLL_INTERVAL = 1 s up to GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS = 1200 s); wait_for_vault_ready (vault_bootstrap.rs, PodmanClient::wait_healthy = podman wait --condition=healthy, which itself polls at the 30 s HEALTHCHECK interval since 1919-hlth dropped the 2 s startup probe); wait_for_vault_api_ready (8 tries, 250 ms doubling to 2 s); images/default lib-common.sh mirror reachability probe (git ls-remote every 2 s up to timeout_s) and the seed-tolerant clone retries in the entrypoint-forge-*.sh scripts; lib-lane.sh wait_for_lane_socket (1 s, 10 s budget). Do NOT remove until 1922-gate is on linux-next: removing first would start the forge against an unready mirror.'
+  exit_criteria:
+  - '`grep -nE ''wait_for_git_mirror_ready|GIT_MIRROR_SEED_POLL_INTERVAL'' crates/tillandsias-headless/src` finds no call site; today it does.'
+  - '`grep -nE ''sleep [0-9]'' images/default/lib-common.sh` finds no mirror-probe sleep; today it matches.'
+  - The 1922-accp fixture counts zero sibling polls.
+  verifiable_closure: Both greps empty and 1922-accp green on linux, macOS VM and WSL launches.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Blocked on 1922-gate. Left: delete each loop listed in context, keep any lane-socket wait only if it is the forge waiting on itself, rerun 1922-accp.'
+  provenance: operator ruling 2026-10-28; waits inventoried on macuahuitl 2026-10-28.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:55:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the 2026-10-28 readiness-events ruling
+- packet_id: readiness-events-appear-in-curated-logs
+  order: 1922-elog
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  depends_on:
+  - enclave-services-announce-readiness-as-events
+  capability_tags:
+  - logging
+  - events
+  - privacy
+  estimated_hours: 3
+  title: Ready, failed and retry_after readiness events are written to the curated event log, with no PII
+  context: 'Forge log visibility ruling: own forge, its children and global curated events; logs die with the forge. Existing carriers: flow_sink.rs (FlowSource transitions to FlowState subscribers), progress_sink.rs (ProgressEvent), diagnostic_event_emitter.rs and tillandsias-logging event_collector.rs. No flume usage exists today. Each readiness record carries service, state (starting|ready|failed), retry_after when failed, and a monotonic ts; no paths, tokens, project remote URLs or usernames.'
+  exit_criteria:
+  - A launch writes one curated line per readiness transition for vault, mirror and proxy on linux, macOS VM and WSL.
+  - A test feeds a record containing a remote URL and a token-shaped string and asserts neither reaches the log line.
+  verifiable_closure: The redaction test passes and a curated log excerpt from each platform is attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: pick the carrier (flow_sink is the closest fit), define the record, write the redaction test first.'
+  provenance: operator ruling 2026-10-28; event carriers inventoried on macuahuitl 2026-10-28.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:55:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the 2026-10-28 readiness-events ruling
+- packet_id: acceptance-fixture-forge-never-starts-before-mirror-ready-and-counts-no-polls
+  order: 1922-accp
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - headless
+  - fixture
+  - readiness
+  - polling
+  estimated_hours: 4
+  title: An acceptance fixture fails on today's code when the forge starts before the mirror is ready or any sibling poll is counted
+  context: 'Land this first, red. The fixture drives the launch chain against a fake event source and a fake podman: the mirror stays unready until the fixture emits its ready event. It fails if the forge container is created before that event, or if any readiness probe of a sibling (probe_git_mirror_seeded, wait_healthy, vault API probe) is invoked more than zero times. On today''s code both arms are red: wait_for_git_mirror_ready calls probe_git_mirror_seeded once per second, and the forge is created after the wait regardless of an event. Platform runs: linux natively; macOS VM and WSL via the headless inside the guest.'
+  exit_criteria:
+  - The fixture is red on linux-next as of 2026-10-28 with both arms named in its output (forge-before-ready, polls=N>0).
+  - It is green once 1922-gate and 1922-unwt land.
+  verifiable_closure: The red run output from the pre-fix tree and the green run output after the gate, both attached.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: inject a probe counter and an event source seam into the launch chain, write both arms, record the red run on today''s tree.'
+  provenance: operator ruling 2026-10-28 relayed by the coordinator.
+  events:
+  - type: filed
+    ts: '2026-10-28T23:55:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the 2026-10-28 readiness-events ruling

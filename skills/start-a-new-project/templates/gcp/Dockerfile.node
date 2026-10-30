@@ -1,0 +1,13 @@
+# {{NAME}}: Node.js on Google Cloud Run.
+# Cloud Run sends requests to $PORT (8080 unless set) on 0.0.0.0, stops the
+# container with SIGTERM, and keeps no files between instances.
+FROM docker.io/library/node:24-slim
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev || npm install --omit=dev
+COPY . .
+ENV PORT={{PORT}} NODE_ENV=production
+EXPOSE {{PORT}}
+# The image's own non-root user.
+USER node
+CMD ["npm", "start"]

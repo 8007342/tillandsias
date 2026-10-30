@@ -3,6 +3,7 @@ members = [
     "crates/tillandsias-browser-mcp",
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
+    "crates/tillandsias-embed",
     "crates/tillandsias-headless",
     "crates/tillandsias-host-shell",
     "crates/tillandsias-exec",

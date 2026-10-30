@@ -22,6 +22,8 @@
 
 // Windows Event Log relay (self-gated with `#![cfg(target_os = "windows")]`;
 // compiles to nothing elsewhere). @trace spec:windows-event-logging
+#[cfg(target_os = "windows")]
+mod bringup_timer;
 mod eventlog;
 #[cfg(target_os = "windows")]
 mod hvsocket;

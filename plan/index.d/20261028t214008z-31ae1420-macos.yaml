@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-lane-exits-on-a-401-account-read-without-offering-re-login
+    event:
+      type: claimed
+      ts: "2026-10-28T21:40:08Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        claimed by macOS; PR #695 covers criterion 2: codex-oauth-session offers the device sign-in in the same window on an unauthorized/401 exit and relaunches once; fixture codex_lane_offers_relogin_on_unauthorized fails on the previous wrapper. Criterion 1, from reading the source only: tillandsias never refreshes the Codex credential itself. Codex refreshes it, and the wrapper harvests rotations to Vault every 2 s, plus a final harvest on exit. A hard kill (oomd) skips the final harvest, and a failed harvest only warns, so Vault can keep a refresh token that is already rotated. Criteria 1 and 3 stay open.

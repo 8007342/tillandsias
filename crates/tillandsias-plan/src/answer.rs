@@ -532,6 +532,9 @@ pub fn relate(envelope: &Envelope, root: &Path) -> CallerRelation {
     // 2026-09-26: 569 git calls, 5958 ms for one groundtruth case), a cost that
     // grows with the ledger AND with the number of rows cited. Once per pair.
     let mut evaluated: BTreeSet<(String, Option<String>)> = BTreeSet::new();
+    // 1924-gyff: the distinct pairs are read in ONE `git cat-file --batch`
+    // rather than one `git show` each.
+    let mut pairs: Vec<(String, Option<String>)> = Vec::new();
     for c in &envelope.citations {
         // A path that escapes the checkout is a separate, harder violation that
         // `verify` already reports; do not hand it to git.
@@ -548,14 +551,26 @@ pub fn relate(envelope: &Envelope, root: &Path) -> CallerRelation {
         if !evaluated.insert((c.path.clone(), frame.map(str::to_string))) {
             continue;
         }
-        let here = std::fs::read_to_string(root.join(rel)).ok();
-        let there = frame.and_then(|sha| view.file_at(sha, &c.path));
+        pairs.push((c.path.clone(), frame.map(str::to_string)));
+    }
+    let framed: Vec<(&str, &str)> = pairs
+        .iter()
+        .filter_map(|(p, f)| f.as_deref().map(|f| (f, p.as_str())))
+        .collect();
+    let mut blobs = view.files_at(&framed).into_iter();
+    for (path, frame) in &pairs {
+        let here = std::fs::read_to_string(root.join(path)).ok();
+        let there = if frame.is_some() {
+            blobs.next().flatten()
+        } else {
+            None
+        };
         match (here, there) {
             (None, Some(_)) => {
-                absent_here.insert(c.path.clone());
+                absent_here.insert(path.clone());
             }
             (Some(h), Some(t)) if h != t => {
-                drifted.insert(c.path.clone());
+                drifted.insert(path.clone());
             }
             // (Some, None): the frame is unfetched or the path did not exist
             // there. Nothing is provable, so nothing is claimed — `relation`

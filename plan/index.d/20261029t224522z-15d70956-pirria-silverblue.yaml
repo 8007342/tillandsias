@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: dev-loop-and-gate-sccache-regimes-are-split
+    field: next_action
+    value: 'Pushed on work/1916-dvlp (3445da3d9, stacked on work/1916-embd). build.sh: CARGO_INCREMENTAL=1 drops RUSTC_WRAPPER and adds assets-from-source to the default debug build; 0/unset keeps sccache. [profile.dev] line-tables-only + split-debuginfo unpacked. Fixture scripts/lua/test-build-sccache-regimes.lua: 3/6 before, 6 arms after. pirria (4 cores, no sccache), one-line main.rs edit + one test: 14.0-16.3 s before, 10.1-11.5 s after; under 2 s is not reachable on this host. Left: gate step (needs a darwin STEP_SECOND_REGIME), a gate log showing sccache hits on a host that has sccache, land.'
+    ts: "2026-10-29T22:45:22Z"
+    host: pirria-silverblue
+    replaces_sha256: "4f31771b7b5b12ba9b3f33eac987cb037ca9d6c0d7f357bfb29d07a626f1e62c"
+
+events:
+  - packet_id: dev-loop-and-gate-sccache-regimes-are-split
+    event:
+      type: note
+      ts: "2026-10-29T22:45:22Z"
+      host: pirria-silverblue
+      summary: |-
+        pushed

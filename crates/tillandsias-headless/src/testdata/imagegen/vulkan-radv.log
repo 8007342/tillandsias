@@ -1,0 +1,5 @@
+ggml_vulkan: 0 = AMD Radeon Graphics (RADV RENOIR) (radv) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 65536 | int dot: 0 | matrix cores: none
+[W] auto-fit: no GPU devices; using the default backend --- backend_fit.cpp:444
+[V] model manager prepared params backend buffers (626.35 MB, 358 tensors, 1 blocks, VRAM) on Vulkan0 --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (649.98 MB, 280 tensors, 1 blocks, VRAM) on Vulkan0 --- model_manager.cpp:490
+[V] model manager prepared params backend buffers (  2.34 MB, 67 tensors, 1 blocks, VRAM) on Vulkan0 --- model_manager.cpp:490

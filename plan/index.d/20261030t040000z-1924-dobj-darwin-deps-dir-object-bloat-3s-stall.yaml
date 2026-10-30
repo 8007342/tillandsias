@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at macuahuitl-fedora's request,
+# 2026-10-29: the constant 3.0 s "system-daemon stall" seen in 1924-vprx and 1924-fsev.
+packets:
+- packet_id: darwin-deps-dir-object-bloat-stalls-every-test-binary
+  order: 1924-dobj
+  status: ready
+  kind: research
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - build-time
+  - macos
+  - cargo-target-hygiene
+  blocked_by:
+  - capability:operator-approval-for-target-dir-prune
+  estimated_hours: 3
+  title: Every darwin test binary run from target/debug/deps stalls about 3 s, because the directory holds about 1.2 million stale .o files
+  context: 'Measured on tlatoanis-macbook-air, macOS 27.0.1 (26A434), 2026-10-29, at normal priority with no sudo. The constant 3.0 s seen in FSEventStreamStart (notify watch) and in reqwest''s default Client build (the macOS proxy lookup) is NOT a system-daemon or sandbox stall. Evidence: (1) A Swift probe in the same process tree: FSEventStreamStart with notify''s exact flags, stop, purge and SCDynamicStoreCopyProxies all took under 3 ms. Python _scproxy took 2 ms. (2) A standalone Rust probe pinned to notify 8.2.0 and reqwest 0.11.27 with identical resolved features took 2-4 ms, both on the main thread and under libtest. (3) The SAME vault-client test binary copied to target/timing-probe/ ran url_joins in 0.01 s, and copied back into target/debug/deps under a neutral name it took 3.05 s. The probe binary copied INTO target/debug/deps also took 3.07 s for watch and 3.03 s for the reqwest build. So the trigger is the executable''s directory. target/debug/deps holds 1,243,186 entries, 1,227,248 of them .o files, 104 GB in total. That fits darwin''s default split-debuginfo=unpacked, which leaves per-build object files that cargo never collects. Inference, not traced: CoreFoundation scans the main executable''s directory (bundle lookup) on first use by SystemConfiguration and FSEvents. Under a parallel suite, the 3 s grows to 8-16 s per process. This means every darwin test process that touches CoreFoundation pays it, and it accounts for the 68-85 s vault-client and 150-210 s scanner rows. Neither a reboot nor a fresh login context is needed to explain it; context (b) was not separately tested, because the move-the-binary control isolated the trigger.'
+  exit_criteria:
+  - 'With target/debug/deps pruned of stale objects (operator-approved), the same vault-client and scanner test binaries run url_joins and the notify watch in under 50 ms, measured.'
+  - 'A durable fix keeps it from recurring: a darwin dev/test profile with split-debuginfo set to packed or off (scoped so Linux is unchanged), or a measured gate step that prunes stale objects, plus a check that refuses when deps exceeds an entry-count bound.'
+  - 'The darwin workspace test run and preflight are re-timed before and after.'
+  verifiable_closure: 'ls -f target/debug/deps | wc -l stays under a stated bound after a full ./build.sh --check'
+  unscoreable: 'a host-filesystem and build-hygiene property, not a litmus; the move-the-binary control is the reproducer.'
+  next_action: 'Ask the operator to approve pruning target/debug on this host (cargo clean -p for the workspace crates, or a full cargo clean costing about 25 min of rebuild), then measure; separately prototype CARGO_PROFILE_{DEV,TEST}_SPLIT_DEBUGINFO=packed for darwin only.'
+  provenance: 'macuahuitl-fedora request 2026-10-29; probes in target/timing-probe on this host.'
+  events:
+  - type: filed
+    ts: '2026-10-30T04:00:00Z'
+    host: tlatoanis-macbook-air
+    summary: the 3 s stall is the 1.2M-object target/debug/deps, not a daemon; reproduced by moving the binary

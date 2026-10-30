@@ -1,0 +1,26 @@
+# @trace order:1874-b9tg (spec: openspec/changes/local-image-generation, not yet archived)
+# OPTIONAL CUDA variant of images/imagegen. Not built by default: the Vulkan
+# build places the whole model on the NVIDIA card at the same speed (1.44 s
+# CUDA vs 1.39 s Vulkan warm, measured on lenovinha 2026-10-27), and the CUDA
+# devel base is a multi-GB pull. Kept for hosts where the Vulkan ICD is absent.
+FROM docker.io/nvidia/cuda:13.3.1-devel-ubuntu24.04 AS build
+ARG SDCPP_TAG=master-1015-e41fbcf
+RUN apt-get update && apt-get install -y --no-install-recommends git cmake ninja-build ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch "$SDCPP_TAG" --recurse-submodules --shallow-submodules \
+        https://github.com/leejet/stable-diffusion.cpp /src
+WORKDIR /src
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DSD_CUDA=ON \
+        -DCMAKE_CUDA_ARCHITECTURES="75;86;89" \
+    && cmake --build build -j"$(nproc)" \
+    && test -x build/bin/sd-server
+
+FROM docker.io/nvidia/cuda:13.3.1-runtime-ubuntu24.04
+ARG SDCPP_TAG=master-1015-e41fbcf
+LABEL io.tillandsias.imagegen.sdcpp-tag="${SDCPP_TAG}"
+RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -u 1001 -m -s /usr/sbin/nologin imagegen
+COPY --from=build /src/build/bin/sd-server /src/build/bin/sd-cli /usr/local/bin/
+USER imagegen
+ENTRYPOINT ["/usr/local/bin/sd-server"]

@@ -24,7 +24,9 @@ critical_path:
     expected_behavior: "ok: provider device schemas + alias"
 
   - step: "tray credentialed-agent clicks (codex/claude/opencode/antigravity) delegate to the TTY-capable CLI lane"
-    command: "tr -d ' \\n' < crates/tillandsias-headless/src/main.rs | grep -Fq 'ForgeAgentMode::Codex|ForgeAgentMode::Claude|ForgeAgentMode::OpenCode|ForgeAgentMode::Antigravity' && echo 'ok: tray cli-lane delegation'"
+    # 1923-ia86: 776-jcf3 deleted launch_forge_agent; the tray now launches every
+    # agent as the CLI lane (current_exe --cloud <repo> --<agent>) in a terminal.
+    command: "T=crates/tillandsias-headless/src/tray/mod.rs; grep -Fq 'LaunchKind::Codex => \"--codex\"' $T && grep -Fq 'LaunchKind::Claude => \"--claude\"' $T && grep -Fq 'LaunchKind::OpenCode => \"--opencode\"' $T && grep -Fq 'LaunchKind::Antigravity => \"--antigravity\"' $T && grep -Fq 'std::env::current_exe()' $T && grep -Fq 'launch_in_terminal(&title' $T && echo 'ok: tray cli-lane delegation'"
     timeout_ms: 3000
     expected_behavior: "ok: tray cli-lane delegation"
 

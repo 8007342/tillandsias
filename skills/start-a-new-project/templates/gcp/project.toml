@@ -1,0 +1,6 @@
+# {{NAME}}: settings for Google Cloud's buildpacks ({{RUNTIME}}).
+# The builder finds the language from the project's own files; these lines
+# only pin what it would otherwise guess. Remove any you do not need.
+[[build.env]]
+name = "GOOGLE_RUNTIME"
+value = "{{RUNTIME}}"

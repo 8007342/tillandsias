@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows at the coordinator's direction, 2026-10-29 (operator directive: cut build/validate time by orders of magnitude).
+packets:
+- packet_id: windows-preflight-and-gate-run-from-a-distro-native-ext4-checkout-by-default
+  order: 1924-gyff
+  status: ready
+  kind: perf
+  priority: p0
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags:
+  - build
+  - gate
+  - windows
+  - wsl
+  estimated_hours: 4
+  title: On Windows, ./build.sh --preflight and the gate run from a distro-native ext4 checkout by default, synced incrementally, instead of reading the tree over 9p from /mnt/c
+  context: 'Measured on yolanda 2026-10-29, each guard alone in tillandsias-build, /mnt/c vs an ext4 clone: test-pending-capability-row-does-not-wedge >400 s -> 12.6 s; test-memo-hit-observability >400 s -> 13.4 s; check-added-test-is-referenced 373 s -> 2.3 s; test-project-info-grep-code-recall >400 s -> 2.3 s; check-litmus-bindings.lua >400 s -> 94 s; check-append-vs-origin-fold 338 s -> 78 s; test-metrics-log-path-agreement 204 s -> 10.2 s; test-trace-coverage 176 s -> 1.5 s. Plan-binary cold start 2 ms; git spawns about 10x slower over 9p but most time is file reads. Uncut preflight on /mnt/c: 2,933 s wall, 4,779 s guard time; the normal preflight cuts 114 of 279 guards at the 5 s deadline. The 667-kfyn mirror (TILLANDSIAS_WSL2_SRC_MIRROR=1) exists but is opt-in, and with it --preflight still took 255 s with 113 cuts: either --preflight does not take the mirror path or the per-run sync eats the budget. The memory cap is not a factor (7G gave the same result). Git batching and digest memoisation are cross-platform and routed separately by the coordinator (1916-tsel).'
+  exit_criteria:
+  - 'The reason TILLANDSIAS_WSL2_SRC_MIRROR=1 did not change --preflight is named with evidence (path not taken, or sync cost) and fixed.'
+  - 'On a Windows host, ./build.sh --preflight and ./build.sh --check run from the distro-native ext4 checkout by default; an explicit opt-out keeps /mnt/c.'
+  - 'The sync is incremental (rsync or a fetch-fed ext4 worktree): a second run with one changed file syncs in seconds, measured.'
+  - 'A fixture asserts --preflight takes the ext4 path on a Windows host shape and FAILS on today''s code.'
+  - 'Preflight wall on yolanda with no deadline cuts, before vs after, is recorded on the packet.'
+  verifiable_closure: 'The ext4-path fixture passes in the gate and failed before the change; before/after uncut preflight walls recorded.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Trace with-wsl2-builder.sh for --preflight with the mirror on; time the sync separately from the guards.'
+  provenance: 'Operator directive 2026-10-29 relayed by macuahuitl-fedora; measurements by yolanda-windows 2026-10-29.'
+  events:
+  - type: filed
+    ts: '2026-10-29T23:30:00Z'
+    host: yolanda-windows
+    summary: filed ready from the yolanda 9p-vs-ext4 trace at the coordinator's direction
