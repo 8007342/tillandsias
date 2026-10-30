@@ -115,7 +115,7 @@ if grep -qxF "file $PROBE" "$MANIFEST"; then
         bad "--check passed against a mutated surface"
     fi
     NO_OUT="$("$BIN" next-order 2>&1)"
-    if [ $? -ne 0 ] && printf '%s' "$NO_OUT" | grep -q 'stale-plan-binary'; then
+    if [ $? -ne 0 ] && grep -q 'stale-plan-binary' <<<"$NO_OUT"; then
         ok "next-order refuses to mint from a binary the lane would refuse (output 2)"
     else
         bad "next-order did not refuse as stale-plan-binary: ${NO_OUT%%$'\n'*}"

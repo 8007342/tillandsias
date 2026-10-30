@@ -66,8 +66,8 @@ run_claims() {  # $1 = surface root to pin, or empty for none
 
 # ── 1. reproducer ───────────────────────────────────────────────────────────
 out="$(run_claims "")"
-if printf '%s\n' "$out" | grep -q '^FAIL: claims-fleet-visible' \
-   && printf '%s\n' "$out" | grep -q 'resolved plan binary is STALE'; then
+if grep -q '^FAIL: claims-fleet-visible' <<<"$out" \
+   && grep -q 'resolved plan binary is STALE' <<<"$out"; then
     ok "unpinned, a shared target inside an older checkout makes claims-fleet-visible refuse STALE"
 else
     bad "unpinned run did not refuse STALE — the reproducer does not reproduce: $(printf '%s\n' "$out" | grep -E '^(PASS|FAIL): claims' | tail -1)"
@@ -88,7 +88,7 @@ for pair in "build.sh SCRIPT_DIR" "scripts/local-ci.sh REPO_ROOT"; do
         continue
     fi
     out="$(run_claims "$pin")"
-    if printf '%s\n' "$out" | grep -q '^PASS: claims-fleet-visible'; then
+    if grep -q '^PASS: claims-fleet-visible' <<<"$out"; then
         ok "$1's pin makes claims-fleet-visible pass under the same shared target"
     else
         bad "$1's pin did not make claims-fleet-visible pass: $(printf '%s\n' "$out" | grep -E '^(PASS|FAIL): claims' | tail -1)"
