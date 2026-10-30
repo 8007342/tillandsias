@@ -42,10 +42,14 @@ COPY extra_model_paths.yaml /opt/comfyui/extra_model_paths.yaml
 # 1921-vkrr: the placement probe (backend=cuda, or exit 1 on a silent CPU fallback).
 COPY probe-placement.py /opt/tillandsias/probe-placement.py
 
-# No ComfyUI-Manager anywhere, and custom_nodes holds only what ships with
-# ComfyUI at this commit (the 1921-7aa5 manifest adds reviewed nodes later).
-RUN if find /opt/comfyui / -xdev -iname '*comfyui-manager*' -print -quit 2>/dev/null | grep -q .; then \
-        echo "ComfyUI-Manager must not be in the studio image" >&2; exit 1; fi \
+# 1921-7aa5: custom nodes come only from the reviewed manifest, each at its
+# verified commit with a hashed pip lock. The verify step fails the build on a
+# node dir not in the manifest, a node at another commit, or any
+# ComfyUI-Manager path anywhere in the image.
+COPY custom-nodes.toml custom-nodes.py /opt/tillandsias/
+COPY locks/ /opt/tillandsias/locks/
+RUN python /opt/tillandsias/custom-nodes.py install /opt/tillandsias/custom-nodes.toml /opt/comfyui/custom_nodes \
+    && python /opt/tillandsias/custom-nodes.py verify /opt/tillandsias/custom-nodes.toml /opt/comfyui/custom_nodes / \
     && useradd -u 1001 -m -s /usr/sbin/nologin studio \
     && mkdir -p /out /in /home/studio/.cache /home/studio/user /home/studio/tmp \
     && chown -R studio:studio /out /in /home/studio \

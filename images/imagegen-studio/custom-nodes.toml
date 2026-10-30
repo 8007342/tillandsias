@@ -1,0 +1,13 @@
+# @trace order:1921-7aa5 (spec: openspec/changes/local-image-generation, not yet archived)
+# The ONLY custom nodes the studio image may hold. Custom nodes are arbitrary
+# Python run inside ComfyUI, so each entry is a reviewed row: repository, the
+# exact commit (verified after clone, never trusted from a branch name), its
+# licence, and a hashed pip lock installed with --require-hashes --no-deps.
+# Adding a node means a new review row, then an entry here.
+
+[[node]]
+name = "ComfyUI-GGUF"
+repo = "https://github.com/city96/ComfyUI-GGUF"
+commit = "6ea2651e7df66d7585f6ffee804b20e92fb38b8a"
+license = "Apache-2.0"
+lock = "locks/ComfyUI-GGUF.txt"
