@@ -2687,14 +2687,12 @@ _run_gate_steps() {  # $1 = root
         # ignored, and id-less ones are reported, not refused.
         _metrics_ours=0
         if [ -f "$_metrics_shared" ]; then
-            _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}")" || _metrics_attr=""
-            _metrics_ours="$(printf '%s' "$_metrics_attr" | sed -n 's/^ours=\([0-9]*\).*/\1/p')"
+            _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
             case "$_metrics_attr" in
-                *"unattributed=0"*|"") : ;;
-                *) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} ($_metrics_attr); not attributable to this step (1916-tsel)" ;;
+                *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
             esac
-            if [ "${_metrics_ours:-0}" -gt 0 ]; then
-                _error "gate step ${_step_path##*/} wrote ${_metrics_ours} record(s) carrying this gate's run id into $_metrics_shared (1204-3s2s)"
+            if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
+                _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_shared — $_metrics_attr (1204-3s2s; id-less records refuse unless another gate is live, 1916-tsel)"
                 _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
                 _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
                 _error "  refuse to publish any number, every arm driving it reads zero, and"

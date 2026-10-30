@@ -314,23 +314,29 @@ shared fallback log `/tmp/tillandsias-timing.jsonl` grew during it.
   id is exported by `_gate_run_id_begin` and stamped by cycle-metrics.sh.
 - Only new records carrying that id refuse the step. Steps run one at a
   time, so such a record is the step's own.
-- Another gate's records are ignored. Records with no id are reported as a
-  warning, not a refusal.
+- Another gate's records are ignored.
+- A record with **no** run id still refuses the step, unless another gate is
+  live at that moment. "Live" means a foreign run id landed in the same
+  window, or a sibling `build.sh --check`/`--ci-full`/`--gate-steps`
+  process exists outside this gate's own process ancestry. Only that
+  concurrent case drops to a warning (coordinator ruling 2026-10-29).
 
 **Fixture.** `scripts/test-gate-step-metrics-attribution.sh` runs two
-concurrent writers into a scratch log:
+concurrent writers into a scratch log, with the sibling probe pinned so
+real host gates cannot sway it:
 
 - the clean step is not named;
 - the leaking step is named with exactly its two records;
-- an id-less record is unattributed;
-- build.sh is wired to the helper.
+- an id-less record beside a live gate warns;
+- an id-less record with no concurrent gate refuses;
+- build.sh is wired to the helper's verdict.
 
 It fails on the pre-fix tree. `test-gate-step-metrics-isolation.sh` arms 1
 and 4 now look for the attribution call instead of the old line-count
 compare.
 
-**Residual risk.** A leaking fixture that scrubs its environment (`env -i`)
-writes id-less records. That now warns instead of refusing.
+**Residual risk.** A fixture that scrubs its environment and leaks while
+another gate happens to be running gets a warning, not a refusal.
 
 ## 5. Proposal (not implemented): toward seconds
 

@@ -11,8 +11,10 @@
 #   gate B, a different run id, writes records the whole time.
 #   1 the clean step is not named although B grew the file during it
 #   2 the leaky step IS named (ours>0) although B wrote too
-#   3 a record with no run id is unattributed, never ours
-#   4 build.sh's step loop hands the helper its run id (wiring)
+#   3 an id-less record WHILE another gate is live only warns
+#   4 build.sh's step loop hands the helper its run id and refuses on verdict
+#   5 an id-less record with NO concurrent gate still refuses (the leak gate
+#     keeps its teeth for a fixture that scrubbed its env)
 # FAILS ON THE PRE-FIX TREE: the helper does not exist there, and the old
 # growth check names the clean step.
 set -uo pipefail
@@ -49,12 +51,23 @@ rec leaky gate-A; sleep 0.1; rec leaky gate-A; sleep 0.1
 v2="$(bash "$H" "$LOG" "$before" gate-A)"
 case "$v2" in "ours=2 foreign="*) ok 2 ;; *) bad 2 "the leaking step was not named with its 2 records: [$v2]" ;; esac
 
-# an id-less record is never blamed on the step
-before="$(wc -l < "$LOG")"; rec anonymous ""
-v3="$(bash "$H" "$LOG" "$before" gate-A)"
-case "$v3" in "ours=0 "*"unattributed="[1-9]*) ok 3 ;; *) bad 3 "an id-less record was not reported as unattributed: [$v3]" ;; esac
+# The sibling probe is pinned to a pattern that matches nothing, so only the
+# writers in this fixture decide "concurrent" (the host may run real gates).
+export TILLANDSIAS_GATE_SIBLING_PATTERN="no-such-gate-process-$$-x9q"
 
-if grep -qF 'gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}"' "$ROOT/build.sh"; then ok 4
+# 3: an id-less record while gate B is live (B writes in the window) only warns
+before="$(wc -l < "$LOG")"; rec anonymous ""; sleep 0.1
+v3="$(bash "$H" "$LOG" "$before" gate-A)"
+case "$v3" in "ours=0 "*"unattributed="[1-9]*"concurrent=1 verdict=warn") ok 3 ;; *) bad 3 "an id-less record beside a live gate did not warn: [$v3]" ;; esac
+
+# 5: stop gate B; an id-less record with nobody else running still refuses
+kill "$B_PID" 2>/dev/null; wait "$B_PID" 2>/dev/null; B_PID=""
+before="$(wc -l < "$LOG")"; rec scrubbed-env ""
+v5="$(bash "$H" "$LOG" "$before" gate-A)"
+case "$v5" in "ours=0 foreign=0 unattributed=1 concurrent=0 verdict=refuse") ok 5 ;; *) bad 5 "an id-less record with no concurrent gate did not refuse: [$v5]" ;; esac
+
+if grep -qF 'gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}"' "$ROOT/build.sh" \
+   && grep -qF 'verdict=refuse' "$ROOT/build.sh"; then ok 4
 else bad 4 "build.sh's step loop does not attribute shared-log records by its run id"; fi
 
 if [ "$fail" -gt 0 ]; then echo "FAIL:gate-step-metrics-attribution:$fail-of-$((pass + fail))"; exit 1; fi
