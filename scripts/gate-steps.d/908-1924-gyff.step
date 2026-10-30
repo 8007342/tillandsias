@@ -1,0 +1,12 @@
+# Gate step 1924-gyff — on Windows, the gate and the preflight read the tree
+# from the distro-native ext4 mirror by default, not over 9p from /mnt/c.
+# The fixture cuts with-wsl2-builder.sh's own _w2_src_mirror_wanted out of the
+# file and runs it: --preflight/--check/--test take the mirror, the opt-outs
+# and building modes stay in-tree, and the wrapper syncs only on mirror.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking Windows preflight and gate read from the ext4 mirror by default (1924-gyff)"
+STEP_LUA="scripts/lua/test-wsl2-src-mirror-default.lua"
+STEP_ERROR="with-wsl2-builder.sh no longer sends --preflight/--check/--test to the ext4 source mirror by default, or the opt-outs stopped working (1924-gyff) — see the FAIL lines above"
+STEP_OK="WSL2 source mirror default fixture passed"
+STEP_SECOND_REGIME="yolanda-windows 2026-10-29 msys and tillandsias-build linux ok:wsl2-src-mirror-default:6"
