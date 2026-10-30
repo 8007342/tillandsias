@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at macuahuitl-fedora's request,
+# 2026-10-29, from a darwin ./build.sh --check timing run.
+packets:
+- packet_id: vault-leaf-mint-test-flaky-under-the-full-suite
+  order: 1924-vtls
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - tests
+  - vault
+  - parallel-test-isolation
+  blocked_by:
+  - capability:parallel-test-isolation
+  estimated_hours: 3
+  title: ca_and_vault_leaf_mints_leave_no_plaintext_key_where_the_store_is_inactive fails inside the full workspace suite and passes alone
+  context: 'Measured on tlatoanis-macbook-air 2026-10-29, trunk 024a7fff5, taskpolicy -b: the darwin ./build.sh --check (4213 s) ended fail:test-baseline new-red=1 on this test (added by 713756e72, 1898-hyhf), panicking at crates/tillandsias-headless/src/main.rs:33040 with ensure_vault_tls_leaf: "openssl x509 for Vault TLS leaf failed: exit status: 1". Run alone (--exact, features tray,listen-vsock) it passed 3/3. Source read, not measured: under cfg(test) the CA key is always encrypted at rest (ca_key_store::session() is None) and the passphrase is a process OnceLock, so the passphrase itself is stable within the process. Suspects, in order: (1) another parallel test mints or rewrites the CA key/cert, or the ca.srl from -CAcreateserial, in the same certs dir between ensure_ca_bundle and the x509 sign, because it resolves HOME or the cache dir without env_lock/podman_seam_lock; (2) a shared env var such as OPENSSL_CONF or HOME changed by an unlocked test; (3) a shared tmp dir. The openssl stderr is discarded (Stdio::null), so the failure carries no reason.'
+  exit_criteria:
+  - 'The cause is named with evidence: openssl stderr captured into the error on failure, plus the colliding test or env var identified.'
+  - 'The test passes in 10 consecutive full workspace runs (or a stress loop running it beside the CA-minting tests in parallel), and it fails on today''s code under the same loop.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias -- ca_ vault_ (repeated 10x, all green)'
+  next_action: 'Capture openssl stderr into the Err string, then list every test that calls ensure_ca_bundle or writes under the CA dir and check which ones skip env_lock.'
+  provenance: 'macuahuitl-fedora request 2026-10-29; target/test-transcript-workspace-gate.log from the timing run.'
+  events:
+  - type: filed
+    ts: '2026-10-29T23:26:18Z'
+    host: tlatoanis-macbook-air
+    summary: filed the full-suite flake of the Vault leaf-mint test (passes 3/3 alone)

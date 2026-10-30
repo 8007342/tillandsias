@@ -1,0 +1,33 @@
+# @trace order:1874-h9ns (spec: openspec/changes/local-image-generation, not yet archived)
+# THE IMAGEGEN DOWNLOAD MANIFEST. One row per FILE a tier needs, pinned by
+# repository REVISION (a commit, never a branch), sha256 and byte size.
+# Read by crates/tillandsias-headless/src/imagegen_models.rs; no interpreter.
+#
+# Files are fetched on first use into cache_root()/models/imagegen/<tier>/
+# through the enclave proxy only, sha256-verified on the host before they are
+# kept. A digest mismatch discards the file. Formats: .safetensors or .gguf
+# only (a pickle checkpoint can execute code on load).
+#
+# Licences re-verified 2026-10-29 on the Hugging Face API (cardData.license,
+# gated) for the pinned revision:
+#   akleine/sdxs-09          openrail++  gated=false  (the single-file SDXS-512-0.9
+#                            sd.cpp's docs/distilled_sd.md names; sha256 equals the
+#                            sdxs09 file measured on lenovinha and yoga 2026-10-27)
+#   ByteDance/SDXL-Lightning openrail++  gated=false
+#   madebyollin/sdxl-vae-fp16-fix  mit  gated=false
+# I2/I3 (FLUX.1-schnell) rows are NOT here: their upstream repo is gated and
+# 1921-qqfz repoints them at an ungated Apache-2.0 GGUF copy; it adds their
+# rows to this file. A tier with no row here cannot be fetched.
+#
+# Columns:
+#   tier      I0..I3, a row of tiers.tsv
+#   role      model | vae | clip_l | t5xxl  (the sd.cpp flag the file is passed as)
+#   repo      Hugging Face repository
+#   revision  pinned commit sha
+#   file      path inside the repository (also the cached file name's basename)
+#   sha256    pinned digest
+#   bytes     exact size
+#   licence   licence id (tiers.tsv PERMISSIVE_LICENCES)
+#tier	role	repo	revision	file	sha256	bytes	licence
+I0	model	akleine/sdxs-09	baed838f4d9dadf5ac369570d45ddc72c1cb1ad4	sdxs09.safetensors	2618f142ad9f3884785884216d41fdcc033fde529f30a180f50ea6a05de6a89c	1342124230	openrail++
+I1	model	ByteDance/SDXL-Lightning	c9a24f48e1c025556787b0c58dd67a091ece2e44	sdxl_lightning_4step.safetensors	e0d996ee0013e79d9d3561f50fcafb9a17e3ff07b780358e3b66d67932c4d490	6938040682	openrail++

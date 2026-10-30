@@ -9,9 +9,12 @@ local raw_allowed = env.get("PODMAN_SYNC_ESCAPE_HATCHES")
 -- its caller's by design, never a podman query that should be bounded:
 --   1. main.rs build_image_with_logging: the streamed image build;
 --   2. toolchain_exec.rs run_session (1637-5765): an interactive toolchain
---      session (`flutter run`), ended by its client's disconnect.
+--      session (`flutter run`), ended by its client's disconnect;
+--   3. imagegen_models.rs run_streamed (1874-h9ns): a model fetch or an
+--      image generation, whose progress is read from its own output stream
+--      (events, not polling) and which ends when the process exits.
 -- A third needs the same justification here, in the same commit.
-if raw_allowed == nil or raw_allowed == "" then raw_allowed = "2" end
+if raw_allowed == nil or raw_allowed == "" then raw_allowed = "3" end
 if not text.is_match(raw_allowed, "^-?[0-9]+$") then
     verdict.emit("blocked:podman-sync-bounded:invalid-escape-hatches:" .. raw_allowed, 2)
 end
