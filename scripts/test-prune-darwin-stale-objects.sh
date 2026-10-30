@@ -7,7 +7,7 @@ set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 prune="$here/prune-darwin-stale-objects.sh"
-work="$(mktemp -d)"
+work="$(mktemp -d "${TMPDIR:-/tmp}/prune-darwin-objects.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 deps="$work/debug/deps"
 mkdir -p "$deps"
