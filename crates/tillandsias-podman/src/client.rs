@@ -132,6 +132,10 @@ pub struct PodmanClient {
     /// Extra environment for every podman process this client spawns
     /// (1922-rann: `NOTIFY_SOCKET` for a `--sdnotify=container` launch).
     process_env: Arc<Vec<(String, String)>>,
+    /// 1922-rann: only a client on the real podman binds a notify socket for an
+    /// opted-in launch. A fake or replay backend never runs a container, so a
+    /// test must not create sockets under the host's runtime dir.
+    announces_readiness: bool,
 }
 
 impl std::fmt::Debug for PodmanClient {
@@ -145,6 +149,7 @@ impl PodmanClient {
         Self {
             backend: Arc::new(RealBackend),
             process_env: Arc::default(),
+            announces_readiness: true,
         }
     }
 
@@ -152,6 +157,7 @@ impl PodmanClient {
         Self {
             backend,
             process_env: Arc::default(),
+            announces_readiness: false,
         }
     }
 
@@ -161,6 +167,7 @@ impl PodmanClient {
         Self {
             backend: self.backend.clone(),
             process_env: Arc::new(env),
+            announces_readiness: self.announces_readiness,
         }
     }
 
@@ -1099,7 +1106,10 @@ impl PodmanClient {
         // own notify socket bound BEFORE podman runs, so a READY sent at once is
         // queued, not lost; the one outcome is announced after the run returns.
         #[cfg(unix)]
-        let ready = crate::readiness::bind_for_launch(container_name, args);
+        let ready = self
+            .announces_readiness
+            .then(|| crate::readiness::bind_for_launch(container_name, args))
+            .flatten();
         #[cfg(unix)]
         let launcher = match &ready {
             Some(l) => self.with_process_env(l.podman_env()),
