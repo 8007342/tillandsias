@@ -45,11 +45,12 @@ COPY extra_model_paths.yaml /opt/comfyui/extra_model_paths.yaml
 RUN if find /opt/comfyui / -xdev -iname '*comfyui-manager*' -print -quit 2>/dev/null | grep -q .; then \
         echo "ComfyUI-Manager must not be in the studio image" >&2; exit 1; fi \
     && useradd -u 1001 -m -s /usr/sbin/nologin studio \
-    && mkdir -p /out /in /home/studio/.cache \
+    && mkdir -p /out /in /home/studio/.cache /home/studio/user /home/studio/tmp \
     && chown -R studio:studio /out /in /home/studio \
     && chmod -R a-w /opt/comfyui/custom_nodes
 
 USER studio
 EXPOSE 8188
 ENTRYPOINT ["python", "/opt/comfyui/main.py", "--listen", "0.0.0.0", "--port", "8188", \
-            "--output-directory", "/out", "--input-directory", "/in", "--disable-auto-launch"]
+            "--output-directory", "/out", "--input-directory", "/in", "--disable-auto-launch", \
+            "--user-directory", "/home/studio/user", "--temp-directory", "/home/studio/tmp"]
