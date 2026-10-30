@@ -3143,11 +3143,20 @@ fn find_repo_root() -> Option<PathBuf> {
 /// this binary was BUILT from (a push from a scratch repo, as the pre-push
 /// fixtures make, has no manifest of its own), then the exe walk (an installed
 /// binary whose build checkout is gone).
+///
+/// ORDER 1925-xbpv. `TILLANDSIAS_SURFACE_NO_BUILD_CHECKOUT=1` drops the
+/// build-checkout fallback, test-only: it lets litmus:validator-surface-currency
+/// model an installed binary whose build checkout is gone on a host where that
+/// checkout still exists, so "cannot ask" stays provable as never "fresh".
 fn surface_root() -> Option<PathBuf> {
     let built_in = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .ancestors()
         .nth(2)
-        .map(std::path::Path::to_path_buf);
+        .map(std::path::Path::to_path_buf)
+        .filter(|_| {
+            std::env::var_os("TILLANDSIAS_SURFACE_NO_BUILD_CHECKOUT").as_deref()
+                != Some(std::ffi::OsStr::new("1"))
+        });
     surface_root_from(
         std::env::var_os("TILLANDSIAS_SURFACE_ROOT").map(PathBuf::from),
         std::env::current_dir().ok(),
