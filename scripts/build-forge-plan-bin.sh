@@ -3,7 +3,7 @@
 # Build tillandsias-plan as a static musl binary and stage it at
 # images/default/policy-bin/tillandsias-plan, the forge image's Bash command-policy
 # decider (/usr/local/lib/tillandsias/policy-bin/tillandsias-plan, run by
-# images/default/bash-policy-hook). tillandsias-headless/build.rs embeds it with
+# images/default/bash-policy-hook). crates/tillandsias-embed/build.rs embeds it with
 # the rest of images/, so every guest builds a forge that ships it.
 #
 # Called by scripts/build-sidecar.sh, so every lane that stages the router
@@ -144,7 +144,7 @@ case "$mode" in
         # …/target-musl: no such file or directory"), which on a fresh checkout
         # with no musl gcc aborted build-sidecar.sh under set -e, so the router
         # sidecar was never staged and every cargo build panicked in
-        # tillandsias-headless/build.rs (measured, lenovinha, 2026-10-17).
+        # crates/tillandsias-embed/build.rs (measured, lenovinha, 2026-10-17).
         mkdir -p "$registry" "$TDIR"
         echo "[build-forge-plan-bin] no musl C toolchain on this host: building in ${image} (musl-tools)"
         if ! podman run --rm --security-opt label=disable \

@@ -66,7 +66,7 @@ if ! (cd "$ROOT" && cargo build -p tillandsias-headless --bin "$BIN_NAME") >"$WO
     echo "fail:fake-cloudflare:build"
     exit 1
 fi
-BIN_PATH="$ROOT/target/debug/$BIN_NAME"
+BIN_PATH="${CARGO_TARGET_DIR:-$ROOT/target}/debug/$BIN_NAME"
 if [ ! -x "$BIN_PATH" ]; then
     echo "fail:fake-cloudflare:binary-missing:$BIN_PATH"
     exit 1

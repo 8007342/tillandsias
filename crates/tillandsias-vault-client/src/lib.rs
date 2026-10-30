@@ -139,6 +139,23 @@ impl VaultClient {
         )
     }
 
+    /// A client that never consults the host's proxy settings. On macOS the
+    /// default builder's system-proxy lookup measured ~3 s per process, and
+    /// ~16 s under `taskpolicy -b` (order 1924-vprx). Intended for tests
+    /// against a local fake; production callers use [`Self::new`].
+    #[doc(hidden)]
+    pub fn new_without_system_proxy(base_url: impl Into<String>, token: impl Into<String>) -> Self {
+        Self::with_client(
+            base_url,
+            token,
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .no_proxy()
+                .build()
+                .expect("reqwest client build should not fail on default config"),
+        )
+    }
+
     /// Create a client that trusts the PEM-encoded CA which issued the
     /// enclave Vault server certificate.
     pub fn new_with_ca_certificate(
@@ -148,10 +165,13 @@ impl VaultClient {
     ) -> Result<Self, VaultError> {
         let certificate = reqwest::Certificate::from_pem(ca_pem)
             .map_err(|e| VaultError::Other(format!("invalid Vault CA certificate: {e}")))?;
-        let client = reqwest::Client::builder()
+        let builder = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
-            .add_root_certificate(certificate)
-            .build()?;
+            .add_root_certificate(certificate);
+        // 1924-vprx: this crate's unit tests skip the host proxy lookup.
+        #[cfg(test)]
+        let builder = builder.no_proxy();
+        let client = builder.build()?;
         Ok(Self::with_client(base_url, token, client))
     }
 
@@ -1025,9 +1045,9 @@ mod tests {
 
     #[test]
     fn url_joins_correctly_with_or_without_trailing_slash() {
-        let c = VaultClient::new("https://vault:8200", "root");
+        let c = VaultClient::new_without_system_proxy("https://vault:8200", "root");
         assert_eq!(c.url("sys/health"), "https://vault:8200/v1/sys/health");
-        let c2 = VaultClient::new("https://vault:8200/", "root");
+        let c2 = VaultClient::new_without_system_proxy("https://vault:8200/", "root");
         assert_eq!(c2.url("/sys/health"), "https://vault:8200/v1/sys/health");
     }
 

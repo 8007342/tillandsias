@@ -32,9 +32,17 @@ critical_path:
     expected_behavior: "ENCLAVE_NO_PROXY"
 
   - step: "assert tray launcher shares the same inference proxy bypass"
-    command: "grep -F 'enclave_no_proxy' crates/tillandsias-headless/src/tray/mod.rs && grep -F '.env(\"NO_PROXY\", no_proxy)' crates/tillandsias-headless/src/tray/mod.rs"
+    # 1923-ia86: 776-jcf3 retired the tray's local-launch handlers from
+    # tray/mod.rs; tray-launched sessions now get their proxy env from
+    # pty_handler's env seeding, which must exempt the enclave peers.
+    command: "grep -F 'crate::enclave_no_proxy()' crates/tillandsias-headless/src/pty_handler.rs && grep -F '(\"NO_PROXY\".to_string(), crate::enclave_no_proxy())' crates/tillandsias-headless/src/pty_handler.rs"
     timeout_ms: 2000
     expected_behavior: "enclave_no_proxy"
+
+  - step: "NEGATIVE CONTROL: a pty_handler without the NO_PROXY exemption must FAIL the tray bypass pin"
+    command: "T=$(mktemp -d); grep -vF '(\"NO_PROXY\".to_string(), crate::enclave_no_proxy())' crates/tillandsias-headless/src/pty_handler.rs > \"$T/pty_handler.rs\"; if cmp -s crates/tillandsias-headless/src/pty_handler.rs \"$T/pty_handler.rs\"; then rm -rf \"$T\"; echo 'FAIL: the mutation did not reach pty_handler.rs'; exit 1; fi; if grep -qF '(\"NO_PROXY\".to_string(), crate::enclave_no_proxy())' \"$T/pty_handler.rs\"; then rm -rf \"$T\"; echo 'FAIL: NO_PROXY pin blind to a dropped exemption'; exit 1; fi; rm -rf \"$T\"; echo 'ok: NO_PROXY pin fails when the exemption is dropped'"
+    timeout_ms: 10000
+    expected_behavior: "ok: NO_PROXY pin fails when the exemption is dropped"
 
   - step: "assert inference cache mounts at the ollama home path"
     command: "grep -F '/home/ollama/.ollama/models:rw' scripts/orchestrate-enclave.sh && grep -F '/home/ollama/.ollama/models:rw' scripts/test-inference.sh"

@@ -395,6 +395,18 @@ pub struct ProjectConfig {
 
     /// The `[browser]` section (order 1655-urz9).
     pub browser: Option<BrowserConfig>,
+
+    /// The `[imagegen]` section (order 1874-zry8).
+    pub imagegen: Option<ImagegenConfig>,
+}
+
+/// The `[imagegen]` section of per-project config.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct ImagegenConfig {
+    /// Opt in to the ComfyUI studio sibling. Absent or false: the studio image
+    /// is never built and its container never runs (order 1874-zry8).
+    #[serde(default)]
+    pub studio: bool,
 }
 
 /// The `[browser]` section of per-project config.

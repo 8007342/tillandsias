@@ -10,14 +10,9 @@ use tillandsias_core::image_builder::{
     ImageBuildIdentity, ImageBuildSpec, image_build_identity as compute_image_build_identity,
 };
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct EmbeddedRuntimeAsset {
-    pub(crate) path: &'static str,
-    pub(crate) bytes: &'static [u8],
-    pub(crate) executable: bool,
-}
-
-include!(concat!(env!("OUT_DIR"), "/runtime_assets_generated.rs"));
+// ORDER 1916-embd: generated and embedded by the tillandsias-embed crate.
+pub(crate) use tillandsias_embed::EmbeddedRuntimeAsset;
+use tillandsias_embed::runtime_assets as embedded_assets;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct RuntimeAssetManifest {
@@ -99,12 +94,12 @@ pub(crate) fn validate_runtime_assets(version: &str, root: &Path) -> Result<bool
     if manifest.version != version
         || manifest.manifest_digest != embedded_manifest_digest()
         || manifest.materialized_at.trim().is_empty()
-        || manifest.file_count != EMBEDDED_RUNTIME_ASSETS.len()
+        || manifest.file_count != embedded_assets().len()
     {
         return Ok(false);
     }
 
-    for asset in EMBEDDED_RUNTIME_ASSETS {
+    for asset in embedded_assets() {
         let path = root.join(asset.path);
         let bytes = match fs::read(&path) {
             Ok(bytes) => bytes,
@@ -143,7 +138,7 @@ fn materialize_runtime_assets(version: &str, root: &Path) -> Result<(), String> 
     fs::create_dir_all(&tmp)
         .map_err(|e| format!("Failed to create runtime asset temp dir: {e}"))?;
 
-    for asset in EMBEDDED_RUNTIME_ASSETS {
+    for asset in embedded_assets() {
         write_asset(&tmp, asset)?;
     }
 
@@ -151,8 +146,8 @@ fn materialize_runtime_assets(version: &str, root: &Path) -> Result<(), String> 
         version: version.to_string(),
         manifest_digest: embedded_manifest_digest(),
         materialized_at: chrono::Utc::now().to_rfc3339(),
-        file_count: EMBEDDED_RUNTIME_ASSETS.len(),
-        files: EMBEDDED_RUNTIME_ASSETS
+        file_count: embedded_assets().len(),
+        files: embedded_assets()
             .iter()
             .map(|asset| RuntimeAssetManifestFile {
                 path: asset.path.to_string(),
@@ -267,6 +262,8 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
         "flutter" => Ok("images/flutter"),
         // 1874-b9tg: local image generation, built on first use.
         "imagegen" => Ok("images/imagegen"),
+        // 1874-zry8: the opt-in ComfyUI studio, built only when a project enables it.
+        "imagegen-studio" => Ok("images/imagegen-studio"),
         "vault" => Ok("images/vault"),
         other => Err(format!("Unknown image type: {other}")),
     }
@@ -274,7 +271,7 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
 
 pub(crate) fn embedded_manifest_digest() -> String {
     let mut hasher = Sha256::new();
-    for asset in EMBEDDED_RUNTIME_ASSETS {
+    for asset in embedded_assets() {
         hasher.update(asset.path.as_bytes());
         hasher.update([0]);
         hasher.update([u8::from(asset.executable)]);
@@ -352,7 +349,7 @@ mod tests {
 
     #[test]
     fn embedded_assets_include_required_runtime_contexts() {
-        let paths = EMBEDDED_RUNTIME_ASSETS
+        let paths = embedded_assets()
             .iter()
             .map(|asset| asset.path)
             .collect::<std::collections::HashSet<_>>();
@@ -388,7 +385,7 @@ mod tests {
     #[test]
     fn the_chromium_framework_image_denies_capture_by_managed_policy() {
         let asset = |p: &str| {
-            let a = EMBEDDED_RUNTIME_ASSETS
+            let a = embedded_assets()
                 .iter()
                 .find(|a| a.path == p)
                 .unwrap_or_else(|| panic!("{p} is not embedded"));
@@ -418,7 +415,7 @@ mod tests {
 
     #[test]
     fn every_containerfile_copy_source_exists_in_embedded_assets() {
-        let embedded_paths = EMBEDDED_RUNTIME_ASSETS
+        let embedded_paths = embedded_assets()
             .iter()
             .map(|asset| asset.path)
             .collect::<std::collections::HashSet<_>>();
@@ -440,10 +437,14 @@ mod tests {
             ("images/flutter/Containerfile", "images/flutter"),
             ("images/imagegen/Containerfile", "images/imagegen"),
             ("images/imagegen/Containerfile.cuda", "images/imagegen"),
+            (
+                "images/imagegen-studio/Containerfile",
+                "images/imagegen-studio",
+            ),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {
-            let cf_asset = EMBEDDED_RUNTIME_ASSETS
+            let cf_asset = embedded_assets()
                 .iter()
                 .find(|asset| asset.path == cf_rel_path)
                 .unwrap_or_else(|| panic!("Containerfile asset not embedded: {cf_rel_path}"));

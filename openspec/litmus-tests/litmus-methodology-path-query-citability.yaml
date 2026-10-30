@@ -173,7 +173,14 @@ critical_path:
     # engine spawns NO subprocess at all, so no interpreter of any language is
     # reachable from it, and the MCP wrapper's methodology path executes only
     # the compiled binary.
-    command: "test ! -d crates/tillandsias-methodology || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -cE 'std::process::Command|std::process::' crates/tillandsias-plan/src/methodology.rs)\" = '0' || { echo 'FAIL: the L0 engine spawns a subprocess'; exit 1; }; sed -n '/^methodology_envelope() {/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'out=\"$(\"$PLAN_BIN\"' || { echo 'FAIL: the wrapper does not execute the compiled binary'; exit 1; }; echo 'ok: no-new-crate-no-new-dependency'"
+    #
+    # WHY reqwest (1923-pu9a): order 1826-gi8e added `tillandsias-plan coord`, an
+    # HTTPS client for the fleet coordinator Worker. The workspace reqwest is
+    # already linked by headless, vault-client and vm-layer, so no new
+    # third-party code entered the tree. It is pinned to coordinator_client.rs:
+    # the methodology engine and the grader still reach no network and spawn
+    # no process.
+    command: "test ! -d crates/tillandsias-methodology || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex reqwest serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -rlw reqwest crates/tillandsias-plan/src | tr '\\n' ' ')\" = 'crates/tillandsias-plan/src/coordinator_client.rs ' || { echo 'FAIL: reqwest escaped the coordinator client'; exit 1; }; test \"$(grep -cE 'std::process::Command|std::process::' crates/tillandsias-plan/src/methodology.rs)\" = '0' || { echo 'FAIL: the L0 engine spawns a subprocess'; exit 1; }; sed -n '/^methodology_envelope() {/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh | grep -q 'out=\"$(\"$PLAN_BIN\"' || { echo 'FAIL: the wrapper does not execute the compiled binary'; exit 1; }; echo 'ok: no-new-crate-no-new-dependency'"
     timeout_ms: 15000
     expected_behavior: "ok: no-new-crate-no-new-dependency"
 

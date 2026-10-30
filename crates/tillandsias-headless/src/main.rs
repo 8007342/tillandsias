@@ -83,6 +83,7 @@ mod image_build_scope;
 mod imagegen_consent;
 mod imagegen_models;
 mod imagegen_placement;
+mod imagegen_studio;
 mod imagegen_tiers;
 #[cfg(feature = "host-services")]
 mod imagegen_tool;
@@ -2601,6 +2602,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1874-b9tg: local image generation. Not an INIT image: built on
         // first use through ensure_image_exists.
         "imagegen" => "images/imagegen",
+        // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
+        // only for a project with `[imagegen] studio = true`.
+        "imagegen-studio" => "images/imagegen-studio",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -4236,7 +4240,8 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 }
 
 /// The passwd home of this user, which HOME cannot fake.
-#[cfg(all(test, unix))]
+#[cfg(test)]
+#[cfg(unix)]
 fn passwd_home() -> Option<PathBuf> {
     // SAFETY: getpwuid returns a pointer into static storage or null; it is
     // read at once, under env_lock in every test caller.
@@ -4655,6 +4660,8 @@ mod enclave_healthcheck_tests;
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--detach".into(),
+        // 1922-rann: the proxy announces readiness (READY=1 once squid listens).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         // Order 387: a crashed/exited container holding the name must not
         // block relaunch with exit-125; --replace atomically removes it
         // (mirrors order 314's inference fix and order 378's forge-agent fix).
@@ -5791,6 +5798,8 @@ fn build_git_run_args(
     let mirror_volume = format!("tillandsias-mirror-{project_name}");
     let mut args = vec![
         "--detach".into(),
+        // 1922-rann: the mirror announces readiness (READY=1 once seeded).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         "--rm".into(),
         // Order 387: relaunch a mirror container while an exited one still
         // holds the name must not fail with exit-125 (mirrors order 314/378).
@@ -18555,6 +18564,15 @@ pub(crate) fn ensure_enclave_for_project(
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
         report_inference_readiness(&client, debug).await;
+        // 1874-zry8: the ComfyUI studio sibling, only for a project that opted in.
+        crate::imagegen_studio::ensure_if_enabled(
+            &client,
+            project_name,
+            project_path,
+            version,
+            debug,
+        )
+        .await;
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a

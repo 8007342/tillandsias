@@ -43,6 +43,7 @@ FROM docker.io/library/alpine:3.20
 # @trace spec:tillandsias-vault — curl + jq are required by /usr/local/bin/vault-cli
 # so the relay helper can fetch the GitHub token from Vault at push time.
 RUN apk add --no-cache \
+        socat \
         git \
         git-daemon \
         bash \
