@@ -56,7 +56,7 @@ struct DiskstatsRow {
 #[derive(Debug)]
 pub struct MetricsSampler {
     system: System,
-    disks: Disks,
+    disks: DiskSource,
     /// Previous `/proc/diskstats` snapshot used for rate computation.
     /// `None` until the first `sample_disk_io` call.
     previous_diskstats: Option<(Instant, BTreeMap<String, DiskstatsRow>)>,
@@ -66,14 +66,38 @@ pub struct MetricsSampler {
     pressure_dir: String,
 }
 
+/// Where [`MetricsSampler::sample_disk`] reads disk usage from.
+///
+/// Enumerating the host's disks is not cheap everywhere: on macOS sysinfo
+/// asks CoreFoundation for each volume's properties, which measured ~46 s
+/// on one host (order 1924-smpl). Tests that are not about the host's disks
+/// supply a fixed list instead.
+#[derive(Debug)]
+enum DiskSource {
+    Host(Disks),
+    /// `(mount_point, total_bytes, available_bytes)` rows.
+    Fixed(Vec<(String, u64, u64)>),
+}
+
 impl MetricsSampler {
     /// Construct a new sampler. The underlying `System` is created with no
     /// initial refresh; call a `sample_*` method to populate values.
     pub fn new() -> Self {
-        let system = System::new();
-        let disks = Disks::new_with_refreshed_list();
+        Self::with_disk_source(DiskSource::Host(Disks::new_with_refreshed_list()))
+    }
+
+    /// Construct a sampler whose disk usage is a fixed list of
+    /// `(mount_point, total_bytes, available_bytes)` rows instead of the
+    /// host's mounts. CPU and memory still come from the host. Intended for
+    /// tests; production callers use [`Self::new`].
+    #[doc(hidden)]
+    pub fn with_disk_list(disks: Vec<(String, u64, u64)>) -> Self {
+        Self::with_disk_source(DiskSource::Fixed(disks))
+    }
+
+    fn with_disk_source(disks: DiskSource) -> Self {
         Self {
-            system,
+            system: System::new(),
             disks,
             previous_diskstats: None,
             diskstats_path: PROC_DISKSTATS.to_string(),
@@ -89,7 +113,7 @@ impl MetricsSampler {
         diskstats_path: impl Into<String>,
         pressure_dir: impl Into<String>,
     ) -> Self {
-        let mut s = Self::new();
+        let mut s = Self::with_disk_list(Vec::new());
         s.diskstats_path = diskstats_path.into();
         s.pressure_dir = pressure_dir.into();
         s
@@ -138,15 +162,29 @@ impl MetricsSampler {
     /// Filesystem entries that report zero total bytes (e.g., pseudo
     /// filesystems like cgroup2) are filtered out.
     pub fn sample_disk(&mut self) -> Vec<DiskMetric> {
-        self.disks.refresh();
         let timestamp = Utc::now();
-        self.disks
-            .iter()
-            .filter(|d| d.total_space() > 0)
-            .map(|d| DiskMetric {
-                mount_point: d.mount_point().to_string_lossy().to_string(),
-                total_bytes: d.total_space(),
-                available_bytes: d.available_space(),
+        let rows: Vec<(String, u64, u64)> = match &mut self.disks {
+            DiskSource::Host(disks) => {
+                disks.refresh();
+                disks
+                    .iter()
+                    .map(|d| {
+                        (
+                            d.mount_point().to_string_lossy().to_string(),
+                            d.total_space(),
+                            d.available_space(),
+                        )
+                    })
+                    .collect()
+            }
+            DiskSource::Fixed(rows) => rows.clone(),
+        };
+        rows.into_iter()
+            .filter(|(_, total, _)| *total > 0)
+            .map(|(mount_point, total_bytes, available_bytes)| DiskMetric {
+                mount_point,
+                total_bytes,
+                available_bytes,
                 timestamp,
             })
             .collect()
@@ -645,16 +683,88 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    /// Order 1924-smpl: a sampler test must not enumerate the host's disks
+    /// (~46 s on macOS) or sleep past this bound.
+    const TEST_BUDGET: Duration = Duration::from_secs(2);
+
+    /// A fixture sampler that fails its test if the test outlives
+    /// [`TEST_BUDGET`], measured from construction to drop.
+    struct Timed {
+        sampler: MetricsSampler,
+        start: Instant,
+    }
+
+    impl std::ops::Deref for Timed {
+        type Target = MetricsSampler;
+        fn deref(&self) -> &MetricsSampler {
+            &self.sampler
+        }
+    }
+
+    impl std::ops::DerefMut for Timed {
+        fn deref_mut(&mut self) -> &mut MetricsSampler {
+            &mut self.sampler
+        }
+    }
+
+    impl Drop for Timed {
+        fn drop(&mut self) {
+            let took = self.start.elapsed();
+            if !std::thread::panicking() {
+                assert!(
+                    took < TEST_BUDGET,
+                    "sampler test took {took:?}; a test sampler uses with_disk_list"
+                );
+            }
+        }
+    }
+
+    /// Two mounts plus a zero-sized pseudo filesystem the sampler filters.
+    fn fixture_sampler() -> Timed {
+        Timed {
+            sampler: MetricsSampler::with_disk_list(vec![
+                ("/".into(), 500 << 30, 200 << 30),
+                ("/home".into(), 1 << 40, 1 << 39),
+                ("/sys/fs/cgroup".into(), 0, 0),
+            ]),
+            start: Instant::now(),
+        }
+    }
+
     #[test]
     fn new_does_not_panic() {
-        let _s = MetricsSampler::new();
+        let _s = fixture_sampler();
+    }
+
+    /// The real host enumeration, on Linux only: there it reads
+    /// /proc/mounts. On macOS it is the ~46 s CoreFoundation walk.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn host_disk_enumeration_reports_sane_mounts() {
+        let mut s = MetricsSampler::new();
+        for d in &s.sample_disk() {
+            assert!(d.total_bytes > 0, "filtered disks should be non-zero");
+            assert!(d.used_percent() >= 0.0 && d.used_percent() <= 100.0);
+        }
+    }
+
+    #[test]
+    fn test_budget_fails_a_slow_test() {
+        let slow = std::panic::catch_unwind(|| {
+            let _s = fixture_sampler();
+            std::thread::sleep(TEST_BUDGET + Duration::from_millis(50));
+        });
+        assert!(
+            slow.is_err(),
+            "a fixture sampler must fail a test past its bound"
+        );
     }
 
     #[test]
     fn sample_cpu_returns_zeros_on_first_call() {
         // sysinfo documents that the first refresh returns 0% for all cores.
         // We assert the type and shape, not the value.
-        let mut s = MetricsSampler::new();
+        let mut s = fixture_sampler();
         let cpu = s.sample_cpu();
         assert!(cpu.is_valid(), "first sample should still be in [0,100]");
         assert!(
@@ -665,7 +775,7 @@ mod tests {
 
     #[test]
     fn sample_cpu_after_warmup_in_range() {
-        let mut s = MetricsSampler::new();
+        let mut s = fixture_sampler();
         let _ = s.sample_cpu();
         std::thread::sleep(MINIMUM_CPU_UPDATE_INTERVAL);
         let cpu = s.sample_cpu();
@@ -674,7 +784,7 @@ mod tests {
 
     #[test]
     fn sample_memory_returns_sane_values() {
-        let mut s = MetricsSampler::new();
+        let mut s = fixture_sampler();
         let m = s.sample_memory();
         // On any real Linux box this is at least 1 MiB. CI containers may
         // report tiny values, so we only assert non-zero.
@@ -690,10 +800,11 @@ mod tests {
 
     #[test]
     fn sample_disk_finds_at_least_one_mount() {
-        let mut s = MetricsSampler::new();
+        let mut s = fixture_sampler();
         let disks = s.sample_disk();
-        // CI sandboxes occasionally lack /proc/mounts visibility; only
-        // assert that we never panic. If we do see mounts, validate them.
+        // The zero-sized pseudo filesystem is filtered; the two mounts stay.
+        let mounts: Vec<&str> = disks.iter().map(|d| d.mount_point.as_str()).collect();
+        assert_eq!(mounts, ["/", "/home"]);
         for d in &disks {
             assert!(d.total_bytes > 0, "filtered disks should be non-zero");
             assert!(d.used_percent() >= 0.0 && d.used_percent() <= 100.0);
@@ -716,7 +827,7 @@ mod tests {
 
     #[test]
     fn ten_rapid_samples_do_not_panic() {
-        let mut s = MetricsSampler::new();
+        let mut s = fixture_sampler();
         for _ in 0..10 {
             let _ = s.sample_cpu();
             let _ = s.sample_memory();
@@ -726,7 +837,7 @@ mod tests {
 
     #[tokio::test]
     async fn collect_continuous_returns_immediately_on_zero_interval() {
-        let mut s = MetricsSampler::new();
+        let mut s = fixture_sampler();
         // With zero interval the loop logs a warning and returns; assert it
         // does not hang.
         tokio::time::timeout(Duration::from_secs(2), s.collect_continuous(Duration::ZERO))
