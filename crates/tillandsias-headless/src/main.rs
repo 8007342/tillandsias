@@ -4653,6 +4653,8 @@ mod enclave_healthcheck_tests;
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--detach".into(),
+        // 1922-rann: the proxy announces readiness (READY=1 once squid listens).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         // Order 387: a crashed/exited container holding the name must not
         // block relaunch with exit-125; --replace atomically removes it
         // (mirrors order 314's inference fix and order 378's forge-agent fix).
@@ -5789,6 +5791,8 @@ fn build_git_run_args(
     let mirror_volume = format!("tillandsias-mirror-{project_name}");
     let mut args = vec![
         "--detach".into(),
+        // 1922-rann: the mirror announces readiness (READY=1 once seeded).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         "--rm".into(),
         // Order 387: relaunch a mirror container while an exited one still
         // holds the name must not fail with exit-125 (mirrors order 314/378).

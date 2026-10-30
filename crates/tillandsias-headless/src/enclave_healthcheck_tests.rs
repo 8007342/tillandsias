@@ -89,3 +89,64 @@ fn enclave_healthchecks_probe_every_30_to_60_seconds() {
         );
     }
 }
+
+/// 1922-rann: vault, mirror and proxy announce readiness only through their
+/// entrypoint's notify_ready, after the service is truly ready. Vault and Vault
+/// Agent sd_notify on their own start (measured before unseal and before seed),
+/// so the socket must be hidden before any child starts.
+#[test]
+fn enclave_services_announce_readiness_only_from_their_entrypoint() {
+    let services = [
+        (
+            "vault",
+            include_str!("../../../images/vault/entrypoint.sh"),
+            include_str!("../../../images/vault/Containerfile"),
+            "notify_ready \"vault unsealed",
+        ),
+        (
+            "git",
+            include_str!("../../../images/git/entrypoint.sh"),
+            include_str!("../../../images/git/Containerfile"),
+            "notify_ready \"mirror seeded",
+        ),
+        (
+            "proxy",
+            include_str!("../../../images/proxy/entrypoint.sh"),
+            include_str!("../../../images/proxy/Containerfile"),
+            "notify_ready \"proxy listening\"",
+        ),
+    ];
+    for (name, entry, containerfile, announce) in services {
+        // Line numbers of code (not comments), so a header that names a
+        // child does not count as starting it.
+        let code_line = |needle: &str| {
+            entry
+                .lines()
+                .position(|l| !l.trim_start().starts_with('#') && l.contains(needle))
+        };
+        let hidden = code_line("unset NOTIFY_SOCKET")
+            .unwrap_or_else(|| panic!("{name}: NOTIFY_SOCKET is not hidden from children"));
+        let first_child = [
+            "vault server",
+            "VAULT_AGENT_BOOTSTRAP",
+            "git daemon",
+            "squid",
+        ]
+        .iter()
+        .filter_map(|c| code_line(c))
+        .min()
+        .unwrap_or(usize::MAX);
+        assert!(
+            hidden < first_child,
+            "{name}: a child starts before the socket is hidden"
+        );
+        assert!(
+            entry.contains(announce),
+            "{name}: no `{announce}` announcement"
+        );
+        assert!(
+            containerfile.contains("socat"),
+            "{name}: the image has no socat to send READY=1"
+        );
+    }
+}
