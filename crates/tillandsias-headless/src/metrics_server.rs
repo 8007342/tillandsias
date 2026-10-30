@@ -41,6 +41,20 @@ impl MetricsServerState {
         }
     }
 
+    /// A state whose sampler reads disk usage from a fixed list: enumerating
+    /// the host's disks takes ~46 s on macOS (order 1924-smpl).
+    #[cfg(test)]
+    fn for_tests() -> Self {
+        Self {
+            sampler: Arc::new(Mutex::new(MetricsSampler::with_disk_list(vec![(
+                "/".into(),
+                500 << 30,
+                200 << 30,
+            )]))),
+            exporter: PrometheusExporter::new(),
+        }
+    }
+
     /// Get a mutable reference to the sampler (for testing).
     #[allow(dead_code)]
     fn with_sampler<F, R>(&self, f: F) -> Option<R>
@@ -409,26 +423,27 @@ mod tests {
 
     #[test]
     fn test_metrics_server_state_creation() {
-        let state = MetricsServerState::new();
+        let state = MetricsServerState::for_tests();
         assert!(state.sampler.lock().is_ok());
     }
 
     #[test]
     fn test_metrics_server_state_default() {
-        let state = MetricsServerState::default();
-        assert!(state.sampler.lock().is_ok());
+        // Default is new(); constructing one walks the host's disks, so the
+        // test pins the signature rather than paying that walk.
+        let _: fn() -> MetricsServerState = MetricsServerState::default;
     }
 
     #[test]
     fn test_metrics_server_state_shared() {
-        let state = Arc::new(MetricsServerState::new());
+        let state = Arc::new(MetricsServerState::for_tests());
         let _state_clone = Arc::clone(&state);
         assert!(state.sampler.lock().is_ok());
     }
 
     #[test]
     fn test_format_prometheus_metrics() {
-        let state = MetricsServerState::new();
+        let state = MetricsServerState::for_tests();
         let result = format_prometheus_metrics(&state);
         assert!(result.is_ok());
 
@@ -441,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_format_prometheus_metrics_contains_valid_format() {
-        let state = MetricsServerState::new();
+        let state = MetricsServerState::for_tests();
         let metrics = format_prometheus_metrics(&state).unwrap();
 
         let lines: Vec<&str> = metrics.lines().collect();
@@ -567,7 +582,7 @@ mod tests {
             Err(err) => panic!("bind: {err}"),
         };
         let addr = listener.local_addr().unwrap();
-        let state = Arc::new(MetricsServerState::new());
+        let state = Arc::new(MetricsServerState::for_tests());
 
         // Hand-spawn the accept-once handler so the test can join cleanly.
         let server_state = Arc::clone(&state);
@@ -615,7 +630,7 @@ mod tests {
             Err(_) => return,
         };
         let addr = listener.local_addr().unwrap();
-        let state = Arc::new(MetricsServerState::new());
+        let state = Arc::new(MetricsServerState::for_tests());
 
         let server_state = Arc::clone(&state);
         let server = tokio::spawn(async move {
