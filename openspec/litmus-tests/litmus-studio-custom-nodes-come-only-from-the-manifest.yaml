@@ -4,11 +4,11 @@ spec: accel-capability-probe
 phase: pre-build
 description: The studio's build-time custom-node check passes on exactly the manifest set and fails on an unlisted node, a node at another commit, a missing node, or any ComfyUI-Manager path
 severity: high
-size: instant
+size: quick
 
 preconditions:
   - workspace contains images/imagegen-studio/custom-nodes.py and images/imagegen-studio/custom-nodes.toml
-  - python3 (3.11+, for tomllib) is available in PATH
+  - podman is available, and the studio Containerfile's pinned Python base image is pullable or cached (the arms run inside it, --network none; no host Python)
 
 critical_path:
   - step: "six arms: the manifest set passes; unlisted node, other commit, missing node, ComfyUI-Manager in custom_nodes, and comfyui_manager elsewhere in the image each fail with their own violation"
