@@ -13,9 +13,49 @@ use tillandsias_metrics::{
     DashboardSnapshot, DiskIoMetric, MetricsSampler, PsiMetric, emit_dashboard_metric,
 };
 
+/// Order 1924-smpl: enumerating the host's disks takes ~46 s on macOS
+/// (sysinfo's CoreFoundation volume walk), so these tests read CPU, memory,
+/// /proc/diskstats and PSI from the host but disk usage from a fixed list,
+/// and each fails if it outlives this bound.
+const TEST_BUDGET: Duration = Duration::from_secs(2);
+
+struct Timed {
+    sampler: MetricsSampler,
+    start: std::time::Instant,
+}
+
+impl std::ops::Deref for Timed {
+    type Target = MetricsSampler;
+    fn deref(&self) -> &MetricsSampler {
+        &self.sampler
+    }
+}
+
+impl std::ops::DerefMut for Timed {
+    fn deref_mut(&mut self) -> &mut MetricsSampler {
+        &mut self.sampler
+    }
+}
+
+impl Drop for Timed {
+    fn drop(&mut self) {
+        let took = self.start.elapsed();
+        if !std::thread::panicking() {
+            assert!(took < TEST_BUDGET, "sampler test took {took:?}");
+        }
+    }
+}
+
+fn timed_sampler() -> Timed {
+    Timed {
+        sampler: MetricsSampler::with_disk_list(vec![("/".into(), 500 << 30, 200 << 30)]),
+        start: std::time::Instant::now(),
+    }
+}
+
 #[test]
 fn sampler_survives_rapid_burst() {
-    let mut s = MetricsSampler::new();
+    let mut s = timed_sampler();
     for _ in 0..10 {
         let cpu = s.sample_cpu();
         let mem = s.sample_memory();
@@ -35,7 +75,7 @@ fn sampler_values_converge_to_reasonable_ranges() {
     // After two samples spaced by the documented minimum interval the CPU
     // value should still be in [0, 100]. We do NOT assert specific numbers
     // (CI hosts can spike unpredictably) — only the invariant.
-    let mut s = MetricsSampler::new();
+    let mut s = timed_sampler();
     let _ = s.sample_cpu();
     std::thread::sleep(sysinfo_min_interval());
     let cpu = s.sample_cpu();
@@ -50,7 +90,7 @@ fn sampler_values_converge_to_reasonable_ranges() {
 
 #[tokio::test]
 async fn continuous_sampler_runs_without_panic() {
-    let mut s = MetricsSampler::new();
+    let mut s = timed_sampler();
     // Spawn the sampler with a 100ms interval and abort after 350ms.
     let handle = tokio::spawn(async move {
         s.collect_continuous(Duration::from_millis(100)).await;
@@ -65,7 +105,7 @@ async fn continuous_sampler_runs_without_panic() {
 
 #[test]
 fn dashboard_snapshot_from_real_sampler() {
-    let mut s = MetricsSampler::new();
+    let mut s = timed_sampler();
     let _ = s.sample_cpu();
     std::thread::sleep(sysinfo_min_interval());
     let cpu = s.sample_cpu();
@@ -99,7 +139,7 @@ fn sample_disk_io_returns_reasonable_rates() {
     // First call establishes a baseline (empty); second after a short sleep
     // produces real rates. On stripped CI containers without /proc/diskstats
     // both calls return empty — both behaviours are acceptable.
-    let mut s = MetricsSampler::new();
+    let mut s = timed_sampler();
     let first = s.sample_disk_io();
     assert!(first.is_empty(), "first sample should be a baseline");
 
@@ -125,7 +165,7 @@ fn sample_psi_runs_on_any_kernel() {
     // PSI is widely available on 5.x+ but may be disabled at build time.
     // Either result is fine — we only assert the metric is structurally
     // valid and never panics.
-    let s = MetricsSampler::new();
+    let s = timed_sampler();
     let psi: PsiMetric = s.sample_psi();
     assert!(psi.is_valid(), "PSI out of range: {psi:?}");
     if !psi.available {
@@ -138,7 +178,7 @@ fn sample_psi_runs_on_any_kernel() {
 
 #[test]
 fn dashboard_snapshot_includes_disk_io_and_psi() {
-    let mut s = MetricsSampler::new();
+    let mut s = timed_sampler();
     let _ = s.sample_cpu();
     let _ = s.sample_disk_io();
     std::thread::sleep(sysinfo_min_interval());
