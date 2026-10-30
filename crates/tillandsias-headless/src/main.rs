@@ -80,6 +80,8 @@ mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
+#[cfg(feature = "host-services")]
+mod imagegen_consent;
 mod imagegen_models;
 mod imagegen_placement;
 mod imagegen_studio;

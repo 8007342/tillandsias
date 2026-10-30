@@ -17,3 +17,7 @@ kill 4242             # stop the one you mean, by PID
 ```
 
 Don't use `pkill -f` or `killall -r`. Your command runs as `bash -c "<your command>"`, so the pattern you pass is also in your own shell's command line, and the kill ends your own shell along with the target (exit status 144). In Claude, the forge's command check refuses both.
+
+## Generating images
+
+`image.generate` starts on the smallest model. When a bigger one fits this computer, the result carries `bigger_tier_offer` with an `ask` sentence. Show the user that sentence exactly as written. Only if they say yes, call `image.generate` again with the same prompt, the offered `tier` and its `consent_token`. A token works once. Never ask for a bigger tier on your own: without a token you get `consent_required` and nothing runs.
