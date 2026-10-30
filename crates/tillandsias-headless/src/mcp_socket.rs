@@ -1658,13 +1658,13 @@ mod image_generate_fixtures {
         assert!(path.starts_with("/work/tmp/imagegen/"), "{path}");
         let host = scratch
             .path()
-            .join("kkrc-proj-a")
+            .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
             .join(path.rsplit('/').next().unwrap());
         assert!(host.is_file(), "{}", host.display());
         let thumb = r["thumbnail_path"].as_str().unwrap();
         let thumb_host = scratch
             .path()
-            .join("kkrc-proj-a")
+            .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
             .join(thumb.rsplit('/').next().unwrap());
         let (tw, th) = image::image_dimensions(&thumb_host).unwrap();
         assert!(tw <= 256 && th <= 256, "{tw}x{th}");
@@ -1734,6 +1734,7 @@ fn live_image_generate_through_the_lane_socket() {
         assert!(v["error"].is_null(), "{v}");
         let res = &v["result"]["structuredContent"];
         let host = crate::imagegen_tool::lane_scratch_dir(&project, "imggen-e2e")
+            .unwrap()
             .join(res["path"].as_str().unwrap().rsplit('/').next().unwrap());
         eprintln!("host file: {}", host.display());
         assert!(host.is_file());

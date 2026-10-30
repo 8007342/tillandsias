@@ -9757,17 +9757,16 @@ fn build_opencode_forge_args(
             "--env".into(),
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
-        // 1874-kkrc: image.generate's shared scratch dir, empty per forge.
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
         #[cfg(feature = "host-services")]
-        if let Some(dir) = imagegen_tool::forge_scratch_mount(
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
             project_name,
             raw_instance.as_deref().unwrap_or("default"),
         ) {
             args.extend([
                 "--mount".into(),
                 format!(
-                    "type=bind,source={},target={}",
-                    dir.display(),
+                    "type=volume,source={volume},target={}",
                     imagegen_tool::FORGE_SCRATCH
                 ),
             ]);
@@ -19168,6 +19167,9 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     }
     #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+    // 1874-kkrc: image.generate's scratch volume goes with the forge.
+    #[cfg(feature = "host-services")]
+    imagegen_tool::remove_lane_volume(project, instance);
     remove_source_volume_if_present(&volume, debug)
 }
 
@@ -19689,17 +19691,13 @@ fn build_forge_agent_run_args_with_vault(
                 "TILLANDSIAS_CONTROL_SOCKET",
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
-        // 1874-kkrc: image.generate's shared scratch dir, empty per forge.
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
         #[cfg(feature = "host-services")]
-        if let Some(dir) = imagegen_tool::forge_scratch_mount(
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
             project_name,
             raw_instance.as_deref().unwrap_or("default"),
         ) {
-            spec = spec.bind_mount(
-                dir.display().to_string(),
-                imagegen_tool::FORGE_SCRATCH,
-                false,
-            );
+            spec = spec.volume(volume, imagegen_tool::FORGE_SCRATCH, MountMode::ReadWrite);
         }
     }
     // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).

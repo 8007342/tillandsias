@@ -84,6 +84,8 @@ pub struct Job {
     pub tier: TierRow,
     /// `(asked, got)` when a size was moved onto the grid.
     pub rounded: Option<((u32, u32), (u32, u32))>,
+    /// The lane volume the engine mounts at /out (None: bind `out_dir`).
+    pub out_volume: Option<String>,
 }
 
 fn round_to_grid(v: u32) -> u32 {
@@ -149,6 +151,7 @@ pub fn parse_job(
         seed,
         count,
         rounded: (asked != got).then_some((asked, got)),
+        out_volume: None,
         tier,
     })
 }
@@ -179,36 +182,69 @@ pub trait Engine: Send + Sync {
     ) -> Result<EngineOut, String>;
 }
 
-/// `cache_root()/imagegen-scratch/<project>-<instance>`: on disk, never tmpfs
-/// (a 1024² PNG batch on tmpfs is RAM the forge loses).
-pub fn lane_scratch_dir(project: &str, instance: &str) -> PathBuf {
+/// The lane's scratch VOLUME: a podman named volume per forge instance,
+/// created at forge launch and removed at forge teardown, mounted into the
+/// forge at /work/tmp/imagegen and into the engine at /out. Never a host
+/// .cache bind (the forge must not see host cache dirs).
+pub fn lane_volume(project: &str, instance: &str) -> String {
     let inst = if instance.trim().is_empty() {
         "default"
     } else {
         instance.trim()
     };
-    scratch_root().join(format!("{project}-{inst}"))
+    format!("tillandsias-imagegen-{project}-{inst}")
 }
 
-fn scratch_root() -> PathBuf {
+fn podman_ok(args: &[&str]) -> Result<String, String> {
+    let out = crate::podman_command()
+        .args(args)
+        .output_bounded(std::time::Duration::from_secs(30))
+        .map_err(|e| format!("podman {}: {e}", args.join(" ")))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+    } else {
+        Err(format!(
+            "podman {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
+    }
+}
+
+/// Create the lane volume (idempotent).
+pub fn ensure_lane_volume(project: &str, instance: &str) -> Result<String, String> {
+    let name = lane_volume(project, instance);
+    podman_ok(&["volume", "create", "--ignore", &name])?;
+    Ok(name)
+}
+
+/// Forge launch: a fresh, empty volume (a leftover one from a crashed forge
+/// is removed first; one in use by a live forge of this lane stays).
+pub fn forge_scratch_volume(project: &str, instance: &str) -> Option<String> {
+    let name = lane_volume(project, instance);
+    let _ = podman_ok(&["volume", "rm", &name]);
+    ensure_lane_volume(project, instance).ok()
+}
+
+/// Forge teardown: the images go with the forge.
+pub fn remove_lane_volume(project: &str, instance: &str) {
+    let _ = podman_ok(&["volume", "rm", "-f", &lane_volume(project, instance)]);
+}
+
+/// Where the HOST reads the lane's files (to measure them and make the
+/// thumbnail): the volume's mountpoint, or the fixture seam's dir.
+pub fn lane_scratch_dir(project: &str, instance: &str) -> Result<PathBuf, String> {
     if let Some(root) = seam()
         .lock()
         .ok()
         .and_then(|s| s.as_ref().map(|s| s.scratch_root.clone()))
     {
-        return root;
+        let dir = root.join(lane_volume(project, instance));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        return Ok(dir);
     }
-    tillandsias_core::cache_root::cache_root().join("imagegen-scratch")
-}
-
-/// The forge launch's mount args for the lane scratch dir. Wipes the dir
-/// first: a new forge starts with an empty `/work/tmp/imagegen/`, which is
-/// what "deleted when the forge shuts down" means for the next forge.
-pub fn forge_scratch_mount(project: &str, instance: &str) -> Option<PathBuf> {
-    let dir = lane_scratch_dir(project, instance);
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).ok()?;
-    Some(dir)
+    let name = ensure_lane_volume(project, instance)?;
+    podman_ok(&["volume", "inspect", "--format", "{{.Mountpoint}}", &name]).map(PathBuf::from)
 }
 
 /// Fixture seam: a stub engine and a scratch root.
@@ -287,8 +323,9 @@ pub fn call(
         }
     };
     let job = parse_job(args, &ladder, &ceiling, false)?;
-    let out_dir = lane_scratch_dir(project, instance);
-    std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
+    let mut job = job;
+    let out_dir = lane_scratch_dir(project, instance)?;
+    job.out_volume = Some(lane_volume(project, instance));
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
@@ -479,7 +516,10 @@ impl PodmanSdCli {
                 self.models_dir.display()
             ),
             "--mount".into(),
-            format!("type=bind,source={},target=/out", out_dir.display()),
+            match &job.out_volume {
+                Some(v) => format!("type=volume,source={v},target=/out"),
+                None => format!("type=bind,source={},target=/out", out_dir.display()),
+            },
             "--mount".into(),
             format!(
                 "type=bind,source={},target=/home/imagegen/.cache/nv",
