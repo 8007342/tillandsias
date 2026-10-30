@@ -14,7 +14,11 @@
 -- Verdict ok:studio-placement:<gpu line>, violation:... otherwise.
 
 local home = env.get("HOME") or ""
-local image = env.get("TILLANDSIAS_STUDIO_IMAGE") or "localhost/tillandsias-imagegen-studio:latest"
+-- No default: a mutable tag is banned, and the versioned tag is the launcher's to name.
+local image = env.get("TILLANDSIAS_STUDIO_IMAGE") or ""
+if image == "" then
+    verdict.emit("could-not-run:studio-placement:set-TILLANDSIAS_STUDIO_IMAGE-to-the-versioned-tag", 2)
+end
 local models = env.get("TILLANDSIAS_STUDIO_MODELS") or (home .. "/.cache/tillandsias/models/imagegen")
 
 -- The cache lives outside the repo, where fs.* refuses to look.
