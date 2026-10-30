@@ -17,7 +17,9 @@
 #[cfg(unix)]
 use std::os::unix::net::UnixDatagram;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 /// What a launch ends with.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +92,7 @@ pub fn notify_socket_path(runtime_dir: &Path, service: &str) -> PathBuf {
         .join(format!("{service}.sock"))
 }
 
+#[cfg(unix)]
 fn runtime_dir() -> PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR")
         .map(PathBuf::from)
