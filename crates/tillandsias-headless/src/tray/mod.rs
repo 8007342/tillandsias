@@ -4903,10 +4903,15 @@ mod tests {
             crate::cloudflare_mcp::TOOLS.len() + 1,
             "{tools:?}"
         );
+        // 1874-kkrc: image.generate joins deliberately, by name.
+        assert!(
+            tools.contains(&"image.generate"),
+            "image.generate is advertised (1874-kkrc): {tools:?}"
+        );
         assert_eq!(
             tools.len() - cloudflare,
-            19,
-            "lifecycle tools + service_logs + toolchain_prepare + browser family + cloudflare family, nothing else"
+            20,
+            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + cloudflare family, nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -4976,10 +4981,11 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                19,
-                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765) + thirteen browser tools, got {tools:?}"
+                20,
+                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc) + thirteen browser tools, got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
+            assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
 
             // A disallowed URL must come back as a typed JSON-RPC error from the
             // composed server — proving browser.* actually ROUTED there rather
@@ -5461,7 +5467,9 @@ mod tests {
                 .count();
             #[cfg(feature = "vault")]
             assert_eq!(cloudflare, crate::cloudflare_mcp::TOOLS.len() + 1);
-            assert_eq!(tools.len() - cloudflare, 19);
+            // 1874-kkrc: image.generate, by name.
+            assert!(tools.iter().any(|t| t["name"] == "image.generate"));
+            assert_eq!(tools.len() - cloudflare, 20);
 
             drop(writer);
             drop(lines);

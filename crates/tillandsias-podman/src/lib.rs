@@ -13,6 +13,7 @@ mod gpu;
 pub mod launch;
 pub mod peer_table;
 pub mod policy;
+pub mod readiness;
 pub mod runtime;
 pub mod terminal_handoff;
 pub mod wedge_capture;

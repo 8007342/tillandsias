@@ -118,7 +118,9 @@ listen-vsock = ["host-services", "tokio-vsock", "tillandsias-control-wire/vsock"
 # in whichever process launches the forge: the Linux tray, or the VM guest.
 # No crates of its own; it exists so the guest gets them without the desktop
 # tray (zbus, image) that `tray` brings.
-host-services = []
+# 1874-kkrc: `image` (pure Rust PNG) for image.generate's thumbnails, which
+# the VM guest serves too.
+host-services = ["image"]
 # ORDER 1916-embd: the DEV loop. Embed no runtime assets and read them from
 # this checkout at runtime (TILLANDSIAS_ASSET_SOURCE_ROOT overrides), so an
 # asset edit costs no rustc work. Off by default: every release path embeds

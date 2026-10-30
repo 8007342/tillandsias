@@ -124,6 +124,14 @@ tillandsias-podman = { path = "crates/tillandsias-podman" }
 tillandsias-scanner = { path = "crates/tillandsias-scanner" }
 tillandsias-secure-channel = { path = "crates/tillandsias-secure-channel" }
 
+# ORDER 1916-dvlp. The dev loop's debuginfo: line tables are enough for a
+# backtrace with file:line. split-debuginfo is NOT set here: a profile cannot
+# be per-platform, and "unpacked" on darwin left 1.2M loose .o files (104 GB)
+# in target/debug/deps, stalling every CoreFoundation test process 3-16 s
+# (macuahuitl, 2026-10-30). build.sh sets it for Linux only.
+[profile.dev]
+debug = "line-tables-only"
+
 [profile.release]
 lto = true
 strip = true

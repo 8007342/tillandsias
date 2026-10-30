@@ -154,9 +154,95 @@ fi
 # Opt out with TILLANDSIAS_NO_SCCACHE=1; an explicit RUSTC_WRAPPER wins.
 # The cache dir is a fixed, bind-mountable path so the operator can put it
 # on the fast build root without any env change (1805-relo).
+# ORDER 1916-dvlp — TWO REGIMES. sccache refuses an incremental unit
+# ("incremental compilation is prohibited"), so the wrapper and a dev
+# incremental loop exclude each other. CARGO_INCREMENTAL=1 (or
+# TILLANDSIAS_CARGO_INCREMENTAL=1) is the DEV regime: no wrapper, and the
+# default debug build reads headless's runtime assets from this checkout
+# (assets-from-source, 1916-embd) so an asset edit costs no rustc work. The
+# gate regime (CARGO_INCREMENTAL=0 or unset) keeps the wrapper and embeds.
+# Pinned by scripts/lua/test-build-sccache-regimes.lua.
+# ORDER 1916-dvlp. Linux dev builds keep debuginfo in the object files
+# (split-debuginfo=unpacked) instead of copying it into every linked binary.
+# Linux only: on darwin "unpacked" piled up 1.2M loose .o files (104 GB) and
+# stalled every CoreFoundation test process; darwin sets its own value. An
+# explicit CARGO_PROFILE_DEV_SPLIT_DEBUGINFO wins.
+if [[ "$(uname -s)" == "Linux" ]]; then
+    export CARGO_PROFILE_DEV_SPLIT_DEBUGINFO="${CARGO_PROFILE_DEV_SPLIT_DEBUGINFO:-unpacked}"
+elif [[ "$(uname -s)" == "Darwin" ]]; then
+    # ORDER 1924-dobj. darwin keeps its default "unpacked": every build leaves
+    # its .o files in target/debug/deps for the debug map, and cargo never
+    # collects the stale ones. "packed" stops that but runs dsymutil on every
+    # link: one edit then one headless test measured 135 s packed vs 39 s
+    # unpacked (2026-10-29), so the edit loop keeps unpacked and every build
+    # prunes the objects no linked binary can read (~0.1 s steady state).
+    _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
+    "$SCRIPT_DIR/scripts/prune-darwin-stale-objects.sh" "$_deps_dir" >&2 || true
+    # Hold a SHARED lock for the rest of this run, so another build.sh's
+    # prune skips while this one's cargo writes into the target. fd 7 stays
+    # open in this shell and every cargo it spawns; the lock goes with it.
+    mkdir -p "$_deps_dir/../.."
+    exec 7>>"$_deps_dir/../../.tillandsias-prune.lock"
+    perl -MFcntl=:flock -e 'open(my $fh, ">>&=", 7) or exit 2; flock($fh, LOCK_SH) or exit 1' \
+        || echo "warn:darwin-prune-lock:could not take the shared build lock" >&2
+    # Backstop above the prune: refuse a deps dir that still grew past the
+    # bound rather than run every test 3-16 s slow. One clean darwin build
+    # is ~13-16k entries; 1.24M stalled each CoreFoundation process 3 s
+    # (measured 2026-10-29). The bound is ~7x a clean build.
+    _deps_bound=100000
+    if [[ -d "$_deps_dir" ]]; then
+        _deps_count="$(ls -f "$_deps_dir" | wc -l | tr -d ' ')"
+        if (( _deps_count > _deps_bound )); then
+            echo "refused:darwin-deps-bloat:entries=$_deps_count bound=$_deps_bound dir=$_deps_dir" >&2
+            echo "  why: past ~1M entries every test process that touches CoreFoundation stalls 3-16 s (1924-dobj)" >&2
+            echo "  remedy: cargo clean (a rebuildable cache; ~7 min to rebuild the tests), then re-run" >&2
+            exit 1
+        fi
+    fi
+fi
 # BEGIN-SCCACHE
 _sccache_bin=""
-if [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
+TILLANDSIAS_DEV_BUILD_FEATURES=""
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    TILLANDSIAS_DEV_BUILD_FEATURES="--features tillandsias-headless/assets-from-source"
+fi
+# The dev regime's linker (1916-dvlp). Linking was 3.9 of 5.7 s of a warm
+# one-line headless edit on pirria (-Z time-passes, 2026-10-29), and lld cut
+# the edit from ~6.2 s to ~2.5 s. mold first, then ld.lld, only when one
+# resolves; nothing is installed. Set for the HOST target only
+# (CARGO_TARGET_<HOST>_RUSTFLAGS), so the musl and Windows rustflags in
+# .cargo/config.toml are untouched; an explicit RUSTFLAGS wins over target
+# rustflags in cargo, so it is left alone. Gate and release never see this.
+TILLANDSIAS_DEV_LINKER=""
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    _dev_linker_why=""
+    if [[ -n "${RUSTFLAGS:-}" ]]; then
+        _dev_linker_why="RUSTFLAGS is set, and cargo would ignore target rustflags beside it"
+    elif command -v mold >/dev/null 2>&1; then
+        TILLANDSIAS_DEV_LINKER=mold
+    elif command -v ld.lld >/dev/null 2>&1; then
+        TILLANDSIAS_DEV_LINKER=lld
+    else
+        _dev_linker_why="neither mold nor ld.lld on PATH"
+    fi
+    _dev_host="$(rustc -vV 2>/dev/null | sed -n 's/^host: //p')"
+    if [[ -n "$TILLANDSIAS_DEV_LINKER" && "$_dev_host" != *-linux-* ]]; then
+        _dev_linker_why="host ${_dev_host:-unknown} is not Linux"
+        TILLANDSIAS_DEV_LINKER=""
+    fi
+    if [[ -n "$TILLANDSIAS_DEV_LINKER" ]]; then
+        _dev_var="CARGO_TARGET_$(tr 'a-z.-' 'A-Z__' <<<"$_dev_host")_RUSTFLAGS"
+        export "$_dev_var=${!_dev_var:+${!_dev_var} }-C link-arg=-fuse-ld=$TILLANDSIAS_DEV_LINKER"
+        echo "linker: $TILLANDSIAS_DEV_LINKER (dev regime; $_dev_var)" >&2
+        unset _dev_var
+    else
+        echo "linker: default ($_dev_linker_why)" >&2
+    fi
+    unset _dev_linker_why _dev_host
+fi
+if [[ "${CARGO_INCREMENTAL:-}" == "1" ]]; then
+    : # the dev regime: the off line below says why
+elif [[ -z "${TILLANDSIAS_NO_SCCACHE:-}" && -z "${RUSTC_WRAPPER:-}" ]]; then
     _sccache_bin="$(command -v sccache 2>/dev/null || true)"
 fi
 if [[ -n "$_sccache_bin" ]]; then
@@ -169,6 +255,7 @@ else
     _sccache_why="no sccache on PATH; install one into ~/.cargo/bin"
     [[ -n "${TILLANDSIAS_NO_SCCACHE:-}" ]] && _sccache_why="TILLANDSIAS_NO_SCCACHE set"
     [[ -n "${RUSTC_WRAPPER:-}" ]] && _sccache_why="RUSTC_WRAPPER already set to $RUSTC_WRAPPER"
+    [[ "${CARGO_INCREMENTAL:-}" == "1" ]] && _sccache_why="CARGO_INCREMENTAL=1: the dev regime; sccache refuses incremental units (1916-dvlp)"
     echo "sccache: off ($_sccache_why)" >&2
     unset _sccache_why
 fi
@@ -6949,8 +7036,9 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
     _bump_build_version
     _check_trace_coverage
-    _step "Building workspace (debug)..."
-    _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    _step "Building workspace (debug)${TILLANDSIAS_DEV_BUILD_FEATURES:+, dev regime: assets from source}..."
+    # shellcheck disable=SC2086 # the features word list is split on purpose
+    _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" $TILLANDSIAS_DEV_BUILD_FEATURES 2>&1
     _info "Debug build complete"
 
     # Prune dangling images accumulated during the build

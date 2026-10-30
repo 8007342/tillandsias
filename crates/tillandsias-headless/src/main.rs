@@ -80,9 +80,14 @@ mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
+#[cfg(feature = "host-services")]
+mod imagegen_consent;
 mod imagegen_models;
 mod imagegen_placement;
+mod imagegen_studio;
 mod imagegen_tiers;
+#[cfg(feature = "host-services")]
+mod imagegen_tool;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -2623,6 +2628,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1874-b9tg: local image generation. Not an INIT image: built on
         // first use through ensure_image_exists.
         "imagegen" => "images/imagegen",
+        // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
+        // only for a project with `[imagegen] studio = true`.
+        "imagegen-studio" => "images/imagegen-studio",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -4678,6 +4686,8 @@ mod enclave_healthcheck_tests;
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--detach".into(),
+        // 1922-rann: the proxy announces readiness (READY=1 once squid listens).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         // Order 387: a crashed/exited container holding the name must not
         // block relaunch with exit-125; --replace atomically removes it
         // (mirrors order 314's inference fix and order 378's forge-agent fix).
@@ -5814,6 +5824,8 @@ fn build_git_run_args(
     let mirror_volume = format!("tillandsias-mirror-{project_name}");
     let mut args = vec![
         "--detach".into(),
+        // 1922-rann: the mirror announces readiness (READY=1 once seeded).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         "--rm".into(),
         // Order 387: relaunch a mirror container while an exited one still
         // holds the name must not fail with exit-125 (mirrors order 314/378).
@@ -9852,6 +9864,20 @@ fn build_opencode_forge_args(
             "--env".into(),
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=volume,source={volume},target={}",
+                    imagegen_tool::FORGE_SCRATCH
+                ),
+            ]);
+        }
     }
     // Order 1859-v5iv: the tray run that launched this forge, so a tray start
     // after that run died reaps it (dead_run.rs).
@@ -18635,6 +18661,15 @@ pub(crate) fn ensure_enclave_for_project(
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
         report_inference_readiness(&client, debug).await;
+        // 1874-zry8: the ComfyUI studio sibling, only for a project that opted in.
+        crate::imagegen_studio::ensure_if_enabled(
+            &client,
+            project_name,
+            project_path,
+            version,
+            debug,
+        )
+        .await;
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -19248,6 +19283,9 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     }
     #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+    // 1874-kkrc: image.generate's scratch volume goes with the forge.
+    #[cfg(feature = "host-services")]
+    imagegen_tool::remove_lane_volume(project, instance);
     remove_source_volume_if_present(&volume, debug)
 }
 
@@ -19769,6 +19807,14 @@ fn build_forge_agent_run_args_with_vault(
                 "TILLANDSIAS_CONTROL_SOCKET",
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            spec = spec.volume(volume, imagegen_tool::FORGE_SCRATCH, MountMode::ReadWrite);
+        }
     }
     // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
     if let Some(run) = dead_run::run_label_value() {

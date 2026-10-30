@@ -18,7 +18,7 @@ FROM docker.io/hashicorp/vault:1.18
 # Add bash, jq, curl on top of the upstream Alpine-based vault image.
 # `--no-cache` keeps the layer deterministic.
 USER root
-RUN apk add --no-cache bash jq curl coreutils \
+RUN apk add --no-cache bash jq curl coreutils socat \
     && mkdir -p /vault/data /vault/config /vault/audit /run/secrets \
     && chown -R vault:vault /vault/data /vault/config /vault/audit
 

@@ -75,7 +75,15 @@ pub struct Scanner {
 }
 
 impl Scanner {
-    pub fn new(config: ScannerConfig) -> Self {
+    pub fn new(mut config: ScannerConfig) -> Self {
+        // FSEvents reports resolved paths (/private/var/..., not /var/...), so
+        // a watch path behind a symlink never matched its own events on macOS
+        // (order 1924-fsev). A path that cannot be resolved stays as given.
+        for path in &mut config.watch_paths {
+            if let Ok(resolved) = path.canonicalize() {
+                *path = resolved;
+            }
+        }
         Self {
             config,
             known: HashMap::new(),
@@ -133,6 +141,10 @@ impl Scanner {
         // Errors are logged and skipped rather than propagated — the scanner degrades
         // gracefully when paths are missing, permissions are denied, or inotify watch
         // limits are exhausted.
+        // Register every path in one batch: on macOS each separate
+        // watcher.watch() restarts the FSEvents stream, measured at ~3 s per
+        // call, so N project dirs cost N x 3 s (order 1924-fsev).
+        let mut paths = watcher.paths_mut();
         let mut active_watches = 0usize;
         for watch_path in &self.config.watch_paths {
             if !watch_path.exists() {
@@ -140,7 +152,7 @@ impl Scanner {
                 continue;
             }
 
-            match watcher.watch(watch_path, RecursiveMode::NonRecursive) {
+            match paths.add(watch_path, RecursiveMode::NonRecursive) {
                 Ok(()) => {
                     active_watches += 1;
                     info!(?watch_path, "Watching for project changes");
@@ -165,7 +177,7 @@ impl Scanner {
                                 .file_name()
                                 .is_some_and(|n| n.to_string_lossy().starts_with('.'))
                         {
-                            match watcher.watch(&path, RecursiveMode::NonRecursive) {
+                            match paths.add(&path, RecursiveMode::NonRecursive) {
                                 Ok(()) => {
                                     active_watches += 1;
                                 }
@@ -188,6 +200,11 @@ impl Scanner {
                     );
                 }
             }
+        }
+
+        if let Err(e) = paths.commit() {
+            warn!(?e, "Failed to start the filesystem watches");
+            active_watches = 0;
         }
 
         if active_watches == 0 {
@@ -335,11 +352,13 @@ mod tests {
     #[test]
     fn resolve_project_dir_direct_child() {
         let dir = tempfile::tempdir().unwrap();
-        let project = dir.path().join("my-app");
+        // Event paths arrive resolved (1924-fsev), so the fixture is too.
+        let root = dir.path().canonicalize().unwrap();
+        let project = root.join("my-app");
         fs::create_dir_all(&project).unwrap();
 
         let config = ScannerConfig {
-            watch_paths: vec![dir.path().to_path_buf()],
+            watch_paths: vec![root.clone()],
             debounce: Duration::from_millis(100),
         };
         let scanner = Scanner::new(config);
@@ -351,11 +370,13 @@ mod tests {
     #[test]
     fn resolve_project_dir_nested_file() {
         let dir = tempfile::tempdir().unwrap();
-        let project = dir.path().join("my-app");
+        // Event paths arrive resolved (1924-fsev), so the fixture is too.
+        let root = dir.path().canonicalize().unwrap();
+        let project = root.join("my-app");
         fs::create_dir_all(project.join("src")).unwrap();
 
         let config = ScannerConfig {
-            watch_paths: vec![dir.path().to_path_buf()],
+            watch_paths: vec![root.clone()],
             debounce: Duration::from_millis(100),
         };
         let scanner = Scanner::new(config);
@@ -402,10 +423,9 @@ mod tests {
                 }
             }
             Ok(None) => panic!("Channel closed unexpectedly"),
-            Err(_) => {
-                // Timeout is acceptable in CI — inotify may not trigger in temp dirs
-                // on all platforms. The unit tests above cover the logic.
-            }
+            // 1924-fsev: a timeout used to pass here, which hid that macOS
+            // never delivered the event for a temp dir behind /var -> /private/var.
+            Err(_) => panic!("no project event within 5 s of creating new-project"),
         }
 
         handle.abort();
