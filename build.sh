@@ -169,6 +169,27 @@ fi
 # explicit CARGO_PROFILE_DEV_SPLIT_DEBUGINFO wins.
 if [[ "$(uname -s)" == "Linux" ]]; then
     export CARGO_PROFILE_DEV_SPLIT_DEBUGINFO="${CARGO_PROFILE_DEV_SPLIT_DEBUGINFO:-unpacked}"
+elif [[ "$(uname -s)" == "Darwin" ]]; then
+    # ORDER 1924-dobj. darwin keeps its default "unpacked": every build leaves
+    # its .o files in target/debug/deps for the debug map, and cargo never
+    # collects the stale ones. "packed" stops that but runs dsymutil on every
+    # link: one edit then one headless test measured 135 s packed vs 39 s
+    # unpacked (2026-10-29), so the edit loop keeps unpacked and this guard
+    # catches the pile-up instead.
+    # Refuse a bloated deps dir rather than run every test 3-16 s slow. One
+    # clean darwin build is ~13k entries; 1.24M stalled each CoreFoundation
+    # process 3 s (measured 2026-10-29). The bound is ~7x a clean build.
+    _deps_bound=100000
+    _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
+    if [[ -d "$_deps_dir" ]]; then
+        _deps_count="$(ls -f "$_deps_dir" | wc -l | tr -d ' ')"
+        if (( _deps_count > _deps_bound )); then
+            echo "refused:darwin-deps-bloat:entries=$_deps_count bound=$_deps_bound dir=$_deps_dir" >&2
+            echo "  why: past ~1M entries every test process that touches CoreFoundation stalls 3-16 s (1924-dobj)" >&2
+            echo "  remedy: cargo clean (a rebuildable cache; ~7 min to rebuild the tests), then re-run" >&2
+            exit 1
+        fi
+    fi
 fi
 # BEGIN-SCCACHE
 _sccache_bin=""
