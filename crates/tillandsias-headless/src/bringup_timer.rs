@@ -190,7 +190,7 @@ mod tests {
             (
                 &main,
                 "mirror-seed",
-                "timed_async( \"mirror-seed\", wait_for_git_mirror_ready(",
+                "timed_async( \"mirror-seed\", gate_forge_launch(",
             ),
             (
                 &main,

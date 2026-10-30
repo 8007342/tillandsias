@@ -198,6 +198,7 @@ impl ReadyListener {
             let outcome = self.wait(deadline, retry_after);
             let (kind, body) = outcome_event(&service, &container, &outcome);
             crate::client::emit_diagnostic_event(true, kind, &container, &body);
+            publish(&container, outcome.clone());
             outcome
         })
     }
@@ -234,7 +235,10 @@ pub fn bind_for_launch(container: &str, args: &[String]) -> Option<ReadyListener
         return None;
     }
     match ReadyListener::bind(service_label(container)) {
-        Ok(l) => Some(l),
+        Ok(l) => {
+            begin(container);
+            Some(l)
+        }
         Err(e) => {
             eprintln!(
                 "[tillandsias] readiness socket for {container} not bound ({e}); no ready event this launch"
@@ -253,6 +257,137 @@ pub fn announce_launch(listener: ReadyListener, container: &str) {
         ready_deadline(container),
         RETRY_AFTER,
     );
+}
+
+// ── 1922-gate: the readiness board ───────────────────────────────────────────
+//
+// One entry per container this process launched or reused. A launch marks its
+// entry pending when it binds the notify socket and publishes its one outcome
+// when the announce thread ends; a container the launcher found already running
+// (and accepted as such) is published Ready with a `reused` status, since no
+// new READY=1 will come. The gate subscribes to the entries and returns when
+// every one holds an outcome: it never probes a service.
+
+type Slot = tokio::sync::watch::Sender<Option<ReadyOutcome>>;
+
+fn board() -> &'static std::sync::Mutex<std::collections::HashMap<String, Slot>> {
+    static BOARD: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, Slot>>> =
+        std::sync::OnceLock::new();
+    BOARD.get_or_init(Default::default)
+}
+
+fn slot(container: &str) -> Slot {
+    let mut map = board().lock().unwrap_or_else(|e| e.into_inner());
+    map.entry(container.to_string())
+        .or_insert_with(|| tokio::sync::watch::channel(None).0)
+        .clone()
+}
+
+/// A launch of `container` started: forget any earlier outcome.
+pub fn begin(container: &str) {
+    slot(container).send_replace(None);
+}
+
+/// The launch's one outcome. The announce thread calls this; a fixture is the
+/// other caller, standing in for conmon.
+pub fn publish(container: &str, outcome: ReadyOutcome) {
+    slot(container).send_replace(Some(outcome));
+}
+
+/// The launcher accepted an already-running `container`: it is ready, and no
+/// new event will say so.
+pub fn mark_reused(container: &str) {
+    publish(
+        container,
+        ReadyOutcome::Ready {
+            status: Some("reused".to_string()),
+        },
+    );
+}
+
+/// Whether anything in this process launched or reused `container`.
+pub fn is_tracked(container: &str) -> bool {
+    board()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .contains_key(container)
+}
+
+/// Await `container`'s outcome for at most `deadline`. An outcome already
+/// published returns at once. Silence past the deadline is published as one
+/// failed outcome and emitted as its one `event:service_ready_failed`; a
+/// failure the announce thread already emitted is returned, not re-emitted.
+pub async fn await_ready(container: &str, deadline: Duration) -> ReadyOutcome {
+    let mut rx = slot(container).subscribe();
+    let waited = tokio::time::timeout(deadline, rx.wait_for(Option::is_some)).await;
+    if let Ok(Ok(outcome)) = waited
+        && let Some(outcome) = outcome.clone()
+    {
+        return outcome;
+    }
+    let outcome = ReadyOutcome::Failed {
+        reason: format!("no ready event within {}s", deadline.as_secs()),
+        retry_after: RETRY_AFTER,
+    };
+    let (kind, body) = outcome_event(service_label(container), container, &outcome);
+    crate::client::emit_diagnostic_event(true, kind, container, &body);
+    publish(container, outcome.clone());
+    outcome
+}
+
+/// The gate's own deadline: the announce thread's, plus slack so a published
+/// outcome always wins the race against the gate's timeout.
+pub fn gate_deadline(container: &str) -> Duration {
+    ready_deadline(container) + Duration::from_secs(5)
+}
+
+/// Await every hard requirement. `Ok` only when all of them are ready; `Err`
+/// names each one that failed and the longest `retry_after`.
+pub async fn gate(containers: &[&str]) -> Result<(), String> {
+    gate_within(containers, gate_deadline).await
+}
+
+pub async fn gate_within(
+    containers: &[&str],
+    deadline: impl Fn(&str) -> Duration,
+) -> Result<(), String> {
+    // Concurrently, so the deadlines run side by side and never stack.
+    let mut waits = tokio::task::JoinSet::new();
+    for c in containers {
+        let (container, within) = (c.to_string(), deadline(c));
+        waits.spawn(async move {
+            let outcome = await_ready(&container, within).await;
+            (container, outcome)
+        });
+    }
+    let mut failed = Vec::new();
+    let mut retry = Duration::ZERO;
+    while let Some(joined) = waits.join_next().await {
+        let (container, outcome) = joined.map_err(|e| format!("readiness gate task: {e}"))?;
+        if let ReadyOutcome::Failed {
+            reason,
+            retry_after,
+        } = outcome
+        {
+            retry = retry.max(retry_after);
+            failed.push(format!("{container}: {reason}"));
+        }
+    }
+    failed.sort();
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "readiness gate: {} not ready ({}); retry_after={}s",
+            if failed.len() == 1 {
+                "a hard requirement is"
+            } else {
+                "hard requirements are"
+            },
+            failed.join("; "),
+            retry.as_secs()
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -359,5 +494,40 @@ mod tests {
             }
             other => panic!("expected Failed, got {other:?}"),
         }
+    }
+
+    /// 1922-gate: the board answers from published outcomes, never a probe.
+    #[tokio::test]
+    async fn the_gate_waits_for_every_outcome_and_refuses_with_retry_after() {
+        let short = |_: &str| Duration::from_millis(100);
+        mark_reused("gate-test-a");
+        begin("gate-test-b");
+        // b is pending: the gate times out on it alone, once.
+        let err = gate_within(&["gate-test-a", "gate-test-b"], short)
+            .await
+            .unwrap_err();
+        assert!(
+            err.contains("gate-test-b") && !err.contains("gate-test-a"),
+            "{err}"
+        );
+        assert!(err.contains("retry_after=5s"), "{err}");
+        // The timeout was published, so the next await answers at once.
+        assert!(matches!(
+            await_ready("gate-test-b", Duration::ZERO).await,
+            ReadyOutcome::Failed { .. }
+        ));
+        // A relaunch clears it; a later READY lets the gate through.
+        begin("gate-test-b");
+        let later = tokio::spawn(async {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+            publish("gate-test-b", ReadyOutcome::Ready { status: None });
+        });
+        gate_within(&["gate-test-a", "gate-test-b"], |_: &str| {
+            Duration::from_secs(5)
+        })
+        .await
+        .unwrap();
+        later.await.unwrap();
+        assert!(is_tracked("gate-test-a") && !is_tracked("gate-test-never"));
     }
 }
