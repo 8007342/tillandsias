@@ -262,6 +262,8 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
         "flutter" => Ok("images/flutter"),
         // 1874-b9tg: local image generation, built on first use.
         "imagegen" => Ok("images/imagegen"),
+        // 1874-zry8: the opt-in ComfyUI studio, built only when a project enables it.
+        "imagegen-studio" => Ok("images/imagegen-studio"),
         "vault" => Ok("images/vault"),
         other => Err(format!("Unknown image type: {other}")),
     }
@@ -435,6 +437,10 @@ mod tests {
             ("images/flutter/Containerfile", "images/flutter"),
             ("images/imagegen/Containerfile", "images/imagegen"),
             ("images/imagegen/Containerfile.cuda", "images/imagegen"),
+            (
+                "images/imagegen-studio/Containerfile",
+                "images/imagegen-studio",
+            ),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {

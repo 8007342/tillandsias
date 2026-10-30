@@ -1,0 +1,56 @@
+# @trace order:1874-zry8, order:1921-7aa5 (spec: openspec/changes/local-image-generation, design section 7)
+# OPTIONAL ComfyUI studio, a forge sibling. Never built unless a project sets
+# `[imagegen] studio = true`; a project without it never builds or runs this.
+#
+# Operator ruling (1921 roadmap, R2): pinned ComfyUI, no ComfyUI-Manager (it
+# installs code from git/pip at runtime), custom_nodes read-only and filled only
+# from the 1921-7aa5 manifest, no egress at run time (--network=none), models
+# fetched host-side through the licence register into the shared cache and
+# mounted read-only at /models.
+#
+# ComfyUI is GPL-3.0 and runs UNMODIFIED as a separate container; its LICENSE
+# stays in /opt/comfyui. CUDA comes from the torch wheels (bundled CUDA 12.8
+# libraries); the driver is the host's, injected by CDI (nvidia.com/gpu=all).
+FROM docker.io/library/python:3.12.16-slim-bookworm
+
+ARG COMFYUI_REF=v0.40.0
+ARG COMFYUI_SHA=3541246a9c997f4b8c32f9f88f3c985d02021c79
+ARG TORCH_VERSION=2.10.0+cu128
+ARG TORCHVISION_VERSION=0.25.0+cu128
+LABEL io.tillandsias.imagegen-studio.comfyui-ref="${COMFYUI_REF}" \
+      io.tillandsias.imagegen-studio.comfyui-sha="${COMFYUI_SHA}" \
+      io.tillandsias.imagegen-studio.torch="${TORCH_VERSION}"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# The commit is verified, not trusted from the tag name.
+RUN git clone --filter=blob:none https://github.com/comfyanonymous/ComfyUI /opt/comfyui \
+    && git -C /opt/comfyui checkout --detach "$COMFYUI_SHA" \
+    && test "$(git -C /opt/comfyui rev-parse HEAD)" = "$COMFYUI_SHA" \
+    && rm -rf /opt/comfyui/.git \
+    && test -f /opt/comfyui/LICENSE
+
+RUN pip install --no-cache-dir \
+        "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
+        --index-url https://download.pytorch.org/whl/cu128 \
+    && pip install --no-cache-dir -r /opt/comfyui/requirements.txt \
+    && python -c "import torch, torchvision; print('torch', torch.__version__)"
+
+COPY extra_model_paths.yaml /opt/comfyui/extra_model_paths.yaml
+
+# No ComfyUI-Manager anywhere, and custom_nodes holds only what ships with
+# ComfyUI at this commit (the 1921-7aa5 manifest adds reviewed nodes later).
+RUN if find /opt/comfyui / -xdev -iname '*comfyui-manager*' -print -quit 2>/dev/null | grep -q .; then \
+        echo "ComfyUI-Manager must not be in the studio image" >&2; exit 1; fi \
+    && useradd -u 1001 -m -s /usr/sbin/nologin studio \
+    && mkdir -p /out /in /home/studio/.cache /home/studio/user /home/studio/tmp \
+    && chown -R studio:studio /out /in /home/studio \
+    && chmod -R a-w /opt/comfyui/custom_nodes
+
+USER studio
+EXPOSE 8188
+ENTRYPOINT ["python", "/opt/comfyui/main.py", "--listen", "0.0.0.0", "--port", "8188", \
+            "--output-directory", "/out", "--input-directory", "/in", "--disable-auto-launch", \
+            "--user-directory", "/home/studio/user", "--temp-directory", "/home/studio/tmp"]
