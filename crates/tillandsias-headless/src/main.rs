@@ -1001,6 +1001,7 @@ fn main() {
         || status_check
         || ensure_enclave
         || sync_project.is_some()
+        || rejoin_project.is_some()
         || inference_tier
         || capabilities
         || github_login
@@ -25209,6 +25210,11 @@ mod tests {
             "claude_login",
             "codex_login",
             "antigravity_login",
+            // 1911-3dqo, yoga 2026-10-30: --rejoin was missing, so a rejoin
+            // SIGTERMed the running tray and it stopped the whole stack and
+            // the very forge the rejoin came for (tray log: "Received
+            // shutdown signal", then podman stop of every enclave service).
+            "rejoin_project.is_some()",
         ] {
             assert!(
                 window.split(&['|', '\n', ' '][..]).any(|tok| tok == lane),
