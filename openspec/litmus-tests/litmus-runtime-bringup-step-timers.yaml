@@ -1,0 +1,30 @@
+# @trace spec:observability-metrics, order:1915-brst
+name: litmus:runtime-bringup-step-timers
+spec: observability-metrics
+phase: pre-build
+description: Every runtime bring-up step (proxy-ready, vault-health, image-ensure, mirror-seed, model-preload, forge-start) is timed once at its call site and reports one 'bringup step=<name> ms=<n>' line; ledger rows carry only step, duration, exit, host and time
+severity: medium
+size: quick
+backend: fake
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/bringup_timer.rs
+  - cargo is available in PATH
+
+critical_path:
+  - step: "the timer, its ledger row shape, the per-step call-site pins and the real attached-launch forge-start report pass"
+    command: "RUSTUP_HOME=\"${RUSTUP_HOME:-$HOME/.rustup}\" CARGO_HOME=\"${CARGO_HOME:-$HOME/.cargo}\" cargo test -q -p tillandsias-headless --bin tillandsias -- bringup_timer delegated_result_fake_podman_covers_fresh_status_and_exact_timeout_reap 2>&1"
+    timeout_ms: 600000
+    expected_behavior: "test result: ok."
+
+observability:
+  traces:
+    - "@trace order:1915-brst"
+  expected_log: "test result: ok."
+  log_fields:
+    spec: "observability-metrics"
+    test: "runtime-bringup-step-timers"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/bringup_timer.rs and the call sites it pins"
+  command: "grep -n 'bringup_timer::' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/container_deps.rs"
