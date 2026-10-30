@@ -1201,6 +1201,9 @@ FLAG_CHECK=false
 # exits, and NEVER compiles.
 FLAG_PREFLIGHT=false
 FLAG_PREFLIGHT_FULL=false
+# ORDER 1916-tsel — the warm-forge fast loop; see scripts/gate-changed.sh.
+FLAG_CHANGED=false
+CHANGED_BASE=""
 # ORDER 1384-bqhy — run ONLY the gate-steps.d loop over <root> (whose
 # scripts/gate-steps.d it reads). The fixture's way into the real loop over a
 # scratch tree; --check calls the same function over the checkout.
@@ -1227,6 +1230,16 @@ while [[ $# -gt 0 ]]; do
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
         --preflight)      FLAG_PREFLIGHT=true ;;
+        --changed)
+            FLAG_CHANGED=true
+            if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                CHANGED_BASE="$2"
+                shift 2
+            else
+                shift
+            fi
+            continue
+            ;;
         --gate-steps)
             GATE_STEPS_ROOT="${2:-}"
             [ -n "$GATE_STEPS_ROOT" ] || { echo "error: --gate-steps needs a root directory" >&2; exit 2; }
@@ -1331,6 +1344,10 @@ Build flags:
   --test            Run test suite (cargo test --workspace --no-fail-fast,
                     plus the tray/listen-vsock feature pass)
   --check           Type-check only (cargo check --workspace)
+  --changed [base]  Warm-forge loop: run ONLY the cargo tests and gate fixtures
+                    whose declared inputs intersect `git diff base` (default:
+                    merge-base with origin/linux-next). A guard file or an
+                    unmapped path runs the full --check. Not a land gate.
   --clean           Clean build artifacts before building
   --ci              Run local CI/CD validation (quick: spec binding, drift, version, fmt, clippy, tests)
   --ci-full         Run phased CI/CD validation (pre-build gate, post-build smoke, runtime residual litmus)
@@ -1480,6 +1497,30 @@ if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == 
     (cd "$SCRIPT_DIR" && _touch_gating_checkout)
 fi
 # END-GATE-TOUCH
+
+# ORDER 1916-tsel — `--changed [base]`: the warm-forge fast loop. It runs here,
+# after the toolbox, sccache and diff-base preamble and WITHOUT the gate touch
+# above (that touch is what makes every --check rebuild cold), and exits.
+# scripts/gate-changed.sh derives each fixture's and crate's inputs from the
+# tree and runs only those intersecting the diff; exit 10 means it could not
+# scope the change (a guard file, an unmapped path), so the full --check runs.
+if [[ "$FLAG_CHANGED" == true ]]; then
+    if [[ -n "$CHANGED_BASE" ]]; then
+        _chg_base="$(git -C "$SCRIPT_DIR" rev-parse --verify -q "$CHANGED_BASE^{commit}")" || {
+            echo "refused:changed:bad-base:$CHANGED_BASE" >&2
+            _afford "the base does not resolve to a commit, so there is no diff to select checks from" \
+                "name a commit or ref, e.g. ./build.sh --changed origin/linux-next"
+            exit 2; }
+        export TILLANDSIAS_GATE_DIFF_BASE="$_chg_base"
+    fi
+    _chg_rc=0
+    bash "$SCRIPT_DIR/scripts/gate-changed.sh" --run ${TILLANDSIAS_GATE_DIFF_BASE:+"$TILLANDSIAS_GATE_DIFF_BASE"} || _chg_rc=$?
+    if [[ "$_chg_rc" -eq 10 ]]; then
+        echo "note:changed:full — the change could not be scoped (line above names why); running the full ./build.sh --check" >&2
+        exec bash "$SCRIPT_DIR/build.sh" --check
+    fi
+    exit "$_chg_rc"
+fi
 
 # ORDER 1802-fbld — BUILD PLACEMENT REPORT. One line saying whether target/ is
 # on the host's fast build root (TILLANDSIAS_FAST_BUILD_ROOT, default
@@ -2607,9 +2648,13 @@ _run_gate_steps() {  # $1 = root
         #
         # It also catches writers a name-based scan cannot see — a step that
         # reaches the runner indirectly, or code nobody has written yet.
+        # ORDER 1916-tsel: the shared path is overridable ONLY so the
+        # attribution fixture can drive two writers without touching the
+        # host's real fallback log.
+        _metrics_shared="${TILLANDSIAS_GATE_SHARED_TIMING_PATH:-/tmp/tillandsias-timing.jsonl}"
         _metrics_shared_before=""
-        if [ -f /tmp/tillandsias-timing.jsonl ]; then
-            _metrics_shared_before="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
+        if [ -f "$_metrics_shared" ]; then
+            _metrics_shared_before="$(wc -l < "$_metrics_shared" 2>/dev/null || echo 0)"
         fi
 
         # The output streams as before AND is kept, so a refusal can be named
@@ -2635,10 +2680,21 @@ _run_gate_steps() {  # $1 = root
             fi
         fi
 
-        if [ -f /tmp/tillandsias-timing.jsonl ]; then
-            _metrics_shared_after="$(wc -l < /tmp/tillandsias-timing.jsonl 2>/dev/null || echo 0)"
-            if [ "${_metrics_shared_after:-0}" -gt "${_metrics_shared_before:-0}" ]; then
-                _error "gate step ${_step_path##*/} wrote $(( _metrics_shared_after - ${_metrics_shared_before:-0} )) record(s) into /tmp/tillandsias-timing.jsonl (1204-3s2s)"
+        # ORDER 1916-tsel — ATTRIBUTE BY RUN ID, NOT BY GROWTH. Growth alone
+        # blamed this step for records a CONCURRENT gate on the same host
+        # wrote (two land-queue evictions, 2026-10-29). Only new records
+        # stamped with THIS gate's run id are this step's; another gate's are
+        # ignored, and id-less ones are reported, not refused.
+        _metrics_ours=0
+        if [ -f "$_metrics_shared" ]; then
+            _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}")" || _metrics_attr=""
+            _metrics_ours="$(printf '%s' "$_metrics_attr" | sed -n 's/^ours=\([0-9]*\).*/\1/p')"
+            case "$_metrics_attr" in
+                *"unattributed=0"*|"") : ;;
+                *) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} ($_metrics_attr); not attributable to this step (1916-tsel)" ;;
+            esac
+            if [ "${_metrics_ours:-0}" -gt 0 ]; then
+                _error "gate step ${_step_path##*/} wrote ${_metrics_ours} record(s) carrying this gate's run id into $_metrics_shared (1204-3s2s)"
                 _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
                 _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
                 _error "  refuse to publish any number, every arm driving it reads zero, and"
@@ -4647,6 +4703,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Lua source-agreement production integration passed"
+
+    # ORDER 1916-tsel — `./build.sh --changed` selects by declared input. The
+    # fixture mutates a stub tree one path at a time: an input selects its
+    # fixture and not an unrelated one, a crate selects its reverse
+    # dependents, and a guard or an unmapped path selects everything.
+    _step "Checking --changed selects checks by their inputs (1916-tsel)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-changed-selects-by-input.sh" 2>&1; then
+        _error "./build.sh --changed no longer scopes by input, or no longer fails safe to the full gate (1916-tsel)"
+        exit 1
+    fi
+    _info "--changed input-selection fixture passed"
+
+    # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
+    # records carrying ITS gate's run id; two concurrent writers prove a
+    # concurrent gate no longer gets the running step blamed and evicted.
+    _step "Checking the timing-log leak check blames only its own gate (1916-tsel)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-step-metrics-attribution.sh" 2>&1; then
+        _error "the shared-timing-log leak check attributes records by growth again, or no longer names a leaking step (1916-tsel)"
+        exit 1
+    fi
+    _info "Timing-log leak attribution fixture passed"
 
     # ORDER 1118-pifa: THIS STEP IS LOAD-BEARING. Do not skip or memoise it on
     # its run count. It tops `skippable:` on two hosts at ~95s with fail_pct=0,

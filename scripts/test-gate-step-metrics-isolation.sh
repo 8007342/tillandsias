@@ -62,8 +62,8 @@ trap restore EXIT
 echo "arm 1 — the gate's step loop carries the isolation check"
 if grep -q '1204-3s2s' "$ROOT/build.sh" \
    && grep -q '_metrics_shared_before' "$ROOT/build.sh" \
-   && grep -q '_metrics_shared_after' "$ROOT/build.sh"; then
-    ok "build.sh compares the shared path across each step and refuses on growth"
+   && grep -q 'gate-step-metrics-attribution.sh' "$ROOT/build.sh"; then
+    ok "build.sh compares the shared path across each step and refuses on records carrying its own run id (1916-tsel)"
 else
     bad "build.sh no longer guards the shared metrics path around gate steps"
 fi
@@ -144,7 +144,9 @@ echo "arm 4 — CONTROL: the guard keys on GROWTH, not on the file existing"
 # A host legitimately mid-split (a forge, an out-of-repo run) must not make
 # every subsequent step fail. The gate compares before/after, so a pre-existing
 # file that no step adds to is not an offence.
-if grep -q '\-gt "\${_metrics_shared_before:-0}"' "$ROOT/build.sh"; then
+# 1916-tsel: the baseline line count is handed to the attribution helper,
+# which reads only the records appended after it.
+if grep -qF '"$_metrics_shared" "${_metrics_shared_before:-0}"' "$ROOT/build.sh"; then
     ok "the comparison is before-vs-after, so a pre-existing file alone does not refuse"
 else
     bad "the guard does not compare against a baseline — a pre-existing file would fail every step"
