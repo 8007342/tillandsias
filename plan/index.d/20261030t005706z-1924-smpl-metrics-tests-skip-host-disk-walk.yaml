@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at macuahuitl-fedora's request,
+# 2026-10-29 (operator directive: cut build/validate time by orders of magnitude).
+packets:
+- packet_id: metrics-sampler-tests-skip-the-host-disk-walk
+  order: 1924-smpl
+  status: in_progress
+  kind: perf
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - tests
+  - metrics
+  - build-time
+  estimated_hours: 3
+  title: tillandsias-metrics sampler tests take 147-186 s each because every one walks the host's disks
+  context: 'Measured on tlatoanis-macbook-air 2026-10-29 (darwin, taskpolicy -b): in a full nextest workspace run, nine tillandsias-metrics tests took 147-186 s each and the headless metrics_server tests about 128 s each, making them the critical path. The suite alone took 397 s. Cause, measured with sample(1): not a sleep, but MetricsSampler::new() -> sysinfo Disks::new_with_refreshed_list() -> apple::disk::get_disk_properties (CoreFoundation volume properties), about 46 s for new_does_not_panic run alone. The coordinator first suspected the sample interval; the interval is not the cost. Production cadence and new() stay unchanged. Side observation, not measured end-to-end: the shipped tray''s metrics path on macOS pays the same walk at sampler construction.'
+  exit_criteria:
+  - 'Each of the nine slow tests passes in under 2 s on darwin, and the tillandsias-metrics suite drops from 397 s.'
+  - 'A fixture fails a sampler test that outlives a 2 s bound (Timed drop check, proven by test_budget_fails_a_slow_test).'
+  - 'The workspace test critical path is measured before and after.'
+  verifiable_closure: 'cargo nextest run -p tillandsias-metrics'
+  unscoreable: 'a timing bound, not a litmus: the Timed 2 s drop check in the tillandsias-metrics sampler and integration tests is the guard, and test_budget_fails_a_slow_test proves it fires.'
+  next_action: 'Land work/1924-smpl; measure the full workspace nextest critical path after.'
+  provenance: 'macuahuitl-fedora request 2026-10-29; nextest timings from the darwin run.'
+  events:
+  - type: filed
+    ts: '2026-10-30T00:57:06Z'
+    host: tlatoanis-macbook-air
+    summary: filed and claimed; the cost is sysinfo's macOS disk walk, not the interval
