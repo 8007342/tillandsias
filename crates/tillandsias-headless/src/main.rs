@@ -82,6 +82,7 @@ mod image_build_scope;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
 mod imagegen_models;
 mod imagegen_placement;
+mod imagegen_studio;
 mod imagegen_tiers;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
@@ -2598,6 +2599,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1874-b9tg: local image generation. Not an INIT image: built on
         // first use through ensure_image_exists.
         "imagegen" => "images/imagegen",
+        // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
+        // only for a project with `[imagegen] studio = true`.
+        "imagegen-studio" => "images/imagegen-studio",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -18539,6 +18543,15 @@ pub(crate) fn ensure_enclave_for_project(
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
         report_inference_readiness(&client, debug).await;
+        // 1874-zry8: the ComfyUI studio sibling, only for a project that opted in.
+        crate::imagegen_studio::ensure_if_enabled(
+            &client,
+            project_name,
+            project_path,
+            version,
+            debug,
+        )
+        .await;
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
