@@ -117,8 +117,22 @@ trap - EXIT INT TERM HUP PIPE
 OUTSIDE="$(mktemp -d)" || { echo "FAIL: cannot make a temp dir"; exit 1; }
 # shellcheck disable=SC2064
 trap "rm -rf '$OUTSIDE'" EXIT INT TERM HUP PIPE
+# 1925-xbpv: since 1745-ntuq the binary also walks up from the cwd and then
+# falls back to the checkout it was BUILT from, so a copied binary still reaches
+# a ledger here. The arm runs from outside the checkout and switches the build
+# fallback off by its test-only env; the control below runs the same command
+# WITH the fallback and must reach a ledger, which proves the switch is what
+# makes the arm ask the cannot-ask question.
+no_ledger() { (cd "$OUTSIDE" && env -u TILLANDSIAS_SURFACE_ROOT TILLANDSIAS_SURFACE_NO_BUILD_CHECKOUT="$1" ./tillandsias-plan validator-surface-hash --check 2>&1); }
 if cp "$BIN" "$OUTSIDE/tillandsias-plan" 2>/dev/null; then
-    if OUT="$("$OUTSIDE/tillandsias-plan" validator-surface-hash --check 2>&1)"; then
+    CTRL="$(no_ledger 0)"
+    case "$CTRL" in
+        unknown:validator-surface*)
+            bad "control: with the build-checkout fallback on, the binary still could not reach a ledger — the arm below would prove nothing" ;;
+        *)
+            ok "control: with the build-checkout fallback on, the copied binary reaches a ledger" ;;
+    esac
+    if OUT="$(no_ledger 1)"; then
         bad "--check passed from a binary with no checkout above it — cannot-ask read as fresh"
     else
         case "$OUT" in
