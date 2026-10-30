@@ -18,6 +18,13 @@ shows everything — no container knowledge required.
 Installers and per-platform instructions live at
 **[tillandsias.org/#install](https://tillandsias.org/#install)**.
 
+Direct downloads, always the stable channel:
+
+- Linux: `curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash`
+- macOS: `curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash`,
+  or the [Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg) disk image
+- Windows: the portable [tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip)
+
 All binaries, checksums and signatures are attached to the
 [latest release](https://github.com/8007342/tillandsias/releases/latest);
 see [docs/VERIFICATION.md](docs/VERIFICATION.md) to verify them.

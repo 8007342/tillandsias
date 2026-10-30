@@ -190,6 +190,76 @@ impl GitView {
         // read as one.
         self.run(&["show", &format!("{commit}:{path}")])
     }
+
+    /// [`Self::file_at`] for many `(commit, path)` pairs through ONE
+    /// `git cat-file --batch` process, answers in input order (1924-gyff).
+    /// One `git show` per pair cost 1,088 spawns in test-memo-hit-observability
+    /// and 544 in test-metrics-log-path-agreement (measured on yolanda
+    /// 2026-10-29). Same contract per pair: `None` for an unfetched commit, an
+    /// absent path, or a non-UTF-8 blob; a pair the protocol cannot carry (a
+    /// newline in the path, a non-sha commit) is `None` without reaching git.
+    pub fn files_at(&self, pairs: &[(&str, &str)]) -> Vec<Option<String>> {
+        use std::io::{BufRead, Read, Write};
+        let mut answers: Vec<Option<String>> = vec![None; pairs.len()];
+        let asked: Vec<usize> = (0..pairs.len())
+            .filter(|&i| {
+                let (c, p) = pairs[i];
+                looks_like_sha(c) && !p.is_empty() && !p.contains(['\n', '\r'])
+            })
+            .collect();
+        if asked.is_empty() {
+            return answers;
+        }
+        let Ok(mut child) = Command::new("git")
+            .arg("-C")
+            .arg(&self.root)
+            .args(["cat-file", "--batch"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        else {
+            return answers;
+        };
+        // Written on its own thread: a large blob fills stdout while stdin is
+        // still being fed, and one thread doing both would deadlock.
+        let input: String = asked
+            .iter()
+            .map(|&i| format!("{}:{}\n", pairs[i].0, pairs[i].1))
+            .collect();
+        let mut stdin = child.stdin.take().expect("piped stdin");
+        let writer = std::thread::spawn(move || {
+            let _ = stdin.write_all(input.as_bytes());
+        });
+        let mut out = std::io::BufReader::new(child.stdout.take().expect("piped stdout"));
+        for &i in &asked {
+            let mut header = String::new();
+            if out.read_line(&mut header).ok().filter(|&n| n > 0).is_none() {
+                break;
+            }
+            // "<sha> <type> <size>" or "<name> missing" / "<name> ambiguous".
+            let fields: Vec<&str> = header.split_whitespace().collect();
+            let size = match fields.as_slice() {
+                [_, kind, size] if *kind != "missing" => size.parse::<usize>().ok(),
+                _ => None,
+            };
+            let Some(size) = size else { continue };
+            let mut body = vec![0u8; size + 1];
+            if out.read_exact(&mut body).is_err() {
+                break;
+            }
+            body.truncate(size);
+            if fields[1] == "blob" {
+                answers[i] = String::from_utf8(body).ok();
+            }
+        }
+        // Close our end first: after an early break git may be blocked writing,
+        // and only a broken pipe lets it exit and release the writer.
+        drop(out);
+        let _ = writer.join();
+        let _ = child.wait();
+        answers
+    }
 }
 
 /// Reject anything that is not a plain hex object name BEFORE it reaches the
@@ -343,6 +413,50 @@ mod tests {
         assert!(!looks_like_sha(
             "0bba6525f280b1f7aa4ca15d7cceef8fed902bd2 --exec"
         ));
+    }
+
+    /// 1924-gyff: the batch answers exactly what file_at answers, pair by pair
+    /// and in input order, across present, absent, unfetched, a directory, a
+    /// large blob and a protocol-unsafe path.
+    #[test]
+    fn files_at_matches_file_at_pair_by_pair() {
+        let r = repo("files-at");
+        r.write("a.txt", "alpha\n");
+        r.write("dir/b.txt", "beta\n");
+        let big = "x".repeat(300_000);
+        r.write("big.txt", &big);
+        let c1 = r.commit("one");
+        r.write("a.txt", "alpha two\n");
+        let c2 = r.commit("two");
+        let view = GitView::new(r.path());
+        let unfetched = "0123456789abcdef0123456789abcdef01234567";
+        let pairs: Vec<(&str, &str)> = vec![
+            (&c1, "a.txt"),
+            (&c2, "a.txt"),
+            (&c1, "dir/b.txt"),
+            (&c1, "nope.txt"),
+            (unfetched, "a.txt"),
+            (&c1, "dir"),
+            (&c1, "big.txt"),
+            (&c1, "a\nb"),
+            ("HEAD", "a.txt"),
+            (&c2, "a.txt"),
+        ];
+        let batch = view.files_at(&pairs);
+        let single: Vec<Option<String>> = pairs.iter().map(|(c, p)| view.file_at(c, p)).collect();
+        assert_eq!(batch.len(), pairs.len());
+        for (i, (b, s)) in batch.iter().zip(&single).enumerate() {
+            // `git show <c>:dir` prints a tree LISTING; the batch reads only
+            // blobs. Every other pair must agree exactly.
+            if pairs[i].1 == "dir" {
+                assert_eq!(b, &None, "a tree is not file contents");
+                continue;
+            }
+            assert_eq!(b, s, "pair {i} {:?}", pairs[i]);
+        }
+        assert_eq!(batch[0].as_deref(), Some("alpha\n"));
+        assert_eq!(batch[1].as_deref(), Some("alpha two\n"));
+        assert_eq!(batch[6].as_deref().map(str::len), Some(300_000));
     }
 
     #[test]

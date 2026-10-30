@@ -490,7 +490,14 @@ critical_path:
     # STRUCTURALLY — the grader spawns no process at all — because a word-grep
     # would fire on the query set's own honest text (one of its cases is
     # literally "is Python allowed in a committed script?").
-    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
+    #
+    # WHY reqwest (1923-pu9a): order 1826-gi8e added `tillandsias-plan coord`, an
+    # HTTPS client for the fleet coordinator Worker. The workspace reqwest is
+    # already linked by headless, vault-client and vm-layer, so no new
+    # third-party code entered the tree. It is pinned to coordinator_client.rs:
+    # the methodology engine and the grader still reach no network and spawn
+    # no process.
+    command: "test ! -d crates/tillandsias-groundtruth || { echo 'FAIL: a new crate appeared'; exit 1; }; test \"$(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\" = 'chrono redb regex reqwest serde serde_json serde_yaml sha2 tokio ' || { echo \"FAIL: the dependency set changed: $(grep -oE '^[a-z0-9_-]+ = \\{ workspace = true' crates/tillandsias-plan/Cargo.toml | cut -d' ' -f1 | sort | tr '\\n' ' ')\"; exit 1; }; test \"$(grep -rlw reqwest crates/tillandsias-plan/src | tr '\\n' ' ')\" = 'crates/tillandsias-plan/src/coordinator_client.rs ' || { echo 'FAIL: reqwest escaped the coordinator client'; exit 1; }; test \"$(grep -c 'std::process::Command' crates/tillandsias-plan/src/groundtruth.rs)\" = '0' || { echo 'FAIL: the grader spawns a subprocess'; exit 1; }; Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; grep -qE '^\\s*(command|script|shell|exec):' \"$Q\" && { echo 'FAIL: the query set carries executable keys — ground truth is DATA'; exit 1; }; echo 'ok: no-new-dependency-data-only-query-set'"
     timeout_ms: 15000
     expected_behavior: "ok: no-new-dependency-data-only-query-set"
 

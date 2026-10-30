@@ -250,7 +250,7 @@ if [[ "$USE_TARGET" == true ]]; then
     #       -z --gc-sections --strip-all
     #   clang: error: linker command failed with exit code 1
     # Since 710-w9kc made this sidecar a REQUIRED build asset
-    # (tillandsias-headless/build.rs include_bytes!s it), that link failure
+    # (crates/tillandsias-embed/build.rs include_bytes!s it), that link failure
     # means `cargo build` for the whole workspace fails on macOS — not just
     # this crate. Having a `cc` is not the same as having one that can link
     # for the target.
@@ -292,7 +292,7 @@ strip "$SRC" 2>/dev/null || true
 # ASSERT THE FORMAT BEFORE STAGING (order 723-b9cn).
 #
 # This binary has exactly two consumers and both are Linux: the router
-# Containerfile COPYs it into the image, and tillandsias-headless/build.rs
+# Containerfile COPYs it into the image, and crates/tillandsias-embed/build.rs
 # include_bytes!s it as a runtime asset extracted inside the guest. The
 # host-target fallback above drops --target entirely, so on macOS it produces a
 # Mach-O and stages it under a name that says "Linux musl router sidecar".

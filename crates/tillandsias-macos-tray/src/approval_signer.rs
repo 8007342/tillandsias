@@ -400,7 +400,7 @@ mod tests {
         let sig = dir.join("msg.sig");
         std::fs::write(&signers, format!("{line}\n")).unwrap();
         std::fs::write(&sig, armored).unwrap();
-        let mut child = Command::new("ssh-keygen")
+        let mut child = Command::new("/usr/bin/ssh-keygen")
             .args(["-Y", "verify", "-n", NAMESPACE, "-I", PRINCIPAL, "-f"])
             .arg(&signers)
             .arg("-s")

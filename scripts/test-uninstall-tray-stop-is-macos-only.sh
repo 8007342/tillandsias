@@ -18,15 +18,19 @@ bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 U="$ROOT/scripts/uninstall.sh"
 [ -f "$U" ] || { echo "skip:uninstall-tray-stop:no-uninstaller"; echo "uninstall-tray-stop-is-macos-only: 0 passed, 0 failed (skipped)"; exit 0; }
 
-W="$(mktemp -d)"; trap 'rm -rf "$W"' EXIT INT TERM
+decoy_pid=""
+# The decoy EXECs its sleep, so the pid below IS the sleep and the trap's kill
+# reaches it; a bash wrapper's orphaned sleep outlived the fixture by 120 s
+# and held the gate step open (1924-dcoy).
+W="$(mktemp -d)"; trap '[ -n "$decoy_pid" ] && kill -9 "$decoy_pid" 2>/dev/null; rm -rf "$W"' EXIT INT TERM
 
 # A decoy that merely MENTIONS the literal. Split so this fixture does not carry
 # the string it tests for — the guard's own scan would otherwise match the
 # fixture (learned on 1234-zade, same night).
 _lit="tillandsias""-tray"
 decoy_script="$W/decoy.sh"
-printf '#!/usr/bin/env bash\nsleep 120\n' > "$decoy_script"; chmod +x "$decoy_script"
-"$decoy_script" "$_lit" >/dev/null 2>&1 &
+printf '#!/usr/bin/env bash\nexec sleep 120\n' > "$decoy_script"; chmod +x "$decoy_script"
+"$decoy_script" "$_lit" </dev/null >/dev/null 2>&1 &
 decoy_pid=$!
 sleep 0.3
 

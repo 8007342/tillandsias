@@ -387,8 +387,8 @@ SCRIPT_REL="$(realpath --relative-to="$(pwd)" "$0")"
 # run is therefore a CHILD, not an exec, and the native plan binary is rebuilt
 # after it passes. A host that cannot build natively is told so by name
 # rather than left to discover it at push time.
-# ORDER 667-kfyn: BUILD FROM A DISTRO-NATIVE COPY OF THE CHECKOUT (opt-in,
-# TILLANDSIAS_WSL2_SRC_MIRROR=1). From /mnt/c every source read crosses 9p
+# ORDER 667-kfyn: BUILD FROM A DISTRO-NATIVE COPY OF THE CHECKOUT (
+# the default since 1924-gyff; TILLANDSIAS_WSL2_SRC_MIRROR=0 opts out). From /mnt/c every source read crosses 9p
 # onto NTFS: on yolanda the expert-groundtruth litmus timed out at its 120 s
 # budget from /mnt/c and passed from an ext4 clone of the same tree. The copy
 # lives at /srv/tillandsias-wsl2-src/<repo>, NOT under /root: gate fixtures
@@ -399,18 +399,33 @@ SCRIPT_REL="$(realpath --relative-to="$(pwd)" "$0")"
 # computed here on the source side, the digest the pre-push hook checks, so the
 # stamp a mirror run writes is one this checkout accepts; writeback then copies
 # the gate's .git/tillandsias-* records home. Only the read-only modes use it
-# (--check, --test); anything else builds in-tree, and
+# (--check, --test, --preflight); anything else builds in-tree, and
 # TILLANDSIAS_WSL2_SRC_IN_TREE=1 forces in-tree outright.
+# ORDER 1924-gyff: the mirror is the DEFAULT, and --preflight takes it too.
+# Measured on yolanda 2026-10-29, each guard alone: test-trace-coverage 176 s
+# from /mnt/c, 1.5 s from ext4; check-added-test-is-referenced 373 s -> 2.3 s.
+# The opt-in left --preflight in-tree even with the flag set ("only
+# --check/--test run from the mirror"), so the 5 s door cut 114 of 279 guards.
+# _w2_src_mirror_wanted <script-basename> <args...> prints mirror or in-tree;
+# test-wsl2-src-mirror-default.lua runs this function itself.
+_w2_src_mirror_wanted() {
+    local script="$1" arg; shift
+    if [[ "${TILLANDSIAS_WSL2_SRC_IN_TREE:-}" == 1 || "${TILLANDSIAS_WSL2_SRC_MIRROR:-}" == 0 \
+            || "$script" != build.sh || $# -eq 0 ]]; then
+        echo in-tree; return 0
+    fi
+    for arg in "$@"; do
+        case "$arg" in --check|--test|--preflight) ;; *) echo in-tree; return 0 ;; esac
+    done
+    echo mirror
+}
 _W2_CD=""
 _w2_mirror=0
-if [[ "${TILLANDSIAS_WSL2_SRC_MIRROR:-}" == 1 && "${TILLANDSIAS_WSL2_SRC_IN_TREE:-}" != 1 \
-        && "$(basename "$SCRIPT_REL")" == build.sh && $# -gt 0 ]]; then
+if [[ "$(_w2_src_mirror_wanted "$(basename "$SCRIPT_REL")" "$@")" == mirror ]]; then
     _w2_mirror=1
-    for arg in "$@"; do
-        case "$arg" in --check|--test) ;; *) _w2_mirror=0 ;; esac
-    done
-    [[ "$_w2_mirror" == 1 ]] \
-        || echo "[wsl2-builder] source mirror: only --check/--test run from the mirror; building in-tree for: $*"
+elif [[ "$(basename "$SCRIPT_REL")" == build.sh && "${TILLANDSIAS_WSL2_SRC_IN_TREE:-}" != 1 \
+        && "${TILLANDSIAS_WSL2_SRC_MIRROR:-}" != 0 ]]; then
+    echo "[wsl2-builder] source mirror: only --check/--test/--preflight run from the mirror; building in-tree for: $*"
 fi
 if [[ "$_w2_mirror" == 1 ]]; then
     _w2_src_linux="/mnt$(cygpath -u "$PWD_WIN")"

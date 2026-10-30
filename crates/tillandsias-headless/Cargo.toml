@@ -13,6 +13,9 @@ path = "src/main.rs"
 
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
+# Order 1916-embd: the embedded runtime assets, in their own crate so an asset
+# edit does not rerun this crate's build script.
+tillandsias-embed = { path = "../tillandsias-embed" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 # Order 1420-2pav: the tillandsia palette and colour-tier detection for the
 # QR login screen (the renderer crate is 1420-9vpk).
@@ -118,6 +121,11 @@ listen-vsock = ["host-services", "tokio-vsock", "tillandsias-control-wire/vsock"
 # 1874-kkrc: `image` (pure Rust PNG) for image.generate's thumbnails, which
 # the VM guest serves too.
 host-services = ["image"]
+# ORDER 1916-embd: the DEV loop. Embed no runtime assets and read them from
+# this checkout at runtime (TILLANDSIAS_ASSET_SOURCE_ROOT overrides), so an
+# asset edit costs no rustc work. Off by default: every release path embeds
+# without having to remember a flag. Never ship a binary built with it.
+assets-from-source = ["tillandsias-embed/from-source"]
 # @trace spec:tillandsias-vault — Phase 6 default-on.
 vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs", "keyring"]
 
