@@ -174,13 +174,15 @@ elif [[ "$(uname -s)" == "Darwin" ]]; then
     # its .o files in target/debug/deps for the debug map, and cargo never
     # collects the stale ones. "packed" stops that but runs dsymutil on every
     # link: one edit then one headless test measured 135 s packed vs 39 s
-    # unpacked (2026-10-29), so the edit loop keeps unpacked and this guard
-    # catches the pile-up instead.
-    # Refuse a bloated deps dir rather than run every test 3-16 s slow. One
-    # clean darwin build is ~13k entries; 1.24M stalled each CoreFoundation
-    # process 3 s (measured 2026-10-29). The bound is ~7x a clean build.
-    _deps_bound=100000
+    # unpacked (2026-10-29), so the edit loop keeps unpacked and every build
+    # prunes the objects no linked binary can read (~0.1 s steady state).
     _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
+    "$SCRIPT_DIR/scripts/prune-darwin-stale-objects.sh" "$_deps_dir" >&2 || true
+    # Backstop above the prune: refuse a deps dir that still grew past the
+    # bound rather than run every test 3-16 s slow. One clean darwin build
+    # is ~13-16k entries; 1.24M stalled each CoreFoundation process 3 s
+    # (measured 2026-10-29). The bound is ~7x a clean build.
+    _deps_bound=100000
     if [[ -d "$_deps_dir" ]]; then
         _deps_count="$(ls -f "$_deps_dir" | wc -l | tr -d ' ')"
         if (( _deps_count > _deps_bound )); then

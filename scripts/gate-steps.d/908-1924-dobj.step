@@ -1,0 +1,11 @@
+# Gate step 1924-dobj — darwin's unpacked debuginfo leaves loose .o files that
+# cargo never collects; build.sh prunes every group no linked executable can
+# read. The fixture proves an executable's own objects are kept, a library's
+# loose objects are pruned, nothing else is touched, and a rerun prunes nothing.
+#
+# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the darwin stale-object prune keeps what binaries read (1924-dobj)"
+STEP_SCRIPT="scripts/test-prune-darwin-stale-objects.sh"
+STEP_ERROR="the darwin stale-object prune removed a linked executable's objects, kept a stale group, or touched a non-object file (1924-dobj) — see the FAIL lines above"
+STEP_OK="Darwin stale-object prune fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-29 darwin ok:prune-darwin-stale-objects:5"
