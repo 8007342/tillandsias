@@ -34848,13 +34848,16 @@ esac
         let source = include_str!("main.rs");
         let studio = source_window(source, "pub(crate) fn run_studio_mode(");
         assert!(studio.contains("studio::WebLane::studio(studio_id)?"));
+        // source-pin-ok: that the studio lane IS the OpenCode Web launch (no second route/OTP/window path) is the contract.
         assert!(studio.contains(
             "run_opencode_web_mode(project_path, is_cloud, None, port_override, &lane, debug)"
         ));
         let web = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        // source-pin-ok: the route host must come from the lane, or a studio would be routed as opencode.<label>.
         assert!(web.contains("lane.route_host(&router_host_label(project_name))"));
         assert!(!web.contains("format!(\"opencode.{}\", router_host_label(project_name))"));
         let browser = source_window(source, "fn launch_opencode_web_browser(");
+        // source-pin-ok: the window URL must come from the lane, or a studio window would open OpenCode.
         assert!(
             browser.contains("project_service_url(lane.service, project_name, router_host_port)")
         );
