@@ -3105,6 +3105,54 @@ _run_local_ci_gate() {
     fi
 }
 
+# ORDER 1925-77h4 — --ci-full CHECKS THE PLAN BINARY BEFORE THE PRE-BUILD
+# LITMUS. A release worktree reused across days kept a target/release
+# tillandsias-plan built before #742 changed crates/tillandsias-plan, and
+# fixtures that resolve it through plan-binary-probe.sh validated pushes with
+# the old rules (claims-fleet-visible and plan-only-lane-structural red alone,
+# macuahuitl 2026-10-30). Every binary the probe or a target dir can name is
+# asked `validator-surface-hash --check`: a stale one (rc 3) triggers ONE
+# rebuild, and a binary still stale after it refuses the run. unknown: (rc 4)
+# is not a freshness verdict and is reported, not refused.
+# Pinned by scripts/lua/test-ci-full-refreshes-stale-plan-binary.lua.
+# BEGIN-PLAN-BIN-CURRENT
+_ci_full_plan_bins_current() {
+    local _cands _b _seen=" " _stale="" _still="" _rc _probe
+    _probe="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _probe=""
+    case "$_probe" in ./*) _probe="$SCRIPT_DIR/${_probe#./}" ;; esac
+    _cands="$_probe
+${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/release/tillandsias-plan
+$SCRIPT_DIR/target/release/tillandsias-plan"
+    while IFS= read -r _b; do
+        [ -n "$_b" ] && [ -x "$_b" ] || continue
+        case "$_seen" in *" $_b "*) continue ;; esac
+        _seen="$_seen$_b "
+        _rc=0; (cd "$SCRIPT_DIR" && "$_b" validator-surface-hash --check >/dev/null 2>&1) || _rc=$?
+        case "$_rc" in
+            0) echo "ok:ci-full-plan-binary:current:$_b" >&2 ;;
+            3) _stale="${_stale:+$_stale }$_b" ;;
+            *) echo "note:ci-full-plan-binary:unknown:$_b rc=$_rc — not a freshness verdict" >&2 ;;
+        esac
+    done <<< "$_cands"
+    [ -n "$_stale" ] || return 0
+    echo "stale:ci-full-plan-binary:$_stale — rebuilding: cargo build --release -p tillandsias-plan" >&2
+    (cd "$SCRIPT_DIR" && cargo build --release -p tillandsias-plan) >&2 || true
+    for _b in $_stale; do
+        _rc=0; (cd "$SCRIPT_DIR" && "$_b" validator-surface-hash --check >/dev/null 2>&1) || _rc=$?
+        if [ "$_rc" -eq 3 ]; then
+            _still="${_still:+$_still }$_b"
+        else
+            echo "ok:ci-full-plan-binary:rebuilt:$_b" >&2
+        fi
+    done
+    [ -n "$_still" ] || return 0
+    echo "refused:ci-full-plan-binary:stale-after-rebuild:$_still" >&2
+    _afford "a plan binary the pre-build litmus can resolve still embeds an older validator surface than this checkout (1925-77h4)" \
+        "rebuild or remove each named copy (cargo build --release -p tillandsias-plan builds only \${CARGO_TARGET_DIR:-target}), then re-run --ci-full"
+    return 1
+}
+# END-PLAN-BIN-CURRENT
+
 _prepare_ci_full_install_inputs() {
     [[ "$FLAG_CI_FULL" == true ]] || return 0
     [[ "$FLAG_INSTALL" == true ]] || return 0
@@ -3173,6 +3221,7 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
         export TILLANDSIAS_CI_RUN_ID
         _step "Running full CI/CD validation (pre-build gate)..."
         _prepare_ci_full_install_inputs
+        _ci_full_plan_bins_current || exit 1
         CI_ARGS=(--phase pre-build)
     else
         _step "Running quick CI/CD validation (pre-build gate, fast mode)..."
