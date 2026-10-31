@@ -780,7 +780,7 @@ probe_mirror_reachable() {
     if [[ $lsrc -eq 0 && -n "$lsout" ]]; then
         return 0                       # resolvable AND serving refs
     fi
-    if echo "$lsout" | grep -qi "unable to look up\|Name or service not known\|Could not resolve"; then
+    if grep -qi "unable to look up\|Name or service not known\|Could not resolve" <<<"$lsout"; then
         class="alias-unresolvable"
     elif [[ $lsrc -eq 0 ]]; then
         class="serving-but-no-refs"
