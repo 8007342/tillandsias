@@ -1,0 +1,37 @@
+# @trace order:1861-nmpp (spec: openspec/changes/web-studio-lanes)
+# GrapesJS web studio, a forge sibling: a visual editor on a project's static
+# site, saving into the project checkout through a local storage endpoint.
+#
+# Operator scope (2026-10-31, relayed by macuahuitl): the open-source GrapesJS
+# CORE only (BSD-3-Clause), never the GrapesJS Studio SDK, its cloud, or
+# anything needing a licence key. The core is vendored at build time from the
+# npm tarball, verified against its pinned sha512 integrity, so nothing is
+# fetched at run time; the studio runs with no egress. Its LICENSE ships in
+# /opt/studio/vendor/grapesjs/LICENSE.
+FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90
+
+ARG GRAPESJS_VERSION=0.23.8
+ARG GRAPESJS_INTEGRITY=sha512-4+HvGRnWK0IbFva2FUxu6GXA3/BFGq0vRaeJ8MhhFR5O42wq9T7rKxChYLKgEmplHb2ea9HsfIzJtsEibeYv7w==
+LABEL io.tillandsias.web-studio.engine="grapesjs" \
+      io.tillandsias.web-studio.grapesjs-version="${GRAPESJS_VERSION}" \
+      io.tillandsias.web-studio.grapesjs-integrity="${GRAPESJS_INTEGRITY}" \
+      io.tillandsias.web-studio.licence="BSD-3-Clause"
+
+WORKDIR /opt/studio
+COPY vendor.mjs /opt/studio/vendor.mjs
+# The tarball is verified against the pinned integrity, not trusted from the
+# version name; only dist/ and LICENSE are kept.
+RUN node /opt/studio/vendor.mjs "$GRAPESJS_VERSION" "$GRAPESJS_INTEGRITY" /opt/studio/vendor/grapesjs \
+    && test -f /opt/studio/vendor/grapesjs/LICENSE \
+    && test -f /opt/studio/vendor/grapesjs/dist/grapes.min.js \
+    && test -f /opt/studio/vendor/grapesjs/dist/css/grapes.min.css \
+    && rm /opt/studio/vendor.mjs
+
+COPY server.mjs editor.html /opt/studio/
+RUN useradd -u 1001 -m -s /usr/sbin/nologin studio \
+    && mkdir -p /project && chown studio:studio /project
+
+USER studio
+EXPOSE 8090
+ENV STUDIO_PROJECT=/project STUDIO_PORT=8090
+ENTRYPOINT ["node", "/opt/studio/server.mjs"]
