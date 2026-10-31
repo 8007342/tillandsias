@@ -15788,7 +15788,13 @@ fn launch_observatorium_browser(
 
     send_issue_web_session(&project_label, &otp)
         .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &app_url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         return Err(format!(
             "Observatorium app did not become reachable with a registered session: {err}"
         ));
@@ -17229,6 +17235,10 @@ fn wait_for_authenticated_opencode_web(
     project_name: &str,
     url: &str,
     cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
+    // ORDER 1863-eckw: re-sends IssueWebSession. A 401 means the router
+    // sidecar never received the session, which happens when it was still
+    // reconnecting to a freshly spawned tray (measured: 19 probes, all 401).
+    reregister: &mut dyn FnMut() -> Result<(), String>,
     debug: bool,
 ) -> Result<(), String> {
     let cookie_header = format!(
@@ -17247,6 +17257,16 @@ fn wait_for_authenticated_opencode_web(
     while start.elapsed() < timeout {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
+            Ok(401) => {
+                last_outcome =
+                    String::from("status 401 (session not at the router yet; re-registered)");
+                let _ = reregister();
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(502) => {
                 last_outcome = String::from("status 502 (starting)");
                 if debug {
@@ -17859,6 +17879,23 @@ fn send_issue_web_session(_project_label: &str, _cookie_value: &[u8; 32]) -> Res
     )
 }
 
+/// ORDER 1863-eckw. The tray the launcher saw at startup can exit before the
+/// web session is registered (it was shutting down when probed), leaving no
+/// control socket. A connect failure therefore spawns a tray and retries
+/// once; any other failure (a wrong reply, a timeout) is returned unchanged.
+fn register_web_session_with_tray_retry(
+    mut send: impl FnMut() -> Result<(), String>,
+    spawn_tray: impl FnOnce(),
+) -> Result<(), String> {
+    match send() {
+        Err(e) if e.starts_with("Failed to connect to control socket") => {
+            spawn_tray();
+            send()
+        }
+        other => other,
+    }
+}
+
 fn launch_opencode_web_browser(
     project_name: &str,
     certs_dir: &Path,
@@ -17924,12 +17961,25 @@ fn launch_opencode_web_browser(
     // cookie. If the handshake fails (no tray, wrong reply, timeout) we
     // refuse to launch the browser to prevent the "unauthorised" landing
     // page that used to result from the race.
-    send_issue_web_session(&project_label, &otp).map_err(|e| {
+    register_web_session_with_tray_retry(
+        || send_issue_web_session(&project_label, &otp),
+        || {
+            let lane = cli_reserved_lane(Some(project_name), true);
+            maybe_spawn_detached_tray_for_cli(false, lane.as_deref(), debug);
+        },
+    )
+    .map_err(|e| {
         let _ =
             emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
         format!("Failed to register web session with router: {e}")
     })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
         return Err(err);
     }
@@ -26097,6 +26147,42 @@ mod tests {
             .map(String::from)
             .to_vec();
         assert_eq!(attached_run_args(&explicit), explicit);
+    }
+
+    /// ORDER 1863-eckw, measured on yoga 2026-10-30: the launcher saw a tray
+    /// on control.sock, skipped spawning one, and that tray exited before the
+    /// web session was registered, so registration failed ENOENT and the web
+    /// forge ran with no session. A connect failure now spawns a tray and
+    /// retries once; any other failure is returned as-is.
+    #[test]
+    fn a_web_session_whose_tray_vanished_spawns_one_and_retries() {
+        let mut sends = 0;
+        let mut spawned = 0;
+        let ok = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                if sends == 1 {
+                    Err("Failed to connect to control socket /run/x/control.sock: No such file or directory (os error 2)".into())
+                } else {
+                    Ok(())
+                }
+            },
+            || spawned += 1,
+        );
+        assert_eq!(ok, Ok(()));
+        assert_eq!((sends, spawned), (2, 1));
+
+        let mut sends = 0;
+        let mut spawned = 0;
+        let refused = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                Err("tray replied with an unexpected message".into())
+            },
+            || spawned += 1,
+        );
+        assert!(refused.is_err());
+        assert_eq!((sends, spawned), (1, 0), "only a connect failure respawns");
     }
 
     /// ORDER 1911-3dqo: a rejoin finds the one running forge of a project,
