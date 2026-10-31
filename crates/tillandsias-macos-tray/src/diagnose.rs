@@ -871,6 +871,46 @@ impl AsyncWrite for ControlWireStream {
     }
 }
 
+/// Order 1925-cxch: run one CLI session's credential exchange over a fresh
+/// control-wire connection. Best-effort and loud: a failure is printed and the
+/// session goes on, because a guest whose Vault needs nothing must not be held
+/// up, and one that does will say so at its ready gate.
+async fn cli_credential_exchange(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    session: &crate::installation_uuid::CliCredentialExchange,
+    when: &str,
+) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream = match open_control_wire_stream(
+        vz,
+        CONTROL_WIRE_VSOCK_PORT,
+        std::time::Duration::from_secs(30),
+    )
+    .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[tillandsias-tray] credential exchange ({when}): connect: {e}");
+            return;
+        }
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 3,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(e) = client.handshake().await {
+        eprintln!("[tillandsias-tray] credential exchange ({when}): handshake: {e}");
+        return;
+    }
+    if let Err(e) = session.exchange(&mut client).await {
+        eprintln!("[tillandsias-tray] credential exchange ({when}): {e}");
+    }
+}
+
 async fn open_control_wire_stream(
     vz: &tillandsias_vm_layer::vz::VzRuntime,
     port: u32,
@@ -1715,6 +1755,8 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        cli_credential_exchange(&vz, &credentials, "boot").await;
         eprintln!("[exec-guest] waiting for the guest service to answer…");
         // ORDER 1751-ipuw: Ready now waits for Vault to be unsealed, and
         // exec-guest is the tool for diagnosing a guest whose Vault is NOT
@@ -1780,6 +1822,7 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
                 }
             }
         };
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
         report_exec(result)
     })
@@ -2659,6 +2702,8 @@ pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        cli_credential_exchange(&vz, &credentials, "boot").await;
         eprintln!("[opencode] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
@@ -2691,6 +2736,7 @@ pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
             let _ = std::io::stdout().flush();
         })
         .await;
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
