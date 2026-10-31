@@ -947,6 +947,29 @@ pub(crate) fn lane_accepting(project: &str, instance: &str) -> bool {
     UnixStream::connect(mcp_socket_path_for_lane(project, instance)).is_ok()
 }
 
+/// ORDER 1911-3dqo. Serve lane `(project, instance)` again after the process
+/// that bound it died while its forge kept running (systemd-oomd killed the
+/// launcher on lenovinha 2026-10-28). The lane is handed to the tray first,
+/// so a tray adopts it on its next tick even if this rejoin dies too; when
+/// nothing answers yet, this process binds it, reclaiming the refusing
+/// socket the dead launcher left.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub(crate) fn serve_lane_for_rejoin(project: &str, instance: &str) -> Result<(), String> {
+    mark_lane_tray_owned(project, instance)?;
+    if !lane_accepting(project, instance) {
+        start_mcp_socket_server_for_lane(project, instance)?;
+    }
+    if lane_accepting(project, instance) {
+        Ok(())
+    } else {
+        Err(format!(
+            "lane {project}-{} does not answer on {}",
+            lane_instance(instance),
+            mcp_socket_path_for_lane(project, instance).display()
+        ))
+    }
+}
+
 /// The lane a socket dir's marker names, when it names exactly the dir it
 /// sits in: a marker cannot point the tray at another lane's socket.
 fn marked_lane(dir: &std::path::Path) -> Option<LaneListenerKey> {
@@ -1478,6 +1501,25 @@ mod lane_adoption_tests {
         cleanup(&key);
         assert_eq!(adopted, vec![key.clone()]);
         assert!(answered, "pre-fix: connect() on the lane socket is refused");
+    }
+
+    /// ORDER 1911-3dqo: systemd-oomd killed the launcher and the forge kept
+    /// running; the lane socket it bound was left refusing. A rejoin must make
+    /// the lane answer again, and hand it to the tray so the next launcher
+    /// death does not repeat this.
+    #[test]
+    fn a_rejoin_serves_a_lane_whose_launcher_was_killed() {
+        let (key, _rt) = lane("rejoin");
+        let path = leave_stale_socket(&key);
+
+        let served = serve_lane_for_rejoin(&key.0, &key.1);
+
+        let answered = UnixStream::connect(&path).is_ok();
+        let marked = path.parent().unwrap().join(LANE_TRAY_MARKER).is_file();
+        cleanup(&key);
+        assert_eq!(served, Ok(()));
+        assert!(answered, "pre-fix: connect() on the lane socket is refused");
+        assert!(marked, "the rejoined lane is handed to the tray");
     }
 
     #[test]
