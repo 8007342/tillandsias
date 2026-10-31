@@ -29,10 +29,12 @@
 --     comment counts, which is why the surface list is explicit and short
 --     rather than the transitive closure of every script (that would trade a
 --     loud false ORPHAN for a silent false ACTIVE);
---   * the population is scripts/check-*.sh ONLY — a Lua decider is not
---     audited here. Every shell-to-Lua port therefore removes a guard from this
---     audit; 1577-ct29 widens the population. Kept identical to the .sh here
---     so this commit is a pure port.
+--   * the population is scripts/check-*.sh AND the Lua deciders
+--     scripts/lua/{check,audit,verify}-*.lua (1577-ct29): before that, every
+--     shell-to-Lua port silently REMOVED its guard from this audit (831-ezea,
+--     a check that narrows its own denominator). A Lua guard is matched on
+--     its basename (check-x.lua), which every STEP_LUA and _run_lua_decider
+--     site names literally.
 --
 -- THE SYMLINK HISTORY, and why this walker does not need to follow links. The
 -- runtime skill dirs (.claude/skills, .opencode, .codex, .gemini, .github) are
@@ -129,26 +131,36 @@ end
 -- A guard referencing its OWN name, and this auditor (either form), never
 -- count as an invoker.
 local function find_invoker(name)
+    local needle = name:match("[^/]+$")
     for _, s in ipairs(SURFACES) do
         for _, p in ipairs(files_of(s)) do
             if not (ends_with(p, "scripts/" .. name) or ends_with(p, "scripts/audit-guard-activation.sh")
                     or ends_with(p, "scripts/lua/audit-guard-activation.lua")) then
                 local c = read(p)
-                if c and c:find(name, 1, true) then return p end
+                if c and c:find(needle, 1, true) then return p end
             end
         end
     end
     return nil
 end
 
--- The population: scripts/check-*.sh, direct children, byte-ordered.
+-- The population: scripts/check-*.sh and scripts/lua/{check,audit,verify}-*.lua
+-- (this auditor excluded), direct children, byte-ordered; a Lua guard is named
+-- lua/<file> so a .sh and a .lua of the same stem stay distinct.
 local population = {}
 do
     local ok_w, walked = pcall(fs.walk, "scripts")
     if ok_w then
         for _, p in ipairs(walked) do
             local rel = p:sub(#"scripts/" + 1)
-            if not rel:find("/", 1, true) and rel:match("^check%-.*%.sh$") then population[#population + 1] = rel end
+            if not rel:find("/", 1, true) and rel:match("^check%-.*%.sh$") then
+                population[#population + 1] = rel
+            elseif rel:match("^lua/[^/]+%.lua$") and rel ~= "lua/audit-guard-activation.lua" then
+                local base = rel:sub(#"lua/" + 1)
+                if base:match("^check%-") or base:match("^audit%-") or base:match("^verify%-") then
+                    population[#population + 1] = rel
+                end
+            end
         end
     end
     table.sort(population)
@@ -170,7 +182,7 @@ end
 
 if total == 0 then
     verdict.emit("violation:guard-activation:population=0 total=0 active=0 orphan=0 verdict=unavailable:no-guards-enumerated", 1,
-        "scripts/check-*.sh matched no files — the audit proved nothing. Zero guards in a repo that ships dozens means a broken checkout, a moved scripts/ directory, or a renamed guard prefix; it does not mean every guard is active.")
+        "scripts/check-*.sh and scripts/lua/check-*.lua matched no files — the audit proved nothing. Zero guards in a repo that ships dozens means a broken checkout, a moved scripts/ directory, or a renamed guard prefix; it does not mean every guard is active.")
 end
 local counts = string.format("population=%d total=%d active=%d orphan=%d", total, total, active, orphan)
 if orphan == 0 then
