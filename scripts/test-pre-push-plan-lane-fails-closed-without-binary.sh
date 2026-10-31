@@ -83,6 +83,14 @@ G() { git -c user.email=t@t -c user.name=t "$@"; }
 git init -q --bare "$W/bare.git"
 git init -q -b linux-next "$W/wc"
 cd "$W/wc" || exit 2
+# ORDER 1926-pmau: build.sh and local-ci.sh export TILLANDSIAS_SURFACE_ROOT at
+# the GATING checkout (1925-ided). Every push below is from this scratch repo,
+# which has no validator-surface manifest of its own, so an inherited root
+# made the binary compare its build surface against the gating checkout and
+# read "stale" whenever the two differ — arm 2 refused for the host's install
+# state, not the lane. Unset it so the binary uses its own build checkout,
+# exactly what an ungated push from a manifest-less repo resolves.
+unset TILLANDSIAS_SURFACE_ROOT
 git remote add origin "$W/bare.git"
 # core.hooksPath is GLOBAL and OVERRIDES .git/hooks — pin it per scratch repo,
 # or a forge's ~/.gitconfig substitutes the real hooks for the one under test.
