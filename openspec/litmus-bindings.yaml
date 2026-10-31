@@ -577,6 +577,7 @@ specs:
   - litmus:git-mirror-ref-convergence
   - litmus:git-mirror-existing-volume-hardening
   - litmus:git-mirror-yaml-gate-shape
+  - litmus:git-mirror-yaml-gate-accepts-plain-dates
   - litmus:git-mirror-relay-verified-ack
   - litmus:git-mirror-vault-agent-auto-auth
   - litmus:forge-gitconfig-bidirectional-quarantine
