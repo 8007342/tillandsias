@@ -1521,6 +1521,12 @@ fn main() {
     }
 
     if let Some(studio) = studio_id.as_deref() {
+        // A studio that cannot launch is refused before a tray companion is
+        // spawned: that companion reconciles the enclave as it starts.
+        if let Err(e) = studio::WebLane::studio(studio) {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
         let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
         maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
         if let Some(project_path) = config_path {
