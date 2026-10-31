@@ -3,13 +3,13 @@ name: litmus:git-mirror-seed-failure-surfaced-shape
 spec: git-mirror-service
 phase: pre-build
 description: >
-  Order 778-hb3x criterion 3. The launcher's seeded-gate
-  (wait_for_git_mirror_ready) surfaces the mirror's own seed-fetch failure line
-  while it waits and when it gives up, so a wait that can never succeed is
-  visibly different from a slow first seed. This pins the cross-component half:
-  the marker the launcher searches for is the one images/git/entrypoint.sh
-  prints in both failure arms, and the gate reads the mirror log in both
-  places. The extraction itself is unit-tested (mirror_seed_failure_tests).
+  Order 778-hb3x criterion 3. When the launcher refuses a mirror another
+  launch started and has not seeded (adopted_mirror_outcome, 1922-unwt), the
+  refusal carries the mirror's own seed-fetch failure line, so a seed that can
+  never succeed is visibly different from a slow one. This pins the
+  cross-component half: the marker the launcher searches for is the one
+  images/git/entrypoint.sh prints in both failure arms, and the refusal reads
+  the mirror log. The extraction itself is unit-tested (mirror_seed_failure_tests).
 severity: medium
 size: instant
 
@@ -34,7 +34,7 @@ observability:
   log_fields:
     spec: "git-mirror-service"
     test: "git-mirror-seed-failure-surfaced-shape"
-    artifact: "crates/tillandsias-headless/src/main.rs (wait_for_git_mirror_ready) + images/git/entrypoint.sh"
+    artifact: "crates/tillandsias-headless/src/main.rs (adopted_mirror_outcome) + images/git/entrypoint.sh"
 
 rollback:
   on_failure: >
