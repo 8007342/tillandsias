@@ -54,8 +54,25 @@ require_source crates/tillandsias-vm-layer/src/wsl.rs \
     'ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock {port}'
 require_source crates/tillandsias-windows-tray/src/wsl_lifecycle.rs \
     'ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420'
+# 1928-s9ae: BOTH trays launch a forge in the guest by the CLOUD form. Since
+# 776-jcf3 the guest refuses local-checkout launches; #751 (1925-mcld) moved
+# macOS off `--opencode {path}` onto `--cloud {} --opencode`, the form the
+# Windows tray already used through tillandsias-host-shell's launch_spec.
 require_source crates/tillandsias-macos-tray/src/diagnose.rs \
-    'exec /usr/local/bin/tillandsias-headless --opencode {path}'
+    'exec /usr/local/bin/tillandsias-headless --cloud {} --opencode'
+require_source crates/tillandsias-host-shell/src/pty/mod.rs \
+    'GUEST_HEADLESS_BIN.to_string(),'
+require_source crates/tillandsias-host-shell/src/pty/mod.rs \
+    '"--cloud".to_string(),'
+require_source crates/tillandsias-windows-tray/src/notify_icon.rs \
+    'use tillandsias_host_shell::pty::{PtyIntent, intent_for_action, launch_spec};'
+# And the retired local-checkout form must not come back on either tray.
+for surface in crates/tillandsias-macos-tray/src crates/tillandsias-windows-tray/src crates/tillandsias-host-shell/src; do
+    if grep -rnF -- 'tillandsias-headless --opencode {path}' "$surface"; then
+        echo "FAIL: the retired local-checkout launch form is back in $surface (776-jcf3)" >&2
+        exit 1
+    fi
+done
 
 for surface in \
     crates/tillandsias-vm-layer/src \

@@ -29,6 +29,7 @@ size: instant
 
 preconditions:
   - workspace contains scripts/test-spawn-failure-names-program.sh
+  - workspace contains scripts/test-spawn-program-captured-before-spawn.sh
   - a cargo toolchain is resolvable, or the fixture skips by name
 
 critical_path:
@@ -43,7 +44,9 @@ critical_path:
     expected_behavior: "ok:spawn-failure-names-program:2/2"
 
   - step: "the program name is captured BEFORE the spawn, because the spawn borrows the command mutably"
-    command: "p=$(grep -n 'let program = command' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1); s=$(grep -n 'spawn_caller_owned_lifetime()' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1); [ -n \"$p\" ] && [ -n \"$s\" ] && [ \"$p\" -lt \"$s\" ] && echo 'ok: program captured before spawn'"
+    # 1928-s9ae: scoped to the enclosing function; the whole-file first-occurrence
+    # compare went red when 1911-3dqo added an unrelated earlier spawn.
+    command: "bash scripts/test-spawn-program-captured-before-spawn.sh"
     timeout_ms: 10000
     expected_behavior: "ok: program captured before spawn"
 
