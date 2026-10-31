@@ -33,6 +33,7 @@ RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
         diffutils patch file gettext diffstat \
         iproute iputils socat nmap-ncat sqlite \
         inotify-tools \
+        lua lua-filesystem lua-lpeg \
     && git lfs install --system \
     && microdnf clean all \
     && rustc_v="$(rpm -q --qf '%{VERSION}-%{RELEASE}' rust)" \
