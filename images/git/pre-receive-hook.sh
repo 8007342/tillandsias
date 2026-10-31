@@ -53,6 +53,8 @@ else
     log_msg "WARNING: no YAML validator found (tillandsias-policy or ruby)"
 fi
 
+RUBY_YAML_LOAD='YAML.safe_load_file(ARGV[0], permitted_classes: [Date, Time, Symbol], aliases: true)'
+
 # --- Validate a single YAML file content ---
 # Args: $1 = file path (for logging), $2 = temp file path with content
 validate_yaml_file() {
@@ -72,11 +74,14 @@ validate_yaml_file() {
             fi
             ;;
         ruby)
-            if ruby -ryaml -e "YAML.load_file(ARGV[0])" "$tmpfile" 2>/dev/null; then
+            # 1863-mqiw: Psych 4 makes load_file a safe load that refuses Date, so
+            # the plain `created: 2026-10-25` openspec writes rejected the push.
+            # Permit what yq loads: dates, times, symbols and aliases.
+            if ruby -rdate -ryaml -e "$RUBY_YAML_LOAD" "$tmpfile" 2>/dev/null; then
                 return 0
             else
                 log_msg "REJECT: $label failed YAML validation (ruby)"
-                ruby -ryaml -e "YAML.load_file(ARGV[0])" "$tmpfile" 2>&1 | while IFS= read -r line; do
+                ruby -rdate -ryaml -e "$RUBY_YAML_LOAD" "$tmpfile" 2>&1 | while IFS= read -r line; do
                     log_msg "  $line"
                 done
                 return 1
