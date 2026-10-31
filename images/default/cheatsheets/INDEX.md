@@ -101,6 +101,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - java.md                          — writing Java in the forge — modern syntax, common stdlib, patterns. [pull-on-demand: stub]
 - javascript.md                    — writing modern JS in the forge — Node scripts, browser code, glue. [bundled, partial-verify]
 - json.md                          — producing or consuming JSON in the forge — config files, API payloads, jq targe… [bundled, partial-verify]
+- lua.md [DRAFT]                   — ## Provenance [pull-on-demand: stub]
 - markdown.md                      — writing READMEs, cheatsheets, OpenSpec docs, anything in this repo. [pull-on-demand: stub]
 - python.md                        — writing Python in the forge — syntax, idioms, packaging. [bundled, partial-verify]
 - rust.md                          — writing Rust in the forge — syntax, ownership idioms, common stdlib. [bundled, partial-verify]
