@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: enclave-services-announce-readiness-as-events
+    field: next_action
+    value: 'Nothing is built yet. Left: pick sdnotify vs health_status per service (vault and mirror need an app-level ready, not a port), emit READY from each entrypoint, map it into PodmanEventStream records, then capture one launch per platform. EVIDENCE (yolanda-windows, v56.10.31.1 smoke 2026-10-31, plan/issues/smoke-e2e-findings-v56.10.31.1-windows-2026-10-31-yolanda.md at 4377c99c2): the forge lane (tillandsias-headless --cloud 8007342/ranitas --opencode, a systemd-run unit in the guest, tray running) refused twice, deterministically, with "readiness gate: a hard requirement is not ready (tillandsias-proxy: no ready event within 125s)". The proxy WAS ready: the tray''s resident headless logged event:service_ready service=proxy at 17:18:51Z, podman showed it healthy with restarts=0, and it carried the lane''s github tunnels during the wait. The lane is a SECOND headless process started about 8 min later, so its gate waits for a NEW ready event that an application-lifetime service (vault, proxy, router, nix-cache) already sent before the lane existed. A fix has to let a late subscriber read current readiness (replay or a state query), not only future events. The same shape is reported on macOS.'
+    ts: "2026-10-31T17:35:11Z"
+    host: yolanda-windows
+    replaces_sha256: "09097bce180d351b68d55374984ca47ea995aa6eefca758ed980247f3744e79e"
