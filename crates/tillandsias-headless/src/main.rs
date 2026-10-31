@@ -33503,9 +33503,47 @@ esac
         saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
     }
 
+    /// 1932-4hwq: where a scratch home may live. A forge exports TMPDIR inside
+    /// the real HOME (/home/forge/.cache/...), so a tempdir there IS under the
+    /// real home and the 1898-hyhf guard rightly refuses it. Take the first of
+    /// TMPDIR, XDG_RUNTIME_DIR and /tmp that exists and is outside the passwd
+    /// home; with none, refuse loudly rather than weaken the guard.
+    #[cfg(unix)]
+    fn scratch_base() -> PathBuf {
+        let real = passwd_home().filter(|h| h.as_os_str().len() > 1);
+        let candidates = [
+            Some(std::env::temp_dir()),
+            std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+            Some(PathBuf::from("/tmp")),
+        ];
+        for c in candidates.into_iter().flatten() {
+            if c.as_os_str().is_empty() || !c.is_dir() {
+                continue;
+            }
+            match &real {
+                Some(h) if c.starts_with(h) => continue,
+                _ => return c,
+            }
+        }
+        panic!(
+            "1932-4hwq: no scratch root outside the real home ({:?}): TMPDIR, \
+             XDG_RUNTIME_DIR and /tmp are all inside it or missing",
+            real
+        );
+    }
+
+    /// No passwd home off unix (and no 1898-hyhf guard to trip): TMPDIR is fine.
+    #[cfg(not(unix))]
+    fn scratch_base() -> PathBuf {
+        std::env::temp_dir()
+    }
+
     impl ScratchHome {
         fn new() -> Self {
-            let root = tempfile::tempdir().expect("scratch home");
+            let root = tempfile::Builder::new()
+                .prefix("scratch-home-")
+                .tempdir_in(scratch_base())
+                .expect("scratch home");
             let run = root.path().join("run");
             std::fs::create_dir_all(&run).expect("scratch runtime dir");
             let saved = ["HOME", "XDG_RUNTIME_DIR", "TILLANDSIAS_HOST_KIND"]
@@ -33640,6 +33678,14 @@ esac
             .join("ca"),
         )
         .expect_err("the real home must be refused");
+        // 1932-4hwq: a scratch dir INSIDE the real home (a forge's TMPDIR) is
+        // still refused; ScratchHome avoids it, the guard does not excuse it.
+        refuse_real_home_in_test(&real.join(".cache/tillandsias-project/tmp/.tmpX/ca"))
+            .expect_err("a scratch dir under the real home must be refused");
+        assert!(
+            !ScratchHome::new().path().starts_with(&real),
+            "1932-4hwq: ScratchHome must land outside the real home"
+        );
         assert!(err.contains("1898-hyhf"), "{err}");
     }
 
