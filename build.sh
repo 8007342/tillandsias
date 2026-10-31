@@ -4851,6 +4851,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "./build.sh --changed no longer scopes by input, or no longer fails safe to the full gate (1916-tsel)"
         exit 1
     fi
+    _step "Checking --changed runs its selected fixtures in a bounded pool (1931-steb)..."
+    if ! _run_lua_decider "scripts/lua/test-gate-changed-parallel-fixtures.lua" 2>&1; then
+        _error "./build.sh --changed's fixture pool lost its order, isolation, serial rule or concurrency (1931-steb)"
+        exit 1
+    fi
     _info "--changed input-selection fixture passed"
 
     # ORDER 1916-tsel — the shared-timing-log leak check names a step only for
