@@ -166,11 +166,22 @@ do
     table.sort(population)
 end
 
+-- DELIBERATE EXCEPTIONS: guards that exist on purpose without a gate surface.
+-- Each carries its reason; it is reported `exempt:` and counted active, so the
+-- exception is visible on every run rather than silently skipped.
+local EXEMPT = {
+    ["lua/check-imagegen-tier-sources-ungated.lua"] =
+        "needs egress to huggingface.co (reads each tier's gated flag); kept out of the offline gate on purpose (1921-qqfz)",
+}
+
 local total, active, orphan = #population, 0, 0
 local orphans = {}
 for _, name in ipairs(population) do
     local inv = find_invoker(name)
-    if inv then
+    if not inv and EXEMPT[name] then
+        active = active + 1
+        out.line(string.format("exempt:  %-45s (%s)", name, EXEMPT[name]))
+    elseif inv then
         active = active + 1
         out.line(string.format("active:  %-45s <- %s", name, inv))
     else
