@@ -1,0 +1,141 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: triage of the six OpenSpec changes over 90 days old (coordinator queue, 2026-10-31).
+packets:
+- packet_id: openspec-change-artifact-namespace-prefix-versioning-is-stale-over-90-days-triage-abandoned
+  order: 1935-m5ps
+  status: ready
+  kind: maintenance
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - openspec
+  - maintenance
+  - docs
+  estimated_hours: 1
+  title: "OpenSpec change artifact-namespace-prefix-versioning is over 90 days old and warns on every commit; triage: abandoned"
+  context: '0 of 23 tasks done; last touched 2026-05-24; no implementation found (no artifact namespace prefix in crates/ or scripts/ beyond lib-env-forward''s unrelated env prefix).'
+  exit_criteria:
+  - openspec/changes/artifact-namespace-prefix-versioning is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  next_action: 'Operator decides: archive as abandoned (openspec archive --skip-specs) or re-plan. Recommendation: archive as abandoned; its versioning delta was never applied.'
+  provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
+  events:
+  - type: filed
+    ts: '2026-10-31T20:26:29Z'
+    host: calmecacpilli
+    summary: filed p3 triage (abandoned)
+- packet_id: openspec-change-control-wire-pty-attach-is-stale-over-90-days-triage-likely-implemented-unticked
+  order: 1935-dape
+  status: ready
+  kind: maintenance
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - openspec
+  - maintenance
+  - docs
+  estimated_hours: 1
+  title: "OpenSpec change control-wire-pty-attach is over 90 days old and warns on every commit; triage: likely-implemented-unticked"
+  context: '12 of 39 tasks ticked; last touched 2026-05-25. PTY attach over vsock/hvsocket exists in crates/tillandsias-macos-tray/src/terminal_attach.rs, crates/tillandsias-windows-tray/src/hvsocket.rs and crates/tillandsias-host-shell/src/vsock_client.rs.'
+  exit_criteria:
+  - openspec/changes/control-wire-pty-attach is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  next_action: 'A macOS or Windows host verifies the remaining tasks against the trays, ticks them, then archives with spec sync into openspec/specs/vsock-transport. Not verifiable on a Linux low-end host.'
+  provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
+  events:
+  - type: filed
+    ts: '2026-10-31T20:26:29Z'
+    host: calmecacpilli
+    summary: filed p3 triage (likely-implemented-unticked)
+- packet_id: openspec-change-dev-control-mcp-is-stale-over-90-days-triage-partly-live
+  order: 1935-w558
+  status: ready
+  kind: maintenance
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - openspec
+  - maintenance
+  - docs
+  estimated_hours: 1
+  title: "OpenSpec change dev-control-mcp is over 90 days old and warns on every commit; triage: partly-live"
+  context: '5 of 26 tasks ticked; last touched 2026-07-28. openspec/specs/mcp-tool-socket exists; the dev-control-mcp capability spec has no main spec.'
+  exit_criteria:
+  - openspec/changes/dev-control-mcp is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  next_action: 'Owner of the MCP socket work decides which open tasks still apply; split live tasks into plan rows and archive, or keep the change and refresh tasks.md.'
+  provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
+  events:
+  - type: filed
+    ts: '2026-10-31T20:26:29Z'
+    host: calmecacpilli
+    summary: filed p3 triage (partly-live)
+- packet_id: openspec-change-i18n-localization-wave-17-is-stale-over-90-days-triage-partly-live
+  order: 1935-9upa
+  status: ready
+  kind: maintenance
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - openspec
+  - maintenance
+  - docs
+  estimated_hours: 1
+  title: "OpenSpec change i18n-localization-wave-17 is over 90 days old and warns on every commit; triage: partly-live"
+  context: '23 of 36 tasks ticked; last touched 2026-05-14. locales/ already carries fr.toml and ja.toml (and ar, hi, it, ko, nah).'
+  exit_criteria:
+  - openspec/changes/i18n-localization-wave-17 is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  next_action: 'A host that can run the localization checks ticks what landed, files rows for the rest, then archives with spec sync.'
+  provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
+  events:
+  - type: filed
+    ts: '2026-10-31T20:26:29Z'
+    host: calmecacpilli
+    summary: filed p3 triage (partly-live)
+- packet_id: openspec-change-macos-tray-build-and-release-is-stale-over-90-days-triage-likely-implemented-unticked
+  order: 1935-uaez
+  status: ready
+  kind: maintenance
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - openspec
+  - maintenance
+  - docs
+  estimated_hours: 1
+  title: "OpenSpec change macos-tray-build-and-release is over 90 days old and warns on every commit; triage: likely-implemented-unticked"
+  context: '1 of 47 tasks ticked; last touched 2026-08-09. .github/workflows/release.yml has a macos release job tracing spec:macos-tray-build-and-release, and scripts/build-macos-tray.sh exists. The delta spec still says cargo build while the script prereqs name zig/cargo-zigbuild, so the delta has drifted. The coordinator''s ghost-trace concern does not reproduce: scripts/trace-coverage.sh --ghosts reports no ghost traces (the trace resolves through the change spec).'
+  exit_criteria:
+  - openspec/changes/macos-tray-build-and-release is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  next_action: 'A macOS host reconciles the delta spec with scripts/build-macos-tray.sh and the release job, ticks tasks, then archives with spec sync.'
+  provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
+  events:
+  - type: filed
+    ts: '2026-10-31T20:26:29Z'
+    host: calmecacpilli
+    summary: filed p3 triage (likely-implemented-unticked)
+- packet_id: openspec-change-vm-recipe-provisioning-is-stale-over-90-days-triage-superseded
+  order: 1935-wxpw
+  status: ready
+  kind: maintenance
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - openspec
+  - maintenance
+  - docs
+  estimated_hours: 1
+  title: "OpenSpec change vm-recipe-provisioning is over 90 days old and warns on every commit; triage: superseded"
+  context: '7 of 47 tasks ticked; last touched 2026-05-25. Its premise (owner stance 2026-05-24: Tillandsias ships no Linux binaries) is contradicted by today''s release, which builds and publishes musl-static Linux binaries for both arches (release.yml ''Build musl-static binaries via Nix'').'
+  exit_criteria:
+  - openspec/changes/vm-recipe-provisioning is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  next_action: 'Operator decides: archive as superseded (openspec archive --skip-specs), or restate the stance. Recommendation: archive as superseded.'
+  provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
+  events:
+  - type: filed
+    ts: '2026-10-31T20:26:29Z'
+    host: calmecacpilli
+    summary: filed p3 triage (superseded)
