@@ -57,7 +57,11 @@
 # fail paths violated it; the fixture caught it on its first run.
 set -uo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# TILLANDSIAS_FLEET_ACTIVITY_ROOT: a repo to report on instead of this one, for
+# the fixture's scratch repo only (1931-66u5). Without it the fixture's
+# "--since 10.years" arm scanned THIS repo's whole history (126 s on pirria),
+# hit its own `timeout 60` and still passed, and flaked a land run (#712).
+ROOT="${TILLANDSIAS_FLEET_ACTIVITY_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT" || exit 2
 
 WINDOW="3.hours"

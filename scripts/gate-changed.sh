@@ -362,26 +362,60 @@ fi
 # selection and the fixture silently did not run (measured: 3 of 85 selected
 # ran). Read through \037, which is not whitespace and keeps empty fields.
 cut -f1 "$WORK/fx-sel" > "$WORK/fx-sel.ids"
-while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
-    grep -qxF -- "$_id${_args:+ $_args}" "$WORK/fx-sel.ids" || continue
-    _ran=$((_ran + 1)); _s="$(_now)"; _out="$WORK/out.$_ran"
-    if [ "$_runner" = lua ]; then
-        if [ -z "$_plan" ]; then echo "could-not-run:gate-changed:no-plan-binary:$_path"; _fail=$((_fail + 1)); continue; fi
+
+# BEGIN-FX-POOL
+# ORDER 1931-steb — THE SELECTED FIXTURES RUN IN PARALLEL, at most
+# GATE_CHANGED_JOBS at once (default: nproc; 1 is the old serial loop). Each
+# writes its own log, rc and ms under $WORK/fx.<n>, and the results are printed
+# afterwards in selection order, so the output reads exactly as the serial
+# loop's did. A fixture whose header declares `# preflight: serial — <reason>`
+# (the door's declaration, build.sh) runs ALONE: the pool drains first.
+# bash 3.2 has no `wait -n`, so a full pool is polled at 0.1 s.
+# Pinned by scripts/lua/test-gate-changed-parallel-fixtures.lua.
+_jobs="${GATE_CHANGED_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 1)}"
+case "$_jobs" in ''|*[!0-9]*|0) _jobs=1 ;; esac
+_fx_running() { jobs -pr | wc -l | tr -d ' '; }
+_fx_wait_below() { while [ "$(_fx_running)" -ge "$1" ]; do sleep 0.1; done; }
+_fx_one() { # _fx_one <n> <runner> <path> <args> <adv>
+    local _o="$WORK/fx.$1" _s _rc
+    _s="$(_now)"
+    if [ "$2" = lua ]; then
         # shellcheck disable=SC2086
-        TILLANDSIAS_SCRIPT_RUNNER_BIN="$_plan" "$_plan" script run "$ROOT/$_path" -- $_args > "$_out" 2>&1 </dev/null
+        TILLANDSIAS_SCRIPT_RUNNER_BIN="$_plan" "$_plan" script run "$ROOT/$3" -- $4 > "$_o.out" 2>&1 </dev/null
     else
         # shellcheck disable=SC2086
-        bash "$ROOT/$_path" $_args > "$_out" 2>&1 </dev/null
+        bash "$ROOT/$3" $4 > "$_o.out" 2>&1 </dev/null
     fi
     _rc=$?
-    _ms=$(( $(_now) - _s ))
-    case "$_adv" in skip=*) [ "$_rc" = "${_adv#skip=}" ] && _rc=0 ;; 1) _rc=0 ;; esac
+    case "$5" in skip=*) [ "$_rc" = "${5#skip=}" ] && _rc=0 ;; 1) _rc=0 ;; esac
+    echo "$(( $(_now) - _s ))" > "$_o.ms"; echo "$_rc" > "$_o.rc"
+}
+: > "$WORK/fx.order"
+while IFS=$'\037' read -r _id _runner _path _args _adv _desc _rest; do
+    grep -qxF -- "$_id${_args:+ $_args}" "$WORK/fx-sel.ids" || continue
+    _ran=$((_ran + 1))
+    printf '%s\t%s\n' "$_ran" "$_path" >> "$WORK/fx.order"
+    if [ "$_runner" = lua ] && [ -z "$_plan" ]; then
+        echo "could-not-run:gate-changed:no-plan-binary:$_path" > "$WORK/fx.$_ran.out"
+        echo 127 > "$WORK/fx.$_ran.rc"; echo 0 > "$WORK/fx.$_ran.ms"; continue
+    fi
+    if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$ROOT/$_path" 2>/dev/null | head -n 1)" ]; then
+        wait; _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv"
+    else
+        _fx_wait_below "$_jobs"
+        _fx_one "$_ran" "$_runner" "$_path" "$_args" "$_adv" &
+    fi
+done < <(tr '\t' '\037' < "$WORK/pop")
+wait
+while IFS=$'\t' read -r _n _path; do
+    _rc="$(cat "$WORK/fx.$_n.rc" 2>/dev/null || echo 125)"; _ms="$(cat "$WORK/fx.$_n.ms" 2>/dev/null || echo 0)"
     if [ "$_rc" -ne 0 ]; then
-        tail -n 20 "$_out"; echo "fail:gate-changed:fixture:$_path rc=$_rc ms=$_ms"; _fail=$((_fail + 1))
+        tail -n 20 "$WORK/fx.$_n.out"; echo "fail:gate-changed:fixture:$_path rc=$_rc ms=$_ms"; _fail=$((_fail + 1))
     else
         echo "ok:gate-changed:fixture:$_path ms=$_ms"
     fi
-done < <(tr '\t' '\037' < "$WORK/pop")
+done < "$WORK/fx.order"
+# END-FX-POOL
 
 _total=$(( $(_now) - _t0 ))
 if [ "$_ran" -ne "$FX_N" ]; then
