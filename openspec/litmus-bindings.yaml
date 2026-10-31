@@ -1075,6 +1075,7 @@ specs:
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
