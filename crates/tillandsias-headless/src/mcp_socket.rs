@@ -1070,6 +1070,11 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
                 // An active peer might belong to a CLI child or another tray
                 // process. Never steal its pathname merely because this
                 // process has not populated its own in-memory registry.
+                // 1863-eckw: on a tray-marked lane that peer is the tray
+                // serving it, so the lane is served and this launch proceeds.
+                Ok(_) if socket_path.parent().and_then(marked_lane).is_some() => {
+                    return Ok(());
+                }
                 Ok(_) => {
                     return Err(format!(
                         "mcp socket already has a live owner; refusing to unlink: {}",
@@ -1527,6 +1532,21 @@ mod lane_adoption_tests {
         cleanup(&key);
         assert_eq!(unmarked, Some(path));
         assert_eq!(marked, None);
+    }
+
+    /// 1863-eckw: the launch after an adoption binds a lane the tray already
+    /// serves. The tray's listener is the lane being served, not a rival.
+    #[test]
+    fn a_relaunch_onto_a_tray_served_lane_is_not_refused() {
+        let (key, _rt) = lane("relaunch");
+        let path = mcp_socket_path_for_lane(&key.0, &key.1);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _ = fs::remove_file(&path);
+        let _tray = UnixListener::bind(&path).unwrap();
+        mark_lane_tray_owned(&key.0, &key.1).unwrap();
+        let bound = start_mcp_socket_server_for_lane(&key.0, &key.1);
+        cleanup(&key);
+        assert_eq!(bound, Ok(()));
     }
 }
 
