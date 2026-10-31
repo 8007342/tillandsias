@@ -339,6 +339,7 @@ specs:
   - litmus:headless-init-status-check-source-built
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
+  - litmus:ci-full-refreshes-stale-plan-binary
   - litmus:wsl2-builder-wrapper-shape
   - litmus:wsl2-builder-shell-options-shape
   - litmus:nix-container-lane-shape
