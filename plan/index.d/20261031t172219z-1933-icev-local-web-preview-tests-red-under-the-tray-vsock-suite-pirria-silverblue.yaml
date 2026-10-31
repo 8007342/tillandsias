@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-silverblue at the coordinator's request (macuahuitl, 2026-10-31). Same family as 1924-vtls.
+packets:
+- packet_id: two-local-web-preview-tests-go-red-in-the-tray-listen-vsock-headless-suite
+  order: 1933-icev
+  status: ready
+  kind: defect
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - test
+  - headless
+  capability_blockers:
+  - parallel-test-isolation
+  estimated_hours: 3
+  title: 'Two local_web_preview tests fail the tray,listen-vsock headless suite: one is a cross-test podman call during a held seam, the other a non-tmpfs scratch in a forge'
+  context: 'Measured on pirria-silverblue (forge) 2026-10-31, cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock: 1237 passed, 2 failed. Related: 1924-vtls (parallel-isolation flake family), 1932-4hwq (TMPDIR inside HOME). (A) local_web_preview::tests::preview_admits_the_launched_outside_project_and_no_other, local_web_preview.rs:3659 "a refused label never reaches Podman": the stub log gained "volume rm tillandsias-imagegen-alpha-default" between calls_before and the assert. with_stub holds podman_seam_lock and env_lock, so another test reached imagegen_tool::remove_lane_volume (via cleanup_forge_ram_workspace, main.rs:19449) for project alpha and ran podman through this test''s stub without the seam lock. Passes alone. The culprit test is not yet identified (not obvious, so not fixed). (B) local_web_preview::tests::source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only, local_web_preview.rs:3758 "Linux lost the tmpfs home for preview leaves: router_not_ready: no tmpfs": DETERMINISTIC here, fails alone too, so not a parallel flake. with_stub sets TILLANDSIAS_TEST_PREVIEW_TLS_SHM to a tempdir under TMPDIR, and router_dynamic_caddyfile_host_path falls back to temp_dir() with XDG_RUNTIME_DIR unset; a forge''s TMPDIR is on disk, so neither is tmpfs. On a host whose /tmp is tmpfs it passes.'
+  exit_criteria:
+  - (A) Every test that can reach podman (imagegen_tool::podman_ok included) holds podman_seam_lock, or the stray caller is found and serialised; the test passes in the full tray,listen-vsock suite 5 runs out of 5.
+  - (B) The test's scratch for the shm and router roots is on a tmpfs when one exists (e.g. /dev/shm), and it passes in a forge with TMPDIR on disk, without dropping the Linux tmpfs assertion.
+  unscoreable: 'unpinnable-until-the-guard-exists: the two tests are the subject; the claimer names the reproducing run in the same commit (1136-n8sh).'
+  next_action: 'For (A), find the test that drives cleanup_forge_ram_workspace or remove_lane_volume for project alpha without podman_seam_lock (grep callers; run with --test-threads=2 to reproduce). For (B), make with_stub''s TLS scratch a tempdir_in("/dev/shm") when it is tmpfs.'
+  provenance: 1932-4hwq verification run, pirria-silverblue, 2026-10-31.
+  events:
+  - type: filed
+    ts: '2026-10-31T17:22:19Z'
+    host: pirria-silverblue
+    summary: filed p2, two local_web_preview reds with two causes; same family as 1924-vtls
