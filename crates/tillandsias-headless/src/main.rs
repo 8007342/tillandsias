@@ -33556,6 +33556,7 @@ esac
     /// real home and the 1898-hyhf guard rightly refuses it. Take the first of
     /// TMPDIR, XDG_RUNTIME_DIR and /tmp that exists and is outside the passwd
     /// home; with none, refuse loudly rather than weaken the guard.
+    #[cfg(unix)]
     fn scratch_base() -> PathBuf {
         let real = passwd_home().filter(|h| h.as_os_str().len() > 1);
         let candidates = [
@@ -33577,6 +33578,12 @@ esac
              XDG_RUNTIME_DIR and /tmp are all inside it or missing",
             real
         );
+    }
+
+    /// No passwd home off unix (and no 1898-hyhf guard to trip): TMPDIR is fine.
+    #[cfg(not(unix))]
+    fn scratch_base() -> PathBuf {
+        std::env::temp_dir()
     }
 
     impl ScratchHome {
