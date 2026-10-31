@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl, 2026-10-31).
+packets:
+- packet_id: a-report-only-lua-check-lists-ready-rows-whose-work-ref-already-landed-on-trunk
+  order: 1934-mxxc
+  status: in_progress
+  kind: enhancement
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - lua
+  - plan-ledger
+  - coordination
+  estimated_hours: 1
+  title: Nothing lists ready rows whose land(N) work/<order> merged — 81 such rows on 2026-10-31, at least 8 of them finished ports nobody closed
+  context: 'calmecacpilli 2026-10-31: 8 ready rows (1570-k4fx, 1570-25iq, 1570-qutp, 1577-57u3, 1570-g4rx, 1570-mxcg, 1577-g96z, 1580-8hra) had landed weeks earlier and were re-offered as work. scripts/check-stale-ready-rows.sh (1144-jfr5) matches fix(/feat(/... subjects citing an order but not the land(N): work/<order> merge subject. A report-only Lua pass covers that shape.'
+  exit_criteria:
+  - scripts/lua/check-ready-rows-with-landed-work.lua prints one line per ready row whose work/<order> landed on origin/linux-next and ends advisory:ready-rows-with-landed-work:<n> (advisory), exit 0 always; named by the coordinate-multihost-work skill.
+  unscoreable: 'advisory-by-design: it never refuses; its output is a triage list, not a verdict.'
+  next_action: 'Land work/1934-mxxc; the triage of its list proceeds in batches of ~10 closures per ref (coordinator rules 2026-10-31).'
+  provenance: coordinator request to calmecacpilli, 2026-10-31.
+  events:
+  - type: filed
+    ts: '2026-10-31T19:28:57Z'
+    host: calmecacpilli
+    summary: filed and claimed; check written and run (advisory:ready-rows-with-landed-work:81)
