@@ -8,3 +8,4 @@ STEP_DESC="Checking the forge-constraints cheatsheet matches the image (1816-iyy
 STEP_LUA="scripts/lua/check-forge-constraints-cheatsheet.lua"
 STEP_ERROR="the forge-constraints cheatsheet drifted from what the forge image does (1816-iyyc) — see the verdict line above"
 STEP_OK="Forge-constraints cheatsheet passed"
+STEP_SECOND_REGIME="yolanda 2026-10-31 msys ok:forge-constraints-cheatsheet"
