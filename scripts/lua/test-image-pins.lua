@@ -18,7 +18,8 @@
 --              passes with every proxy pointed at a closed port
 --   7 NO RECORD fails closed: blocked, exit 2
 --   8 LIVE     this checkout passes, every FROM under images/ and
---              observatorium/ counted (from=17 at the time of writing)
+--              observatorium/ counted (from=17 at the time of writing; pinned=4
+--              since 1861-nmpp added the GrapesJS studio on the node pin)
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-image-pins.lua
 
@@ -158,7 +159,7 @@ local live = proc.run({ argv = { PLAN, "script", "run", SUBJECT_REL }, cwd = ROO
 local lo = text.trim(live.stdout or "")
 local from_n = tonumber(lo:match("from=(%d+)") or "")
 arm("8 LIVE this checkout passes, every FROM counted",
-    live.code == 0 and from_n ~= nil and from_n >= 17 and lo:find("pinned=3", 1, true) ~= nil, tostring(live.code) .. " " .. lo)
+    live.code == 0 and from_n ~= nil and from_n >= 17 and lo:find("pinned=4", 1, true) ~= nil, tostring(live.code) .. " " .. lo)
 
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then

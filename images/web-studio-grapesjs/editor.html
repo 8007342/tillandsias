@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- @trace order:1861-nmpp — GrapesJS core editor, served from the vendored copy; no CDN. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>Web studio</title>
+<link rel="stylesheet" href="/vendor/dist/css/grapes.min.css">
+<style>html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }</style>
+<script src="/vendor/dist/grapes.min.js"></script>
+</head>
+<body>
+<div id="gjs"></div>
+<script>
+(async () => {
+  const loaded = await (await fetch("/load")).json();
+  const editor = grapesjs.init({
+    container: "#gjs",
+    fromElement: false,
+    components: loaded.projectData ? undefined : loaded.html || "",
+    projectData: loaded.projectData,
+    // The page or project data is passed in directly, so storage never loads;
+    // it only saves, through the studio endpoint, on every change (below).
+    storageManager: { type: "studio", autoload: false, autosave: false },
+    plugins: [
+      (ed) =>
+        ed.Storage.add("studio", {
+          async load() {
+            return loaded.projectData || {};
+          },
+          async store(projectData) {
+            const res = await fetch("/store", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ html: ed.getHtml(), css: ed.getCss(), projectData }),
+            });
+            if (!res.ok) throw new Error("store failed: " + res.status);
+          },
+        }),
+    ],
+  });
+  window.studioEditor = editor;
+  // Save on every change (debounced) through the editor's own storage. The
+  // built-in autosave counts changes it tracked itself, and with autoload off
+  // a change can go uncounted (measured: dirty count 0 after an edit).
+  let pending;
+  editor.on("update component:add component:remove component:update component:styleUpdate", () => {
+    document.documentElement.setAttribute("data-studio-save", "scheduled");
+    clearTimeout(pending);
+    pending = setTimeout(() => editor.store(), 300);
+  });
+  // Fixture hook (scripts/test-web-studio-grapesjs.sh): one real edit, saved
+  // by the editor's own autosave, proves the browser path end to end.
+  if (location.hash === "#selftest") {
+    const mark = (k, v) => document.documentElement.setAttribute("data-selftest-" + k, String(v));
+    editor.on("storage:start:store", () => mark("store", "started"));
+    editor.on("storage:end:store", () => mark("store", "done"));
+    editor.on("storage:error", (e) => mark("error", e && e.message ? e.message : e));
+    editor.onReady(() => {
+      editor.addComponents("<p>studio-selftest</p>");
+      mark("dirty", editor.getDirtyCount());
+    });
+  }
+})();
+</script>
+</body>
+</html>
