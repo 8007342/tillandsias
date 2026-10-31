@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: three-ci-release-litmus-tests-were-red-on-plain-trunk-shell-ratchet-decider-retirement-shape-and-command-policy-evaluator-shape
+    field: status
+    value: completed
+    ts: "2026-10-31T19:34:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: three-ci-release-litmus-tests-were-red-on-plain-trunk-shell-ratchet-decider-retirement-shape-and-command-policy-evaluator-shape
+    event:
+      type: completed
+      ts: "2026-10-31T19:34:20Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 8fe143d31 (landed work/1553-y9dv, ancestor of origin/linux-next); run-litmus-test.sh --test litmus:shell-ratchet, litmus:decider-retirement-shape, litmus:command-policy-evaluator-shape all PASS
+  - packet_id: three-ci-release-litmus-tests-were-red-on-plain-trunk-shell-ratchet-decider-retirement-shape-and-command-policy-evaluator-shape
+    event:
+      type: note
+      ts: "2026-10-31T19:34:20Z"
+      host: calmecacpilli
+      summary: |-
+        stale ready row; its own verifiable_closure re-run green on calmecacpilli 2026-10-31
