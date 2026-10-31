@@ -493,6 +493,7 @@ specs:
 - spec_id: forge-hot-cold-split
   status: active
   litmus_tests:
+  - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
   - litmus:forge-hot-cold-split-tmpfs-shape

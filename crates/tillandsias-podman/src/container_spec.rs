@@ -102,6 +102,8 @@ pub struct ContainerSpec {
     // ORDER 1375-xxzj: a forge cgroup budget. Typed rather than a passthrough
     // option, so the anti-bypass allowlist stays `--device=` only.
     memory_budget: Option<tillandsias_core::forge_budget::ForgeBudget>,
+    /// 1913-ebv8: the systemd slice the container's scope is placed in.
+    cgroup_parent: Option<String>,
     network: Option<String>,
     env: Vec<(String, String)>,
     /// Names passed as `--env NAME`: podman copies the value from ITS OWN
@@ -147,6 +149,7 @@ impl ContainerSpec {
             label_disable: true,
             pids_limit: None,
             memory_budget: None,
+            cgroup_parent: None,
             network: None,
             env: Vec::new(),
             env_passthrough: Vec::new(),
@@ -213,6 +216,13 @@ impl ContainerSpec {
     /// memory.low, memory.swap.max, pids.max). It supersedes `pids_limit`.
     pub fn memory_budget(mut self, budget: tillandsias_core::forge_budget::ForgeBudget) -> Self {
         self.memory_budget = Some(budget);
+        self
+    }
+
+    /// 1913-ebv8: place the container's scope in this slice (`None` leaves
+    /// podman's default).
+    pub fn cgroup_parent(mut self, slice: Option<String>) -> Self {
+        self.cgroup_parent = slice;
         self
     }
 
@@ -397,6 +407,9 @@ impl ContainerSpec {
         }
         if self.tty {
             args.push("--tty".to_string());
+        }
+        if let Some(slice) = &self.cgroup_parent {
+            args.push(format!("--cgroup-parent={slice}"));
         }
         if let Some(budget) = self.memory_budget {
             args.extend(budget.podman_args());

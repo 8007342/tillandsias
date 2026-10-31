@@ -707,6 +707,8 @@ fn build_local_preview_run_args(
             .sibling(50, 256)
             .podman_args(),
     );
+    // 1913-ebv8: in the forge's slice, ranked before it.
+    args.extend(crate::oom_slice_args());
     if let Some(dir) = &live.app_dir {
         args.extend(["--label".into(), format!("{APP_DIR}={dir}")]);
     }

@@ -99,6 +99,9 @@ mod container_deps;
 mod control_dispatch;
 #[cfg(target_os = "linux")]
 mod forge_swap;
+// 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
+#[cfg(target_os = "linux")]
+mod oom_posture;
 // RAM-only source-volume identity is needed by default CLI launchers too.
 mod launch_images;
 mod local_projects;
@@ -4527,6 +4530,27 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     Ok(certs_dir)
 }
 
+/// 1913-ebv8: `--cgroup-parent=tillandsias.slice` where the host runs podman on
+/// the systemd cgroup manager; nothing elsewhere. Forge and siblings alike, so
+/// oomd ranks them against each other inside one monitored slice.
+pub(crate) fn oom_slice_args() -> Vec<String> {
+    oom_slice()
+        .map(|slice| vec![format!("--cgroup-parent={slice}")])
+        .unwrap_or_default()
+}
+
+/// The slice itself, for a `ContainerSpec` launch.
+pub(crate) fn oom_slice() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        oom_posture::available().then(|| oom_posture::SLICE.to_string())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 fn build_stack_common_args(
     container_name: &str,
     hostname: &str,
@@ -4557,6 +4581,7 @@ fn build_stack_common_args(
     // memory.swap.max and pids.max = clamp(512·nproc, 4096, 16384), which
     // keeps the 4096 floor above.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
+    args.extend(oom_slice_args());
     args.extend(proxy_env_args());
     args.extend([
         "--env".into(),
@@ -9603,6 +9628,7 @@ fn build_opencode_forge_args(
     // Same budget as build_stack_common_args (1375-xxzj; the 4096 pids floor of
     // 667-se87 is kept by the clamp): this lane hosts workspace builds too.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
+    args.extend(oom_slice_args());
     match mode {
         ForgeMode::Cli => {
             // When a prompt is provided, the entrypoint execs
@@ -16424,6 +16450,9 @@ async fn run_agent_container_attached(
     // `swap:` line and the forge runs as before.
     #[cfg(target_os = "linux")]
     let _swap = forge_swap::acquire(container_name, debug);
+    // 1913-ebv8: once it runs, the forge is the last oomd candidate in its slice.
+    #[cfg(target_os = "linux")]
+    oom_posture::guard_forge(container_name, debug);
 
     bringup_timer::report("forge-start", forge_started.elapsed().as_millis(), 0);
 
@@ -18308,6 +18337,13 @@ pub(crate) fn run_opencode_web_mode(
             )
             .await
             .map_err(|e| format!("[OpenCode Web] failed to start forge: {e}"))?;
+        // 1913-ebv8: the web forge runs detached; mark it now.
+        #[cfg(target_os = "linux")]
+        if oom_posture::available()
+            && let Err(e) = oom_posture::mark_running(&forge_container_name(project_name))
+        {
+            eprintln!("[tillandsias] oom: the web forge is not marked oomd-avoid ({e})");
+        }
         emit_opencode_web_event(project_name, "forge", "started", Some("opencode-web"))?;
 
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
@@ -19608,7 +19644,9 @@ fn build_forge_agent_run_args_with_vault(
         // comment rides only some copies makes the missed ones look
         // intentional.
         // ORDER 1375-xxzj: the full cgroup budget; its pids clamp keeps the 4096 floor.
-        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host());
+        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host())
+        // 1913-ebv8: in tillandsias.slice, where oomd ranks this forge last.
+        .cgroup_parent(oom_slice());
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
         // D3 of order 702-6jza. With --tty, podman injects its DEFAULT
