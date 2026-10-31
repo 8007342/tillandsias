@@ -196,6 +196,9 @@ impl ReadyListener {
         let (service, container) = (service.to_string(), container.to_string());
         std::thread::spawn(move || {
             let outcome = self.wait(deadline, retry_after);
+            if matches!(outcome, ReadyOutcome::Ready { .. }) {
+                record_ready(&container);
+            }
             let (kind, body) = outcome_event(&service, &container, &outcome);
             crate::client::emit_diagnostic_event(true, kind, &container, &body);
             publish(&container, outcome.clone());
@@ -283,9 +286,148 @@ fn slot(container: &str) -> Slot {
         .clone()
 }
 
-/// A launch of `container` started: forget any earlier outcome.
+/// A launch of `container` started: forget any earlier outcome, in this
+/// process and on the host.
 pub fn begin(container: &str) {
     slot(container).send_replace(None);
+    forget_ready(container);
+}
+
+// ── 1922-lrdy: readiness that outlives the launch that heard it ──────────────
+//
+// READY=1 is sent once, to the process that launched the service. A later
+// launch whose gate starts after it (the proxy, vault or mirror already up from
+// an earlier launch, or started by the tray) would wait for an event that has
+// already happened (v56.10.31.1 macOS smoke: "tillandsias-proxy: no ready event
+// within 125s" with a healthy proxy). So the announce thread also records the
+// READY as a tmpfs marker holding the container's ID, and the gate reads that
+// state once. The ID makes a marker die with its container: a recreated
+// container has a new ID and must announce again.
+
+/// What podman records about a running container: its ID and its health
+/// status ("healthy", "starting", "unhealthy", or empty without a check).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Running {
+    pub id: String,
+    pub health: String,
+}
+
+type IdLookup = fn(&str) -> Option<Running>;
+
+struct ReadyStore {
+    dir: Option<PathBuf>,
+    lookup: IdLookup,
+}
+
+fn ready_store() -> &'static std::sync::Mutex<ReadyStore> {
+    static STORE: std::sync::OnceLock<std::sync::Mutex<ReadyStore>> = std::sync::OnceLock::new();
+    STORE.get_or_init(|| {
+        std::sync::Mutex::new(ReadyStore {
+            dir: None,
+            lookup: running_container_id,
+        })
+    })
+}
+
+/// Fixtures only: keep markers under `dir` and resolve container IDs with
+/// `lookup` instead of podman.
+#[doc(hidden)]
+pub fn use_ready_store_for_tests(dir: PathBuf, lookup: IdLookup) {
+    let mut s = ready_store().lock().unwrap_or_else(|e| e.into_inner());
+    s.dir = Some(dir);
+    s.lookup = lookup;
+}
+
+fn ready_marker(container: &str) -> Option<PathBuf> {
+    if container.is_empty() || container.contains(['/', '\\']) || container.starts_with('.') {
+        return None;
+    }
+    let dir = ready_store()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .dir
+        .clone();
+    #[cfg(unix)]
+    let dir = dir.or_else(|| Some(runtime_dir().join("tillandsias").join("ready")));
+    dir.map(|d| d.join(container))
+}
+
+fn lookup_running(container: &str) -> Option<Running> {
+    let f = ready_store()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .lookup;
+    f(container)
+}
+
+/// `container`'s ID and health if it is running now: one read of podman's
+/// recorded state, not a probe of the service.
+fn running_container_id(container: &str) -> Option<Running> {
+    let out = crate::podman_cmd_sync()
+        .args([
+            "container",
+            "inspect",
+            "--format",
+            "{{.Id}} {{.State.Running}} {{.State.Health.Status}}",
+            container,
+        ])
+        .output_bounded(Duration::from_secs(10))
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut f = text.split_whitespace();
+    match (f.next(), f.next()) {
+        (Some(id), Some("true")) => Some(Running {
+            id: id.to_string(),
+            health: f.next().unwrap_or("").to_string(),
+        }),
+        _ => None,
+    }
+}
+
+/// Record that `container`, as it runs now, sent READY=1.
+pub fn record_ready(container: &str) {
+    let (Some(path), Some(Running { id, .. })) =
+        (ready_marker(container), lookup_running(container))
+    else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let tmp = path.with_extension("tmp");
+    if std::fs::write(&tmp, format!("{id}\n")).is_ok() {
+        let _ = std::fs::rename(&tmp, &path);
+    }
+}
+
+fn forget_ready(container: &str) {
+    if let Some(path) = ready_marker(container) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
+/// The services whose podman HEALTHCHECK tests exactly what their READY=1
+/// announces: the proxy (port 3128 listening, both) and the vault
+/// (`sys/health` answers 200 only initialized and unsealed). The mirror is not
+/// one: its check is the daemon, its READY is the seed.
+fn health_means_ready(container: &str) -> bool {
+    matches!(container, "tillandsias-proxy" | "tillandsias-vault")
+}
+
+/// Whether `container`, as it runs now, already sent READY=1 to some launch:
+/// its marker names the running ID or, for a service whose healthcheck is its
+/// readiness, podman records it healthy (a container started before markers
+/// existed, or whose marker the tmpfs lost).
+pub fn was_ready(container: &str) -> bool {
+    let Some(now) = lookup_running(container) else {
+        return false;
+    };
+    let recorded = ready_marker(container).and_then(|p| std::fs::read_to_string(p).ok());
+    recorded.is_some_and(|r| r.trim() == now.id)
+        || (now.health == "healthy" && health_means_ready(container))
 }
 
 /// The launch's one outcome. The announce thread calls this; a fixture is the
@@ -318,7 +460,17 @@ pub fn is_tracked(container: &str) -> bool {
 /// failed outcome and emitted as its one `event:service_ready_failed`; a
 /// failure the announce thread already emitted is returned, not re-emitted.
 pub async fn await_ready(container: &str, deadline: Duration) -> ReadyOutcome {
+    // 1922-lrdy: subscribe FIRST, then read the recorded state, then wait, so a
+    // READY landing between the two is seen by one or the other.
     let mut rx = slot(container).subscribe();
+    if rx.borrow().is_none() && was_ready(container) {
+        let outcome = ReadyOutcome::Ready {
+            status: Some("ready-earlier".to_string()),
+        };
+        let (kind, body) = outcome_event(service_label(container), container, &outcome);
+        crate::client::emit_diagnostic_event(true, kind, container, &body);
+        publish(container, outcome);
+    }
     let waited = tokio::time::timeout(deadline, rx.wait_for(Option::is_some)).await;
     if let Ok(Ok(outcome)) = waited
         && let Some(outcome) = outcome.clone()
@@ -529,5 +681,82 @@ mod tests {
         .unwrap();
         later.await.unwrap();
         assert!(is_tracked("gate-test-a") && !is_tracked("gate-test-never"));
+    }
+
+    #[cfg(unix)]
+    static CURRENT_ID: std::sync::Mutex<&'static str> = std::sync::Mutex::new("ctr-1");
+    #[cfg(unix)]
+    fn fake_running_id(container: &str) -> Option<Running> {
+        let id = CURRENT_ID.lock().unwrap().to_string();
+        match container {
+            c if c.starts_with("lrdy-") => Some(Running {
+                id,
+                health: "starting".into(),
+            }),
+            // Started before markers existed: no marker, recorded healthy.
+            "tillandsias-proxy" => Some(Running {
+                id,
+                health: "healthy".into(),
+            }),
+            "tillandsias-git-lrdy" => Some(Running {
+                id,
+                health: "healthy".into(),
+            }),
+            _ => None,
+        }
+    }
+
+    /// 1922-lrdy acceptance. The proxy's READY=1 fires BEFORE the gate starts,
+    /// to an earlier launch (here: a real notify listener whose in-process
+    /// entry is then dropped, as a new launch process would never have had it).
+    /// The gate passes at once from the recorded state; a recreated container
+    /// (new ID) and a relaunch (begin) are not satisfied by it.
+    /// Pre-fix: the gate waited the full deadline and refused.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_ready_that_fired_before_the_gate_satisfies_it_without_a_new_event() {
+        let dir = std::env::temp_dir().join(format!("lrdy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        use_ready_store_for_tests(dir.join("ready"), fake_running_id);
+        let c = "lrdy-proxy";
+
+        // The earlier launch: READY=1 arrives on its notify socket.
+        let listener = ReadyListener::bind_at(dir.join("notify").join("proxy.sock")).unwrap();
+        let path = listener.path.clone();
+        let earlier = listener.announce("proxy", c, Duration::from_secs(5), RETRY_AFTER);
+        let tx = UnixDatagram::unbound().unwrap();
+        tx.send_to(b"READY=1\nSTATUS=proxy listening", &path)
+            .unwrap();
+        assert!(matches!(
+            earlier.join().unwrap(),
+            ReadyOutcome::Ready { .. }
+        ));
+
+        // A later launch (a new process) never saw that event.
+        board().lock().unwrap().remove(c);
+        let short = |_: &str| Duration::from_millis(300);
+        let t0 = std::time::Instant::now();
+        gate_within(&[c], short)
+            .await
+            .expect("the recorded READY satisfies the gate");
+        assert!(t0.elapsed() < Duration::from_millis(250), "it did not wait");
+
+        // The container was recreated: its new ID has announced nothing.
+        board().lock().unwrap().remove(c);
+        *CURRENT_ID.lock().unwrap() = "ctr-2";
+        let err = gate_within(&[c], short).await.unwrap_err();
+        assert!(err.contains(c) && err.contains("retry_after=5s"), "{err}");
+
+        // A relaunch clears the marker even when the ID would match.
+        *CURRENT_ID.lock().unwrap() = "ctr-1";
+        record_ready(c);
+        begin(c);
+        assert!(!was_ready(c));
+
+        // A proxy from before markers: podman records it healthy, and its
+        // healthcheck is its readiness. A healthy mirror is NOT seeded.
+        assert!(was_ready("tillandsias-proxy"));
+        assert!(!was_ready("tillandsias-git-lrdy"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

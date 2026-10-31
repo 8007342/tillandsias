@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli-silverblue: triage of the unlanded FORGE_DIAGNOSTICS.md on origin/work/1863-eckw (65cf07990), at the coordinator's request (macuahuitl, 2026-10-31).
+# Triage outcome: the report's findings are already rows (1863-eckw lane socket, 1863-4knc .localhost via Squid, 1870-imye /opt/cheatsheets, 1874-6p63 doctor incl. no-in-forge-renderer and tmpfs/cache free lines, 1874-dt48 permission profile, 1874-pn3s flutter shim, 1874-4sqt plan CLI ergonomics) and its body is distilled at plan/diagnostics/forge-tillandsias-opencode-web-2026-10-25.md. The one unfiled finding (section 3.5 / 6.7) is this row. The root FORGE_DIAGNOSTICS.md is dropped, not landed.
+packets:
+- packet_id: a-forge-states-its-launch-mode-and-lane-listener-owner-so-a-field-report-can-name-which-launch-path-failed
+  order: 1934-6cdj
+  status: ready
+  kind: enhancement
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - forge
+  - tray
+  - headless
+  estimated_hours: 2
+  title: A forge cannot tell whether it was tray- or CLI-launched, nor who owns its lane listener, so a lane-failure report has to carry both hypotheses
+  context: 'FORGE_DIAGNOSTICS.md section 3.5 (2026-10-25, opencode-web forge on macuahuitl, origin/work/1863-eckw 65cf07990): tray- and CLI-launched forges look identical from inside, and the host-browser failure differs by mode (tray exit orphans the listener; CLI return orphans it; a client starting early loses the tools). 1863-eckw therefore carries two hypotheses. Proposed: export TILLANDSIAS_LAUNCH_MODE (tray|cli|headless) into the forge env and write the lane listener owner (pid + liveness probe hint) into .forge-startup-context.md.'
+  exit_criteria:
+  - A forge launched from the tray and one launched from the CLI each show the matching TILLANDSIAS_LAUNCH_MODE value in their environment and in .forge-startup-context.md (a fixture over the env/context renderer, red on today's code).
+  - .forge-startup-context.md names the lane listener's owner process, so 1874-6p63's doctor can report it.
+  unscoreable: 'unpinnable-until-the-renderer-seam-is-chosen: the claimer names the env/context render function the fixture drives (1136-n8sh).'
+  next_action: 'Find where the forge env and .forge-startup-context.md are rendered for the tray and CLI launch paths, add the mode at each call site, and pin it with a fixture.'
+  provenance: triage of FORGE_DIAGNOSTICS.md (origin/work/1863-eckw 65cf07990) by calmecacpilli-silverblue, 2026-10-31.
+  events:
+  - type: filed
+    ts: '2026-10-31T17:22:19Z'
+    host: calmecacpilli-silverblue
+    summary: filed p3 from the stray FORGE_DIAGNOSTICS.md triage; the rest of that report was already filed or distilled, and the root .md is dropped

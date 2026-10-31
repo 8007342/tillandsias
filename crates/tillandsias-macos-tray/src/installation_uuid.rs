@@ -329,6 +329,49 @@ pub(crate) async fn deliver_once_per_boot_in(
     result
 }
 
+/// Order 1925-cxch: the credential exchange for ONE CLI session's VM boot.
+///
+/// The tray app runs [`deliver_credentials_and_check_handover`] on every status
+/// tick. The CLI modes (`--cloud … --opencode`, `--exec-guest`) boot the VM
+/// without the tray, and until this existed they did neither half. So a boot
+/// whose Vault was sealed waited for Ready forever ("waiting for the host to
+/// unlock the vault"), and a Vault the session initialised never handed its
+/// share to the Keychain, so the share was lost when the VM stopped (v56.10.31.1
+/// macOS smoke). A session calls [`Self::exchange`] after the VM starts
+/// (deliver, which also collects any handover already pending) and again before
+/// it stops (collect the handover of a Vault initialised or healed meanwhile).
+/// The memo is the session's own, so the second call only collects.
+pub struct CliCredentialExchange {
+    service: String,
+    memo: DeliveryMemo,
+}
+
+impl CliCredentialExchange {
+    pub fn new() -> Self {
+        Self::in_service(KEYCHAIN_SERVICE)
+    }
+
+    pub(crate) fn in_service(service: &str) -> Self {
+        Self {
+            service: service.to_string(),
+            memo: DeliveryMemo::new(),
+        }
+    }
+
+    pub async fn exchange(
+        &self,
+        client: &mut tillandsias_host_shell::vsock_client::Client,
+    ) -> Result<(), String> {
+        deliver_once_per_boot_in(client, &self.service, &self.memo).await
+    }
+}
+
+impl Default for CliCredentialExchange {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The delivery and handover against the Keychain service `service`.
 /// Production passes [`KEYCHAIN_SERVICE`]; tests pass a scratch
 /// `tillandsias-scratch-test-...` service they remove, so a test never reads or
@@ -1058,6 +1101,83 @@ pub(crate) mod tests {
                 .as_deref(),
             Some("fresh-token"),
             "the handover's root token must be written to the Keychain"
+        );
+    }
+
+    /// Order 1925-cxch: a CLI session delivers at boot, then before stop it
+    /// only collects, and the handover of a Vault it initialised lands in the
+    /// Keychain. On v56.10.31.1 the CLI did neither, so its Vault's share was
+    /// lost when the VM stopped and the next boot never unsealed.
+    #[tokio::test]
+    async fn a_cli_session_delivers_at_boot_and_collects_before_stop() {
+        use futures_util::{SinkExt, StreamExt};
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+        let scratch = ScratchService::new();
+        let session = CliCredentialExchange::in_service(&scratch.0);
+
+        // Boot: an empty Keychain (a reset host) still delivers, so the guest
+        // learns the installation, and the handover it holds is collected.
+        let (host, guest) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(fake_guest(
+            guest,
+            tillandsias_control_wire::DeliverCredentialsOutcome::Superseded,
+        ));
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        assert_eq!(session.exchange(&mut client).await, Ok(()));
+        drop(client);
+        assert!(
+            guest.await.unwrap(),
+            "the boot exchange delivers, then asks for the handover"
+        );
+
+        // Before stop: the same session only collects (no second delivery),
+        // and a newer handover overwrites the Keychain.
+        let (host, io) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(async move {
+            type Io = tokio_util::codec::Framed<
+                tokio::io::DuplexStream,
+                tokio_util::codec::LengthDelimitedCodec,
+            >;
+            let mut io: Io = tokio_util::codec::Framed::new(
+                io,
+                tillandsias_control_wire::transport::control_frame_codec(),
+            );
+            let frame = io.next().await.unwrap().unwrap();
+            let env = tillandsias_control_wire::decode(&frame).unwrap();
+            let ControlMessage::GetVaultHandover { seq } = env.body else {
+                panic!(
+                    "before stop the session must only collect, got {:?}",
+                    env.body
+                )
+            };
+            let bytes = tillandsias_control_wire::encode(&ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: env.seq,
+                body: ControlMessage::VaultHandoverReply {
+                    seq_in_reply_to: seq,
+                    unseal_share_b64: Some("healed-share".into()),
+                    root_token: Some("healed-token".into()),
+                },
+            })
+            .unwrap();
+            io.send(bytes.into()).await.unwrap();
+        });
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        assert_eq!(session.exchange(&mut client).await, Ok(()));
+        drop(client);
+        guest.await.unwrap();
+        assert_eq!(
+            read_credential_string_in(&scratch.0, "vault-shamir-share-v1")
+                .unwrap()
+                .as_deref(),
+            Some("healed-share"),
+            "the share the session's Vault handed over must reach the Keychain"
         );
     }
 
