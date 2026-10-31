@@ -817,6 +817,17 @@ pub async fn run_vsock_listener(
             path.display()
         );
     }
+    // 1927-q6fk: lane processes (wsl.exe lanes on Windows, PTY children on
+    // macOS) read the host's delivery from this agent over a guest-local
+    // socket — the replacement for the plaintext file 1909-aryk removed.
+    #[cfg(all(target_os = "linux", feature = "vault"))]
+    if let Err(e) = crate::guest_credentials::serve() {
+        eprintln!(
+            "[vsock] guest credential socket {} not served: {e}; lanes in this guest \
+             cannot read the host's delivery",
+            crate::guest_credentials::SOCKET_PATH
+        );
+    }
     let transport = Transport::Vsock {
         cid: vmaddr_cid_any(),
         port,
