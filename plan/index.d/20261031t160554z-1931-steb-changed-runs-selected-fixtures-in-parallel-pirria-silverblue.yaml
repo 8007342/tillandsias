@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-silverblue at the coordinator's request (macuahuitl, 2026-10-31), from the --changed profile.
+packets:
+- packet_id: changed-runs-its-selected-fixtures-in-parallel-bounded-by-nproc-with-isolated-logs
+  order: 1931-steb
+  status: ready
+  kind: enhancement
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - gate
+  estimated_hours: 3
+  title: ./build.sh --changed runs its selected fixtures one at a time; run them in parallel, bounded by nproc, each with its own log
+  context: 'Profiled on pirria (4 cores) 2026-10-31, a one-line tillandsias-core edit: 325 s warm, of which 61 selected fixtures are 168 s serial and cargo ~157 s. NOTED, NOT IN SCOPE (coordinator): (a) the tray,listen-vsock and listen-vsock feature runs re-run the whole 1235-test headless suite on any core change (~140 s with the default run); (b) the 23 always-selected (because=*) fixtures cost 18.9 s per run and a digest cache over their real reads would skip them on a crate-only diff.'
+  exit_criteria:
+  - The selected fixtures run concurrently, at most nproc at once, each fixture's output in its own log, printed whole and in selection order.
+  - Verdicts and the summary line are unchanged in form; a failing fixture still fails the run.
+  - The same core diff measured before and after on the same host.
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Find the fixture loop in scripts/gate-changed.sh; run it under a bounded job pool with a log per fixture; measure.'
+  provenance: --changed profile, pirria-silverblue, 2026-10-31.
+  events:
+  - type: filed
+    ts: '2026-10-31T16:05:54Z'
+    host: pirria-silverblue
+    summary: filed p2 at the coordinator's request, with the two noted follow-ups

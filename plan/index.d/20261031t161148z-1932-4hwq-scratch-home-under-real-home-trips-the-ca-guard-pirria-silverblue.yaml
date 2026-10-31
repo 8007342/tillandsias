@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-silverblue at the coordinator's request (macuahuitl, 2026-10-31): is source_built_init_and_status_check_smoke_uses_fake_podman red on plain linux-next.
+packets:
+- packet_id: scratch-home-under-a-tmpdir-inside-the-real-home-trips-the-1898-hyhf-ca-guard
+  order: 1932-4hwq
+  status: ready
+  kind: defect
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - test
+  - forge
+  - headless
+  estimated_hours: 2
+  title: Three headless CA tests fail deterministically in a forge, because ScratchHome lands under TMPDIR and the forge's TMPDIR is inside the real HOME
+  context: 'Measured on pirria-silverblue (forge) 2026-10-31, plain origin/linux-next 5df2bcf63, each test alone with --exact, 3/3 runs: tests::source_built_init_and_status_check_smoke_uses_fake_podman panics at main.rs:33707 "ensure_ca_bundle: 1898-hyhf: a test reached the real home for CA material (/home/forge/.cache/tillandsias-project/tmp/.tmpQL8N95/.local/state/tillandsias/ca)"; tests::ca_and_vault_leaf_mints_leave_no_plaintext_key_where_the_store_is_inactive panics the same way at 33644; tests::ca_mint_refuses_the_real_home_under_test fails assert !ca_dir().starts_with(real) at 33683. All three PASS with TMPDIR=/tmp. A forge exports TMPDIR=/home/forge/.cache/tillandsias-project/tmp, inside HOME=/home/forge, so the guard''s prefix test reads the scratch home as the real one. Not 1924-vtls (the Mac''s parallel-isolation flake): here they are deterministic and run alone.'
+  exit_criteria:
+  - With the forge's TMPDIR (inside HOME), all three tests pass, alone and in the full suite.
+  - The 1898-hyhf guard still refuses a test that really reaches the real home (its negative control stays red-capable).
+  unscoreable: 'unpinnable-until-the-guard-exists: the three tests are the subject; the claimer names the fix''s arm in the same commit (1136-n8sh).'
+  next_action: 'Decide between ScratchHome avoiding a TMPDIR under the real HOME and the guard comparing against the real home''s own state paths rather than a HOME prefix; keep ca_mint_refuses_the_real_home_under_test meaningful.'
+  provenance: --changed profile on pirria-silverblue, 2026-10-31; coordinator asked to check plain linux-next.
+  events:
+  - type: filed
+    ts: '2026-10-31T16:11:48Z'
+    host: pirria-silverblue
+    summary: filed p1, three deterministic forge-only CA test reds with one cause
