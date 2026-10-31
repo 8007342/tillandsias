@@ -136,6 +136,11 @@ mod ca_key_store;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
+// Order 1927-q6fk: the agent hands the host's delivery to lane processes over
+// a guest-local socket, never a file.
+#[cfg(all(target_os = "linux", feature = "vault"))]
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+mod guest_credentials;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
 // @trace order:1776-brk3 — the on-demand image build breaker: a failed build

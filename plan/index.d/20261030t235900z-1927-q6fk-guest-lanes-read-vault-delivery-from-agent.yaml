@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora (Claude), 2026-10-30, from the yolanda Windows report.
+packets:
+- packet_id: guest-lanes-read-vault-delivery-from-the-resident-agent
+  order: 1927-q6fk
+  status: in_progress
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - vault
+  - windows
+  - guest
+  estimated_hours: 3
+  title: Every guest forge lane fails "keyring locked" (zbus ServiceUnknown) since 1909-aryk removed the share file
+  context: 'yolanda 2026-10-30, v56.10.30.x, Windows tray + headless WSL2: every forge lane fails "[forge-launch] prerequisites ... tillandsias-vault not satisfied: keyring locked: the OS keyring did not answer for vault-shamir-share-v1 (zbus ServiceUnknown: The name is not activatable)". The host delivery (Windows Credential Manager, installation_uuid::deliver_and_handover_with) reaches only the resident agent''s memory; a wsl.exe lane is another process, read the plaintext fallback file until 1909-aryk removed it, and then fell through ensure_unseal_key to the D-Bus Secret Service a guest does not have.'
+  exit_criteria:
+  - 'A lane process in a guest obtains the delivered share from the resident agent over a 0600 guest-local socket, with nothing written to disk (a_lane_reads_the_agents_delivery_and_pushes_a_handover_back).'
+  - 'ensure_unseal_key in a guest never consults the keyring; an initialized store without a delivery reports a named wait with the tray remedy (a_guest_decides_from_the_delivery_and_never_from_dbus).'
+  - 'ServiceUnknown is reported as "no keyring service", not "keyring locked" (a_missing_secret_service_is_not_reported_as_locked fails on the pre-fix code).'
+  - 'On yolanda, after installing the stable carrying this fix, a forge lane launches with the vault store kept.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --features vault,listen-vsock --bin tillandsias -- guest_credentials a_missing_secret_service a_guest_decides; then a lane launch on yolanda from the tray.'
+  next_action: 'Land the work ref; after the next stable, launch a forge lane on yolanda from the tray and record the result.'
+  provenance: 'operator report from yolanda 2026-10-30.'
+  events:
+  - type: filed
+    ts: '2026-10-30T23:59:00Z'
+    host: macuahuitl-fedora
+    summary: filed the guest-lane vault delivery regression and its fix on work/1927-q6fk
