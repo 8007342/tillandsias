@@ -871,6 +871,46 @@ impl AsyncWrite for ControlWireStream {
     }
 }
 
+/// Order 1925-cxch: run one CLI session's credential exchange over a fresh
+/// control-wire connection. Best-effort and loud: a failure is printed and the
+/// session goes on, because a guest whose Vault needs nothing must not be held
+/// up, and one that does will say so at its ready gate.
+async fn cli_credential_exchange(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    session: &crate::installation_uuid::CliCredentialExchange,
+    when: &str,
+) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream = match open_control_wire_stream(
+        vz,
+        CONTROL_WIRE_VSOCK_PORT,
+        std::time::Duration::from_secs(30),
+    )
+    .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[tillandsias-tray] credential exchange ({when}): connect: {e}");
+            return;
+        }
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 3,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(e) = client.handshake().await {
+        eprintln!("[tillandsias-tray] credential exchange ({when}): handshake: {e}");
+        return;
+    }
+    if let Err(e) = session.exchange(&mut client).await {
+        eprintln!("[tillandsias-tray] credential exchange ({when}): {e}");
+    }
+}
+
 async fn open_control_wire_stream(
     vz: &tillandsias_vm_layer::vz::VzRuntime,
     port: u32,
@@ -1715,6 +1755,8 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        cli_credential_exchange(&vz, &credentials, "boot").await;
         eprintln!("[exec-guest] waiting for the guest service to answer…");
         // ORDER 1751-ipuw: Ready now waits for Vault to be unsealed, and
         // exec-guest is the tool for diagnosing a guest whose Vault is NOT
@@ -1780,6 +1822,7 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
                 }
             }
         };
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
         report_exec(result)
     })
@@ -1980,12 +2023,14 @@ pub fn transport_conformance_main() -> i32 {
     };
 
     // Boot + readiness on the main thread (helpers pump the runloop).
+    let credentials = crate::installation_uuid::CliCredentialExchange::new();
     let booted = rt.block_on(async {
         eprintln!("[transport-conformance] starting VM…");
         if let Err(e) = vz.start().await {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return false;
         }
+        cli_credential_exchange(&vz, &credentials, "boot").await;
         eprintln!("[transport-conformance] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
@@ -2044,6 +2089,7 @@ pub fn transport_conformance_main() -> i32 {
     };
 
     print!("{}", render_report(&results));
+    rt.block_on(cli_credential_exchange(&vz, &credentials, "before stop"));
     let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
     if all_passed(&results) { 0 } else { 1 }
 }
@@ -2394,6 +2440,8 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
 
             eprintln!("[diagnose] starting VM for the metrics read…");
             vz.start().await.map_err(|e| format!("start: {e}"))?;
+            let credentials = crate::installation_uuid::CliCredentialExchange::new();
+            cli_credential_exchange(&vz, &credentials, "boot").await;
             let result = async {
                 vz.wait_phase_ready(Duration::from_secs(300), |t| {
                     probe_phase_secure_or_plain(&vz, t)
@@ -2408,6 +2456,7 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
             }
             .await;
             // Stop the VM whatever happened: this verb owns the VM it booted.
+            cli_credential_exchange(&vz, &credentials, "before stop").await;
             let _ = vz.stop(Duration::from_secs(10)).await;
             result
         });
@@ -2479,6 +2528,8 @@ pub fn list_cloud_projects_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        cli_credential_exchange(&vz, &credentials, "boot").await;
         eprintln!("[list-cloud-projects] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
@@ -2520,6 +2571,7 @@ pub fn list_cloud_projects_main() -> i32 {
             },
         )
         .await;
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
@@ -2659,6 +2711,8 @@ pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        cli_credential_exchange(&vz, &credentials, "boot").await;
         eprintln!("[opencode] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
@@ -2691,6 +2745,7 @@ pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
             let _ = std::io::stdout().flush();
         })
         .await;
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
@@ -3590,6 +3645,43 @@ mod tests {
             exit_code_from(&report),
             0,
             "provisioned is healthy even while the tray owns the VM"
+        );
+    }
+
+    /// Order 1925-cxch: every CLI mode that boots the VM also runs the Vault
+    /// credential exchange, so none strands a Vault the way `--opencode` and
+    /// `--exec-guest` did on v56.10.31.1. `github_login_main` is the one
+    /// exception: it only captures (701-g98y), because delivering the
+    /// Keychain's older share would overwrite the epoch it just created.
+    #[test]
+    fn every_cli_boot_runs_the_credential_exchange() {
+        // source-pin-ok: the property is "no boot path omits the call", which only the source shows
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let source =
+            std::fs::read_to_string(std::path::Path::new(&manifest).join("src/diagnose.rs"))
+                .expect("read diagnose.rs");
+        let body = source
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("non-test half");
+        let mut checked = 0;
+        for chunk in body.split("\npub fn ").skip(1) {
+            let name = chunk.split('(').next().unwrap_or_default();
+            let end = chunk.find("\n}\n").unwrap_or(chunk.len());
+            let func = &chunk[..end];
+            if !func.contains("vz.start().await") || name == "github_login_main" {
+                continue;
+            }
+            checked += 1;
+            assert!(
+                func.contains("cli_credential_exchange(&vz, &credentials, \"boot\")")
+                    && func.contains("cli_credential_exchange(&vz, &credentials, \"before stop\")"),
+                "{name} boots the VM without the CLI credential exchange at boot and before stop"
+            );
+        }
+        assert_eq!(
+            checked, 5,
+            "the five Ready-waiting CLI modes were found and checked"
         );
     }
 
