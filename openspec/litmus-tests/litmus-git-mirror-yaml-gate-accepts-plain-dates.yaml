@@ -1,0 +1,54 @@
+# @trace spec:git-mirror-service
+# @trace order:1863-mqiw
+#
+# Order 1863-mqiw: the git image ships ruby and no tillandsias-policy, so the
+# mirror's pre-receive YAML gate validates with ruby. Psych 4 (Ruby 3.1+) made
+# YAML.load_file a safe load that refuses Date, so the plain
+# `created: 2026-10-25` that `openspec new change` writes rejected the whole
+# push, while yq loads the same file. The sibling litmus:git-mirror-yaml-gate-shape
+# and scripts/test-pre-receive-yaml-gate.sh put tillandsias-policy on PATH and
+# never reach the ruby branch; this one runs the hook INSIDE the git image.
+#
+# REGIME: post-build, because it needs the built localhost/tillandsias-git
+# image. Without podman or the image the suite exits 3 with
+# `could-not-run:pre-receive-date:<reason>`, a named refusal, never a green.
+name: litmus:git-mirror-yaml-gate-accepts-plain-dates
+spec: git-mirror-service
+phase: post-build
+description: >
+  Pin 1863-mqiw: inside the git image the pre-receive hook validates with
+  ruby, accepts a push carrying `created: 2026-10-25`, still rejects broken
+  YAML, and yq loads the same document to the same date.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-pre-receive-yaml-gate-date.sh
+  - localhost/tillandsias-git:v<VERSION> is built
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-pre-receive-yaml-gate-date.sh && test -x scripts/test-pre-receive-yaml-gate-date.sh && echo 'ok: pre-receive-date-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: pre-receive-date-suite-parses"
+
+  - step: "ruby validator accepts openspec's plain date, rejects broken YAML, and agrees with yq"
+    command: "bash scripts/test-pre-receive-yaml-gate-date.sh"
+    timeout_ms: 180000
+    expected_behavior: "PASS: pre-receive (ruby) and yq agree on created: 2026-10-25"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "PASS: pre-receive (ruby) and yq agree on created: 2026-10-25"
+  log_fields:
+    spec: git-mirror-service
+    test: git-mirror-yaml-gate-accepts-plain-dates
+    artifact: images/git/pre-receive-hook.sh
+
+rollback:
+  on_failure: >
+    The ruby branch of images/git/pre-receive-hook.sh refuses a YAML class yq
+    accepts. Check RUBY_YAML_LOAD permits Date, Time, Symbol and aliases and
+    that the ruby call carries -rdate.
+  command: "grep -n 'RUBY_YAML_LOAD' images/git/pre-receive-hook.sh"
