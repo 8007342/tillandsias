@@ -18,10 +18,16 @@ preconditions:
   - workspace contains crates/tillandsias-headless/src/dead_run.rs
   - workspace contains images/inference/supervise.sh
 critical_path:
+  - step: "the passed-count pins are floors with 0 failed, and the retired exact pins refuse growth (1929-gfxy)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-count-floors.lua 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "ok:litmus-count-floors:9/9"
   - step: "Req: a dead run is detected (gone pid, reused pid, other boot) and a live one is left alone; its labelled containers are stopped before any is removed, then its volumes; a tray-run forge carries the run label"
     command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock -- dead_run opencode_lane_builder_labels_the_launching_tray_run 2>&1"
     timeout_ms: 600000
-    success_pattern: "test result: ok. 5 passed"
+    # A FLOOR, not an exact count (1929-gfxy's sweep): the filter matches
+    # every dead_run test, so a new one must not turn a green run red.
+    success_pattern: "test result: ok\\. ([5-9]|[1-9][0-9]+) passed; 0 failed"
   - step: "Req: the inference entrypoint passes SIGTERM on to the engine and every background job, as a child and as PID 1, and a bare wait (the old line) does not"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-inference-supervise.lua 2>&1"
     timeout_ms: 60000
