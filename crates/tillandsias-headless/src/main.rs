@@ -136,6 +136,11 @@ mod ca_key_store;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
+// Order 1927-q6fk: the agent hands the host's delivery to lane processes over
+// a guest-local socket, never a file.
+#[cfg(all(target_os = "linux", feature = "vault"))]
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+mod guest_credentials;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
 // @trace order:1776-brk3 — the on-demand image build breaker: a failed build
@@ -582,6 +587,12 @@ fn main() {
         .filter(|a| !a.starts_with("--"))
         .cloned()
         .unwrap_or_else(|| "linux-next".to_string());
+    // ORDER 1911-3dqo: re-attach a forge whose launcher died. Takes the
+    // project as the NEXT argument, like --sync.
+    let rejoin_project: Option<String> = user_args
+        .iter()
+        .position(|a| a == "--rejoin")
+        .map(|i| user_args.get(i + 1).cloned().unwrap_or_default());
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
@@ -908,6 +919,8 @@ fn main() {
         // `Unsupported option: --sync` — the exact shape the --reset-state
         // comment at the top of this list records. A source scan would have
         // seen the flag everywhere and missed it.
+        // Order 1911-3dqo: dispatched early (run_rejoin).
+        "--rejoin",
         "--sync",
         "--github-login",
         "--with-token",
@@ -993,6 +1006,7 @@ fn main() {
         || status_check
         || ensure_enclave
         || sync_project.is_some()
+        || rejoin_project.is_some()
         || inference_tier
         || capabilities
         || github_login
@@ -1281,6 +1295,24 @@ fn main() {
     if ensure_enclave {
         if let Err(e) = run_cli_with_vault_credential_cleanup(debug, || run_ensure_enclave(debug)) {
             eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if let Some(project) = rejoin_project.as_deref() {
+        #[cfg(feature = "host-services")]
+        let result = if project.is_empty() || project.starts_with("--") {
+            Err("--rejoin needs a project: tillandsias --rejoin <project>".to_string())
+        } else {
+            run_rejoin(project, debug)
+        };
+        #[cfg(not(feature = "host-services"))]
+        let result: Result<(), String> = Err(format!(
+            "--rejoin {project} needs a binary built with host services"
+        ));
+        if let Err(e) = result {
+            eprintln!("Error: {e}");
             std::process::exit(1);
         }
         return;
@@ -9489,6 +9521,81 @@ fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debu
     let _ = mcp_socket::start_mcp_socket_server_for_lane(project, instance);
 }
 
+/// ORDER 1911-3dqo. The running forge of `project` (lane `instance`) that a
+/// rejoin re-attaches to, across every agent mode. A forge outlives its
+/// launcher (conmon owns it), so the launcher's death leaves exactly this
+/// container running with nobody attached.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+fn rejoin_target(
+    project: &str,
+    instance: Option<&str>,
+    running: &[String],
+) -> Result<String, String> {
+    let found: Vec<String> = [
+        ForgeAgentMode::OpenCode,
+        ForgeAgentMode::Claude,
+        ForgeAgentMode::Codex,
+        ForgeAgentMode::Antigravity,
+        ForgeAgentMode::Maintenance,
+    ]
+    .into_iter()
+    .map(|mode| forge_container_name_for_mode_with_instance(project, mode, instance))
+    .filter(|name| running.contains(name))
+    .collect();
+    match found.as_slice() {
+        [one] => Ok(one.clone()),
+        [] => Err(format!(
+            "no running forge for {project}{}; nothing to rejoin",
+            forge_instance_suffix_from(instance)
+        )),
+        many => Err(format!(
+            "more than one running forge for {project}: {}; set TILLANDSIAS_FORGE_INSTANCE or stop one",
+            many.join(", ")
+        )),
+    }
+}
+
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+fn rejoin_attach_args(container: &str) -> Vec<String> {
+    vec!["attach".to_string(), container.to_string()]
+}
+
+/// ORDER 1911-3dqo. `tillandsias --rejoin <project>`: serve the forge's lane
+/// MCP socket again, then re-attach its pty.
+#[cfg(feature = "host-services")]
+fn run_rejoin(project: &str, debug: bool) -> Result<(), String> {
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let out = podman_command()
+        .args(["ps", "--format", "{{.Names}}"])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("podman ps failed: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("podman ps exited {}", out.status));
+    }
+    let running: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let container = rejoin_target(project, instance.as_deref(), &running)?;
+    let lane = instance.as_deref().unwrap_or("default");
+    mcp_socket::serve_lane_for_rejoin(project, lane)
+        .map_err(|e| format!("runtime_unavailable: lane MCP socket not served: {e}"))?;
+    if debug {
+        eprintln!("[tillandsias] lane {project}-{lane} serves; attaching {container}");
+    }
+    // Caller-owned: an interactive attach lasts as long as its operator.
+    let status = podman_command()
+        .args(rejoin_attach_args(&container))
+        .spawn_caller_owned_lifetime()
+        .and_then(|mut child| child.wait())
+        .map_err(|e| format!("podman attach failed: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("podman attach {container} exited {status}"))
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -15681,7 +15788,13 @@ fn launch_observatorium_browser(
 
     send_issue_web_session(&project_label, &otp)
         .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &app_url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         return Err(format!(
             "Observatorium app did not become reachable with a registered session: {err}"
         ));
@@ -16213,6 +16326,23 @@ async fn run_delegated_agent_container(
     }
 }
 
+/// ORDER 1911-3dqo. The argv an attached forge launch hands podman: a tty
+/// session gets `--sig-proxy=false`, so a hangup or signal that reaches the
+/// `podman run` client (its launcher was SIGKILLed and the pty closed) ends
+/// the client and leaves the forge running under conmon for `--rejoin`.
+/// Ctrl-C still reaches the forge as a byte on the tty. An explicit
+/// `--sig-proxy` setting is left as given.
+fn attached_run_args(args: &[String]) -> Vec<String> {
+    let tty = args.iter().any(|a| a == "--tty" || a == "-t" || a == "-it");
+    let explicit = args.iter().any(|a| a.starts_with("--sig-proxy"));
+    let mut out = Vec::with_capacity(args.len() + 1);
+    if tty && !explicit {
+        out.push("--sig-proxy=false".to_string());
+    }
+    out.extend_from_slice(args);
+    out
+}
+
 async fn run_agent_container_attached(
     client: &PodmanClient,
     stage: &str,
@@ -16365,9 +16495,10 @@ async fn run_agent_container_attached(
 
     bringup_timer::report("forge-start", forge_started.elapsed().as_millis(), 0);
 
+    let attached = attached_run_args(args);
     let Some(config) = delegated else {
         return client
-            .run_container_attached_observed(stage, container_name, args, debug)
+            .run_container_attached_observed(stage, container_name, &attached, debug)
             .await;
     };
 
@@ -17104,6 +17235,10 @@ fn wait_for_authenticated_opencode_web(
     project_name: &str,
     url: &str,
     cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
+    // ORDER 1863-eckw: re-sends IssueWebSession. A 401 means the router
+    // sidecar never received the session, which happens when it was still
+    // reconnecting to a freshly spawned tray (measured: 19 probes, all 401).
+    reregister: &mut dyn FnMut() -> Result<(), String>,
     debug: bool,
 ) -> Result<(), String> {
     let cookie_header = format!(
@@ -17122,6 +17257,16 @@ fn wait_for_authenticated_opencode_web(
     while start.elapsed() < timeout {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
+            Ok(401) => {
+                last_outcome =
+                    String::from("status 401 (session not at the router yet; re-registered)");
+                let _ = reregister();
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(502) => {
                 last_outcome = String::from("status 502 (starting)");
                 if debug {
@@ -17734,6 +17879,23 @@ fn send_issue_web_session(_project_label: &str, _cookie_value: &[u8; 32]) -> Res
     )
 }
 
+/// ORDER 1863-eckw. The tray the launcher saw at startup can exit before the
+/// web session is registered (it was shutting down when probed), leaving no
+/// control socket. A connect failure therefore spawns a tray and retries
+/// once; any other failure (a wrong reply, a timeout) is returned unchanged.
+fn register_web_session_with_tray_retry(
+    mut send: impl FnMut() -> Result<(), String>,
+    spawn_tray: impl FnOnce(),
+) -> Result<(), String> {
+    match send() {
+        Err(e) if e.starts_with("Failed to connect to control socket") => {
+            spawn_tray();
+            send()
+        }
+        other => other,
+    }
+}
+
 fn launch_opencode_web_browser(
     project_name: &str,
     certs_dir: &Path,
@@ -17799,12 +17961,25 @@ fn launch_opencode_web_browser(
     // cookie. If the handshake fails (no tray, wrong reply, timeout) we
     // refuse to launch the browser to prevent the "unauthorised" landing
     // page that used to result from the race.
-    send_issue_web_session(&project_label, &otp).map_err(|e| {
+    register_web_session_with_tray_retry(
+        || send_issue_web_session(&project_label, &otp),
+        || {
+            let lane = cli_reserved_lane(Some(project_name), true);
+            maybe_spawn_detached_tray_for_cli(false, lane.as_deref(), debug);
+        },
+    )
+    .map_err(|e| {
         let _ =
             emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
         format!("Failed to register web session with router: {e}")
     })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
         return Err(err);
     }
@@ -25212,6 +25387,11 @@ mod tests {
             "claude_login",
             "codex_login",
             "antigravity_login",
+            // 1911-3dqo, yoga 2026-10-30: --rejoin was missing, so a rejoin
+            // SIGTERMed the running tray and it stopped the whole stack and
+            // the very forge the rejoin came for (tray log: "Received
+            // shutdown signal", then podman stop of every enclave service).
+            "rejoin_project.is_some()",
         ] {
             assert!(
                 window.split(&['|', '\n', ' '][..]).any(|tok| tok == lane),
@@ -25948,6 +26128,85 @@ mod tests {
     /// Order 427: two workers on one project must not collide. Before the
     /// instance component existed, both got `tillandsias-<project>-forge-<mode>`
     /// and `--replace` made worker 2 destroy worker 1.
+    /// ORDER 1911-3dqo, measured on yoga 2026-10-30: SIGKILL of the launcher
+    /// hung up its pty, the attached `podman run` client proxied the hangup
+    /// as `container kill` (journal: kill event from the run client's own
+    /// pid, 2 ms before died), and `--rm` removed the forge. A tty session
+    /// carries Ctrl-C as a byte, so it needs no signal proxy.
+    #[test]
+    fn a_tty_forge_launch_does_not_proxy_the_launchers_signals() {
+        let tty: Vec<String> = ["--rm", "--interactive", "--tty", "img"]
+            .map(String::from)
+            .to_vec();
+        let out = attached_run_args(&tty);
+        assert_eq!(out.first().map(String::as_str), Some("--sig-proxy=false"));
+        assert_eq!(&out[1..], &tty[..]);
+        let piped: Vec<String> = ["--rm", "img"].map(String::from).to_vec();
+        assert_eq!(attached_run_args(&piped), piped);
+        let explicit: Vec<String> = ["--sig-proxy=true", "--tty", "img"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(attached_run_args(&explicit), explicit);
+    }
+
+    /// ORDER 1863-eckw, measured on yoga 2026-10-30: the launcher saw a tray
+    /// on control.sock, skipped spawning one, and that tray exited before the
+    /// web session was registered, so registration failed ENOENT and the web
+    /// forge ran with no session. A connect failure now spawns a tray and
+    /// retries once; any other failure is returned as-is.
+    #[test]
+    fn a_web_session_whose_tray_vanished_spawns_one_and_retries() {
+        let mut sends = 0;
+        let mut spawned = 0;
+        let ok = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                if sends == 1 {
+                    Err("Failed to connect to control socket /run/x/control.sock: No such file or directory (os error 2)".into())
+                } else {
+                    Ok(())
+                }
+            },
+            || spawned += 1,
+        );
+        assert_eq!(ok, Ok(()));
+        assert_eq!((sends, spawned), (2, 1));
+
+        let mut sends = 0;
+        let mut spawned = 0;
+        let refused = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                Err("tray replied with an unexpected message".into())
+            },
+            || spawned += 1,
+        );
+        assert!(refused.is_err());
+        assert_eq!((sends, spawned), (1, 0), "only a connect failure respawns");
+    }
+
+    /// ORDER 1911-3dqo: a rejoin finds the one running forge of a project,
+    /// whatever its agent mode, and re-attaches its pty with `podman attach`.
+    #[test]
+    fn a_rejoin_targets_the_running_forge_and_attaches_its_pty() {
+        let claude_w2 =
+            forge_container_name_for_mode_with_instance("acme", ForgeAgentMode::Claude, Some("w2"));
+        let running = vec!["tillandsias-git-service".to_string(), claude_w2.clone()];
+        assert_eq!(rejoin_target("acme", Some("w2"), &running), Ok(claude_w2));
+        assert!(rejoin_target("acme", None, &running).is_err());
+        assert!(rejoin_target("other", Some("w2"), &running).is_err());
+        let both = vec![
+            "tillandsias-acme-forge".to_string(),
+            "tillandsias-acme-forge-codex".to_string(),
+        ];
+        let err = rejoin_target("acme", None, &both).unwrap_err();
+        assert!(err.contains("tillandsias-acme-forge-codex"), "{err}");
+        assert_eq!(
+            rejoin_attach_args("tillandsias-acme-forge"),
+            vec!["attach".to_string(), "tillandsias-acme-forge".to_string()]
+        );
+    }
+
     #[test]
     fn forge_container_names_are_instance_scoped_so_workers_coexist() {
         for mode in [

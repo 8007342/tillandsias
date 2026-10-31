@@ -5311,7 +5311,12 @@ Key skills: \`/forge-quick-intro\`, \`meta-orchestration\`, \`advance-work-from-
 Do NOT assume a tool exists because a skill or doc names it. This forge is a
 Fedora base, not your host, and the difference has bitten agents repeatedly.
 
-**Present:** \`jq\` \`yq\` \`git\` \`gh\` \`cargo\` \`rustc\` \`node\` \`go\` \`rust-analyzer\`
+**Present:** \`jq\` \`yq\` \`git\` \`gh\` \`cargo\` \`rustc\` \`node\` \`go\` \`rust-analyzer\` \`lua\` (5.4, with \`lfs\` and \`lpeg\`)
+
+**For scripted edits, use the Lua helpers, not a python3 heredoc** (\`tellme about lua\`):
+\`lua-edit FILE OLD NEW [OLD NEW ...]\` applies every pair or none: it refuses, changing
+nothing, unless each OLD occurs exactly once. \`lua-conflict FILE ours|theirs|both [HUNK]\`
+resolves merge-conflict hunks; \`git add\` the file after.
 **ABSENT:** \`ruby\` — several skills still show \`ruby -ryaml\` for YAML validation.
 It is not here. Use \`yq\` instead (verified: it accepts valid YAML and exits
 non-zero on invalid).

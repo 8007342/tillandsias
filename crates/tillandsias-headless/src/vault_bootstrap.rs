@@ -358,6 +358,110 @@ pub fn get_pending_handover() -> (Option<String>, Option<String>) {
     (None, None)
 }
 
+/// Order 1927-q6fk. What the resident agent serves to lane processes on the
+/// guest-local credential socket: the host's delivery, as held in memory.
+#[cfg(feature = "vault")]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn delivered_credentials_snapshot() -> Option<InVmCredentials> {
+    IN_VM_CREDENTIALS
+        .get()
+        .and_then(|cell| cell.lock().ok().and_then(|g| g.clone()))
+}
+
+/// Order 1927-q6fk. A lane initialised or healed Vault and pushed the new pair:
+/// stage it for the host's next `GetVaultHandover` and adopt it as this
+/// agent's delivery, exactly as an in-process init would.
+#[cfg(feature = "vault")]
+#[cfg_attr(
+    any(not(target_os = "linux"), not(feature = "listen-vsock")),
+    allow(dead_code)
+)]
+pub(crate) fn stage_handover_from_lane(share_b64: String, token: String) {
+    store_handover_in_memory(&share_b64, &token);
+}
+
+/// The in-memory half of a guest handover, shared by an in-process init, a
+/// heal, and a lane's push (order 1927-q6fk).
+#[cfg(feature = "vault")]
+fn store_handover_in_memory(share_b64: &str, token: &str) {
+    let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = cell.lock() {
+        *guard = Some(PendingHandover {
+            unseal_share_b64: Some(share_b64.to_string()),
+            root_token: Some(token.to_string()),
+        });
+    }
+    let creds_cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = creds_cell.lock() {
+        if let Some(creds) = guard.as_mut() {
+            creds.root_token = Some(token.to_string());
+            creds.unseal_share_b64 = Some(share_b64.to_string());
+        } else {
+            *guard = Some(InVmCredentials {
+                unseal_share_b64: Some(share_b64.to_string()),
+                installation_uuid: String::new(),
+                root_token: Some(token.to_string()),
+            });
+        }
+    }
+}
+
+/// A guest handover from THIS process: held in memory and, in a lane process,
+/// pushed to the resident agent so the host collects it (order 1927-q6fk).
+/// Before this a lane's fresh init lived only in the lane's memory and died
+/// with it, so the next boot found an initialized store and no share.
+#[cfg(feature = "vault")]
+fn stage_guest_handover(share_b64: &str, token: &str) {
+    store_handover_in_memory(share_b64, token);
+    #[cfg(target_os = "linux")]
+    if !crate::guest_credentials::is_serving()
+        && let Err(e) = crate::guest_credentials::push_handover(share_b64, token)
+    {
+        eprintln!(
+            "[tillandsias-vault] could not hand the new unseal share to the resident agent ({e}); \
+             the host cannot collect it from this process"
+        );
+    }
+}
+
+/// Order 1927-q6fk. A lane process in a guest holds no delivery of its own: the
+/// host delivered into the resident agent's memory. Ask the agent over the
+/// guest-local socket and adopt its answer. Cheap and repeatable: it does
+/// nothing once this process holds a delivery, or in the agent itself.
+/// Returns a one-clause description of what the agent said, for messages.
+#[cfg(feature = "vault")]
+fn adopt_agent_delivery() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        if delivered_credentials_snapshot().is_some() || crate::guest_credentials::is_serving() {
+            return None;
+        }
+        if !is_running_in_vm() {
+            return None;
+        }
+        use crate::guest_credentials::AgentAnswer;
+        match crate::guest_credentials::fetch() {
+            AgentAnswer::Delivered(c) => {
+                let cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
+                if let Ok(mut guard) = cell.lock()
+                    && guard.is_none()
+                {
+                    *guard = Some(c.into_in_vm());
+                }
+                None
+            }
+            AgentAnswer::NotDelivered => {
+                Some("the resident agent is up but the host has not delivered yet".to_string())
+            }
+            AgentAnswer::NoAgent(e) => Some(format!("the resident agent did not answer ({e})")),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 /// Set once a GetVaultHandover reply actually carries the first-boot Shamir
 /// share. An empty reply is only a timeout observation, not delivery: a later
 /// request must retain the bounded first-boot retry window. Steady-state
@@ -3852,6 +3956,23 @@ fn unseal_key_source(
         return Ok(KeySource::Share(key));
     }
     match keyring {
+        // 1927-q6fk: "the name is not activatable" is not a locked keyring —
+        // no Secret Service exists at all, and unlocking cannot help.
+        KeyringAnswer::Unreachable(reason)
+            if vault_data_initialized && keyring_service_absent(&reason) =>
+        {
+            Err(format!(
+                "no keyring service: no Secret Service answers on this machine's D-Bus for \
+                 {VAULT_SHAMIR_SHARE_V1} ({reason}), and the vault store is already \
+                 initialized; nothing was written\n  \
+                 why: only the stored Shamir share unseals initialized storage, and there is no \
+                 keyring here that could hold it\n  \
+                 remedy: start a Secret Service (gnome-keyring or KeePassXC) and relaunch \
+                 tillandsias; if the share is gone with the keyring, the store cannot be \
+                 opened: remove `<cache>/tillandsias/vault-data` (this loses every stored \
+                 sign-in), run `tillandsias --init`, and sign in again"
+            ))
+        }
         KeyringAnswer::Unreachable(reason) if vault_data_initialized => Err(format!(
             "keyring locked: the OS keyring did not answer for {VAULT_SHAMIR_SHARE_V1} ({reason}), \
              and the vault store is already initialized; nothing was written\n  \
@@ -3861,6 +3982,69 @@ fn unseal_key_source(
         )),
         _ => Ok(KeySource::Derive),
     }
+}
+
+/// 1927-q6fk. True when the keyring error says no Secret Service exists, as
+/// opposed to one that is locked or slow: D-Bus `ServiceUnknown` ("The name is
+/// not activatable"), or no session bus at all.
+fn keyring_service_absent(reason: &str) -> bool {
+    [
+        "ServiceUnknown",
+        "not activatable",
+        "was not provided by any .service files",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "Couldn't connect to a D-Bus",
+    ]
+    .iter()
+    .any(|needle| reason.contains(needle))
+}
+
+/// 1927-q6fk. The key a GUEST may use. A guest has no keyring of its own: its
+/// only source is the host's delivery, read from this process's memory or the
+/// resident agent's. It never falls through to D-Bus.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+#[derive(Debug, PartialEq, Eq)]
+enum GuestKey {
+    /// The host delivered a well-formed share.
+    Share([u8; 32]),
+    /// The host delivered WITHOUT a share: the first-boot dummy derived from
+    /// the installation uuid. On an initialized store the partial-init guard
+    /// then wipes it and the person signs in again, as ruled.
+    DeriveFromUuid(String),
+    /// Nothing delivered and nothing to open: a first boot, any key will do.
+    FirstBoot,
+}
+
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn guest_unseal_key_source(
+    delivery: Option<&InVmCredentials>,
+    vault_data_initialized: bool,
+    agent: Option<&str>,
+) -> Result<GuestKey, String> {
+    use base64::Engine;
+    if let Some(creds) = delivery {
+        if let Some(encoded) = &creds.unseal_share_b64
+            && let Ok(v) = base64::engine::general_purpose::STANDARD.decode(encoded.trim())
+            && let Ok(key) = <[u8; 32]>::try_from(v.as_slice())
+        {
+            return Ok(GuestKey::Share(key));
+        }
+        return Ok(GuestKey::DeriveFromUuid(creds.installation_uuid.clone()));
+    }
+    if !vault_data_initialized {
+        return Ok(GuestKey::FirstBoot);
+    }
+    Err(format!(
+        "{WAITING_FOR_HOST}: this guest has no keyring of its own (no Secret Service runs \
+         here) and the host has not delivered {VAULT_SHAMIR_SHARE_V1} for the already \
+         initialized store; nothing was written ({})\n  \
+         remedy: start the Tillandsias tray on the host and wait until it shows ready (on \
+         Windows it delivers the share from Windows Credential Manager, on macOS from the \
+         keychain), then relaunch. If the host no longer holds the share, the store cannot \
+         be opened: the guest wipes it when the tray next connects, and you sign in to \
+         GitHub and your AI providers again",
+        agent.unwrap_or("no delivery in this process")
+    ))
 }
 
 /// True when the vault store holds anything. A store that exists but cannot be
@@ -3880,41 +4064,43 @@ fn vault_data_initialized() -> bool {
 /// @trace spec:tillandsias-vault
 #[cfg(feature = "vault")]
 fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
-    use base64::Engine;
-
-    if is_running_in_vm()
-        && let Some(cell) = IN_VM_CREDENTIALS.get()
-        && let Ok(guard) = cell.lock()
-        && let Some(creds) = &*guard
-    {
-        if let Some(encoded) = &creds.unseal_share_b64
-            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(encoded)
-            && key_vec.len() == 32
-        {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] recovered Shamir unseal share from host-delivered credentials (v1, base64)"
-                );
+    // 1927-q6fk: a guest asks only the host's delivery — this process's, or
+    // the resident agent's for a lane process — and never the D-Bus keyring,
+    // which does not exist in a guest.
+    if is_running_in_vm() {
+        let agent = adopt_agent_delivery();
+        let delivery = delivered_credentials_snapshot();
+        match guest_unseal_key_source(
+            delivery.as_ref(),
+            vault_data_initialized(),
+            agent.as_deref(),
+        )? {
+            GuestKey::Share(key) => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias-vault] recovered Shamir unseal share from host-delivered credentials (v1, base64)"
+                    );
+                }
+                return Ok(key);
             }
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&key_vec);
-            return Ok(key);
+            GuestKey::DeriveFromUuid(uuid) => {
+                // The host delivered no share (1909-aryk: no file is
+                // consulted). On an empty store the vault container generates
+                // the real share during init; on an initialized store the
+                // partial-init guard wipes it, which forces the re-login.
+                if debug {
+                    eprintln!(
+                        "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
+                    );
+                }
+                let machine_id = read_machine_id()?;
+                return Ok(auto_unseal::derive_unseal_key(
+                    machine_id.as_bytes(),
+                    uuid.as_bytes(),
+                ));
+            }
+            GuestKey::FirstBoot => return Ok(random_first_boot_key()),
         }
-        // The host delivered no share (1909-aryk: no file is consulted) —
-        // derive a first-boot dummy key. On an empty store the vault container
-        // generates the real share during init; on an initialized store the
-        // partial-init guard has already wiped it, which forces the re-login.
-        if debug {
-            eprintln!(
-                "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
-            );
-        }
-        let machine_id = read_machine_id()?;
-        let dummy_key = auto_unseal::derive_unseal_key(
-            machine_id.as_bytes(),
-            creds.installation_uuid.as_bytes(),
-        );
-        return Ok(dummy_key);
     }
 
     // 1. Try to get the Shamir share from the keychain
@@ -3954,10 +4140,15 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     // 32-byte read; `operator init` ignores it and generates the real share.
     // It is random, so no installation anchor has to be kept anywhere for
     // it, least of all in a plaintext fallback file.
+    Ok(random_first_boot_key())
+}
+
+#[cfg(feature = "vault")]
+fn random_first_boot_key() -> [u8; 32] {
     let mut dummy_key = [0u8; 32];
     dummy_key[..16].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
     dummy_key[16..].copy_from_slice(uuid::Uuid::new_v4().as_bytes());
-    Ok(dummy_key)
+    dummy_key
 }
 
 /// Fallback for non-vault builds.
@@ -4673,10 +4864,17 @@ fn share_check_now() -> ShareCheck {
                 .map(|v| v.len() == 32)
                 .unwrap_or(false)
     };
-    let keychain = keyring_entry(VAULT_SHAMIR_SHARE_V1)
-        .ok()
-        .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok())
-        .is_some_and(|s| valid(&s));
+    let in_vm = is_running_in_vm();
+    // 1927-q6fk: a lane process asks the resident agent on every poll, so the
+    // wait ends the moment the host delivers; a guest never asks D-Bus.
+    if in_vm {
+        let _ = adopt_agent_delivery();
+    }
+    let keychain = !in_vm
+        && keyring_entry(VAULT_SHAMIR_SHARE_V1)
+            .ok()
+            .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok())
+            .is_some_and(|s| valid(&s));
     let delivered = IN_VM_CREDENTIALS.get().and_then(|cell| {
         let guard = cell.lock().ok()?;
         let creds = guard.as_ref()?;
@@ -4685,7 +4883,7 @@ fn share_check_now() -> ShareCheck {
     ShareCheck {
         keychain,
         delivered,
-        in_vm: is_running_in_vm(),
+        in_vm,
     }
 }
 
@@ -5421,6 +5619,7 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
     });
 
     let host_delivered = if is_running_in_vm() {
+        let _ = adopt_agent_delivery();
         IN_VM_CREDENTIALS.get().and_then(|cell| {
             cell.lock()
                 .ok()
@@ -5430,9 +5629,15 @@ fn shamir_share_candidates() -> Vec<(&'static str, String)> {
         None
     };
 
-    let host_keychain = keyring_entry(VAULT_SHAMIR_SHARE_V1)
-        .ok()
-        .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok());
+    // 1927-q6fk: a guest has no Secret Service; asking it only costs a D-Bus
+    // round trip that fails.
+    let host_keychain = if is_running_in_vm() {
+        None
+    } else {
+        keyring_entry(VAULT_SHAMIR_SHARE_V1)
+            .ok()
+            .and_then(|entry| with_keyring_timeout(move || entry.get_password()).ok())
+    };
 
     assemble_share_candidates(guest_podman_secret, host_delivered, host_keychain)
 }
@@ -5445,29 +5650,9 @@ fn persist_healed_root_token(token: &str, share_b64: &str, debug: bool) -> Resul
     // Order 1919-keyc: the memoized token is the stale one being replaced.
     root_token_memo_clear();
     if is_running_in_vm() {
-        let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
-        if let Ok(mut guard) = cell.lock() {
-            *guard = Some(PendingHandover {
-                unseal_share_b64: Some(share_b64.to_string()),
-                root_token: Some(token.to_string()),
-            });
-        }
-        let creds_cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
-        if let Ok(mut guard) = creds_cell.lock() {
-            if let Some(creds) = guard.as_mut() {
-                creds.root_token = Some(token.to_string());
-                // The winning share just authenticated generate-root against
-                // the current storage epoch; replace any stale delivered
-                // share so later heals in this process start from it.
-                creds.unseal_share_b64 = Some(share_b64.to_string());
-            } else {
-                *guard = Some(InVmCredentials {
-                    unseal_share_b64: Some(share_b64.to_string()),
-                    installation_uuid: String::new(),
-                    root_token: Some(token.to_string()),
-                });
-            }
-        }
+        // The winning share just authenticated generate-root against the
+        // current storage epoch; it replaces any stale delivered share.
+        stage_guest_handover(share_b64, token);
         // 1909-aryk: memory only; the host collects it with GetVaultHandover
         // and keeps it in its own secure storage.
         if debug {
@@ -5743,32 +5928,10 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                     "[tillandsias-vault] running in VM; storing fresh-init handover in memory for host query"
                 );
             }
-            let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
-            if let Ok(mut guard) = cell.lock() {
-                *guard = Some(PendingHandover {
-                    unseal_share_b64: Some(share_b64.clone()),
-                    root_token: Some(token.clone()),
-                });
-            }
-
             // 1909-aryk: nothing is written to disk. The host collects the
-            // token and share with GetVaultHandover into its secure storage,
-            // and the partial-init guard asks the host's delivery, not a file.
-
-            // Update in-memory credentials so the current process has the new token.
-            let creds_cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
-            if let Ok(mut guard) = creds_cell.lock() {
-                if let Some(creds) = guard.as_mut() {
-                    creds.root_token = Some(token.clone());
-                    creds.unseal_share_b64 = Some(share_b64.clone());
-                } else {
-                    *guard = Some(InVmCredentials {
-                        unseal_share_b64: Some(share_b64.clone()),
-                        installation_uuid: String::new(),
-                        root_token: Some(token.clone()),
-                    });
-                }
-            }
+            // token and share with GetVaultHandover into its secure storage;
+            // a lane process pushes them to the resident agent (1927-q6fk).
+            stage_guest_handover(&share_b64, &token);
         } else {
             keychain_set_blocking("vault-root-token-v1", &token)?;
             keychain_set_blocking(VAULT_SHAMIR_SHARE_V1, &share_b64)?;
@@ -5815,6 +5978,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         return Ok(token);
     }
     if is_running_in_vm() {
+        let agent = adopt_agent_delivery();
         if let Some(cell) = IN_VM_CREDENTIALS.get()
             && let Ok(guard) = cell.lock()
             && let Some(creds) = &*guard
@@ -5823,7 +5987,10 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             log_root_token_recovery(debug, "host-delivered credentials");
             return Ok(token.clone());
         }
-        return Err("running in VM but no root token delivered from host".to_string());
+        return Err(format!(
+            "running in VM but no root token delivered from host{}",
+            agent.map(|a| format!(" ({a})")).unwrap_or_default()
+        ));
     }
 
     let entry_token = keyring_entry("vault-root-token-v1")
@@ -9032,6 +9199,71 @@ mod tests {
             Ok(KeySource::Derive)
         );
         assert_eq!(unseal_key_source(locked(), false), Ok(KeySource::Derive));
+    }
+
+    /// 1927-q6fk (yolanda 2026-10-30, every Windows lane): a missing Secret
+    /// Service is not a locked keyring. PRE-FIX this reads "keyring locked ...
+    /// unlock the OS keyring", a remedy that cannot work.
+    #[test]
+    fn a_missing_secret_service_is_not_reported_as_locked() {
+        let reason = "Platform secure storage failure: zbus error: \
+                      org.freedesktop.DBus.Error.ServiceUnknown: The name is not activatable";
+        let refusal = unseal_key_source(KeyringAnswer::Unreachable(reason.into()), true)
+            .expect_err("no keyring on initialized storage must not derive a key");
+        assert!(!refusal.contains("keyring locked"), "{refusal}");
+        assert!(!refusal.contains("unlock the OS keyring"), "{refusal}");
+        assert!(refusal.starts_with("no keyring service"), "{refusal}");
+        assert!(
+            refusal.contains("sign in again"),
+            "the wipe path is named: {refusal}"
+        );
+        // A real timeout is still a locked keyring.
+        let timeout = unseal_key_source(
+            KeyringAnswer::Unreachable("keyring operation timed out after 2s".into()),
+            true,
+        )
+        .unwrap_err();
+        assert!(timeout.contains("keyring locked"), "{timeout}");
+    }
+
+    fn guest_creds(share: Option<String>) -> InVmCredentials {
+        InVmCredentials {
+            unseal_share_b64: share,
+            installation_uuid: "inst-1".into(),
+            root_token: None,
+        }
+    }
+
+    /// 1927-q6fk. A guest decides from the host's delivery alone: the share
+    /// when delivered; the derived dummy when delivered WITHOUT a share (the
+    /// guard then wipes and the person signs in again); a first boot when
+    /// nothing is stored; and a named wait, never a D-Bus keyring error, when
+    /// an initialized store has no delivery yet.
+    #[test]
+    fn a_guest_decides_from_the_delivery_and_never_from_dbus() {
+        use base64::Engine;
+        let share = base64::engine::general_purpose::STANDARD.encode([9u8; 32]);
+        assert_eq!(
+            guest_unseal_key_source(Some(&guest_creds(Some(share))), true, None),
+            Ok(GuestKey::Share([9u8; 32]))
+        );
+        assert_eq!(
+            guest_unseal_key_source(Some(&guest_creds(None)), true, None),
+            Ok(GuestKey::DeriveFromUuid("inst-1".into()))
+        );
+        assert_eq!(
+            guest_unseal_key_source(None, false, None),
+            Ok(GuestKey::FirstBoot)
+        );
+        let wait = guest_unseal_key_source(None, true, Some("the resident agent did not answer"))
+            .unwrap_err();
+        assert!(wait.starts_with(WAITING_FOR_HOST), "{wait}");
+        assert!(wait.contains("Windows Credential Manager"), "{wait}");
+        assert!(wait.contains("resident agent did not answer"), "{wait}");
+        assert!(
+            !wait.contains("keyring locked") && !wait.contains("zbus"),
+            "{wait}"
+        );
     }
 
     /// Order 259: the cold-VM first-login name-in-use race is closed by TWO

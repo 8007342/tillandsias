@@ -217,9 +217,10 @@ fn main() {
              prompts for your git name, email, and PAT (token hidden)\n    \
              --list-cloud-projects  Boot the VM and list GitHub repos via the\n                  \
              stored Vault token; streams the repo listing to stdout\n    \
-             --opencode <path> [--prompt <text>]  Boot the VM and launch the\n                  \
-             OpenCode forge on <path> inside the guest; streams forge output\n                  \
-             to this terminal. With --prompt runs non-interactively (one shot).\n    \
+             --cloud <owner>/<repo> --opencode [--prompt <text>]  Boot the VM and\n                  \
+             launch the OpenCode forge on that GitHub project inside the guest;\n                  \
+             streams forge output to this terminal. With --prompt runs\n                  \
+             non-interactively (one shot).\n    \
              --diagnose    Print a static health report, then exit\n    \
              --with-metrics  With --diagnose: boot the VM, read the guest\n                  \
              metrics snapshot over the control wire, print it in the report,\n                  \
@@ -393,19 +394,23 @@ fn main() {
         require_no_live_tray("--list-cloud-projects");
         std::process::exit(diagnose::list_cloud_projects_main());
     }
-    // `--opencode <path> [--prompt <text>]`: boot VM and launch forge in guest.
-    if let Some(oc_idx) = args.iter().position(|a| a == "--opencode") {
+    // `--cloud <owner>/<repo> --opencode [--prompt <text>]`: boot VM and launch
+    // the forge in the guest (1925-mcld: the cloud is the only launch).
+    if args.iter().any(|a| a == "--opencode") {
+        let cloud = match diagnose::opencode_cloud_target(&args) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{{\"error\":\"{e}\"}}");
+                std::process::exit(2);
+            }
+        };
         require_no_live_tray("--opencode");
-        let path = args
-            .get(oc_idx + 1)
-            .cloned()
-            .unwrap_or_else(|| ".".to_string());
         let prompt = args
             .iter()
             .position(|a| a == "--prompt")
             .and_then(|i| args.get(i + 1))
             .cloned();
-        std::process::exit(diagnose::opencode_main(path, prompt));
+        std::process::exit(diagnose::opencode_main(cloud, prompt));
     }
     if args.iter().any(|a| a == "--diagnose") {
         let format = if args.iter().any(|a| a == "--json") {

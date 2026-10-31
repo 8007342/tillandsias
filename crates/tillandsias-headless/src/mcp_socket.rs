@@ -947,6 +947,29 @@ pub(crate) fn lane_accepting(project: &str, instance: &str) -> bool {
     UnixStream::connect(mcp_socket_path_for_lane(project, instance)).is_ok()
 }
 
+/// ORDER 1911-3dqo. Serve lane `(project, instance)` again after the process
+/// that bound it died while its forge kept running (systemd-oomd killed the
+/// launcher on lenovinha 2026-10-28). The lane is handed to the tray first,
+/// so a tray adopts it on its next tick even if this rejoin dies too; when
+/// nothing answers yet, this process binds it, reclaiming the refusing
+/// socket the dead launcher left.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub(crate) fn serve_lane_for_rejoin(project: &str, instance: &str) -> Result<(), String> {
+    mark_lane_tray_owned(project, instance)?;
+    if !lane_accepting(project, instance) {
+        start_mcp_socket_server_for_lane(project, instance)?;
+    }
+    if lane_accepting(project, instance) {
+        Ok(())
+    } else {
+        Err(format!(
+            "lane {project}-{} does not answer on {}",
+            lane_instance(instance),
+            mcp_socket_path_for_lane(project, instance).display()
+        ))
+    }
+}
+
 /// The lane a socket dir's marker names, when it names exactly the dir it
 /// sits in: a marker cannot point the tray at another lane's socket.
 fn marked_lane(dir: &std::path::Path) -> Option<LaneListenerKey> {
@@ -1070,6 +1093,11 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
                 // An active peer might belong to a CLI child or another tray
                 // process. Never steal its pathname merely because this
                 // process has not populated its own in-memory registry.
+                // 1863-eckw: on a tray-marked lane that peer is the tray
+                // serving it, so the lane is served and this launch proceeds.
+                Ok(_) if socket_path.parent().and_then(marked_lane).is_some() => {
+                    return Ok(());
+                }
                 Ok(_) => {
                     return Err(format!(
                         "mcp socket already has a live owner; refusing to unlink: {}",
@@ -1480,6 +1508,25 @@ mod lane_adoption_tests {
         assert!(answered, "pre-fix: connect() on the lane socket is refused");
     }
 
+    /// ORDER 1911-3dqo: systemd-oomd killed the launcher and the forge kept
+    /// running; the lane socket it bound was left refusing. A rejoin must make
+    /// the lane answer again, and hand it to the tray so the next launcher
+    /// death does not repeat this.
+    #[test]
+    fn a_rejoin_serves_a_lane_whose_launcher_was_killed() {
+        let (key, _rt) = lane("rejoin");
+        let path = leave_stale_socket(&key);
+
+        let served = serve_lane_for_rejoin(&key.0, &key.1);
+
+        let answered = UnixStream::connect(&path).is_ok();
+        let marked = path.parent().unwrap().join(LANE_TRAY_MARKER).is_file();
+        cleanup(&key);
+        assert_eq!(served, Ok(()));
+        assert!(answered, "pre-fix: connect() on the lane socket is refused");
+        assert!(marked, "the rejoined lane is handed to the tray");
+    }
+
     #[test]
     fn a_tick_leaves_a_lane_with_a_live_owner_alone() {
         let (key, _rt) = lane("live");
@@ -1527,6 +1574,21 @@ mod lane_adoption_tests {
         cleanup(&key);
         assert_eq!(unmarked, Some(path));
         assert_eq!(marked, None);
+    }
+
+    /// 1863-eckw: the launch after an adoption binds a lane the tray already
+    /// serves. The tray's listener is the lane being served, not a rival.
+    #[test]
+    fn a_relaunch_onto_a_tray_served_lane_is_not_refused() {
+        let (key, _rt) = lane("relaunch");
+        let path = mcp_socket_path_for_lane(&key.0, &key.1);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _ = fs::remove_file(&path);
+        let _tray = UnixListener::bind(&path).unwrap();
+        mark_lane_tray_owned(&key.0, &key.1).unwrap();
+        let bound = start_mcp_socket_server_for_lane(&key.0, &key.1);
+        cleanup(&key);
+        assert_eq!(bound, Ok(()));
     }
 }
 

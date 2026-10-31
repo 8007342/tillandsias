@@ -16,11 +16,18 @@ severity: high
 size: instant
 preconditions:
   - workspace contains crates/tillandsias-headless/src/mcp_socket.rs
+  - workspace contains scripts/test-lane-adoption-pattern-floor.sh
 critical_path:
   - step: "Req: a marked lane whose launcher exited answers after one tray tick; a live owner, an unmarked lane and a spoofed marker are left alone (pre-fix: connect() is refused)"
     command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock lane_adoption_tests 2>&1"
     timeout_ms: 600000
-    success_pattern: "test result: ok. 5 passed"
+    # 1929-gfxy: a FLOOR, not an exact count. The module grew to 7 tests
+    # (1863-eckw, 1911-3dqo) and the exact "5 passed" pin refused a green run.
+    success_pattern: "test result: ok\\. ([5-9]|[1-9][0-9]+) passed; 0 failed"
+  - step: "the lane-adoption pattern is a floor of 5 with no failures, and the retired exact pin refuses today's 7-test output"
+    command: "bash scripts/test-lane-adoption-pattern-floor.sh"
+    timeout_ms: 10000
+    expected_behavior: "ok:lane-adoption-pattern-floor"
   - step: "Req: the forge reports the lane as ready, stale, absent or unset (a missing socket is not called stale)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-lane-socket-state.lua 2>&1"
     timeout_ms: 60000

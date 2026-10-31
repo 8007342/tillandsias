@@ -683,7 +683,6 @@ fn build_local_preview_run_args(
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
         "--read-only".into(),
-        "--pids-limit=256".into(),
         "--tmpfs".into(),
         "/tmp:rw,nosuid,nodev,size=256m,mode=1777".into(),
         "--workdir".into(),
@@ -700,6 +699,14 @@ fn build_local_preview_run_args(
         "--label".into(),
         format!("{PROFILE}={}", profile.name()),
     ];
+    // 1911-3dqo (coordinator ruling): a preview is a forge sibling, so its
+    // memory.high sits below the forge's and it protects nothing; two full
+    // forge budgets on one host would defeat the reclaim order. pids as before.
+    args.extend(
+        tillandsias_core::forge_budget::ForgeBudget::for_this_host()
+            .sibling(50, 256)
+            .podman_args(),
+    );
     if let Some(dir) = &live.app_dir {
         args.extend(["--label".into(), format!("{APP_DIR}={dir}")]);
     }
