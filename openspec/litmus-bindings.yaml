@@ -166,6 +166,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:release-cache-is-saved-only-by-main
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
@@ -493,6 +494,7 @@ specs:
 - spec_id: forge-hot-cold-split
   status: active
   litmus_tests:
+  - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
   - litmus:forge-hot-cold-split-tmpfs-shape
@@ -803,6 +805,7 @@ specs:
   - litmus:ledger-node-claim-shape
   - litmus:git-delta-wait-shape
   - litmus:opencode-prompt-e2e-shape
+  - litmus:smoke-agent-prompt-is-minimal
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
   - litmus:codex-e2e-launch-parity
@@ -1038,12 +1041,14 @@ specs:
   last_verified: '2026-05-30'
 - spec_id: singleton-guard
   status: active
-  litmus_tests: null
-  coverage_ratio: 0
+  litmus_tests:
+  - litmus:one-tray-per-enclave-and-the-cli-sees-it
+  coverage_ratio: 100
   last_verified: '2026-05-14'
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:plan-next-names-a-stale-ledger-and-hides-rows-siblings-hold
   - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
@@ -1080,6 +1085,7 @@ specs:
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
+  - litmus:web-studio-grapesjs-stores-as-a-repo-diff
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape
@@ -1314,6 +1320,7 @@ specs:
   litmus_tests:
   - litmus:binary-e2e-smoke
   - litmus:dead-tray-run-is-reaped
+  - litmus:a-graceful-exit-leaves-another-owners-enclave-running
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: ephemeral-guarantee

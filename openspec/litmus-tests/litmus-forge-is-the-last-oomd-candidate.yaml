@@ -1,0 +1,30 @@
+# @trace order:1913-ebv8
+name: litmus:forge-is-the-last-oomd-candidate
+spec: forge-hot-cold-split
+phase: runtime
+description: Under memory pressure systemd-oomd kills a sibling before the forge, because the forge's user-owned scope is one candidate (memory.oom.group) marked user.oomd_avoid; every running tillandsias forge sits in tillandsias.slice with those marks
+severity: high
+size: quick
+
+preconditions:
+  - Linux host with podman on the systemd cgroup manager, a user systemd manager, systemd-oomd running, getfattr/setfattr (attr)
+  - for arm 2, a tillandsias forge launched by this build is running
+
+critical_path:
+  - step: "arm 1: in a throwaway MemoryHigh=200M slice, the avoid-marked scope survives oomd and the other is killed, with the mark placed on each in turn; arm 2: every running forge is in tillandsias.slice with memory.oom.group=1 and user.oomd_avoid=1"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-forge-oomd-avoid.lua"
+    timeout_ms: 900000
+    expected_behavior: "ok:forge-oomd-avoid:2-arms"
+
+observability:
+  traces:
+    - "@trace order:1913-ebv8"
+  expected_log: "ok:forge-oomd-avoid:2-arms"
+  log_fields:
+    spec: "forge-hot-cold-split"
+    test: "forge-is-the-last-oomd-candidate"
+    artifact: "crates/tillandsias-headless/src/oom_posture.rs + scripts/lua/test-forge-oomd-avoid.lua"
+
+rollback:
+  on_failure: "oomctl to see tillandsias.slice; getfattr -n user.oomd_avoid on the forge's libpod scope; read oom_posture.rs for the ownership rule"
+  command: "oomctl"

@@ -480,17 +480,23 @@ findings.
 
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
+# 1941-smkp: ONE short agent turn, never the /meta-orchestration loop on the
+# shared hosted free tier (a full loop is 100+ requests; 2026-11-01 ended in a
+# 429 with Retry-After 78443). The token is spelled out so the prompt text
+# cannot satisfy the grep.
+SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode \
-  --prompt "Use the /meta-orchestration skill" 2>&1 \
+  --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee "$LOG_DIR/04-meta-orchestration.log"
 FORGE_RC=${PIPESTATUS[0]}; printf 'forge_exit=%s\n' "$FORGE_RC" | tee "$LOG_DIR/04-forge-exit.txt"
 test "$FORGE_RC" -eq 0
+grep -q 'SMOKE-AGENT-OK' "$LOG_DIR/04-meta-orchestration.log"
 ```
 
-Allow the in-forge agent to complete its skill, including filing and pushing
-its plan work packets. Do not terminate it merely because it runs long.
+The agent runs one turn and exits. It no longer runs a cycle, so it files and
+pushes nothing; the smoke's findings are yours to file.
 
 
 ### 4·Linux — choosing the harness (order 404)

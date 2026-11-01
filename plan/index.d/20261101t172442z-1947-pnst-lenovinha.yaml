@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01).
+packets:
+- packet_id: plan-next-answers-from-the-trunk-ledger-or-says-how-stale-its-index-is
+  order: 1947-pnst
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [mcp, plan, index, freshness]
+  estimated_hours: 3
+  title: plan_next answers from the trunk ledger, or refuses with its staleness, instead of serving a weeks-old checkout as exact
+  context: 'lenovinha 2026-11-01: plan_next returned freshness source_commit 69776ab29, indexed_at 2026-10-14T19:03:40Z, with confidence exact. The forge-plan server reads the main checkout at its current HEAD, which here is a work branch (work/1667-6rtp) last moved 2026-10-14, while origin/linux-next was at 49faf7a60 (2026-11-01). All five rows it offered were already held by sibling-branch claims of other hosts, so a worker following it would collide or idle. Nothing compares the indexed commit with origin/linux-next, and the answer gives no sign it is 18 days old.'
+  exit_criteria:
+  - 'A fixture serves plan_next from a checkout whose HEAD is behind a fetched origin/linux-next, and asserts the answer is either built from origin/linux-next or carries a staleness verdict (commits and days behind) with confidence below exact. Pre-fix result: FAILS, the answer reports exact for the old HEAD.'
+  - 'A row that a sibling branch holds in_progress is not offered as claimable, which matches what check-claims-across-branches.sh reports. Pre-fix result: FAILS on 1233-jqp4, 1236-bmjh, 1237-f9dy and 776-jcf3.'
+  verifiable_closure: 'Fixture transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Decide the source: read the ledger from origin/linux-next (git show, no checkout move), or keep HEAD and report the staleness. Then fold the sibling-branch claims into the claimable filter.'
+  provenance: 1921-q7q3 pickup on lenovinha 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T17:24:42Z'
+    host: lenovinha
+    summary: filed p1 ready, plan_next served a checkout 18 days behind trunk as exact

@@ -126,6 +126,12 @@ pub(crate) fn forwarder_spec(
     .name(forwarder_name(handle))
     .network(format!("{}:alias=router", handle.network_name))
     // 1911-3dqo: a small forge sibling, reclaimed before the forge.
+    // 1913-ebv8: beside the forge in tillandsias.slice, ranked before it.
+    .cgroup_parent(
+        crate::oom_slice_args()
+            .pop()
+            .and_then(|a| a.strip_prefix("--cgroup-parent=").map(str::to_string)),
+    )
     .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host().sibling(5, 32))
     .tmpfs("/tmp:size=8m")
     .env("TILLANDSIAS_FWD_PROJECT", project)
@@ -462,6 +468,12 @@ pub(crate) fn browser_window_spec(
     // names resolve to the forwarder over IPv4.
     .disable_ipv6()
     // 1911-3dqo: a window is a forge sibling, reclaimed before the forge.
+    // 1913-ebv8: beside the forge in tillandsias.slice, ranked before it.
+    .cgroup_parent(
+        crate::oom_slice_args()
+            .pop()
+            .and_then(|a| a.strip_prefix("--cgroup-parent=").map(str::to_string)),
+    )
     .memory_budget(window_budget())
     .arg(format!(
         "--host-resolver-rules={}",
@@ -516,6 +528,12 @@ pub(crate) fn webkit_window_spec(
     // names resolve to the forwarder over IPv4.
     .disable_ipv6()
     // 1911-3dqo: a window is a forge sibling, reclaimed before the forge.
+    // 1913-ebv8: beside the forge in tillandsias.slice, ranked before it.
+    .cgroup_parent(
+        crate::oom_slice_args()
+            .pop()
+            .and_then(|a| a.strip_prefix("--cgroup-parent=").map(str::to_string)),
+    )
     .memory_budget(window_budget())
     .tmpfs("/tmp:size=256m")
     .tmpfs("/dev/shm:size=256m")

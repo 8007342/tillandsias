@@ -536,7 +536,21 @@ so this one push unblocks the fleet. No `--no-verify` is ever needed —
 
 `release.yml` is `workflow_dispatch`-only. The skill explicitly triggers it with the new tag, never via `on: push: tags:` (the workflow is intentionally manual to keep release authorship traceable).
 
+**Seed the caches on main first (order 1942-mijg).** GitHub restores an
+Actions cache only from the run's own ref or the default branch, and a tag is
+neither for the NEXT tag: every cache a tag run saved was restorable by nobody,
+so each release cold-built ~499 Nix derivations (67 min on v56.11.1.1). The
+workflow therefore saves only when `github.ref` is `refs/heads/main`, and the
+only main run is this seed (`cache_seed=true`: builds what the release builds,
+saves the Nix store and both rust-caches, publishes nothing). Dispatch it on
+main, wait for it, THEN dispatch the tag, which restores what the seed saved.
+A seed failure does not block the release; it only means the tag cold-builds.
+
 ```bash
+gh workflow run release.yml --ref main -f cache_seed=true
+sleep 5
+seed_id="$(gh run list --workflow=release.yml --branch=main --event=workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
+gh run watch "${seed_id}" >/dev/null || echo "seed run ${seed_id} failed: the release will cold-build"
 gh workflow run release.yml --ref "${new_tag}"
 sleep 5
 gh run list --workflow=release.yml --branch="${new_tag}" --limit 1

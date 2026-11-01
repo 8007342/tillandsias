@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: measurement
+      ts: "2026-11-01T20:54:43Z"
+      agent_id: linux-lenovinha-opus5-20261101t205443z
+      host: lenovinha
+      summary: |-
+        SPILL BENCHMARK (protocol 7.2), lenovinha 2026-11-01, zram-only regime, scripts/measure-forge-memory-budget.sh --spill on work/1378-7w2p, random (incompressible) bytes in 64 MiB files, M=2048 MiB, memory.swap.max=4096 MiB written exactly. Verbatim:
+        regime:host=lenovinha:kernel=7.2.13-200.fc44.x86_64:nproc=16:mem_total_mib=13811:swap=/dev/zram0,partition,8G:swappiness=10:image=localhost/tillandsias-forge:v56.10.31.1:image_id=27e9a5d224bf
+        measure:forge-spill:backing=tmpfs:mem_max_mib=2048:swap_max_mib=4096:w_mib=1024:write_ms=2802:read_ms=193:memory_peak_mib=1030:swap_peak_mib=0:high=0:max=0:oom=0:oom_kill=0:host_min_avail_mib=9943:verdict=ok
+        measure:forge-spill:backing=volume:mem_max_mib=2048:swap_max_mib=4096:w_mib=1024:write_ms=2661:read_ms=378:memory_peak_mib=775:swap_peak_mib=0:high=0:max=0:oom=0:oom_kill=0:host_min_avail_mib=10883:verdict=ok
+        measure:forge-spill:backing=tmpfs:mem_max_mib=2048:swap_max_mib=4096:w_mib=2048:write_ms=5551:read_ms=398:memory_peak_mib=2048:swap_peak_mib=8:high=0:max=288:oom=0:oom_kill=0:host_min_avail_mib=9008:verdict=ok
+        measure:forge-spill:backing=volume:mem_max_mib=2048:swap_max_mib=4096:w_mib=2048:write_ms=5245:read_ms=357:memory_peak_mib=2048:swap_peak_mib=0:high=0:max=32:oom=0:oom_kill=0:host_min_avail_mib=11062:verdict=ok
+        measure:forge-spill:backing=tmpfs:mem_max_mib=2048:swap_max_mib=4096:w_mib=4096:write_ms=13133:read_ms=6344:memory_peak_mib=2048:swap_peak_mib=2060:high=0:max=21141:oom=0:oom_kill=0:host_min_avail_mib=6867:verdict=ok
+        measure:forge-spill:backing=volume:mem_max_mib=2048:swap_max_mib=4096:w_mib=4096:write_ms=10308:read_ms=1462:memory_peak_mib=2048:swap_peak_mib=0:high=0:max=4963:oom=0:oom_kill=0:host_min_avail_mib=10842:verdict=ok
+        measure:forge-spill:backing=tmpfs:mem_max_mib=2048:swap_max_mib=0:w_mib=4096:write_ms=5456:read_ms=-1:memory_peak_mib=2048:swap_peak_mib=0:high=0:max=88:oom=2:oom_kill=2:host_min_avail_mib=9072:verdict=oom-killed:rc=137
+        READING: the falsifiable claim (tmpfs + swap beats the cold volume at 2M) is FALSE here for incompressible data: at W=2M tmpfs wrote in 13.1 s vs 10.3 s and read back shuffled in 6.3 s vs 1.5 s on the NVMe volume (4.3x slower), with 2060 MiB in zram and host MemAvailable down to 6867 MiB. At W<=M the two are even. Control holds: swap.max=0 OOM-kills at M (oom_kill=2). Per the protocol, size HOT to stay resident and treat the swap allowance as an OOM guard. CAVEAT: random bytes are zram's worst case; a build tree compresses, so a compressible-data run could narrow the gap. LEFT: the floor-host regime and the zram + disk swapfile regime (no swapfile on lenovinha).

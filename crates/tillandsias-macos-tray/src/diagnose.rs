@@ -871,15 +871,47 @@ impl AsyncWrite for ControlWireStream {
     }
 }
 
+/// Order 1925-cxch: deliver the Vault credentials on the guest's FIRST phase
+/// answer, which is the guest's own "control wire is listening" signal.
+///
+/// One exchange right after `vz.start()` was too early: the guest's listener
+/// was not up, the connect was reset, nothing was delivered, and a warm boot's
+/// Vault stayed sealed until Ready timed out (v56.10.31.2 macOS smoke). The
+/// Ready wait already probes the guest's phase on its own schedule; the first
+/// probe that gets an answer proves the listener is up, so the exchange runs
+/// then. No new cadence is added. A failed exchange is tried again on the next
+/// answer, so it rides the same existing schedule.
+pub(crate) struct DeliverOnFirstAnswer {
+    done: std::cell::Cell<bool>,
+}
+
+impl DeliverOnFirstAnswer {
+    pub(crate) fn new() -> Self {
+        Self {
+            done: std::cell::Cell::new(false),
+        }
+    }
+
+    pub(crate) async fn observe<T, E, X, XF>(&self, answer: &Result<T, E>, exchange: X)
+    where
+        X: FnOnce() -> XF,
+        XF: std::future::Future<Output = bool>,
+    {
+        if answer.is_ok() && !self.done.get() && exchange().await {
+            self.done.set(true);
+        }
+    }
+}
+
 /// Order 1925-cxch: run one CLI session's credential exchange over a fresh
-/// control-wire connection. Best-effort and loud: a failure is printed and the
-/// session goes on, because a guest whose Vault needs nothing must not be held
-/// up, and one that does will say so at its ready gate.
+/// control-wire connection. Loud: a failure is printed, and the result says
+/// whether the exchange completed so the boot delivery can try again on the
+/// guest's next phase answer.
 async fn cli_credential_exchange(
     vz: &tillandsias_vm_layer::vz::VzRuntime,
     session: &crate::installation_uuid::CliCredentialExchange,
     when: &str,
-) {
+) -> bool {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_host_shell::vsock_client::Client;
     let stream = match open_control_wire_stream(
@@ -892,7 +924,7 @@ async fn cli_credential_exchange(
         Ok(s) => s,
         Err(e) => {
             eprintln!("[tillandsias-tray] credential exchange ({when}): connect: {e}");
-            return;
+            return false;
         }
     };
     let mut client = Client::from_stream(
@@ -904,10 +936,14 @@ async fn cli_credential_exchange(
     );
     if let Err(e) = client.handshake().await {
         eprintln!("[tillandsias-tray] credential exchange ({when}): handshake: {e}");
-        return;
+        return false;
     }
-    if let Err(e) = session.exchange(&mut client).await {
-        eprintln!("[tillandsias-tray] credential exchange ({when}): {e}");
+    match session.exchange(&mut client).await {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("[tillandsias-tray] credential exchange ({when}): {e}");
+            false
+        }
     }
 }
 
@@ -1756,7 +1792,7 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
             return 1;
         }
         let credentials = crate::installation_uuid::CliCredentialExchange::new();
-        cli_credential_exchange(&vz, &credentials, "boot").await;
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[exec-guest] waiting for the guest service to answer…");
         // ORDER 1751-ipuw: Ready now waits for Vault to be unsealed, and
         // exec-guest is the tool for diagnosing a guest whose Vault is NOT
@@ -1765,7 +1801,15 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
                 let probe = probe_phase_secure_or_plain(&vz, t);
-                async move { probe.await.map(exec_guest_ready_phase) }
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || cli_credential_exchange(vzr, credentials, "boot"))
+                        .await;
+                    answer.map(exec_guest_ready_phase)
+                }
             })
             .await
         {
@@ -2030,11 +2074,22 @@ pub fn transport_conformance_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return false;
         }
-        cli_credential_exchange(&vz, &credentials, "boot").await;
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[transport-conformance] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || {
+                            cli_credential_exchange(vzr, credentials, "boot")
+                        })
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -2146,10 +2201,26 @@ pub fn github_login_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        // Order 1925-ghlg: deliver at boot like every other CLI mode. Ready
+        // is held until Vault unseals, so without this a warm boot never got
+        // here (v56.11.1.1 smoke: timeout after 300 s). 701-g98y still holds
+        // for the END of this command: after the login it only captures, so
+        // the Keychain's older share never overwrites the new epoch.
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[github-login] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || cli_credential_exchange(vzr, credentials, "boot"))
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -2441,10 +2512,21 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
             eprintln!("[diagnose] starting VM for the metrics read…");
             vz.start().await.map_err(|e| format!("start: {e}"))?;
             let credentials = crate::installation_uuid::CliCredentialExchange::new();
-            cli_credential_exchange(&vz, &credentials, "boot").await;
+            let first_answer = DeliverOnFirstAnswer::new();
             let result = async {
                 vz.wait_phase_ready(Duration::from_secs(300), |t| {
-                    probe_phase_secure_or_plain(&vz, t)
+                    let probe = probe_phase_secure_or_plain(&vz, t);
+                    let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                    let (first_answer, credentials) = (&first_answer, &credentials);
+                    async move {
+                        let answer = probe.await;
+                        first_answer
+                            .observe(&answer, || {
+                                cli_credential_exchange(vzr, credentials, "boot")
+                            })
+                            .await;
+                        answer
+                    }
                 })
                 .await
                 .map_err(|e| format!("wait_phase_ready: {e}"))?;
@@ -2529,11 +2611,22 @@ pub fn list_cloud_projects_main() -> i32 {
             return 1;
         }
         let credentials = crate::installation_uuid::CliCredentialExchange::new();
-        cli_credential_exchange(&vz, &credentials, "boot").await;
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[list-cloud-projects] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || {
+                            cli_credential_exchange(vzr, credentials, "boot")
+                        })
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -2712,11 +2805,22 @@ pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
             return 1;
         }
         let credentials = crate::installation_uuid::CliCredentialExchange::new();
-        cli_credential_exchange(&vz, &credentials, "boot").await;
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[opencode] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || {
+                            cli_credential_exchange(vzr, credentials, "boot")
+                        })
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -3648,11 +3752,64 @@ mod tests {
         );
     }
 
+    /// Order 1925-cxch: a guest that refuses connects until its control wire
+    /// listens gets the delivery on its first answer, exactly once, and a failed
+    /// exchange is tried again on the next answer. With the old one-shot boot
+    /// exchange the delivery happened before the guest answered and was lost.
+    #[tokio::test]
+    async fn the_boot_delivery_waits_for_the_guests_first_answer() {
+        use std::cell::{Cell, RefCell};
+        let first = super::DeliverOnFirstAnswer::new();
+        let calls = Cell::new(0u32);
+        let log = RefCell::new(Vec::new());
+        // The guest refuses twice, then answers on every probe.
+        let answers: [Result<u8, &str>; 5] = [
+            Err("reset by peer"),
+            Err("reset by peer"),
+            Ok(1),
+            Ok(1),
+            Ok(2),
+        ];
+        for (i, answer) in answers.iter().enumerate() {
+            first
+                .observe(answer, || async {
+                    calls.set(calls.get() + 1);
+                    log.borrow_mut().push(i);
+                    true
+                })
+                .await;
+        }
+        assert_eq!(calls.get(), 1, "delivered exactly once");
+        assert_eq!(
+            *log.borrow(),
+            vec![2],
+            "on the first answer, never before it"
+        );
+
+        // A failed exchange rides the next answer.
+        let first = super::DeliverOnFirstAnswer::new();
+        let attempts = RefCell::new(Vec::new());
+        for (i, answer) in [Ok::<u8, &str>(1), Ok(1), Ok(1)].iter().enumerate() {
+            first
+                .observe(answer, || async {
+                    attempts.borrow_mut().push(i);
+                    i == 1
+                })
+                .await;
+        }
+        assert_eq!(
+            *attempts.borrow(),
+            vec![0, 1],
+            "retried on the next answer, then done"
+        );
+    }
+
     /// Order 1925-cxch: every CLI mode that boots the VM also runs the Vault
     /// credential exchange, so none strands a Vault the way `--opencode` and
-    /// `--exec-guest` did on v56.10.31.1. `github_login_main` is the one
-    /// exception: it only captures (701-g98y), because delivering the
-    /// Keychain's older share would overwrite the epoch it just created.
+    /// `--exec-guest` did on v56.10.31.1. All six deliver at boot;
+    /// `github_login_main` alone only captures before stop (701-g98y), because
+    /// delivering the Keychain's older share then would overwrite the epoch
+    /// it just created.
     #[test]
     fn every_cli_boot_runs_the_credential_exchange() {
         // source-pin-ok: the property is "no boot path omits the call", which only the source shows
@@ -3669,19 +3826,35 @@ mod tests {
             let name = chunk.split('(').next().unwrap_or_default();
             let end = chunk.find("\n}\n").unwrap_or(chunk.len());
             let func = &chunk[..end];
-            if !func.contains("vz.start().await") || name == "github_login_main" {
+            if !func.contains("vz.start().await") {
                 continue;
             }
             checked += 1;
+            // Every boot delivers on the guest's first answer: Ready is held
+            // until Vault unseals (1925-ghlg: github-login was the exception
+            // and could not pass a warm boot).
             assert!(
-                func.contains("cli_credential_exchange(&vz, &credentials, \"boot\")")
-                    && func.contains("cli_credential_exchange(&vz, &credentials, \"before stop\")"),
-                "{name} boots the VM without the CLI credential exchange at boot and before stop"
+                func.contains("cli_credential_exchange(vzr, credentials, \"boot\")")
+                    && func.contains("DeliverOnFirstAnswer::new()"),
+                "{name} boots the VM without delivering the Vault credentials on the first answer"
             );
+            // Before stop: github-login captures only (701-g98y); every other
+            // mode runs the session's collect.
+            if name == "github_login_main" {
+                assert!(
+                    func.contains("capture_vault_handover(&mut client)"),
+                    "github_login_main must still capture the new epoch's handover"
+                );
+            } else {
+                assert!(
+                    func.contains("cli_credential_exchange(&vz, &credentials, \"before stop\")"),
+                    "{name} stops the VM without collecting the Vault handover"
+                );
+            }
         }
         assert_eq!(
-            checked, 5,
-            "the five Ready-waiting CLI modes were found and checked"
+            checked, 6,
+            "the six VM-booting CLI modes were found and checked"
         );
     }
 
