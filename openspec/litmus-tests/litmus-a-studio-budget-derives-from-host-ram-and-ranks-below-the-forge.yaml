@@ -1,0 +1,36 @@
+# @trace order:1921-q7q3, spec:local-web-preview
+# A studio sibling gets memory.high and memory.max computed from host RAM at
+# launch, swap equal to max, half the cores, no reservation and
+# oom_score_adj 1000, so memory pressure reclaims from and kills the studio,
+# never the forge (1913-ebv8, 1911-3dqo). This is the UNIT half. The live
+# half (a synthetic allocation in the studio next to a forge: studio throttled
+# then killed, forge survives) waits on operator consent and a restored
+# enclave on lenovinha.
+name: litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
+spec: local-web-preview
+phase: pre-build
+description: The studio budget derives from MemTotal/MemAvailable with a floor and a 75% cap, and the studio argv writes each cgroup limit exactly with no reservation and the maximum OOM score
+severity: high
+size: quick
+
+preconditions:
+  - cargo can build the tillandsias bin with --features tray,listen-vsock
+
+critical_path:
+  - step: "the studio budget derives from host RAM and ranks below the forge"
+    command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- the_studio_budget_derives_from_host_ram the_studio_ranks_below_the_forge_under_pressure 2>&1); grep -E 'test result' <<<\"$out\""
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 2 passed"
+
+observability:
+  traces:
+    - "@trace order:1921-q7q3"
+  expected_log: "test result: ok. 2 passed"
+  log_fields:
+    spec: "local-web-preview"
+    test: "a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge"
+    artifact: "crates/tillandsias-headless/src/imagegen_studio.rs"
+
+rollback:
+  on_failure: "read StudioBudget::for_host and run_args"
+  command: "grep -n -A30 'impl StudioBudget' crates/tillandsias-headless/src/imagegen_studio.rs"
