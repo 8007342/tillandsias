@@ -1041,8 +1041,9 @@ specs:
   last_verified: '2026-05-30'
 - spec_id: singleton-guard
   status: active
-  litmus_tests: null
-  coverage_ratio: 0
+  litmus_tests:
+  - litmus:one-tray-per-enclave-and-the-cli-sees-it
+  coverage_ratio: 100
   last_verified: '2026-05-14'
 - spec_id: spec-traceability
   status: active
@@ -1320,6 +1321,7 @@ specs:
   litmus_tests:
   - litmus:binary-e2e-smoke
   - litmus:dead-tray-run-is-reaped
+  - litmus:a-graceful-exit-leaves-another-owners-enclave-running
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: ephemeral-guarantee
