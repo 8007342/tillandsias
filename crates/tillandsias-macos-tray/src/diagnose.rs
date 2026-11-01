@@ -2201,10 +2201,26 @@ pub fn github_login_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        // Order 1925-ghlg: deliver at boot like every other CLI mode. Ready
+        // is held until Vault unseals, so without this a warm boot never got
+        // here (v56.11.1.1 smoke: timeout after 300 s). 701-g98y still holds
+        // for the END of this command: after the login it only captures, so
+        // the Keychain's older share never overwrites the new epoch.
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[github-login] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || cli_credential_exchange(vzr, credentials, "boot"))
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -3790,9 +3806,10 @@ mod tests {
 
     /// Order 1925-cxch: every CLI mode that boots the VM also runs the Vault
     /// credential exchange, so none strands a Vault the way `--opencode` and
-    /// `--exec-guest` did on v56.10.31.1. `github_login_main` is the one
-    /// exception: it only captures (701-g98y), because delivering the
-    /// Keychain's older share would overwrite the epoch it just created.
+    /// `--exec-guest` did on v56.10.31.1. All six deliver at boot;
+    /// `github_login_main` alone only captures before stop (701-g98y), because
+    /// delivering the Keychain's older share then would overwrite the epoch
+    /// it just created.
     #[test]
     fn every_cli_boot_runs_the_credential_exchange() {
         // source-pin-ok: the property is "no boot path omits the call", which only the source shows
@@ -3809,20 +3826,35 @@ mod tests {
             let name = chunk.split('(').next().unwrap_or_default();
             let end = chunk.find("\n}\n").unwrap_or(chunk.len());
             let func = &chunk[..end];
-            if !func.contains("vz.start().await") || name == "github_login_main" {
+            if !func.contains("vz.start().await") {
                 continue;
             }
             checked += 1;
+            // Every boot delivers on the guest's first answer: Ready is held
+            // until Vault unseals (1925-ghlg: github-login was the exception
+            // and could not pass a warm boot).
             assert!(
                 func.contains("cli_credential_exchange(vzr, credentials, \"boot\")")
-                    && func.contains("DeliverOnFirstAnswer::new()")
-                    && func.contains("cli_credential_exchange(&vz, &credentials, \"before stop\")"),
-                "{name} boots the VM without the CLI credential exchange at boot and before stop"
+                    && func.contains("DeliverOnFirstAnswer::new()"),
+                "{name} boots the VM without delivering the Vault credentials on the first answer"
             );
+            // Before stop: github-login captures only (701-g98y); every other
+            // mode runs the session's collect.
+            if name == "github_login_main" {
+                assert!(
+                    func.contains("capture_vault_handover(&mut client)"),
+                    "github_login_main must still capture the new epoch's handover"
+                );
+            } else {
+                assert!(
+                    func.contains("cli_credential_exchange(&vz, &credentials, \"before stop\")"),
+                    "{name} stops the VM without collecting the Vault handover"
+                );
+            }
         }
         assert_eq!(
-            checked, 5,
-            "the five Ready-waiting CLI modes were found and checked"
+            checked, 6,
+            "the six VM-booting CLI modes were found and checked"
         );
     }
 
