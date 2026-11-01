@@ -37,6 +37,11 @@ const MODELS_TSV: &str = include_str!("../../../images/imagegen/models.tsv");
 /// and under an allowed licence.
 const REGISTER_TSV: &str = include_str!("../../../images/models/licence-register.tsv");
 
+/// The shipped register (1954-gdi6: image.generate gates ControlNet and LoRA files on it).
+pub fn register_tsv() -> &'static str {
+    REGISTER_TSV
+}
+
 /// Refuse `row` unless `register` carries it exactly (repo, revision, file,
 /// sha256), `gated` false and an allowed spdx.
 pub fn register_admits(register: &str, row: &ModelFile) -> Result<(), String> {
@@ -86,6 +91,17 @@ pub struct ModelFile {
 }
 
 impl ModelFile {
+    /// 1954-gdi6: a ControlNet (`controlnet:<name>`) or LoRA (`lora`) row.
+    pub fn is_aux(&self) -> bool {
+        self.role == "lora" || self.role.starts_with("controlnet:")
+    }
+
+    /// The base tier an aux row pairs with: the first segment of its `tier`
+    /// column (`I1/controlnet-openpose` pairs with I1).
+    pub fn base_tier(&self) -> &str {
+        self.tier.split('/').next().unwrap_or(&self.tier)
+    }
+
     /// The pinned download URL: a commit, never a branch.
     pub fn url(&self) -> String {
         format!(
@@ -165,10 +181,11 @@ pub fn manifest() -> Vec<ModelFile> {
 }
 
 /// The files tier `tier` needs. Empty when the tier has no pinned files yet.
+/// ControlNet and LoRA rows (1954-gdi6) are fetched only when a request names them.
 pub fn files_for_tier(manifest: &[ModelFile], tier: &str) -> Vec<ModelFile> {
     manifest
         .iter()
-        .filter(|m| m.tier == tier)
+        .filter(|m| m.tier == tier && !m.is_aux())
         .cloned()
         .collect()
 }
