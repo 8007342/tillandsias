@@ -25163,6 +25163,7 @@ mod tests {
         assert_eq!(shutdown_escalation_targets(enclave()).len(), 4);
         // A, the owner, still sweeps its own enclave on exit.
         drop(run_a);
+        crate::tray_presence::wait_released(&dir);
         let owner = crate::tray_presence::owner_elsewhere(&dir);
         assert_eq!(shutdown_targets_for(enclave(), owner).len(), 4);
         let _ = std::fs::remove_dir_all(&dir);
