@@ -265,7 +265,92 @@ pub fn parse_job(
 pub enum Progress {
     Building,
     Fetch(FetchEvent),
-    Step { done: u32, total: u32 },
+    Step {
+        done: u32,
+        total: u32,
+    },
+    /// 1955-rjv3: waiting for the host's GPU; `position` jobs are ahead.
+    Queued {
+        position: usize,
+    },
+}
+
+/// 1955-rjv3: one engine on the device at a time, per host. Calls wait in
+/// arrival order (a queue, never a refusal) and report their position.
+struct GpuQueue {
+    state: Mutex<(u64, u64)>, // (next ticket, now serving)
+    turn: std::sync::Condvar,
+}
+
+fn gpu_queue() -> &'static GpuQueue {
+    static Q: OnceLock<GpuQueue> = OnceLock::new();
+    Q.get_or_init(|| GpuQueue {
+        state: Mutex::new((0, 0)),
+        turn: std::sync::Condvar::new(),
+    })
+}
+
+/// Holds the device until dropped; dropping wakes the next ticket.
+struct GpuTurn;
+
+impl Drop for GpuTurn {
+    fn drop(&mut self) {
+        let q = gpu_queue();
+        let mut st = q.state.lock().unwrap_or_else(|e| e.into_inner());
+        st.1 += 1;
+        q.turn.notify_all();
+    }
+}
+
+fn wait_for_gpu(progress: &mut dyn FnMut(Progress)) -> GpuTurn {
+    let q = gpu_queue();
+    let mut st = q.state.lock().unwrap_or_else(|e| e.into_inner());
+    let ticket = st.0;
+    st.0 += 1;
+    let mut last = None;
+    while st.1 != ticket {
+        let ahead = (ticket - st.1) as usize;
+        if last != Some(ahead) {
+            last = Some(ahead);
+            progress(Progress::Queued { position: ahead });
+        }
+        st = q.turn.wait(st).unwrap_or_else(|e| e.into_inner());
+    }
+    GpuTurn
+}
+
+/// Who holds GPU memory now (nvidia-smi compute apps), when it can say.
+fn vram_holders() -> Option<String> {
+    let out = std::process::Command::new("nvidia-smi")
+        .args([
+            "--query-compute-apps=pid,process_name,used_memory",
+            "--format=csv,noheader",
+        ])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (out.status.success() && !text.is_empty()).then_some(text)
+}
+
+/// 1955-rjv3: turn an engine failure into one that says what happened.
+pub fn explain_engine_failure(err: &str, holders: Option<String>) -> String {
+    if err.contains("cannot make enough memory available") {
+        let who = holders.map_or_else(
+            || "another process (nvidia-smi could not say which; an inference container such as ollama is the usual one)".to_string(),
+            |h| format!("these processes (pid, name, memory): {}", h.replace('\n', "; ")),
+        );
+        return format!(
+            "gpu_memory_busy: the GPU does not have enough free memory for this model; it is held by {who}. \
+             Stop or unload it, or retry later. Engine said: {}",
+            err.lines().last().unwrap_or(err)
+        );
+    }
+    if err.contains("exited 139") || err.contains("signal 11") {
+        return format!(
+            "{err} (the engine crashed; the usual cause is too little free GPU memory)"
+        );
+    }
+    err.to_string()
 }
 
 /// What a generate produced.
@@ -470,8 +555,13 @@ pub fn call(
     let names: Vec<String> = (0..job.count)
         .map(|i| format!("img-{stamp}-{}-{i}.png", job.seed))
         .collect();
+    let turn = wait_for_gpu(progress);
     let t0 = Instant::now();
-    let out = engine.generate(&job, &out_dir, &names, progress)?;
+    let out = engine
+        .generate(&job, &out_dir, &names, progress)
+        .map_err(|e| explain_engine_failure(&e, vram_holders()));
+    drop(turn);
+    let out = out?;
     let elapsed = t0.elapsed().as_secs_f64();
     let licence = job.tier.licence.clone();
     let mut images = Vec::new();
@@ -519,6 +609,13 @@ pub fn call(
         "ephemeral": true,
         "note": EPHEMERAL_NOTE,
         "bigger_tier_offer": bigger,
+        // 1955-rjv3: part of the model ran on the CPU; slower, and a sign the
+        // GPU was short of memory. Reported, never passed off as a GPU run.
+        "degraded": (out.backend == "mixed").then(|| json!({
+            "backend": "mixed",
+            "why": "part of the model did not fit in GPU memory and ran on the CPU; \
+                    the image is valid but generation was slower. Free GPU memory and retry for a full GPU run."
+        })),
         "control": job.aux.control.as_ref().map(|(m, img)| json!({
             "model": m.label(), "sha256": m.sha256, "licence": m.licence,
             "image": img.replacen("/out", FORGE_SCRATCH, 1),
@@ -563,6 +660,11 @@ pub fn progress_notification(token: &Value, seq: &mut u64, event: &Progress) -> 
         Progress::Fetch(FetchEvent::Verified { .. }) => {
             (100.0, Some(100.0), "model verified".to_string())
         }
+        Progress::Queued { position } => (
+            0.0,
+            None,
+            format!("waiting for the GPU: {position} job(s) ahead"),
+        ),
         Progress::Step { done, total } => (
             f64::from(*done),
             Some(f64::from(*total)),
@@ -1004,6 +1106,102 @@ mod tests {
                 first_use: false,
             })
         }
+    }
+
+    /// Records how many generates are in flight at once, and reports "mixed".
+    #[derive(Default)]
+    struct Overlap {
+        now: std::sync::atomic::AtomicUsize,
+        max: std::sync::atomic::AtomicUsize,
+    }
+    impl Engine for Overlap {
+        fn generate(
+            &self,
+            job: &Job,
+            out_dir: &Path,
+            names: &[String],
+            _progress: &mut dyn FnMut(Progress),
+        ) -> Result<EngineOut, String> {
+            use std::sync::atomic::Ordering::SeqCst;
+            let n = self.now.fetch_add(1, SeqCst) + 1;
+            self.max.fetch_max(n, SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            for n in names {
+                image::RgbImage::new(job.width, job.height)
+                    .save(out_dir.join(n))
+                    .map_err(|e| e.to_string())?;
+            }
+            self.now.fetch_sub(1, SeqCst);
+            Ok(EngineOut {
+                backend: "mixed".into(),
+                first_use: false,
+            })
+        }
+    }
+
+    /// 1955-rjv3 verifiable closure. Pre-fix: FAILS (six parallel calls ran
+    /// six engines on one device; "mixed" came back as plain success).
+    #[test]
+    fn imagegen_concurrent_calls_never_overlap_on_the_device() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        imagegen_consent::reset_for_test();
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let engine = Arc::new(Overlap::default());
+        install_seam(Some(Seam {
+            engine: engine.clone(),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I0".into(),
+        }));
+        let handles: Vec<_> = (0..6)
+            .map(|i| {
+                std::thread::spawn(move || {
+                    let mut queued = Vec::new();
+                    let r = call(
+                        "rjv3-proj",
+                        &format!("lane{i}"),
+                        &json!({"prompt":"a fox","width":64,"height":64,"seed":i}),
+                        &mut |p| {
+                            if let Progress::Queued { position } = p {
+                                queued.push(position)
+                            }
+                        },
+                    );
+                    (r, queued)
+                })
+            })
+            .collect();
+        let mut saw_queue = false;
+        for h in handles {
+            let (r, queued) = h.join().unwrap();
+            let r = r.expect("a queued call runs, it is not refused");
+            assert_eq!(r["degraded"]["backend"], "mixed", "mixed is degraded: {r}");
+            assert!(r["degraded"]["why"].as_str().is_some_and(|w| !w.is_empty()));
+            saw_queue |= queued.iter().any(|p| *p >= 1);
+        }
+        install_seam(None);
+        assert_eq!(
+            engine.max.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "two engines ran on the device at once"
+        );
+        assert!(saw_queue, "a waiting call reports its queue position");
+    }
+
+    /// The engine's VRAM refusal names who holds the device.
+    #[test]
+    fn a_vram_refusal_names_the_holders() {
+        let log = "model manager memory on Vulkan0: reported free 180.38 MB / total 24564.00 MB\n\
+                   cannot make enough memory available";
+        let e = explain_engine_failure(
+            &format!("engine_failed: sd-cli exited 1\n{log}"),
+            Some("1234, ollama, 23900 MiB".into()),
+        );
+        assert!(e.starts_with("gpu_memory_busy:"), "{e}");
+        assert!(e.contains("ollama"), "{e}");
+        let e = explain_engine_failure("engine_failed: sd-cli exited 139", None);
+        assert!(e.starts_with("engine_failed:"), "{e}");
+        assert!(e.contains("crashed"), "a segfault says so: {e}");
     }
 
     /// 1874-p8w7 verifiable closure. Pre-fix: FAILS (bigger_tier_offer is
