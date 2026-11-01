@@ -59,9 +59,15 @@ jobs:
           fetch-depth: 0
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+        # Order 1933-ysbq: cache-nix-action's README lists the installers it is
+        # compatible with (nix-quick-install-action, cachix/install-nix-action,
+        # determinate-nix-action); DeterminateSystems/nix-installer-action is
+        # not one. With it, every save failed in the post step ("/usr/bin/tar"
+        # failed with exit code 2, v56.10.30.1 and v56.10.31.1, run
+        # 41212733409), so 1916-nxcs's save never landed and each release
+        # rebuilt all 499 derivations (~62 min). install-nix-action is listed.
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
         with:
-          flakehub: false
           # v56.9.25.1's Linux job failed three times on ONE NAR: the CDN edge
           # serving the runners dropped cache.nixos.org's cargo-package-winapi-
           # i686 NAR at exactly 2 MiB ("Stream error in the HTTP/2 framing
@@ -71,7 +77,8 @@ jobs:
           # framing layer; fallback=true builds a path whose substitution
           # failed instead of failing the release (a cargo-package-* path is a
           # fixed-output crates.io fetch, so building it is cheap and exact).
-          extra-conf: |
+          extra_nix_config: |
+            experimental-features = nix-command flakes
             http2 = false
             fallback = true
 

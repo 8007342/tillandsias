@@ -6430,26 +6430,6 @@ async fn probe_git_mirror_seeded(
     }
 }
 
-/// The live Windows pristine-volume seed took roughly 12–15 minutes
-/// (mirror-first-seed-vs-launch-readiness-race). Twenty minutes preserves a
-/// finite launch refusal while covering the measured upper bound with room for
-/// proxy/cache variance. A seeded mirror returns before the first sleep.
-const GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS: u32 = 20 * 60;
-const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
-
-/// Order 452 slice 2: launcher-side git-mirror readiness gate.
-///
-/// A clone-only forge (order 437) clones `git://git-<project>/<project>` the
-/// moment its entrypoint runs, but a FRESH mirror volume seeds in a background
-/// sweep — a full-repo fetch from upstream through the proxy that can take
-/// minutes — while the guest's clone backstop only waits ~60s. Block the
-/// launch until the mirror's bare repo has a resolvable HEAD and a concrete
-/// head, mirroring the [`wait_for_inference_ready`] pattern: bounded, truthful,
-/// and loud on timeout.
-///
-/// Probes via `podman exec` inside the mirror container so readiness is
-/// measured on the served repo itself, not on network reachability.
-/// @trace spec:git-mirror-service
 /// ORDER 778-hb3x criterion 3. The line the mirror prints when its seed fetch
 /// fails (images/git/entrypoint.sh, `retry_msg "[git-mirror] Seed fetch
 /// failed: …"`). A cross-component string: the litmus
@@ -6477,8 +6457,9 @@ fn last_seed_failure(lines: &[String]) -> Option<String> {
 /// awaited here.
 ///
 /// A mirror this process neither launched nor reused has no event to wait on
-/// (another process started it), so it keeps the bounded seeded-probe until
-/// 1922-unwt retires it; once it passes, the mirror is marked reused.
+/// (another process started it). It is asked once whether it is seeded
+/// (1922-unwt): seeded is marked reused; unseeded is published as its one
+/// failed outcome, so the gate refuses with `retry_after` instead of polling.
 /// @trace order:1922-gate, spec:podman-orchestration
 async fn gate_forge_launch(
     client: &PodmanClient,
@@ -6520,15 +6501,12 @@ async fn gate_forge_launch_within(
         if readiness::is_tracked(git_container_name) {
             hard.push(git_container_name);
         } else {
-            wait_for_git_mirror_ready(
-                client,
+            readiness::publish(
                 git_container_name,
-                project_name,
-                expected_branch,
-                debug,
-            )
-            .await?;
-            readiness::mark_reused(git_container_name);
+                adopted_mirror_outcome(client, git_container_name, project_name, expected_branch)
+                    .await,
+            );
+            hard.push(git_container_name);
         }
     }
     // The headless launches containers only inside a Linux host, VM or WSL
@@ -6545,87 +6523,41 @@ async fn gate_forge_launch_within(
         .map_err(|e| format!("{e}. The forge was not started; launch again after retry_after."))
 }
 
-async fn wait_for_git_mirror_ready(
+/// ORDER 1922-unwt. The one outcome for a mirror another process started:
+/// seeded is ready (`reused`); unseeded is failed, carrying what the probe saw
+/// and the mirror's own last seed-fetch failure (778-hb3x criterion 3). One
+/// probe, never a loop: that process's launch owns the seed and its event.
+async fn adopted_mirror_outcome(
     client: &PodmanClient,
     container_name: &str,
     project_name: &str,
     expected_branch: Option<&str>,
-    debug: bool,
-) -> Result<(), String> {
-    // First seed is a full-repo fetch through the proxy: minutes, not seconds
-    // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
-    // still fails the launch loudly instead of hanging forever.
-    //
-    // Race note (order: mirror-first-seed-vs-launch-readiness-race):
-    // `git rev-parse --verify HEAD` can pass while the initial upstream fetch
-    // is still in progress. Require the launcher-declared host branch to be a
-    // concrete local head as well. When the host branch is unknowable
-    // (detached/git-less checkout), require at least one concrete local head;
-    // never assume the target project uses Tillandsias' `main` convention.
+) -> tillandsias_podman::readiness::ReadyOutcome {
+    use tillandsias_podman::readiness::{RETRY_AFTER, ReadyOutcome};
     let repo_path = format!("/srv/git/{project_name}");
-    let mut last = String::from("no probe attempted");
-    let mut seen_failure: Option<String> = None;
-    for attempt in 1..=GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS {
-        match probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await {
-            Ok(seeded_ref) => {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS} ({seeded_ref} present)"
-                    );
-                }
-                return Ok(());
-            }
-            Err(reason) => last = reason,
+    let probed = probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await;
+    let last = match probed {
+        Ok(_) => {
+            return ReadyOutcome::Ready {
+                status: Some("reused".to_string()),
+            };
         }
-        if attempt == 5 {
-            // One non-debug notice so an operator watching a first launch
-            // knows the wait is the mirror seed, not a hang.
-            eprintln!(
-                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s max)..."
-            );
-        }
-        // ORDER 778-hb3x criterion 3: a wait that can never succeed must not
-        // look like a slow first seed. Every 30 s, say what the probe saw and
-        // the mirror's own last seed-fetch failure, when it has one; print it
-        // again only when it changes. Measured on yoga 2026-09-29: a 1200 s
-        // wait that ended in "branch … is not concrete" said nothing until then.
-        if attempt == 5 || (attempt > 5 && attempt % 30 == 0) {
-            let tail = client
-                .log_tail(container_name, 200)
-                .await
-                .unwrap_or_default();
-            let failure = last_seed_failure(&tail.lines);
-            if failure != seen_failure || attempt == 5 {
-                eprintln!("[tillandsias] [forge-launch]   still waiting ({attempt}s): {last}");
-                if let Some(f) = &failure {
-                    eprintln!("[tillandsias] [forge-launch]   mirror reports: {f}");
-                }
-                seen_failure = failure;
-            }
-        }
-        if debug {
-            eprintln!(
-                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}): {last}"
-            );
-        }
-        tokio::time::sleep(GIT_MIRROR_SEED_POLL_INTERVAL).await;
-    }
+        Err(reason) => reason,
+    };
     let tail = client
         .log_tail(container_name, 200)
         .await
         .unwrap_or_default();
     let mirror_says = last_seed_failure(&tail.lines)
-        .map(|f| format!(" The mirror's last seed failure: {f}."))
+        .map(|f| format!("; the mirror's last seed failure: {f}"))
         .unwrap_or_default();
-    Err(format!(
-        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}.{mirror_says} \
-         A forge launched now would land on an empty tree, so the launch is refused \
-         (fresh-checkout invariant, \
-         plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
-         Inspect `podman logs {container_name}` — common causes: the upstream seed fetch \
-         is still running or failed (network/proxy), upstream is empty, or the mirror's \
-         HEAD is unborn on an old image (ensure-mirror-head repairs it on container start)."
-    ))
+    ReadyOutcome::Failed {
+        reason: format!(
+            "started by another launch and not seeded yet ({last}){mirror_says}; \
+             a forge now would clone an empty tree. Inspect `podman logs {container_name}`"
+        ),
+        retry_after: RETRY_AFTER,
+    }
 }
 
 /// The host tree WSL2 projects into the guest: the Windows driver store plus
@@ -15788,7 +15720,13 @@ fn launch_observatorium_browser(
 
     send_issue_web_session(&project_label, &otp)
         .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &app_url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         return Err(format!(
             "Observatorium app did not become reachable with a registered session: {err}"
         ));
@@ -17229,6 +17167,10 @@ fn wait_for_authenticated_opencode_web(
     project_name: &str,
     url: &str,
     cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
+    // ORDER 1863-eckw: re-sends IssueWebSession. A 401 means the router
+    // sidecar never received the session, which happens when it was still
+    // reconnecting to a freshly spawned tray (measured: 19 probes, all 401).
+    reregister: &mut dyn FnMut() -> Result<(), String>,
     debug: bool,
 ) -> Result<(), String> {
     let cookie_header = format!(
@@ -17247,6 +17189,16 @@ fn wait_for_authenticated_opencode_web(
     while start.elapsed() < timeout {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
+            Ok(401) => {
+                last_outcome =
+                    String::from("status 401 (session not at the router yet; re-registered)");
+                let _ = reregister();
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(502) => {
                 last_outcome = String::from("status 502 (starting)");
                 if debug {
@@ -17859,6 +17811,23 @@ fn send_issue_web_session(_project_label: &str, _cookie_value: &[u8; 32]) -> Res
     )
 }
 
+/// ORDER 1863-eckw. The tray the launcher saw at startup can exit before the
+/// web session is registered (it was shutting down when probed), leaving no
+/// control socket. A connect failure therefore spawns a tray and retries
+/// once; any other failure (a wrong reply, a timeout) is returned unchanged.
+fn register_web_session_with_tray_retry(
+    mut send: impl FnMut() -> Result<(), String>,
+    spawn_tray: impl FnOnce(),
+) -> Result<(), String> {
+    match send() {
+        Err(e) if e.starts_with("Failed to connect to control socket") => {
+            spawn_tray();
+            send()
+        }
+        other => other,
+    }
+}
+
 fn launch_opencode_web_browser(
     project_name: &str,
     certs_dir: &Path,
@@ -17924,12 +17893,25 @@ fn launch_opencode_web_browser(
     // cookie. If the handshake fails (no tray, wrong reply, timeout) we
     // refuse to launch the browser to prevent the "unauthorised" landing
     // page that used to result from the race.
-    send_issue_web_session(&project_label, &otp).map_err(|e| {
+    register_web_session_with_tray_retry(
+        || send_issue_web_session(&project_label, &otp),
+        || {
+            let lane = cli_reserved_lane(Some(project_name), true);
+            maybe_spawn_detached_tray_for_cli(false, lane.as_deref(), debug);
+        },
+    )
+    .map_err(|e| {
         let _ =
             emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
         format!("Failed to register web session with router: {e}")
     })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
         return Err(err);
     }
@@ -24342,15 +24324,13 @@ mod tests {
         backend.push(Ok(fake_podman_output(0, "")));
         let client = PodmanClient::with_backend(backend.clone());
 
-        wait_for_git_mirror_ready(
-            &client,
-            "tillandsias-git-fixture",
-            "fixture",
-            Some("trunk"),
-            false,
-        )
-        .await
-        .expect("a concrete non-main target branch is seeded on the first probe");
+        let outcome =
+            adopted_mirror_outcome(&client, "tillandsias-git-fixture", "fixture", Some("trunk"))
+                .await;
+        assert!(
+            matches!(&outcome, tillandsias_podman::readiness::ReadyOutcome::Ready { status } if status.as_deref() == Some("reused")),
+            "a concrete non-main target branch is seeded on the first probe: {outcome:?}"
+        );
 
         let seen = backend.seen();
         assert_eq!(
@@ -24426,8 +24406,8 @@ mod tests {
     ///   polls=N            — the gate probed the sibling N > 0 times;
     ///   held-unready-...   — with the mirror held unready, the gate did not
     ///                        refuse with one failure carrying retry_after.
-    /// Red on linux-next until 1922-gate (wait_for_git_mirror_ready polled
-    /// once a second and returned on a probe, not an event).
+    /// Red on linux-next until 1922-gate (the launcher polled the mirror once
+    /// a second and returned on a probe, not an event).
     /// Run: cargo test -p tillandsias-headless --bin tillandsias readiness_acceptance
     #[tokio::test]
     async fn readiness_acceptance_forge_never_starts_before_mirror_ready_and_counts_no_polls() {
@@ -24519,18 +24499,40 @@ mod tests {
         assert!(red.is_empty(), "{verdict}");
     }
 
-    #[test]
-    fn git_mirror_readiness_budget_covers_observed_cold_seed() {
-        assert_eq!(
-            GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS,
-            20 * 60,
-            "cold-seed wait must retain the reviewed 20-minute bound above the live 12–15 minute observation"
-        );
-        assert_eq!(
-            GIT_MIRROR_SEED_POLL_INTERVAL,
-            Duration::from_secs(1),
-            "attempt count and user-visible seconds must stay aligned"
-        );
+    /// 1922-unwt: a mirror another launch started and has not seeded is ONE
+    /// failed outcome carrying retry_after and the mirror's own seed failure,
+    /// after one probe and one log read; never a wait.
+    #[tokio::test]
+    async fn an_adopted_unseeded_mirror_fails_once_with_retry_after_and_never_waits() {
+        use tillandsias_podman::readiness::{RETRY_AFTER, ReadyOutcome};
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Ok(fake_podman_output(
+            0,
+            "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED\n",
+        )));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        let t0 = std::time::Instant::now();
+        let outcome =
+            adopted_mirror_outcome(&client, "tillandsias-git-fixture", "fixture", Some("trunk"))
+                .await;
+
+        match outcome {
+            ReadyOutcome::Failed {
+                reason,
+                retry_after,
+            } => {
+                assert_eq!(retry_after, RETRY_AFTER);
+                assert!(
+                    reason.contains("UPSTREAM AUTH REFUSED") && reason.contains("not seeded"),
+                    "the refusal names the mirror's own failure: {reason}"
+                );
+            }
+            ready => panic!("an unseeded mirror must not be ready: {ready:?}"),
+        }
+        assert_eq!(backend.seen().len(), 2, "one probe and one log read");
+        assert!(t0.elapsed() < Duration::from_secs(1), "no wait");
     }
 
     /// Order 494 interim guard (leak-not-destroy): a RUNNING forge must never
@@ -26097,6 +26099,42 @@ mod tests {
             .map(String::from)
             .to_vec();
         assert_eq!(attached_run_args(&explicit), explicit);
+    }
+
+    /// ORDER 1863-eckw, measured on yoga 2026-10-30: the launcher saw a tray
+    /// on control.sock, skipped spawning one, and that tray exited before the
+    /// web session was registered, so registration failed ENOENT and the web
+    /// forge ran with no session. A connect failure now spawns a tray and
+    /// retries once; any other failure is returned as-is.
+    #[test]
+    fn a_web_session_whose_tray_vanished_spawns_one_and_retries() {
+        let mut sends = 0;
+        let mut spawned = 0;
+        let ok = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                if sends == 1 {
+                    Err("Failed to connect to control socket /run/x/control.sock: No such file or directory (os error 2)".into())
+                } else {
+                    Ok(())
+                }
+            },
+            || spawned += 1,
+        );
+        assert_eq!(ok, Ok(()));
+        assert_eq!((sends, spawned), (2, 1));
+
+        let mut sends = 0;
+        let mut spawned = 0;
+        let refused = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                Err("tray replied with an unexpected message".into())
+            },
+            || spawned += 1,
+        );
+        assert!(refused.is_err());
+        assert_eq!((sends, spawned), (1, 0), "only a connect failure respawns");
     }
 
     /// ORDER 1911-3dqo: a rejoin finds the one running forge of a project,
@@ -33465,9 +33503,47 @@ esac
         saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
     }
 
+    /// 1932-4hwq: where a scratch home may live. A forge exports TMPDIR inside
+    /// the real HOME (/home/forge/.cache/...), so a tempdir there IS under the
+    /// real home and the 1898-hyhf guard rightly refuses it. Take the first of
+    /// TMPDIR, XDG_RUNTIME_DIR and /tmp that exists and is outside the passwd
+    /// home; with none, refuse loudly rather than weaken the guard.
+    #[cfg(unix)]
+    fn scratch_base() -> PathBuf {
+        let real = passwd_home().filter(|h| h.as_os_str().len() > 1);
+        let candidates = [
+            Some(std::env::temp_dir()),
+            std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+            Some(PathBuf::from("/tmp")),
+        ];
+        for c in candidates.into_iter().flatten() {
+            if c.as_os_str().is_empty() || !c.is_dir() {
+                continue;
+            }
+            match &real {
+                Some(h) if c.starts_with(h) => continue,
+                _ => return c,
+            }
+        }
+        panic!(
+            "1932-4hwq: no scratch root outside the real home ({:?}): TMPDIR, \
+             XDG_RUNTIME_DIR and /tmp are all inside it or missing",
+            real
+        );
+    }
+
+    /// No passwd home off unix (and no 1898-hyhf guard to trip): TMPDIR is fine.
+    #[cfg(not(unix))]
+    fn scratch_base() -> PathBuf {
+        std::env::temp_dir()
+    }
+
     impl ScratchHome {
         fn new() -> Self {
-            let root = tempfile::tempdir().expect("scratch home");
+            let root = tempfile::Builder::new()
+                .prefix("scratch-home-")
+                .tempdir_in(scratch_base())
+                .expect("scratch home");
             let run = root.path().join("run");
             std::fs::create_dir_all(&run).expect("scratch runtime dir");
             let saved = ["HOME", "XDG_RUNTIME_DIR", "TILLANDSIAS_HOST_KIND"]
@@ -33602,6 +33678,14 @@ esac
             .join("ca"),
         )
         .expect_err("the real home must be refused");
+        // 1932-4hwq: a scratch dir INSIDE the real home (a forge's TMPDIR) is
+        // still refused; ScratchHome avoids it, the guard does not excuse it.
+        refuse_real_home_in_test(&real.join(".cache/tillandsias-project/tmp/.tmpX/ca"))
+            .expect_err("a scratch dir under the real home must be refused");
+        assert!(
+            !ScratchHome::new().path().starts_with(&real),
+            "1932-4hwq: ScratchHome must land outside the real home"
+        );
         assert!(err.contains("1898-hyhf"), "{err}");
     }
 

@@ -1,4 +1,4 @@
--- @trace order:778-hb3x, order:1607-8bq5, spec:git-mirror-service
+-- @trace order:778-hb3x, order:1607-8bq5, order:1922-unwt, spec:git-mirror-service
 --
 -- test-git-mirror-seed-failure-surfaced.lua — PORTED from
 -- test-git-mirror-seed-failure-surfaced.sh (1607-8bq5's carried shell->lua
@@ -11,10 +11,11 @@
 --               (GIT_MIRROR_SEED_FAILURE_MARKER, main.rs) is the one
 --               images/git/entrypoint.sh prints (`retry_msg "<marker> ..."`), in
 --               BOTH of the mirror's failure arms
---   2 GATE      wait_for_git_mirror_ready reads the mirror log (.log_tail) and
---               calls last_seed_failure while it waits AND before it gives up
+--   2 GATE      adopted_mirror_outcome (the one probe of a mirror another
+--               launch started, 1922-unwt) reads the mirror log (.log_tail) and
+--               calls last_seed_failure for its failed outcome
 --   3 MUTANTS   an entrypoint with one failure arm stripped of the marker, and a
---               gate body with one call, are each refused (the checks can fail)
+--               gate body without the call, are each refused (the checks can fail)
 --   4 READERS   the .sh's retired PASS: line has no reader in scripts/, the gate
 --               steps or the litmus specs; the count searched is printed
 --
@@ -48,11 +49,11 @@ local function judge(main_src, entry_src)
     end
     local arms = count(entry_src, 'retry_msg "' .. marker)
     if arms < 2 then why[#why + 1] = "entrypoint.sh prints [" .. marker .. "] in " .. arms .. " arms (want both: auth-refused and generic)" end
-    local body = main_src:match("\n(async fn wait_for_git_mirror_ready%(.-\n})\n") or ""
+    local body = main_src:match("\n(async fn adopted_mirror_outcome%(.-\n})\n") or ""
     local calls = count(body, "last_seed_failure(&tail.lines)")
     local logs = count(body, ".log_tail(container_name")
-    if calls < 2 or logs < 2 then
-        why[#why + 1] = "wait_for_git_mirror_ready calls last_seed_failure " .. calls .. " times and log_tail " .. logs .. " times (want >= 2 each)"
+    if calls < 1 or logs < 1 then
+        why[#why + 1] = "adopted_mirror_outcome calls last_seed_failure " .. calls .. " times and log_tail " .. logs .. " times (want >= 1 each)"
     end
     return marker, arms, calls, logs, why
 end
@@ -61,8 +62,8 @@ local main_src, entry_src = fs.read(MAIN) or "", fs.read(ENTRY) or ""
 local marker, arms, calls, logs, why = judge(main_src, entry_src)
 if marker and arms >= 2 then ok("1: the mirror prints the launcher's marker [" .. marker .. "] in " .. arms .. " failure arms")
 else bad("1: " .. table.concat(why, "; ")) end
-if calls >= 2 and logs >= 2 then
-    ok("2: the seeded-gate reads the mirror log and surfaces the failure while waiting and on give-up (" .. calls .. " calls)")
+if calls >= 1 and logs >= 1 then
+    ok("2: the adopted-mirror refusal reads the mirror log and surfaces its seed failure (" .. calls .. " call)")
 else bad("2: " .. table.concat(why, "; ")) end
 
 -- 3: mutants, judged by the same function.
@@ -70,10 +71,10 @@ local one_arm = marker and entry_src:gsub('retry_msg "' .. marker:gsub("%p", "%%
 local _, m_arms = judge(main_src, one_arm)
 local one_call = main_src:gsub("last_seed_failure%(&tail%.lines%)", "last_seed_failure_removed(&tail.lines)", 1)
 local _, _, m_calls = judge(one_call, entry_src)
--- Today there are exactly two arms and two calls, so stripping one of each
+-- Today there are exactly two arms and one call, so stripping one of each
 -- drops below the floor; if either grows, this arm says so instead of passing.
-if marker and m_arms == arms - 1 and m_arms < 2 and m_calls == calls - 1 and m_calls < 2 then
-    ok("3: a failure arm without the marker and a gate body with one call are each refused (" .. m_arms .. " arm, " .. m_calls .. " call)")
+if marker and m_arms == arms - 1 and m_arms < 2 and m_calls == calls - 1 and m_calls < 1 then
+    ok("3: a failure arm without the marker and a gate body without the call are each refused (" .. m_arms .. " arm, " .. m_calls .. " calls)")
 else
     bad("3: mutants were not refused, or the floor moved (arms " .. tostring(arms) .. "->" .. tostring(m_arms)
         .. ", calls " .. tostring(calls) .. "->" .. tostring(m_calls) .. "); extend the mutants")

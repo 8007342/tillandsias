@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Claude, release agent) during the v56.10.31.1 cut.
+packets:
+- packet_id: two-release-gate-pins-follow-the-code-they-guard-cloud-launch-form-and-in-function-spawn-capture
+  order: 1928-s9ae
+  status: in_progress
+  kind: bugfix
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - release-gate
+  - litmus
+  estimated_hours: 1
+  title: The v56.10.31.1 gate refused on two pins that lagged the code, the macOS cloud-launch marker and a whole-file spawn-position compare
+  context: 'Measured on macuahuitl 2026-10-31, v56.10.31.1 cut gate on cbce069c9. litmus:forge-config-trust-cross-platform-parity required the retired macOS launch literal ''exec /usr/local/bin/tillandsias-headless --opencode {path}'', and #751 (1925-mcld) moved macOS to ''--cloud {} --opencode'' (the only form the guest accepts since 776-jcf3). litmus:spawn-failure-names-program step 3 compared the first ''let program = command'' (line 11456) with the first spawn_caller_owned_lifetime() in main.rs. 5f8cce30d (1911-3dqo) added an unrelated spawn at line 9589, so the step went red while the property held (the function''s own spawn is at 11462). Both fail when run alone. A third red, lane-socket-survives-launcher-exit, passed 7/7 alone.'
+  exit_criteria:
+  - 'The parity fixture requires the cloud form on macOS (diagnose.rs) and on Windows (tillandsias-host-shell launch_spec, used by notify_icon.rs), and refuses the retired local-checkout form on either tray.'
+  - 'scripts/test-spawn-program-captured-before-spawn.sh: the in-function property holds; the retired whole-file check refuses on today''s file; a mutant with the capture moved after its spawn fails.'
+  - 'The v56.10.31.1 cut ./build.sh --ci-full passes its pre-build litmus.'
+  verifiable_closure: 'litmus:spawn-failure-names-program'
+  next_action: 'Land work/1928-s9ae into linux-next (coordinator), then the release agent re-runs the v56.10.31.1 cut gate.'
+  provenance: 'v56.10.31.1 cut, macuahuitl, 2026-10-31; ~/.cache/tillandsias-agent-targets/release-cifull5.log.'
+  events:
+  - type: filed
+    ts: '2026-10-31T06:21:24Z'
+    host: macuahuitl
+    summary: two pins lagged #751 and 1911-3dqo; parity now requires the --cloud form on both trays and the spawn check is scoped to its function

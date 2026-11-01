@@ -39,6 +39,10 @@ preconditions:
   - workspace contains images/default/config-overlay/mcp/host-browser.sh
 
 critical_path:
+  - step: "the passed-count pins are floors with 0 failed, and the retired exact pins refuse growth (1929-gfxy)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-count-floors.lua 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "ok:litmus-count-floors:9/9"
   - step: "LIVE NEGATIVE: McpFrame on the shared control socket is refused as Unsupported"
     # ORDER 925-erjs. Was `grep -A12 … | grep -F 'ErrorCode::Unsupported'`, and
     # the arm's own COMMENT says "refused with ErrorCode::Unsupported" two lines
@@ -66,7 +70,9 @@ critical_path:
     # TILLANDSIAS_CONTROL_SOCKET at /nope fails its test.
     command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock mounts_only_per_lane_mcp_dir 2>&1"
     timeout_ms: 600000
-    success_pattern: "test result: ok. 2 passed"
+    # A FLOOR, not an exact count (1929-gfxy's sweep): the filter is a
+    # substring, so a third mounts_only_per_lane_mcp_dir test must not refuse.
+    success_pattern: "test result: ok\\. ([2-9]|[1-9][0-9]+) passed; 0 failed"
 
   - step: "Req: the bridge reads the lane socket from TILLANDSIAS_CONTROL_SOCKET"
     command: "grep -F 'TILLANDSIAS_CONTROL_SOCKET' images/default/config-overlay/mcp/host-browser.sh >/dev/null && echo 'ok: bridge and launcher agree on the lane socket'"

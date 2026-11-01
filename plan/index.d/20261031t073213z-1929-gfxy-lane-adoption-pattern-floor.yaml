@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Claude, release agent) during the v56.10.31.1 cut.
+packets:
+- packet_id: lane-socket-survives-launcher-exit-pins-a-floor-not-an-exact-test-count
+  order: 1929-gfxy
+  status: in_progress
+  kind: bugfix
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - release-gate
+  - litmus
+  estimated_hours: 1
+  title: The lane-socket litmus pinned exactly "5 passed" and refused a green 7-test run in two v56.10.31.1 gates
+  context: 'Measured on macuahuitl 2026-10-31. litmus:lane-socket-survives-launcher-exit step 1 had success_pattern "test result: ok. 5 passed"; lane_adoption_tests in crates/tillandsias-headless/src/mcp_socket.rs grew to 7 (1863-eckw e9e53c1f0, 1911-3dqo f18d47dbb), so the gate read "7 passed; 0 failed" as a FAIL on cbce069c9 and again on 3aa8272ea. Sweep of every success_pattern/expected_behavior with an exact "N passed": 42 pins; on today''s tree only this one fails. The single-test pins use --exact filters (1 passed by construction). Pins that still pass but would break on growth (noted, not changed): dead-tray-run-is-reaped "test result: ok. 5 passed", no-credentials-at-rest "5 passed" (unanchored, also matches 15/25), host-browser-mcp-lane-socket-shape "test result: ok. 2 passed".'
+  exit_criteria:
+  - 'Step 1 success_pattern is a floor of 5 with 0 failed.'
+  - 'scripts/test-lane-adoption-pattern-floor.sh judges the parsed pattern with grep -E: accepts 5/7/12 passed, refuses 4 passed, a failure and FAILED; the retired exact pin refuses today''s 7-test output. 8/8 after, 6/8 against the old pin.'
+  - 'The v56.10.31.1 cut ./build.sh --ci-full passes its pre-build litmus.'
+  verifiable_closure: 'litmus:lane-socket-survives-launcher-exit'
+  next_action: 'Land work/1929-gfxy into linux-next (coordinator), then the release agent re-runs the v56.10.31.1 cut gate. The three noted growth-fragile pins can take the same floor form when next touched.'
+  provenance: 'v56.10.31.1 cut, macuahuitl, 2026-10-31; ~/.cache/tillandsias-agent-targets/release-cifull6.log.'
+  events:
+  - type: filed
+    ts: '2026-10-31T07:32:13Z'
+    host: macuahuitl
+    summary: exact "5 passed" pin refused a green 7-test module; now a floor of 5 with 0 failed, swept 42 pins

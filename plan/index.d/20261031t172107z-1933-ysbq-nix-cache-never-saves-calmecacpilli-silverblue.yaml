@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli-silverblue at the coordinator's request (macuahuitl, 2026-10-31).
+packets:
+- packet_id: release-nix-cache-save-fails-tar-exit-2-incompatible-installer
+  order: 1933-ysbq
+  status: in_progress
+  kind: defect
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - ci
+  - release
+  - nix
+  estimated_hours: 1
+  title: The release workflow's Nix cache never saves (post-step tar exits 2), so every release rebuilds all 499 derivations (~62 min)
+  context: 'Releases v56.10.30.1 and v56.10.31.1 both cold-built 499 derivations; run 41212733409 post-cache step: Failed to save: "/usr/bin/tar" failed with error ... exit code 2 (reported by macuahuitl; this host has no gh auth, so the log was not re-read here). cache-nix-action v7 README "Compatible Nix installers" lists nixbuild/nix-quick-install-action, cachix/install-nix-action and DeterminateSystems/determinate-nix-action; release.yml installed with DeterminateSystems/nix-installer-action, which is not listed. 1916-nxcs (#700) turned save on but the save could never succeed with that installer.'
+  exit_criteria:
+  - release.yml installs Nix with a cache-nix-action compatible installer, keeping http2=false and fallback=true (scripts/check-nix-cache-installer-compatible.sh is green; it was red on the old workflow).
+  - The next operator-approved release run logs a successful cache save, and the run after that reports Nix Cache Hit.
+  unscoreable: 'cloud-run-gated: the save can only be observed on an operator-approved release run; the static check is the local arm.'
+  next_action: 'Land work/1933-ysbq; at the next release, read the Linux job post-cache step. If tar still exits 2, read its stderr (permission denied under /nix/var vs a missing path) before changing anything else.'
+  provenance: coordinator assignment to calmecacpilli-silverblue, 2026-10-31.
+  events:
+  - type: filed
+    ts: '2026-10-31T17:21:07Z'
+    host: calmecacpilli-silverblue
+    summary: filed and claimed p1; installer swapped to cachix/install-nix-action v31.11.1 (pinned SHA) with a static compatibility check
