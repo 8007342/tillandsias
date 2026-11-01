@@ -673,6 +673,57 @@ pub struct Envelope {
     /// `verify-answer`, which is where the claim becomes falsifiable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     caller_relation: Option<CallerRelation>,
+    /// ORDER 1947-pnst — the served ledger is missing plan commits that the
+    /// fetched trunk has. lenovinha 2026-11-01: plan_next served a main
+    /// checkout parked 18 days back on a work branch, every offered row was
+    /// already claimed elsewhere, and nothing in the answer said so. Like
+    /// `skipped_sources` this is an OMISSION, not a citation weakness, so it
+    /// gets its own field and leaves `confidence` alone (796-4ydb); the
+    /// answer's second line also states it, since that is what an agent reads.
+    /// Absent when the ledger is current or no trunk ref is fetched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    stale_ledger: Option<StaleLedger>,
+}
+
+/// ORDER 1947-pnst — how far the served ledger lags the fetched trunk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StaleLedger {
+    pub trunk_ref: String,
+    pub trunk_commit: String,
+    pub head_commit: String,
+    pub plan_commits_missing: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_date: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trunk_date: Option<String>,
+}
+
+/// The trunk a served ledger is compared with, overridable for other
+/// projects and fixtures.
+pub const DEFAULT_TRUNK_REF: &str = "refs/remotes/origin/linux-next";
+
+/// ORDER 1947-pnst — compare the checkout at `root` with `trunk_ref`.
+/// `None` when they agree on `plan/`, or when either cannot be resolved
+/// (no git, no fetched trunk): nothing is claimed that git cannot show.
+pub fn stale_ledger(root: &Path, trunk_ref: &str) -> Option<StaleLedger> {
+    let view = crate::gitref::GitView::new(root);
+    let head = view.head()?;
+    let trunk = view.resolve_commit(trunk_ref)?;
+    if head == trunk {
+        return None;
+    }
+    let missing = view.count_missing(&head, &trunk, "plan")?;
+    if missing == 0 {
+        return None;
+    }
+    Some(StaleLedger {
+        trunk_ref: trunk_ref.to_string(),
+        head_date: view.commit_date(&head),
+        trunk_date: view.commit_date(&trunk),
+        trunk_commit: trunk,
+        head_commit: head,
+        plan_commits_missing: missing,
+    })
 }
 
 impl Envelope {
@@ -700,6 +751,7 @@ impl Envelope {
             citation_root: None,
             skipped_sources: Vec::new(),
             caller_relation: None,
+            stale_ledger: None,
         }
     }
 
@@ -715,6 +767,7 @@ impl Envelope {
             citation_root: None,
             skipped_sources: Vec::new(),
             caller_relation: None,
+            stale_ledger: None,
         }
     }
 
@@ -787,6 +840,40 @@ impl Envelope {
             }
         }
         self
+    }
+
+    /// ORDER 1947-pnst — mark an answer computed from a ledger that lags
+    /// trunk. The verdict is the answer's second line, so a reader that never
+    /// looks past `answer` still sees it. `None` is a no-op.
+    pub fn with_stale_ledger(mut self, stale: Option<StaleLedger>) -> Self {
+        if let Some(s) = stale {
+            let short = |c: &str| c.chars().take(9).collect::<String>();
+            // Line 2, after the answer's own header line, which consumers
+            // pin (litmus-expert-groundtruth-harness reads line 1).
+            let (head_line, rest) = match self.answer.split_once('\n') {
+                Some((h, r)) => (h.to_string(), r.to_string()),
+                None => (self.answer.clone(), String::new()),
+            };
+            self.answer = format!(
+                "{head_line}\nSTALE LEDGER: this answer comes from {} ({}), which is missing {} \
+                 plan commit(s) that {} has ({}, {}). Rows shown may already be claimed or \
+                 closed; fetch and read trunk, and run scripts/check-claims-across-branches.sh \
+                 before claiming.\n{}",
+                short(&s.head_commit),
+                s.head_date.as_deref().unwrap_or("date unknown"),
+                s.plan_commits_missing,
+                s.trunk_ref,
+                short(&s.trunk_commit),
+                s.trunk_date.as_deref().unwrap_or("date unknown"),
+                rest
+            );
+            self.stale_ledger = Some(s);
+        }
+        self
+    }
+
+    pub fn stale_ledger(&self) -> Option<&StaleLedger> {
+        self.stale_ledger.as_ref()
     }
 
     /// ORDER 801-g9nn — attach the reader's position. See the field doc for why
@@ -3832,5 +3919,67 @@ events:
                 .expect("citation object")
                 .contains_key("commit")
         );
+    }
+
+    /// ORDER 1947-pnst, the lenovinha 2026-11-01 shape: the served checkout
+    /// sits on an old commit while the fetched trunk carries newer plan
+    /// commits (a claim on a row the selector still offers). The verdict
+    /// names both commits and the count; pre-fix the answer said nothing and
+    /// the envelope had no such field.
+    #[test]
+    fn a_ledger_behind_trunk_is_named_stale_and_a_current_one_is_not() {
+        let r = crate::gitref::testrepo::repo("pnst-stale");
+        r.write("plan/index.yaml", "packets: []\n");
+        let old = r.commit("ledger as of the parked checkout");
+        r.write("src/unrelated.rs", "fn main() {}\n");
+        let code_only = r.commit("a code-only commit");
+        r.write("plan/index.d/claim.yaml", "packets: []\n");
+        let trunk = r.commit("another host claims a row");
+        r.git(&["update-ref", "refs/remotes/origin/linux-next", &trunk]);
+        let trunk_ref = DEFAULT_TRUNK_REF;
+
+        // Parked 2 commits back: one of them touches plan/.
+        r.checkout(&old);
+        let stale = stale_ledger(r.path(), trunk_ref).expect("behind trunk on plan/");
+        assert_eq!(stale.head_commit, old);
+        assert_eq!(stale.trunk_commit, trunk);
+        assert_eq!(stale.plan_commits_missing, 1);
+        assert!(stale.head_date.is_some() && stale.trunk_date.is_some());
+
+        let env =
+            Envelope::unsupported("no claimable work", Freshness::new(old.clone(), "x".into()))
+                .with_stale_ledger(Some(stale));
+        let lines: Vec<&str> = env.answer().lines().collect();
+        assert!(
+            lines[0].starts_with("unsupported:"),
+            "line 1 stays the header"
+        );
+        assert!(lines[1].starts_with("STALE LEDGER:"), "{}", env.answer());
+        assert!(lines[1].contains(&old[..9]) && lines[1].contains(&trunk[..9]));
+        assert!(lines[1].contains("missing 1 plan commit"));
+        let v = serde_json::to_value(&env).unwrap();
+        assert_eq!(v["stale_ledger"]["plan_commits_missing"], 1);
+        assert_eq!(
+            v["confidence"], "unsupported",
+            "confidence is untouched (796-4ydb)"
+        );
+
+        // Missing only a code commit: the ledger is current.
+        r.git(&["update-ref", "refs/remotes/origin/linux-next", &code_only]);
+        assert_eq!(stale_ledger(r.path(), trunk_ref), None);
+        // On trunk itself: current, and the envelope serializes as before.
+        r.git(&["update-ref", "refs/remotes/origin/linux-next", &trunk]);
+        r.checkout(&trunk);
+        assert_eq!(stale_ledger(r.path(), trunk_ref), None);
+        let clean = Envelope::unsupported("x", Freshness::new(trunk.clone(), "x".into()))
+            .with_stale_ledger(None);
+        assert!(
+            serde_json::to_value(&clean)
+                .unwrap()
+                .get("stale_ledger")
+                .is_none()
+        );
+        // No fetched trunk: nothing is claimed.
+        assert_eq!(stale_ledger(r.path(), "refs/remotes/origin/absent"), None);
     }
 }
