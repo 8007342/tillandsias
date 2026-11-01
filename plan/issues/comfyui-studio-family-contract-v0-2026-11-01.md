@@ -343,3 +343,17 @@ Strings that start with "…" stand for elided entries of the same shape: 62 of 
   }
 }
 ```
+
+## Revision 2026-11-01: kumbia-kombat owner decisions (relayed by kumbia-kombat-forge, demon_attack-forge informed)
+
+These supersede the matching fields in the example above.
+
+1. **Native pixel size is per room.** A character that appears in several rooms (Mācron) keeps ONE accepted high-res source set, and the pixel finish runs once per room target.
+   - `frame.native` becomes `{"perRoom": true, "<room>": {"width", "height", "pixelScale"}}`.
+   - `targets[]` gains a `room` key, one target per room atlas.
+2. **Rooms may use different cameras.** Level 4 is side-on: a horizontal ground line, no floor-projection scaling, true profile views.
+   - Proposed: `frame` and `targets[]` carry `camera: "floor-perspective" | "side-on"`.
+   - QA uses it to know whether `baseline_drift` is measured on a projected ground line or a flat one.
+3. **The motion source is hand-keyed Blender stand-in rigs.** The rigs render the control PNGs and region PNGs.
+   - `poses[]` therefore stays camera-agnostic.
+   - Camera and view are render parameters, not pose fields.
