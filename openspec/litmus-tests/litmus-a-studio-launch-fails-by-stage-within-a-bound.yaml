@@ -1,0 +1,33 @@
+# @trace order:1945-sthg, spec:local-web-preview
+# lenovinha 2026-11-01: --studio comfyui printed three lines, then nothing for
+# 50 minutes. Each sibling studio stage (images, studio container, router
+# route, session and window) now prints progress and has a deadline; a stall
+# fails with the stage name and the bound.
+name: litmus:a-studio-launch-fails-by-stage-within-a-bound
+spec: local-web-preview
+phase: pre-build
+description: A stalled studio launch stage, blocking or async, fails naming the stage and its bound well within the bound's time; a failing stage names itself; a passing stage returns its value
+severity: high
+size: quick
+
+preconditions:
+  - cargo can build the tillandsias bin with --features tray,listen-vsock
+
+critical_path:
+  - step: "a stalled stage fails by name within its bound"
+    command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- studio_stages:: 2>&1); grep -E 'test result' <<<\"$out\""
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 3 passed"
+
+observability:
+  traces:
+    - "@trace order:1945-sthg"
+  expected_log: "test result: ok. 3 passed"
+  log_fields:
+    spec: "local-web-preview"
+    test: "a-studio-launch-fails-by-stage-within-a-bound"
+    artifact: "crates/tillandsias-headless/src/studio_stages.rs"
+
+rollback:
+  on_failure: "read studio_stages::run_blocking and run_async, and the stages in run_sibling_studio_mode"
+  command: "cat crates/tillandsias-headless/src/studio_stages.rs"

@@ -141,6 +141,21 @@
         "components/**",
         "public/**"
       ]
+    },
+    {
+      "brief": "Node-based image generation on the local models, outputs to the lane's scratch volume.",
+      "entry": [],
+      "frameworks": [],
+      "id": "comfyui",
+      "image": "imagegen-studio",
+      "kind": "sibling",
+      "license": "GPL-3.0-only",
+      "name": "ComfyUI",
+      "packet": "1921-2krx",
+      "port": 8188,
+      "save_adapter": "own-writer",
+      "status": "ready",
+      "write_allowlist": []
     }
   ]
 }

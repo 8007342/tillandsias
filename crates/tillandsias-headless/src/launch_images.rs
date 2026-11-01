@@ -34,6 +34,10 @@ pub(crate) enum LaunchSite {
     ChromiumWindow,
     /// A WebKit window from the tray (order 1656-tjv4).
     WebKitWindow,
+    /// `run_sibling_studio_mode` (1921-2krx): a studio in its own container,
+    /// behind the router, in a Chromium window; no forge, git or inference.
+    /// The studio's own image is added by the lane (`WebLane::images`).
+    SiblingStudio,
 }
 
 /// The images `site` ensures, in build order (a dependency's base is built
@@ -69,6 +73,7 @@ pub(crate) fn launch_images(site: LaunchSite) -> &'static [&'static str] {
         ],
         LaunchSite::ChromiumWindow => &["chromium-framework"],
         LaunchSite::WebKitWindow => &["webkit"],
+        LaunchSite::SiblingStudio => &["router", "chromium-core", "chromium-framework"],
     }
 }
 
@@ -76,7 +81,7 @@ pub(crate) fn launch_images(site: LaunchSite) -> &'static [&'static str] {
 mod tests {
     use super::*;
 
-    const ALL: [LaunchSite; 7] = [
+    const ALL: [LaunchSite; 8] = [
         LaunchSite::Opencode,
         LaunchSite::OpencodeWeb,
         LaunchSite::EnclaveForProject,
@@ -84,6 +89,7 @@ mod tests {
         LaunchSite::Status,
         LaunchSite::ChromiumWindow,
         LaunchSite::WebKitWindow,
+        LaunchSite::SiblingStudio,
     ];
 
     #[test]

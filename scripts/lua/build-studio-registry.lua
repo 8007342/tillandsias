@@ -44,6 +44,22 @@ for i, s in ipairs(reg.studios or {}) do
     if s.status ~= "planned" and s.status ~= "ready" then
         verdict.emit("refused:studio-registry:status:" .. s.id, 1)
     end
+    -- 1921-2krx: a sibling runs its own image next to the forge and never
+    -- touches the checkout, so it names its image and allows no write.
+    local kind = s.kind or "forge"
+    if kind ~= "forge" and kind ~= "sibling" then
+        verdict.emit("refused:studio-registry:kind:" .. s.id, 1)
+    end
+    if kind == "sibling" then
+        if type(s.image) ~= "string" or not s.image:match("^[a-z][a-z0-9-]*$") then
+            verdict.emit("refused:studio-registry:sibling-without-image:" .. s.id, 1)
+        end
+        if not table.is_empty(s.write_allowlist) then
+            verdict.emit("refused:studio-registry:sibling-writes-the-checkout:" .. s.id, 1)
+        end
+    elseif s.image ~= nil then
+        verdict.emit("refused:studio-registry:image-on-a-forge-studio:" .. s.id, 1)
+    end
 end
 if seen.silex then verdict.emit("refused:studio-registry:silex-is-not-offered", 1) end
 if #(reg.studios or {}) == 0 then verdict.emit("refused:studio-registry:empty", 1) end
