@@ -18,12 +18,12 @@ critical_path:
   - step: "a live tray whose socket was unlinked is still seen; a second tray is refused and the first tray's socket still answers; a stale socket file is replaced"
     command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- tray_presence:: 2>&1); grep -E 'test result' <<<\"$out\""
     timeout_ms: 900000
-    expected_behavior: "test result: ok. 4 passed"
+    expected_behavior: "test result: ok. 5 passed"
 
 observability:
   traces:
     - "@trace order:1944-trsp"
-  expected_log: "test result: ok. 4 passed"
+  expected_log: "test result: ok. 5 passed"
   log_fields:
     spec: "singleton-guard"
     test: "one-tray-per-enclave-and-the-cli-sees-it"
