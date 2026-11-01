@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01),
+# from the 1921-2krx live check that tore down lenovinha's enclave.
+packets:
+- packet_id: a-cli-lane-attaches-to-a-live-tray-and-a-second-tray-never-reconciles-the-enclave
+  order: 1944-trsp
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, cli, enclave, reconcile]
+  estimated_hours: 4
+  title: A CLI lane attaches to a live tray instead of spawning a companion, and a second tray can never reconcile an enclave another tray owns
+  context: 'lenovinha 2026-11-01, debug build of work/1921-2krx: tillandsias --debug --cloud octocat/Hello-World --studio comfyui printed spawned detached tray companion although a tray (pid 574244, debug build from wt-b9tg) had been up 16 h. maybe_spawn_detached_tray_for_cli skips only when connect() to control_socket_host_dir()/control.sock succeeds, and it did not. The companion then reconciled the enclave: it stopped tillandsias-proxy, tillandsias-inference and tillandsias-nix-cache, removed tillandsias-router and tillandsias-git-kumbia-kombat, and recreated tillandsias-vault (left Exited after it was killed by PID). The 16 h tray was gone afterwards. A 2026-10-31 probe of --studio grapesjs did the same with no tray present. Two defects: the presence check misses a live tray, and nothing stops a second tray from reconciling an enclave it does not own.'
+  exit_criteria:
+  - 'A fixture with a live tray present (its control socket listening) runs a CLI lane (--studio) and asserts no tray companion is spawned and the lane attaches to the existing tray. Pre-fix result: FAILS on the 2026-11-01 lenovinha shape.'
+  - 'A second tray started while one owns the enclave refuses to reconcile (no stop, rm or recreate of enclave containers) and names the owner. Pre-fix result: FAILS.'
+  verifiable_closure: 'Fixture transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'First find why connect() failed against the 16 h tray (socket path, a build with a different control_socket_host_dir, or a stale socket); then add the ownership lock.'
+  provenance: 1921-2krx live check, lenovinha 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T12:03:16Z'
+    host: lenovinha
+    summary: filed p0 ready from the 2krx live-check incident
+- packet_id: a-studio-launch-reports-progress-and-fails-by-name-within-a-bound
+  order: 1945-sthg
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, cli, progress, deadline]
+  estimated_hours: 3
+  title: A studio launch emits a progress event per stage and fails with a named reason within a bounded time instead of hanging silently
+  context: 'lenovinha 2026-11-01: tillandsias --debug --cloud octocat/Hello-World --studio comfyui printed three lines (version, cloud project resolved, spawned detached tray companion) and then nothing for 50 minutes until an outer timeout killed it. Where it waited is unknown: a lock, the companion tray, an image build (imagegen-studio is about 9 GB and had no v56.11.1.1 tag) or the router. A user sees a frozen terminal.'
+  exit_criteria:
+  - 'The studio lane emits one progress event per stage (images, studio container, router route, session, window) and each stage has a deadline; a fixture that stalls a stage gets a named failure (stage and reason) within that bound. Pre-fix result: FAILS, no event after the tray spawn.'
+  verifiable_closure: 'Fixture transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Reproduce under operator consent with --debug and a per-stage trace to find the 50-minute wait.'
+  provenance: 1921-2krx live check, lenovinha 2026-11-01; coordinator order.
+  blocked_by: [1921-2krx]
+  events:
+  - type: filed
+    ts: '2026-11-01T12:03:16Z'
+    host: lenovinha
+    summary: filed p1 ready from the 2krx live-check hang

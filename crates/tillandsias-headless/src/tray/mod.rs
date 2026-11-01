@@ -20,7 +20,7 @@ use std::env;
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -534,10 +534,9 @@ impl Drop for AsyncTaskExecutor {
 type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>;
 
 fn control_socket_path() -> PathBuf {
-    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })));
-    runtime_dir.join("tillandsias/control.sock")
+    // 1944-trsp: the same directory the CLI probes and the lock lives in (an
+    // empty XDG_RUNTIME_DIR used to resolve differently here).
+    crate::control_socket_host_dir().join("control.sock")
 }
 
 // Env var that overrides the default Linux-native host project root.
@@ -1395,13 +1394,14 @@ fn start_control_socket_server(shutdown: Arc<ShutdownLatch>) -> Result<(), Strin
         fs::create_dir_all(parent)
             .map_err(|err| format!("failed to create control socket directory: {err}"))?;
     }
-    if socket_path.exists() {
-        fs::remove_file(&socket_path)
-            .map_err(|err| format!("failed to remove stale control socket: {err}"))?;
+    // ORDER 1944-trsp: never unlinks a socket someone still answers on.
+    let listener = crate::tray_presence::bind_control_socket(&socket_path)?;
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        if let Ok(m) = fs::symlink_metadata(&socket_path) {
+            let _ = crate::BOUND_CONTROL_SOCKET.set((m.dev(), m.ino()));
+        }
     }
-
-    let listener = UnixListener::bind(&socket_path)
-        .map_err(|err| format!("failed to bind control socket: {err}"))?;
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod control socket: {err}"))?;
 
@@ -3974,6 +3974,10 @@ fn ensure_desktop_icon() {
 }
 
 pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
+    // ORDER 1944-trsp: FIRST, before the run marker, the socket, the
+    // schedulers or the vault probe. A second tray refuses here and touches
+    // nothing; the kernel releases the lock when this process exits.
+    let _tray_lock = crate::tray_presence::acquire(&crate::control_socket_host_dir())?;
     // Order 1859-v5iv: mint and export this run's id before any thread exists
     // (forges launched under it carry it as a label), then reap the previous
     // run if it died without its graceful exit — before anything launches.

@@ -102,6 +102,8 @@ mod forge_swap;
 // 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
 #[cfg(target_os = "linux")]
 mod oom_posture;
+// 1944-trsp: one tray per enclave (a lifetime flock), and a CLI that can tell.
+mod tray_presence;
 // RAM-only source-volume identity is needed by default CLI launchers too.
 mod launch_images;
 mod local_projects;
@@ -8976,6 +8978,22 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
 /// 2026-09-04 at 01:09Z and 12:42:21Z; order 1019-ba6e). Both phases now
 /// share this one predicate, so ownership cannot be honoured in one loop and
 /// forgotten in the next.
+/// ORDER 1946-shsc: the enclave has ONE owner, the process holding
+/// `tray.lock` (1944-trsp). A process that exits while ANOTHER process holds
+/// it stops nothing: the shared stack and the forges it launched are that
+/// owner's to stop. On lenovinha 2026-11-01 an exiting companion stopped the
+/// proxy, inference, nix-cache, router and git mirror a 16 h tray relied on.
+/// Leaving a container running is recoverable; stopping a live owner's is not.
+fn shutdown_targets_for(
+    containers: Vec<tillandsias_podman::ContainerListEntry>,
+    owner_elsewhere: Option<Option<u32>>,
+) -> Vec<tillandsias_podman::ContainerListEntry> {
+    if owner_elsewhere.is_some() {
+        return Vec::new();
+    }
+    shutdown_escalation_targets(containers)
+}
+
 fn shutdown_escalation_targets(
     containers: Vec<tillandsias_podman::ContainerListEntry>,
 ) -> Vec<tillandsias_podman::ContainerListEntry> {
@@ -15526,11 +15544,30 @@ fn maybe_spawn_detached_tray_for_cli(
     // false positive used to cause `--observatorium` / `--opencode-web` to
     // race past this helper and then fail in `send_issue_web_session` with
     // `Connection refused`.
-    if control_socket_is_listening(&socket_path) {
-        if debug {
-            eprintln!("[tillandsias] reusing existing tray control socket");
+    // ORDER 1944-trsp: the socket can be gone while its tray lives (a second
+    // tray's start and exit unlinked it on lenovinha, 2026-11-01), so a failed
+    // connect is not "no tray". The tray's lifetime lock decides; a companion
+    // is started only when nobody holds it.
+    match tray_presence::presence(
+        &control_socket_host_dir(),
+        control_socket_is_listening(&socket_path),
+    ) {
+        tray_presence::Presence::Listening => {
+            if debug {
+                eprintln!("[tillandsias] reusing existing tray control socket");
+            }
+            return;
         }
-        return;
+        tray_presence::Presence::AliveWithoutSocket { pid } => {
+            eprintln!(
+                "[tillandsias] a tray is running ({}) but its control socket {} does not answer; \
+                 not starting a second tray over it. Quit and restart the tray to restore the socket.",
+                pid.map_or_else(|| "pid unknown".to_string(), |p| format!("pid {p}")),
+                socket_path.display()
+            );
+            return;
+        }
+        tray_presence::Presence::Absent => {}
     }
 
     let Ok(exe) = std::env::current_exe() else {
@@ -15668,6 +15705,25 @@ fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<Strin
 /// stale socket file left over from a crashed tray.
 ///
 /// @trace spec:tray-host-control-socket
+/// (dev, inode) of the control socket this process bound, if any (1944-trsp).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) static BOUND_CONTROL_SOCKET: std::sync::OnceLock<(u64, u64)> =
+    std::sync::OnceLock::new();
+
+#[cfg(unix)]
+pub(crate) fn control_socket_is_ours(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    match (BOUND_CONTROL_SOCKET.get(), fs::symlink_metadata(path)) {
+        (Some(&(dev, ino)), Ok(m)) => m.dev() == dev && m.ino() == ino,
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+pub(crate) fn control_socket_is_ours(_path: &Path) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn control_socket_is_listening(socket_path: &Path) -> bool {
     if !socket_path.exists() {
@@ -22120,6 +22176,13 @@ fn load_config(_path: &str) -> Result<(), String> {
 /// @trace spec:graceful-shutdown, spec:app-lifecycle
 pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     debug!("starting graceful shutdown sequence");
+    let owner_elsewhere = crate::tray_presence::owner_elsewhere(&control_socket_host_dir());
+    if let Some(pid) = owner_elsewhere {
+        info!(
+            owner = ?pid,
+            "another process owns the enclave; leaving its containers running"
+        );
+    }
 
     // 2. Stop all tillandsias-managed containers
     let client = PodmanClient::new();
@@ -22151,7 +22214,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                 // stopper). Ownership is decided by is_stack_managed_name —
                 // the same vocabulary the teardown and reset scopes speak —
                 // never by prefix alone.
-                let running_at_start = shutdown_escalation_targets(containers);
+                let running_at_start = shutdown_targets_for(containers, owner_elsewhere);
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -22190,7 +22253,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                         Ok(Ok(remaining)) => {
                             // 1019-ba6e: ownership, not prefix — the same
                             // predicate the stop phase applied.
-                            let running = shutdown_escalation_targets(remaining);
+                            let running = shutdown_targets_for(remaining, owner_elsewhere);
                             if running.is_empty() {
                                 debug!(
                                     "verification clean: zero running managed containers remain"
@@ -22222,8 +22285,10 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 
     // 4. Cleanup ephemeral resources (sockets and logs)
     // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
+    // ORDER 1944-trsp: only the socket THIS process bound. A headless exit or
+    // a refused tray removing it left a live tray unreachable.
     let socket_path = control_socket_host_dir().join("control.sock");
-    if socket_path.exists() {
+    if control_socket_is_ours(&socket_path) {
         debug!(path = %socket_path.display(), "removing control socket");
         let _ = fs::remove_file(&socket_path);
     }
@@ -25059,6 +25124,48 @@ mod tests {
             vec!["tillandsias-vault"],
             "only OWNED and RUNNING containers may be escalated to SIGKILL"
         );
+    }
+
+    /// 1946-shsc, the 2026-11-01 case: run A holds the tray lock and owns
+    /// the shared stack; run B exits gracefully. B stops NOTHING of A's.
+    /// Pre-fix B's sweep took every running stack container. Once no other
+    /// owner exists, the sweep is the 936-kdev ownership filter as before.
+    #[test]
+    fn a_graceful_exit_leaves_another_owners_enclave_running() {
+        let entry = |name: &str| tillandsias_podman::ContainerListEntry {
+            name: name.to_string(),
+            state: "running".to_string(),
+            exit_code: 0,
+            exited_at: 0,
+            restarts: 0,
+        };
+        let enclave = || {
+            vec![
+                entry("tillandsias-proxy"),
+                entry("tillandsias-inference"),
+                entry("tillandsias-vault"),
+                entry("tillandsias-git-kumbia-kombat"),
+            ]
+        };
+        let dir = std::path::PathBuf::from("/dev/shm")
+            .join(format!("shsc-two-runs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_a = crate::tray_presence::acquire(&dir).expect("A owns the enclave");
+        // B is another process: the lock names A's pid, which is not B's.
+        std::fs::write(crate::tray_presence::lock_path(&dir), "1").unwrap();
+        let b_owner = crate::tray_presence::owner_elsewhere(&dir);
+        assert_eq!(b_owner, Some(Some(1)));
+        assert!(
+            shutdown_targets_for(enclave(), b_owner).is_empty(),
+            "B must leave A's enclave running"
+        );
+        // Pre-fix behaviour, for the record: B's sweep took all four.
+        assert_eq!(shutdown_escalation_targets(enclave()).len(), 4);
+        // A, the owner, still sweeps its own enclave on exit.
+        drop(run_a);
+        let owner = crate::tray_presence::owner_elsewhere(&dir);
+        assert_eq!(shutdown_targets_for(enclave(), owner).len(), 4);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Order 477 (the packet's steady-state criterion): after the LAST lane

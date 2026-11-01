@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01).
+packets:
+- packet_id: plan-next-reports-every-ranked-row-it-drops-with-count-and-ids-instead-of-a-silent-gap-in-its-numbering
+  order: 1949-pndr
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [mcp, plan, selector, citations]
+  estimated_hours: 2
+  title: plan_next reports every ranked row it drops for lack of a citable span (count and ids) instead of leaving a silent gap in its numbering
+  context: 'lenovinha 2026-11-01, plan_next linux on trunk: the answer said "top 5 of 587 eligible" and listed ranks 3, 4 and 5 only. answer_next_excluding (crates/tillandsias-plan/src/answer.rs) skips a row whose packet_row_citations returns None with a bare continue, keeping the rank counter, so the two highest-ranked rows vanish without a word. 722-uern (p0) is a likely one of them. A worker reading the answer takes rank 3 as the top of the queue and p0 work stays hidden.'
+  exit_criteria:
+  - 'A fixture ranks a row with no citable span above citable ones and asserts the answer names it (id and order) on a dropped line with the count, and the shown rows are numbered without a gap or with the gap explained. Pre-fix result: FAILS, the row is absent and ranks start at 2 or later with no mention.'
+  verifiable_closure: 'Fixture transcript before and after; plan_next linux on trunk lists the dropped ids. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Collect the dropped ids in the selector loop, report them (count and ids, with why: no citable span) in the answer and as a field, then find why 722-uern has no citable span.'
+  provenance: 1378-7w2p pickup on lenovinha 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T20:50:12Z'
+    host: lenovinha
+    summary: filed p1 ready, plan_next hid its top two ranked rows

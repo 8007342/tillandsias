@@ -166,6 +166,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:release-cache-is-saved-only-by-main
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
@@ -1040,12 +1041,14 @@ specs:
   last_verified: '2026-05-30'
 - spec_id: singleton-guard
   status: active
-  litmus_tests: null
-  coverage_ratio: 0
+  litmus_tests:
+  - litmus:one-tray-per-enclave-and-the-cli-sees-it
+  coverage_ratio: 100
   last_verified: '2026-05-14'
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:plan-next-names-a-stale-ledger-and-hides-rows-siblings-hold
   - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
@@ -1317,6 +1320,7 @@ specs:
   litmus_tests:
   - litmus:binary-e2e-smoke
   - litmus:dead-tray-run-is-reaped
+  - litmus:a-graceful-exit-leaves-another-owners-enclave-running
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: ephemeral-guarantee
