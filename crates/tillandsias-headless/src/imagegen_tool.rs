@@ -106,6 +106,22 @@ pub struct Aux {
 }
 
 impl Aux {
+    /// Every ControlNet and LoRA must pair with the request's base tier: an
+    /// SD1.5 ControlNet on an SDXL model fails inside sd-cli, so refuse it here.
+    pub fn check_base(&self, tier: &str) -> Result<(), String> {
+        for m in self.files() {
+            if m.base_tier() != tier {
+                return Err(format!(
+                    "invalid_arguments: {} pairs with tier {}, not {tier}; pass tier {} or pick a file for {tier}",
+                    m.label(),
+                    m.base_tier(),
+                    m.base_tier()
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// The pinned files this request adds to the tier's own.
     pub fn files(&self) -> Vec<imagegen_models::ModelFile> {
         self.control
@@ -124,7 +140,14 @@ fn admitted(
 ) -> Result<imagegen_models::ModelFile, String> {
     let row = manifest
         .iter()
-        .find(|m| m.role == role && m.cache_name().trim_end_matches(".safetensors").trim_end_matches(".gguf") == name)
+        .find(|m| match role {
+            // A ControlNet is named by its role (`controlnet:openpose`): upstream
+            // files are all called diffusion_pytorch_model*.safetensors.
+            "controlnet" => m.role == format!("controlnet:{name}"),
+            // A LoRA is named by its file stem, which is what sd.cpp's
+            // `<lora:NAME:w>` looks up.
+            _ => m.role == role && lora_stem(m) == name,
+        })
         .ok_or_else(|| {
             format!(
                 "model_refused: no pinned {role} named {name}; a {role} is used only when \
@@ -134,6 +157,12 @@ fn admitted(
         })?;
     imagegen_models::register_admits(register, row)?;
     Ok(row.clone())
+}
+
+fn lora_stem(m: &imagegen_models::ModelFile) -> &str {
+    m.cache_name()
+        .trim_end_matches(".safetensors")
+        .trim_end_matches(".gguf")
 }
 
 /// Parse `control_net`, `control_image` and `loras` against the manifest and
@@ -533,6 +562,7 @@ pub fn call(
         &imagegen_models::manifest(),
         imagegen_models::register_tsv(),
     )?;
+    job.aux.check_base(&job.tier.tier)?;
     // 1874-p8w7: a tier above what this lane accepted runs only on a token.
     let lane = imagegen_consent::lane_key(project, instance);
     let request = imagegen_consent::request_hash(args);
@@ -990,9 +1020,9 @@ mod tests {
         let sha_lo = "b".repeat(64);
         let sha_un = "d".repeat(64);
         let manifest = format!(
-            "aux\tcontrolnet\tacme/cn-openpose-sdxl\t{rev}\topenpose.safetensors\t{sha_cn}\t10\tapache-2.0\n\
-             aux\tlora\tacme/robot-lora\t{rev}\trobot.safetensors\t{sha_lo}\t5\tmit\n\
-             aux\tlora\tacme/unlisted-lora\t{rev}\tunlisted.safetensors\t{sha_un}\t5\tmit\n"
+            "I0/controlnet-openpose\tcontrolnet:openpose\tacme/cn-openpose-sdxl\t{rev}\topenpose.safetensors\t{sha_cn}\t10\tapache-2.0\n\
+             I0/lora\tlora\tacme/robot-lora\t{rev}\trobot.safetensors\t{sha_lo}\t5\tmit\n\
+             I0/lora\tlora\tacme/unlisted-lora\t{rev}\tunlisted.safetensors\t{sha_un}\t5\tmit\n"
         );
         let manifest = imagegen_models::parse_manifest(&manifest).unwrap();
         let register = format!(
@@ -1026,9 +1056,20 @@ mod tests {
                 .cloned()
                 .unwrap_or_else(|| panic!("{flag} missing from {a:?}"))
         };
-        assert_eq!(after("--control-net"), "/models/aux/openpose.safetensors");
+        assert_eq!(
+            after("--control-net"),
+            "/models/I0/controlnet-openpose/openpose.safetensors"
+        );
         assert_eq!(after("--control-image"), "/out/poses/pose-03.png");
-        assert_eq!(after("--lora-model-dir"), "/models/aux");
+        assert_eq!(after("--lora-model-dir"), "/models/I0/lora");
+        // A file pinned for another base tier is refused before sd-cli runs.
+        assert!(job.aux.check_base("I0").is_ok());
+        assert!(
+            job.aux
+                .check_base("I1")
+                .unwrap_err()
+                .starts_with("invalid_arguments:")
+        );
         assert!(after("--prompt").ends_with("<lora:robot:0.8>"), "{a:?}");
 
         // A file the manifest lists but the register does not admit is refused.
