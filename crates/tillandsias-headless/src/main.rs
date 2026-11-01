@@ -18135,15 +18135,34 @@ fn run_sibling_studio_mode(
         resolve_launch_project_identity(project_path, is_cloud, "studio-project")?;
     let project_name = project_name_owned.as_str();
 
-    let version = VERSION.trim();
-    let root = resolve_runtime_asset_root(version, debug)?;
-    let certs_dir = ensure_ca_bundle(debug)?;
-    ensure_enclave_network(debug)?;
-    let images = lane.images(launch_images::launch_images(
+    // 1945-sthg: one progress line per stage and a deadline on each, so a
+    // stall fails by name instead of a silent 50-minute wait (2026-11-01).
+    use std::time::Duration;
+    use studio_stages::{Stage, run_async, run_blocking};
+    const TOTAL: usize = 4;
+    let label = lane.label.clone();
+    let version = VERSION.trim().to_string();
+    let images: Vec<String> = lane.images(launch_images::launch_images(
         launch_images::LaunchSite::SiblingStudio,
     ));
-    let images: Vec<&str> = images.iter().map(String::as_str).collect();
-    ensure_versioned_images(&root, &images, version, debug)?;
+    // The studio image is large (about 9 GB) and may be built on first use.
+    let images_stage = Stage {
+        index: 1,
+        total: TOTAL,
+        name: "images",
+        bound: Duration::from_secs(40 * 60),
+    };
+    let certs_dir = {
+        let version = version.clone();
+        run_blocking(&label, images_stage, move || {
+            let root = resolve_runtime_asset_root(&version, debug)?;
+            let certs_dir = ensure_ca_bundle(debug)?;
+            ensure_enclave_network(debug)?;
+            let images: Vec<&str> = images.iter().map(String::as_str).collect();
+            ensure_versioned_images(&root, &images, &version, debug)?;
+            Ok(certs_dir)
+        })?
+    };
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -18155,34 +18174,60 @@ fn run_sibling_studio_mode(
     })?;
     let container = imagegen_studio::container_name(project_name);
     rt.block_on(async {
-        let plan = imagegen_studio::plan_explicit(&tillandsias_core::cache_root::cache_root());
-        imagegen_studio::start(&client, &plan, project_name, version, debug)
-            .await
-            .map_err(|e| format!("[{}] failed to start the studio: {e}", lane.label))?;
-        let router_image = versioned_image_tag("router", version);
-        ensure_router_running(
-            &client,
-            &certs_dir,
-            &router_image,
-            version,
-            router_host_port,
-            debug,
-        )
+        let studio_stage = Stage {
+            index: 2,
+            total: TOTAL,
+            name: "studio container",
+            bound: Duration::from_secs(5 * 60),
+        };
+        run_async(&label, studio_stage, async {
+            let plan = imagegen_studio::plan_explicit(&tillandsias_core::cache_root::cache_root());
+            imagegen_studio::start(&client, &plan, project_name, &version, debug)
+                .await
+                .map_err(|e| format!("failed to start the studio: {e}"))
+        })
         .await?;
-        // Not public: the route keeps the OTP forward_auth gate.
-        let route = RouterRoute::new(
-            lane.route_host(&router_host_label(project_name)),
-            container.clone(),
-            lane.port,
-        );
-        upsert_router_route(route, debug)?;
-        caddy_reload_routes(debug).await
+        let route_stage = Stage {
+            index: 3,
+            total: TOTAL,
+            name: "router route",
+            bound: Duration::from_secs(3 * 60),
+        };
+        run_async(&label, route_stage, async {
+            let router_image = versioned_image_tag("router", &version);
+            ensure_router_running(
+                &client,
+                &certs_dir,
+                &router_image,
+                &version,
+                router_host_port,
+                debug,
+            )
+            .await?;
+            // Not public: the route keeps the OTP forward_auth gate.
+            let route = RouterRoute::new(
+                lane.route_host(&router_host_label(project_name)),
+                container.clone(),
+                lane.port,
+            );
+            upsert_router_route(route, debug)?;
+            caddy_reload_routes(debug).await
+        })
+        .await
     })?;
     eprintln!(
-        "[tillandsias] {} for {project_name}: {container} (no host port; only the router's authenticated route)",
-        lane.label
+        "[tillandsias] {label} for {project_name}: {container} (no host port; only the router's authenticated route)"
     );
-    launch_opencode_web_browser(project_name, &certs_dir, router_host_port, lane, debug)
+    let window_stage = Stage {
+        index: 4,
+        total: TOTAL,
+        name: "session and window",
+        bound: Duration::from_secs(3 * 60),
+    };
+    let (project, lane) = (project_name.to_string(), lane.clone());
+    run_blocking(&label, window_stage, move || {
+        launch_opencode_web_browser(&project, &certs_dir, router_host_port, &lane, debug)
+    })
 }
 
 pub(crate) fn run_opencode_web_mode(
@@ -20615,6 +20660,7 @@ mod browser_open;
 #[cfg(feature = "host-services")]
 mod host_audio;
 mod studio;
+mod studio_stages;
 
 // @trace spec:local-web-preview (order 1637-5765): opt-in toolchains (Flutter)
 // in a sibling container, streamed over the lane's MCP socket. Gated with
