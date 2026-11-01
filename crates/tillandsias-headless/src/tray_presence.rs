@@ -173,6 +173,21 @@ pub(crate) fn presence(dir: &Path, socket_listening: bool) -> Presence {
     }
 }
 
+/// Test-only: wait until no descriptor holds the lock in `dir`. Dropping a
+/// [`TrayLock`] closes this process's descriptor, but a child that another
+/// test spawns in the same process holds an inherited copy between fork and
+/// exec (close-on-exec only takes effect at exec), so a probe made right
+/// after the drop can still see the lock for a moment. Seen in the gate on
+/// 2026-11-01. A tray holds its lock for life, so production never races
+/// this. Off unix `lock_is_held` is always false, so this returns at once.
+#[cfg(test)]
+pub(crate) fn wait_released(dir: &Path) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while lock_is_held(dir) && std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
@@ -207,6 +222,7 @@ mod tests {
 
         // Once the live tray exits, its lock is gone with it: a new tray starts.
         drop(live);
+        wait_released(&dir);
         assert_eq!(presence(&dir, false), Presence::Absent);
         let next = acquire(&dir).expect("lock is free after the owner exits");
         // A listening socket always means attach.
@@ -267,6 +283,7 @@ mod tests {
         std::fs::write(lock_path(&dir), "1").unwrap();
         assert_eq!(owner_elsewhere(&dir), Some(Some(1)));
         drop(lock);
+        wait_released(&dir);
         assert_eq!(owner_elsewhere(&dir), None, "released: nobody owns it");
         let _ = std::fs::remove_dir_all(&dir);
     }
