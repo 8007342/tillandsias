@@ -1,6 +1,6 @@
 # Third-party licence management — findings and proposal (2026-10-31)
 
-@trace order:1931-lcns, spec:approval-attestation, spec:approval-record, spec:first-use-download-consent
+@trace order:1940-lcns, spec:approval-attestation, spec:approval-record, spec:first-use-download-consent
 
 Operator direction (2026-10-31): research the licence acceptance of third-party
 software we install; use the hardware-key signatures from the fingerprint and
@@ -243,9 +243,28 @@ device's security hardware and kept only on this computer."
 
 ## Work packets
 
-### Work Packet: 1931-lcns/component-licence-register
+### Work Packet: 1940-ilic
 
-- id: `1931-lcns/component-licence-register`
+- id: `1940-ilic`
+- owner_host: linux
+- capability_tags: [licensing, lua, inference, policy]
+- status: ready
+- priority: first (coordinator, 2026-10-31: the most urgent finding)
+- discovered_by: operator direction 2026-10-31, research in this file (F6, F7)
+- evidence:
+  - `images/inference/tiers/*.tsv` — LLM pins with no licence column
+  - `images/inference/decode-floor-pin.sh` — names `qwen2.5:3b` (Qwen Research licence, non-commercial-style) in comments
+- next_action: >
+    Add an `spdx` column to every inference tier table and a Lua checker
+    (sibling of scripts/lua/check-model-licence-register.lua) that refuses a
+    pin whose licence is not on the allowlist, with explicit refusals for
+    `qwen2.5:3b` and `qwen2.5:72b`. Verify each pinned model's licence
+    against its card and record the URL and date. Ships ahead of, and does
+    not wait for, 1940-creg.
+
+### Work Packet: 1940-creg
+
+- id: `1940-creg`
 - owner_host: linux
 - capability_tags: [licensing, lua, register, images, policy]
 - status: ready
@@ -264,9 +283,9 @@ device's security hardware and kept only on this computer."
     (Qwen2.5 sizes, nomic-embed-text) into the register with their Apache-2.0
     ids, and add explicit `refuse` rows for `qwen2.5:3b` and `qwen2.5:72b`.
 
-### Work Packet: 1931-lcns/third-party-notices-generator
+### Work Packet: 1940-ntcs
 
-- id: `1931-lcns/third-party-notices-generator`
+- id: `1940-ntcs`
 - owner_host: linux
 - capability_tags: [licensing, rust, policy, release]
 - status: ready
@@ -280,11 +299,11 @@ device's security hardware and kept only on this computer."
     `THIRD-PARTY-NOTICES.md` from the register (verbatim Apache NOTICE
     contents, verbatim OpenRAIL Attachment A, licence text or link per row),
     a `--check` mode, and include the file in the release tarball and the
-    tray's About page. Depends on `1931-lcns/component-licence-register`.
+    tray's About page. Depends on `1940-creg`.
 
-### Work Packet: 1931-lcns/licence-acceptance-statement
+### Work Packet: 1940-stmt
 
-- id: `1931-lcns/licence-acceptance-statement`
+- id: `1940-stmt`
 - owner_host: linux
 - capability_tags: [licensing, approval-broker, sshsig, rust, security]
 - status: ready
@@ -301,9 +320,9 @@ device's security hardware and kept only on this computer."
     `ssh-keygen -Y verify`. Blocked on the broker landing; the delta can land
     before it.
 
-### Work Packet: 1931-lcns/first-launch-licence-card
+### Work Packet: 1940-card
 
-- id: `1931-lcns/first-launch-licence-card`
+- id: `1940-card`
 - owner_host: linux
 - capability_tags: [licensing, tray-ui, approval-dialog, macron, ux]
 - status: ready
@@ -321,9 +340,9 @@ device's security hardware and kept only on this computer."
     container start, FIRST_RUN installers and model fetch. The acknowledge
     card must never say acceptance is required.
 
-### Work Packet: 1931-lcns/licence-text-pins
+### Work Packet: 1940-txtp
 
-- id: `1931-lcns/licence-text-pins`
+- id: `1940-txtp`
 - owner_host: linux
 - capability_tags: [licensing, provenance, cheatsheet-sources]
 - status: ready
@@ -338,9 +357,9 @@ device's security hardware and kept only on this computer."
     lines in the cheatsheets, and record their sha256 in the register so the
     card renders the pinned text and refuses on drift.
 
-### Work Packet: 1931-lcns/redistribution-gate
+### Work Packet: 1940-rdst
 
-- id: `1931-lcns/redistribution-gate`
+- id: `1940-rdst`
 - owner_host: linux
 - capability_tags: [licensing, release, gate, build-script]
 - status: ready
