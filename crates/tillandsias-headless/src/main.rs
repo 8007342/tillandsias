@@ -102,6 +102,8 @@ mod forge_swap;
 // 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
 #[cfg(target_os = "linux")]
 mod oom_posture;
+// 1944-trsp: one tray per enclave (a lifetime flock), and a CLI that can tell.
+mod tray_presence;
 // RAM-only source-volume identity is needed by default CLI launchers too.
 mod launch_images;
 mod local_projects;
@@ -15526,11 +15528,30 @@ fn maybe_spawn_detached_tray_for_cli(
     // false positive used to cause `--observatorium` / `--opencode-web` to
     // race past this helper and then fail in `send_issue_web_session` with
     // `Connection refused`.
-    if control_socket_is_listening(&socket_path) {
-        if debug {
-            eprintln!("[tillandsias] reusing existing tray control socket");
+    // ORDER 1944-trsp: the socket can be gone while its tray lives (a second
+    // tray's start and exit unlinked it on lenovinha, 2026-11-01), so a failed
+    // connect is not "no tray". The tray's lifetime lock decides; a companion
+    // is started only when nobody holds it.
+    match tray_presence::presence(
+        &control_socket_host_dir(),
+        control_socket_is_listening(&socket_path),
+    ) {
+        tray_presence::Presence::Listening => {
+            if debug {
+                eprintln!("[tillandsias] reusing existing tray control socket");
+            }
+            return;
         }
-        return;
+        tray_presence::Presence::AliveWithoutSocket { pid } => {
+            eprintln!(
+                "[tillandsias] a tray is running ({}) but its control socket {} does not answer; \
+                 not starting a second tray over it. Quit and restart the tray to restore the socket.",
+                pid.map_or_else(|| "pid unknown".to_string(), |p| format!("pid {p}")),
+                socket_path.display()
+            );
+            return;
+        }
+        tray_presence::Presence::Absent => {}
     }
 
     let Ok(exe) = std::env::current_exe() else {
@@ -15668,6 +15689,25 @@ fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<Strin
 /// stale socket file left over from a crashed tray.
 ///
 /// @trace spec:tray-host-control-socket
+/// (dev, inode) of the control socket this process bound, if any (1944-trsp).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) static BOUND_CONTROL_SOCKET: std::sync::OnceLock<(u64, u64)> =
+    std::sync::OnceLock::new();
+
+#[cfg(unix)]
+pub(crate) fn control_socket_is_ours(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    match (BOUND_CONTROL_SOCKET.get(), fs::symlink_metadata(path)) {
+        (Some(&(dev, ino)), Ok(m)) => m.dev() == dev && m.ino() == ino,
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+pub(crate) fn control_socket_is_ours(_path: &Path) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn control_socket_is_listening(socket_path: &Path) -> bool {
     if !socket_path.exists() {
@@ -22222,8 +22262,10 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 
     // 4. Cleanup ephemeral resources (sockets and logs)
     // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
+    // ORDER 1944-trsp: only the socket THIS process bound. A headless exit or
+    // a refused tray removing it left a live tray unreachable.
     let socket_path = control_socket_host_dir().join("control.sock");
-    if socket_path.exists() {
+    if control_socket_is_ours(&socket_path) {
         debug!(path = %socket_path.display(), "removing control socket");
         let _ = fs::remove_file(&socket_path);
     }
