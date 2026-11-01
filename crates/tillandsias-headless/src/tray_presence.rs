@@ -144,6 +144,22 @@ fn lock_is_held(_dir: &Path) -> bool {
     false
 }
 
+/// `Some(holder pid)` when a process OTHER than this one holds the tray lock
+/// in `dir` (1946-shsc): that process owns the enclave, and this one's exit
+/// must leave its containers alone. `None` when this process holds it or
+/// nobody does.
+pub(crate) fn owner_elsewhere(dir: &Path) -> Option<Option<u32>> {
+    if !lock_is_held(dir) {
+        return None;
+    }
+    let pid = holder_pid(dir);
+    if pid == Some(std::process::id()) {
+        None
+    } else {
+        Some(pid)
+    }
+}
+
 /// The CLI's presence check: the socket answers, or the lock says a tray lives.
 pub(crate) fn presence(dir: &Path, socket_listening: bool) -> Presence {
     if socket_listening {
@@ -235,6 +251,23 @@ mod tests {
         drop(bind_control_socket(&sock).unwrap());
         assert!(sock.exists(), "the dead listener left its file");
         assert!(bind_control_socket(&sock).is_ok());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 1946-shsc: while this process holds the lock it owns the enclave;
+    /// when a lock is held by a pid that is not ours, another process owns
+    /// it; with no lock, nobody does.
+    #[test]
+    fn the_enclave_owner_is_the_lock_holder() {
+        let dir = scratch("owner");
+        assert_eq!(owner_elsewhere(&dir), None, "no lock, no owner");
+        let lock = acquire(&dir).unwrap();
+        assert_eq!(owner_elsewhere(&dir), None, "we hold it: we own it");
+        // Another holder: the pid recorded in the lock is not ours.
+        std::fs::write(lock_path(&dir), "1").unwrap();
+        assert_eq!(owner_elsewhere(&dir), Some(Some(1)));
+        drop(lock);
+        assert_eq!(owner_elsewhere(&dir), None, "released: nobody owns it");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
