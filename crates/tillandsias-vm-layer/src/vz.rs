@@ -4849,6 +4849,68 @@ mod tests {
     /// is up and BEFORE installing anything on the release-day image, and a
     /// failed upgrade is recorded but does not fail provisioning. Before this
     /// the guest kept Fedora 44's launch kernel (6.19.10) forever.
+    /// Order 1925-gupg: EXECUTE the upgrade block, not just read it. Under the
+    /// provisioning script's own `set -euo pipefail` and ERR trap, a failing
+    /// `dnf upgrade` (offline mirror) must not trip the trap: provisioning goes
+    /// on, and the marker says FAILED. A working `dnf` records ok. The block is
+    /// cut from the generated script, so a later edit is what gets run.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_guest_upgrade_is_recorded_and_provisioning_continues() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let script = provision_user_data("off");
+        let start = script
+            .find("if dnf -y upgrade --refresh; then")
+            .expect("the upgrade block");
+        let end = start + script[start..].find("\nfi\n").expect("its fi") + "\nfi\n".len();
+        let dir = tempfile::tempdir().expect("tempdir");
+        let marker = dir.path().join("marker");
+        let block = script[start..end].replace(
+            "/var/log/tillandsias-provision-marker",
+            marker.to_str().unwrap(),
+        );
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let fake = |name: &str, body: &str| {
+            let p = bin.join(name);
+            std::fs::write(&p, format!("#!/bin/bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        fake("rpm", "echo kernel-core-7.2.13-200.fc44.aarch64 Sun");
+        fake("uname", "echo 6.19.10-300.fc44.aarch64");
+        let run = |dnf_rc: i32| -> String {
+            fake("dnf", &format!("exit {dnf_rc}"));
+            let _ = std::fs::remove_file(&marker);
+            let out = std::process::Command::new("/bin/bash")
+                .arg("-c")
+                .arg(format!(
+                    "set -euo pipefail\ntrap 'echo TRAPPED; exit 99' ERR\n{block}echo CONTINUED\n"
+                ))
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .expect("bash");
+            let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+            assert!(out.status.success(), "dnf rc={dnf_rc}: {stdout}");
+            assert!(!stdout.contains("TRAPPED"), "the ERR trap fired: {stdout}");
+            assert!(
+                stdout.contains("CONTINUED"),
+                "provisioning stopped: {stdout}"
+            );
+            std::fs::read_to_string(&marker).unwrap_or_default()
+        };
+        let failed = run(1);
+        assert!(
+            failed.contains("tillandsias-guest-upgrade FAILED rc=1")
+                && failed.contains("running_kernel=6.19.10"),
+            "{failed}"
+        );
+        let ok = run(0);
+        assert!(
+            ok.contains("tillandsias-guest-upgrade ok installed_kernel=kernel-core-7.2.13"),
+            "{ok}"
+        );
+    }
+
     #[test]
     fn provision_user_data_upgrades_the_guest_os_before_installing() {
         let script = provision_user_data("off");
