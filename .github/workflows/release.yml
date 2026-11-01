@@ -100,7 +100,10 @@ jobs:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
           restore-prefixes-first-match: |
             nix-${{ runner.os }}-
-          save: true
+          # Order 1942-mijg: only main saves (the cache_seed run the release
+          # skill dispatches on main before the tag). A tag-scoped save is
+          # restorable by nobody and only evicts main's from the 10 GB quota.
+          save: ${{ github.ref == 'refs/heads/main' }}
 
       # ── Gates that used to live here now run on local hardware ───────────────
       #
@@ -566,10 +569,10 @@ jobs:
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
         with:
           workspaces: . -> target
-          # Order 1916-nxcs: a stable key shared by every ref, saved on every
-          # run. A main-ref save (cache_seed) is restorable by the tag runs.
+          # Order 1916-nxcs: a stable key shared by every ref; 1942-mijg: saved
+          # only on main (the cache_seed run), the scope every tag run restores.
           shared-key: release-${{ runner.os }}
-          save-if: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install guest cross-build tools
         run: |
@@ -721,10 +724,10 @@ jobs:
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
         with:
           workspaces: . -> target
-          # Order 1916-nxcs: a stable key shared by every ref, saved on every
-          # run. A main-ref save (cache_seed) is restorable by the tag runs.
+          # Order 1916-nxcs: a stable key shared by every ref; 1942-mijg: saved
+          # only on main (the cache_seed run), the scope every tag run restores.
           shared-key: release-${{ runner.os }}
-          save-if: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Resolve version (same as Linux job)
         id: version
