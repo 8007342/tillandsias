@@ -3808,6 +3808,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    if ! _run_lua_decider "scripts/lua/check-smoke-agent-prompt-is-minimal.lua" 2>&1; then
+        _error "a smoke skill hands its forge agent the /meta-orchestration loop — a smoke spends one short turn on the shared hosted model (1941-smkp)"
+        exit 1
+    fi
+
     # ORDER 1484-uf29. The typed Lua runner is the decision path. Every input
     # is named here rather than discovered by the evaluator or a manifest.
     if ! _run_lua_decider "scripts/lua/source-agreements.lua" \

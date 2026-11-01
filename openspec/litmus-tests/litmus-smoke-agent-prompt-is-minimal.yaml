@@ -1,0 +1,39 @@
+# @trace spec:meta-orchestration
+# @trace order:1941-smkp
+#
+# Operator ruling 2026-11-01, relayed by macuahuitl: a smoke spends ONE short
+# agent turn. Both smoke skills launched their forge lane with
+# `--prompt "Use the /meta-orchestration skill"`, a full autonomous loop of
+# 100+ model requests per smoke on the hosted free tier every fleet host
+# shares; that night yoga's smokes and repro lanes ended in a 429 with
+# Retry-After 78443 (1941-tlsh). The check refuses any smoke skill that hands
+# its agent the loop; the fixture proves it refuses by line, passes the fixed
+# prompt, ignores non-smoke skills, refuses an empty population, and reads the
+# live tree. Red on the tree before 1941-smkp (3 prompts in 2 skills).
+name: litmus:smoke-agent-prompt-is-minimal
+spec: meta-orchestration
+phase: pre-build
+description: No smoke skill launches its forge agent with the /meta-orchestration loop; the smoke prompt is one fixed short turn
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary) and git; offline, reads skills/ only
+
+critical_path:
+  - step: "a smoke skill's forge prompt is one fixed turn, never the loop"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-smoke-agent-prompt-is-minimal.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:smoke-agent-prompt-fixture:5"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "five arms: the loop is refused by line, the fixed prompt passes, a non-smoke skill is not judged, an empty population is could-not-run, the live tree passes"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "smoke-agent-prompt-is-minimal"
+
+rollback:
+  on_failure: "read the refused-prompt lines; put the fixed SMOKE_PROMPT (one tool call, then the spelled-out token) back in that smoke skill's forge-lane block"
+  command: "grep -n -- '--prompt' skills/*smoke*/SKILL.md"
