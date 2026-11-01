@@ -1,0 +1,39 @@
+# @trace order:1921-2krx, order:1874-zry8 (web-studio-lanes change, not yet archived; rebind to web-studio-lane when archived)
+# The UNIT half of 1921-2krx. The live half (ss shows no ComfyUI listener on
+# the host, a request without the session token gets 401, the window opens
+# only after an authenticated 2xx) waits on operator consent: the 2026-11-01
+# live run spawned a reconciling tray companion (1944-trsp) and hung (1945-sthg).
+name: litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
+spec: local-web-preview
+phase: pre-build
+description: ComfyUI is a ready SIBLING studio row on its own image and port, never recommended for a site; its container argv publishes no host port and mounts the models read-only; the registry JSON is what registry.lua generates
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains images/studio/registry.lua and crates/tillandsias-headless/data/studios.json
+  - cargo can build the tillandsias bin with --features tray,listen-vsock
+
+critical_path:
+  - step: "the registry JSON (with the comfyui sibling row) is what registry.lua generates, and the generator's sibling rules held"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/build-studio-registry.lua -- --check"
+    timeout_ms: 10000
+    expected_behavior: "ok:studio-registry:fresh:6"
+
+  - step: "comfyui is a ready sibling lane on imagegen-studio:8188 routed as studio.<label>; its argv has no -p/--publish and mounts /models read-only"
+    command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- comfyui_is_a_ready_sibling_lane_on_its_own_image the_studio_is_absent_by_default_and_resolves_with_the_shared_cache_when_enabled 2>&1); grep -E 'test result' <<<\"$out\""
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 2 passed"
+
+observability:
+  traces:
+    - "@trace order:1921-2krx"
+  expected_log: "test result: ok. 2 passed"
+  log_fields:
+    spec: "local-web-preview"
+    test: "comfyui-studio-is-a-sibling-behind-the-otp-route"
+    artifact: "images/studio/registry.lua + crates/tillandsias-headless/src/studio.rs + imagegen_studio.rs"
+
+rollback:
+  on_failure: "regenerate the registry JSON with scripts/lua/build-studio-registry.lua; read WebLane::studio and imagegen_studio::run_args"
+  command: "cat images/studio/registry.lua"
