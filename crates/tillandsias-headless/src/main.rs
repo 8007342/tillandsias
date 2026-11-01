@@ -18109,7 +18109,80 @@ pub(crate) fn run_studio_mode(
     debug: bool,
 ) -> Result<(), String> {
     let lane = studio::WebLane::studio(studio_id)?;
+    if lane.sibling {
+        return run_sibling_studio_mode(project_path, is_cloud, port_override, &lane, debug);
+    }
     run_opencode_web_mode(project_path, is_cloud, None, port_override, &lane, debug)
+}
+
+/// ORDER 1921-2krx: a SIBLING studio (ComfyUI) runs in its own container next
+/// to the forge, so no forge, git mirror or inference is started for it. The
+/// studio publishes no host port; the router routes `studio.<label>` to its
+/// container on the enclave network, behind the same OTP `forward_auth` gate
+/// as OpenCode Web, and the window opens through the same session issue and
+/// authenticated probe (`launch_opencode_web_browser`), so it opens only after
+/// an authenticated 2xx.
+fn run_sibling_studio_mode(
+    project_path: &str,
+    is_cloud: bool,
+    port_override: Option<u16>,
+    lane: &studio::WebLane,
+    debug: bool,
+) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --studio")?;
+    report_runtime_lane("--studio", debug);
+    let (project_name_owned, _canonical_path) =
+        resolve_launch_project_identity(project_path, is_cloud, "studio-project")?;
+    let project_name = project_name_owned.as_str();
+
+    let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
+    let certs_dir = ensure_ca_bundle(debug)?;
+    ensure_enclave_network(debug)?;
+    let images = lane.images(launch_images::launch_images(
+        launch_images::LaunchSite::SiblingStudio,
+    ));
+    let images: Vec<&str> = images.iter().map(String::as_str).collect();
+    ensure_versioned_images(&root, &images, version, debug)?;
+
+    let rt = podman_runtime()?;
+    let client = PodmanClient::new();
+    let router_host_port = rt.block_on(async {
+        match existing_router_host_port(&client, debug).await? {
+            Some(port) => Ok::<u16, String>(port),
+            None => Ok(select_router_host_port(port_override, debug)?),
+        }
+    })?;
+    let container = imagegen_studio::container_name(project_name);
+    rt.block_on(async {
+        let plan = imagegen_studio::plan_explicit(&tillandsias_core::cache_root::cache_root());
+        imagegen_studio::start(&client, &plan, project_name, version, debug)
+            .await
+            .map_err(|e| format!("[{}] failed to start the studio: {e}", lane.label))?;
+        let router_image = versioned_image_tag("router", version);
+        ensure_router_running(
+            &client,
+            &certs_dir,
+            &router_image,
+            version,
+            router_host_port,
+            debug,
+        )
+        .await?;
+        // Not public: the route keeps the OTP forward_auth gate.
+        let route = RouterRoute::new(
+            lane.route_host(&router_host_label(project_name)),
+            container.clone(),
+            lane.port,
+        );
+        upsert_router_route(route, debug)?;
+        caddy_reload_routes(debug).await
+    })?;
+    eprintln!(
+        "[tillandsias] {} for {project_name}: {container} (no host port; only the router's authenticated route)",
+        lane.label
+    );
+    launch_opencode_web_browser(project_name, &certs_dir, router_host_port, lane, debug)
 }
 
 pub(crate) fn run_opencode_web_mode(
@@ -34848,6 +34921,8 @@ esac
             image: "studio-stub".into(),
             entrypoint: Some("/usr/local/bin/studio-stub".into()),
             label: "Stub studio".into(),
+            id: "stub".into(),
+            sibling: false,
         };
         let args = apply_web_lane(base.clone(), &stub, version);
         assert_eq!(
