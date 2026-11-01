@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-silverblue at the coordinator's request (macuahuitl, 2026-10-31), from the --changed profile.
+packets:
+- packet_id: fleet-activity-fixture-arm-1-scans-its-scratch-repo-not-this-checkouts-history
+  order: 1931-66u5
+  status: ready
+  kind: defect
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - fixture
+  - gate
+  estimated_hours: 1
+  title: test-fleet-activity.sh ARM 1 scans this checkout's whole history (126 s), hits its own timeout 60 and still passes; it flaked a land run (#712)
+  context: 'scripts/fleet-activity.sh resolves ROOT from its own location, so the fixture''s ARM 1 (--ref HEAD --since 10.years) reported on this repo, not the 4-commit scratch repo it builds. Profiled on pirria 2026-10-31: the step took 68.5 s of a 325 s --changed run; the same scan alone takes 126 s, so the arm read a truncated run and passed on the header alone. The coordinator reports this step flaked and evicted #712.'
+  exit_criteria:
+  - The fixture runs in seconds.
+  - ARM 1 reads the scratch repo and asserts its exact commit count, so pointing it back at this checkout fails.
+  verifiable_closure: 'bash scripts/test-fleet-activity.sh prints PASS: fleet-activity 9/9 in under 2 s; with ARM 1 pointed at this checkout it prints FAIL: ARM 1 ... commits=3107.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture is the subject and its own run is the evidence (1136-n8sh).'
+  next_action: 'On work/1931-66u5: TILLANDSIAS_FLEET_ACTIVITY_ROOT override in fleet-activity.sh; ARM 1 points at the scratch repo and asserts commits=4.'
+  provenance: --changed profile, pirria-silverblue, 2026-10-31.
+  events:
+  - type: filed
+    ts: '2026-10-31T16:05:54Z'
+    host: pirria-silverblue
+    summary: filed p1 at the coordinator's request

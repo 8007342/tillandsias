@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: acceptance-fixture-forge-never-starts-before-mirror-ready-and-counts-no-polls
+    field: status
+    value: completed
+    ts: "2026-10-31T15:01:55Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: acceptance-fixture-forge-never-starts-before-mirror-ready-and-counts-no-polls
+    event:
+      type: completed
+      ts: "2026-10-31T15:01:55Z"
+      host: pirria-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: 8ea64b1fd land-queue gate green; readiness acceptance test added (ignored, prints refused:readiness-acceptance:forge-before-ready:polls=4)
+  - packet_id: acceptance-fixture-forge-never-starts-before-mirror-ready-and-counts-no-polls
+    event:
+      type: note
+      ts: "2026-10-31T15:01:55Z"
+      host: pirria-silverblue
+      summary: |-
+        landed on origin/linux-next as 8ea64b1fd (#710); the work-ref tip is an ancestor of 8ea64b1fd

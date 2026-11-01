@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's p0 order (macuahuitl, 2026-10-31).
+packets:
+- packet_id: the-readiness-gate-accepts-a-ready-that-fired-before-it-subscribed
+  order: 1922-lrdy
+  parent: launcher-starts-the-forge-from-a-readiness-gate-subscribed-to-events
+  status: in_progress
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [headless, readiness, events]
+  estimated_hours: 3
+  title: The readiness gate counts a READY that fired before it subscribed, so an already-running proxy, vault or mirror never blocks a launch
+  context: 'v56.10.31.1 macOS smoke, cold boot: readiness gate: tillandsias-proxy: no ready event within 125s with a healthy proxy that had already sent READY=1 to an earlier launch. Any lane whose reuse branch does not mark the proxy (the OpenCode CLI lane) waited for an event that had already happened; Linux too on the second launch of a session. Fix: the announce thread records READY as a tmpfs marker holding the container ID; the gate subscribes, then reads that state once (marker matching the running ID, or podman health=healthy for proxy and vault, whose healthcheck is their readiness), then waits.'
+  exit_criteria:
+  - 'A fixture where the READY fires before the gate starts passes at once and fails on the pre-fix code (readiness::tests::a_ready_that_fired_before_the_gate_satisfies_it_without_a_new_event); a recreated container (new ID) and a relaunch are not satisfied by an old marker.'
+  - 'Live: two consecutive launches with the proxy kept running; the second gate passes with status=ready-earlier.'
+  verifiable_closure: 'Fixture red pre-fix and green after; live transcript of the second launch.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the closing fixture is a Rust unit test in crates/tillandsias-podman (readiness tests), landed with the fix (1136-n8sh).'
+  next_action: 'PR up, then live check on macOS.'
+  provenance: coordinator p0 order 2026-10-31 from the v56.10.31.1 macOS smoke.
+  events:
+  - type: filed
+    ts: '2026-10-31T17:38:43Z'
+    host: lenovinha
+    summary: filed p0 in_progress from the coordinator order (macOS smoke regression of 1922-gate)

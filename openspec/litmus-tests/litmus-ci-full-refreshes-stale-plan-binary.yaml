@@ -1,0 +1,27 @@
+# @trace spec:dev-build
+# @trace order:1925-77h4
+#
+# ./build.sh --ci-full asks every plan binary it can name whether it was built
+# from this checkout's validator surface, before the pre-build litmus. A
+# release worktree reused across days kept a target/release/tillandsias-plan
+# older than #742, and fixtures resolving it through plan-binary-probe.sh
+# validated pushes with the old rules (macuahuitl, v56.10.30.1 cut). Stale
+# means one rebuild; still stale refuses the run. The fixture runs the block
+# extracted from build.sh over a planted stub and a fake cargo, so nothing is
+# built, and refuses on the pre-fix build.sh (no block).
+name: litmus:ci-full-refreshes-stale-plan-binary
+spec: dev-build
+phase: pre-build
+description: --ci-full rebuilds a stale plan binary before the pre-build litmus, and refuses when a copy stays stale
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains build.sh
+  - a tillandsias-plan with `script run` resolves through scripts/plan-binary-probe.sh
+
+critical_path:
+  - step: "stale is rebuilt once, still-stale refuses, current and unknown are left alone, and --ci-full calls it before the gate"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ci-full-refreshes-stale-plan-binary.lua 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "ok:ci-full-refreshes-stale-plan-binary:5/5"

@@ -37,18 +37,15 @@ _commit "tlatoani@alpha.ayahuitlcalpan.com" "crates/x.rs"          "code a"
 _commit "tlatoani@Some-MacBook.local"       "plan/index.d/b.yaml"  "plan b"
 _commit "someone@gmail.com"                 "plan/index.d/c.yaml"  "plan c"
 
-run() { timeout 60 bash "$CHECK" --ref HEAD --since "10.years" 2>&1; }
-cd "$R" || exit 2
-out="$(cd "$R" && timeout 60 bash "$CHECK" --ref HEAD --since 10.years 2>&1)"
-cd "$ROOT" || exit 2
-
-# The script resolves its own repo root from its location, so it reports on THIS
-# checkout regardless of cwd. That is correct for its job and makes the scratch
-# repo unusable for the counting arms — assert the property that IS reachable:
-# it never reports on a tree it was not pointed at.
+# ARM 1 reads the SCRATCH repo (1931-66u5). The script resolves its root from
+# its own location, so this arm used to scan this checkout's whole history:
+# 126 s on pirria against a `timeout 60`, passing on a truncated run and
+# flaking a land run (#712). TILLANDSIAS_FLEET_ACTIVITY_ROOT points it at $R,
+# and the exact commit count is the teeth: this repo has thousands, $R has 4.
+out="$(TILLANDSIAS_FLEET_ACTIVITY_ROOT="$R" timeout 20 bash "$CHECK" --ref HEAD --since 10.years 2>&1)"
 case "$out" in
-    *"ref=HEAD"*) ok "ARM 1: --ref is honoured and named in the header" ;;
-    *) bad "ARM 1: --ref HEAD not reflected in the output header" ;;
+    *"ref=HEAD"*"commits=4"*) ok "ARM 1: --ref is honoured and the report is of the scratch repo it was pointed at (4 commits)" ;;
+    *) bad "ARM 1: wanted ref=HEAD and commits=4 from the scratch repo; got: $(printf '%s' "$out" | head -1)" ;;
 esac
 
 # ── ARM 2: a shared provider is a BUCKET, never a host row ───────────────────

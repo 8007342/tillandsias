@@ -1,0 +1,10 @@
+# Gate step 1933-ysbq — every workflow using nix-community/cache-nix-action
+# installs Nix with an installer that action lists as compatible; otherwise the
+# cache save's tar exits 2 and the cache is never written.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the Nix cache uses a compatible installer (1933-ysbq)"
+STEP_LUA="scripts/lua/test-check-nix-cache-installer-compatible.lua"
+STEP_ERROR="a workflow pairs cache-nix-action with an incompatible Nix installer, so the cache never saves (1933-ysbq) — see the FAIL lines above"
+STEP_OK="Nix cache installer fixture passed"
+STEP_SECOND_REGIME="yolanda 2026-10-31 msys ok:nix-cache-installer-fixture:5 arms"

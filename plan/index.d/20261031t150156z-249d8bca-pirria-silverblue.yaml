@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-flux-tiers-fetch-from-an-ungated-apache-mirror-because-the-black-forest-labs-repo-is-gated
+    field: status
+    value: completed
+    ts: "2026-10-31T15:01:56Z"
+    host: pirria-silverblue
+
+events:
+  - packet_id: imagegen-flux-tiers-fetch-from-an-ungated-apache-mirror-because-the-black-forest-labs-repo-is-gated
+    event:
+      type: completed
+      ts: "2026-10-31T15:01:56Z"
+      host: pirria-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: d1ed0b883 land-queue gate green; check-imagegen-tier-sources-ungated ok
+  - packet_id: imagegen-flux-tiers-fetch-from-an-ungated-apache-mirror-because-the-black-forest-labs-repo-is-gated
+    event:
+      type: note
+      ts: "2026-10-31T15:01:56Z"
+      host: pirria-silverblue
+      summary: |-
+        landed on origin/linux-next as d1ed0b883 (#711); the work-ref tip is an ancestor of d1ed0b883
