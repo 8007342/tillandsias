@@ -166,6 +166,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:release-cache-is-saved-only-by-main
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
