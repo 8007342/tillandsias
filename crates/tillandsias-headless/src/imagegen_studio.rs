@@ -38,6 +38,15 @@ pub fn plan(config: &ProjectConfig, cache_root: &Path) -> Option<StudioPlan> {
         })
 }
 
+/// 1921-2krx: the plan for an EXPLICIT `--studio comfyui` launch. Asking for
+/// the studio by name is the opt-in, so the project config is not consulted.
+pub fn plan_explicit(cache_root: &Path) -> StudioPlan {
+    StudioPlan {
+        image: STUDIO_IMAGE,
+        models_dir: crate::imagegen_models::models_dir_under(cache_root),
+    }
+}
+
 pub fn container_name(project: &str) -> String {
     format!("tillandsias-{project}-studio")
 }
@@ -104,39 +113,48 @@ pub async fn ensure_if_enabled(
     let Some(plan) = plan(&config, &tillandsias_core::cache_root::cache_root()) else {
         return;
     };
-    let started = async {
-        std::fs::create_dir_all(&plan.models_dir)
-            .map_err(|e| format!("{}: {e}", plan.models_dir.display()))?;
-        let root = crate::resolve_runtime_asset_root(version, debug)?;
-        let tag = crate::versioned_image_tag(STUDIO_IMAGE, version);
-        crate::ensure_image_exists(&root, STUDIO_IMAGE, &tag, debug)?;
-        let out_volume = format!("tillandsias-imagegen-{project_name}-default");
-        let mut args = run_args(
-            &plan,
-            project_name,
-            &out_volume,
-            host_has_cdi_gpu(),
-            &ForgeBudget::for_this_host(),
-        );
-        // 1913-ebv8: in the forge's slice, ranked before it.
-        args.extend(crate::oom_slice_args());
-        args.push(tag);
-        client
-            .run_container_observed(
-                "imagegen-studio",
-                &container_name(project_name),
-                &args,
-                debug,
-            )
-            .await
-            .map(|_| ())
-    };
-    match started.await {
+    match start(client, &plan, project_name, version, debug).await {
         Ok(()) => eprintln!(
             "[tillandsias] imagegen studio up for {project_name} (http://studio:{STUDIO_PORT} inside the enclave)"
         ),
         Err(e) => eprintln!("[tillandsias] imagegen studio NOT started for {project_name}: {e}"),
     }
+}
+
+/// Build (on first use) and start the studio container for `project_name`.
+/// It publishes no host port: the only way in is the router's OTP route.
+pub async fn start(
+    client: &tillandsias_podman::PodmanClient,
+    plan: &StudioPlan,
+    project_name: &str,
+    version: &str,
+    debug: bool,
+) -> Result<(), String> {
+    std::fs::create_dir_all(&plan.models_dir)
+        .map_err(|e| format!("{}: {e}", plan.models_dir.display()))?;
+    let root = crate::resolve_runtime_asset_root(version, debug)?;
+    let tag = crate::versioned_image_tag(STUDIO_IMAGE, version);
+    crate::ensure_image_exists(&root, STUDIO_IMAGE, &tag, debug)?;
+    let out_volume = format!("tillandsias-imagegen-{project_name}-default");
+    let mut args = run_args(
+        plan,
+        project_name,
+        &out_volume,
+        host_has_cdi_gpu(),
+        &ForgeBudget::for_this_host(),
+    );
+    // 1913-ebv8: in the forge's slice, ranked before it.
+    args.extend(crate::oom_slice_args());
+    args.push(tag);
+    client
+        .run_container_observed(
+            "imagegen-studio",
+            &container_name(project_name),
+            &args,
+            debug,
+        )
+        .await
+        .map(|_| ())
 }
 
 #[cfg(test)]
@@ -198,5 +216,14 @@ mod tests {
         assert!(
             !run_args(&p, "proj", "v", false, &forge).contains(&"nvidia.com/gpu=all".to_string())
         );
+        // 1921-2krx: no host listener. The router's OTP route is the only way
+        // in, so the argv publishes nothing, and an explicit launch resolves
+        // the same read-only model mount without the config opt-in.
+        assert!(
+            !a.iter()
+                .any(|s| s == "-p" || s.starts_with("--publish") || s.starts_with("-p=")),
+            "{a:?}"
+        );
+        assert_eq!(plan_explicit(cache.path()), p);
     }
 }
