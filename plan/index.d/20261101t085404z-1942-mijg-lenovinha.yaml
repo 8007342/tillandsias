@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's p1 order (macuahuitl, 2026-11-01).
+packets:
+- packet_id: the-release-restores-a-nix-cache-that-main-saved
+  order: 1942-mijg
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [ci, release, nix, cache]
+  estimated_hours: 3
+  title: The release restores a Nix and Rust cache that main saved; a tag run never saves a cache nobody else can restore
+  context: 'Releases are dispatched on a new tag ref, and GitHub restores a cache only from the run ref or the default branch. Every cache so far is under refs/tags/v* (gh cache list: v56.10.31.2, v56.11.1.1), so each release cold-builds about 499 derivations (67 min on v56.11.1.1). The 1916-nxcs cache_seed input exists but was never dispatched on main. Fix: a push to main runs the seed path (build and save, publish nothing), and the cache saves are scoped to refs/heads/main so tag runs only restore. No schedule; signing stays on tag refs (the Sigstore SAN pins refs/tags).'
+  exit_criteria:
+  - 'A workflow lint refuses any cache save in release.yml not scoped to refs/heads/main, and refuses a workflow with no main producer; it is red on the pre-fix workflow.'
+  - 'The next release after a main push logs a Nix cache hit restored from the main scope.'
+  verifiable_closure: 'litmus:release-cache-is-saved-only-by-main'
+  unscoreable: 'unpinnable-until-the-guard-exists: the closing litmus (scripts/lua/check-release-cache-scope.lua) lands with the fix (1136-n8sh).'
+  next_action: 'PR with the lint and the workflow change.'
+  provenance: coordinator p1 order 2026-11-01 (release run v56.11.1.1 cold build).
+  events:
+  - type: filed
+    ts: '2026-11-01T08:54:04Z'
+    host: lenovinha
+    summary: filed p1 in_progress from the coordinator order
