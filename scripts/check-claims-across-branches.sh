@@ -201,6 +201,17 @@ _is_me() { # _is_me <host-label>
 }
 
 CURRENT="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" || CURRENT=""
+# ORDER 1948-xbaf. A sibling that is an ANCESTOR of HEAD holds nothing HEAD has
+# not already folded: every fragment it has, HEAD has, so HEAD's own status is
+# the later word. lenovinha 2026-11-01: origin/windows-next (2026-09-25, an
+# ancestor of trunk) folded 776-jcf3 as in_progress while trunk had since set
+# it back to ready, and this script sent a host away from a free row.
+# TILLANDSIAS_XBRANCH_ANCESTOR_SKIP=0 turns the skip off, which only restores
+# the older, stricter verdict (the fixture's stub arms use it).
+_is_ancestor_of_head() { # _is_ancestor_of_head <branch>
+    [ "${TILLANDSIAS_XBRANCH_ANCESTOR_SKIP:-1}" = 0 ] && return 1
+    git merge-base --is-ancestor "origin/$1" HEAD 2>/dev/null
+}
 
 if [ "$NO_FETCH" = 0 ]; then
     # One fetch, all siblings. This is the whole cost of the remedy.
@@ -222,6 +233,8 @@ if [ "$BATCH" = 1 ]; then
         git rev-parse --verify -q "origin/$b" >/dev/null 2>&1 || continue
         [ "$b" = "$CURRENT" ] && continue
         checked=$((checked + 1))
+        # 1948-xbaf: HEAD already folded all of it.
+        _is_ancestor_of_head "$b" && continue
         tmp="$(mktemp -d "${TMPDIR:-/tmp}/xbranch.XXXXXX")"
         if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
             # TWO STAGES, because `status` answers ONE id per invocation at
@@ -305,6 +318,11 @@ for b in $SIBLINGS; do
     if git archive "origin/$b" plan/index.yaml plan/index.d 2>/dev/null | tar -x -C "$tmp" 2>/dev/null; then
         st="$("$PLAN_BIN" --index "$tmp/plan/index.yaml" status "$PACKET" 2>/dev/null | awk '{print $2}')"
         [ -n "$st" ] && seen_anywhere=1
+        # 1948-xbaf: an ancestor still proves the packet exists (above), but
+        # its in_progress is a claim HEAD has already folded past.
+        if [ "$st" = in_progress ] && _is_ancestor_of_head "$b"; then
+            st=superseded
+        fi
         if [ "$st" = in_progress ]; then
             # 1104-w9np: whose claim is it? A holder that is THIS host is the
             # reader's own claim reflected back by a sibling that merged their
