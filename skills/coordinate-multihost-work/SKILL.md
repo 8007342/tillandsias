@@ -278,6 +278,18 @@ candidates into the handoff:
 scripts/check-stale-ready-rows.sh          # stale-candidate:<order>:<n>:<sha> … then ok:stale-ready-rows:<c>/<ready>:pass=cites-order
 ```
 
+and the landed-work-ref pass beside it (1934-mxxc, report-only Lua):
+
+```bash
+TILLANDSIAS_PLAN_BIN=<plan> tillandsias-plan script run scripts/lua/check-ready-rows-with-landed-work.lua
+# ready row with a landed work/<order> ref: <sha> kind=<kind> … then advisory:ready-rows-with-landed-work:<n>
+```
+
+It catches the shape the first pass cannot: a row whose `land(N): work/<order>`
+merged while nobody cited the order in a work-commit subject, or nobody moved
+the row (measured 2026-10-31 on calmecacpilli: 81 rows, 8 confirmed landed ports).
+The same rule applies: a landed ref is not completion; verify, then close with evidence.
+
 A candidate is a `ready` row whose order a landed commit SUBJECT cites as
 work (`fix(`, `feat(`, `close(`, `test(`, `record(`, `style(`, `docs(`,
 `refactor(`). MEASURED on the first run (2026-09-13): 93 of 509 ready rows.

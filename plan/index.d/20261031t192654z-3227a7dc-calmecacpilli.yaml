@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-portability-idioms-the-advisory-scanner-for-shell-idioms-that-fail-on-another-host-is-itself-the-most-pipe-heavy-shell-decider-and-costs-21-s-per-check-so-it-is-ported-to-scripts-lua-on-script-run
+    field: status
+    value: completed
+    ts: "2026-10-31T19:26:54Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: check-portability-idioms-the-advisory-scanner-for-shell-idioms-that-fail-on-another-host-is-itself-the-most-pipe-heavy-shell-decider-and-costs-21-s-per-check-so-it-is-ported-to-scripts-lua-on-script-run
+    event:
+      type: completed
+      ts: "2026-10-31T19:26:54Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 14e95c4f6 (land 286); scripts/lua/check-portability-idioms.lua -> portability-idioms: silent-degrade=10 loud-fail=22 (advisory); .sh deleted
+  - packet_id: check-portability-idioms-the-advisory-scanner-for-shell-idioms-that-fail-on-another-host-is-itself-the-most-pipe-heavy-shell-decider-and-costs-21-s-per-check-so-it-is-ported-to-scripts-lua-on-script-run
+    event:
+      type: note
+      ts: "2026-10-31T19:26:54Z"
+      host: calmecacpilli
+      summary: |-
+        stale ready row, closed with evidence

@@ -493,6 +493,7 @@ specs:
 - spec_id: forge-hot-cold-split
   status: active
   litmus_tests:
+  - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
   - litmus:forge-hot-cold-split-tmpfs-shape
@@ -803,6 +804,7 @@ specs:
   - litmus:ledger-node-claim-shape
   - litmus:git-delta-wait-shape
   - litmus:opencode-prompt-e2e-shape
+  - litmus:smoke-agent-prompt-is-minimal
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
   - litmus:codex-e2e-launch-parity
@@ -1076,9 +1078,11 @@ specs:
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
+  - litmus:web-studio-grapesjs-stores-as-a-repo-diff
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape

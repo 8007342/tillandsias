@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-new-web-app-can-be-set-up-for-google-cloud-run-by-dockerfile-or-buildpacks-from-sourced-cheatsheets-and-filled-in-templates
+    field: status
+    value: completed
+    ts: "2026-10-31T20:34:36Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-new-web-app-can-be-set-up-for-google-cloud-run-by-dockerfile-or-buildpacks-from-sourced-cheatsheets-and-filled-in-templates
+    event:
+      type: completed
+      ts: "2026-10-31T20:34:36Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: ea8120a49 (landed work/1906-md6q, ancestor of origin/linux-next); scripts/run-litmus-test.sh --test litmus:start-a-new-project-google-cloud-deploy-targets --compact -> PASS
+  - packet_id: a-new-web-app-can-be-set-up-for-google-cloud-run-by-dockerfile-or-buildpacks-from-sourced-cheatsheets-and-filled-in-templates
+    event:
+      type: note
+      ts: "2026-10-31T20:34:36Z"
+      host: calmecacpilli
+      summary: |-
+        stale ready row; its verifiable_closure litmus re-run green on calmecacpilli 2026-10-31

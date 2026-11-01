@@ -118,6 +118,8 @@ pub async fn ensure_if_enabled(
             host_has_cdi_gpu(),
             &ForgeBudget::for_this_host(),
         );
+        // 1913-ebv8: in the forge's slice, ranked before it.
+        args.extend(crate::oom_slice_args());
         args.push(tag);
         client
             .run_container_observed(
