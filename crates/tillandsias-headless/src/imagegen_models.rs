@@ -37,6 +37,11 @@ const MODELS_TSV: &str = include_str!("../../../images/imagegen/models.tsv");
 /// and under an allowed licence.
 const REGISTER_TSV: &str = include_str!("../../../images/models/licence-register.tsv");
 
+/// The shipped register (1954-gdi6: image.generate gates ControlNet and LoRA files on it).
+pub fn register_tsv() -> &'static str {
+    REGISTER_TSV
+}
+
 /// Refuse `row` unless `register` carries it exactly (repo, revision, file,
 /// sha256), `gated` false and an allowed spdx.
 pub fn register_admits(register: &str, row: &ModelFile) -> Result<(), String> {
