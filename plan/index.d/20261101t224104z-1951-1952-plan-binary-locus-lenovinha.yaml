@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01),
+# from macuahuitl's ci-full run for 56.11.1.2 (log: macuahuitl scratch/cifull-56.11.1.2.log).
+packets:
+- packet_id: the-ci-full-stale-plan-binary-refusal-prints-a-remedy-that-rebuilds-the-copy-it-checks
+  order: 1951-pbrm
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [plan, gate, build, affordance]
+  estimated_hours: 2
+  title: The ci-full stale plan-binary refusal prints a remedy that rebuilds the binary it checks, not one in build.sh's shared target dir
+  context: 'macuahuitl 2026-11-01, ./build.sh --ci-full for 56.11.1.2: ci-full-plan-binary refused stale-after-rebuild and printed cargo build --release -p tillandsias-plan. Run as printed, that command builds into the shared CARGO_TARGET_DIR build.sh exports, while the copy the check reads is the worktree''s own target/release/tillandsias-plan, so following the remedy can never clear the refusal. A refusal whose remedy cannot make it pass is a dead end (1247-amcu).'
+  exit_criteria:
+  - 'A fixture runs the check with a stale binary at the path it reads, runs the printed remedy verbatim in the same environment, and re-runs the check; it must pass. Pre-fix result: FAILS, the second check refuses again.'
+  verifiable_closure: 'Fixture transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Make the check and its remedy name one path: print CARGO_TARGET_DIR=<the dir the check reads> with the build command, or check the binary the shared build produces.'
+  provenance: macuahuitl ci-full 56.11.1.2, 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T22:41:04Z'
+    host: lenovinha
+    summary: filed p1 ready, refusal remedy rebuilds a different binary
+- packet_id: a-gate-without-its-worktree-plan-binary-never-accepts-the-main-checkouts-copy-as-current
+  order: 1952-pbfb
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [plan, gate, build, freshness]
+  estimated_hours: 3
+  title: A gate whose worktree has no plan binary does not fall back to the main checkout's copy and call it current
+  context: 'macuahuitl 2026-11-01, ci-full for 56.11.1.2: with the worktree''s target/release/tillandsias-plan absent, the gate resolved the main checkout''s target/release/tillandsias-plan and the freshness check passed it as current, although it lacked behaviour the litmus expected. litmus cycle-batch-triage-shape step 25 and selector-urgency-not-inert-shape failed; both passed with CARGO_TARGET_DIR=$PWD/target. Freshness was judged against something other than this worktree''s sources. Kin of 1947-pnst (an answer served from another checkout).'
+  exit_criteria:
+  - 'A fixture with a worktree that has no plan binary and a main checkout whose binary predates a validator-surface change in the worktree asserts the gate either builds the worktree''s own binary or refuses naming the path it would have used; it never runs the main checkout''s copy as current. Pre-fix result: FAILS, the fallback is accepted.'
+  verifiable_closure: 'Fixture transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Find the resolver (scripts/plan-binary-probe.sh resolve_plan_binary) fallback order and the freshness hash input; key freshness on the worktree''s validator surface, or drop the cross-checkout fallback in gates.'
+  provenance: macuahuitl ci-full 56.11.1.2, 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T22:41:04Z'
+    host: lenovinha
+    summary: filed p1 ready, gate accepted another checkout's plan binary as current
