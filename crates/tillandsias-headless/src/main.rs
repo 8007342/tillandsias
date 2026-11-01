@@ -675,6 +675,17 @@ fn main() {
     let bash = user_args.iter().any(|a| a == "--bash");
     let antigravity = user_args.iter().any(|a| a == "--antigravity");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+    // 1860-auhm: `--studio <id>` opens the project in a registered web studio.
+    let studio_id: Option<String> = match user_args.iter().position(|a| a == "--studio") {
+        Some(i) => match user_args.get(i + 1).filter(|v| !v.starts_with('-')) {
+            Some(id) => Some(id.clone()),
+            None => {
+                eprintln!("Error: --studio requires a studio id");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
 
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
@@ -946,6 +957,7 @@ fn main() {
         "--bash",
         "--antigravity",
         "--opencode-web",
+        "--studio",
         "--observatorium",
         "--port",
         "--prompt",
@@ -1040,7 +1052,11 @@ fn main() {
             return None;
         }
         if user_args.get(i.saturating_sub(1)).is_some_and(|prev| {
-            prev == "--prompt" || prev == "--port" || prev == "--listen-vsock" || prev == "--cloud"
+            prev == "--prompt"
+                || prev == "--port"
+                || prev == "--listen-vsock"
+                || prev == "--cloud"
+                || prev == "--studio"
         }) {
             return None;
         }
@@ -1424,6 +1440,7 @@ fn main() {
         && let Some(flag) = [
             (opencode, "--opencode"),
             (opencode_web, "--opencode-web"),
+            (studio_id.is_some(), "--studio"),
             (observatorium, "--observatorium"),
             (codex, "--codex"),
             (claude, "--claude"),
@@ -1503,6 +1520,27 @@ fn main() {
         }
     }
 
+    if let Some(studio) = studio_id.as_deref() {
+        // A studio that cannot launch is refused before a tray companion is
+        // spawned: that companion reconciles the enclave as it starts.
+        if let Err(e) = studio::WebLane::studio(studio) {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
+        if let Some(project_path) = config_path {
+            if let Err(e) = run_studio_mode(&project_path, studio, is_cloud, port_override, debug) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+            return;
+        } else {
+            eprintln!("Error: --studio requires a project (--cloud owner/repo)");
+            std::process::exit(2);
+        }
+    }
+
     if opencode_web {
         let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
         maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
@@ -1512,6 +1550,7 @@ fn main() {
                 is_cloud,
                 prompt.as_deref(),
                 port_override,
+                &studio::WebLane::opencode(),
                 debug,
             ) {
                 eprintln!("Error: {}", e);
@@ -16876,6 +16915,7 @@ fn project_service_url(service_name: &str, project_name: &str, host_port: u16) -
     }
 }
 
+#[cfg(test)]
 fn opencode_web_url(project_name: &str, host_port: u16) -> String {
     project_service_url("opencode", project_name, host_port)
 }
@@ -17832,9 +17872,10 @@ fn launch_opencode_web_browser(
     project_name: &str,
     certs_dir: &Path,
     router_host_port: u16,
+    lane: &studio::WebLane,
     debug: bool,
 ) -> Result<(), String> {
-    let url = opencode_web_url(project_name, router_host_port);
+    let url = project_service_url(lane.service, project_name, router_host_port);
     emit_opencode_web_event(project_name, "browser", "wait_for_route", Some(&url))?;
     if let Err(err) = wait_for_opencode_web_route(project_name, &url, debug) {
         emit_opencode_web_event(project_name, "browser", "route_unhealthy", Some(&err))?;
@@ -18027,11 +18068,27 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
     Ok(())
 }
 
+/// ORDER 1860-auhm: a registered studio, launched as a web lane. Same stack,
+/// route, OTP and window as OpenCode Web; only the lane differs (the studio's
+/// image and entry, routed as `studio.<label>`). A studio whose lane is not
+/// built yet is refused here, before anything starts.
+pub(crate) fn run_studio_mode(
+    project_path: &str,
+    studio_id: &str,
+    is_cloud: bool,
+    port_override: Option<u16>,
+    debug: bool,
+) -> Result<(), String> {
+    let lane = studio::WebLane::studio(studio_id)?;
+    run_opencode_web_mode(project_path, is_cloud, None, port_override, &lane, debug)
+}
+
 pub(crate) fn run_opencode_web_mode(
     project_path: &str,
     is_cloud: bool,
     prompt: Option<&str>,
     port_override: Option<u16>,
+    lane: &studio::WebLane,
     debug: bool,
 ) -> Result<(), String> {
     require_desktop_user_session("tillandsias --opencode-web")?;
@@ -18082,12 +18139,11 @@ pub(crate) fn run_opencode_web_mode(
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    ensure_versioned_images(
-        &root,
-        launch_images::launch_images(launch_images::LaunchSite::OpencodeWeb),
-        version,
-        debug,
-    )?;
+    let lane_images = lane.images(launch_images::launch_images(
+        launch_images::LaunchSite::OpencodeWeb,
+    ));
+    let lane_images: Vec<&str> = lane_images.iter().map(String::as_str).collect();
+    ensure_versioned_images(&root, &lane_images, version, debug)?;
 
     if debug {
         eprintln!("[tillandsias] [OpenCode Web] Repo root: {}", root.display());
@@ -18299,6 +18355,7 @@ pub(crate) fn run_opencode_web_mode(
             false,
             debug,
         );
+        let opencode_args = apply_web_lane(opencode_args, lane, version);
         client
             .run_container_observed(
                 "opencode-web-forge",
@@ -18351,9 +18408,9 @@ pub(crate) fn run_opencode_web_mode(
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
         let route = RouterRoute::new(
-            format!("opencode.{}", router_host_label(project_name)),
+            lane.route_host(&router_host_label(project_name)),
             forge_container_name(project_name),
-            4096u16,
+            lane.port,
         );
         upsert_router_route(route, debug)?;
 
@@ -18372,7 +18429,35 @@ pub(crate) fn run_opencode_web_mode(
         Ok::<(), String>(())
     })?;
 
-    launch_opencode_web_browser(project_name, &certs_dir, router_host_port, debug)
+    launch_opencode_web_browser(project_name, &certs_dir, router_host_port, lane, debug)
+}
+
+/// ORDER 1860-auhm: the forge argv for `lane`. The OpenCode Web lane is the
+/// argv unchanged; a studio swaps the forge image for its own (stacked on the
+/// forge base) and the web entrypoint for its entry, and tells the studio
+/// front which paths a save may touch.
+fn apply_web_lane(mut args: Vec<String>, lane: &studio::WebLane, version: &str) -> Vec<String> {
+    if lane.service == "opencode" {
+        return args;
+    }
+    let forge_tag = forge_image_tag(version);
+    if let Some(i) = args.iter().position(|a| *a == forge_tag) {
+        args[i] = versioned_image_tag(&lane.image, version);
+        args.splice(
+            i..i,
+            [
+                "--env".to_string(),
+                format!("TILLANDSIAS_STUDIO={}", lane.studio_id()),
+            ],
+        );
+    }
+    if let Some(entry) = &lane.entrypoint
+        && let Some(i) = args.iter().position(|a| a == "--entrypoint")
+        && i + 1 < args.len()
+    {
+        args[i + 1] = entry.clone();
+    }
+    args
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -20415,8 +20500,10 @@ mod preview_ca;
 // @trace spec:host-browser-mcp (order 1649-xqet)
 #[cfg(feature = "host-services")]
 mod browser_open;
+// 1860-auhm: the studio lane contract (registry, choice, web lane, co-edit feed).
 #[cfg(feature = "host-services")]
 mod host_audio;
+mod studio;
 
 // @trace spec:local-web-preview (order 1637-5765): opt-in toolchains (Flutter)
 // in a sibling container, streamed over the lane's MCP socket. Gated with
@@ -33503,9 +33590,47 @@ esac
         saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
     }
 
+    /// 1932-4hwq: where a scratch home may live. A forge exports TMPDIR inside
+    /// the real HOME (/home/forge/.cache/...), so a tempdir there IS under the
+    /// real home and the 1898-hyhf guard rightly refuses it. Take the first of
+    /// TMPDIR, XDG_RUNTIME_DIR and /tmp that exists and is outside the passwd
+    /// home; with none, refuse loudly rather than weaken the guard.
+    #[cfg(unix)]
+    fn scratch_base() -> PathBuf {
+        let real = passwd_home().filter(|h| h.as_os_str().len() > 1);
+        let candidates = [
+            Some(std::env::temp_dir()),
+            std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+            Some(PathBuf::from("/tmp")),
+        ];
+        for c in candidates.into_iter().flatten() {
+            if c.as_os_str().is_empty() || !c.is_dir() {
+                continue;
+            }
+            match &real {
+                Some(h) if c.starts_with(h) => continue,
+                _ => return c,
+            }
+        }
+        panic!(
+            "1932-4hwq: no scratch root outside the real home ({:?}): TMPDIR, \
+             XDG_RUNTIME_DIR and /tmp are all inside it or missing",
+            real
+        );
+    }
+
+    /// No passwd home off unix (and no 1898-hyhf guard to trip): TMPDIR is fine.
+    #[cfg(not(unix))]
+    fn scratch_base() -> PathBuf {
+        std::env::temp_dir()
+    }
+
     impl ScratchHome {
         fn new() -> Self {
-            let root = tempfile::tempdir().expect("scratch home");
+            let root = tempfile::Builder::new()
+                .prefix("scratch-home-")
+                .tempdir_in(scratch_base())
+                .expect("scratch home");
             let run = root.path().join("run");
             std::fs::create_dir_all(&run).expect("scratch runtime dir");
             let saved = ["HOME", "XDG_RUNTIME_DIR", "TILLANDSIAS_HOST_KIND"]
@@ -33640,6 +33765,14 @@ esac
             .join("ca"),
         )
         .expect_err("the real home must be refused");
+        // 1932-4hwq: a scratch dir INSIDE the real home (a forge's TMPDIR) is
+        // still refused; ScratchHome avoids it, the guard does not excuse it.
+        refuse_real_home_in_test(&real.join(".cache/tillandsias-project/tmp/.tmpX/ca"))
+            .expect_err("a scratch dir under the real home must be refused");
+        assert!(
+            !ScratchHome::new().path().starts_with(&real),
+            "1932-4hwq: ScratchHome must land outside the real home"
+        );
         assert!(err.contains("1898-hyhf"), "{err}");
     }
 
@@ -34659,6 +34792,81 @@ esac
     /// Order 1763-nc9d: the OpenCode Web route, its URL and its session
     /// label all name the project by its host label, the value the router
     /// sidecar derives from the (lowercased) Host header.
+    /// 1860-auhm: a studio is the OpenCode Web lane with a different lane.
+    /// The forge argv of a stub studio runs the studio's image and entry and
+    /// names the studio for its front; OpenCode Web's argv is untouched.
+    #[test]
+    fn a_studio_lane_swaps_only_the_image_and_the_entry() {
+        let version = "9.9.9.9";
+        let base = vec![
+            "run".to_string(),
+            "--entrypoint".to_string(),
+            "/usr/local/bin/entrypoint-forge-opencode-web.sh".to_string(),
+            forge_image_tag(version),
+        ];
+        let stub = studio::WebLane {
+            service: "studio",
+            port: 4300,
+            image: "studio-stub".into(),
+            entrypoint: Some("/usr/local/bin/studio-stub".into()),
+            label: "Stub studio".into(),
+        };
+        let args = apply_web_lane(base.clone(), &stub, version);
+        assert_eq!(
+            args,
+            [
+                "run",
+                "--entrypoint",
+                "/usr/local/bin/studio-stub",
+                "--env",
+                "TILLANDSIAS_STUDIO=stub",
+                &versioned_image_tag("studio-stub", version),
+            ]
+        );
+        assert_eq!(
+            apply_web_lane(base.clone(), &studio::WebLane::opencode(), version),
+            base
+        );
+        assert_eq!(
+            stub.route_host(&router_host_label("My_Site")),
+            "studio.my-site"
+        );
+        assert_eq!(
+            project_service_url(stub.service, "My_Site", 8080),
+            "http://studio.my-site.localhost:8080/"
+        );
+    }
+
+    /// 1860-auhm: the studio lane runs through the OpenCode Web launch, so its
+    /// route is the lane's host and port, and its window opens only after the
+    /// authenticated 2xx probe, as OpenCode Web's does.
+    #[test]
+    fn the_studio_route_and_window_come_from_the_shared_web_lane() {
+        // source-pin-ok: ORDER of the authenticated probe and the window launch is the contract (1860-auhm).
+        let source = include_str!("main.rs");
+        let studio = source_window(source, "pub(crate) fn run_studio_mode(");
+        assert!(studio.contains("studio::WebLane::studio(studio_id)?"));
+        // source-pin-ok: that the studio lane IS the OpenCode Web launch (no second route/OTP/window path) is the contract.
+        assert!(studio.contains(
+            "run_opencode_web_mode(project_path, is_cloud, None, port_override, &lane, debug)"
+        ));
+        let web = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        // source-pin-ok: the route host must come from the lane, or a studio would be routed as opencode.<label>.
+        assert!(web.contains("lane.route_host(&router_host_label(project_name))"));
+        assert!(!web.contains("format!(\"opencode.{}\", router_host_label(project_name))"));
+        let browser = source_window(source, "fn launch_opencode_web_browser(");
+        // source-pin-ok: the window URL must come from the lane, or a studio window would open OpenCode.
+        assert!(
+            browser.contains("project_service_url(lane.service, project_name, router_host_port)")
+        );
+        let probe = browser.find("wait_for_authenticated_opencode_web(");
+        let window = browser.find("rt_block_on_podman_run(args");
+        assert!(
+            matches!((probe, window), (Some(p), Some(w)) if p < w),
+            "the window must open only after the authenticated probe"
+        );
+    }
+
     #[test]
     fn opencode_web_names_the_project_by_its_host_label() {
         assert_eq!(router_host_label("DEVxSD_gameJam"), "devxsd-gamejam");
@@ -34679,10 +34887,16 @@ esac
         )
         .expect("main.rs readable");
         // Needles are split so this test's own text cannot match them.
+        // 1860-auhm: the route host now comes from the lane (opencode.<label>
+        // for OpenCode Web), still from the project's host label.
         assert!(source.contains(concat!(
-            "format!(\"opencode.{}\", router_host",
+            "lane.route_host(&router_host",
             "_label(project_name))"
         )));
+        assert_eq!(
+            studio::WebLane::opencode().route_host(&router_host_label("DEVxSD_gameJam")),
+            "opencode.devxsd-gamejam"
+        );
         assert_eq!(
             source
                 .matches(concat!(
@@ -36624,7 +36838,12 @@ mod forge_budget_argv_tests {
                 .and_then(|r| r.split(['(', '<']).next())
                 .unwrap_or("?")
                 .to_string();
-            if name == "forge_image_tag" || !body.contains("forge_image_tag(") {
+            // apply_web_lane (1860-auhm) builds nothing: it rewrites the argv
+            // build_opencode_forge_args already budgeted, finding the tag by name.
+            if name == "forge_image_tag"
+                || name == "apply_web_lane"
+                || !body.contains("forge_image_tag(")
+            {
                 continue;
             }
             launchers.push(name.clone());
