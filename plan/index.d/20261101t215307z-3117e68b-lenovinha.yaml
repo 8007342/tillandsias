@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: measurement
+      ts: "2026-11-01T21:53:07Z"
+      agent_id: linux-lenovinha-opus5-20261101t215307z
+      host: lenovinha
+      summary: |-
+        SPILL BENCHMARK, REAL PAYLOAD ARM (removes the random-bytes caveat), lenovinha 2026-11-01, same regime and M=2048/swap.max=4096 as the random run. Payload: real target/debug/deps files (zstd -1 ratio 4.01; zram uses lzo-rle), 64 MiB chunks written with dd, cycling 4 cached chunks. Verbatim:
+        regime:host=lenovinha:kernel=7.2.13-200.fc44.x86_64:nproc=16:mem_total_mib=13811:swap=/dev/zram0,partition,8G:swappiness=10:image=localhost/tillandsias-forge:v56.10.31.1:image_id=27e9a5d224bf
+        payload=/var/home/lenovinha/claudia/tillandsias/target/work/wt-xbaf/target/debug/deps:payload_zstd1_ratio=4.01:zram_alg=lzo-rle
+        measure:forge-spill:payload=real:backing=tmpfs:mem_max_mib=2048:swap_max_mib=4096:w_mib=1024:write_ms=855:read_ms=164:memory_peak_mib=1223:swap_peak_mib=0:high=0:max=0:oom=0:oom_kill=0:host_min_avail_mib=10160:verdict=ok
+        measure:forge-spill:payload=real:backing=volume:mem_max_mib=2048:swap_max_mib=4096:w_mib=1024:write_ms=511:read_ms=194:memory_peak_mib=1027:swap_peak_mib=0:high=0:max=0:oom=0:oom_kill=0:host_min_avail_mib=11161:verdict=ok
+        measure:forge-spill:payload=real:backing=tmpfs:mem_max_mib=2048:swap_max_mib=4096:w_mib=2048:write_ms=1022:read_ms=471:memory_peak_mib=2048:swap_peak_mib=8:high=0:max=290:oom=0:oom_kill=0:host_min_avail_mib=9060:verdict=ok
+        measure:forge-spill:payload=real:backing=volume:mem_max_mib=2048:swap_max_mib=4096:w_mib=2048:write_ms=1570:read_ms=383:memory_peak_mib=1960:swap_peak_mib=0:high=0:max=0:oom=0:oom_kill=0:host_min_avail_mib=11113:verdict=ok
+        measure:forge-spill:payload=real:backing=tmpfs:mem_max_mib=2048:swap_max_mib=4096:w_mib=4096:write_ms=5992:read_ms=10425:memory_peak_mib=2048:swap_peak_mib=2060:high=0:max=20683:oom=0:oom_kill=0:host_min_avail_mib=8088:verdict=ok
+        measure:forge-spill:payload=real:backing=volume:mem_max_mib=2048:swap_max_mib=4096:w_mib=4096:write_ms=3721:read_ms=1201:memory_peak_mib=2048:swap_peak_mib=0:high=0:max=19057:oom=0:oom_kill=0:host_min_avail_mib=11003:verdict=ok
+        measure:forge-spill:payload=real:backing=tmpfs:mem_max_mib=2048:swap_max_mib=0:w_mib=4096:write_ms=978:read_ms=-1:memory_peak_mib=2048:swap_peak_mib=0:high=0:max=45:oom=2:oom_kill=2:host_min_avail_mib=9106:verdict=oom-killed:rc=137
+        READING: compressible data does NOT rescue the spill. At W=2M: write 6.0 s tmpfs vs 3.7 s volume; shuffled read 10.4 s vs 1.2 s (8.7x slower, worse than the 4.3x with random bytes), 2060 MiB in zram. At W<=M the two are close. Control OOMs at M. The protocol ruling stands on both payloads: size HOT to stay resident; the swap allowance is an OOM guard, not working space.
+        DISCARDED FIRST ATTEMPT, for the record: copying a large payload with cp (a) reflinked on btrfs, so the volume 'wrote' 4 GiB in 168 ms, and (b) charged the payload's page cache to the same cgroup; with swappiness=10 the kernel evicted it instead of swapping the tmpfs and the W=2M tmpfs run thrashed 25 min, then was SIGKILLed with 312 MiB swapped. A forge that reads sources while its tmpfs spills may see the same read thrash; unmeasured.
