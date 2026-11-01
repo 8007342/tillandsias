@@ -4854,7 +4854,7 @@ mod tests {
     /// `dnf upgrade` (offline mirror) must not trip the trap: provisioning goes
     /// on, and the marker says FAILED. A working `dnf` records ok. The block is
     /// cut from the generated script, so a later edit is what gets run.
-    #[cfg(unix)]
+    #[cfg(target_os = "macos")]
     #[test]
     fn a_failed_guest_upgrade_is_recorded_and_provisioning_continues() {
         use std::os::unix::fs::PermissionsExt as _;
@@ -4911,6 +4911,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn provision_user_data_upgrades_the_guest_os_before_installing() {
         let script = provision_user_data("off");
@@ -4935,6 +4936,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn provision_user_data_sets_up_zram_and_disk_swap_non_fatally() {
         let ud = super::provision_user_data_for_test();
