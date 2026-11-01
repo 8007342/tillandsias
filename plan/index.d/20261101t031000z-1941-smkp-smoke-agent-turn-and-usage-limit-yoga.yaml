@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl, 2026-11-01), operator-approved, story 1941.
+# Background: plan/issues/cold-lane-agent-tls-eproto-hop-2026-11-01-yoga.md and its two addenda;
+# the night ended in a 429 "Free usage limit reached", Retry-After 78443, after 11 opencode sessions.
+packets:
+- packet_id: smoke-tests-spend-one-minimal-agent-turn-not-a-meta-orchestration-loop
+  order: 1941-smkp
+  status: ready
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - smoke
+  - forge
+  - opencode
+  estimated_hours: 2
+  title: Smoke tests launch a full /meta-orchestration loop on the shared free model tier; spend one short fixed agent turn instead
+  context: 'skills/smoke-curl-install-and-test-e2e/SKILL.md step 4 (the forge-lane block, symlinked as .claude/skills/smoke-curl-install-and-test-e2e) launches `tillandsias --cloud 8007342/tillandsias --opencode --prompt "Use the /meta-orchestration skill"`: a full autonomous loop of 100+ model requests per smoke, on the free opencode/big-pickle tier that every fleet host shares. skills/build-install-and-smoke-test-e2e/SKILL.md does the same. On 2026-11-01 yoga ran two smokes plus repro lanes and hit `429 Too Many Requests`, `Retry-After: 78443`.'
+  exit_criteria:
+  - 'The smoke forge lane sends one short fixed prompt that proves the agent answers and can call one tool (for example: run `tillandsias --version`, then reply with a fixed token), capped at a few model requests.'
+  - 'The smoke asserts the fixed token, not opencode_exit, and still asserts the cold-host credential guard where it applies.'
+  - 'Both smoke skills changed; neither invokes /meta-orchestration through a hosted free model.'
+  verifiable_closure: 'A check (Lua, under scripts/lua/) that reads every skills/*/SKILL.md and refuses a smoke skill whose forge-lane prompt invokes /meta-orchestration through a hosted model. It refuses on today''s tree (both smoke skills carry the prompt) and passes after the change; it is wired into a gate and named by a litmus.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the check and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Write the refusing check first (red on today''s tree), then replace the prompt in both smoke skills.'
+  provenance: operator approval relayed by macuahuitl-fedora, 2026-11-01; yoga's 1941-tlsh investigation.
+  events:
+  - type: filed
+    ts: '2026-11-01T03:10:00Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request after the free-tier 429 on yoga
+- packet_id: a-provider-usage-limit-is-reported-as-itself-and-stops-the-lane-until-retry-after
+  order: 1941-rlim
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - forge
+  - opencode
+  - lane
+  - plan
+  estimated_hours: 4
+  title: A provider 429 "Free usage limit reached" surfaced as "TLS handshake failed" and the lane kept going; report it, stop cleanly, and record Retry-After so no host retries early
+  context: 'On 2026-11-01 02:55:15Z opencode 1.19.5 got `< 429 Too Many Requests`, `Retry-After: 78443`, body `Free usage limit reached`; earlier the same night the agent died four times on `EPROTO: The TLS handshake failed`, which a packet capture showed was the edge ending the session with a TLS alert. The lane reported neither as a usage limit, and later lanes kept retrying the same provider.'
+  exit_criteria:
+  - 'The forge or lane wrapper recognises a provider 429 (and the usage-limit body) and prints `provider usage limit reached, retry after <UTC time>`, then stops the lane cleanly with a distinct verdict.'
+  - 'The retry-after deadline is written as a plan event (or the fleet message store) so every host can read it.'
+  - 'A launch before the deadline refuses with the same message instead of calling the provider.'
+  verifiable_closure: 'A fixture that feeds the wrapper a recorded 429 response with `Retry-After` (no network) and asserts the `provider usage limit reached, retry after <time>` line, the clean stop verdict, the recorded deadline, and that a second launch before the deadline refuses without a request. It fails on today''s tree (the wrapper has no such handling) and passes after.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture is written with the fix and named by a litmus in the same commit (1136-n8sh).'
+  next_action: 'Find where the lane wrapper reads the agent''s exit (images/default/entrypoint-forge-opencode.sh via harness-supervisor, and the host lane in tillandsias-headless); add the 429 detection with a recorded-response fixture first.'
+  provenance: operator approval relayed by macuahuitl-fedora, 2026-11-01; yoga's 1941-tlsh investigation.
+  events:
+  - type: filed
+    ts: '2026-11-01T03:10:00Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request after the free-tier 429 on yoga

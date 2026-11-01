@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 1903-djsq: never reach the operator's session bus or gnome-keyring-daemon.
+. "$(cd "$(dirname "$0")" && pwd)/test-support/private-session-bus.sh"
 # test-check-credential-channel.sh — pin the 860-g798 fix: `gh auth status`
 # succeeding while git cannot push non-interactively must NEVER produce a bare
 # ok. The measured incident: a fresh clone passed `ok:gh-keyring`, entered
@@ -41,6 +43,15 @@ cat >"$W/bin-noauth/gh" <<'NOAUTH'
 exit 1
 NOAUTH
 chmod +x "$W/bin-noauth/gh"
+
+# 1903-djsq: a SERVING secret service, stubbed. These arms used to fall through
+# to the REAL busctl and read the operator's session bus (the sentinel guard
+# counted 38 bus events from this fixture); with the private bus the real one
+# would now answer not-serving, so the healthy-store premise is stated here.
+for _b in "$W/bin" "$W/bin-noauth"; do
+    printf '#!/usr/bin/env bash\necho "NAME PID"\necho "org.freedesktop.secrets 1 gnome-keyring-d"\nexit 0\n' > "$_b/busctl"
+    chmod +x "$_b/busctl"
+done
 
 scratch() {
     local d="$W/repo-$1"
@@ -499,6 +510,9 @@ esac
 exit 0
 GHEOF
     chmod +x "$bin/gh"
+    # 1903-djsq: a serving store by default (arms that need another state
+    # overwrite this); the real busctl reads the operator's session bus.
+    cp "$W/bin/busctl" "$bin/busctl"
     printf '%s' "$d|$bin"
 }
 

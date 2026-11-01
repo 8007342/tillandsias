@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: ci-full-rebuilds-or-refuses-a-stale-release-plan-binary
+    field: unscoreable
+    value: ''
+    ts: "2026-10-31T15:14:06Z"
+    host: pirria-silverblue
+    replaces_sha256: "187dd3e76241e910199323ca1e50aabba6def80a7cba7a1f695ab0d0772b24a2"
+
+events:
+  - packet_id: ci-full-rebuilds-or-refuses-a-stale-release-plan-binary
+    event:
+      type: note
+      ts: "2026-10-31T15:14:06Z"
+      host: pirria-silverblue
+      summary: |-
+        superseded by verifiable_closure

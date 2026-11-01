@@ -17,6 +17,8 @@ specs:
   - litmus:imagegen-tier-ladder-from-the-envelope
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
+  - litmus:imagegen-image-is-first-use-and-placement-is-read-from-the-log
+  - litmus:studio-custom-nodes-come-only-from-the-manifest
   coverage_ratio: 100
   last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
@@ -149,6 +151,12 @@ specs:
   - litmus:cheatsheet-host-image-sync
   coverage_ratio: 100
   last_verified: '2026-06-04'
+- spec_id: research-records
+  status: active
+  litmus_tests:
+  - litmus:research-records-shape
+  coverage_ratio: 80
+  last_verified: '2026-10-26'
 - spec_id: cheatsheets-license-tiered
   status: active
   litmus_tests:
@@ -159,6 +167,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:release-cache-is-saved-only-by-main
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
@@ -306,6 +315,7 @@ specs:
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
+  - litmus:forge-lua-tooling
   - litmus:claude-launch-stability-shape
   - litmus:harness-curl-install-shape
   - litmus:harness-byte-cheap
@@ -331,6 +341,7 @@ specs:
   - litmus:headless-init-status-check-source-built
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
+  - litmus:ci-full-refreshes-stale-plan-binary
   - litmus:wsl2-builder-wrapper-shape
   - litmus:wsl2-builder-shell-options-shape
   - litmus:nix-container-lane-shape
@@ -484,6 +495,7 @@ specs:
 - spec_id: forge-hot-cold-split
   status: active
   litmus_tests:
+  - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
   - litmus:forge-hot-cold-split-tmpfs-shape
@@ -570,6 +582,7 @@ specs:
   - litmus:git-mirror-ref-convergence
   - litmus:git-mirror-existing-volume-hardening
   - litmus:git-mirror-yaml-gate-shape
+  - litmus:git-mirror-yaml-gate-accepts-plain-dates
   - litmus:git-mirror-relay-verified-ack
   - litmus:git-mirror-vault-agent-auto-auth
   - litmus:forge-gitconfig-bidirectional-quarantine
@@ -744,6 +757,7 @@ specs:
   litmus_tests:
   - litmus:join-the-fleet-idempotent
   - litmus:claims-fleet-visible
+  - litmus:gate-pins-surface-root
   - litmus:release-freeze-holds-code
   - litmus:pre-push-deletion-only
   - litmus:expire-claims-reads-the-status-write
@@ -792,6 +806,7 @@ specs:
   - litmus:ledger-node-claim-shape
   - litmus:git-delta-wait-shape
   - litmus:opencode-prompt-e2e-shape
+  - litmus:smoke-agent-prompt-is-minimal
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
   - litmus:codex-e2e-launch-parity
@@ -940,6 +955,8 @@ specs:
   - litmus:project-bootstrap-readme-shape
   - litmus:skills-canonical-and-mcp-first-shape
   - litmus:onboarding-cold-start-discovery
+  - litmus:start-a-new-project-google-cloud-deploy-targets
+  - litmus:start-a-new-project-cloudflare-by-default
   coverage_ratio: 75
   last_verified: '2026-05-14'
 - spec_id: project-summarizers
@@ -1025,12 +1042,14 @@ specs:
   last_verified: '2026-05-30'
 - spec_id: singleton-guard
   status: active
-  litmus_tests: null
-  coverage_ratio: 0
+  litmus_tests:
+  - litmus:one-tray-per-enclave-and-the-cli-sees-it
+  coverage_ratio: 100
   last_verified: '2026-05-14'
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:plan-next-names-a-stale-ledger-and-hides-rows-siblings-hold
   - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape
   - litmus:spec-traceability-usage-shape
@@ -1063,9 +1082,11 @@ specs:
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
+  - litmus:web-studio-grapesjs-stores-as-a-repo-diff
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape
@@ -1251,6 +1272,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-metrics-shape
+  - litmus:runtime-bringup-step-timers
   - litmus:guest-container-metrics-wire-shape
   coverage_ratio: 100
   last_verified: '2026-05-29'
@@ -1299,6 +1321,7 @@ specs:
   litmus_tests:
   - litmus:binary-e2e-smoke
   - litmus:dead-tray-run-is-reaped
+  - litmus:a-graceful-exit-leaves-another-owners-enclave-running
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: ephemeral-guarantee

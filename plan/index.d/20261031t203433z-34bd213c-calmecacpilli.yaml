@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-browser-mcp-lane-socket-shape-litmus-greps-a-file-the-lane-launch-left
+    field: status
+    value: completed
+    ts: "2026-10-31T20:34:33Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: host-browser-mcp-lane-socket-shape-litmus-greps-a-file-the-lane-launch-left
+    event:
+      type: completed
+      ts: "2026-10-31T20:34:33Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 470284e35 (landed work/1900-5tmr, ancestor of origin/linux-next); scripts/run-litmus-test.sh --test litmus:host-browser-mcp-lane-socket-shape --compact -> PASS
+  - packet_id: host-browser-mcp-lane-socket-shape-litmus-greps-a-file-the-lane-launch-left
+    event:
+      type: note
+      ts: "2026-10-31T20:34:33Z"
+      host: calmecacpilli
+      summary: |-
+        stale ready row; its verifiable_closure litmus re-run green on calmecacpilli 2026-10-31

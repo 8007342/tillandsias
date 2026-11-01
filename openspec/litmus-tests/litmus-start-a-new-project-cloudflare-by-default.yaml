@@ -1,0 +1,28 @@
+# @trace spec:project-bootstrap-readme, order:1907-xhpx
+name: litmus:start-a-new-project-cloudflare-by-default
+spec: project-bootstrap-readme
+phase: pre-build
+description: A new website or Flutter app gets a filled-in Cloudflare config, a local-settings example and an ignored .dev.vars without asking; other stacks and --deploy none get none; nothing secret-shaped is written and nothing existing is overwritten
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains skills/start-a-new-project/scaffold.sh and scripts/lua/test-start-a-new-project-cloudflare.lua
+
+critical_path:
+  - step: "--stack web serves ./public; --stack flutter serves ./build/web as a single-page app; name is the slug and compatibility_date a date; no secret-shaped value; none, other and flutter-flame write no Cloudflare file; existing files are kept"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-start-a-new-project-cloudflare.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:start-a-new-project-cloudflare:6"
+
+observability:
+  traces:
+    - "@trace order:1907-xhpx"
+  expected_log: "ok:start-a-new-project-cloudflare:6"
+  log_fields:
+    spec: "project-bootstrap-readme"
+    test: "start-a-new-project-cloudflare-by-default"
+
+rollback:
+  on_failure: "inspect skills/start-a-new-project/scaffold.sh and templates/cloudflare/"
+  command: "ls skills/start-a-new-project/templates/cloudflare"

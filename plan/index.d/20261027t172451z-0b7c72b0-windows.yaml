@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+    event:
+      type: note
+      ts: "2026-10-27T17:24:51Z"
+      agent_id: windows-yolanda-opus5-20261027t172451z
+      host: windows
+      summary: |-
+        PII AMENDMENT (operator 2026-10-27: approval signatures published in notes and trailers must expose no personally identifiable data; research by yolanda-windows). The signature bytes carry no PII on any platform (Hello raw RSA PKCS1v15, sk ed25519 sig+flags+counter, Secure Enclave raw ECDSA; SSHSIG adds only the public key, namespace and hash). The leaks are in the design: (1) the host field (design.md:107,:273 say hostname) becomes an opaque enrolment id derived from the public key; (2) the Approved-by trailer becomes 'operator (enrolment-id)' with no hostname and no biometric name (the D4 example 'with Touch ID on macneo' leaks both); (3) detail is built from a template of action and ref names, and the signer REFUSES /home/, /Users/, C:\Users\ paths and email addresses; (4) project is the repo slug, never a local path; (5) allowed-signers principals are opaque (PR 668 uses 'operator', good), never an email; (6) issued and expires stay UTC rounded to the minute. Linkability: one stable public key links every approval across repos; per-repo keys, or accept and document. Fixture: a statement carrying a hostname, home path or email is refused before signing.

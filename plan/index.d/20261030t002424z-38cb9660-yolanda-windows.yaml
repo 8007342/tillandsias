@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-preflight-and-gate-run-from-a-distro-native-ext4-checkout-by-default
+    field: next_action
+    value: 'Push and PR are done. Owed after the laptop restart: one uncut preflight on yolanda (TILLANDSIAS_PREFLIGHT_TIMEOUT=300, BUDGET_S=3000) from the ext4 mirror, against the 2,933 s /mnt/c baseline, recorded here. A later idea for the sync: build the change list from git status instead of walking the tree (~10 s floor today).'
+    ts: "2026-10-30T00:24:24Z"
+    host: yolanda-windows
+    replaces_sha256: "c4559d2ecfe7b0cf124d72e666eac1fd3c72fc9c2b9be6252e064da5889af099"

@@ -743,7 +743,23 @@ impl WslLifecycle {
     ///
     /// @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md (w11 flip),
     /// spec:vm-provisioning-lifecycle.provision.first-run-downloads@v2
+    /// Provision the guest through to Ready, reporting the whole span as the
+    /// `wsl-boot` bring-up step (1915-brst).
     pub async fn provision_via_recipe(
+        &self,
+        progress: Arc<dyn ProvisionProgress>,
+    ) -> Result<(), String> {
+        let started = std::time::Instant::now();
+        let r = self.provision_via_recipe_steps(progress).await;
+        crate::bringup_timer::report(
+            "wsl-boot",
+            started.elapsed().as_millis(),
+            if r.is_ok() { 0 } else { 1 },
+        );
+        r
+    }
+
+    async fn provision_via_recipe_steps(
         &self,
         progress: Arc<dyn ProvisionProgress>,
     ) -> Result<(), String> {

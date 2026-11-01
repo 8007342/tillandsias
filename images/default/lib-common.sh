@@ -764,38 +764,33 @@ forge_mirror_relay_gate() {
 
 probe_mirror_reachable() {
     local host="$1" project="$2"
-    local timeout_s="${TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S:-20}"
     local url="git://${host}/${project}"
-    local start now elapsed=0 lsout lsrc last_class="unknown"
-    start="$(date +%s 2>/dev/null || echo 0)"
-    while :; do
-        # LC_ALL=C on THIS invocation only (773-f5ma). The classifier below greps
-        # git's stderr for English phrases; on a French-locale host git emits
-        # `fatal : impossible de rechercher ... (Nom ou service inconnu)`, the
-        # grep never matches, and a DOA alias silently degrades to the slow
-        # seed-tolerant path instead of fast-failing with its remedy. Scoped to
-        # the command whose stderr is parsed, never exported: the forge's own
-        # locale is the operator's and must not be rewritten by a probe.
-        lsout="$(LC_ALL=C git ls-remote "$url" 2>&1)"; lsrc=$?
-        if [[ $lsrc -eq 0 && -n "$lsout" ]]; then
-            return 0                       # resolvable AND serving refs
-        fi
-        if echo "$lsout" | grep -qi "unable to look up\|Name or service not known\|Could not resolve"; then
-            last_class="alias-unresolvable"
-        elif [[ $lsrc -eq 0 ]]; then
-            last_class="serving-but-no-refs"   # up, still seeding
-        else
-            last_class="resolvable-not-serving"
-        fi
-        now="$(date +%s 2>/dev/null || echo 0)"
-        elapsed=$(( now - start ))
-        [[ $elapsed -ge $timeout_s ]] && break
-        sleep 2
-    done
+    local lsout lsrc class
+    # ORDER 1922-unwt: asked ONCE. The launcher's readiness gate (1922-gate)
+    # starts this forge only after the mirror's ready event, so there is no
+    # seed window left to wait out here; this only names the DOA alias fault.
+    # LC_ALL=C on THIS invocation only (773-f5ma). The classifier below greps
+    # git's stderr for English phrases; on a French-locale host git emits
+    # `fatal : impossible de rechercher ... (Nom ou service inconnu)`, the
+    # grep never matches, and a DOA alias silently degrades to the slow
+    # seed-tolerant path instead of fast-failing with its remedy. Scoped to
+    # the command whose stderr is parsed, never exported: the forge's own
+    # locale is the operator's and must not be rewritten by a probe.
+    lsout="$(LC_ALL=C git ls-remote "$url" 2>&1)"; lsrc=$?
+    if [[ $lsrc -eq 0 && -n "$lsout" ]]; then
+        return 0                       # resolvable AND serving refs
+    fi
+    if grep -qi "unable to look up\|Name or service not known\|Could not resolve" <<<"$lsout"; then
+        class="alias-unresolvable"
+    elif [[ $lsrc -eq 0 ]]; then
+        class="serving-but-no-refs"
+    else
+        class="resolvable-not-serving"
+    fi
     # Only the unresolvable-alias class is a confirmed unrecoverable fault; every
-    # other timeout defers to the seed-tolerant clone loop rather than fail here.
-    if [[ "$last_class" == "alias-unresolvable" ]]; then
-        echo "[forge] mirror reachability probe: ALIAS UNRESOLVABLE after ${elapsed}s for ${url}." >&2
+    # other class is left to the clone below, which refuses an empty tree loudly.
+    if [[ "$class" == "alias-unresolvable" ]]; then
+        echo "[forge] mirror reachability probe: ALIAS UNRESOLVABLE for ${url}." >&2
         echo "[forge]   The forge asked for '${host}' but no mirror registers that DNS alias on the enclave —" >&2
         echo "[forge]   a name/startup fault, NOT a seed delay. Likely a stale forge image from before the" >&2
         echo "[forge]   per-project alias migration (order 659-8faj), or an image built from bundled assets that" >&2
@@ -803,7 +798,7 @@ probe_mirror_reachable() {
         echo "[forge]   injected TILLANDSIAS_GIT_SERVICE matches the mirror's --network-alias." >&2
         return 1
     fi
-    trace_lifecycle "git-mirror" "reachability probe inconclusive after ${elapsed}s (last class: ${last_class}); deferring to the seed-tolerant clone loop"
+    trace_lifecycle "git-mirror" "reachability probe: ${class}; deferring to the clone"
     return 0
 }
 
@@ -1165,10 +1160,10 @@ _clone_project_from_mirror_impl() {
         fi
         # Order 1310-rec6: a reachable mirror may still be unable to RELAY.
         forge_mirror_relay_gate "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" || exit 1
-        # Retry budget: the launcher-side wait_for_git_mirror_ready gate
-        # (order 452 slice 2) blocks the launch until the mirror advertises a
-        # resolvable HEAD, so this loop is the fail-loud BACKSTOP, not the
-        # primary wait. Still, a first seed is a full-repo fetch from GitHub
+        # Retry budget: the launcher's readiness gate (1922-gate) starts this
+        # forge only after the mirror's seeded event when the project has an
+        # upstream, so this loop is the fail-loud BACKSTOP, not the primary
+        # wait. Still, a first seed is a full-repo fetch from GitHub
         # through the proxy (~minutes on slow links, and the gate can be
         # skipped on lanes without a remote), so back off to ~60s instead of
         # the old 5x1s that guaranteed a crash during any real seed window.
@@ -5311,7 +5306,12 @@ Key skills: \`/forge-quick-intro\`, \`meta-orchestration\`, \`advance-work-from-
 Do NOT assume a tool exists because a skill or doc names it. This forge is a
 Fedora base, not your host, and the difference has bitten agents repeatedly.
 
-**Present:** \`jq\` \`yq\` \`git\` \`gh\` \`cargo\` \`rustc\` \`node\` \`go\` \`rust-analyzer\`
+**Present:** \`jq\` \`yq\` \`git\` \`gh\` \`cargo\` \`rustc\` \`node\` \`go\` \`rust-analyzer\` \`lua\` (5.4, with \`lfs\` and \`lpeg\`)
+
+**For scripted edits, use the Lua helpers, not a python3 heredoc** (\`tellme about lua\`):
+\`lua-edit FILE OLD NEW [OLD NEW ...]\` applies every pair or none: it refuses, changing
+nothing, unless each OLD occurs exactly once. \`lua-conflict FILE ours|theirs|both [HUNK]\`
+resolves merge-conflict hunks; \`git add\` the file after.
 **ABSENT:** \`ruby\` — several skills still show \`ruby -ryaml\` for YAML validation.
 It is not here. Use \`yq\` instead (verified: it accepts valid YAML and exits
 non-zero on invalid).

@@ -105,6 +105,10 @@ from: <old sha>
 to: <new sha>
 detail: Merge work/1879-5jkt into linux-next
 host: <hostname>
+forge_instance: <instance id>
+forge_agent: <agent>
+forge_project: <project label>
+forge_launched: 2026-10-25T13:40:00Z
 strength: hardware-biometric | hardware-pin | hardware-presence | software-password
 nonce: <128-bit random, broker-issued>
 issued: 2026-10-25T14:02:11Z
@@ -258,8 +262,15 @@ The dialog offers **Approve this time**, **Approve for 10 minutes**,
 **Approve for 2 hours** and **Approve this session**, plus Not now. A grant is
 per action class and target (for example `workflow-dispatch` on
 `release.yml@main`, or `cloudflare-deploy` on Worker `macron-dev`), never
-global. A covered request proceeds with no prompt. "This session" ends when the
-tray exits. A standing grant ("don't ask me again for this") has no expiry and
+global, and bound to ONE forge instance (operator ruling 2026-10-26). A
+covered request proceeds with no prompt only when the requesting forge is the
+instance named in the grant. A second concurrent forge on the same project
+with the same agent gets its own, separate grants. The window says so plainly
+("Approvals here apply only to this forge.") under a metadata line
+`<Agent>/<Project>/Launched at <YYYY-MM-DD HH:MM>`. "This session" ends when
+that forge stops, not when the tray exits. Grants wider than one forge come
+later and are not offered yet. When it arrives, a standing grant ("don't ask
+me again for this") has no expiry and
 is offered only from the tray's grant list, not the dialog, so it is never a
 reflex click.
 
@@ -269,8 +280,12 @@ Grant statement (signed by the device key as SSHSIG, D2):
 tillandsias-grant v1
 action: workflow-dispatch
 target: 8007342/tillandsias release.yml@main
-scope: once | 10m | 2h | session:<tray boot id> | standing
+scope: once | 10m | 2h | session | standing   (standing deferred, see above)
 host: <hostname>
+forge_instance: <instance id, unique per forge launch>
+forge_agent: <agent>
+forge_project: <project label>
+forge_launched: 2026-10-25T13:40:00Z
 strength: hardware-biometric | hardware-pin | hardware-presence | software-password
 issued: 2026-10-25T14:02:11Z
 expires: 2026-10-25T14:12:11Z      (absent for standing)
@@ -282,7 +297,9 @@ spent.
 
 ### R2. Grants live in Vault, and the signature is what counts
 
-Grants are stored at `secret/tillandsias/approvals/grants/<host>/<action>/<target-hash>`.
+Grants are stored at `secret/tillandsias/approvals/grants/<host>/<forge-instance-id>/<action>/<target-hash>`.
+A verifier refuses a grant whose `forge_instance` differs from the requesting
+forge's, even if the agent, project and target match.
 Vault policy: only the approval broker's role may write. Only the named
 service roles may read: `git-mirror-hook`, `mcp-gate`, `release-tooling`.
 The Vault file audit device is on. Verifiers check the signature against the

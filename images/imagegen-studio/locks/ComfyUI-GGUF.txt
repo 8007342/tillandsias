@@ -1,0 +1,5 @@
+# Hashed lock for ComfyUI-GGUF (requirements: gguf>=0.13.0, sentencepiece, protobuf).
+# sentencepiece, numpy, pyyaml and tqdm come from ComfyUI's own requirements;
+# pip check after install proves the closure is satisfied.
+gguf==0.19.0 --hash=sha256:70bcd10edfe697fb2dad6e40af2234b9d8ece9a41a99761405121ebda1c3c1cd
+protobuf==7.36.2 --hash=sha256:89f23aa53c24553a2416fd4fd1ec06f74fa42b14b546d8883128813f775bbfd2

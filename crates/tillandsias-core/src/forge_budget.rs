@@ -79,6 +79,25 @@ impl ForgeBudget {
         Self::for_host(nproc, mem)
     }
 
+    /// ORDER 1911-3dqo. The budget of a container that serves a forge (a
+    /// browser window, its forwarder, a web preview): `percent` of this
+    /// forge's `memory.max`, its `memory.high` below the forge's, and NO
+    /// `memory.low`, so under user.slice pressure the kernel reclaims from the
+    /// sibling before it touches the forge's protected working set. The forge
+    /// was the systemd-oomd victim on lenovinha 2026-10-28 at 447M while its
+    /// unbudgeted siblings drove the pressure. Derived from the forge's tier,
+    /// so floor hosts scale down with it.
+    pub fn sibling(&self, percent: u64, pids_max: u32) -> Self {
+        let max = (self.memory_max_mib * percent.min(100) / 100).max(64);
+        ForgeBudget {
+            memory_max_mib: max,
+            memory_high_mib: (max * 85 / 100).min(self.memory_high_mib.saturating_sub(1)),
+            memory_low_mib: 0,
+            swap_max_mib: (self.swap_max_mib * percent.min(100) / 100).max(64),
+            pids_max,
+        }
+    }
+
     /// The podman flags that set this budget, each cgroup file written
     /// exactly (see the module note on `--memory-swap`).
     pub fn podman_args(&self) -> Vec<String> {
@@ -112,6 +131,32 @@ fn parse_mem_total_mib(meminfo: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1911-3dqo: on every tier a sibling's memory.high sits below the
+    /// forge's and it protects nothing, so reclaim lands on it first.
+    #[test]
+    fn a_sibling_budget_sits_below_its_forge_on_every_tier() {
+        for (nproc, mem) in [
+            (4, 3_800),
+            (4, 7_800),
+            (12, 15_127),
+            (16, 13_811),
+            (32, 64_000),
+        ] {
+            let forge = ForgeBudget::for_host(nproc, mem);
+            for pct in [5, 25, 50, 100] {
+                let s = forge.sibling(pct, 64);
+                assert!(
+                    s.memory_high_mib < forge.memory_high_mib,
+                    "{nproc}/{mem} {pct}%: {s:?} vs {forge:?}"
+                );
+                assert!(s.memory_high_mib < s.memory_max_mib);
+                assert!(s.memory_max_mib <= forge.memory_max_mib);
+                assert_eq!(s.memory_low_mib, 0);
+                assert_eq!(s.pids_max, 64);
+            }
+        }
+    }
 
     #[test]
     fn tiers_follow_the_design_table() {

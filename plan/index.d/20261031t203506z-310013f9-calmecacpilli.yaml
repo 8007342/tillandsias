@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-land-queue-stamps-each-landing-with-a-carried-trailer-per-backlog-so-paid-waived-and-silent-integrations-are-counted-from-git-history
+    event:
+      type: note
+      ts: "2026-10-31T20:35:06Z"
+      agent_id: forge-forge-tillandsias-claude-20261031t203506z
+      host: calmecacpilli
+      summary: |-
+        triage (calmecacpilli 2026-10-31): work/1577-568c landed as 5c3a83f40 on linux-next, but no runnable closure could be re-run on this host, so the row stays ready. Evidence that would close it: no verifiable_closure. To close: a landing through the land queue writes a Carried: trailer (paid|waived|due) and a fixture shows a due, silent change evicted (see 7956d90e2 feat(1577-568c)); run scripts/test-land-queue.sh green.

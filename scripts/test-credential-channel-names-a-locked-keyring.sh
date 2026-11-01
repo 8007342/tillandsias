@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 1903-djsq: never reach the operator's session bus or gnome-keyring-daemon.
+. "$(cd "$(dirname "$0")" && pwd)/test-support/private-session-bus.sh"
 # @trace order:1189-2ra5, spec:meta-orchestration
 #
 # test-credential-channel-names-a-locked-keyring.sh — pin the discriminator
@@ -270,8 +272,10 @@ else
 fi
 
 echo "arm 6 — gh auth status is bounded too (it BLOCKS on a locked keyring)"
-if grep -qE '_ccc_timeout [0-9]+ gh auth status' "$GUARD"; then
-    ok "gh auth status runs under _ccc_timeout"
+# 1903-djsq: the bound is _ccc_keyring_bounded, which ABANDONS a hung client
+# rather than SIGTERMing it mid-D-Bus-call (the 1265-8qr6 abort input).
+if grep -qE '_ccc_keyring_bounded [0-9]+ gh auth status' "$GUARD"; then
+    ok "gh auth status runs under _ccc_keyring_bounded"
 else
     bad "gh auth status is unbounded — against a locked keyring it blocks, hanging the guard itself"
 fi

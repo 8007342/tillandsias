@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-is-killed-by-systemd-oomd-and-its-session-cannot-be-rejoined
+    event:
+      type: progress
+      ts: "2026-10-30T23:20:30Z"
+      agent_id: linux-yoga-claude-20261027t070947z
+      host: yoga
+      summary: |
+        Live arm on yoga 2026-10-30 (work/1911-3dqo @ 5f8cce30d): launcher SIGKILLed by PID -> forge still Running; lane MCP socket refused before rejoin, accepted during `tillandsias --rejoin tillandsias`; podman attach reached the live forge prompt (typed input echoed at the fish prompt; the probe's bash-only $((6*7)) never ran, a probe defect). CORRECTION to the earlier "second teardown of unknown mechanism": it was --rejoin missing from is_cli_mode, so rejoin took the launcher singleton and SIGTERMed the tray, whose graceful_shutdown_async stopped the stack (fixed 081005c5d, pinned in cli_mode_counts_every_lane_flag). Open: the setsid tray companion still shares the terminal's cgroup scope, so systemd-oomd killing the terminal kills it too. Remaining scope: toolchain budgets (from 1913-imcb), inference sizing by tier, inference killed before forge. PR #691 readied.

@@ -12,6 +12,44 @@ set -uo pipefail
 # run the probe unbounded: an unbounded probe is the 860-g798 incident itself
 # (a push that hung >10 minutes on an interactive prompt). Return 127 so the
 # caller sees "could not run" rather than a fabricated answer.
+# ORDER 1903-djsq — A KEYRING CLIENT IS BOUNDED BY ABANDONING IT, NEVER BY KILLING IT.
+#
+# gnome-keyring-daemon aborts in invoke_get_property_in_idle_cb (1265-8qr6)
+# when the client that asked a property vanishes before the idle callback
+# replies, and D-Bus re-activates it LOCKED. timeout(1) SIGTERMs the client's
+# whole process group (gh, or git's `gh auth git-credential` helper) mid-call,
+# which is that input. Measured during gates: macuahuitl 2026-10-25 20:36,
+# 20:51, 2026-10-26 02:01 PDT; lenovinha 2026-10-26 01:03 PDT.
+#
+# So the three calls that reach the keyring (gh auth status, gh api user,
+# git credential fill) wait at most <secs> and then STOP WAITING: the client is
+# left to finish (or to keep blocking on a locked keyring, which is harmless —
+# blocking is not a crash) and the guard answers rc 124 exactly as before. Its
+# stdout/stderr go to files, so an abandoned client never holds the caller's
+# command-substitution pipe open. Needs no timeout(1), so it also bounds on a
+# stock Mac.
+_ccc_keyring_bounded() {
+  local _secs="$1"; shift
+  local _d _pid _i=0 _rc=0 _ticks
+  _d="$(mktemp -d "${TMPDIR:-/tmp}/ccc-probe.XXXXXX")" || return 127
+  "$@" <&0 >"$_d/out" 2>"$_d/err" &
+  _pid=$!
+  _ticks=$((_secs * 5))
+  while kill -0 "$_pid" 2>/dev/null && [ "$_i" -lt "$_ticks" ]; do
+    sleep 0.2; _i=$((_i + 1))
+  done
+  if kill -0 "$_pid" 2>/dev/null; then
+    disown "$_pid" 2>/dev/null || true
+    echo "[check-credential-channel] '$1' did not answer in ${_secs}s; left running, not killed (1903-djsq)." >&2
+    rm -rf "$_d"
+    return 124
+  fi
+  wait "$_pid" 2>/dev/null; _rc=$?
+  cat "$_d/out"; cat "$_d/err" >&2
+  rm -rf "$_d"
+  return "$_rc"
+}
+
 _ccc_timeout() {
   local _secs="$1"; shift
   if command -v timeout >/dev/null 2>&1; then
@@ -533,7 +571,7 @@ credential_channel_verdict() {
     case "$_url" in
       http://*|https://*)
         _cred="$(printf 'url=%s\n\n' "$_url" | GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never \
-                 GIT_ASKPASS=/bin/false _ccc_timeout 20 git credential fill 2>/dev/null)"
+                 GIT_ASKPASS=/bin/false _ccc_keyring_bounded 20 git credential fill 2>/dev/null)"
         CCC_PROBE_USER="$(printf '%s\n' "$_cred" | sed -n 's/^username=//p' | head -n 1)"
         CCC_PROBE_PASS="$(printf '%s\n' "$_cred" | sed -n 's/^password=//p' | head -n 1)"
         ;;
@@ -765,7 +803,7 @@ credential_channel_verdict() {
   # give. "I could not bound the probe" is not "you have no credential".
   _ccc_gh_auth_ok() {
     if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
-      GH_PROMPT_DISABLED=1 _ccc_timeout 15 gh auth status >/dev/null 2>&1
+      GH_PROMPT_DISABLED=1 _ccc_keyring_bounded 15 gh auth status >/dev/null 2>&1
       return $?
     fi
     # No bounding tool. Say so once, loudly, and fall back to the pre-1189-2ra5
@@ -925,7 +963,7 @@ credential_channel_verdict() {
       # Does GitHub accept the stored credential? This is the discriminator and
       # nothing else is.
       local _api_err _api_rc=0
-      _api_err="$(GH_PROMPT_DISABLED=1 _ccc_timeout 20 gh api user 2>&1 >/dev/null)" || _api_rc=$?
+      _api_err="$(GH_PROMPT_DISABLED=1 _ccc_keyring_bounded 20 gh api user 2>&1 >/dev/null)" || _api_rc=$?
       if [ "$_api_rc" -eq 0 ]; then
         printf 'accepted'
         return 0

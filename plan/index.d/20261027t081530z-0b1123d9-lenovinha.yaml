@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-agents-generate-images-locally-through-one-mcp-tool-on-stable-diffusion-cpp-sized-to-the-host
+    event:
+      type: note
+      ts: "2026-10-27T08:15:30Z"
+      agent_id: linux-lenovinha-opus5-20261027t081530z
+      host: lenovinha
+      summary: |
+        Backend matrix on lenovinha (RTX 3070 Laptop 8 GB, Vega iGPU, Ryzen 7 5800H). Read this before writing the b9tg/kkrc fallback detector. Recipe from macuahuitl: sd.cpp master-1015-e41fbcf. Model SDXS-09 (I0), sha256 2618f142ad9f3884785884216d41fdcc033fde529f30a180f50ea6a05de6a89c. 512x512, 1 step, seed 42.
+
+        Protocol: 1 warm-up and 3 timed runs per backend; times are medians. Every GPU run put all 3 parameter blocks in VRAM. No llvmpipe, no silent CPU fallback.
+
+        - CUDA (CDI, --device nvidia.com/gpu=all): 1.44 s per image. Load 0.62 s, generate 0.49 s. Peak VRAM about 2.2 GiB.
+        - Vulkan on the NVIDIA card (CDI), warm: 1.39 s. Same speed as CUDA, with a smaller image and lower RSS.
+        - Vulkan on the NVIDIA card, cold: 31.0 s, spent compiling shaders. Setting __GL_SHADER_DISK_CACHE_PATH to a persisted dir brings later runs down to the warm time.
+        - Vulkan radv on the Vega iGPU (renderD128 + card1 only): 3.46 s, cold and warm alike. VRAM about 2.0 GiB and GTT about 0.8 GiB, both including the desktop's own usage.
+        - CPU with -t 8: 4.48 s, generate 3.81 s, RSS 1.8 GiB. With -t 16 it is slower (5.14 s), so set -t to the physical core count.
+
+        8 GB VRAM: auto-fit saw 7140 MiB free with a 6628 MiB budget and placed the whole I0 model on CUDA0.
+
+        Device lines from the logs:
+        - CUDA: 'Device 0: NVIDIA GeForce RTX 3070 Laptop GPU, compute capability 8.6, VMM: yes, VRAM: 7893 MiB'
+        - Vulkan on NVIDIA: 'ggml_vulkan: 0 = NVIDIA GeForce RTX 3070 Laptop GPU (NVIDIA) | uma: 0 | fp16: 1 | bf16: 1'
+        - Vulkan radv: 'ggml_vulkan: 0 = AMD Radeon Graphics (RADV RENOIR) (radv) | uma: 1 | fp16: 1 | bf16: 0'
+
+        Detector gotchas:
+        (1) At this sd.cpp tag the old 'params backend buffer size ... MB(VRAM)/(RAM)' lines are gone. Placement is now reported as 'model manager prepared params backend buffers (..., VRAM) on <dev>', plus a line 'auto-fit: --backend "diffusion=CUDA0,te=CUDA0,vae=CUDA0"'.
+        (2) On radv, auto-fit logs '[W] auto-fit: no GPU devices; using the default backend', yet the run IS on Vulkan0 with its weights in VRAM; it is a uma iGPU. Never read that warning as a fallback. Assert the ggml device line and the VRAM placement instead.
+        (3) The __GL_SHADER_DISK_CACHE_* variables are NVIDIA-only. radv never wrote to the cache dir.
+        (4) Add a .containerignore for models/, or the 1.3 GB model is sent into the build context.
+
+        Data on lenovinha: target/work/imagegen-spike/ (results.tsv, logs/, 18 PNGs, matrix.sh).

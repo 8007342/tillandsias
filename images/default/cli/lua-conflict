@@ -1,0 +1,83 @@
+#!/usr/bin/env lua
+-- lua-conflict — resolve git merge-conflict hunks in one file (order 1864-qymj).
+--
+-- Usage: lua-conflict FILE ours|theirs|both [HUNK]
+--
+-- Resolves every conflict hunk (or only hunk number HUNK, counted from 1)
+-- as OURS (the side before =======), THEIRS (the side after it) or BOTH
+-- (ours, then theirs). A diff3 base section (||||||| ... up to =======) is
+-- dropped. Exits 1 and changes nothing when the file has no hunk, a hunk is
+-- unterminated, or HUNK is out of range. The file is replaced atomically.
+--
+-- After resolving, `git add FILE` as usual; this helper never stages.
+
+local function die(msg, code)
+  io.stderr:write("lua-conflict: " .. msg .. "\n")
+  os.exit(code or 1)
+end
+
+local file, side, which = arg[1], arg[2], arg[3]
+if not file or file == "-h" or file == "--help" then
+  io.stdout:write("usage: lua-conflict FILE ours|theirs|both [HUNK]\n")
+  os.exit(file and 0 or 2)
+end
+if side ~= "ours" and side ~= "theirs" and side ~= "both" then
+  die("side must be ours, theirs or both; got " .. tostring(side), 2)
+end
+local only = nil
+if which then
+  only = tonumber(which)
+  if not only or only < 1 or only ~= math.floor(only) then die("HUNK must be a positive whole number", 2) end
+end
+
+local fh = io.open(file, "rb") or die("cannot read " .. file, 2)
+local text = fh:read("a")
+fh:close()
+
+-- Split keeping line endings, so a CRLF file stays CRLF.
+local lines = {}
+for line in text:gmatch("[^\n]*\n?") do
+  if line ~= "" then lines[#lines + 1] = line end
+end
+
+local out, n, state = {}, 0, nil
+local ours, theirs = {}, {}
+for idx, line in ipairs(lines) do
+  if state == nil and line:find("^<<<<<<<") then
+    state, ours, theirs, n = "ours", {}, {}, n + 1
+    ours.start = idx
+  elseif state == "ours" and line:find("^|||||||") then
+    state = "base"
+  elseif (state == "ours" or state == "base") and line:find("^=======\r?\n?$") then
+    state = "theirs"
+  elseif state == "theirs" and line:find("^>>>>>>>") then
+    if only and n ~= only then
+      for i = ours.start, idx do out[#out + 1] = lines[i] end
+    else
+      if side ~= "theirs" then for _, l in ipairs(ours) do out[#out + 1] = l end end
+      if side ~= "ours" then for _, l in ipairs(theirs) do out[#out + 1] = l end end
+    end
+    state = nil
+  elseif state == "ours" then
+    ours[#ours + 1] = line
+  elseif state == "theirs" then
+    theirs[#theirs + 1] = line
+  elseif state == nil then
+    out[#out + 1] = line
+  end
+end
+
+if state ~= nil then die("unterminated conflict hunk " .. n .. "; file unchanged") end
+if n == 0 then die("no conflict hunk in " .. file .. "; file unchanged") end
+if only and only > n then die(string.format("hunk %d asked, file has %d; file unchanged", only, n)) end
+
+local tmp = file .. ".lua-conflict.tmp"
+local o = io.open(tmp, "wb") or die("cannot write " .. tmp, 2)
+o:write(table.concat(out))
+o:close()
+local ok, err = os.rename(tmp, file)
+if not ok then
+  os.remove(tmp)
+  die("rename failed: " .. tostring(err), 2)
+end
+io.stdout:write(string.format("ok:lua-conflict:%s:%s:%s of %d hunk(s)\n", file, side, only and ("hunk " .. only) or "all", n))

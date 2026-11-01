@@ -8,6 +8,19 @@ on:
         description: "Version to release. Defaults to VERSION from the selected ref."
         required: false
         type: string
+      cache_seed:
+        # Order 1916-nxcs. GitHub scopes an Actions cache to the ref that saved
+        # it: a cache saved by a tag run is restorable only by that same tag,
+        # while a cache saved on the default branch (main) is restorable by
+        # every ref. Releases run from tags, so a tag-saved cache never reaches
+        # the NEXT release. Dispatching this workflow on main with
+        # cache_seed=true builds exactly what a release builds, saves the Nix
+        # store and both rust-caches under main's scope, and skips every
+        # signing, release-creation, tag and upload step. It adds no trigger.
+        description: "Warm the caches only (run on main): build, save caches, publish nothing."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -46,9 +59,15 @@ jobs:
           fetch-depth: 0
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+        # Order 1933-ysbq: cache-nix-action's README lists the installers it is
+        # compatible with (nix-quick-install-action, cachix/install-nix-action,
+        # determinate-nix-action); DeterminateSystems/nix-installer-action is
+        # not one. With it, every save failed in the post step ("/usr/bin/tar"
+        # failed with exit code 2, v56.10.30.1 and v56.10.31.1, run
+        # 41212733409), so 1916-nxcs's save never landed and each release
+        # rebuilt all 499 derivations (~62 min). install-nix-action is listed.
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
         with:
-          flakehub: false
           # v56.9.25.1's Linux job failed three times on ONE NAR: the CDN edge
           # serving the runners dropped cache.nixos.org's cargo-package-winapi-
           # i686 NAR at exactly 2 MiB ("Stream error in the HTTP/2 framing
@@ -58,7 +77,8 @@ jobs:
           # framing layer; fallback=true builds a path whose substitution
           # failed instead of failing the release (a cargo-package-* path is a
           # fixed-output crates.io fetch, so building it is cheap and exact).
-          extra-conf: |
+          extra_nix_config: |
+            experimental-features = nix-command flakes
             http2 = false
             fallback = true
 
@@ -70,10 +90,20 @@ jobs:
         # rebuilds GCC. With it, that's a one-time cost.
         uses: nix-community/cache-nix-action@v7
         with:
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
+          # Order 1916-nxcs: the key covers BOTH locks (crane vendors from
+          # Cargo.lock), and the cache is SAVED. save: false with no other
+          # producer meant every release restored a key no run ever wrote and
+          # cold-built the crane deps (Nix build step 61 of 63 min,
+          # run 39495753986). The prefix restore still gives a lock-bumped run
+          # the nearest older store. Only a main-ref save reaches other tags;
+          # see the cache_seed input.
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
           restore-prefixes-first-match: |
             nix-${{ runner.os }}-
-          save: false
+          # Order 1942-mijg: only main saves (the cache_seed run the release
+          # skill dispatches on main before the tag). A tag-scoped save is
+          # restorable by nobody and only evicts main's from the 10 GB quota.
+          save: ${{ github.ref == 'refs/heads/main' }}
 
       # ── Gates that used to live here now run on local hardware ───────────────
       #
@@ -138,7 +168,7 @@ jobs:
           # to read "the router sidecar + runtime assets are git-tracked, so nix
           # embeds them from the checked-out tree". That sentence stopped being
           # true the moment the blob was removed, and nothing here noticed:
-          # crates/tillandsias-headless/build.rs:93 still lists the file among
+          # crates/tillandsias-embed/build.rs still lists the file among
           # its REQUIRED runtime assets and panics at build.rs:104 without it,
           # so the two headless builds below would fail on a clean CI checkout.
           # It has never been exercised — the last release predates the removal.
@@ -262,6 +292,7 @@ jobs:
           retention-days: 14
 
       - name: Collect + validate release artifacts
+        if: ${{ !inputs.cache_seed }}
         run: |
           mkdir -p release-artifacts
           install -m 0755 result-host/bin/tillandsias           release-artifacts/tillandsias-linux-x86_64
@@ -305,12 +336,15 @@ jobs:
           cat SHA256SUMS
 
       - name: Install Cosign
+        if: ${{ !inputs.cache_seed }}
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Verify Cosign installation
+        if: ${{ !inputs.cache_seed }}
         run: cosign version
 
       - name: Sign artifacts with Cosign bundles
+        if: ${{ !inputs.cache_seed }}
         run: |
           cd release-artifacts
           for artifact in *; do
@@ -328,6 +362,7 @@ jobs:
           done
 
       - name: Verify release artifact set
+        if: ${{ !inputs.cache_seed }}
         run: |
           cd release-artifacts
           test -f tillandsias-linux-x86_64
@@ -345,6 +380,7 @@ jobs:
           ls -la
 
       - name: Create or update GitHub Release
+        if: ${{ !inputs.cache_seed }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -412,6 +448,7 @@ jobs:
           fi
 
       - name: Update rolling tags
+        if: ${{ !inputs.cache_seed }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -429,6 +466,7 @@ jobs:
           echo "Updated rolling tag: unstable -> ${GITHUB_SHA}"
 
       - name: Stage the unstable channel copy (installers default to unstable)
+        if: ${{ !inputs.cache_seed }}
         run: |
           # Order 1369-sjbc. The same bytes went to v${VERSION} and to
           # `unstable`, so an installer fetched from /releases/download/unstable/
@@ -448,6 +486,7 @@ jobs:
           grep -qx 'DEFAULT_CHANNEL="unstable"' install.sh
 
       - name: Refresh unstable channel release
+        if: ${{ !inputs.cache_seed }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -530,6 +569,10 @@ jobs:
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
         with:
           workspaces: . -> target
+          # Order 1916-nxcs: a stable key shared by every ref; 1942-mijg: saved
+          # only on main (the cache_seed run), the scope every tag run restores.
+          shared-key: release-${{ runner.os }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install guest cross-build tools
         run: |
@@ -556,6 +599,7 @@ jobs:
         run: scripts/build-macos-tray.sh
 
       - name: Verify bundle (sanity checks before signing)
+        if: ${{ !inputs.cache_seed }}
         run: |
           codesign --verify --deep --strict --verbose=2 dist/Tillandsias.app
           codesign -d --entitlements - dist/Tillandsias.app 2>&1 \
@@ -567,9 +611,11 @@ jobs:
       # Tillandsias.dmg so the releases/latest/download/ link never goes
       # stale. Appends its own line to dist/SHA256SUMS before staging.
       - name: Build styled DMG (drag to Applications)
+        if: ${{ !inputs.cache_seed }}
         run: scripts/build-macos-dmg.sh
 
       - name: Verify DMG contents
+        if: ${{ !inputs.cache_seed }}
         run: |
           hdiutil attach dist/Tillandsias.dmg -readonly -nobrowse
           test -d /Volumes/Tillandsias/Tillandsias.app
@@ -578,6 +624,7 @@ jobs:
           hdiutil detach /Volumes/Tillandsias
 
       - name: Stage release artifacts
+        if: ${{ !inputs.cache_seed }}
         run: |
           mkdir -p release-artifacts
           cp dist/tillandsias-tray-*-macos-arm64.tar.gz release-artifacts/
@@ -586,12 +633,18 @@ jobs:
           # The macOS SHA256SUMS uses a distinct filename so it doesn't
           # collide with the Linux job's SHA256SUMS in the GitHub release.
           mv dist/SHA256SUMS release-artifacts/SHA256SUMS-macos
+          # Order 1360-34uw: name the installer in the macOS manifest, as the
+          # Linux (install.sh) and Windows (install-windows.ps1) lanes do.
+          (cd release-artifacts && shasum -a 256 install-macos.sh >> SHA256SUMS-macos)
+          grep -q ' install-macos.sh$' release-artifacts/SHA256SUMS-macos
           ls -la release-artifacts/
 
       - name: Install Cosign
+        if: ${{ !inputs.cache_seed }}
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Sign macOS artifacts with Cosign bundles
+        if: ${{ !inputs.cache_seed }}
         run: |
           cd release-artifacts
           for artifact in tillandsias-tray-*-macos-arm64.tar.gz Tillandsias.dmg install-macos.sh; do
@@ -605,6 +658,7 @@ jobs:
           done
 
       - name: Upload macOS assets to release
+        if: ${{ !inputs.cache_seed }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -670,6 +724,10 @@ jobs:
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
         with:
           workspaces: . -> target
+          # Order 1916-nxcs: a stable key shared by every ref; 1942-mijg: saved
+          # only on main (the cache_seed run), the scope every tag run restores.
+          shared-key: release-${{ runner.os }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Resolve version (same as Linux job)
         id: version
@@ -684,7 +742,19 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved Windows release version: v${VERSION}"
 
+      - name: Warm the Rust cache (cache_seed runs only)
+        if: ${{ inputs.cache_seed }}
+        shell: bash
+        # The release build below needs this version's published guest
+        # binaries, which a seed run never uploads; compile the same two
+        # release-profile crates the build script compiles instead, so the
+        # rust-cache post step saves their dependency graph.
+        run: |
+          cargo build --release --locked -p tillandsias-windows-tray
+          cargo build --release --locked -p tillandsias-headless --bin tillandsias
+
       - name: Stage guest headless binaries (source-matched embed)
+        if: ${{ !inputs.cache_seed }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -744,7 +814,7 @@ jobs:
       # thing that must never be long-lived, and it comes from federated OIDC
       # below (id-token: write is already granted on this job).
       - name: Azure login (federated OIDC — no stored signing credential)
-        if: vars.TILLANDSIAS_SIGNING_ACCOUNT != ''
+        if: ${{ !inputs.cache_seed && (vars.TILLANDSIAS_SIGNING_ACCOUNT != '') }}
         uses: azure/login@a65d910e8af852a8061c627c456678983e180302 # v2
         with:
           client-id: ${{ vars.TILLANDSIAS_SIGNING_CLIENT_ID }}
@@ -752,7 +822,7 @@ jobs:
           subscription-id: ${{ vars.TILLANDSIAS_SIGNING_SUBSCRIPTION_ID }}
 
       - name: Install Artifact Signing Client Tools
-        if: vars.TILLANDSIAS_SIGNING_ACCOUNT != ''
+        if: ${{ !inputs.cache_seed && (vars.TILLANDSIAS_SIGNING_ACCOUNT != '') }}
         shell: pwsh
         run: |
           # The documented MSI install. Preferred over winget on a runner
@@ -764,6 +834,7 @@ jobs:
           Remove-Item .\ArtifactSigningClientTools.msi
 
       - name: Build + package the Windows tray (windows-owned build script)
+        if: ${{ !inputs.cache_seed }}
         shell: pwsh
         env:
           TILLANDSIAS_SIGNING_ENDPOINT: ${{ vars.TILLANDSIAS_SIGNING_ENDPOINT }}
@@ -819,6 +890,7 @@ jobs:
           Get-ChildItem release-artifacts
 
       - name: Stage version-stable portable aliases
+        if: ${{ !inputs.cache_seed }}
         shell: bash
         run: |
           # The packaged zip carries the version in its NAME, so it can never be
@@ -877,9 +949,11 @@ jobs:
           ls -la tillandsias-windows-x64.zip tillandsias-tray.exe
 
       - name: Install Cosign
+        if: ${{ !inputs.cache_seed }}
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Sign Windows artifacts with Cosign bundles
+        if: ${{ !inputs.cache_seed }}
         shell: bash
         run: |
           cd release-artifacts
@@ -902,6 +976,7 @@ jobs:
           done
 
       - name: Refuse a Windows asset set with an unverifiable file
+        if: ${{ !inputs.cache_seed }}
         shell: bash
         run: |
           # Order 756-rfdr. install-windows.ps1 shipped in v0.4.260815.1 with no
@@ -916,6 +991,7 @@ jobs:
           bash scripts/check-release-asset-integrity.sh release-artifacts
 
       - name: Upload Windows assets to release
+        if: ${{ !inputs.cache_seed }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

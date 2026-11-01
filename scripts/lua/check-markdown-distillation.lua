@@ -86,6 +86,11 @@ local ALLOWED = {
     "scripts/*/README.md",
     "docs/*", "cheatsheets/*", "openspec/*", "plan/*", "skills/*", "crates/*",
     "methodology/specs/*",
+    -- research/<domain>/<slug>.md (order 1809-dwqf): the provenance-linked
+    -- research store, a canonical root of the same class as cheatsheets/ —
+    -- each record carries its source and is shape-checked by
+    -- scripts/lua/check-research-records.lua (spec research-records).
+    "research/*",
     ".claude/commands/*", ".opencode/commands/*", ".opencode/command/*", ".github/prompts/*",
     -- 2026-08-28 repair: a runtime instruction surface the OpenCode agent loads at launch — same class as the AGENTS.md entry above.
     ".opencode/instructions/*",

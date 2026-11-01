@@ -1,0 +1,169 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora at the operator's request, 2026-10-28 (operator-approved 2026-10-28). Runtime policy Lua layer packets from the lua-runtime-layer research report. Rule: Lua decides and returns a table; Rust acts on a closed vocabulary.
+packets:
+- packet_id: host-runtime-budgets-live-in-one-policy-table
+  order: 1917-bdgt
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - headless
+  - runtime
+  - policy
+  estimated_hours: 6
+  title: Runtime waits, budgets, retry counts and pids limits live in one embedded host-policy table, printed by tillandsias --policy-dump
+  context: 'operator-approved 2026-10-28. Source: scratch/research/lua-runtime-layer.md sections 3 (row 1), 5 and 6.2. About 60 of 222 headless main.rs commits in 60 days (27 percent) changed a budget, constant, string, retry rule or sequence. This first step is data only and needs no Lua host: Rust reads the table. Speeds other work: those small fixes stop needing a headless rebuild.'
+  exit_criteria:
+  - grep -nE 'pids_limit\(|--pids-limit=' crates/ returns no literal numbers; each limit comes from the table.
+  - tillandsias --policy-dump prints the effective table, including GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS and the Vault-ready budget; today the flag does not exist.
+  verifiable_closure: A headless test that loads the embedded table and asserts --policy-dump lists every key the code reads.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: list the constants from report section 3 row 1, write the table and loader, replace the literals, add --policy-dump and its test. Credential, mount and cgroup-enforcement code stays in Rust.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/lua-runtime-layer.md sections 3 (row 1), 5 and 6.2 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: lua-host-hoists-into-its-own-crate-with-a-policy-class
+  order: 1917-host
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - lua
+  - rust
+  - headless
+  estimated_hours: 8
+  title: The Lua host moves into a tillandsias-lua crate with a PredicateClass::Policy that sees only a facts table, and headless depends on it
+  context: 'operator-approved 2026-10-28. Source: scratch/research/lua-runtime-layer.md sections 4 and 6.1. mlua lives only in tillandsias-plan today; headless has none. The Policy class gets verbs log_info and verbs plus a read-only facts table, with no fs, proc, clock or env. mlua entering the macOS and Windows trays is unproven, so a darwin and an msys build are needed.'
+  exit_criteria:
+  - cargo tree -p tillandsias-headless -i mlua is non-empty; today it is empty.
+  - A pinned test asserts PredicateClass::Policy.verbs() == ["log_info","verbs"].
+  - touch main.rs && cargo build -p tillandsias-headless wall time is recorded with its regime on a linux, a darwin and an msys host.
+  verifiable_closure: cargo test -p tillandsias-lua policy_class_verbs_are_pinned
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: move lua_predicate.rs, lua_std.rs and script_run.rs into the new crate without a tillandsias-plan dependency, add the Policy class and its pin, then record the three build times.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/lua-runtime-layer.md sections 4 and 6.1 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: image-ensure-retry-policy-is-a-lua-decision
+  order: 1917-imgd
+  status: pending
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - lua
+  - headless
+  - images
+  estimated_hours: 8
+  title: The image-ensure and retry policy becomes scripts/lua/host-policy/image-ensure.lua, and Rust only carries out the verdict it returns
+  context: 'operator-approved 2026-10-28. Source: scratch/research/lua-runtime-layer.md sections 3 and 6.3. ensure_image_decision and the run_retry_image backoff change often. The report says to land the ratchet (1917-ratc) before widening.'
+  exit_criteria:
+  - A headless test changes the retry count through the dev reload dir and sees the new behaviour with no change to main.rs; today the count is compiled in.
+  verifiable_closure: The headless reload test named in the exit criterion.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Waiting on 1917-host and 1917-ratc. Left once they land: write the script, turn the Rust function into a thin executor of its closed verdict vocabulary, add the test.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/lua-runtime-layer.md sections 3 and 6.3 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1917-host
+  - 1917-ratc
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: embedded-policy-scripts-carry-a-sha256-manifest
+  order: 1917-prov
+  status: pending
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - lua
+  - security
+  - release
+  estimated_hours: 4
+  title: Embedded policy scripts carry a sha256 manifest checked at load, and release builds ignore the dev script dir
+  context: 'operator-approved 2026-10-28. Source: scratch/research/lua-runtime-layer.md sections 4 and 6.4. TILLANDSIAS_DEV_LUA_DIR is compiled out unless --features dev-lua. Must land before any policy script ships in a release.'
+  exit_criteria:
+  - A test that sets TILLANDSIAS_DEV_LUA_DIR on a non-dev build sees it ignored.
+  - The manifest check refuses a tampered script; a fixture FAILS on today's code, which has no manifest.
+  verifiable_closure: cargo test -p tillandsias-lua manifest_refuses_tampered_script
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Waiting on 1917-host. Left once it lands: generate the manifest at build time, check it at load, gate the dev dir behind the feature, add both tests.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/lua-runtime-layer.md sections 4 and 6.4 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1917-host
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: lua-trial-scripts-expire-and-cannot-name-privileged-verbs
+  order: 1917-ratc
+  status: pending
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - lua
+  - gate
+  - policy
+  estimated_hours: 4
+  title: check-lua-trial-expiry.lua refuses an expired @lua-trial, and a second guard refuses host-policy scripts that name proc., fs., expert.shell or vault
+  context: 'operator-approved 2026-10-28. Source: scratch/research/lua-runtime-layer.md sections 4 and 6.5. The promotion rule: each host-policy script carries -- @lua-trial order:<id> until:<date> and -- @ports-to <rust symbol>. Tables invite fixes without tests, so this lands before the layer widens.'
+  exit_criteria:
+  - A fixture script past its until date is refused by the guard in scripts/local-ci.sh; today no such guard exists.
+  - A fixture host-policy script that names proc. is refused; one that does not is accepted.
+  verifiable_closure: Both guard fixtures pass in the gate and failed before the change.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Waiting on 1917-host. Left once it lands: write both guards with positive and negative fixtures and wire them into local-ci.sh.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/lua-runtime-layer.md sections 4 and 6.5 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1917-host
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: ux-strings-and-doctor-classification-move-to-tables
+  order: 1917-strs
+  status: pending
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - lua
+  - headless
+  - ux
+  estimated_hours: 6
+  title: Tray and init-bar strings move into a strings table, and diagnostics classification moves to Lua; test-approved-ux-strings.lua reads the table
+  context: 'operator-approved 2026-10-28. Source: scratch/research/lua-runtime-layer.md sections 3 and 6.6. Status text and doctor classification are data or read-only decisions. Credential, Vault, mount and signal paths stay in Rust.'
+  exit_criteria:
+  - test-approved-ux-strings.lua reads the strings table and no longer greps main.rs; today it greps main.rs.
+  - select_diagnostics_agent_kind's classification runs from a host-policy script, and a test changes a rule without touching Rust.
+  verifiable_closure: test-approved-ux-strings.lua passes against the table in the gate.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Waiting on 1917-host and 1917-ratc. Left once they land: extract the strings, move the classification, update the guard.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/lua-runtime-layer.md sections 3 and 6.6 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1917-host
+  - 1917-ratc
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)

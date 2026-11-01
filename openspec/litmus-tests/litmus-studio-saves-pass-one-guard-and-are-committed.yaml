@@ -1,0 +1,30 @@
+# @trace order:1860-auhm (web-studio-lanes change, not yet archived; rebind to web-studio-lane when archived)
+name: litmus:studio-saves-pass-one-guard-and-are-committed
+spec: local-web-preview
+phase: pre-build
+description: A studio save outside the checkout, under .git, through a symlink or off the allowlist is refused, evented and writes nothing; an allowlisted save is committed as studio(<id>) save <path>; the registry JSON is what registry.lua generates
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains images/studio/studio-front.js, images/studio/registry.lua and crates/tillandsias-headless/data/studios.json
+  - podman is available with a local tillandsias-forge image (node and git run inside it, --network none; no host node)
+
+critical_path:
+  - step: "four arms in the forge image: refusals write and commit nothing and are evented; an allowlisted save is committed and evented; an identical save commits nothing; the HTTP front refuses traversal (403), commits a save, 404s a PWA path, 400s a bad body"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-studio-front.lua"
+    timeout_ms: 180000
+    expected_behavior: "ok:studio-front:4-arms"
+
+observability:
+  traces:
+    - "@trace order:1860-auhm"
+  expected_log: "ok:studio-front:4-arms"
+  log_fields:
+    spec: "local-web-preview"
+    test: "studio-saves-pass-one-guard-and-are-committed"
+    artifact: "images/studio/studio-front.js + studio-front.selftest.js + scripts/lua/test-studio-front.lua"
+
+rollback:
+  on_failure: "inspect guard() in images/studio/studio-front.js; regenerate the registry JSON with scripts/lua/build-studio-registry.lua"
+  command: "cat images/studio/registry.lua"

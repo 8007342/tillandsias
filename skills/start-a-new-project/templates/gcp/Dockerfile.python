@@ -1,0 +1,14 @@
+# {{NAME}}: Python on Google Cloud Run (the shape of Google's run/helloworld sample).
+# Cloud Run sends requests to $PORT (8080 unless set) on 0.0.0.0, stops the
+# container with SIGTERM, and keeps no files between instances.
+FROM docker.io/library/python:3.14-slim
+ENV PYTHONUNBUFFERED=1 PORT={{PORT}}
+WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt gunicorn
+COPY . .
+RUN useradd --uid 10001 --no-create-home app
+USER app
+EXPOSE {{PORT}}
+# main.py must define `app` (Flask or any WSGI app).
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app

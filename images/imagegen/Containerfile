@@ -1,0 +1,42 @@
+# @trace order:1874-b9tg (spec: openspec/changes/local-image-generation, not yet archived)
+# Local image generation: stable-diffusion.cpp's sd-server, Vulkan + CPU in one
+# binary (a ggml Vulkan build keeps its CPU backend). NOT an INIT image: built
+# on first use through ensure_image_exists. CUDA is the optional variant in
+# Containerfile.cuda. No egress: models are mounted from the host cache, never
+# fetched here (1874-h9ns), and the lane runs on the internal network only.
+#
+# Measured on lenovinha 2026-10-27 (RTX 3070 Laptop, Vega iGPU, SDXS-09 512px,
+# 1 step, median of 3): Vulkan/NVIDIA 1.39 s warm, radv 3.46 s, CPU -t 8 4.48 s.
+# Upstream tags are automated master-<n>-<sha> with no semver and the CLI/API
+# changes often, so the tag is pinned and bumped only by a packet that re-runs
+# the placement fixture (imagegen_placement.rs).
+FROM registry.fedoraproject.org/fedora:44 AS build
+ARG SDCPP_TAG=master-1015-e41fbcf
+RUN dnf -y install --setopt=install_weak_deps=False git gcc-c++ cmake ninja-build \
+        vulkan-headers vulkan-loader-devel glslc glslang spirv-headers-devel \
+    && dnf clean all
+RUN git clone --depth 1 --branch "$SDCPP_TAG" --recurse-submodules --shallow-submodules \
+        https://github.com/leejet/stable-diffusion.cpp /src
+WORKDIR /src
+RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DSD_VULKAN=ON \
+    && cmake --build build -j"$(nproc)" \
+    && test -x build/bin/sd-server && test -x build/bin/sd-cli
+
+FROM registry.fedoraproject.org/fedora:44
+ARG SDCPP_TAG=master-1015-e41fbcf
+LABEL io.tillandsias.imagegen.sdcpp-tag="${SDCPP_TAG}"
+# The Vulkan userspace, as in images/inference (917-zkge): a backend that is
+# installed is not a backend that enumerates a device without a loader and an
+# ICD. The four X/glvnd libraries are what the NVIDIA ICD (mounted by CDI)
+# links against; without them it fails to load and the run is silently CPU.
+RUN dnf -y install --setopt=install_weak_deps=False vulkan-loader mesa-vulkan-drivers \
+        libX11 libXext libglvnd-glx libglvnd-egl libgomp \
+    && dnf clean all \
+    && useradd -u 1000 -m -s /sbin/nologin imagegen
+COPY --from=build /src/build/bin/sd-server /src/build/bin/sd-cli /usr/local/bin/
+USER imagegen
+# The NVIDIA driver compiles Vulkan shaders on first use (31 s cold vs 1.39 s
+# warm, measured); the lane mounts a persisted volume here. radv ignores it.
+ENV __GL_SHADER_DISK_CACHE_PATH=/home/imagegen/.cache/nv \
+    __GL_SHADER_DISK_CACHE_SKIP_CLEANUP=1
+ENTRYPOINT ["/usr/local/bin/sd-server"]

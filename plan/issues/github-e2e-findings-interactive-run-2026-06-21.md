@@ -1,5 +1,6 @@
 # GitHub E2E Interactive Run Findings — 2026-06-21
 
+**Status:** `resolved` — distilled: G1 became order 75 (github-e2e/redundant-vault-bootstrap) and G2 order 76 (github-e2e/forge-base-missing-ux); both completed and archived (checked 2026-10-31 by calmecacpilli).
 **Filed:** 2026-06-21T14:55Z
 **Agent:** linux-tlatoani-big-pickle-20260621T1455Z
 **Host:** linux_mutable (Fedora Linux)

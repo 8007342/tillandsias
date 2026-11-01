@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-consent-fixtures-ask-policy-eval-to-spend-a-token-that-only-an-execution-door-spends
+    field: status
+    value: completed
+    ts: "2026-10-31T19:34:17Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-consent-fixtures-ask-policy-eval-to-spend-a-token-that-only-an-execution-door-spends
+    event:
+      type: completed
+      ts: "2026-10-31T19:34:17Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: a97ac5d15 (landed work/1764-ca9x, ancestor of origin/linux-next); scripts/test-command-policy-consent.sh -> PASS: command-policy-consent 9/9 skipped=1
+  - packet_id: the-consent-fixtures-ask-policy-eval-to-spend-a-token-that-only-an-execution-door-spends
+    event:
+      type: note
+      ts: "2026-10-31T19:34:17Z"
+      host: calmecacpilli
+      summary: |-
+        stale ready row; its own verifiable_closure re-run green on calmecacpilli 2026-10-31

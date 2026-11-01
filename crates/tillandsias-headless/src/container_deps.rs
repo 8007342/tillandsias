@@ -359,7 +359,9 @@ impl Satisfier for RealSatisfier {
             Service::Vault => {
                 #[cfg(feature = "vault")]
                 {
-                    crate::vault_bootstrap::ensure_vault_running(self.debug)
+                    crate::bringup_timer::timed("vault-health", || {
+                        crate::vault_bootstrap::ensure_vault_running(self.debug)
+                    })
                 }
                 #[cfg(not(feature = "vault"))]
                 {
@@ -368,7 +370,9 @@ impl Satisfier for RealSatisfier {
                     );
                 }
             }
-            Service::Proxy => crate::ensure_proxy_running(self.debug),
+            Service::Proxy => crate::bringup_timer::timed("proxy-ready", || {
+                crate::ensure_proxy_running(self.debug)
+            }),
             Service::NixCache => crate::ensure_nix_cache_running(self.debug),
             Service::GitLogin => Err(format!(
                 "{} is a launch target, not a satisfiable prerequisite",

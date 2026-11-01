@@ -20,7 +20,10 @@ set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 W="$(mktemp -d "${TMPDIR:-/tmp}/forge-swap-test.XXXXXX")"
 holder=""
-trap '[ -n "$holder" ] && kill "$holder" 2>/dev/null; rm -rf "$W"' EXIT
+# The holder's stdio is /dev/null and the trap kills its children too: flock
+# forks the sleep, and a sleep left on this script's stdout keeps the gate's
+# tee waiting for 60 s after the last arm (1924-dcoy).
+trap '[ -n "$holder" ] && { pkill -P "$holder" 2>/dev/null; kill "$holder" 2>/dev/null; }; rm -rf "$W"' EXIT
 pass=0; fail=0; skip=0
 ok()   { pass=$((pass + 1)); echo "ok   $1"; }
 bad()  { fail=$((fail + 1)); echo "FAIL $1"; }
@@ -123,7 +126,7 @@ EOF
     chmod +x "$W/systemctl"
     : > "$W/run/1000/tillandsias/swap-held-1.lease"; : > "$W/run/1000/tillandsias/swap-free-2.lease"
     # premise: hold one lease from a live process, exactly as the tray does
-    flock "$W/run/1000/tillandsias/swap-held-1.lease" sleep 60 & holder=$!
+    flock "$W/run/1000/tillandsias/swap-held-1.lease" sleep 60 </dev/null >/dev/null 2>&1 & holder=$!
     for _ in 1 2 3 4 5 6 7 8 9 10; do flock -n "$W/run/1000/tillandsias/swap-held-1.lease" true 2>/dev/null || break; sleep 0.2; done
     if flock -n "$W/run/1000/tillandsias/swap-held-1.lease" true 2>/dev/null; then
         bad "premise: the held lease is not held, so the gc arm would mean nothing"

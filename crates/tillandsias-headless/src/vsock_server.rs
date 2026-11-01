@@ -807,6 +807,27 @@ pub async fn run_vsock_listener(
     shutdown: Arc<AtomicBool>,
     state: VmStateHandle,
 ) -> io::Result<()> {
+    // 1909-aryk: an older guest left the Vault root token and unseal share in
+    // plaintext files. Delete them before the host can connect; the next
+    // delivery from the host's secure storage is the only source now.
+    #[cfg(feature = "vault")]
+    for path in crate::vault_bootstrap::purge_credential_fallbacks() {
+        eprintln!(
+            "[vsock] removed plaintext credential file {} (1909-aryk)",
+            path.display()
+        );
+    }
+    // 1927-q6fk: lane processes (wsl.exe lanes on Windows, PTY children on
+    // macOS) read the host's delivery from this agent over a guest-local
+    // socket — the replacement for the plaintext file 1909-aryk removed.
+    #[cfg(all(target_os = "linux", feature = "vault"))]
+    if let Err(e) = crate::guest_credentials::serve() {
+        eprintln!(
+            "[vsock] guest credential socket {} not served: {e}; lanes in this guest \
+             cannot read the host's delivery",
+            crate::guest_credentials::SOCKET_PATH
+        );
+    }
     let transport = Transport::Vsock {
         cid: vmaddr_cid_any(),
         port,

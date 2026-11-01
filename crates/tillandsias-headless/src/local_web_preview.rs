@@ -683,7 +683,6 @@ fn build_local_preview_run_args(
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
         "--read-only".into(),
-        "--pids-limit=256".into(),
         "--tmpfs".into(),
         "/tmp:rw,nosuid,nodev,size=256m,mode=1777".into(),
         "--workdir".into(),
@@ -700,6 +699,16 @@ fn build_local_preview_run_args(
         "--label".into(),
         format!("{PROFILE}={}", profile.name()),
     ];
+    // 1911-3dqo (coordinator ruling): a preview is a forge sibling, so its
+    // memory.high sits below the forge's and it protects nothing; two full
+    // forge budgets on one host would defeat the reclaim order. pids as before.
+    args.extend(
+        tillandsias_core::forge_budget::ForgeBudget::for_this_host()
+            .sibling(50, 256)
+            .podman_args(),
+    );
+    // 1913-ebv8: in the forge's slice, ranked before it.
+    args.extend(crate::oom_slice_args());
     if let Some(dir) = &live.app_dir {
         args.extend(["--label".into(), format!("{APP_DIR}={dir}")]);
     }
@@ -3742,9 +3751,19 @@ mod tests {
             let args = crate::build_router_run_args(Path::new("/ca"), "managed-router", 18080);
             // Rootful hosts (uid 0) omit the publish by design (1794-rf3a);
             // the live args must agree with whichever branch this uid takes.
+            // ORDER 1902-hh7i: since 1901-bnif there is also no publish when
+            // the leaves have no tmpfs home (preview_tls_dir), which is every
+            // darwin host. Linux must keep that home, or this check would
+            // stop exercising the publish branch without anyone noticing.
+            let tls_home = crate::preview_tls_dir();
+            #[cfg(target_os = "linux")]
+            assert!(
+                tls_home.is_ok(),
+                "Linux lost the tmpfs home for preview leaves: {tls_home:?}"
+            );
             assert_eq!(
                 args.contains(&"127.0.0.1:18443:8443".into()),
-                !crate::running_as_root()
+                !crate::running_as_root() && tls_home.is_ok()
             );
             // Both branches, independent of the uid the gate runs as.
             let leaf = Path::new("/leaf");

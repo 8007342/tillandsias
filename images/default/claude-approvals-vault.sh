@@ -21,8 +21,9 @@
 #            (additive; a fresh prompt-and-approve always wins over vault)
 #   harvest  extract the approval keys from ~/.claude.json -> vault
 #   digest   sha of the extracted approval doc (change detection)
-#   watch    poll while CHILD_PID lives; harvest on change — catches the
-#            operator's first-ever approval within seconds of the click
+#   watch    harvest on each write of the config (an inotify event; a poll
+#            while CHILD_PID lives only on an image without inotify-tools) —
+#            catches the operator's first-ever approval right after the click
 #
 # The doc contains only booleans and project paths — no credentials — but it
 # rides the same scoped vault path discipline as everything else.
@@ -30,6 +31,7 @@ set -uo pipefail
 
 USER_CFG="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
 VAULT_PATH="secret/claude/approvals"
+VAULT_CLI="${TILLANDSIAS_VAULT_CLI:-/usr/local/bin/vault-cli.sh}"
 
 extract_approvals() {
     [[ -s "$USER_CFG" ]] || { printf '{}'; return 0; }
@@ -40,7 +42,7 @@ extract_approvals() {
 
 restore_approvals() {
     local doc tmp
-    doc="$(/usr/local/bin/vault-cli.sh read -field=approvals_b64 "$VAULT_PATH" 2>/dev/null | base64 -d 2>/dev/null)" || doc=''
+    doc="$("$VAULT_CLI" read -field=approvals_b64 "$VAULT_PATH" 2>/dev/null | base64 -d 2>/dev/null)" || doc=''
     [[ -n "$doc" ]] || { echo "[approvals] no vault doc yet — first launch will prompt once and harvest" >&2; return 0; }
     printf '%s' "$doc" | jq -e 'type == "object"' >/dev/null 2>&1 || { echo "[approvals] vault doc invalid; ignoring" >&2; return 0; }
     mkdir -p "$(dirname "$USER_CFG")"
@@ -62,21 +64,40 @@ harvest_approvals() {
     doc="$(extract_approvals)"
     [[ "$doc" != '{}' && -n "$doc" ]] || return 0
     printf '%s' "$doc" | base64 -w0 | \
-        /usr/local/bin/vault-cli.sh write-stdin "$VAULT_PATH" approvals_b64 >/dev/null
+        "$VAULT_CLI" write-stdin "$VAULT_PATH" approvals_b64 >/dev/null
 }
 
 approvals_digest() { extract_approvals | sha256sum | awk '{print $1}'; }
 
+# Operator approval 2026-10-28 (1914-twan): copy on an inotify event, not a
+# 3 s poll (1,200 wakeups an hour, each running jq over the whole config).
+harvest_if_changed() {
+    current="$(approvals_digest)"
+    if [[ "$current" != "$last" ]]; then
+        harvest_approvals && last="$current"
+    fi
+}
+
 watch_approvals() {
-    local child_pid="$1" poll_secs last current
-    poll_secs="${TILLANDSIAS_APPROVALS_POLL_SECS:-3}"
+    local child_pid="$1" poll_secs last current cfg_dir name
     last="$(approvals_digest)"
+    cfg_dir="$(dirname "$USER_CFG")"
+    if command -v inotifywait >/dev/null 2>&1 && [[ -d "$cfg_dir" ]]; then
+        # Claude rewrites the config in place or by rename. The watch ends
+        # with the container; every change has already been copied by then.
+        while read -r name; do
+            case "$name" in
+                # Catch a write made before the watch existed.
+                "Watches established.") harvest_if_changed ;;
+                "$(basename "$USER_CFG")") harvest_if_changed ;;
+            esac
+        done < <(exec inotifywait -m -e close_write,moved_to --format '%f' "$cfg_dir" 2>&1)
+        return 0
+    fi
+    poll_secs="${TILLANDSIAS_APPROVALS_POLL_SECS:-3}"
     while kill -0 "$child_pid" 2>/dev/null; do
         sleep "$poll_secs"
-        current="$(approvals_digest)"
-        if [[ "$current" != "$last" ]]; then
-            harvest_approvals && last="$current"
-        fi
+        harvest_if_changed
     done
     harvest_approvals || true
 }

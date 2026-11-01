@@ -1,0 +1,189 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora at the operator's request, 2026-10-28 (operator-approved 2026-10-28). Build pipeline packets from the build-pipeline research report.
+packets:
+- packet_id: release-workflow-saves-the-nix-cache-and-rust-cache-restores-on-tags
+  order: 1916-nxcs
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - ci
+  - github-actions
+  - release
+  estimated_hours: 2
+  title: The release workflow saves the Nix cache it restores, and rust-cache on macOS and Windows restores on tag runs
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md sections 4 and 5.1. release.yml sets cache-nix-action save: false with a primary key on flake.lock only, so every release restores a key no run writes and cold-builds crane deps; the Nix build step takes 61 of the Linux job''s 63 min. swatinem/rust-cache on macOS and Windows saves only on the default branch, so tag runs restore nothing. About 283 GitHub minutes per release. Speeds other work: every release and its verification.'
+  exit_criteria:
+  - 'release.yml''s Nix cache step has save: true and a key on flake.lock plus Cargo.lock; rust-cache on macOS and Windows has a key or save-if that a tag run can hit (for example a shared-key saved from a main-branch run).'
+  - On the second release run with unchanged locks, the Nix Cache step reports a hit and the Nix build step takes under 15 min; today both are false (no hit, 61 min).
+  verifiable_closure: 'gh run view of two consecutive release runs with unchanged locks: the second shows the cache hit and a Nix build step under 15 min.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is changed yet. Left: edit the two cache steps in .github/workflows/release.yml, land, then read the cache step and Nix step timings from two release runs (the first saves, the second must hit) and attach both run ids.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md sections 4 and 5.1 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p0 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: gate-budget-cut-from-phase-attribution
+  order: 1916-gbct
+  status: pending
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - gate
+  estimated_hours: 6
+  title: The slowest non-cargo gate fixtures move to --ci-full or run only for the files they cover, chosen from per-phase timing
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md section 5.3. Ranked p1 although not in the operator''s p1 list: it is the largest gate saving (24 min median) and every landing waits on the gate. It needs the attribution 1915-gtph produces.'
+  exit_criteria:
+  - Median build-check over 10 consecutive gates in .cache/metrics/tillandsias-timing.jsonl is under 600 s; today it is 1,464 s.
+  - Every fixture moved out of --check still runs in --ci-full or in a changed-files scope, and a listing proves none was dropped.
+  verifiable_closure: A query over the timing ledger showing the median of the last 10 build-check rows under 600 s.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Waiting on 1915-gtph. Left once it lands: rank phases by wall time over 5 gates, move or scope the top ones, and measure 10 gates.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md section 5.3 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1915-gtph
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: dev-loop-and-gate-sccache-regimes-are-split
+  order: 1916-dvlp
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - rust
+  estimated_hours: 4
+  title: 'A dev incremental build works through build.sh: the sccache wrapper is used only for the non-incremental gate regime'
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md sections 1 and 5.4. RUSTC_WRAPPER=sccache with CARGO_INCREMENTAL=1 refuses to compile (incremental compilation is prohibited), so build.sh''s wrapper and a dev incremental loop exclude each other, and the two regimes never share hits. Also add [profile.dev] debug = line-tables-only and split-debuginfo = unpacked. mold measured no gain; leave it out unless measured otherwise.'
+  exit_criteria:
+  - CARGO_INCREMENTAL=1 ./build.sh compiles; today rustc exits 1 with 'incremental compilation is prohibited'.
+  - A one-line edit in tillandsias-headless main.rs followed by one named test runs in under 2 s on the measuring host, with the regime recorded; today 2.6 s.
+  - The gate regime (CARGO_INCREMENTAL=0 with sccache) keeps its cache hits; a gate log shows sccache hits as before.
+  verifiable_closure: A fixture that runs build.sh with CARGO_INCREMENTAL=1 and asserts that no sccache wrapper is set and the build exits 0.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is changed yet. Left: make build.sh drop RUSTC_WRAPPER when incremental is on, add the dev profile, write the fixture first, and record before and after timings with their regime.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md sections 1 and 5.4 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: tests-run-only-for-crates-a-change-touches
+  order: 1916-tsel
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - gate
+  - rust
+  estimated_hours: 6
+  title: Gate tests are selected per changed crate (cargo-nextest or a reverse-dependency filter), not all 113 test binaries every time
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md sections 2 and 5.8. Tests cost 127 s per gate across 113 binaries whatever the change. Hypothesis in the report; measure before and after. Release tier (--ci-full) keeps the full set.'
+  exit_criteria:
+  - A change touching only crates/tillandsias-otp runs at most 3 test binaries in ./build.sh --check; today 113.
+  - A change to a crate that others depend on still runs every dependent crate's tests; a fixture with a stub workspace asserts both selections and FAILS on today's code.
+  verifiable_closure: The selection fixture passes in the gate and failed before the change.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: choose nextest filtersets or a cargo metadata reverse-dependency walk, write the fixture, wire it into --check only (not --ci-full).'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md sections 2 and 5.8 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: build-rs-assets-move-to-an-embed-crate
+  order: 1916-embd
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - rust
+  - headless
+  estimated_hours: 6
+  title: Assets embedded by headless build.rs move to a small tillandsias-embed crate, so editing a cheatsheet no longer recompiles headless
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md sections 1 and 5.6. Headless build.rs emits 1,044 rerun-if-changed lines (all of images/, 520 files and 18 MB, plus research, observatorium and skills), so any cheatsheet edit recompiles the 36k-line main.rs crate. Narrowing rerun-if-changed into a separate crate stops that.'
+  exit_criteria:
+  - Editing one file under cheatsheets/ and running cargo build --timings recompiles tillandsias-embed and not tillandsias-headless's own code; today headless recompiles.
+  - tillandsias-headless's build.rs emits fewer than 50 rerun-if-changed lines; today 1,044.
+  verifiable_closure: cargo build -vv after touching one cheatsheet shows no 'Compiling tillandsias-headless' line for the lib or bin source.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: count the rerun-if-changed lines as today''s red, create the embed crate, move the include_* assets behind it, and re-measure.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md sections 1 and 5.6 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p1 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: headless-splits-into-library-crates
+  order: 1916-hspl
+  status: pending
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - build
+  - rust
+  - headless
+  estimated_hours: 24
+  title: tillandsias-headless splits into library crates (vault-bootstrap, accel-probe, tray-linux, vsock-server, web-preview, cloudflare) and a thin binary
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md sections 3 and 5.5. headless is 108k lines in 59 modules; main.rs is 36,256 lines. Days of work, so ranked after the cheaper build wins. Lands best after 1916-embd.'
+  exit_criteria:
+  - A one-line edit in vault_bootstrap recompiles a crate under 15k lines according to cargo build --timings; today 108k.
+  - All three platform trays still build; a darwin and an msys build of the split tree are recorded.
+  verifiable_closure: cargo build --timings output after a one-line vault_bootstrap edit showing the recompiled crate's size.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Nothing is built yet. Left: extract one module (vault_bootstrap) first as a proof, measure, then the rest.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md sections 3 and 5.5 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1916-embd
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p2 from the operator-approved research report (operator-approved 2026-10-28)
+- packet_id: release-reuses-fleet-built-artifacts
+  order: 1916-rlay
+  status: pending
+  kind: feature
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - ci
+  - github-actions
+  - release
+  estimated_hours: 12
+  title: 'Speculative: the release publishes fleet-built, signed artifacts or pulls a shared Nix store, so the Linux job finishes in under 10 min'
+  context: 'operator-approved 2026-10-28. Source: scratch/research/build-pipeline.md section 5.7. A hypothesis in the report: build.sh --release already yields the musl binaries on a fleet host. Needs a decision on a Nix binary cache or signed upload before work; revisit after 1916-nxcs shows what a saved cache alone gives.'
+  exit_criteria:
+  - The Linux release job takes under 10 min, and its artifact checksums equal a local nix build of the same commit; today 63 min.
+  verifiable_closure: gh run view of a release whose Linux job is under 10 min, with matching checksums.
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture or probe named in the exit criteria lands with the fix (1136-n8sh).'
+  next_action: 'Waiting on 1916-nxcs. Left: measure the release after the cache fix; if the Linux job is still over 15 min, write a design note comparing a Nix cache and signed uploads.'
+  provenance: 'operator-approved 2026-10-28; research report scratch/research/build-pipeline.md section 5.7 (macuahuitl, 2026-10-28). Operator 2026-10-28: "Yes to fixing github actions and yes to adding timers and metrics to our build process and runtime, we need observability. I approve the work items from the reports. Triage them accordingly, since some of them moved ahead could speed up other work from the queue."'
+  blocked_by:
+  - 1916-nxcs
+  events:
+  - type: filed
+    ts: '2026-10-28T22:10:00Z'
+    host: macuahuitl-fedora
+    summary: filed p3 from the operator-approved research report (operator-approved 2026-10-28)

@@ -1,0 +1,12 @@
+// Cloudflare settings for {{NAME}}: the web build in ./build/web.
+// Build it first with: flutter build web
+// Then preview it locally with: npx wrangler dev
+// Publishing happens only when you ask for it.
+{
+  "name": "{{SLUG}}",
+  "compatibility_date": "{{COMPAT_DATE}}",
+  "assets": {
+    "directory": "./build/web",
+    "not_found_handling": "single-page-application"
+  }
+}

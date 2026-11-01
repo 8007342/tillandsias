@@ -1,0 +1,9 @@
+# {{NAME}}: a static web app (Flutter web, or any built site) on Google Cloud Run.
+# Buildpacks cannot serve a static site on a generally available path, so this
+# uses a Dockerfile. nginx listens on $PORT (Cloud Run's, 8080 unless set).
+# For Flutter, build first: flutter build web  (output in build/web).
+FROM docker.io/nginxinc/nginx-unprivileged:stable-alpine
+ENV PORT={{PORT}}
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+COPY build/web/ /usr/share/nginx/html/
+EXPOSE {{PORT}}

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-opencode-permission-profile-must-beat-the-checkout-opencode-json
+    event:
+      type: note
+      ts: "2026-10-31T20:35:06Z"
+      agent_id: forge-forge-tillandsias-claude-20261031t203506z
+      host: calmecacpilli
+      summary: |-
+        triage (calmecacpilli 2026-10-31): work/1874-dt48 landed as 0d1854561 on linux-next, but no runnable closure could be re-run on this host, so the row stays ready. Evidence that would close it: closure names a fixture but no script path. To close: run the fixture that resolves forge-launch OpenCode permission (allow + 5 read-only paths) vs host launch (ask), and record its verdict.

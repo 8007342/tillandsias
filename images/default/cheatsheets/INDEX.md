@@ -68,6 +68,14 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - windows-wsl-hop.md                    — you run shell in a WSL guest (`tillandsias`, `tillandsias-build`) from Git Bash… [bundled, partial-verify]
 - yarn.md                               — an existing project chose yarn — otherwise npm/pnpm are usually preferred. [bundled, partial-verify]
 
+## cloud
+
+- cloudflare-workers-static-assets.md — ## Provenance [pull-on-demand: stub]
+- gcp-buildpacks.md                   — deploying to Cloud Run with the "Google Cloud's buildpacks" build [bundled, partial-verify]
+- gcp-cloud-run-deploy-paths.md       — a web app should deploy to Google Cloud Run from its GitHub repo, [bundled, partial-verify]
+- gcp-cloudbuild-yaml.md              — a repo needs its own Cloud Build pipeline (tests before deploy, [bundled, partial-verify]
+- gcp-dockerfile-for-cloud-run.md     — deploying to Cloud Run with the "Dockerfile" build type, or any [bundled, partial-verify]
+
 ## concurrent-git
 
 - agent-handoff.md                   — you're an agent picking up work from `plan/`, you need to claim something, chec… [bundled, partial-verify]
@@ -93,6 +101,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - java.md                          — writing Java in the forge — modern syntax, common stdlib, patterns. [pull-on-demand: stub]
 - javascript.md                    — writing modern JS in the forge — Node scripts, browser code, glue. [bundled, partial-verify]
 - json.md                          — producing or consuming JSON in the forge — config files, API payloads, jq targe… [bundled, partial-verify]
+- lua.md [DRAFT]                   — ## Provenance [pull-on-demand: stub]
 - markdown.md                      — writing READMEs, cheatsheets, OpenSpec docs, anything in this repo. [pull-on-demand: stub]
 - python.md                        — writing Python in the forge — syntax, idioms, packaging. [bundled, partial-verify]
 - rust.md                          — writing Rust in the forge — syntax, ownership idioms, common stdlib. [bundled, partial-verify]

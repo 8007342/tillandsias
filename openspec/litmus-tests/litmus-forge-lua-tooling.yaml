@@ -1,0 +1,52 @@
+# @trace spec:default-image
+# @trace order:1864-qymj
+#
+# Order 1864-qymj: agents fell back to ad-hoc python3 heredocs for multi-site
+# edits and conflict resolution because the forge had liblua but no lua
+# binary. This pins the interpreter (with lfs and lpeg), its line in the
+# startup context's Present list, and the two helpers: lua-edit refuses and
+# changes nothing unless every OLD occurs exactly once; lua-conflict resolves
+# a hunk as ours, theirs or both and refuses a file with no hunk.
+#
+# REGIME: post-build, because it runs inside the built forge image. Without
+# podman or the image the suite exits 3 with `could-not-run:forge-lua:<reason>`,
+# a named refusal, never a green.
+name: litmus:forge-lua-tooling
+spec: default-image
+phase: post-build
+description: >
+  Pin 1864-qymj: inside the forge image lua 5.4 is on PATH with lfs and lpeg,
+  the startup context names it, lua-edit is all-or-nothing on exactly-once
+  matches, and lua-conflict resolves ours, theirs and both.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-forge-lua-tooling.sh
+  - localhost/tillandsias-forge:v<VERSION> is built
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-forge-lua-tooling.sh && test -x scripts/test-forge-lua-tooling.sh && echo 'ok: forge-lua-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-lua-suite-parses"
+
+  - step: "interpreter, startup context, lua-edit and lua-conflict behave inside the forge"
+    command: "bash scripts/test-forge-lua-tooling.sh"
+    timeout_ms: 180000
+    expected_behavior: "PASS: forge lua tooling (interpreter, context, lua-edit, lua-conflict)"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "PASS: forge lua tooling (interpreter, context, lua-edit, lua-conflict)"
+  log_fields:
+    spec: default-image
+    test: forge-lua-tooling
+    artifact: images/default/cli/lua-edit
+
+rollback:
+  on_failure: >
+    lua is missing from Containerfile.base, the helpers are not linked into
+    /usr/local/bin, or lib-common.sh's Present list dropped lua.
+  command: "grep -n 'lua' images/default/Containerfile.base images/default/Containerfile"

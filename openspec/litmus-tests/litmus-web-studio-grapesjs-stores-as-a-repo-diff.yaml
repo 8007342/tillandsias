@@ -1,0 +1,56 @@
+# @trace spec:local-web-preview
+# @trace order:1861-nmpp (spec: openspec/changes/web-studio-lanes, not yet archived)
+#
+# Order 1861-nmpp slice 1: the GrapesJS studio image. Open-source core only
+# (BSD-3-Clause), vendored at build time from the npm tarball and verified
+# against its pinned sha512, so the studio needs no network at run time. Bound
+# under local-web-preview until the web-studio-lane spec is archived, the same
+# way the imagegen studio litmus sits under accel-capability-probe.
+#
+# The fixture builds images/web-studio-grapesjs, runs it with --network none on
+# a throwaway git checkout, and asserts: the vendored core is served, the editor
+# page names no external URL, /load returns the project's page, a /store lands
+# in index.html and styles.css as a git diff, egress is blocked, and the REAL
+# editor in headless chromium (a pod with no network) stores its own edit.
+#
+# REGIME: post-build. A build that cannot fetch the pinned tarball exits 3
+# (`could-not-run:web-studio:tarball-fetch-failed`), never a green.
+name: litmus:web-studio-grapesjs-stores-as-a-repo-diff
+spec: local-web-preview
+phase: post-build
+description: >
+  Pin 1861-nmpp slice 1: the GrapesJS studio serves a vendored, hash-pinned
+  core with no CDN or egress, and an edit made in the editor reaches the
+  project checkout as a git diff.
+severity: high
+size: long
+
+preconditions:
+  - workspace contains images/web-studio-grapesjs and scripts/test-web-studio-grapesjs.sh
+  - podman can build images; localhost/tillandsias-chromium-framework:v<VERSION> for the browser arm
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-web-studio-grapesjs.sh && test -x scripts/test-web-studio-grapesjs.sh && echo 'ok: web-studio-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: web-studio-suite-parses"
+
+  - step: "vendored core, no egress, and an editor edit lands as a repo diff"
+    command: "bash scripts/test-web-studio-grapesjs.sh"
+    timeout_ms: 900000
+    expected_behavior: "PASS: GrapesJS studio stores an edit as a repo diff with no egress"
+
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "PASS: GrapesJS studio stores an edit as a repo diff with no egress"
+  log_fields:
+    spec: local-web-preview
+    test: web-studio-grapesjs-stores-as-a-repo-diff
+    artifact: images/web-studio-grapesjs/server.mjs
+
+rollback:
+  on_failure: >
+    The studio image no longer vendors the pinned core, its endpoint stopped
+    writing the checkout, or the editor page reaches an external URL.
+  command: "grep -n 'GRAPESJS_' images/web-studio-grapesjs/Containerfile"

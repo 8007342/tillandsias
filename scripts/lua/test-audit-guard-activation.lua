@@ -1,4 +1,4 @@
--- @trace order:1570-25iq, order:599-4wzr, order:1087-h2z9, order:831-ezea
+-- @trace order:1577-ct29, order:1570-25iq, order:599-4wzr, order:1087-h2z9, order:831-ezea
 -- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-audit-guard-activation.lua — the auditor that proves every guard is
@@ -21,6 +21,10 @@
 --              skills/ tree is active for the port (which never follows
 --              links) and for the pinned .sh (find -L, which does).
 --   5 EMPTY    831-ezea: a tree with no check-*.sh is refused, never ok.
+--   6 LUA      1577-ct29: an unreferenced scripts/lua/check-x.lua is ORPHAN and
+--              refused; a scripts/lua/check-y.lua named by build.sh is active.
+--              PARITY (arm 1) compares the .sh guards only, since the pinned
+--              .sh never enumerated Lua deciders.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-audit-guard-activation.lua [-- --plan <bin>]
 
@@ -61,7 +65,7 @@ local function status_set(s)
     for _, l in ipairs(text.lines(s)) do
         local k, n = l:match("^(active):%s+(%S+)")
         if not k then k, n = l:match("^(ORPHAN):%s+(%S+)") end
-        if k then t[#t + 1] = k .. " " .. n end
+        if k and not n:find("/", 1, true) then t[#t + 1] = k .. " " .. n end
     end
     table.sort(t)
     return table.concat(t, "\n"), #t
@@ -97,8 +101,8 @@ if PINNED then
     local luav = line_of(lua_out, [[^(ok|violation):guard-activation:]]) or ""
     local sh_counts = shv:gsub("^guard%-activation: ", "")
     local lua_counts = luav:gsub("^[a-z]+:guard%-activation:", "")
-    check("PARITY: same status for each guard and same counts as the pinned .sh",
-        n >= 10 and sh_set == lua_set and sh_counts == lua_counts,
+    check("PARITY: same status for each .sh guard as the pinned .sh",
+        n >= 10 and sh_set == lua_set,
         "guards=" .. n .. " sets-equal=" .. tostring(sh_set == lua_set) .. " .sh=[" .. shv .. "] port=[" .. luav .. "]")
 else
     check("PARITY (skip: the pre-port .sh is unreachable in this clone's history)", true, "")
@@ -161,6 +165,25 @@ run({ "git", "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=
 rc, o = port_in(ed)
 check("EMPTY: no check-*.sh is refused as unavailable, never reported ok",
     rc == 1 and o:find("verdict=unavailable:no-guards-enumerated", 1, true) ~= nil, "rc=" .. rc .. " out=[" .. o .. "]")
+
+-- ── 6. Lua deciders are in the population (1577-ct29) ──────────────────────
+local lrel = REL .. "/lua"
+for _, sub in ipairs({ "", "/scripts", "/scripts/lua" }) do fs.mkdir(lrel .. sub) end
+fs.write(lrel .. "/scripts/check-wired.sh", "#!/usr/bin/env bash\necho ok\n")
+fs.write(lrel .. "/scripts/lua/check-wired-lua.lua", "verdict.ok('x', 1)\n")
+fs.write(lrel .. "/scripts/lua/check-orphan-lua.lua", "verdict.ok('x', 1)\n")
+fs.write(lrel .. "/build.sh", "#!/usr/bin/env bash\nbash scripts/check-wired.sh\nSTEP_LUA=scripts/lua/check-wired-lua.lua\n")
+fs.write(lrel .. "/.gitignore", ".cache/\n")
+local ld = ROOT .. "/" .. lrel
+run({ "git", "init", "-q" }, { cwd = ld })
+run({ "git", "-c", "user.email=f@f", "-c", "user.name=f", "add", "-A" }, { cwd = ld })
+run({ "git", "-c", "user.email=f@f", "-c", "user.name=f", "-c", "commit.gpgsign=false", "commit", "-qm", "seed" }, { cwd = ld })
+rc, o = port_in(ld)
+check("LUA: an unreferenced scripts/lua/check-*.lua is ORPHAN and refused; a referenced one is active",
+    rc == 1 and has(o, "orphans: lua/check-orphan-lua.lua")
+        and line_of(o, [[^active:\s+lua/check-wired-lua\.lua]]) ~= nil
+        and has(o, "violation:guard-activation:population=3 total=3 active=2 orphan=1 verdict=orphans-found"),
+    "rc=" .. rc .. " out=[" .. o .. "]")
 
 run({ "rm", "-rf", W })
 

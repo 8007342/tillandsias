@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-instrument-can-see-a-comment-that-admits-its-own-missing-evidence-so-a-constant-with-an-honest-unverified-rationale-shaped-the-product-for-seven-weeks-while-every-wiring-check-cleared-it
+    field: status
+    value: completed
+    ts: "2026-10-31T19:34:16Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: no-instrument-can-see-a-comment-that-admits-its-own-missing-evidence-so-a-constant-with-an-honest-unverified-rationale-shaped-the-product-for-seven-weeks-while-every-wiring-check-cleared-it
+    event:
+      type: completed
+      ts: "2026-10-31T19:34:16Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 1cfee874b (landed work/1349-tdpg, ancestor of origin/linux-next); census-admitted-missing-evidence.sh -> ok:admitted-missing-evidence:7 hits, oldest 93d; test-census-admitted-missing-evidence.sh -> ok:...-fixture:8
+  - packet_id: no-instrument-can-see-a-comment-that-admits-its-own-missing-evidence-so-a-constant-with-an-honest-unverified-rationale-shaped-the-product-for-seven-weeks-while-every-wiring-check-cleared-it
+    event:
+      type: note
+      ts: "2026-10-31T19:34:16Z"
+      host: calmecacpilli
+      summary: |-
+        stale ready row; its own verifiable_closure re-run green on calmecacpilli 2026-10-31

@@ -14,7 +14,7 @@ description: >
   of EVERY clone-only forge launch. The git image now ships
   ensure-mirror-head (repair at init/seed/fast-forward, preferring the
   launcher-declared host branch via TILLANDSIAS_PROJECT_DEFAULT_BRANCH), and
-  the launcher blocks on wait_for_git_mirror_ready before starting a forge.
+  the launcher starts a forge only after the mirror's ready event (1922-gate).
   plan/issues/mirror-bare-repo-unborn-head-breaks-all-clones-2026-07-20.md
   Order 501 extends this HEAD-steering pin to the STICKY-HEAD hazard: the
   mirror's HEAD is set only volume-fresh, so a persisted volume can hand a
@@ -34,7 +34,7 @@ critical_path:
     expected_behavior: "ok: repair-helper-wired"
 
   - step: "the launcher passes the host branch and gates on mirror readiness"
-    command: "grep -q 'TILLANDSIAS_PROJECT_DEFAULT_BRANCH' crates/tillandsias-headless/src/main.rs && grep -q 'wait_for_git_mirror_ready' crates/tillandsias-headless/src/main.rs && echo 'ok: launcher-branch-and-gate'"
+    command: "grep -q 'TILLANDSIAS_PROJECT_DEFAULT_BRANCH' crates/tillandsias-headless/src/main.rs && grep -q 'gate_forge_launch(' crates/tillandsias-headless/src/main.rs && echo 'ok: launcher-branch-and-gate'"
     timeout_ms: 5000
     expected_behavior: "ok: launcher-branch-and-gate"
 

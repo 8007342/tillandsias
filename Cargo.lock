@@ -3317,7 +3317,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "56.10.20"
+version = "56.11.1"
 dependencies = [
  "async-trait",
  "dirs",
@@ -3337,6 +3337,10 @@ dependencies = [
  "toml 0.8.2",
  "tracing",
 ]
+
+[[package]]
+name = "tillandsias-embed"
+version = "56.10.20"
 
 [[package]]
 name = "tillandsias-exec"
@@ -3360,7 +3364,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "56.10.20"
+version = "56.11.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -3383,6 +3387,7 @@ dependencies = [
  "tillandsias-browser-mcp",
  "tillandsias-control-wire",
  "tillandsias-core",
+ "tillandsias-embed",
  "tillandsias-host-shell",
  "tillandsias-logging",
  "tillandsias-metrics",
@@ -3466,6 +3471,7 @@ dependencies = [
 name = "tillandsias-macos-tray"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "block2",
  "futures-util",
  "libc",
@@ -3554,7 +3560,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "56.10.20"
+version = "56.11.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3625,7 +3631,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "56.10.20"
+version = "56.11.1"
 dependencies = [
  "dirs",
  "notify",

@@ -871,6 +871,82 @@ impl AsyncWrite for ControlWireStream {
     }
 }
 
+/// Order 1925-cxch: deliver the Vault credentials on the guest's FIRST phase
+/// answer, which is the guest's own "control wire is listening" signal.
+///
+/// One exchange right after `vz.start()` was too early: the guest's listener
+/// was not up, the connect was reset, nothing was delivered, and a warm boot's
+/// Vault stayed sealed until Ready timed out (v56.10.31.2 macOS smoke). The
+/// Ready wait already probes the guest's phase on its own schedule; the first
+/// probe that gets an answer proves the listener is up, so the exchange runs
+/// then. No new cadence is added. A failed exchange is tried again on the next
+/// answer, so it rides the same existing schedule.
+pub(crate) struct DeliverOnFirstAnswer {
+    done: std::cell::Cell<bool>,
+}
+
+impl DeliverOnFirstAnswer {
+    pub(crate) fn new() -> Self {
+        Self {
+            done: std::cell::Cell::new(false),
+        }
+    }
+
+    pub(crate) async fn observe<T, E, X, XF>(&self, answer: &Result<T, E>, exchange: X)
+    where
+        X: FnOnce() -> XF,
+        XF: std::future::Future<Output = bool>,
+    {
+        if answer.is_ok() && !self.done.get() && exchange().await {
+            self.done.set(true);
+        }
+    }
+}
+
+/// Order 1925-cxch: run one CLI session's credential exchange over a fresh
+/// control-wire connection. Loud: a failure is printed, and the result says
+/// whether the exchange completed so the boot delivery can try again on the
+/// guest's next phase answer.
+async fn cli_credential_exchange(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    session: &crate::installation_uuid::CliCredentialExchange,
+    when: &str,
+) -> bool {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream = match open_control_wire_stream(
+        vz,
+        CONTROL_WIRE_VSOCK_PORT,
+        std::time::Duration::from_secs(30),
+    )
+    .await
+    {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[tillandsias-tray] credential exchange ({when}): connect: {e}");
+            return false;
+        }
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 3,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(e) = client.handshake().await {
+        eprintln!("[tillandsias-tray] credential exchange ({when}): handshake: {e}");
+        return false;
+    }
+    match session.exchange(&mut client).await {
+        Ok(()) => true,
+        Err(e) => {
+            eprintln!("[tillandsias-tray] credential exchange ({when}): {e}");
+            false
+        }
+    }
+}
+
 async fn open_control_wire_stream(
     vz: &tillandsias_vm_layer::vz::VzRuntime,
     port: u32,
@@ -1715,6 +1791,8 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[exec-guest] waiting for the guest service to answer…");
         // ORDER 1751-ipuw: Ready now waits for Vault to be unsealed, and
         // exec-guest is the tool for diagnosing a guest whose Vault is NOT
@@ -1723,7 +1801,15 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
                 let probe = probe_phase_secure_or_plain(&vz, t);
-                async move { probe.await.map(exec_guest_ready_phase) }
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || cli_credential_exchange(vzr, credentials, "boot"))
+                        .await;
+                    answer.map(exec_guest_ready_phase)
+                }
             })
             .await
         {
@@ -1780,6 +1866,7 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
                 }
             }
         };
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
         report_exec(result)
     })
@@ -1980,16 +2067,29 @@ pub fn transport_conformance_main() -> i32 {
     };
 
     // Boot + readiness on the main thread (helpers pump the runloop).
+    let credentials = crate::installation_uuid::CliCredentialExchange::new();
     let booted = rt.block_on(async {
         eprintln!("[transport-conformance] starting VM…");
         if let Err(e) = vz.start().await {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return false;
         }
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[transport-conformance] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || {
+                            cli_credential_exchange(vzr, credentials, "boot")
+                        })
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -2044,6 +2144,7 @@ pub fn transport_conformance_main() -> i32 {
     };
 
     print!("{}", render_report(&results));
+    rt.block_on(cli_credential_exchange(&vz, &credentials, "before stop"));
     let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
     if all_passed(&results) { 0 } else { 1 }
 }
@@ -2100,10 +2201,26 @@ pub fn github_login_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        // Order 1925-ghlg: deliver at boot like every other CLI mode. Ready
+        // is held until Vault unseals, so without this a warm boot never got
+        // here (v56.11.1.1 smoke: timeout after 300 s). 701-g98y still holds
+        // for the END of this command: after the login it only captures, so
+        // the Keychain's older share never overwrites the new epoch.
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[github-login] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || cli_credential_exchange(vzr, credentials, "boot"))
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -2394,9 +2511,22 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
 
             eprintln!("[diagnose] starting VM for the metrics read…");
             vz.start().await.map_err(|e| format!("start: {e}"))?;
+            let credentials = crate::installation_uuid::CliCredentialExchange::new();
+            let first_answer = DeliverOnFirstAnswer::new();
             let result = async {
                 vz.wait_phase_ready(Duration::from_secs(300), |t| {
-                    probe_phase_secure_or_plain(&vz, t)
+                    let probe = probe_phase_secure_or_plain(&vz, t);
+                    let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                    let (first_answer, credentials) = (&first_answer, &credentials);
+                    async move {
+                        let answer = probe.await;
+                        first_answer
+                            .observe(&answer, || {
+                                cli_credential_exchange(vzr, credentials, "boot")
+                            })
+                            .await;
+                        answer
+                    }
                 })
                 .await
                 .map_err(|e| format!("wait_phase_ready: {e}"))?;
@@ -2408,6 +2538,7 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
             }
             .await;
             // Stop the VM whatever happened: this verb owns the VM it booted.
+            cli_credential_exchange(&vz, &credentials, "before stop").await;
             let _ = vz.stop(Duration::from_secs(10)).await;
             result
         });
@@ -2479,10 +2610,23 @@ pub fn list_cloud_projects_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[list-cloud-projects] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || {
+                            cli_credential_exchange(vzr, credentials, "boot")
+                        })
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -2520,6 +2664,7 @@ pub fn list_cloud_projects_main() -> i32 {
             },
         )
         .await;
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
@@ -2538,80 +2683,77 @@ pub fn list_cloud_projects_main() -> i32 {
     })
 }
 
-/// `--opencode <path> [--prompt <text>]`: boot the VM and run the in-guest
-/// `tillandsias-headless --opencode <path>` over the control wire, streaming
-/// PTY output to the host terminal in real-time. When `--prompt` is given the
-/// forge runs non-interactively (one shot + exit); without it the session is
-/// open-ended until the user exits.
+/// `--cloud <owner>/<repo> --opencode [--prompt <text>]`: boot the VM and run
+/// the in-guest `tillandsias-headless --cloud <owner>/<repo> --opencode` over
+/// the control wire, streaming PTY output to the host terminal in real-time.
+/// When `--prompt` is given the forge runs non-interactively (one shot +
+/// exit); without it the session is open-ended until the user exits.
 ///
-/// @trace plan/issues/smoke-curl-install-e2e-macos-v0.3.260626.4-2026-06-26.md
-/// Guest-side root where the host's `~/src` arrives via the `home-src`
-/// virtiofs share (vz.rs cloud-init fstab entry).
-const GUEST_SRC_ROOT: &str = "/home/forge/src";
-
-/// Order 331: translate an operator-supplied project path into the
-/// guest-visible form, BEFORE booting the VM.
+/// Order 1925-mcld: 776-jcf3 made the cloud the only launch, and the guest
+/// refuses a local checkout. This CLI kept sending one (it accepted only a
+/// `~/src` path), so the macOS forge lane could not launch at all
+/// (v56.10.30.1 smoke). The menu was unaffected: it already launches
+/// `--cloud` through `tillandsias_host_shell::pty::launch_spec`.
 ///
-/// Pure over already-absolute host paths so it is unit-pinnable:
-/// - a path already under `/home/forge/src` passes through verbatim
-///   (the operator supplied the guest form);
-/// - a path under `<host_home>/src/…` rewrites to `/home/forge/src/…`
-///   (only `~/src` is shared into the guest, so only it can translate);
-/// - anything else is rejected with a message naming both accepted forms —
-///   failing on the host in milliseconds instead of after a ~60s boot with
-///   the guest's opaque "Project not found" (live repro 2026-07-13).
-pub fn translate_project_path_for_guest(abs_path: &str, host_home: &str) -> Result<String, String> {
-    let guest_root = std::path::Path::new(GUEST_SRC_ROOT);
-    let p = std::path::Path::new(abs_path);
-    if p.starts_with(guest_root) {
-        return Ok(abs_path.to_string());
-    }
-    let host_src = std::path::Path::new(host_home).join("src");
-    if let Ok(rest) = p.strip_prefix(&host_src) {
-        if rest.as_os_str().is_empty() {
-            return Err(format!(
-                "--opencode needs a project INSIDE {}, not the src root itself",
-                host_src.display()
-            ));
-        }
-        return Ok(guest_root.join(rest).to_string_lossy().into_owned());
-    }
-    Err(format!(
-        "--opencode project path must be under {} (host form) or {} (guest form); got: {}. \
-         Only ~/src is shared into the guest, so projects elsewhere are not visible to the forge.",
-        host_src.display(),
-        GUEST_SRC_ROOT,
-        abs_path
-    ))
-}
+/// @trace plan/issues/smoke-e2e-findings-v56.10.30.1-2026-10-31-macos-macbookair.md
+const LOCAL_CHECKOUT_REFUSAL: &str = "launching from a local checkout is no longer supported: \
+     Tillandsias does not mount or read a host checkout. Launch it from the cloud instead: \
+     tillandsias-tray --cloud <owner>/<repo> --opencode";
 
-/// Host-side wrapper for [`translate_project_path_for_guest`]: resolves
-/// relative paths (including the bare-`.` default) against the current
-/// directory via `canonicalize` when the path exists on the host, then
-/// applies the pure translation.
-fn resolve_project_path_pre_boot(raw: &str) -> Result<String, String> {
-    let host_home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    // Guest-absolute paths don't exist on the host; skip canonicalize.
-    if raw.starts_with(GUEST_SRC_ROOT) {
-        return translate_project_path_for_guest(raw, &host_home);
-    }
-    let abs = std::fs::canonicalize(raw)
-        .map(|p| p.to_string_lossy().into_owned())
-        .unwrap_or_else(|_| raw.to_string());
-    translate_project_path_for_guest(&abs, &host_home)
-}
-
-pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
-    use tillandsias_vm_layer::VmRuntime;
-
-    // Order 331: translate/validate on the host BEFORE any VM work.
-    let path = match resolve_project_path_pre_boot(&path) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("{{\"error\":\"{e}\"}}");
-            return 2;
-        }
+/// Read the forge target from the tray's argv, BEFORE any VM work: the
+/// `<owner>/<repo>` after `--cloud`, checked with the same validator the menu
+/// launch uses. A path after `--opencode` (the retired local form) is refused
+/// with the guest's own remedy, in milliseconds instead of after a boot.
+pub fn opencode_cloud_target(args: &[String]) -> Result<String, String> {
+    let Some(cloud) = args
+        .iter()
+        .position(|a| a == "--cloud")
+        .and_then(|i| args.get(i + 1))
+        .filter(|v| !v.starts_with("--"))
+    else {
+        return Err(LOCAL_CHECKOUT_REFUSAL.to_string());
     };
+    let (owner, repo) = cloud
+        .split_once('/')
+        .filter(|(o, r)| !o.is_empty() && !r.is_empty() && !r.contains('/'))
+        .ok_or_else(|| format!("--cloud needs <owner>/<repo>; got: {cloud}"))?;
+    tillandsias_host_shell::pty::validate_project_name(cloud)
+        .map_err(|e| format!("--cloud {owner}/{repo} refused: {e}"))?;
+    Ok(cloud.clone())
+}
+
+/// The guest shell command for a cloud forge launch. Pure, so a test pins
+/// that the guest receives `--cloud` and never a path.
+pub fn opencode_guest_command(cloud: &str, prompt: Option<&str>) -> String {
+    let quote = |v: &str| -> String {
+        let escaped: String = v
+            .chars()
+            .flat_map(|c| {
+                if c == '\'' {
+                    vec!['\'', '\\', '\'', '\'']
+                } else {
+                    vec![c]
+                }
+            })
+            .collect();
+        format!("'{escaped}'")
+    };
+    let mut cmd = format!(
+        "export HOME=/root; \
+         export XDG_RUNTIME_DIR=/run/user/0; \
+         export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
+         install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
+         exec /usr/local/bin/tillandsias-headless --cloud {} --opencode",
+        quote(cloud)
+    );
+    if let Some(p) = prompt {
+        cmd.push_str(&format!(" --prompt {}", quote(p)));
+    }
+    cmd
+}
+
+pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
 
     if let Err(err) = stage_embedded_guest_binary() {
         eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
@@ -2662,10 +2804,23 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        let first_answer = DeliverOnFirstAnswer::new();
         eprintln!("[opencode] waiting for VM phase Ready…");
         if let Err(e) = vz
             .wait_phase_ready(Duration::from_secs(300), |t| {
-                probe_phase_secure_or_plain(&vz, t)
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || {
+                            cli_credential_exchange(vzr, credentials, "boot")
+                        })
+                        .await;
+                    answer
+                }
             })
             .await
         {
@@ -2686,36 +2841,7 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             };
         eprintln!("[opencode] control wire ready; launching forge in guest…");
 
-        // Build the shell command for the guest: set required env vars and
-        // exec the headless binary with --opencode and optional --prompt.
-        // TILLANDSIAS_FORGE_SRC_ISOLATION=clone (order 342): the macOS lane
-        // shares the operator's real checkout into the guest over virtiofs,
-        // so the forge MUST work on a guest-owned clone — a blocked in-forge
-        // cycle once git-cleaned sibling work through this share
-        // (plan/issues/forge-shared-checkout-destructive-clean-2026-07-13.md).
-        let mut headless_cmd = format!(
-            "export HOME=/root; \
-             export XDG_RUNTIME_DIR=/run/user/0; \
-             export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-             export TILLANDSIAS_FORGE_SRC_ISOLATION=clone; \
-             install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-             exec /usr/local/bin/tillandsias-headless --opencode {path}"
-        );
-        if let Some(ref p) = prompt {
-            // Shell-quote the prompt so spaces/special chars are safe.
-            let escaped: String = p
-                .chars()
-                .flat_map(|c| {
-                    if c == '\'' {
-                        vec!['\'', '\\', '\'', '\'']
-                    } else {
-                        vec![c]
-                    }
-                })
-                .collect();
-            headless_cmd.push_str(&format!(" --prompt '{escaped}'"));
-        }
-
+        let headless_cmd = opencode_guest_command(&cloud, prompt.as_deref());
         let argv: &[&str] = &["/bin/bash", "-lc", &headless_cmd];
         let result = exec_over_stream_with_input_streaming(stream, argv, &[], |chunk| {
             use std::io::Write;
@@ -2723,6 +2849,7 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             let _ = std::io::stdout().flush();
         })
         .await;
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
@@ -3110,8 +3237,8 @@ mod tests {
     }
 
     use super::parse_aarch64_qcow2_sha;
-    use super::translate_project_path_for_guest;
     use super::{METRICS_STATUS_NO_CAPABILITY, METRICS_STATUS_NO_HANDLE};
+    use super::{opencode_cloud_target, opencode_guest_command};
 
     /// `parse_aarch64_qcow2_sha` reads the actual manifest.toml format
     /// the Fedora pivot emits (`"aarch64.qcow2" = "<sha>"` inside
@@ -3625,33 +3752,159 @@ mod tests {
         );
     }
 
-    /// Order 331 pin: the pure host→guest project-path translation.
+    /// Order 1925-cxch: a guest that refuses connects until its control wire
+    /// listens gets the delivery on its first answer, exactly once, and a failed
+    /// exchange is tried again on the next answer. With the old one-shot boot
+    /// exchange the delivery happened before the guest answered and was lost.
+    #[tokio::test]
+    async fn the_boot_delivery_waits_for_the_guests_first_answer() {
+        use std::cell::{Cell, RefCell};
+        let first = super::DeliverOnFirstAnswer::new();
+        let calls = Cell::new(0u32);
+        let log = RefCell::new(Vec::new());
+        // The guest refuses twice, then answers on every probe.
+        let answers: [Result<u8, &str>; 5] = [
+            Err("reset by peer"),
+            Err("reset by peer"),
+            Ok(1),
+            Ok(1),
+            Ok(2),
+        ];
+        for (i, answer) in answers.iter().enumerate() {
+            first
+                .observe(answer, || async {
+                    calls.set(calls.get() + 1);
+                    log.borrow_mut().push(i);
+                    true
+                })
+                .await;
+        }
+        assert_eq!(calls.get(), 1, "delivered exactly once");
+        assert_eq!(
+            *log.borrow(),
+            vec![2],
+            "on the first answer, never before it"
+        );
+
+        // A failed exchange rides the next answer.
+        let first = super::DeliverOnFirstAnswer::new();
+        let attempts = RefCell::new(Vec::new());
+        for (i, answer) in [Ok::<u8, &str>(1), Ok(1), Ok(1)].iter().enumerate() {
+            first
+                .observe(answer, || async {
+                    attempts.borrow_mut().push(i);
+                    i == 1
+                })
+                .await;
+        }
+        assert_eq!(
+            *attempts.borrow(),
+            vec![0, 1],
+            "retried on the next answer, then done"
+        );
+    }
+
+    /// Order 1925-cxch: every CLI mode that boots the VM also runs the Vault
+    /// credential exchange, so none strands a Vault the way `--opencode` and
+    /// `--exec-guest` did on v56.10.31.1. All six deliver at boot;
+    /// `github_login_main` alone only captures before stop (701-g98y), because
+    /// delivering the Keychain's older share then would overwrite the epoch
+    /// it just created.
     #[test]
-    fn project_path_translation_rules() {
-        let t = |p: &str| translate_project_path_for_guest(p, "/Users/op");
-        // host ~/src/<name> → guest path (the 2026-07-13 live repro shape)
+    fn every_cli_boot_runs_the_credential_exchange() {
+        // source-pin-ok: the property is "no boot path omits the call", which only the source shows
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let source =
+            std::fs::read_to_string(std::path::Path::new(&manifest).join("src/diagnose.rs"))
+                .expect("read diagnose.rs");
+        let body = source
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("non-test half");
+        let mut checked = 0;
+        for chunk in body.split("\npub fn ").skip(1) {
+            let name = chunk.split('(').next().unwrap_or_default();
+            let end = chunk.find("\n}\n").unwrap_or(chunk.len());
+            let func = &chunk[..end];
+            if !func.contains("vz.start().await") {
+                continue;
+            }
+            checked += 1;
+            // Every boot delivers on the guest's first answer: Ready is held
+            // until Vault unseals (1925-ghlg: github-login was the exception
+            // and could not pass a warm boot).
+            assert!(
+                func.contains("cli_credential_exchange(vzr, credentials, \"boot\")")
+                    && func.contains("DeliverOnFirstAnswer::new()"),
+                "{name} boots the VM without delivering the Vault credentials on the first answer"
+            );
+            // Before stop: github-login captures only (701-g98y); every other
+            // mode runs the session's collect.
+            if name == "github_login_main" {
+                assert!(
+                    func.contains("capture_vault_handover(&mut client)"),
+                    "github_login_main must still capture the new epoch's handover"
+                );
+            } else {
+                assert!(
+                    func.contains("cli_credential_exchange(&vz, &credentials, \"before stop\")"),
+                    "{name} stops the VM without collecting the Vault handover"
+                );
+            }
+        }
         assert_eq!(
-            t("/Users/op/src/tillandsias").unwrap(),
-            "/home/forge/src/tillandsias"
+            checked, 6,
+            "the six VM-booting CLI modes were found and checked"
         );
-        // nested subpath translates too
-        assert_eq!(
-            t("/Users/op/src/tillandsias/crates").unwrap(),
-            "/home/forge/src/tillandsias/crates"
-        );
-        // guest-absolute passes through verbatim
-        assert_eq!(
-            t("/home/forge/src/tillandsias").unwrap(),
-            "/home/forge/src/tillandsias"
-        );
-        // the src root itself is not a project
-        assert!(t("/Users/op/src").unwrap_err().contains("INSIDE"));
-        // outside ~/src fails fast with both accepted forms named
-        let err = t("/tmp/elsewhere").unwrap_err();
+    }
+
+    /// Order 1925-mcld: a CLI cloud launch passes validation and reaches the
+    /// guest as `--cloud`; the retired local-path form is refused with the
+    /// guest's remedy. On v56.10.30.1 the tray accepted only a `~/src` path,
+    /// which the guest then refused, so no CLI forge launch could succeed.
+    #[test]
+    fn cli_cloud_launch_reaches_the_guest_as_cloud() {
+        let argv = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let target = opencode_cloud_target(&argv(&[
+            "tillandsias-tray",
+            "--cloud",
+            "8007342/tillandsias",
+            "--opencode",
+            "--prompt",
+            "hi",
+        ]))
+        .expect("a cloud launch passes validation");
+        assert_eq!(target, "8007342/tillandsias");
+        let cmd = opencode_guest_command(&target, Some("it's"));
         assert!(
-            err.contains("/Users/op/src") && err.contains("/home/forge/src"),
-            "{err}"
+            cmd.contains("tillandsias-headless --cloud '8007342/tillandsias' --opencode"),
+            "{cmd}"
         );
+        assert!(cmd.contains("--prompt 'it'\\''s'"), "{cmd}");
+        assert!(
+            !cmd.contains("/home/forge/src"),
+            "no path reaches the guest: {cmd}"
+        );
+
+        // The retired local form is refused with the guest's own remedy.
+        for local in [
+            &[
+                "tillandsias-tray",
+                "--opencode",
+                "/home/forge/src/tillandsias",
+            ][..],
+            &["tillandsias-tray", "--opencode", "8007342/tillandsias"][..],
+        ] {
+            let err = opencode_cloud_target(&argv(local)).unwrap_err();
+            assert!(err.contains("--cloud <owner>/<repo> --opencode"), "{err}");
+        }
+        // A malformed or unsafe cloud name is refused before any boot.
+        for bad in ["noslash", "a/b/c", "/repo", "owner/", "-x/y"] {
+            assert!(
+                opencode_cloud_target(&argv(&["t", "--cloud", bad, "--opencode"])).is_err(),
+                "{bad} must be refused"
+            );
+        }
     }
 
     // ────────────────────────────────────────────────────────────────

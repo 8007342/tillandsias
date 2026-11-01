@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux-yoga-claude-20261027t070947z at operator request relayed by macuahuitl-fedora, 2026-10-27.
+packets:
+- packet_id: project-glossary-gives-each-term-one-meaning-and-flags-retired-synonyms
+  order: 1908-9q4c
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - methodology
+  - docs
+  - vocabulary
+  estimated_hours: 8
+  title: A project glossary gives each term one meaning, and new lines using a retired synonym are flagged
+  context: 'Operator 2026-10-27, relayed by macuahuitl-fedora ("dictionary nomenclature"). Words such as lane, land, cut, gate, stamp, fragment, row, packet, order, claim, forge, enclave, mirror, relay, tier and regime carry several senses across methodology.yaml, methodology/, openspec/specs and skills/. Steps: (1) audit every sense with where it is used; (2) one canonical glossary in methodology/, answerable through methodology_ask, one meaning per term, superseded senses mapped to replacements; (3) methodology.yaml, forge-quick-intro and join-the-fleet tell agents to use glossary terms, and an instant check flags retired synonyms in CHANGED lines only, never a repo-wide rewrite. Idea credit: the vocabulary audit in fear-ai/codess, which carries no licence, so ideas only and no copied text. The top 10 conflicting terms go to the coordinator before step 3.'
+  exit_criteria:
+  - 'An audit note under plan/issues/ lists each audited term with every sense found and at least one file:line per sense.'
+  - 'methodology/glossary.yaml defines each term once, maps every retired synonym to its replacement, and methodology_ask "what does lane mean" answers from it.'
+  - 'methodology.yaml, skills/forge-quick-intro and skills/join-the-fleet name the glossary as binding.'
+  - 'An instant check reads only added lines of a diff and reports a retired synonym with its replacement; a fixture shows it flags an added line and stays silent on the same word in an unchanged line. Pre-fix result: the fixture FAILS, no such check exists.'
+  verifiable_closure: 'The retired-synonym fixture named in the last exit criterion passes in the gate and failed before the change.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix adds the fixture in the same commit (1136-n8sh).
+
+    '
+  next_action: 'Run the audit, report the order id and top 10 conflicting terms to macuahuitl-fedora, then write the glossary.
+
+    '
+  provenance: 'Operator ask 2026-10-27 relayed by macuahuitl-fedora.
+
+    '
+  events:
+  - type: filed
+    ts: '2026-10-28T02:29:34Z'
+    host: yoga
+    summary: filed ready from the operator ask of 2026-10-27

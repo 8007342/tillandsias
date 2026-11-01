@@ -20,6 +20,8 @@ mod action_host;
 #[cfg(target_os = "macos")]
 mod app_delegate;
 #[cfg(target_os = "macos")]
+mod approval_signer;
+#[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
 mod guest_binary;
@@ -215,9 +217,10 @@ fn main() {
              prompts for your git name, email, and PAT (token hidden)\n    \
              --list-cloud-projects  Boot the VM and list GitHub repos via the\n                  \
              stored Vault token; streams the repo listing to stdout\n    \
-             --opencode <path> [--prompt <text>]  Boot the VM and launch the\n                  \
-             OpenCode forge on <path> inside the guest; streams forge output\n                  \
-             to this terminal. With --prompt runs non-interactively (one shot).\n    \
+             --cloud <owner>/<repo> --opencode [--prompt <text>]  Boot the VM and\n                  \
+             launch the OpenCode forge on that GitHub project inside the guest;\n                  \
+             streams forge output to this terminal. With --prompt runs\n                  \
+             non-interactively (one shot).\n    \
              --diagnose    Print a static health report, then exit\n    \
              --with-metrics  With --diagnose: boot the VM, read the guest\n                  \
              metrics snapshot over the control wire, print it in the report,\n                  \
@@ -307,6 +310,24 @@ fn main() {
     // main dispatch queue from its calling thread) — exec_guest_main uses a
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+    // Order 1886-hf9j: the approval key. Enrol prints the allowed-signers
+    // line; sign asks for Touch ID and prints the SSHSIG. Neither touches the
+    // VM, so neither needs the tray quit.
+    // One key per repo slug (operator 2026-10-27).
+    if let Some(idx) = args.iter().position(|a| a == "--approval-enrol") {
+        let Some(slug) = args.get(idx + 1) else {
+            eprintln!("usage: --approval-enrol <owner/name>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::enrol_main(slug));
+    }
+    if let Some(idx) = args.iter().position(|a| a == "--approval-sign") {
+        let (Some(slug), Some(file)) = (args.get(idx + 1), args.get(idx + 2)) else {
+            eprintln!("usage: --approval-sign <owner/name> <statement-file>");
+            std::process::exit(2);
+        };
+        std::process::exit(approval_signer::sign_main(slug, file));
+    }
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
         // 1897-y7j2: a running tray relays the command instead of refusing.
         // The tray is asked only after the request is classified below.
@@ -373,19 +394,23 @@ fn main() {
         require_no_live_tray("--list-cloud-projects");
         std::process::exit(diagnose::list_cloud_projects_main());
     }
-    // `--opencode <path> [--prompt <text>]`: boot VM and launch forge in guest.
-    if let Some(oc_idx) = args.iter().position(|a| a == "--opencode") {
+    // `--cloud <owner>/<repo> --opencode [--prompt <text>]`: boot VM and launch
+    // the forge in the guest (1925-mcld: the cloud is the only launch).
+    if args.iter().any(|a| a == "--opencode") {
+        let cloud = match diagnose::opencode_cloud_target(&args) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{{\"error\":\"{e}\"}}");
+                std::process::exit(2);
+            }
+        };
         require_no_live_tray("--opencode");
-        let path = args
-            .get(oc_idx + 1)
-            .cloned()
-            .unwrap_or_else(|| ".".to_string());
         let prompt = args
             .iter()
             .position(|a| a == "--prompt")
             .and_then(|i| args.get(i + 1))
             .cloned();
-        std::process::exit(diagnose::opencode_main(path, prompt));
+        std::process::exit(diagnose::opencode_main(cloud, prompt));
     }
     if args.iter().any(|a| a == "--diagnose") {
         let format = if args.iter().any(|a| a == "--json") {

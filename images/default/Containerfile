@@ -7,6 +7,7 @@ FROM ${BASE_IMAGE}
 
 # ── Environment exports for diagnostics and agent discovery ─────
 ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
+    TILLANDSIAS_RESEARCH=/opt/research \
     DART_ROOT=/opt/dart-sdk \
     FLUTTER_ROOT=/opt/flutter \
     NODE_USE_SYSTEM_CA=1
@@ -43,6 +44,11 @@ RUN mkdir -p /home/forge/src \
 # ── Cheatsheets ────────────────────────────────────────────────
 COPY cheatsheets/ /opt/cheatsheets-image/
 COPY cheatsheet-sources/ /opt/cheatsheet-sources/
+
+# ── Research library (spec:research-records) ───────────────────
+# Non-technical, provenance-backed research the cheatsheets do not hold.
+# Read-only in the forge; projects pull records into their own research/.
+COPY research/ /opt/research/
 
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias
@@ -230,6 +236,9 @@ COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
 # adapter (images/inference/tiers/); tillandsias-models' tier_for reads them.
 COPY cli/tiers/ /opt/agents/tillandsias-cli/share/tiers/
 COPY cli/tellme /opt/agents/tillandsias-cli/bin/tellme
+# order 1864-qymj: Lua helpers for asserted multi-edits and conflict hunks.
+COPY cli/lua-edit /opt/agents/tillandsias-cli/bin/lua-edit
+COPY cli/lua-conflict /opt/agents/tillandsias-cli/bin/lua-conflict
 # 1874-6p63: one command reporting lane, MCP, router, toolchain and cache health.
 COPY cli/tillandsias-doctor /opt/agents/tillandsias-cli/bin/tillandsias-doctor
 # 1637-5765: `flutter` runs in the shared tillandsias-flutter sibling image,
@@ -244,6 +253,8 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
     && ln -sf /opt/agents/tillandsias-cli/bin/tellme /usr/local/bin/tellme \
+    && ln -sf /opt/agents/tillandsias-cli/bin/lua-edit /usr/local/bin/lua-edit \
+    && ln -sf /opt/agents/tillandsias-cli/bin/lua-conflict /usr/local/bin/lua-conflict \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-doctor /usr/local/bin/tillandsias-doctor \
     && ln -sf /opt/agents/tillandsias-cli/bin/flutter /usr/local/bin/flutter
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 1903-djsq: never reach the operator's session bus or gnome-keyring-daemon.
+. "$(cd "$(dirname "$0")" && pwd)/test-support/private-session-bus.sh"
 # @trace order:1497-ahmd, order:1247-amcu
 #
 # test-credential-channel-affordances.sh — every blocked: verdict of

@@ -1,6 +1,6 @@
 # Implementation: Compile-Time Container Dependency Model
 
-**Status:** `pending` (blocked on research verdict)
+**Status:** `resolved` — distilled into order 121 (container-dependency-graph-research) and order 122 (container-dependency-graph-impl), both completed and archived; the graph lives in crates/tillandsias-headless/src/container_deps.rs, and launch-path ensure coverage continues under epic 1776-ondm (checked 2026-10-31 by calmecacpilli). Was: `pending` (blocked on research verdict).
 **Owner:** linux
 **Date:** 2026-06-27
 **Kind:** enhancement

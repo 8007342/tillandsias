@@ -220,12 +220,27 @@ pub(crate) fn browser_tool_descriptors(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn handle_mcp_jsonrpc(
     project_label: &str,
     instance: &str,
     req: &serde_json::Value,
     browser: &tillandsias_browser_mcp::BrowserMcpServer,
     rt: &tokio::runtime::Runtime,
+) -> Option<serde_json::Value> {
+    handle_mcp_jsonrpc_streaming(project_label, instance, req, browser, rt, &mut |_| {})
+}
+
+/// [`handle_mcp_jsonrpc`] with a sink for lines sent BEFORE the response on
+/// the same stream: the MCP `notifications/progress` of a long tool
+/// (image.generate, 1874-kkrc). Events, not polling.
+pub(crate) fn handle_mcp_jsonrpc_streaming(
+    project_label: &str,
+    instance: &str,
+    req: &serde_json::Value,
+    browser: &tillandsias_browser_mcp::BrowserMcpServer,
+    rt: &tokio::runtime::Runtime,
+    emit: &mut dyn FnMut(serde_json::Value),
 ) -> Option<serde_json::Value> {
     let method = req["method"].as_str().unwrap_or("");
     if method.starts_with("notifications/") {
@@ -319,11 +334,16 @@ pub(crate) fn handle_mcp_jsonrpc(
                     }
                 }),
             ];
+            // 1874-kkrc: local image generation, after the pinned lifecycle
+            // and toolchain tools.
+            tools.push(crate::imagegen_tool::descriptor());
             tools.extend(browser_tool_descriptors(browser, rt));
             // 1772-irs3: the read-only Cloudflare tools, after the browser
             // family (both lists above are pinned).
             #[cfg(feature = "vault")]
             tools.extend(crate::cloudflare_mcp::tool_descriptors());
+            // 1860-auhm: the studio co-edit tools, last (every list above is pinned).
+            tools.extend(crate::studio::tool_descriptors());
             serde_json::json!({ "result": { "tools": tools } })
         }
         "tools/call" => {
@@ -370,6 +390,27 @@ pub(crate) fn handle_mcp_jsonrpc(
                 return Some(resp);
             }
 
+            // 1860-auhm: the studio co-edit tools read the lane's own forge.
+            if let Some(result) = crate::studio::call(
+                tool_name,
+                project_label,
+                instance,
+                &req["params"]["arguments"],
+            ) {
+                let body = match result {
+                    Ok(v) => serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(v)
+                    }),
+                    Err(e) => return Some(mcp_error(req, e)),
+                };
+                let mut resp = body;
+                resp["jsonrpc"] = serde_json::json!("2.0");
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
+
             match tool_name {
                 "publish_local" => {
                     let category = match web_category(args) {
@@ -397,6 +438,26 @@ pub(crate) fn handle_mcp_jsonrpc(
                         app_dir,
                         debug,
                     )) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "image.generate" => {
+                    let token = req["params"]["_meta"]["progressToken"].clone();
+                    let mut seq = 0u64;
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    match crate::imagegen_tool::call(project_label, instance, arguments, &mut |p| {
+                        if let Some(line) =
+                            crate::imagegen_tool::progress_notification(&token, &mut seq, &p)
+                        {
+                            emit(line);
+                        }
+                    }) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
@@ -754,7 +815,21 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 );
                 return;
             }
-            Ok(req) => handle_mcp_jsonrpc(&project_label, &identity.instance, &req, &browser, &rt),
+            Ok(req) => {
+                let mut sink = writer.try_clone().ok();
+                handle_mcp_jsonrpc_streaming(
+                    &project_label,
+                    &identity.instance,
+                    &req,
+                    &browser,
+                    &rt,
+                    &mut |line| {
+                        if let Some(w) = sink.as_mut() {
+                            let _ = writeln!(w, "{}", cap_response_line(&line));
+                        }
+                    },
+                )
+            }
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -895,6 +970,29 @@ pub(crate) fn lane_accepting(project: &str, instance: &str) -> bool {
     UnixStream::connect(mcp_socket_path_for_lane(project, instance)).is_ok()
 }
 
+/// ORDER 1911-3dqo. Serve lane `(project, instance)` again after the process
+/// that bound it died while its forge kept running (systemd-oomd killed the
+/// launcher on lenovinha 2026-10-28). The lane is handed to the tray first,
+/// so a tray adopts it on its next tick even if this rejoin dies too; when
+/// nothing answers yet, this process binds it, reclaiming the refusing
+/// socket the dead launcher left.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub(crate) fn serve_lane_for_rejoin(project: &str, instance: &str) -> Result<(), String> {
+    mark_lane_tray_owned(project, instance)?;
+    if !lane_accepting(project, instance) {
+        start_mcp_socket_server_for_lane(project, instance)?;
+    }
+    if lane_accepting(project, instance) {
+        Ok(())
+    } else {
+        Err(format!(
+            "lane {project}-{} does not answer on {}",
+            lane_instance(instance),
+            mcp_socket_path_for_lane(project, instance).display()
+        ))
+    }
+}
+
 /// The lane a socket dir's marker names, when it names exactly the dir it
 /// sits in: a marker cannot point the tray at another lane's socket.
 fn marked_lane(dir: &std::path::Path) -> Option<LaneListenerKey> {
@@ -1018,6 +1116,11 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
                 // An active peer might belong to a CLI child or another tray
                 // process. Never steal its pathname merely because this
                 // process has not populated its own in-memory registry.
+                // 1863-eckw: on a tray-marked lane that peer is the tray
+                // serving it, so the lane is served and this launch proceeds.
+                Ok(_) if socket_path.parent().and_then(marked_lane).is_some() => {
+                    return Ok(());
+                }
                 Ok(_) => {
                     return Err(format!(
                         "mcp socket already has a live owner; refusing to unlink: {}",
@@ -1352,10 +1455,45 @@ esac
 mod lane_adoption_tests {
     use super::*;
 
-    fn lane(tag: &str) -> LaneListenerKey {
-        (
+    /// ORDER 1901-8keq: each test runs under a SHORT `XDG_RUNTIME_DIR`, held
+    /// for its life under the env lock. Without it the lane socket lands under
+    /// macOS TMPDIR (/var/folders/<hash>/T/), past the 104-byte sun_path cap
+    /// ("path must be shorter than SUN_LEN"), and on Linux under the real
+    /// /run/user dir. Same remedy as 1581-sunl's short_runtime_root.
+    struct ShortRuntime {
+        _env: std::sync::MutexGuard<'static, ()>,
+        _root: tempfile::TempDir,
+        prior: Option<std::ffi::OsString>,
+    }
+
+    impl Drop for ShortRuntime {
+        fn drop(&mut self) {
+            match self.prior.take() {
+                Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
+                None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+            }
+        }
+    }
+
+    fn lane(tag: &str) -> (LaneListenerKey, ShortRuntime) {
+        let env = crate::test_support::env_lock();
+        let root = tempfile::Builder::new()
+            .prefix("tm")
+            .tempdir_in("/tmp")
+            .expect("short runtime root under /tmp");
+        let prior = std::env::var_os("XDG_RUNTIME_DIR");
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", root.path()) };
+        let key = (
             format!("eckw-{tag}-{}", std::process::id()),
             "w1".to_owned(),
+        );
+        (
+            key,
+            ShortRuntime {
+                _env: env,
+                _root: root,
+                prior,
+            },
         )
     }
 
@@ -1379,7 +1517,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn a_marked_lane_whose_launcher_exited_answers_again_after_one_tray_tick() {
-        let key = lane("adopt");
+        let (key, _rt) = lane("adopt");
         let path = leave_stale_socket(&key);
         mark_lane_tray_owned(&key.0, &key.1).unwrap();
         // The marker's on-disk name is the contract between launcher and tray.
@@ -1393,9 +1531,28 @@ mod lane_adoption_tests {
         assert!(answered, "pre-fix: connect() on the lane socket is refused");
     }
 
+    /// ORDER 1911-3dqo: systemd-oomd killed the launcher and the forge kept
+    /// running; the lane socket it bound was left refusing. A rejoin must make
+    /// the lane answer again, and hand it to the tray so the next launcher
+    /// death does not repeat this.
+    #[test]
+    fn a_rejoin_serves_a_lane_whose_launcher_was_killed() {
+        let (key, _rt) = lane("rejoin");
+        let path = leave_stale_socket(&key);
+
+        let served = serve_lane_for_rejoin(&key.0, &key.1);
+
+        let answered = UnixStream::connect(&path).is_ok();
+        let marked = path.parent().unwrap().join(LANE_TRAY_MARKER).is_file();
+        cleanup(&key);
+        assert_eq!(served, Ok(()));
+        assert!(answered, "pre-fix: connect() on the lane socket is refused");
+        assert!(marked, "the rejoined lane is handed to the tray");
+    }
+
     #[test]
     fn a_tick_leaves_a_lane_with_a_live_owner_alone() {
-        let key = lane("live");
+        let (key, _rt) = lane("live");
         let path = mcp_socket_path_for_lane(&key.0, &key.1);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
@@ -1409,7 +1566,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn an_unmarked_stale_lane_is_not_adopted() {
-        let key = lane("unmarked");
+        let (key, _rt) = lane("unmarked");
         leave_stale_socket(&key);
         let adopted = adopt_marked_lanes_where(|l| *l == key);
         cleanup(&key);
@@ -1418,7 +1575,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn a_marker_naming_another_lane_is_ignored() {
-        let key = lane("spoof");
+        let (key, _rt) = lane("spoof");
         let dir = mcp_socket_host_dir_for_lane(&key.0, &key.1);
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join(LANE_TRAY_MARKER), "default\ndefault\n").unwrap();
@@ -1429,7 +1586,7 @@ mod lane_adoption_tests {
 
     #[test]
     fn a_tray_owned_lane_is_not_refused_as_a_foreign_launcher() {
-        let key = lane("foreign");
+        let (key, _rt) = lane("foreign");
         let path = mcp_socket_path_for_lane(&key.0, &key.1);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
@@ -1440,5 +1597,235 @@ mod lane_adoption_tests {
         cleanup(&key);
         assert_eq!(unmarked, Some(path));
         assert_eq!(marked, None);
+    }
+
+    /// 1863-eckw: the launch after an adoption binds a lane the tray already
+    /// serves. The tray's listener is the lane being served, not a rival.
+    #[test]
+    fn a_relaunch_onto_a_tray_served_lane_is_not_refused() {
+        let (key, _rt) = lane("relaunch");
+        let path = mcp_socket_path_for_lane(&key.0, &key.1);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _ = fs::remove_file(&path);
+        let _tray = UnixListener::bind(&path).unwrap();
+        mark_lane_tray_owned(&key.0, &key.1).unwrap();
+        let bound = start_mcp_socket_server_for_lane(&key.0, &key.1);
+        cleanup(&key);
+        assert_eq!(bound, Ok(()));
+    }
+}
+
+/// ORDER 1874-kkrc exit criterion: tools/list carries image.generate, and a
+/// tools/call through the real dispatcher (engine stubbed) returns the
+/// 1871-47ex schema with no base64 run over 256 characters, streams progress
+/// as notifications before the response, and writes into the lane scratch dir
+/// the forge sees at /work/tmp/imagegen. Pre-fix: image.generate is unknown.
+#[cfg(test)]
+mod image_generate_fixtures {
+    use super::*;
+    use crate::imagegen_tool::{Engine, EngineOut, Job, Progress, Seam, install_seam};
+    use std::path::Path;
+
+    /// A real PNG of `w`x`h` (RGBA when `alpha`), written by the `image` crate.
+    struct Stub;
+    impl Engine for Stub {
+        fn generate(
+            &self,
+            job: &Job,
+            out_dir: &Path,
+            names: &[String],
+            progress: &mut dyn FnMut(Progress),
+        ) -> Result<EngineOut, String> {
+            for s in 1..=job.steps {
+                progress(Progress::Step {
+                    done: s,
+                    total: job.steps,
+                });
+            }
+            for n in names {
+                image::RgbImage::new(job.width, job.height)
+                    .save(out_dir.join(n))
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(EngineOut {
+                backend: "vulkan".into(),
+                first_use: false,
+            })
+        }
+    }
+
+    fn longest_base64_run(s: &str) -> usize {
+        let mut best = 0;
+        let mut run = 0;
+        for c in s.chars() {
+            if c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=' {
+                run += 1;
+                best = best.max(run);
+            } else {
+                run = 0;
+            }
+        }
+        best
+    }
+
+    #[test]
+    fn image_generate_is_listed_and_returns_files_with_metadata_and_progress() {
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        install_seam(Some(Seam {
+            engine: std::sync::Arc::new(Stub),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I1".into(),
+        }));
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("kkrc-proj", "a", None, true);
+
+        let list = handle_mcp_jsonrpc(
+            "kkrc-proj",
+            "a",
+            &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}),
+            &browser,
+            &rt,
+        )
+        .unwrap();
+        let tools = list["result"]["tools"].as_array().unwrap();
+        let desc = tools
+            .iter()
+            .find(|t| t["name"] == "image.generate")
+            .expect("image.generate is listed");
+        assert_eq!(desc["inputSchema"]["required"][0], "prompt");
+        let d = desc["description"].as_str().unwrap();
+        assert!(d.contains("deleted when the forge shuts down"), "{d}");
+
+        let mut lines = Vec::new();
+        let reply = handle_mcp_jsonrpc_streaming(
+            "kkrc-proj",
+            "a",
+            &serde_json::json!({
+                "jsonrpc":"2.0","id":2,"method":"tools/call",
+                "params":{"name":"image.generate","_meta":{"progressToken":"t1"},
+                          "arguments":{"prompt":"a red fox","width":640,"height":384,"steps":3,"seed":7}}
+            }),
+            &browser,
+            &rt,
+            &mut |l| lines.push(l),
+        )
+        .unwrap();
+        install_seam(None);
+
+        let r = &reply["result"]["structuredContent"];
+        for key in [
+            "path",
+            "width",
+            "height",
+            "has_alpha",
+            "thumbnail_path",
+            "model",
+            "licence",
+            "tier",
+            "backend",
+            "seed",
+            "steps",
+            "elapsed_s",
+            "ephemeral",
+        ] {
+            assert!(!r[key].is_null(), "result lacks {key}: {reply}");
+        }
+        assert_eq!(
+            (r["width"].as_u64(), r["height"].as_u64()),
+            (Some(640), Some(384))
+        );
+        assert_eq!(r["tier"], "I0", "smallest first");
+        assert_eq!(r["seed"], 7);
+        assert_eq!(r["steps"], 3);
+        assert_eq!(r["ephemeral"], true);
+        let path = r["path"].as_str().unwrap();
+        assert!(path.starts_with("/work/tmp/imagegen/"), "{path}");
+        let host = scratch
+            .path()
+            .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
+            .join(path.rsplit('/').next().unwrap());
+        assert!(host.is_file(), "{}", host.display());
+        let thumb = r["thumbnail_path"].as_str().unwrap();
+        let thumb_host = scratch
+            .path()
+            .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
+            .join(thumb.rsplit('/').next().unwrap());
+        let (tw, th) = image::image_dimensions(&thumb_host).unwrap();
+        assert!(tw <= 256 && th <= 256, "{tw}x{th}");
+        let text = reply.to_string();
+        assert!(
+            longest_base64_run(&text) <= 256,
+            "a base64 run over 256 chars: {text}"
+        );
+
+        assert_eq!(
+            lines.len(),
+            3,
+            "one progress notification per step: {lines:?}"
+        );
+        assert_eq!(lines[0]["method"], "notifications/progress");
+        assert_eq!(lines[0]["params"]["progressToken"], "t1");
+        assert_eq!(lines[2]["params"]["progress"], 3.0);
+    }
+}
+
+/// LIVE, opt-in (1874-kkrc): a real image.generate through a real lane
+/// socket, real engine, real model cache. Lane `<project>-imggen-e2e`, so no
+/// operator lane is touched. Output stays in cache_root()/imagegen-scratch.
+/// TILLANDSIAS_IMAGEGEN_E2E_PROJECT (default kumbia-kombat),
+/// TILLANDSIAS_IMAGEGEN_E2E_ARGS (JSON arguments).
+#[cfg(test)]
+#[test]
+#[ignore = "live: builds the imagegen image and runs a GPU generate"]
+fn live_image_generate_through_the_lane_socket() {
+    use std::io::{BufRead, BufReader, Write};
+    let project = std::env::var("TILLANDSIAS_IMAGEGEN_E2E_PROJECT")
+        .unwrap_or_else(|_| "kumbia-kombat".into());
+    let args: serde_json::Value = serde_json::from_str(
+        &std::env::var("TILLANDSIAS_IMAGEGEN_E2E_ARGS").unwrap_or_else(|_| {
+            r#"{"prompt":"a red fox in snow, pixel art","width":512,"height":512,"seed":7}"#.into()
+        }),
+    )
+    .unwrap();
+    start_mcp_socket_server_for_lane(&project, "imggen-e2e").expect("lane listener");
+    let sock = mcp_socket_path_for_lane(&project, "imggen-e2e");
+    let stream = UnixStream::connect(&sock).expect("connect");
+    let mut w = stream.try_clone().unwrap();
+    let mut r = BufReader::new(stream);
+    let t0 = std::time::Instant::now();
+    writeln!(
+        w,
+        "{}",
+        serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call","params":{
+            "name":"image.generate","_meta":{"progressToken":"e2e"},"arguments":args}})
+    )
+    .unwrap();
+    loop {
+        let mut line = String::new();
+        if r.read_line(&mut line).unwrap() == 0 {
+            panic!("socket closed");
+        }
+        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+        if v["method"] == "notifications/progress" {
+            eprintln!(
+                "[{:6.2}s] progress {}",
+                t0.elapsed().as_secs_f64(),
+                v["params"]["message"]
+            );
+            continue;
+        }
+        eprintln!("[{:6.2}s] reply {v}", t0.elapsed().as_secs_f64());
+        assert!(v["error"].is_null(), "{v}");
+        let res = &v["result"]["structuredContent"];
+        let host = crate::imagegen_tool::lane_scratch_dir(&project, "imggen-e2e")
+            .unwrap()
+            .join(res["path"].as_str().unwrap().rsplit('/').next().unwrap());
+        eprintln!("host file: {}", host.display());
+        assert!(host.is_file());
+        break;
     }
 }

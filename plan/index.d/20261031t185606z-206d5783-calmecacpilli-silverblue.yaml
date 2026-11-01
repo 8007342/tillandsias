@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-shell-to-lua-counter-is-honest-a-floor-line-naming-a-deleted-file-is-refused-and-a-burndown-line-prints-the-window-paid-waived-silent-and-whether-the-stall-trigger-fired
+    field: status
+    value: completed
+    ts: "2026-10-31T18:56:06Z"
+    host: calmecacpilli-silverblue
+
+events:
+  - packet_id: the-shell-to-lua-counter-is-honest-a-floor-line-naming-a-deleted-file-is-refused-and-a-burndown-line-prints-the-window-paid-waived-silent-and-whether-the-stall-trigger-fired
+    event:
+      type: completed
+      ts: "2026-10-31T18:56:06Z"
+      host: calmecacpilli-silverblue
+      summary: |-
+        status 'completed' with evidence_refs: 25f8c419c (land 300); scripts/lua/test-shell-ratchet.lua -> ok:shell-ratchet-fixture:10
+  - packet_id: the-shell-to-lua-counter-is-honest-a-floor-line-naming-a-deleted-file-is-refused-and-a-burndown-line-prints-the-window-paid-waived-silent-and-whether-the-stall-trigger-fired
+    event:
+      type: note
+      ts: "2026-10-31T18:56:06Z"
+      host: calmecacpilli-silverblue
+      summary: |-
+        stale ready row, closed with evidence

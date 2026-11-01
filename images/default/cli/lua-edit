@@ -1,0 +1,75 @@
+#!/usr/bin/env lua
+-- lua-edit — batched, asserted literal replace in one file (order 1864-qymj).
+--
+-- Usage: lua-edit FILE OLD NEW [OLD NEW ...]
+--
+-- Every OLD must occur EXACTLY ONCE in the file as it was read. If any does
+-- not (zero or several times), nothing is written and the exit is 1, naming
+-- each failing OLD. On success all pairs are applied and the file is replaced
+-- atomically (write beside it, then rename). Matching is literal, never a
+-- pattern: `.`, `%` and `(` mean themselves.
+--
+-- This is the forge's answer to the ad-hoc python3 heredocs agents used for
+-- multi-site edits; python3 is forbidden for committed automation here.
+
+local function die(msg, code)
+  io.stderr:write("lua-edit: " .. msg .. "\n")
+  os.exit(code or 1)
+end
+
+local function count(hay, needle)
+  local n, at = 0, 1
+  while true do
+    local s, e = hay:find(needle, at, true)
+    if not s then return n end
+    n = n + 1
+    at = e + 1
+  end
+end
+
+local file = arg[1]
+if not file or file == "-h" or file == "--help" then
+  io.stdout:write("usage: lua-edit FILE OLD NEW [OLD NEW ...]\n")
+  os.exit(file and 0 or 2)
+end
+local npairs = (#arg - 1) / 2
+if #arg < 3 or npairs ~= math.floor(npairs) then
+  die("want FILE then OLD NEW pairs; got " .. (#arg - 1) .. " string(s) after FILE", 2)
+end
+
+local fh = io.open(file, "rb") or die("cannot read " .. file, 2)
+local text = fh:read("a")
+fh:close()
+
+local bad = {}
+for i = 2, #arg, 2 do
+  local old = arg[i]
+  if old == "" then
+    bad[#bad + 1] = "pair " .. (i // 2) .. ": OLD is empty"
+  else
+    local n = count(text, old)
+    if n ~= 1 then
+      bad[#bad + 1] = string.format("pair %d: OLD occurs %d time(s), want exactly 1: %q", i // 2, n, old)
+    end
+  end
+end
+if #bad > 0 then
+  die("refused, file unchanged:\n  " .. table.concat(bad, "\n  "))
+end
+
+for i = 2, #arg, 2 do
+  local old, new = arg[i], arg[i + 1]
+  local s, e = text:find(old, 1, true)
+  text = text:sub(1, s - 1) .. new .. text:sub(e + 1)
+end
+
+local tmp = file .. ".lua-edit.tmp"
+local out = io.open(tmp, "wb") or die("cannot write " .. tmp, 2)
+out:write(text)
+out:close()
+local ok, err = os.rename(tmp, file)
+if not ok then
+  os.remove(tmp)
+  die("rename failed: " .. tostring(err), 2)
+end
+io.stdout:write(string.format("ok:lua-edit:%s:%d pair(s)\n", file, npairs))

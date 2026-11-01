@@ -1,0 +1,35 @@
+# @trace order:1947-pnst, spec:spec-traceability
+# lenovinha 2026-11-01: plan_next served a main checkout parked 18 days back
+# on a work branch (748 plan commits behind origin/linux-next) as if current,
+# and offered rows that were already claimed. The selector now names a
+# ledger that lags the fetched trunk, and hides READY rows that a sibling
+# branch's own fragments hold.
+name: litmus:plan-next-names-a-stale-ledger-and-hides-rows-siblings-hold
+spec: spec-traceability
+phase: pre-build
+description: In real git fixtures, a checkout missing trunk's plan commits gets a stale_ledger verdict naming both commits on the answer's second line (confidence untouched, absent when current or no trunk is fetched), and a row claimed only in a sibling branch's fragment is found and hidden from plan_next
+severity: high
+size: quick
+
+preconditions:
+  - cargo can build tillandsias-plan
+  - git is on PATH
+
+critical_path:
+  - step: "a stale ledger is named and a sibling-held row is hidden"
+    command: "out=$(cargo test -q -p tillandsias-plan --lib -- a_ledger_behind_trunk_is_named_stale sibling_claims:: 2>&1); grep -E 'test result' <<<\"$out\""
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 3 passed"
+
+observability:
+  traces:
+    - "@trace order:1947-pnst"
+  expected_log: "test result: ok. 3 passed"
+  log_fields:
+    spec: "spec-traceability"
+    test: "plan-next-names-a-stale-ledger-and-hides-rows-siblings-hold"
+    artifact: "crates/tillandsias-plan/src/sibling_claims.rs"
+
+rollback:
+  on_failure: "read answer::stale_ledger and sibling_claims::held_on_siblings"
+  command: "cat crates/tillandsias-plan/src/sibling_claims.rs"

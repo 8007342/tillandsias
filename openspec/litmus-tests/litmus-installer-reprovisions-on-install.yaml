@@ -86,3 +86,13 @@ critical_path:
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-install-linux-setup-is-quiet.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:install-linux-setup-is-quiet:7 arms"
+
+  # ORDER 1247-ert9 (1247-amcu Windows slice). Every fatal Die message of
+  # install-windows.ps1 says what happened AND what the user can do next, in one
+  # plain sentence with no command, flag or env var; the log path stays as the
+  # secondary " Details:" tail. The fixture self-checks its judge, counts every
+  # Die call, and FAILED on the pre-fix installer at :239 :790 :913 :959 :1061.
+  - step: "every Windows installer fatal message carries a plain next step (1247-ert9)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-installer-fatal-messages-carry-a-next-step.lua 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "ok:installer-fatal-next-step:9 arms"

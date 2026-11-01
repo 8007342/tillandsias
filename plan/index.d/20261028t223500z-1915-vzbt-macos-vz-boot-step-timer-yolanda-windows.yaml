@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows at the coordinator's direction, 2026-10-28 (sibling of 1915-brst, story observability).
+packets:
+- packet_id: macos-tray-emits-a-bringup-step-timer-line-for-vz-boot
+  order: 1915-vzbt
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - macos
+  - observability
+  - runtime
+  estimated_hours: 1
+  title: 'The macOS tray logs one bringup: step=vz-boot ms=<n> line, and a timing-ledger row, for the Virtualization.framework VM boot'
+  context: 'Sibling of 1915-brst (operator-approved 2026-10-28, story observability). 1915-brst times the headless launch steps and the Windows tray wsl-boot step; the macOS VM boot is the remaining platform step. Same shape: stderr line everywhere; ledger row {ts, host, step, phase: bringup, duration_ms, exit} only where the metrics-log-path rule already enables it; no path, project name or username; timestamps at step boundaries only, with no new poll.'
+  exit_criteria:
+  - 'A macOS tray launch emits exactly one ''bringup: step=vz-boot ms=<n>'' line, taken from timestamps at the start of the VZ boot call and at VM-ready; a test asserts the line and FAILS on today''s code.'
+  - 'The same step appends one ledger row where the metrics-log-path rule enables it, with no PII.'
+  verifiable_closure: 'The vz-boot timer test passes in the macOS gate and failed before the change.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the test lands with the fix (1136-n8sh).'
+  next_action: 'Read the 1915-brst helper and row shape once it lands, then wrap the VZ boot in the macOS tray.'
+  provenance: 'Coordinator direction 2026-10-28 (macuahuitl-fedora), approving 1915-brst scope; operator-approved observability story 2026-10-28.'
+  events:
+  - type: filed
+    ts: '2026-10-28T22:35:00Z'
+    host: yolanda-windows
+    summary: filed ready as the macOS sibling of 1915-brst

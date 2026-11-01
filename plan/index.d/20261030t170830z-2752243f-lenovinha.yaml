@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    field: status
+    value: completed
+    ts: "2026-10-30T17:08:30Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    event:
+      type: completed
+      ts: "2026-10-30T17:08:30Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 1a9857606
+  - packet_id: a-quality-long-or-large-download-image-run-returns-consent-required-with-a-host-minted-single-use-token
+    event:
+      type: note
+      ts: "2026-10-30T17:08:30Z"
+      host: lenovinha
+      summary: |-
+        landed on linux-next at 1a9857606

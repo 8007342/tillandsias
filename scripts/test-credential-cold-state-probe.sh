@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# 1903-djsq: never reach the operator's session bus or gnome-keyring-daemon.
+. "$(cd "$(dirname "$0")" && pwd)/test-support/private-session-bus.sh"
 # ORDER 900-z3kv. The probe that lets a Linux e2e demonstrate which state it ran
 # in must never turn "I could not ask" into "the room was clean".
 #

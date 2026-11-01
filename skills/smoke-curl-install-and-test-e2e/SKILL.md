@@ -1,6 +1,6 @@
 ---
 name: smoke-curl-install-and-test-e2e
-description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-installs the latest release binary from GitHub, does a full `podman system reset --force`, runs `tillandsias --debug --init` from a pristine state, and (if init is clean) launches `tillandsias --cloud 8007342/tillandsias --opencode --prompt "Use the /meta-orchestration skill"`. Every issue observed — by this skill's agent during install/reset/init, or by the agents running inside the forge under meta-orchestration — is filed as a plan/issues work packet for later pickup by /advance-work-from-plan.
+description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-installs the latest release binary from GitHub, does a full `podman system reset --force`, runs `tillandsias --debug --init` from a pristine state, and (if init is clean) launches `tillandsias --cloud 8007342/tillandsias --opencode` with ONE short fixed smoke prompt (run the credential guard, reply with a fixed token; never the /meta-orchestration loop, 1941-smkp). Every issue observed — by this skill's agent during install/reset/init, or by the agent's one turn inside the forge — is filed as a plan/issues work packet for later pickup by /advance-work-from-plan.
 ---
 
 # Smoke: Curl-Install and Test End-to-End
@@ -1206,11 +1206,20 @@ timing_begin smoke-forge-lane smoke
 rm -f target/smoke-e2e/04-agent-watch.txt
 scripts/smoke-agent-watch.sh watch --out target/smoke-e2e --grace 300 > target/smoke-e2e/04-agent-watch.log 2>&1 &
 _WATCH_PID=$!
+# 1941-smkp: ONE short agent turn, never the /meta-orchestration loop. The
+# forge's model is a hosted free tier every fleet host shares; a full loop is
+# 100+ requests per smoke, and on 2026-11-01 that ended in a 429 with
+# Retry-After 78443. The prompt spells the token out so the prompt text itself
+# can never satisfy the grep below.
+SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
-  env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode --prompt "Use the /meta-orchestration skill" 2>&1 \
+  env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
+# The agent answered and called a tool: the token, not the exit code.
+grep -q 'SMOKE-AGENT-OK' target/smoke-e2e/04-opencode.log \
+  && echo 'agent_turn=answered' || echo 'agent_turn=NO-TOKEN (finding)'
 kill "$_WATCH_PID" 2>/dev/null; wait "$_WATCH_PID" 2>/dev/null
 # The watch's verdict, when it issued one, IS the §4 verdict: the agent died and
 # the watch stopped the forge so the lane could return.

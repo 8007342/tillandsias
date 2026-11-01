@@ -495,6 +495,36 @@ where
     }
 }
 
+/// Order 1925-tdlv: collect a pending Vault handover over a short connection
+/// of its own, so the push reader's client is never shared. Best-effort and
+/// loud: the status stream must not be lost to a failed collect.
+async fn collect_vault_handover_on_ready(vz: &VzRuntime) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream =
+        match open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[tillandsias-tray] vault handover on Ready: connect: {e}");
+                return;
+            }
+        };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(e) = client.handshake().await {
+        eprintln!("[tillandsias-tray] vault handover on Ready: handshake: {e}");
+        return;
+    }
+    if let Err(e) = crate::installation_uuid::capture_vault_handover(&mut client).await {
+        eprintln!("[tillandsias-tray] vault handover on Ready: {e}");
+    }
+}
+
 async fn open_control_wire_stream(
     vz: &VzRuntime,
     port: u32,
@@ -2406,6 +2436,9 @@ impl TrayActionHost {
             }
             *busy = true;
         }
+        // Order 1919-keyc: a booting guest holds no credentials yet, so the
+        // next status poll must deliver them rather than skip the Keychain.
+        crate::installation_uuid::note_vm_boot();
         // Idempotency: if we already hold a live VM handle, just log
         // and bail (without touching the busy flag race).
         if ivars.vm.lock().unwrap().is_some() {
@@ -3480,6 +3513,18 @@ async fn run_push_listener(
                 set_vsock_forward_target(&mut client, port).await;
             }
 
+            // Order 1925-tdlv: deliver the Vault credentials on EVERY
+            // (re)connection, for the same reason as the inference target
+            // above: SC-07 suppresses the polls that used to deliver, so a
+            // delivery living only there never fires on a healthy tray, and
+            // Vault holds Ready forever. Best-effort: the subscription must
+            // not be lost to a failed delivery, and the failure is loud.
+            if let Err(e) =
+                crate::installation_uuid::deliver_credentials_on_connect(&mut client).await
+            {
+                eprintln!("[tillandsias-tray] vault credential delivery on connect: {e}");
+            }
+
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
@@ -3588,6 +3633,7 @@ async fn run_push_listener(
         }
 
         let mut progress_log = ProgressLog::default();
+        let mut was_ready = false;
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -3604,6 +3650,16 @@ async fn run_push_listener(
                         ..
                     } => {
                         vm_ever_ready.store(true, Ordering::SeqCst);
+                        // Order 1925-tdlv: Ready means Vault is unsealed, and
+                        // a Vault the guest just initialised or healed holds a
+                        // handover the host must collect before the VM stops.
+                        // The polls that collected it are suppressed under
+                        // SC-07, so collect on the transition, once.
+                        let ready_now = matches!(phase, tillandsias_control_wire::VmPhase::Ready);
+                        if ready_now && !was_ready {
+                            collect_vault_handover_on_ready(&vz).await;
+                        }
+                        was_ready = ready_now;
                         let rebuild_needed = apply_vm_status(
                             phase,
                             podman_ready,
@@ -4716,6 +4772,39 @@ mod tests {
     /// list that had quietly regained a fourth, which is the shape this pin
     /// exists to catch — the tray would resubscribe to a topic whose arm no
     /// longer exists and silently drop every frame.
+    /// Order 1925-tdlv: the push subscription delivers the Vault credentials
+    /// on every (re)connect, BEFORE it subscribes, and collects the handover on
+    /// the transition to Ready. SC-07 suppresses the polls that used to do
+    /// both, so a delivery living only in a poll never fires on a healthy tray
+    /// (v56.11.1.1: Vault held Ready for good on every tray launch).
+    #[test]
+    fn the_push_subscription_delivers_and_collects_vault_credentials() {
+        // source-pin-ok: the property is placement inside run_push_listener, which only the source shows
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let source =
+            std::fs::read_to_string(std::path::Path::new(&manifest).join("src/action_host.rs"))
+                .expect("read action_host.rs");
+        let start = source
+            .find("async fn run_push_listener(")
+            .expect("run_push_listener exists");
+        let body = &source[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let deliver = body
+            .find("deliver_credentials_on_connect(&mut client)")
+            .expect("run_push_listener must deliver on (re)connect");
+        let subscribe = body
+            .find("ControlMessage::Subscribe {")
+            .expect("run_push_listener subscribes");
+        assert!(
+            deliver < subscribe,
+            "the delivery must precede the Subscribe"
+        );
+        assert!(
+            body.contains("collect_vault_handover_on_ready(&vz)"),
+            "run_push_listener must collect the handover on the Ready transition"
+        );
+    }
+
     #[test]
     fn push_subscribe_topics_has_no_local_projects() {
         assert_eq!(

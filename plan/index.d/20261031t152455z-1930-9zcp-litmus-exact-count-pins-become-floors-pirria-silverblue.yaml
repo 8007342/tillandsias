@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by pirria-silverblue at the coordinator's request (macuahuitl, 2026-10-31): the three growth-fragile pins 1929-gfxy noted.
+packets:
+- packet_id: three-growth-fragile-litmus-count-pins-become-floors
+  order: 1930-9zcp
+  status: ready
+  kind: defect
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - litmus
+  - release-gate
+  estimated_hours: 1
+  title: 'dead-tray-run-is-reaped, no-credentials-at-rest and host-browser-mcp-lane-socket-shape pin an exact "N passed" and would refuse a green run when their test filters grow'
+  context: '1929-gfxy (#757) swept 42 exact-count pins and changed only the failing one. It noted three that still pass but break on growth: dead-tray-run-is-reaped "test result: ok. 5 passed", no-credentials-at-rest "5 passed" (unanchored, also matches 15 and 25), host-browser-mcp-lane-socket-shape "test result: ok. 2 passed".'
+  exit_criteria:
+  - Each of the three success_patterns is a floor with 0 failed, in the form #757 used.
+  - A fixture judges each pattern with grep -E (accepts N, N+2, N+12; refuses N-1, a failure and FAILED; the retired exact pin refuses N+1) and refuses the pre-fix patterns.
+  - Today's real cargo output still matches each new pattern.
+  verifiable_closure: 'litmus:dead-tray-run-is-reaped, litmus:no-credentials-at-rest and litmus:host-browser-mcp-lane-socket-shape each run tillandsias-plan script run scripts/lua/test-litmus-count-floors.lua prints ok:litmus-count-floors:9/9 (a step in each of the three litmus files); refused:litmus-count-floors:3-failed on the pre-fix patterns.'
+  next_action: 'On work/1930-9zcp: the three patterns, the fixture, a step in each litmus. Left: land it.'
+  provenance: 1929-gfxy row context and next_action (macuahuitl, 2026-10-31).
+  events:
+  - type: filed
+    ts: '2026-10-31T15:24:55Z'
+    host: pirria-silverblue
+    summary: filed p2 at the coordinator's request, split out of 1929-gfxy's noted pins

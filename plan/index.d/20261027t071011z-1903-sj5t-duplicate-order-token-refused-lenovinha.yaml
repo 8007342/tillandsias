@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the coordinator's request.
+packets:
+  - packet_id: check-strict-fragments-refuses-a-duplicate-order-token-and-next-order-names-no-bare-order-beside-the-minted-one
+    order: 1903-sj5t
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [plan, ledger, tooling]
+    size: S
+    title: "check --strict-fragments refuses one order token on two distinct packet_ids, and next-order's advisory puts no bare order token beside the minted one"
+    context: |
+      2026-10-27 lenovinha filed a packet under order 1874-4sqt, already the
+      landed order of Mac's plan-CLI packet (#667, 13beddf74), under a
+      different packet_id. check --strict-fragments still said "ids unique,
+      live references sound": it checks packet_id uniqueness, not order.
+      The id was copied from next-order's stderr advisory, which ends
+      "Use one token per packet (1874-4sqt)": a real order token in
+      parentheses right after the minted one on stdout.
+    exit_criteria:
+      - "A fixture builds a scratch ledger with two fragments, distinct packet_ids, the same order token; check --strict-fragments exits nonzero naming both packet_ids and the order. Pre-fix result: FAILS, it reports ok."
+      - "next-order's advisory text contains no token in the order grammar (3-4 digits, a hyphen, 4 lowercase alphanumerics) other than the one it minted; a fixture asserts it. Pre-fix result: FAILS, the advisory cites 1874-4sqt."
+    verifiable_closure: "Both fixtures in the exit criteria pass, red on today's binary first."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds its litmus in the same commit (1136-n8sh).
+    next_action: >
+      Write the duplicate-order fixture first and watch check --strict-fragments pass it; then add the order-uniqueness refusal and reword the advisory.
+    provenance: |
+      Coordinator-requested 2026-10-27 from lenovinha's 1874-4sqt misfile (refiled as 1903-6hkw).
+    events:
+      - type: filed
+        ts: "2026-10-27T07:10:11Z"
+        host: lenovinha
+        summary: "filed ready; lenovinha takes it after 1874-bair and 1903-6hkw, or yoga if idle"

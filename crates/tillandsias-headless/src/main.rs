@@ -74,11 +74,20 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod bringup_timer;
 mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+// @trace order:1874-b9tg: where an sd.cpp run placed the model.
+#[cfg(feature = "host-services")]
+mod imagegen_consent;
+mod imagegen_models;
+mod imagegen_placement;
+mod imagegen_studio;
 mod imagegen_tiers;
+#[cfg(feature = "host-services")]
+mod imagegen_tool;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -90,6 +99,11 @@ mod container_deps;
 mod control_dispatch;
 #[cfg(target_os = "linux")]
 mod forge_swap;
+// 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
+#[cfg(target_os = "linux")]
+mod oom_posture;
+// 1944-trsp: one tray per enclave (a lifetime flock), and a CLI that can tell.
+mod tray_presence;
 // RAM-only source-volume identity is needed by default CLI launchers too.
 mod launch_images;
 mod local_projects;
@@ -127,6 +141,11 @@ mod ca_key_store;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
+// Order 1927-q6fk: the agent hands the host's delivery to lane processes over
+// a guest-local socket, never a file.
+#[cfg(all(target_os = "linux", feature = "vault"))]
+#[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
+mod guest_credentials;
 // Advisory per-resource flocks for container check+act sections (order 232, R4).
 mod resource_lock;
 // @trace order:1776-brk3 — the on-demand image build breaker: a failed build
@@ -573,6 +592,12 @@ fn main() {
         .filter(|a| !a.starts_with("--"))
         .cloned()
         .unwrap_or_else(|| "linux-next".to_string());
+    // ORDER 1911-3dqo: re-attach a forge whose launcher died. Takes the
+    // project as the NEXT argument, like --sync.
+    let rejoin_project: Option<String> = user_args
+        .iter()
+        .position(|a| a == "--rejoin")
+        .map(|i| user_args.get(i + 1).cloned().unwrap_or_default());
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
@@ -655,6 +680,17 @@ fn main() {
     let bash = user_args.iter().any(|a| a == "--bash");
     let antigravity = user_args.iter().any(|a| a == "--antigravity");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
+    // 1860-auhm: `--studio <id>` opens the project in a registered web studio.
+    let studio_id: Option<String> = match user_args.iter().position(|a| a == "--studio") {
+        Some(i) => match user_args.get(i + 1).filter(|v| !v.starts_with('-')) {
+            Some(id) => Some(id.clone()),
+            None => {
+                eprintln!("Error: --studio requires a studio id");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
 
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
@@ -899,6 +935,8 @@ fn main() {
         // `Unsupported option: --sync` — the exact shape the --reset-state
         // comment at the top of this list records. A source scan would have
         // seen the flag everywhere and missed it.
+        // Order 1911-3dqo: dispatched early (run_rejoin).
+        "--rejoin",
         "--sync",
         "--github-login",
         "--with-token",
@@ -924,6 +962,7 @@ fn main() {
         "--bash",
         "--antigravity",
         "--opencode-web",
+        "--studio",
         "--observatorium",
         "--port",
         "--prompt",
@@ -984,6 +1023,7 @@ fn main() {
         || status_check
         || ensure_enclave
         || sync_project.is_some()
+        || rejoin_project.is_some()
         || inference_tier
         || capabilities
         || github_login
@@ -1017,7 +1057,11 @@ fn main() {
             return None;
         }
         if user_args.get(i.saturating_sub(1)).is_some_and(|prev| {
-            prev == "--prompt" || prev == "--port" || prev == "--listen-vsock" || prev == "--cloud"
+            prev == "--prompt"
+                || prev == "--port"
+                || prev == "--listen-vsock"
+                || prev == "--cloud"
+                || prev == "--studio"
         }) {
             return None;
         }
@@ -1277,6 +1321,24 @@ fn main() {
         return;
     }
 
+    if let Some(project) = rejoin_project.as_deref() {
+        #[cfg(feature = "host-services")]
+        let result = if project.is_empty() || project.starts_with("--") {
+            Err("--rejoin needs a project: tillandsias --rejoin <project>".to_string())
+        } else {
+            run_rejoin(project, debug)
+        };
+        #[cfg(not(feature = "host-services"))]
+        let result: Result<(), String> = Err(format!(
+            "--rejoin {project} needs a binary built with host services"
+        ));
+        if let Err(e) = result {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     // Order 1350-ku7v: top-level and returning, for the same reason
     // --ensure-enclave is (1004-xw3q) — a CLI query nested under `if init`
     // falls through into the app's service path and sits idle.
@@ -1291,7 +1353,7 @@ fn main() {
     }
 
     if init {
-        if let Err(e) = run_init(debug, force) {
+        if let Err(e) = bringup_timer::timed("image-ensure", || run_init(debug, force)) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -1301,7 +1363,9 @@ fn main() {
         #[cfg(feature = "vault")]
         if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
             // Skip Vault bootstrap in litmus/fake mode — no Vault container.
-        } else if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
+        } else if let Err(e) = bringup_timer::timed("vault-health", || {
+            vault_bootstrap::ensure_vault_running(debug)
+        }) {
             eprintln!("Error bringing Vault up: {}", e);
             std::process::exit(1);
         }
@@ -1381,6 +1445,7 @@ fn main() {
         && let Some(flag) = [
             (opencode, "--opencode"),
             (opencode_web, "--opencode-web"),
+            (studio_id.is_some(), "--studio"),
             (observatorium, "--observatorium"),
             (codex, "--codex"),
             (claude, "--claude"),
@@ -1460,6 +1525,27 @@ fn main() {
         }
     }
 
+    if let Some(studio) = studio_id.as_deref() {
+        // A studio that cannot launch is refused before a tray companion is
+        // spawned: that companion reconciles the enclave as it starts.
+        if let Err(e) = studio::WebLane::studio(studio) {
+            eprintln!("Error: {e}");
+            std::process::exit(1);
+        }
+        let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
+        maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
+        if let Some(project_path) = config_path {
+            if let Err(e) = run_studio_mode(&project_path, studio, is_cloud, port_override, debug) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+            return;
+        } else {
+            eprintln!("Error: --studio requires a project (--cloud owner/repo)");
+            std::process::exit(2);
+        }
+    }
+
     if opencode_web {
         let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
         maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
@@ -1469,6 +1555,7 @@ fn main() {
                 is_cloud,
                 prompt.as_deref(),
                 port_override,
+                &studio::WebLane::opencode(),
                 debug,
             ) {
                 eprintln!("Error: {}", e);
@@ -2589,6 +2676,12 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1637-5765: the opt-in Flutter toolchain. Not an INIT image: built on
         // the forge's first `flutter` (toolchain_exec::prepare).
         "flutter" => "images/flutter",
+        // 1874-b9tg: local image generation. Not an INIT image: built on
+        // first use through ensure_image_exists.
+        "imagegen" => "images/imagegen",
+        // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
+        // only for a project with `[imagegen] studio = true`.
+        "imagegen-studio" => "images/imagegen-studio",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
@@ -4224,7 +4317,8 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 }
 
 /// The passwd home of this user, which HOME cannot fake.
-#[cfg(all(test, unix))]
+#[cfg(test)]
+#[cfg(unix)]
 fn passwd_home() -> Option<PathBuf> {
     // SAFETY: getpwuid returns a pointer into static storage or null; it is
     // read at once, under env_lock in every test caller.
@@ -4477,6 +4571,27 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     Ok(certs_dir)
 }
 
+/// 1913-ebv8: `--cgroup-parent=tillandsias.slice` where the host runs podman on
+/// the systemd cgroup manager; nothing elsewhere. Forge and siblings alike, so
+/// oomd ranks them against each other inside one monitored slice.
+pub(crate) fn oom_slice_args() -> Vec<String> {
+    oom_slice()
+        .map(|slice| vec![format!("--cgroup-parent={slice}")])
+        .unwrap_or_default()
+}
+
+/// The slice itself, for a `ContainerSpec` launch.
+pub(crate) fn oom_slice() -> Option<String> {
+    #[cfg(target_os = "linux")]
+    {
+        oom_posture::available().then(|| oom_posture::SLICE.to_string())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 fn build_stack_common_args(
     container_name: &str,
     hostname: &str,
@@ -4507,6 +4622,7 @@ fn build_stack_common_args(
     // memory.swap.max and pids.max = clamp(512·nproc, 4096, 16384), which
     // keeps the 4096 floor above.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
+    args.extend(oom_slice_args());
     args.extend(proxy_env_args());
     args.extend([
         "--env".into(),
@@ -4636,9 +4752,15 @@ pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
 pub(crate) const FORGE_SSH_QUARANTINE_TMPFS: &str = "/home/forge/.ssh:size=1m,mode=0700,U";
 pub(crate) const FORGE_GH_QUARANTINE_TMPFS: &str = "/home/forge/.config/gh:size=1m,mode=0700,U";
 
+// 1919-hlth: enclave HEALTHCHECKs run as a numeric user at a 30 s interval.
+#[cfg(test)]
+mod enclave_healthcheck_tests;
+
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "--detach".into(),
+        // 1922-rann: the proxy announces readiness (READY=1 once squid listens).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         // Order 387: a crashed/exited container holding the name must not
         // block relaunch with exit-125; --replace atomically removes it
         // (mirrors order 314's inference fix and order 378's forge-agent fix).
@@ -4833,6 +4955,8 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
                 if debug {
                     eprintln!("[tillandsias] enclave proxy already running");
                 }
+                // 1922-gate: reused, so no new ready event will come.
+                tillandsias_podman::readiness::mark_reused("tillandsias-proxy");
                 return Ok(());
             }
         }
@@ -5775,6 +5899,8 @@ fn build_git_run_args(
     let mirror_volume = format!("tillandsias-mirror-{project_name}");
     let mut args = vec![
         "--detach".into(),
+        // 1922-rann: the mirror announces readiness (READY=1 once seeded).
+        tillandsias_podman::readiness::SDNOTIFY_FLAG.into(),
         "--rm".into(),
         // Order 387: relaunch a mirror container while an exited one still
         // holds the name must not fail with exit-125 (mirrors order 314/378).
@@ -6370,26 +6496,6 @@ async fn probe_git_mirror_seeded(
     }
 }
 
-/// The live Windows pristine-volume seed took roughly 12–15 minutes
-/// (mirror-first-seed-vs-launch-readiness-race). Twenty minutes preserves a
-/// finite launch refusal while covering the measured upper bound with room for
-/// proxy/cache variance. A seeded mirror returns before the first sleep.
-const GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS: u32 = 20 * 60;
-const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
-
-/// Order 452 slice 2: launcher-side git-mirror readiness gate.
-///
-/// A clone-only forge (order 437) clones `git://git-<project>/<project>` the
-/// moment its entrypoint runs, but a FRESH mirror volume seeds in a background
-/// sweep — a full-repo fetch from upstream through the proxy that can take
-/// minutes — while the guest's clone backstop only waits ~60s. Block the
-/// launch until the mirror's bare repo has a resolvable HEAD and a concrete
-/// head, mirroring the [`wait_for_inference_ready`] pattern: bounded, truthful,
-/// and loud on timeout.
-///
-/// Probes via `podman exec` inside the mirror container so readiness is
-/// measured on the served repo itself, not on network reachability.
-/// @trace spec:git-mirror-service
 /// ORDER 778-hb3x criterion 3. The line the mirror prints when its seed fetch
 /// fails (images/git/entrypoint.sh, `retry_msg "[git-mirror] Seed fetch
 /// failed: …"`). A cross-component string: the litmus
@@ -6408,87 +6514,116 @@ fn last_seed_failure(lines: &[String]) -> Option<String> {
     Some(text)
 }
 
-async fn wait_for_git_mirror_ready(
+/// ORDER 1922-gate: the forge starts only when its hard requirements have each
+/// reported ready (operator ruling 2026-10-28: forges never wait on or poll
+/// siblings). Vault, proxy and, for a project with an upstream, the mirror are
+/// awaited on the readiness board their launches publish to (#738); a timeout
+/// is one `event:service_ready_failed` carrying `retry_after` and no forge.
+/// Optional siblings (inference, the studio) are started beside this and never
+/// awaited here.
+///
+/// A mirror this process neither launched nor reused has no event to wait on
+/// (another process started it). It is asked once whether it is seeded
+/// (1922-unwt): seeded is marked reused; unseeded is published as its one
+/// failed outcome, so the gate refuses with `retry_after` instead of polling.
+/// @trace order:1922-gate, spec:podman-orchestration
+async fn gate_forge_launch(
+    client: &PodmanClient,
+    git_container_name: &str,
+    project_name: &str,
+    expected_branch: Option<&str>,
+    gate_mirror: bool,
+    debug: bool,
+) -> Result<(), String> {
+    gate_forge_launch_within(
+        client,
+        git_container_name,
+        project_name,
+        expected_branch,
+        gate_mirror,
+        debug,
+        tillandsias_podman::readiness::gate_deadline,
+    )
+    .await
+}
+
+/// [`gate_forge_launch`] with the per-service deadline injected (the
+/// acceptance fixture holds a service unready for milliseconds, not minutes).
+async fn gate_forge_launch_within(
+    client: &PodmanClient,
+    git_container_name: &str,
+    project_name: &str,
+    expected_branch: Option<&str>,
+    gate_mirror: bool,
+    debug: bool,
+    deadline: impl Fn(&str) -> Duration,
+) -> Result<(), String> {
+    use tillandsias_podman::readiness;
+    #[cfg_attr(not(feature = "vault"), allow(unused_mut))]
+    let mut hard: Vec<&str> = vec!["tillandsias-proxy"];
+    #[cfg(feature = "vault")]
+    hard.push(crate::vault_bootstrap::VAULT_CONTAINER_NAME);
+    if gate_mirror {
+        if readiness::is_tracked(git_container_name) {
+            hard.push(git_container_name);
+        } else {
+            readiness::publish(
+                git_container_name,
+                adopted_mirror_outcome(client, git_container_name, project_name, expected_branch)
+                    .await,
+            );
+            hard.push(git_container_name);
+        }
+    }
+    // The headless launches containers only inside a Linux host, VM or WSL
+    // distro, where every launch binds its notify socket; a non-unix build has
+    // no socket, so nothing would ever be published.
+    if cfg!(not(unix)) {
+        return Ok(());
+    }
+    if debug {
+        eprintln!("[tillandsias] [forge-launch] readiness gate: awaiting {hard:?}");
+    }
+    readiness::gate_within(&hard, deadline)
+        .await
+        .map_err(|e| format!("{e}. The forge was not started; launch again after retry_after."))
+}
+
+/// ORDER 1922-unwt. The one outcome for a mirror another process started:
+/// seeded is ready (`reused`); unseeded is failed, carrying what the probe saw
+/// and the mirror's own last seed-fetch failure (778-hb3x criterion 3). One
+/// probe, never a loop: that process's launch owns the seed and its event.
+async fn adopted_mirror_outcome(
     client: &PodmanClient,
     container_name: &str,
     project_name: &str,
     expected_branch: Option<&str>,
-    debug: bool,
-) -> Result<(), String> {
-    // First seed is a full-repo fetch through the proxy: minutes, not seconds
-    // (this workspace's pack alone is >100 MiB). Bounded so a dead upstream
-    // still fails the launch loudly instead of hanging forever.
-    //
-    // Race note (order: mirror-first-seed-vs-launch-readiness-race):
-    // `git rev-parse --verify HEAD` can pass while the initial upstream fetch
-    // is still in progress. Require the launcher-declared host branch to be a
-    // concrete local head as well. When the host branch is unknowable
-    // (detached/git-less checkout), require at least one concrete local head;
-    // never assume the target project uses Tillandsias' `main` convention.
+) -> tillandsias_podman::readiness::ReadyOutcome {
+    use tillandsias_podman::readiness::{RETRY_AFTER, ReadyOutcome};
     let repo_path = format!("/srv/git/{project_name}");
-    let mut last = String::from("no probe attempted");
-    let mut seen_failure: Option<String> = None;
-    for attempt in 1..=GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS {
-        match probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await {
-            Ok(seeded_ref) => {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] [forge-launch] git mirror seeded on attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS} ({seeded_ref} present)"
-                    );
-                }
-                return Ok(());
-            }
-            Err(reason) => last = reason,
+    let probed = probe_git_mirror_seeded(client, container_name, &repo_path, expected_branch).await;
+    let last = match probed {
+        Ok(_) => {
+            return ReadyOutcome::Ready {
+                status: Some("reused".to_string()),
+            };
         }
-        if attempt == 5 {
-            // One non-debug notice so an operator watching a first launch
-            // knows the wait is the mirror seed, not a hang.
-            eprintln!(
-                "[tillandsias] [forge-launch] waiting for git mirror {container_name} to finish seeding {repo_path} (bounded, {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s max)..."
-            );
-        }
-        // ORDER 778-hb3x criterion 3: a wait that can never succeed must not
-        // look like a slow first seed. Every 30 s, say what the probe saw and
-        // the mirror's own last seed-fetch failure, when it has one; print it
-        // again only when it changes. Measured on yoga 2026-09-29: a 1200 s
-        // wait that ended in "branch … is not concrete" said nothing until then.
-        if attempt == 5 || (attempt > 5 && attempt % 30 == 0) {
-            let tail = client
-                .log_tail(container_name, 200)
-                .await
-                .unwrap_or_default();
-            let failure = last_seed_failure(&tail.lines);
-            if failure != seen_failure || attempt == 5 {
-                eprintln!("[tillandsias] [forge-launch]   still waiting ({attempt}s): {last}");
-                if let Some(f) = &failure {
-                    eprintln!("[tillandsias] [forge-launch]   mirror reports: {f}");
-                }
-                seen_failure = failure;
-            }
-        }
-        if debug {
-            eprintln!(
-                "[tillandsias] [forge-launch] git mirror not ready yet (attempt {attempt}/{GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}): {last}"
-            );
-        }
-        tokio::time::sleep(GIT_MIRROR_SEED_POLL_INTERVAL).await;
-    }
+        Err(reason) => reason,
+    };
     let tail = client
         .log_tail(container_name, 200)
         .await
         .unwrap_or_default();
     let mirror_says = last_seed_failure(&tail.lines)
-        .map(|f| format!(" The mirror's last seed failure: {f}."))
+        .map(|f| format!("; the mirror's last seed failure: {f}"))
         .unwrap_or_default();
-    Err(format!(
-        "git mirror {container_name} did not become cloneable within {GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS}s: {last}.{mirror_says} \
-         A forge launched now would land on an empty tree, so the launch is refused \
-         (fresh-checkout invariant, \
-         plan/issues/forge-launch-must-guarantee-fresh-checkout-idempotency-2026-07-20.md). \
-         Inspect `podman logs {container_name}` — common causes: the upstream seed fetch \
-         is still running or failed (network/proxy), upstream is empty, or the mirror's \
-         HEAD is unborn on an old image (ensure-mirror-head repairs it on container start)."
-    ))
+    ReadyOutcome::Failed {
+        reason: format!(
+            "started by another launch and not seeded yet ({last}){mirror_says}; \
+             a forge now would clone an empty tree. Inspect `podman logs {container_name}`"
+        ),
+        retry_after: RETRY_AFTER,
+    }
 }
 
 /// The host tree WSL2 projects into the guest: the Windows driver store plus
@@ -8843,6 +8978,22 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
 /// 2026-09-04 at 01:09Z and 12:42:21Z; order 1019-ba6e). Both phases now
 /// share this one predicate, so ownership cannot be honoured in one loop and
 /// forgotten in the next.
+/// ORDER 1946-shsc: the enclave has ONE owner, the process holding
+/// `tray.lock` (1944-trsp). A process that exits while ANOTHER process holds
+/// it stops nothing: the shared stack and the forges it launched are that
+/// owner's to stop. On lenovinha 2026-11-01 an exiting companion stopped the
+/// proxy, inference, nix-cache, router and git mirror a 16 h tray relied on.
+/// Leaving a container running is recoverable; stopping a live owner's is not.
+fn shutdown_targets_for(
+    containers: Vec<tillandsias_podman::ContainerListEntry>,
+    owner_elsewhere: Option<Option<u32>>,
+) -> Vec<tillandsias_podman::ContainerListEntry> {
+    if owner_elsewhere.is_some() {
+        return Vec::new();
+    }
+    shutdown_escalation_targets(containers)
+}
+
 fn shutdown_escalation_targets(
     containers: Vec<tillandsias_podman::ContainerListEntry>,
 ) -> Vec<tillandsias_podman::ContainerListEntry> {
@@ -9384,6 +9535,81 @@ fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debu
     let _ = mcp_socket::start_mcp_socket_server_for_lane(project, instance);
 }
 
+/// ORDER 1911-3dqo. The running forge of `project` (lane `instance`) that a
+/// rejoin re-attaches to, across every agent mode. A forge outlives its
+/// launcher (conmon owns it), so the launcher's death leaves exactly this
+/// container running with nobody attached.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+fn rejoin_target(
+    project: &str,
+    instance: Option<&str>,
+    running: &[String],
+) -> Result<String, String> {
+    let found: Vec<String> = [
+        ForgeAgentMode::OpenCode,
+        ForgeAgentMode::Claude,
+        ForgeAgentMode::Codex,
+        ForgeAgentMode::Antigravity,
+        ForgeAgentMode::Maintenance,
+    ]
+    .into_iter()
+    .map(|mode| forge_container_name_for_mode_with_instance(project, mode, instance))
+    .filter(|name| running.contains(name))
+    .collect();
+    match found.as_slice() {
+        [one] => Ok(one.clone()),
+        [] => Err(format!(
+            "no running forge for {project}{}; nothing to rejoin",
+            forge_instance_suffix_from(instance)
+        )),
+        many => Err(format!(
+            "more than one running forge for {project}: {}; set TILLANDSIAS_FORGE_INSTANCE or stop one",
+            many.join(", ")
+        )),
+    }
+}
+
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+fn rejoin_attach_args(container: &str) -> Vec<String> {
+    vec!["attach".to_string(), container.to_string()]
+}
+
+/// ORDER 1911-3dqo. `tillandsias --rejoin <project>`: serve the forge's lane
+/// MCP socket again, then re-attach its pty.
+#[cfg(feature = "host-services")]
+fn run_rejoin(project: &str, debug: bool) -> Result<(), String> {
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let out = podman_command()
+        .args(["ps", "--format", "{{.Names}}"])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("podman ps failed: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("podman ps exited {}", out.status));
+    }
+    let running: Vec<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let container = rejoin_target(project, instance.as_deref(), &running)?;
+    let lane = instance.as_deref().unwrap_or("default");
+    mcp_socket::serve_lane_for_rejoin(project, lane)
+        .map_err(|e| format!("runtime_unavailable: lane MCP socket not served: {e}"))?;
+    if debug {
+        eprintln!("[tillandsias] lane {project}-{lane} serves; attaching {container}");
+    }
+    // Caller-owned: an interactive attach lasts as long as its operator.
+    let status = podman_command()
+        .args(rejoin_attach_args(&container))
+        .spawn_caller_owned_lifetime()
+        .and_then(|mut child| child.wait())
+        .map_err(|e| format!("podman attach failed: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("podman attach {container} exited {status}"))
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
@@ -9459,6 +9685,7 @@ fn build_opencode_forge_args(
     // Same budget as build_stack_common_args (1375-xxzj; the 4096 pids floor of
     // 667-se87 is kept by the clamp): this lane hosts workspace builds too.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
+    args.extend(oom_slice_args());
     match mode {
         ForgeMode::Cli => {
             // When a prompt is provided, the entrypoint execs
@@ -9742,6 +9969,20 @@ fn build_opencode_forge_args(
             "--env".into(),
             "TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock".into(),
         ]);
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=volume,source={volume},target={}",
+                    imagegen_tool::FORGE_SCRATCH
+                ),
+            ]);
+        }
     }
     // Order 1859-v5iv: the tray run that launched this forge, so a tray start
     // after that run died reaps it (dead_run.rs).
@@ -13544,6 +13785,20 @@ fn provider_login_tool_cache_mount(provider: &ProviderId) -> Option<String> {
     None
 }
 
+/// ORDER 1909-t9y2. How long a device sign-in step may wait on the PERSON.
+/// Codex prints "expires in 15 minutes" for its one-time code, but the step
+/// ran under the 300 s container budget, so an unfinished sign-in was killed
+/// at minute 5 with ten minutes left on the code (measured 2026-10-28:
+/// exec 03:58:07, `podman rm -f` 04:03:07). The budget is the provider's
+/// window plus a minute, so the provider, not us, decides when it expired.
+fn device_sign_in_budget(provider: &ProviderId) -> std::time::Duration {
+    const SLACK: std::time::Duration = std::time::Duration::from_secs(60);
+    match provider {
+        ProviderId::Codex => std::time::Duration::from_secs(15 * 60) + SLACK,
+        _ => tillandsias_podman::OperationKind::Container.default_budget(),
+    }
+}
+
 /// Stream Codex's own device instructions byte-for-byte and add a QR only when
 /// the complete, code-free verification URI appears. The existing bounded
 /// Podman stream keeps the container PTY and its deadline; Codex needs no stdin
@@ -13562,7 +13817,7 @@ fn run_codex_device_login_with_qr(
     let status = login
         .status_bounded_with_stdin_streaming(
             &[],
-            tillandsias_podman::OperationKind::Container.default_budget(),
+            device_sign_in_budget(&ProviderId::Codex),
             move |chunk| {
                 let mut out = std::io::stdout().lock();
                 let _ = out.write_all(chunk);
@@ -15289,11 +15544,30 @@ fn maybe_spawn_detached_tray_for_cli(
     // false positive used to cause `--observatorium` / `--opencode-web` to
     // race past this helper and then fail in `send_issue_web_session` with
     // `Connection refused`.
-    if control_socket_is_listening(&socket_path) {
-        if debug {
-            eprintln!("[tillandsias] reusing existing tray control socket");
+    // ORDER 1944-trsp: the socket can be gone while its tray lives (a second
+    // tray's start and exit unlinked it on lenovinha, 2026-11-01), so a failed
+    // connect is not "no tray". The tray's lifetime lock decides; a companion
+    // is started only when nobody holds it.
+    match tray_presence::presence(
+        &control_socket_host_dir(),
+        control_socket_is_listening(&socket_path),
+    ) {
+        tray_presence::Presence::Listening => {
+            if debug {
+                eprintln!("[tillandsias] reusing existing tray control socket");
+            }
+            return;
         }
-        return;
+        tray_presence::Presence::AliveWithoutSocket { pid } => {
+            eprintln!(
+                "[tillandsias] a tray is running ({}) but its control socket {} does not answer; \
+                 not starting a second tray over it. Quit and restart the tray to restore the socket.",
+                pid.map_or_else(|| "pid unknown".to_string(), |p| format!("pid {p}")),
+                socket_path.display()
+            );
+            return;
+        }
+        tray_presence::Presence::Absent => {}
     }
 
     let Ok(exe) = std::env::current_exe() else {
@@ -15431,6 +15705,25 @@ fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<Strin
 /// stale socket file left over from a crashed tray.
 ///
 /// @trace spec:tray-host-control-socket
+/// (dev, inode) of the control socket this process bound, if any (1944-trsp).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) static BOUND_CONTROL_SOCKET: std::sync::OnceLock<(u64, u64)> =
+    std::sync::OnceLock::new();
+
+#[cfg(unix)]
+pub(crate) fn control_socket_is_ours(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    match (BOUND_CONTROL_SOCKET.get(), fs::symlink_metadata(path)) {
+        (Some(&(dev, ino)), Ok(m)) => m.dev() == dev && m.ino() == ino,
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+pub(crate) fn control_socket_is_ours(_path: &Path) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn control_socket_is_listening(socket_path: &Path) -> bool {
     if !socket_path.exists() {
@@ -15548,7 +15841,13 @@ fn launch_observatorium_browser(
 
     send_issue_web_session(&project_label, &otp)
         .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &app_url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         return Err(format!(
             "Observatorium app did not become reachable with a registered session: {err}"
         ));
@@ -16080,6 +16379,23 @@ async fn run_delegated_agent_container(
     }
 }
 
+/// ORDER 1911-3dqo. The argv an attached forge launch hands podman: a tty
+/// session gets `--sig-proxy=false`, so a hangup or signal that reaches the
+/// `podman run` client (its launcher was SIGKILLed and the pty closed) ends
+/// the client and leaves the forge running under conmon for `--rejoin`.
+/// Ctrl-C still reaches the forge as a byte on the tty. An explicit
+/// `--sig-proxy` setting is left as given.
+fn attached_run_args(args: &[String]) -> Vec<String> {
+    let tty = args.iter().any(|a| a == "--tty" || a == "-t" || a == "-it");
+    let explicit = args.iter().any(|a| a.starts_with("--sig-proxy"));
+    let mut out = Vec::with_capacity(args.len() + 1);
+    if tty && !explicit {
+        out.push("--sig-proxy=false".to_string());
+    }
+    out.extend_from_slice(args);
+    out
+}
+
 async fn run_agent_container_attached(
     client: &PodmanClient,
     stage: &str,
@@ -16088,6 +16404,9 @@ async fn run_agent_container_attached(
     debug: bool,
     delegated: Option<&DelegatedRunConfig>,
 ) -> Result<(), String> {
+    // 1915-brst: forge-start runs from here to the spawn of the attached run
+    // below; the session itself is not part of bring-up.
+    let forge_started = std::time::Instant::now();
     // ORDER 986-ahnc. THE FORGE ARGV IS VALIDATED HERE OR NOWHERE.
     //
     // 972-6vaj put the hardening envelope behind a real check on the
@@ -16226,10 +16545,16 @@ async fn run_agent_container_attached(
     // `swap:` line and the forge runs as before.
     #[cfg(target_os = "linux")]
     let _swap = forge_swap::acquire(container_name, debug);
+    // 1913-ebv8: once it runs, the forge is the last oomd candidate in its slice.
+    #[cfg(target_os = "linux")]
+    oom_posture::guard_forge(container_name, debug);
 
+    bringup_timer::report("forge-start", forge_started.elapsed().as_millis(), 0);
+
+    let attached = attached_run_args(args);
     let Some(config) = delegated else {
         return client
-            .run_container_attached_observed(stage, container_name, args, debug)
+            .run_container_attached_observed(stage, container_name, &attached, debug)
             .await;
     };
 
@@ -16568,6 +16893,20 @@ fn run_opencode_mode(
                 .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
         }
 
+        // Order 1910-a1m8: the same mirror readiness gate as
+        // ensure_enclave_for_project. Without it the forge cloned a mirror
+        // whose seed had not run yet and gave up after its ~40 s of clone
+        // retries (macOS cold cloud launch, 2026-10-28).
+        gate_forge_launch(
+            &client,
+            &git_container_name,
+            project_name,
+            project_default_branch.as_deref(),
+            project_remote_url.is_some(),
+            debug,
+        )
+        .await?;
+
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
         // terminal (run_container_attached_observed below). Tailing the SUPPORT
         // containers' logs (router/proxy/git/inference) into the same terminal
@@ -16661,6 +17000,7 @@ fn project_service_url(service_name: &str, project_name: &str, host_port: u16) -
     }
 }
 
+#[cfg(test)]
 fn opencode_web_url(project_name: &str, host_port: u16) -> String {
     project_service_url("opencode", project_name, host_port)
 }
@@ -16952,6 +17292,10 @@ fn wait_for_authenticated_opencode_web(
     project_name: &str,
     url: &str,
     cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
+    // ORDER 1863-eckw: re-sends IssueWebSession. A 401 means the router
+    // sidecar never received the session, which happens when it was still
+    // reconnecting to a freshly spawned tray (measured: 19 probes, all 401).
+    reregister: &mut dyn FnMut() -> Result<(), String>,
     debug: bool,
 ) -> Result<(), String> {
     let cookie_header = format!(
@@ -16970,6 +17314,16 @@ fn wait_for_authenticated_opencode_web(
     while start.elapsed() < timeout {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
+            Ok(401) => {
+                last_outcome =
+                    String::from("status 401 (session not at the router yet; re-registered)");
+                let _ = reregister();
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(502) => {
                 last_outcome = String::from("status 502 (starting)");
                 if debug {
@@ -17582,13 +17936,31 @@ fn send_issue_web_session(_project_label: &str, _cookie_value: &[u8; 32]) -> Res
     )
 }
 
+/// ORDER 1863-eckw. The tray the launcher saw at startup can exit before the
+/// web session is registered (it was shutting down when probed), leaving no
+/// control socket. A connect failure therefore spawns a tray and retries
+/// once; any other failure (a wrong reply, a timeout) is returned unchanged.
+fn register_web_session_with_tray_retry(
+    mut send: impl FnMut() -> Result<(), String>,
+    spawn_tray: impl FnOnce(),
+) -> Result<(), String> {
+    match send() {
+        Err(e) if e.starts_with("Failed to connect to control socket") => {
+            spawn_tray();
+            send()
+        }
+        other => other,
+    }
+}
+
 fn launch_opencode_web_browser(
     project_name: &str,
     certs_dir: &Path,
     router_host_port: u16,
+    lane: &studio::WebLane,
     debug: bool,
 ) -> Result<(), String> {
-    let url = opencode_web_url(project_name, router_host_port);
+    let url = project_service_url(lane.service, project_name, router_host_port);
     emit_opencode_web_event(project_name, "browser", "wait_for_route", Some(&url))?;
     if let Err(err) = wait_for_opencode_web_route(project_name, &url, debug) {
         emit_opencode_web_event(project_name, "browser", "route_unhealthy", Some(&err))?;
@@ -17647,12 +18019,25 @@ fn launch_opencode_web_browser(
     // cookie. If the handshake fails (no tray, wrong reply, timeout) we
     // refuse to launch the browser to prevent the "unauthorised" landing
     // page that used to result from the race.
-    send_issue_web_session(&project_label, &otp).map_err(|e| {
+    register_web_session_with_tray_retry(
+        || send_issue_web_session(&project_label, &otp),
+        || {
+            let lane = cli_reserved_lane(Some(project_name), true);
+            maybe_spawn_detached_tray_for_cli(false, lane.as_deref(), debug);
+        },
+    )
+    .map_err(|e| {
         let _ =
             emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
         format!("Failed to register web session with router: {e}")
     })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(
+        project_name,
+        &url,
+        &otp,
+        &mut || send_issue_web_session(&project_label, &otp),
+        debug,
+    ) {
         emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
         return Err(err);
     }
@@ -17768,11 +18153,27 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
     Ok(())
 }
 
+/// ORDER 1860-auhm: a registered studio, launched as a web lane. Same stack,
+/// route, OTP and window as OpenCode Web; only the lane differs (the studio's
+/// image and entry, routed as `studio.<label>`). A studio whose lane is not
+/// built yet is refused here, before anything starts.
+pub(crate) fn run_studio_mode(
+    project_path: &str,
+    studio_id: &str,
+    is_cloud: bool,
+    port_override: Option<u16>,
+    debug: bool,
+) -> Result<(), String> {
+    let lane = studio::WebLane::studio(studio_id)?;
+    run_opencode_web_mode(project_path, is_cloud, None, port_override, &lane, debug)
+}
+
 pub(crate) fn run_opencode_web_mode(
     project_path: &str,
     is_cloud: bool,
     prompt: Option<&str>,
     port_override: Option<u16>,
+    lane: &studio::WebLane,
     debug: bool,
 ) -> Result<(), String> {
     require_desktop_user_session("tillandsias --opencode-web")?;
@@ -17823,12 +18224,11 @@ pub(crate) fn run_opencode_web_mode(
     let certs_dir = ensure_ca_bundle(debug)?;
     ensure_enclave_network(debug)?;
 
-    ensure_versioned_images(
-        &root,
-        launch_images::launch_images(launch_images::LaunchSite::OpencodeWeb),
-        version,
-        debug,
-    )?;
+    let lane_images = lane.images(launch_images::launch_images(
+        launch_images::LaunchSite::OpencodeWeb,
+    ));
+    let lane_images: Vec<&str> = lane_images.iter().map(String::as_str).collect();
+    ensure_versioned_images(&root, &lane_images, version, debug)?;
 
     if debug {
         eprintln!("[tillandsias] [OpenCode Web] Repo root: {}", root.display());
@@ -18040,6 +18440,7 @@ pub(crate) fn run_opencode_web_mode(
             false,
             debug,
         );
+        let opencode_args = apply_web_lane(opencode_args, lane, version);
         client
             .run_container_observed(
                 "opencode-web-forge",
@@ -18049,6 +18450,13 @@ pub(crate) fn run_opencode_web_mode(
             )
             .await
             .map_err(|e| format!("[OpenCode Web] failed to start forge: {e}"))?;
+        // 1913-ebv8: the web forge runs detached; mark it now.
+        #[cfg(target_os = "linux")]
+        if oom_posture::available()
+            && let Err(e) = oom_posture::mark_running(&forge_container_name(project_name))
+        {
+            eprintln!("[tillandsias] oom: the web forge is not marked oomd-avoid ({e})");
+        }
         emit_opencode_web_event(project_name, "forge", "started", Some("opencode-web"))?;
 
         // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
@@ -18092,9 +18500,9 @@ pub(crate) fn run_opencode_web_mode(
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
         let route = RouterRoute::new(
-            format!("opencode.{}", router_host_label(project_name)),
+            lane.route_host(&router_host_label(project_name)),
             forge_container_name(project_name),
-            4096u16,
+            lane.port,
         );
         upsert_router_route(route, debug)?;
 
@@ -18113,7 +18521,35 @@ pub(crate) fn run_opencode_web_mode(
         Ok::<(), String>(())
     })?;
 
-    launch_opencode_web_browser(project_name, &certs_dir, router_host_port, debug)
+    launch_opencode_web_browser(project_name, &certs_dir, router_host_port, lane, debug)
+}
+
+/// ORDER 1860-auhm: the forge argv for `lane`. The OpenCode Web lane is the
+/// argv unchanged; a studio swaps the forge image for its own (stacked on the
+/// forge base) and the web entrypoint for its entry, and tells the studio
+/// front which paths a save may touch.
+fn apply_web_lane(mut args: Vec<String>, lane: &studio::WebLane, version: &str) -> Vec<String> {
+    if lane.service == "opencode" {
+        return args;
+    }
+    let forge_tag = forge_image_tag(version);
+    if let Some(i) = args.iter().position(|a| *a == forge_tag) {
+        args[i] = versioned_image_tag(&lane.image, version);
+        args.splice(
+            i..i,
+            [
+                "--env".to_string(),
+                format!("TILLANDSIAS_STUDIO={}", lane.studio_id()),
+            ],
+        );
+    }
+    if let Some(entry) = &lane.entrypoint
+        && let Some(i) = args.iter().position(|a| a == "--entrypoint")
+        && i + 1 < args.len()
+    {
+        args[i + 1] = entry.clone();
+    }
+    args
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -18396,12 +18832,14 @@ pub(crate) fn ensure_enclave_for_project(
     // launch died trying to pull localhost/tillandsias-router:v<new> from a
     // nonexistent registry (same bump-window class as the order-267
     // run-observatorium finding).
-    ensure_versioned_images(
-        &root,
-        launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
-        version,
-        debug,
-    )?;
+    bringup_timer::timed("image-ensure", || {
+        ensure_versioned_images(
+            &root,
+            launch_images::launch_images(launch_images::LaunchSite::EnclaveForProject),
+            version,
+            debug,
+        )
+    })?;
 
     // 776-jcf3: the mirror seeds from the cloud remote only, never from a
     // host checkout's remote.origin.url.
@@ -18488,7 +18926,21 @@ pub(crate) fn ensure_enclave_for_project(
         // inference-ollama-selfinstall-tls-uid1000-2026-07-24) must NOT abort
         // the forge — warn and continue so cloud-model harnesses launch
         // regardless. When local models land, re-gate behind an opt-in.
-        report_inference_readiness(&client, debug).await;
+        // 1922-gate: inference is an optional sibling. Its readiness is
+        // reported beside the launch, never awaited by it.
+        let inference_client = client.clone();
+        tokio::spawn(async move {
+            report_inference_readiness(&inference_client, debug).await;
+        });
+        // 1874-zry8: the ComfyUI studio sibling, only for a project that opted in.
+        crate::imagegen_studio::ensure_if_enabled(
+            &client,
+            project_name,
+            project_path,
+            version,
+            debug,
+        )
+        .await;
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -18498,16 +18950,18 @@ pub(crate) fn ensure_enclave_for_project(
         // remote: their mirror fills from forge pushes, not an origin seed,
         // so an empty mirror there is a legitimate cold state the guest
         // handles fail-loud rather than a seed-in-progress worth waiting on.
-        if project_remote_url.is_some() {
-            wait_for_git_mirror_ready(
+        bringup_timer::timed_async(
+            "mirror-seed",
+            gate_forge_launch(
                 &client,
                 &git_container_name,
                 project_name,
                 project_default_branch.as_deref(),
+                project_remote_url.is_some(),
                 debug,
-            )
-            .await?;
-        }
+            ),
+        )
+        .await?;
         Ok::<Option<String>, String>(mirror_identity)
     })?;
 
@@ -18788,7 +19242,11 @@ async fn ensure_shared_git_and_inference_for_launch(
         )
         .await?;
     }
-    ensure_inference_for_launch(client, certs_dir, version, debug).await?;
+    bringup_timer::timed_async(
+        "model-preload",
+        ensure_inference_for_launch(client, certs_dir, version, debug),
+    )
+    .await?;
     Ok(mirror_identity)
 }
 
@@ -19095,6 +19553,9 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     }
     #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+    // 1874-kkrc: image.generate's scratch volume goes with the forge.
+    #[cfg(feature = "host-services")]
+    imagegen_tool::remove_lane_volume(project, instance);
     remove_source_volume_if_present(&volume, debug)
 }
 
@@ -19324,7 +19785,9 @@ fn build_forge_agent_run_args_with_vault(
         // comment rides only some copies makes the missed ones look
         // intentional.
         // ORDER 1375-xxzj: the full cgroup budget; its pids clamp keeps the 4096 floor.
-        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host());
+        .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host())
+        // 1913-ebv8: in tillandsias.slice, where oomd ranks this forge last.
+        .cgroup_parent(oom_slice());
     if !non_interactive_prompt {
         spec = spec.interactive().tty();
         // D3 of order 702-6jza. With --tty, podman injects its DEFAULT
@@ -19616,6 +20079,14 @@ fn build_forge_agent_run_args_with_vault(
                 "TILLANDSIAS_CONTROL_SOCKET",
                 "/run/host/tillandsias-mcp/mcp.sock",
             );
+        // 1874-kkrc: image.generate's scratch VOLUME, fresh per forge, removed at teardown.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = imagegen_tool::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            spec = spec.volume(volume, imagegen_tool::FORGE_SCRATCH, MountMode::ReadWrite);
+        }
     }
     // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
     if let Some(run) = dead_run::run_label_value() {
@@ -20123,8 +20594,10 @@ mod preview_ca;
 // @trace spec:host-browser-mcp (order 1649-xqet)
 #[cfg(feature = "host-services")]
 mod browser_open;
+// 1860-auhm: the studio lane contract (registry, choice, web lane, co-edit feed).
 #[cfg(feature = "host-services")]
 mod host_audio;
+mod studio;
 
 // @trace spec:local-web-preview (order 1637-5765): opt-in toolchains (Flutter)
 // in a sibling container, streamed over the lane's MCP socket. Gated with
@@ -21703,6 +22176,13 @@ fn load_config(_path: &str) -> Result<(), String> {
 /// @trace spec:graceful-shutdown, spec:app-lifecycle
 pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     debug!("starting graceful shutdown sequence");
+    let owner_elsewhere = crate::tray_presence::owner_elsewhere(&control_socket_host_dir());
+    if let Some(pid) = owner_elsewhere {
+        info!(
+            owner = ?pid,
+            "another process owns the enclave; leaving its containers running"
+        );
+    }
 
     // 2. Stop all tillandsias-managed containers
     let client = PodmanClient::new();
@@ -21734,7 +22214,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                 // stopper). Ownership is decided by is_stack_managed_name —
                 // the same vocabulary the teardown and reset scopes speak —
                 // never by prefix alone.
-                let running_at_start = shutdown_escalation_targets(containers);
+                let running_at_start = shutdown_targets_for(containers, owner_elsewhere);
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -21773,7 +22253,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                         Ok(Ok(remaining)) => {
                             // 1019-ba6e: ownership, not prefix — the same
                             // predicate the stop phase applied.
-                            let running = shutdown_escalation_targets(remaining);
+                            let running = shutdown_targets_for(remaining, owner_elsewhere);
                             if running.is_empty() {
                                 debug!(
                                     "verification clean: zero running managed containers remain"
@@ -21805,8 +22285,10 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 
     // 4. Cleanup ephemeral resources (sockets and logs)
     // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
+    // ORDER 1944-trsp: only the socket THIS process bound. A headless exit or
+    // a refused tray removing it left a live tray unreachable.
     let socket_path = control_socket_host_dir().join("control.sock");
-    if socket_path.exists() {
+    if control_socket_is_ours(&socket_path) {
         debug!(path = %socket_path.display(), "removing control socket");
         let _ = fs::remove_file(&socket_path);
     }
@@ -24032,15 +24514,13 @@ mod tests {
         backend.push(Ok(fake_podman_output(0, "")));
         let client = PodmanClient::with_backend(backend.clone());
 
-        wait_for_git_mirror_ready(
-            &client,
-            "tillandsias-git-fixture",
-            "fixture",
-            Some("trunk"),
-            false,
-        )
-        .await
-        .expect("a concrete non-main target branch is seeded on the first probe");
+        let outcome =
+            adopted_mirror_outcome(&client, "tillandsias-git-fixture", "fixture", Some("trunk"))
+                .await;
+        assert!(
+            matches!(&outcome, tillandsias_podman::readiness::ReadyOutcome::Ready { status } if status.as_deref() == Some("reused")),
+            "a concrete non-main target branch is seeded on the first probe: {outcome:?}"
+        );
 
         let seen = backend.seen();
         assert_eq!(
@@ -24105,18 +24585,144 @@ mod tests {
         );
     }
 
-    #[test]
-    fn git_mirror_readiness_budget_covers_observed_cold_seed() {
-        assert_eq!(
-            GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS,
-            20 * 60,
-            "cold-seed wait must retain the reviewed 20-minute bound above the live 12–15 minute observation"
-        );
-        assert_eq!(
-            GIT_MIRROR_SEED_POLL_INTERVAL,
-            Duration::from_secs(1),
-            "attempt count and user-visible seconds must stay aligned"
-        );
+    /// ORDER 1922-accp — acceptance fixture for the event-driven readiness gate
+    /// (operator ruling 2026-10-28: forges never wait on or poll siblings).
+    ///
+    /// The fixture stands in for conmon: it owns the mirror's READY event on
+    /// the readiness board and the fake podman would answer any probe. Two arms,
+    /// each named in the output when red:
+    ///   forge-before-ready — the gate let the launch reach forge creation
+    ///                        before the mirror's READY event was published;
+    ///   polls=N            — the gate probed the sibling N > 0 times;
+    ///   held-unready-...   — with the mirror held unready, the gate did not
+    ///                        refuse with one failure carrying retry_after.
+    /// Red on linux-next until 1922-gate (the launcher polled the mirror once
+    /// a second and returned on a probe, not an event).
+    /// Run: cargo test -p tillandsias-headless --bin tillandsias readiness_acceptance
+    #[tokio::test]
+    async fn readiness_acceptance_forge_never_starts_before_mirror_ready_and_counts_no_polls() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use tillandsias_podman::readiness::{self, ReadyOutcome};
+
+        let backend = Arc::new(FakeBackend::default());
+        // Were the gate to probe, the mirror would look seeded at once.
+        backend.push(Ok(fake_podman_output(0, "resolved-head\n")));
+        backend.push(Ok(fake_podman_output(0, "")));
+        let client = PodmanClient::with_backend(backend.clone());
+        let mirror = "tillandsias-git-accp-fixture";
+        let short = |_: &str| Duration::from_millis(300);
+
+        // Vault and proxy have reported; the mirror's launch has begun.
+        readiness::mark_reused("tillandsias-proxy");
+        readiness::mark_reused("tillandsias-vault");
+        let mut red = Vec::new();
+
+        // Arm 1: the mirror is held unready. No forge, one failure, retry_after.
+        readiness::begin(mirror);
+        let held = gate_forge_launch_within(
+            &client,
+            mirror,
+            "accp-fixture",
+            Some("trunk"),
+            true,
+            false,
+            short,
+        )
+        .await;
+        match &held {
+            Err(e) if e.contains(mirror) && e.contains("retry_after=5s") => {}
+            other => red.push(format!("held-unready-not-refused:{other:?}")),
+        }
+
+        // Arm 2: READY arrives later; the gate returns only after it.
+        readiness::begin(mirror);
+        let emitted = Arc::new(AtomicBool::new(false));
+        let flag = emitted.clone();
+        let source = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            flag.store(true, Ordering::SeqCst);
+            readiness::publish(
+                mirror,
+                ReadyOutcome::Ready {
+                    status: Some("mirror seeded (1)".into()),
+                },
+            );
+        });
+        let gate = gate_forge_launch_within(
+            &client,
+            mirror,
+            "accp-fixture",
+            Some("trunk"),
+            true,
+            false,
+            |_: &str| Duration::from_secs(10),
+        )
+        .await;
+        // Reaching here with Ok is the point the launch chain creates the forge.
+        let forge_started = gate.is_ok();
+        let ready_emitted_before_forge = emitted.load(Ordering::SeqCst);
+        source.await.unwrap();
+
+        let polls = backend
+            .seen()
+            .iter()
+            .filter(|(_, argv)| {
+                argv.first().map(String::as_str) == Some("exec") && argv.iter().any(|a| a == mirror)
+            })
+            .count();
+
+        if !forge_started {
+            red.push(format!("forge-never-started:{gate:?}"));
+        }
+        if forge_started && !ready_emitted_before_forge {
+            red.push("forge-before-ready".to_string());
+        }
+        if polls > 0 {
+            red.push(format!("polls={polls}"));
+        }
+        let verdict = if red.is_empty() {
+            "ok:readiness-acceptance:forge-after-ready:polls=0".to_string()
+        } else {
+            format!("refused:readiness-acceptance:{}", red.join(":"))
+        };
+        println!("{verdict}");
+        assert!(red.is_empty(), "{verdict}");
+    }
+
+    /// 1922-unwt: a mirror another launch started and has not seeded is ONE
+    /// failed outcome carrying retry_after and the mirror's own seed failure,
+    /// after one probe and one log read; never a wait.
+    #[tokio::test]
+    async fn an_adopted_unseeded_mirror_fails_once_with_retry_after_and_never_waits() {
+        use tillandsias_podman::readiness::{RETRY_AFTER, ReadyOutcome};
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Err(fake_podman_failure(128)));
+        backend.push(Ok(fake_podman_output(
+            0,
+            "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED\n",
+        )));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        let t0 = std::time::Instant::now();
+        let outcome =
+            adopted_mirror_outcome(&client, "tillandsias-git-fixture", "fixture", Some("trunk"))
+                .await;
+
+        match outcome {
+            ReadyOutcome::Failed {
+                reason,
+                retry_after,
+            } => {
+                assert_eq!(retry_after, RETRY_AFTER);
+                assert!(
+                    reason.contains("UPSTREAM AUTH REFUSED") && reason.contains("not seeded"),
+                    "the refusal names the mirror's own failure: {reason}"
+                );
+            }
+            ready => panic!("an unseeded mirror must not be ready: {ready:?}"),
+        }
+        assert_eq!(backend.seen().len(), 2, "one probe and one log read");
+        assert!(t0.elapsed() < Duration::from_secs(1), "no wait");
     }
 
     /// Order 494 interim guard (leak-not-destroy): a RUNNING forge must never
@@ -24518,6 +25124,48 @@ mod tests {
             vec!["tillandsias-vault"],
             "only OWNED and RUNNING containers may be escalated to SIGKILL"
         );
+    }
+
+    /// 1946-shsc, the 2026-11-01 case: run A holds the tray lock and owns
+    /// the shared stack; run B exits gracefully. B stops NOTHING of A's.
+    /// Pre-fix B's sweep took every running stack container. Once no other
+    /// owner exists, the sweep is the 936-kdev ownership filter as before.
+    #[test]
+    fn a_graceful_exit_leaves_another_owners_enclave_running() {
+        let entry = |name: &str| tillandsias_podman::ContainerListEntry {
+            name: name.to_string(),
+            state: "running".to_string(),
+            exit_code: 0,
+            exited_at: 0,
+            restarts: 0,
+        };
+        let enclave = || {
+            vec![
+                entry("tillandsias-proxy"),
+                entry("tillandsias-inference"),
+                entry("tillandsias-vault"),
+                entry("tillandsias-git-kumbia-kombat"),
+            ]
+        };
+        let dir = std::path::PathBuf::from("/dev/shm")
+            .join(format!("shsc-two-runs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_a = crate::tray_presence::acquire(&dir).expect("A owns the enclave");
+        // B is another process: the lock names A's pid, which is not B's.
+        std::fs::write(crate::tray_presence::lock_path(&dir), "1").unwrap();
+        let b_owner = crate::tray_presence::owner_elsewhere(&dir);
+        assert_eq!(b_owner, Some(Some(1)));
+        assert!(
+            shutdown_targets_for(enclave(), b_owner).is_empty(),
+            "B must leave A's enclave running"
+        );
+        // Pre-fix behaviour, for the record: B's sweep took all four.
+        assert_eq!(shutdown_escalation_targets(enclave()).len(), 4);
+        // A, the owner, still sweeps its own enclave on exit.
+        drop(run_a);
+        let owner = crate::tray_presence::owner_elsewhere(&dir);
+        assert_eq!(shutdown_targets_for(enclave(), owner).len(), 4);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Order 477 (the packet's steady-state criterion): after the LAST lane
@@ -24923,6 +25571,11 @@ mod tests {
             "claude_login",
             "codex_login",
             "antigravity_login",
+            // 1911-3dqo, yoga 2026-10-30: --rejoin was missing, so a rejoin
+            // SIGTERMed the running tray and it stopped the whole stack and
+            // the very forge the rejoin came for (tray log: "Received
+            // shutdown signal", then podman stop of every enclave service).
+            "rejoin_project.is_some()",
         ] {
             assert!(
                 window.split(&['|', '\n', ' '][..]).any(|tok| tok == lane),
@@ -25659,6 +26312,85 @@ mod tests {
     /// Order 427: two workers on one project must not collide. Before the
     /// instance component existed, both got `tillandsias-<project>-forge-<mode>`
     /// and `--replace` made worker 2 destroy worker 1.
+    /// ORDER 1911-3dqo, measured on yoga 2026-10-30: SIGKILL of the launcher
+    /// hung up its pty, the attached `podman run` client proxied the hangup
+    /// as `container kill` (journal: kill event from the run client's own
+    /// pid, 2 ms before died), and `--rm` removed the forge. A tty session
+    /// carries Ctrl-C as a byte, so it needs no signal proxy.
+    #[test]
+    fn a_tty_forge_launch_does_not_proxy_the_launchers_signals() {
+        let tty: Vec<String> = ["--rm", "--interactive", "--tty", "img"]
+            .map(String::from)
+            .to_vec();
+        let out = attached_run_args(&tty);
+        assert_eq!(out.first().map(String::as_str), Some("--sig-proxy=false"));
+        assert_eq!(&out[1..], &tty[..]);
+        let piped: Vec<String> = ["--rm", "img"].map(String::from).to_vec();
+        assert_eq!(attached_run_args(&piped), piped);
+        let explicit: Vec<String> = ["--sig-proxy=true", "--tty", "img"]
+            .map(String::from)
+            .to_vec();
+        assert_eq!(attached_run_args(&explicit), explicit);
+    }
+
+    /// ORDER 1863-eckw, measured on yoga 2026-10-30: the launcher saw a tray
+    /// on control.sock, skipped spawning one, and that tray exited before the
+    /// web session was registered, so registration failed ENOENT and the web
+    /// forge ran with no session. A connect failure now spawns a tray and
+    /// retries once; any other failure is returned as-is.
+    #[test]
+    fn a_web_session_whose_tray_vanished_spawns_one_and_retries() {
+        let mut sends = 0;
+        let mut spawned = 0;
+        let ok = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                if sends == 1 {
+                    Err("Failed to connect to control socket /run/x/control.sock: No such file or directory (os error 2)".into())
+                } else {
+                    Ok(())
+                }
+            },
+            || spawned += 1,
+        );
+        assert_eq!(ok, Ok(()));
+        assert_eq!((sends, spawned), (2, 1));
+
+        let mut sends = 0;
+        let mut spawned = 0;
+        let refused = register_web_session_with_tray_retry(
+            || {
+                sends += 1;
+                Err("tray replied with an unexpected message".into())
+            },
+            || spawned += 1,
+        );
+        assert!(refused.is_err());
+        assert_eq!((sends, spawned), (1, 0), "only a connect failure respawns");
+    }
+
+    /// ORDER 1911-3dqo: a rejoin finds the one running forge of a project,
+    /// whatever its agent mode, and re-attaches its pty with `podman attach`.
+    #[test]
+    fn a_rejoin_targets_the_running_forge_and_attaches_its_pty() {
+        let claude_w2 =
+            forge_container_name_for_mode_with_instance("acme", ForgeAgentMode::Claude, Some("w2"));
+        let running = vec!["tillandsias-git-service".to_string(), claude_w2.clone()];
+        assert_eq!(rejoin_target("acme", Some("w2"), &running), Ok(claude_w2));
+        assert!(rejoin_target("acme", None, &running).is_err());
+        assert!(rejoin_target("other", Some("w2"), &running).is_err());
+        let both = vec![
+            "tillandsias-acme-forge".to_string(),
+            "tillandsias-acme-forge-codex".to_string(),
+        ];
+        let err = rejoin_target("acme", None, &both).unwrap_err();
+        assert!(err.contains("tillandsias-acme-forge-codex"), "{err}");
+        assert_eq!(
+            rejoin_attach_args("tillandsias-acme-forge"),
+            vec!["attach".to_string(), "tillandsias-acme-forge".to_string()]
+        );
+    }
+
     #[test]
     fn forge_container_names_are_instance_scoped_so_workers_coexist() {
         for mode in [
@@ -26940,6 +27672,20 @@ mod tests {
         }
     }
 
+    /// ORDER 1909-t9y2. A Codex device code is valid for 15 minutes; the step
+    /// that waits on it must not be cut off sooner (it was 300 s).
+    #[test]
+    fn codex_device_sign_in_budget_covers_the_code_window() {
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex) >= std::time::Duration::from_secs(15 * 60),
+            "the Codex sign-in step must outlive its 15-minute code"
+        );
+        assert!(
+            device_sign_in_budget(&ProviderId::Codex)
+                > tillandsias_podman::OperationKind::Container.default_budget()
+        );
+    }
+
     /// ORDER 1571-lgex. The end-user line: one line, names the provider, says
     /// what to do, and carries no flag, variable or podman text.
     #[test]
@@ -27707,6 +28453,298 @@ mod tests {
             !qr.contains('\u{2580}') && !qr.contains('\u{2584}'),
             "no half-block glyphs"
         );
+    }
+
+    /// The vault stubs store what they were sent (base64); decode it here so
+    /// the stub scripts carry no decode-to-file idiom.
+    #[cfg(unix)]
+    fn decode_vaulted(path: &std::path::Path) -> String {
+        let Ok(encoded) = std::fs::read(path) else {
+            return String::new();
+        };
+        let mut child = match std::process::Command::new("base64")
+            .arg("-d")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(_) => return String::new(),
+        };
+        {
+            use std::io::Write as _;
+            let _ = child.stdin.take().unwrap().write_all(&encoded);
+        }
+        child
+            .wait_with_output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+            .unwrap_or_default()
+    }
+
+    /// Order 1914-twan: Codex refresh tokens are single-use. An oomd or
+    /// `podman kill` takes the whole container, watcher included, so a
+    /// rotation is lost unless it was copied before the kill. Kill the whole
+    /// process group 1.2 s after a rotation: the old 2 s poll had not copied
+    /// it yet. Shape-only token values; nothing real.
+    #[cfg(unix)]
+    #[test]
+    fn codex_rotation_reaches_vault_before_a_container_kill() {
+        use std::os::unix::fs::PermissionsExt as _;
+        use std::os::unix::process::CommandExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let images = std::path::Path::new(&manifest).join("../../images/default");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let vaulted = dir.path().join("vaulted");
+        let auth = dir.path().join("auth.json");
+        let rotated = dir.path().join("rotated");
+        std::fs::write(&auth, "{\"refresh_token\":\"shape-old\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        // Vault stub: keep the last document written, decoded.
+        write_exec(
+            &bin.join("vault-cli.sh"),
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        // A host without inotify-tools (macOS) gets a stand-in that prints
+        // the file name when its content changes, as inotifywait would; on a
+        // Linux gate host the real inotifywait is exercised.
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/auth.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo auth.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let agent = dir.path().join("agent");
+        write_exec(
+            &agent,
+            format!(
+                "printf '{{\"refresh_token\":\"shape-rotated\"}}\\n' >'{a}'\n: >'{r}'\nsleep 30",
+                a = auth.display(),
+                r = rotated.display()
+            ),
+        );
+        let path = format!(
+            "{}:{}",
+            bin.display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(images.join("codex-oauth-session.sh"))
+            .arg("--")
+            .arg(&agent)
+            .env("PATH", &path)
+            .env(
+                "TILLANDSIAS_CODEX_VAULT_HELPER",
+                images.join("codex-oauth-vault.sh"),
+            )
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_AUTH_FILE", &auth)
+            .env(
+                "TILLANDSIAS_LIFECYCLE_LOG",
+                dir.path().join("lifecycle.log"),
+            )
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .process_group(0)
+            .spawn()
+            .expect("spawn wrapper");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !rotated.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(rotated.exists(), "stub agent never rotated the document");
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        // The whole group, as a container kill would: no EXIT trap, no watcher.
+        let _ = std::process::Command::new("kill")
+            .args(["-KILL", "--", &format!("-{}", child.id())])
+            .status();
+        let _ = child.wait();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("shape-rotated") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(
+            held.contains("shape-rotated"),
+            "Vault must hold the rotated token after a container kill; it held: {held:?}"
+        );
+    }
+
+    /// Order 1914-twan (operator approval 2026-10-28): the Claude approvals
+    /// watcher copies a config write to Vault on the write's event, well
+    /// inside the 3 s poll it replaces.
+    #[cfg(unix)]
+    #[test]
+    fn claude_approvals_reach_vault_on_the_write_event() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let script =
+            std::path::Path::new(&manifest).join("../../images/default/claude-approvals-vault.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let cfg = dir.path().join("claude.json");
+        let vaulted = dir.path().join("vaulted");
+        std::fs::write(&cfg, "{\"theme\":\"dark\"}\n").unwrap();
+        let write_exec = |path: &std::path::Path, body: String| {
+            std::fs::write(path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        let vault_cli = bin.join("vault-cli");
+        write_exec(
+            &vault_cli,
+            format!("cat >'{}.tmp' && mv '{0}.tmp' '{0}'", vaulted.display()),
+        );
+        let has_inotify = std::process::Command::new("sh")
+            .args(["-c", "command -v inotifywait"])
+            .stdout(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !has_inotify {
+            // macOS stand-in printing what inotifywait prints on a write.
+            write_exec(
+                &bin.join("inotifywait"),
+                "for d; do :; done\n\
+                 sum() { cksum \"$d/claude.json\" 2>/dev/null; }\n\
+                 last=\"$(sum)\"\n\
+                 echo 'Watches established.'\n\
+                 while :; do now=\"$(sum)\"\n\
+                 [ \"$now\" != \"$last\" ] && echo claude.json && last=\"$now\"\n\
+                 sleep 0.05; done"
+                    .to_string(),
+            );
+        }
+        let holder = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn holder");
+        let mut watcher = std::process::Command::new("bash")
+            .arg(&script)
+            .arg("watch")
+            .arg(holder.id().to_string())
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
+            .env("CLAUDE_CONFIG_FILE", &cfg)
+            .env("TILLANDSIAS_VAULT_CLI", &vault_cli)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("spawn watcher");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::fs::write(&cfg, "{\"theme\":\"light\"}\n").unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+        let mut held = String::new();
+        while std::time::Instant::now() < deadline {
+            held = decode_vaulted(&vaulted);
+            if held.contains("light") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let _ = watcher.kill();
+        let _ = watcher.wait();
+        let mut holder = holder;
+        let _ = holder.kill();
+        let _ = holder.wait();
+        assert!(
+            held.contains("light"),
+            "the approval write must reach Vault within 1.5 s; Vault held {held:?}"
+        );
+    }
+
+    /// Order 1914-twan: a Codex lane whose agent exits on an expired sign-in
+    /// ("account/read failed ... unauthorized (401)") offers the device
+    /// sign-in in the same window and relaunches, instead of ending the lane.
+    /// Runs the real wrapper with a stub agent, vault helper and login helper.
+    #[cfg(unix)]
+    #[test]
+    fn codex_lane_offers_relogin_on_unauthorized() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let wrapper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-session.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write_stub = |name: &str, body: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        let marks = dir.path().join("marks");
+        let vault = write_stub("vault", "[ \"$1\" = digest ] && echo missing; exit 0");
+        let login = write_stub(
+            "login",
+            &format!("echo login >>'{}'; exit 0", marks.display()),
+        );
+        let agent = write_stub(
+            "agent",
+            &format!(
+                "echo run >>'{m}'\n\
+                 if [ \"$(grep -c run '{m}')\" = 1 ]; then\n\
+                 echo 'Error: account/read failed during TUI bootstrap: account/read failed: \
+                 workspace routing discovery unauthorized (401) (code -32603)' >&2; exit 1; fi\n\
+                 exit 0",
+                m = marks.display()
+            ),
+        );
+        let mut child = std::process::Command::new("bash")
+            .arg(&wrapper)
+            .arg("--")
+            .arg(&agent)
+            .env("TILLANDSIAS_CODEX_VAULT_HELPER", &vault)
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_RELOGIN_HELPER", &login)
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn wrapper");
+        child.stdin.take().unwrap().write_all(b"\n").unwrap();
+        let out = child.wait_with_output().expect("wrapper output");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("sign-in has expired. Sign in again now?"),
+            "the 401 exit must offer re-login; stderr was: {stderr}"
+        );
+        let marks = std::fs::read_to_string(&marks).unwrap_or_default();
+        assert_eq!(
+            marks.lines().collect::<Vec<_>>(),
+            ["run", "login", "run"],
+            "expected run, device login, relaunch"
+        );
+        assert!(out.status.success(), "the relaunched agent exited 0");
     }
 
     #[test]
@@ -30373,6 +31411,9 @@ esac
             Some(nonzero_identity),
         );
         restore.set("FAKE_PODMAN_MODE", "codex-exit-37");
+        // 1915-brst: the attached launch reports forge-start once, at the
+        // spawn, on the thread that drives it.
+        bringup_timer::capture::start();
         let nonzero_error = runtime
             .block_on(run_agent_container_attached(
                 &client,
@@ -30390,6 +31431,15 @@ esac
         assert!(
             nonzero_error.contains("FAILED") && nonzero_error.contains("37"),
             "wrapper lost the nonzero failure: {nonzero_error}"
+        );
+        let bringup = bringup_timer::capture::take();
+        assert_eq!(
+            bringup
+                .iter()
+                .filter(|l| l.starts_with("bringup: step=forge-start ms="))
+                .count(),
+            1,
+            "the attached launch must report forge-start exactly once: {bringup:?}"
         );
 
         let exact_identity = "forge-alpha-codex-20260723T070000Z";
@@ -32685,9 +33735,47 @@ esac
         saved: Vec<(&'static str, Option<std::ffi::OsString>)>,
     }
 
+    /// 1932-4hwq: where a scratch home may live. A forge exports TMPDIR inside
+    /// the real HOME (/home/forge/.cache/...), so a tempdir there IS under the
+    /// real home and the 1898-hyhf guard rightly refuses it. Take the first of
+    /// TMPDIR, XDG_RUNTIME_DIR and /tmp that exists and is outside the passwd
+    /// home; with none, refuse loudly rather than weaken the guard.
+    #[cfg(unix)]
+    fn scratch_base() -> PathBuf {
+        let real = passwd_home().filter(|h| h.as_os_str().len() > 1);
+        let candidates = [
+            Some(std::env::temp_dir()),
+            std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from),
+            Some(PathBuf::from("/tmp")),
+        ];
+        for c in candidates.into_iter().flatten() {
+            if c.as_os_str().is_empty() || !c.is_dir() {
+                continue;
+            }
+            match &real {
+                Some(h) if c.starts_with(h) => continue,
+                _ => return c,
+            }
+        }
+        panic!(
+            "1932-4hwq: no scratch root outside the real home ({:?}): TMPDIR, \
+             XDG_RUNTIME_DIR and /tmp are all inside it or missing",
+            real
+        );
+    }
+
+    /// No passwd home off unix (and no 1898-hyhf guard to trip): TMPDIR is fine.
+    #[cfg(not(unix))]
+    fn scratch_base() -> PathBuf {
+        std::env::temp_dir()
+    }
+
     impl ScratchHome {
         fn new() -> Self {
-            let root = tempfile::tempdir().expect("scratch home");
+            let root = tempfile::Builder::new()
+                .prefix("scratch-home-")
+                .tempdir_in(scratch_base())
+                .expect("scratch home");
             let run = root.path().join("run");
             std::fs::create_dir_all(&run).expect("scratch runtime dir");
             let saved = ["HOME", "XDG_RUNTIME_DIR", "TILLANDSIAS_HOST_KIND"]
@@ -32822,6 +33910,14 @@ esac
             .join("ca"),
         )
         .expect_err("the real home must be refused");
+        // 1932-4hwq: a scratch dir INSIDE the real home (a forge's TMPDIR) is
+        // still refused; ScratchHome avoids it, the guard does not excuse it.
+        refuse_real_home_in_test(&real.join(".cache/tillandsias-project/tmp/.tmpX/ca"))
+            .expect_err("a scratch dir under the real home must be refused");
+        assert!(
+            !ScratchHome::new().path().starts_with(&real),
+            "1932-4hwq: ScratchHome must land outside the real home"
+        );
         assert!(err.contains("1898-hyhf"), "{err}");
     }
 
@@ -33254,6 +34350,24 @@ esac
                     .contains("launch_images::launch_images(launch_images::LaunchSite::Opencode)"),
             "OpenCode CLI lane must build the router image before ensure_router_running \
              (order-327 class; macOS cold-forge live repro 2026-07-15)"
+        );
+    }
+
+    #[test]
+    fn opencode_mode_waits_for_the_mirror_before_the_forge_clones() {
+        let manifest_dir = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        );
+        let source =
+            std::fs::read_to_string(manifest_dir.join("src/main.rs")).expect("main.rs is readable");
+        let window = source_window(&source, "fn run_opencode_mode(");
+        // source-pin-ok: the ORDER of the gate and the forge start is the contract (1910-a1m8).
+        let gate = window.find("gate_forge_launch(");
+        let forge = window.find("run_agent_container_attached(");
+        assert!(
+            matches!((gate, forge), (Some(g), Some(f)) if g < f),
+            "the OpenCode lane must wait for a cloneable mirror before starting the \
+             forge, or a cold launch clones an unseeded mirror (1910-a1m8)"
         );
     }
 
@@ -33823,6 +34937,81 @@ esac
     /// Order 1763-nc9d: the OpenCode Web route, its URL and its session
     /// label all name the project by its host label, the value the router
     /// sidecar derives from the (lowercased) Host header.
+    /// 1860-auhm: a studio is the OpenCode Web lane with a different lane.
+    /// The forge argv of a stub studio runs the studio's image and entry and
+    /// names the studio for its front; OpenCode Web's argv is untouched.
+    #[test]
+    fn a_studio_lane_swaps_only_the_image_and_the_entry() {
+        let version = "9.9.9.9";
+        let base = vec![
+            "run".to_string(),
+            "--entrypoint".to_string(),
+            "/usr/local/bin/entrypoint-forge-opencode-web.sh".to_string(),
+            forge_image_tag(version),
+        ];
+        let stub = studio::WebLane {
+            service: "studio",
+            port: 4300,
+            image: "studio-stub".into(),
+            entrypoint: Some("/usr/local/bin/studio-stub".into()),
+            label: "Stub studio".into(),
+        };
+        let args = apply_web_lane(base.clone(), &stub, version);
+        assert_eq!(
+            args,
+            [
+                "run",
+                "--entrypoint",
+                "/usr/local/bin/studio-stub",
+                "--env",
+                "TILLANDSIAS_STUDIO=stub",
+                &versioned_image_tag("studio-stub", version),
+            ]
+        );
+        assert_eq!(
+            apply_web_lane(base.clone(), &studio::WebLane::opencode(), version),
+            base
+        );
+        assert_eq!(
+            stub.route_host(&router_host_label("My_Site")),
+            "studio.my-site"
+        );
+        assert_eq!(
+            project_service_url(stub.service, "My_Site", 8080),
+            "http://studio.my-site.localhost:8080/"
+        );
+    }
+
+    /// 1860-auhm: the studio lane runs through the OpenCode Web launch, so its
+    /// route is the lane's host and port, and its window opens only after the
+    /// authenticated 2xx probe, as OpenCode Web's does.
+    #[test]
+    fn the_studio_route_and_window_come_from_the_shared_web_lane() {
+        // source-pin-ok: ORDER of the authenticated probe and the window launch is the contract (1860-auhm).
+        let source = include_str!("main.rs");
+        let studio = source_window(source, "pub(crate) fn run_studio_mode(");
+        assert!(studio.contains("studio::WebLane::studio(studio_id)?"));
+        // source-pin-ok: that the studio lane IS the OpenCode Web launch (no second route/OTP/window path) is the contract.
+        assert!(studio.contains(
+            "run_opencode_web_mode(project_path, is_cloud, None, port_override, &lane, debug)"
+        ));
+        let web = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        // source-pin-ok: the route host must come from the lane, or a studio would be routed as opencode.<label>.
+        assert!(web.contains("lane.route_host(&router_host_label(project_name))"));
+        assert!(!web.contains("format!(\"opencode.{}\", router_host_label(project_name))"));
+        let browser = source_window(source, "fn launch_opencode_web_browser(");
+        // source-pin-ok: the window URL must come from the lane, or a studio window would open OpenCode.
+        assert!(
+            browser.contains("project_service_url(lane.service, project_name, router_host_port)")
+        );
+        let probe = browser.find("wait_for_authenticated_opencode_web(");
+        let window = browser.find("rt_block_on_podman_run(args");
+        assert!(
+            matches!((probe, window), (Some(p), Some(w)) if p < w),
+            "the window must open only after the authenticated probe"
+        );
+    }
+
     #[test]
     fn opencode_web_names_the_project_by_its_host_label() {
         assert_eq!(router_host_label("DEVxSD_gameJam"), "devxsd-gamejam");
@@ -33843,10 +35032,16 @@ esac
         )
         .expect("main.rs readable");
         // Needles are split so this test's own text cannot match them.
+        // 1860-auhm: the route host now comes from the lane (opencode.<label>
+        // for OpenCode Web), still from the project's host label.
         assert!(source.contains(concat!(
-            "format!(\"opencode.{}\", router_host",
+            "lane.route_host(&router_host",
             "_label(project_name))"
         )));
+        assert_eq!(
+            studio::WebLane::opencode().route_host(&router_host_label("DEVxSD_gameJam")),
+            "opencode.devxsd-gamejam"
+        );
         assert_eq!(
             source
                 .matches(concat!(
@@ -34347,6 +35542,47 @@ esac
 
         let tag = versioned_image_tag("chromium-framework", "0.2.100");
         assert_eq!(tag, "localhost/tillandsias-chromium-framework:v0.2.100");
+    }
+
+    /// ORDER 1874-b9tg. The imagegen image is a first-use image: the resolver
+    /// knows it, its Containerfile pins an upstream `master-<n>-<sha>` tag,
+    /// and `--init` never builds it.
+    #[test]
+    fn imagegen_resolves_with_a_pinned_sd_cpp_tag_and_is_not_an_init_image() {
+        let root = Path::new(&std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
+            .join("../..");
+        let (containerfile, context) = image_specs(&root, "imagegen").expect("imagegen is known");
+        assert!(
+            context.ends_with("images/imagegen"),
+            "{}",
+            context.display()
+        );
+        assert_eq!(
+            runtime_assets::image_context_rel("imagegen").expect("embedded context"),
+            "images/imagegen"
+        );
+        let (identity, _) =
+            ensure_image_identity(&root, "imagegen", "1.0.0").expect("imagegen identity");
+        assert!(identity.canonical_tag.contains("tillandsias-imagegen"));
+
+        let text = fs::read_to_string(&containerfile).expect("Containerfile");
+        let tag = text
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("ARG SDCPP_TAG="))
+            .expect("Containerfile pins ARG SDCPP_TAG");
+        let parts: Vec<&str> = tag.splitn(3, '-').collect();
+        assert!(
+            parts.len() == 3
+                && parts[0] == "master"
+                && parts[1].parse::<u32>().is_ok()
+                && parts[2].len() >= 7
+                && parts[2].chars().all(|c| c.is_ascii_hexdigit()),
+            "SDCPP_TAG must be an upstream master-<n>-<sha> tag, got {tag}"
+        );
+        assert!(
+            !INIT_IMAGES.contains(&"imagegen"),
+            "imagegen is built on first use, never at init"
+        );
     }
 
     #[test]
@@ -35747,7 +36983,12 @@ mod forge_budget_argv_tests {
                 .and_then(|r| r.split(['(', '<']).next())
                 .unwrap_or("?")
                 .to_string();
-            if name == "forge_image_tag" || !body.contains("forge_image_tag(") {
+            // apply_web_lane (1860-auhm) builds nothing: it rewrites the argv
+            // build_opencode_forge_args already budgeted, finding the tag by name.
+            if name == "forge_image_tag"
+                || name == "apply_web_lane"
+                || !body.contains("forge_image_tag(")
+            {
                 continue;
             }
             launchers.push(name.clone());
