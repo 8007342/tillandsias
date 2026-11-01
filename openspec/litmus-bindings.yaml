@@ -804,6 +804,7 @@ specs:
   - litmus:ledger-node-claim-shape
   - litmus:git-delta-wait-shape
   - litmus:opencode-prompt-e2e-shape
+  - litmus:smoke-agent-prompt-is-minimal
   - litmus:forge-liveness-probe-shape
   - litmus:forge-e2e-rate-limit-shape
   - litmus:codex-e2e-launch-parity

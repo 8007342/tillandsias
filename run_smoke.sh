@@ -42,8 +42,12 @@ if [ "$INIT_RC" -ne 0 ]; then
   exit 1
 fi
 
+# 1941-smkp: one short agent turn, never the /meta-orchestration loop on the
+# shared hosted free tier. The token is spelled out so the prompt cannot match it.
+SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
-  env TILLANDSIAS_NO_TRAY=1 ~/.local/bin/tillandsias . --opencode --prompt "Use the /meta-orchestration skill" 2>&1 \
+  env TILLANDSIAS_NO_TRAY=1 ~/.local/bin/tillandsias . --opencode --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
+grep -q 'SMOKE-AGENT-OK' target/smoke-e2e/04-opencode.log
 
