@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: test-shell-ratchet-sh-is-an-orphan-fixture-no-gate-runs-it-and-it-is-red-on-trunk-so-port-it-to-a-lua-fixture-wired-into-check-and-fix-or-justify-its-three-red-arms
+    field: status
+    value: completed
+    ts: "2026-10-31T19:26:58Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: test-shell-ratchet-sh-is-an-orphan-fixture-no-gate-runs-it-and-it-is-red-on-trunk-so-port-it-to-a-lua-fixture-wired-into-check-and-fix-or-justify-its-three-red-arms
+    event:
+      type: completed
+      ts: "2026-10-31T19:26:58Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: d23faadf7 (land 301); scripts/lua/test-shell-ratchet.lua -> ok:shell-ratchet-fixture:10
+  - packet_id: test-shell-ratchet-sh-is-an-orphan-fixture-no-gate-runs-it-and-it-is-red-on-trunk-so-port-it-to-a-lua-fixture-wired-into-check-and-fix-or-justify-its-three-red-arms
+    event:
+      type: note
+      ts: "2026-10-31T19:26:58Z"
+      host: calmecacpilli
+      summary: |-
+        stale ready row, closed with evidence
