@@ -70,10 +70,14 @@ critical_path:
     # route uses the new `opencode.<project>` order. A regression
     # to `{project}.opencode` would silently break browser-MCP
     # allowlists AND the cookie scoping invariant.
-    # Negative control: the flipped `format!("{}.opencode", …)` must FAIL the step.
-    command: "M=crates/tillandsias-headless/src/main.rs; grep -F 'format!(\"opencode.{}\", router_host_label(project_name))' \"$M\" && ! grep -qF 'format!(\"{}.opencode\"' \"$M\""
+    # Since 1860-auhm the host is built by the shared web lane
+    # (studio.rs WebLane::route_host, service first) and main.rs asks
+    # the lane for it; the OpenCode lane's service is `opencode`.
+    # Negative control: the flipped `format!("{project_label}.{}", self.service)`
+    # or a main.rs `format!("{}.opencode"` must FAIL the step.
+    command: "M=crates/tillandsias-headless/src/main.rs; S=crates/tillandsias-headless/src/studio.rs; grep -F 'format!(\"{}.{project_label}\", self.service)' \"$S\" && grep -qF 'lane.route_host(&router_host_label(project_name))' \"$M\" && ! grep -qF 'format!(\"{}.opencode\"' \"$M\""
     timeout_ms: 3000
-    expected_behavior: "opencode.{}"
+    expected_behavior: "{project_label}"
 
   - step: "Req cookie scoping: validate_subdomain_binding function present"
     # Spec § implicit cookie-scoping invariant: a cookie issued
