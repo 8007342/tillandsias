@@ -7041,6 +7041,44 @@ mod tests {
         );
     }
 
+    /// ORDER 1903-6hkw, the operator-facing case (macuahuitl, 2026-11-01):
+    /// the demon_attack forge on an RTX A5000 (24 GB) was capped at image
+    /// tier I1, because its envelope (accel_gpu=usable, cuda) carried no
+    /// VRAM key and the ceiling fell through to the RAM floor. Rendered by
+    /// the probe and classified by the real ladder, it now reaches I3;
+    /// stripped of accel_vram_gb, as the pre-fix probe rendered it, I1.
+    #[test]
+    fn a_24_gib_cuda_card_reaches_image_tier_i3_and_without_vram_stays_at_i1() {
+        let mib = parse_nvidia_memory_total_mib("24564\n").unwrap();
+        let env = accel_envelope(&doc_with(vec![gpu_with_memory(
+            Some("discrete"),
+            Some(mib * 1024 * 1024),
+        )]));
+        // The fixture document records no RAM; a workstation like
+        // macuahuitl has well over I1's 16 GB floor, which is what earned it
+        // I1 before the fix. I2 and up need VRAM, so RAM alone stops at I1.
+        assert!(env.contains("accel_ram_gb=-"), "{env}");
+        let env = env.replace("accel_ram_gb=-", "accel_ram_gb=64");
+        assert!(env.contains("accel_gpu=usable"), "{env}");
+        assert_eq!(vram_cell(&env), "24", "{env}");
+        let ladder = crate::imagegen_tiers::ladder();
+        assert_eq!(
+            crate::imagegen_tiers::ceiling(&ladder, &env).tier,
+            "I3",
+            "{env}"
+        );
+        let pre_fix: String = env
+            .split_whitespace()
+            .filter(|kv| !kv.starts_with("accel_vram_gb="))
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert_eq!(
+            crate::imagegen_tiers::ceiling(&ladder, &pre_fix).tier,
+            "I1",
+            "{pre_fix}"
+        );
+    }
+
     /// An iGPU's carve-out is system RAM, not VRAM (this host's Vega: 2 GiB;
     /// yolanda's 860M: 512 MB).
     #[test]
