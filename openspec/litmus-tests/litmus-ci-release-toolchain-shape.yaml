@@ -28,7 +28,7 @@ description: >
   Pin workflow_dispatch-only triggers on release.yml + the local
   release preflight/local-ci scripts that replace hosted convergence,
   litmus metadata, and cache-warm workflows. Nix builds run via
-  DeterminateSystems/nix-installer-action + nix-community/cache-nix-action
+  cachix/install-nix-action (no Actions cache since 1950-b4f3)
   (FlakeHub caching was tried and reverted 2026-07-02, commit 769b4a32).
 severity: medium
 size: instant
@@ -40,10 +40,20 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "release workflow installs Nix via nix-installer-action and builds the musl target"
-    command: "grep -F 'DeterminateSystems/nix-installer-action' .github/workflows/release.yml && grep -F 'nix build -L .#tillandsias-x86_64-musl' .github/workflows/release.yml"
+  # 1933-ysbq moved the installer to cachix/install-nix-action on 2026-10-31;
+  # this step kept passing because the retired name survived in a COMMENT
+  # until 1950-b4f3 rewrote it. Pin the installer that is actually used.
+  - step: "release workflow has an uncommented Nix installer step and builds the musl host target"
+    # Anchored at line start so a `#` comment cannot satisfy either grep
+    # (the 1933-ysbq trap); no pipes, per the shell ratchet (1384-bxhk).
+    command: "f=.github/workflows/release.yml; grep -qE '^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*[A-Za-z0-9_-]+/(install-nix-action|nix-quick-install-action|determinate-nix-action)@' \"$f\" && grep -qE '^[[:space:]]*nix build -L [.]#tillandsias-x86_64-musl' \"$f\" && echo 'ok: installer step present and musl host built'"
     timeout_ms: 3000
-    expected_behavior: "tillandsias-x86_64-musl"
+    expected_behavior: "ok: installer step present and musl host built"
+
+  - step: "NEGATIVE CONTROL: an installer named only in a comment must FAIL the step above"
+    command: "d=target/litmus-toolchain-shape; mkdir -p \"$d\"; printf '%s\\n' '      # - uses: cachix/install-nix-action@deadbeef' '          nix build -L .#tillandsias-x86_64-musl' > \"$d/wf.yml\"; if grep -qE '^[[:space:]]*(-[[:space:]]*)?uses:[[:space:]]*[A-Za-z0-9_-]+/(install-nix-action|nix-quick-install-action|determinate-nix-action)@' \"$d/wf.yml\"; then echo 'FAIL: a commented installer passed'; else echo 'ok: commented installer refused'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: commented installer refused"
 
   - step: "release workflow is workflow_dispatch-only (manual trigger)"
     # The merge-to-main-and-release skill carries the trigger
