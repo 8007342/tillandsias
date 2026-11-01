@@ -4908,10 +4908,19 @@ mod tests {
             tools.contains(&"image.generate"),
             "image.generate is advertised (1874-kkrc): {tools:?}"
         );
+        // 1860-auhm: the four studio co-edit tools, by name.
+        for studio in [
+            "studio_options",
+            "studio_open",
+            "studio_changes",
+            "studio_publish_request",
+        ] {
+            assert!(tools.contains(&studio), "{studio} (1860-auhm): {tools:?}");
+        }
         assert_eq!(
             tools.len() - cloudflare,
-            20,
-            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + cloudflare family, nothing else"
+            24,
+            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + studio family + cloudflare family, nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -4981,8 +4990,8 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                20,
-                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc) + thirteen browser tools, got {tools:?}"
+                24,
+                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc), thirteen browser tools + four studio tools (1860-auhm), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5469,7 +5478,8 @@ mod tests {
             assert_eq!(cloudflare, crate::cloudflare_mcp::TOOLS.len() + 1);
             // 1874-kkrc: image.generate, by name.
             assert!(tools.iter().any(|t| t["name"] == "image.generate"));
-            assert_eq!(tools.len() - cloudflare, 20);
+            // 1860-auhm: + the four studio co-edit tools.
+            assert_eq!(tools.len() - cloudflare, 24);
 
             drop(writer);
             drop(lines);

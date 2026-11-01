@@ -342,6 +342,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // family (both lists above are pinned).
             #[cfg(feature = "vault")]
             tools.extend(crate::cloudflare_mcp::tool_descriptors());
+            // 1860-auhm: the studio co-edit tools, last (every list above is pinned).
+            tools.extend(crate::studio::tool_descriptors());
             serde_json::json!({ "result": { "tools": tools } })
         }
         "tools/call" => {
@@ -377,6 +379,27 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 let body = match crate::cloudflare_mcp::call_live(tool_name, args, debug) {
                     Ok(result) => serde_json::json!({
                         "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                    }),
+                    Err(e) => return Some(mcp_error(req, e)),
+                };
+                let mut resp = body;
+                resp["jsonrpc"] = serde_json::json!("2.0");
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
+
+            // 1860-auhm: the studio co-edit tools read the lane's own forge.
+            if let Some(result) = crate::studio::call(
+                tool_name,
+                project_label,
+                instance,
+                &req["params"]["arguments"],
+            ) {
+                let body = match result {
+                    Ok(v) => serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(v)
                     }),
                     Err(e) => return Some(mcp_error(req, e)),
                 };
