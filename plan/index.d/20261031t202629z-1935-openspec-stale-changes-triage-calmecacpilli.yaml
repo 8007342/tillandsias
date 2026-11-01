@@ -17,6 +17,9 @@ packets:
   context: '0 of 23 tasks done; last touched 2026-05-24; no implementation found (no artifact namespace prefix in crates/ or scripts/ beyond lib-env-forward''s unrelated env prefix).'
   exit_criteria:
   - openspec/changes/artifact-namespace-prefix-versioning is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  verifiable_closure: |
+    cargo run -q --release -p tillandsias-plan -- script run scripts/lua/probe-openspec-change-settled.lua artifact-namespace-prefix-versioning
+    prints ok:openspec-change-settled:artifact-namespace-prefix-versioning (archived, or every task ticked); on today's tree it prints refused:openspec-change-settled:artifact-namespace-prefix-versioning:<done>/<total>-ticked and exits 1.
   next_action: 'Operator decides: archive as abandoned (openspec archive --skip-specs) or re-plan. Recommendation: archive as abandoned; its versioning delta was never applied.'
   provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
   events:
@@ -40,6 +43,9 @@ packets:
   context: '12 of 39 tasks ticked; last touched 2026-05-25. PTY attach over vsock/hvsocket exists in crates/tillandsias-macos-tray/src/terminal_attach.rs, crates/tillandsias-windows-tray/src/hvsocket.rs and crates/tillandsias-host-shell/src/vsock_client.rs.'
   exit_criteria:
   - openspec/changes/control-wire-pty-attach is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  verifiable_closure: |
+    cargo run -q --release -p tillandsias-plan -- script run scripts/lua/probe-openspec-change-settled.lua control-wire-pty-attach
+    prints ok:openspec-change-settled:control-wire-pty-attach (archived, or every task ticked); on today's tree it prints refused:openspec-change-settled:control-wire-pty-attach:<done>/<total>-ticked and exits 1.
   next_action: 'A macOS or Windows host verifies the remaining tasks against the trays, ticks them, then archives with spec sync into openspec/specs/vsock-transport. Not verifiable on a Linux low-end host.'
   provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
   events:
@@ -63,6 +69,9 @@ packets:
   context: '5 of 26 tasks ticked; last touched 2026-07-28. openspec/specs/mcp-tool-socket exists; the dev-control-mcp capability spec has no main spec.'
   exit_criteria:
   - openspec/changes/dev-control-mcp is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  verifiable_closure: |
+    cargo run -q --release -p tillandsias-plan -- script run scripts/lua/probe-openspec-change-settled.lua dev-control-mcp
+    prints ok:openspec-change-settled:dev-control-mcp (archived, or every task ticked); on today's tree it prints refused:openspec-change-settled:dev-control-mcp:<done>/<total>-ticked and exits 1.
   next_action: 'Owner of the MCP socket work decides which open tasks still apply; split live tasks into plan rows and archive, or keep the change and refresh tasks.md.'
   provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
   events:
@@ -86,6 +95,9 @@ packets:
   context: '23 of 36 tasks ticked; last touched 2026-05-14. locales/ already carries fr.toml and ja.toml (and ar, hi, it, ko, nah).'
   exit_criteria:
   - openspec/changes/i18n-localization-wave-17 is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  verifiable_closure: |
+    cargo run -q --release -p tillandsias-plan -- script run scripts/lua/probe-openspec-change-settled.lua i18n-localization-wave-17
+    prints ok:openspec-change-settled:i18n-localization-wave-17 (archived, or every task ticked); on today's tree it prints refused:openspec-change-settled:i18n-localization-wave-17:<done>/<total>-ticked and exits 1.
   next_action: 'A host that can run the localization checks ticks what landed, files rows for the rest, then archives with spec sync.'
   provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
   events:
@@ -109,6 +121,9 @@ packets:
   context: '1 of 47 tasks ticked; last touched 2026-08-09. .github/workflows/release.yml has a macos release job tracing spec:macos-tray-build-and-release, and scripts/build-macos-tray.sh exists. The delta spec still says cargo build while the script prereqs name zig/cargo-zigbuild, so the delta has drifted. The coordinator''s ghost-trace concern does not reproduce: scripts/trace-coverage.sh --ghosts reports no ghost traces (the trace resolves through the change spec).'
   exit_criteria:
   - openspec/changes/macos-tray-build-and-release is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  verifiable_closure: |
+    cargo run -q --release -p tillandsias-plan -- script run scripts/lua/probe-openspec-change-settled.lua macos-tray-build-and-release
+    prints ok:openspec-change-settled:macos-tray-build-and-release (archived, or every task ticked); on today's tree it prints refused:openspec-change-settled:macos-tray-build-and-release:<done>/<total>-ticked and exits 1.
   next_action: 'A macOS host reconciles the delta spec with scripts/build-macos-tray.sh and the release job, ticks tasks, then archives with spec sync.'
   provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
   events:
@@ -132,6 +147,9 @@ packets:
   context: '7 of 47 tasks ticked; last touched 2026-05-25. Its premise (owner stance 2026-05-24: Tillandsias ships no Linux binaries) is contradicted by today''s release, which builds and publishes musl-static Linux binaries for both arches (release.yml ''Build musl-static binaries via Nix'').'
   exit_criteria:
   - openspec/changes/vm-recipe-provisioning is archived (with or without spec sync, per the decision) or its tasks.md reflects reality, and the stale-change notice for it stops.
+  verifiable_closure: |
+    cargo run -q --release -p tillandsias-plan -- script run scripts/lua/probe-openspec-change-settled.lua vm-recipe-provisioning
+    prints ok:openspec-change-settled:vm-recipe-provisioning (archived, or every task ticked); on today's tree it prints refused:openspec-change-settled:vm-recipe-provisioning:<done>/<total>-ticked and exits 1.
   next_action: 'Operator decides: archive as superseded (openspec archive --skip-specs), or restate the stance. Recommendation: archive as superseded.'
   provenance: calmecacpilli triage 2026-10-31 of the commit-time OpenSpec stale notices.
   events:
