@@ -927,7 +927,10 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                 ledger,
                 index,
                 &root,
-                &sibling_refs().iter().map(String::as_str).collect::<Vec<_>>(),
+                &sibling_refs()
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
             );
             let mut hidden = overlaid.clone();
             hidden.extend(held.keys().cloned());
@@ -9460,7 +9463,10 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 &ledger,
                 &index,
                 &root,
-                &sibling_refs().iter().map(String::as_str).collect::<Vec<_>>(),
+                &sibling_refs()
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
             );
             let held_ids: std::collections::BTreeSet<String> = held.keys().cloned().collect();
             let envelope = answer::answer_next_excluding(
