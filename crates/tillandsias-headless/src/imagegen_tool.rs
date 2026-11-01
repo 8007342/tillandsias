@@ -539,6 +539,8 @@ impl PodmanSdCli {
             &tillandsias_core::forge_budget::ForgeBudget::for_this_host(),
             model_bytes,
         ));
+        // 1913-ebv8: in the forge's slice, ranked before it.
+        a.extend(crate::oom_slice_args());
         if crate::nvidia_cdi_available() {
             a.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
         } else if Path::new("/dev/dri").exists() {
