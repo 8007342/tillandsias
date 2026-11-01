@@ -712,7 +712,11 @@ impl BrowserMcpServer {
                 format!(
                     "URL_NOT_ALLOWED: browser windows load the project over https only; \
                      open https://www.{}.localhost:<preview port> instead",
-                    self.project_label
+                    // Order 1935-mwxr: the remedy names the DNS host label
+                    // (demon_attack -> demon-attack), the same one the
+                    // allowlist expects, never the raw project name.
+                    crate::host_label::project_host_label(&self.project_label)
+                        .unwrap_or_else(|_| self.project_label.clone())
                 ),
             );
         }
@@ -2740,6 +2744,29 @@ mod tests {
             .expect("opens");
         drop(server);
         assert_eq!(*host.stops.lock(), vec!["tillandsias-browser-acme-1"]);
+    }
+
+    /// Order 1935-mwxr: the https-only remedy for a project named with an
+    /// underscore names the hyphenated host the allowlist will admit.
+    #[tokio::test]
+    async fn https_only_remedy_names_the_dns_host_label() {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "demon_attack",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        let err = open(&server, "http://www.demon-attack.localhost:8080/")
+            .await
+            .expect_err("plaintext refused");
+        assert!(
+            err.contains("https://www.demon-attack.localhost:"),
+            "remedy must name the DNS label: {err}"
+        );
+        assert!(!err.contains("demon_attack.localhost"), "{err}");
     }
 
     /// Order 1651-5t7n: in container mode a plaintext URL is refused before
