@@ -92,6 +92,26 @@ fi
 PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '/target/litmus-runtime/bin$' | paste -sd: -)"
 export PATH
 
+# ORDER 1943-fdsb: ASK THE BINARY THE DOOR ASKS, BEFORE ANY ARM RUNS THE DOOR.
+# build.sh --preflight refuses with refused:preflight:stale-plan-binary and
+# runs NO guard when the resolved plan binary was built from another validator
+# surface. Every arm below then read that refusal as a broken door: on
+# lenovinha (2026-11-01) a 2026-10-27 ~/.local/bin binary turned clean trunk
+# into 10/20 ("a newly wired guard was invisible", "no wall clock", ...), and
+# the same trunk was 20/20 once the binary was current. A stale binary says
+# nothing about the door, so this says so and scores nothing.
+_fd_bin="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _fd_bin=""
+if [ -n "$_fd_bin" ]; then
+    _fd_vs="$("$_fd_bin" validator-surface-hash --check 2>&1)" || true
+    case "$_fd_vs" in
+        *stale:validator-surface*)
+            echo "could-not-run:preflight-front-door:stale-plan-binary — $_fd_bin (${_fd_vs##*stale:validator-surface })"
+            echo "  WHY: the door refuses before any guard runs, so no arm here can observe it."
+            echo "  REMEDY: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then re-run."
+            exit 2 ;;
+    esac
+fi
+
 PLANT=scripts/check-zz-1305-planted.sh
 cat > "$PLANT" <<'PL'
 #!/usr/bin/env bash
