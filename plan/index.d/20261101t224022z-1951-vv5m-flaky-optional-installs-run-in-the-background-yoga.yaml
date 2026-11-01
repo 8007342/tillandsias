@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl-fedora, 2026-11-01), from operator direction.
+packets:
+- packet_id: flaky-optional-installs-run-as-a-background-family-and-first-use-shims-wait-for-them
+  order: 1951-vv5m
+  status: ready
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - forge
+  - images
+  - provisioning
+  - network
+  estimated_hours: 8
+  title: A flaky optional install (pip, npm, curl fetch) blocks the forge build and freezes the tray; run those as a background family with long timeouts and have their first-use shims say "still installing"
+  context: 'Operator direction 2026-11-01 (verbatim, relayed by macuahuitl-fedora): "separate those flaky installs into their own family of flaky installs, and install them as background processes with longer timeouts, as long as their first time use shims are aware that they might still be getting installed, we should be able to getting away with not waiting for these flaky installers when they happen. This is not the only path where that happens." Evidence: on macuahuitl 2026-11-01 the forge image build stalled about 10 min in images/default/Containerfile.base step 4/6 on `timeout "${PIP_STALL_BUDGET_S}" pip3 install --timeout 30 --retries 2 ... pyright==1.1.410 bandit==1.9.2` (0% CPU, no traffic, PyPI reachable from the host at 0.39 s) while the tray menu froze. 1771-4iw3 only bounded that step; it still blocks the build and fails it. Candidate sites found by yoga (a first sample by grep, not a census): the pip3 + npm -g dev-tool step in images/default/Containerfile.base; images/default/lib-common.sh FIRST_RUN installers (ensure_forge_prebuilt_tools, ensure_dart_sdk, the opencode-ai npm install, the @fission-ai/openspec npm install); images/chromium/Containerfile.framework npm -g; images/webkit/Containerfile playwright npm -g; images/imagegen-studio/Containerfile pip installs.'
+  exit_criteria:
+  - 'An audit table in plan/issues/ lists EVERY image build and provision path that fetches from the network (Containerfiles, entrypoints, lib-common FIRST_RUN, host-side provisioning), each classified required or flaky-optional with the reason.'
+  - 'Flaky-optional installs run as one named background family (detached, long per-install timeout, a status file per install: pending / installing / ok / failed:<reason>) and the forge reaches ready without waiting for them.'
+  - 'Each flaky-optional tool has a first-use shim: while its install is pending or installing it waits a bounded time or prints `<tool> is still installing (started <ts>); try again shortly`, and on failed it prints the recorded reason and a retry command, instead of command-not-found.'
+  - 'A required install keeps blocking with a named verdict, as today.'
+  verifiable_closure: 'A fixture (Lua, under scripts/lua/, no network) that stubs one flaky-optional installer to hang, then asserts the forge readiness check passes within its normal budget, the tool''s status reads installing, and its shim prints the still-installing line. It fails on today''s tree (the hanging install blocks readiness) and passes after; wired into a gate and named by a litmus.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Write the audit table first (it decides scope), then the red fixture, then move the forge-base pip3/npm dev-tool step out of the build into the background family.'
+  provenance: operator direction 2026-11-01 relayed by macuahuitl-fedora; macuahuitl forge-base stall 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T22:40:22Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request from operator direction on flaky installs
