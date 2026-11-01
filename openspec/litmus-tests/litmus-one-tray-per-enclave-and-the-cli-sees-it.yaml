@@ -1,0 +1,34 @@
+# @trace order:1944-trsp, spec:singleton-guard
+# lenovinha 2026-11-01: a CLI lane spawned a tray companion next to a 16 h tray
+# whose control.sock a second tray's start and exit had unlinked; the companion
+# reconciled the enclave. The tray now holds a lifetime flock (tray.lock) taken
+# before any side effect, and the CLI reads it.
+name: litmus:one-tray-per-enclave-and-the-cli-sees-it
+spec: singleton-guard
+phase: pre-build
+description: With a live tray holding the lock and its control socket unlinked (the 2026-11-01 case), the CLI reports a live tray and never spawns; a second tray is refused before touching anything; once the owner exits the lock is free
+severity: critical
+size: quick
+
+preconditions:
+  - cargo can build the tillandsias bin with --features tray,listen-vsock
+  - /dev/shm is writable
+
+critical_path:
+  - step: "a live tray whose socket was unlinked is still seen; a second tray is refused and the first tray's socket still answers; a stale socket file is replaced"
+    command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- tray_presence:: 2>&1); grep -E 'test result' <<<\"$out\""
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 4 passed"
+
+observability:
+  traces:
+    - "@trace order:1944-trsp"
+  expected_log: "test result: ok. 4 passed"
+  log_fields:
+    spec: "singleton-guard"
+    test: "one-tray-per-enclave-and-the-cli-sees-it"
+    artifact: "crates/tillandsias-headless/src/tray_presence.rs"
+
+rollback:
+  on_failure: "read tray_presence::presence and the first lines of tray::run_tray_mode_with_debug"
+  command: "cat crates/tillandsias-headless/src/tray_presence.rs"
