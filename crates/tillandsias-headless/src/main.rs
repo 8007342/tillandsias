@@ -1018,6 +1018,9 @@ fn main() {
         || bash
         || antigravity
         || opencode_web
+        // 1953-stsk: --studio was missing, so a studio launch SIGTERMed the
+        // running tray (lenovinha 2026-11-01).
+        || studio_id.is_some()
         || observatorium
         || init
         || status_check
@@ -25584,6 +25587,40 @@ mod tests {
                  singleton-kill the running headless service (2026-07-12 repro)"
             );
         }
+
+        // ORDER 1953-stsk: the hand-kept list above drifts. A lane added
+        // after it (--studio, 1860-auhm) was never put on it, so a studio
+        // launch SIGTERMed the running tray on lenovinha 2026-11-01 and the
+        // tray's companion then SIGTERMed the launch. Every lane in the
+        // positional-launch refusal table (`(flag_expr, "--lane")`) must be
+        // counted too, so a lane added there cannot be missed here.
+        let table = source
+            .split("let Some(flag) = [")
+            .nth(1)
+            .and_then(|tail| tail.split("]\n").next())
+            .expect("positional-launch lane table");
+        let mut lanes = 0;
+        // One entry per line: `(flag_expr, "--lane"),`.
+        for line in table.lines() {
+            let Some(entry) = line.trim().strip_prefix('(') else {
+                continue;
+            };
+            let Some((expr, _lane)) = entry.split_once(", \"--") else {
+                continue;
+            };
+            lanes += 1;
+            let expr = expr.trim();
+            assert!(
+                window.split(&['|', '\n', ' '][..]).any(|tok| tok == expr),
+                "lane `{expr}` from the positional-launch table is missing from is_cli_mode — \
+                 that lane would take the launcher singleton and SIGTERM the running tray \
+                 (1953-stsk)"
+            );
+        }
+        assert!(
+            lanes >= 8,
+            "parsed only {lanes} lanes from the table: {table}"
+        );
     }
 
     #[test]
