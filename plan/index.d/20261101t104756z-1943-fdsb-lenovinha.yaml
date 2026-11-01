@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01).
+packets:
+- packet_id: the-front-door-fixture-names-a-stale-plan-binary-instead-of-failing-ten-arms
+  order: 1943-fdsb
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [preflight, fixture, plan-binary]
+  estimated_hours: 1
+  title: The preflight-front-door fixture reports a stale plan binary as could-not-run, not as ten behaviour failures
+  context: 'litmus:preflight-front-door went 10/20 on clean trunk on lenovinha. The cause was host-local: ~/.local/bin/tillandsias-plan was from 2026-10-27, so every arm that runs ./build.sh --preflight got refused:preflight:stale-plan-binary before any guard ran (No guard was run. A stale binary says nothing about the tree), and the fixture scored each as a broken door: a newly wired guard was invisible, no why/remedy, no wall clock, and so on. With a current binary the same trunk is 20/20. A red that names the door when the binary is at fault reads as a trunk regression and evicts PRs. Fix: the fixture asks the binary the door asks (validator-surface-hash --check through resolve_plan_binary) once, before the arms, and on stale:validator-surface prints one could-not-run line with the remedy and exits 2.'
+  exit_criteria:
+  - 'With a stale binary resolved, the fixture prints could-not-run:preflight-front-door:stale-plan-binary and exits 2, running no arm; with a current one it is 20/20 as before.'
+  verifiable_closure: 'litmus:preflight-front-door'
+  next_action: 'PR with the fixture probe.'
+  provenance: coordinator order 2026-11-01 after the trunk red reported with 1942-mijg.
+  events:
+  - type: filed
+    ts: '2026-11-01T10:47:56Z'
+    host: lenovinha
+    summary: filed in_progress; root cause measured (stale host binary, 20/20 once current)
