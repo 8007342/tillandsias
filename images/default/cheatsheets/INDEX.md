@@ -112,6 +112,14 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - yaml.md                          — writing YAML config — Kubernetes, GitHub Actions, OpenAPI, CI files. [pull-on-demand: stub]
 - java/rxjava-event-driven.md      — You have an asynchronous data source (UI events, sensor readings, network respo… [pull-on-demand: stub]
 
+## legal
+
+- busl-1-1-hashicorp-vault.md               — bumping the Vault image, wondering whether the enclave Vault [bundled, partial-verify]
+- combining-licences-without-conflict.md    — adding a container image, a vendored web component, an npm/pip [bundled, partial-verify]
+- openrail-use-restricted-model-licences.md — adding a model row to the register, wording the first-launch [bundled, partial-verify]
+- proprietary-eulas-in-the-stack.md         — bumping any of these, considering bundling one, or wording its [bundled, partial-verify]
+- runtime-acknowledgement-vs-acceptance.md  — deciding which tier a new component's card gets, wording a [bundled, partial-verify]
+
 ## observability
 
 - cheatsheet-metrics.md [DRAFT]    — you are designing or maintaining the cheatsheet metrics pipeline, which tracks … [bundled, partial-verify]
