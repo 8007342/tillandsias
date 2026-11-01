@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01),
+# split out of 1944-trsp so that row's diff stays narrow.
+packets:
+- packet_id: a-graceful-exit-stops-only-what-that-process-started-or-the-enclave-has-one-owner
+  order: 1946-shsc
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, headless, shutdown, enclave]
+  estimated_hours: 4
+  title: A graceful exit stops only the containers that process started (or the enclave has one reference owner), never every enclave container by name
+  context: 'graceful_shutdown_async (crates/tillandsias-headless/src/main.rs) lists tillandsias-* containers and stops every one is_stack_managed_name accepts, whoever started it. It runs on every tray exit (tray/mod.rs, after the shutdown latch) and every headless exit (run_headless_async). On lenovinha 2026-11-01 the enclave lost the proxy, inference, nix-cache, router and git mirror while a 16 h tray was meant to own it; 1944-trsp stops the second tray from starting, but any tray or headless process that exits gracefully still takes down an enclave other processes rely on. Options: stop only containers carrying this run tillandsias.tray-run label (1859-v5iv already labels forges), or a reference count or single owner for the shared stack.'
+  exit_criteria:
+  - 'A fixture with two runs (A owns the shared stack, B a process that exits gracefully) asserts B stops only what B started and A containers keep running; the pre-fix code stops all of them. Pre-fix result: FAILS.'
+  verifiable_closure: 'Fixture transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Decide ownership (run label versus a reference owner) with the coordinator, then fix graceful_shutdown_async.'
+  provenance: 1944-trsp investigation, lenovinha 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T12:15:26Z'
+    host: lenovinha
+    summary: filed p1 ready, split from 1944-trsp
