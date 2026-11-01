@@ -1639,6 +1639,8 @@ distributed_work:
     # a platform or host kind (linux, macos, windows, forge, linux_mutable) and
     # the forge container hostname (forge-tillandsias) name no one machine (1201-hsf9).
     fleet_hosts:
+      - calmecacpilli
+      - calmecacpilli-silverblue
       - esme
       - esmeraldinha
       - lenovinha
