@@ -1,0 +1,146 @@
+{
+  "frameworks": [
+    {
+      "id": "next-tailwind",
+      "package_deps_all": [
+        "next",
+        "tailwindcss"
+      ]
+    },
+    {
+      "id": "react",
+      "package_deps_any": [
+        "react"
+      ]
+    },
+    {
+      "files_any": [
+        "hugo.toml",
+        "hugo.yaml",
+        "config.toml",
+        "_config.yml",
+        "astro.config.mjs",
+        ".eleventy.js",
+        "eleventy.config.js"
+      ],
+      "id": "markdown-ssg"
+    },
+    {
+      "files_any": [
+        "index.html"
+      ],
+      "id": "plain-html"
+    }
+  ],
+  "studios": [
+    {
+      "brief": "Drag-and-drop page builder for plain HTML and CSS sites.",
+      "entry": [
+        "/usr/local/bin/studio-grapesjs"
+      ],
+      "frameworks": [
+        "plain-html"
+      ],
+      "id": "grapesjs",
+      "license": "BSD-3-Clause",
+      "name": "GrapesJS",
+      "packet": "1861-nmpp",
+      "port": 4096,
+      "save_adapter": "endpoint",
+      "status": "planned",
+      "write_allowlist": [
+        "*.html",
+        "**/*.html",
+        "*.css",
+        "**/*.css",
+        ".tillandsias/studio/grapesjs/**"
+      ]
+    },
+    {
+      "brief": "Content editor for markdown sites (Hugo, Jekyll, Astro, 11ty).",
+      "entry": [
+        "/usr/local/bin/studio-decap"
+      ],
+      "frameworks": [
+        "markdown-ssg"
+      ],
+      "id": "decap",
+      "license": "MIT",
+      "name": "Decap CMS",
+      "packet": "1862-wrx5",
+      "port": 4096,
+      "save_adapter": "own-writer",
+      "status": "planned",
+      "write_allowlist": [
+        "content/**",
+        "_posts/**",
+        "src/content/**",
+        "static/**",
+        "admin/config.yml",
+        "admin/index.html"
+      ]
+    },
+    {
+      "brief": "Visual content editing for Next.js, Astro and Hugo, in local mode.",
+      "entry": [
+        "/usr/local/bin/studio-tina"
+      ],
+      "frameworks": [
+        "next-tailwind"
+      ],
+      "id": "tina",
+      "license": "Apache-2.0",
+      "name": "TinaCMS",
+      "packet": "1863-dmke",
+      "port": 4096,
+      "save_adapter": "own-writer",
+      "status": "planned",
+      "write_allowlist": [
+        "content/**",
+        "tina/config.ts",
+        "tina/config.js",
+        ".gitignore"
+      ]
+    },
+    {
+      "brief": "Visual editor for React sites, built from the site's own components.",
+      "entry": [
+        "/usr/local/bin/studio-puck"
+      ],
+      "frameworks": [
+        "react"
+      ],
+      "id": "puck",
+      "license": "MIT",
+      "name": "Puck",
+      "packet": "1864-ay3x",
+      "port": 4096,
+      "save_adapter": "endpoint",
+      "status": "planned",
+      "write_allowlist": [
+        ".tillandsias/studio/puck/**"
+      ]
+    },
+    {
+      "brief": "Visual editor for Next.js and Tailwind that edits the code directly.",
+      "entry": [
+        "/usr/local/bin/studio-onlook"
+      ],
+      "frameworks": [],
+      "id": "onlook",
+      "license": "Apache-2.0",
+      "name": "Onlook",
+      "needs_cloud_account": true,
+      "packet": "1865-dn5h",
+      "port": 4096,
+      "save_adapter": "own-writer",
+      "status": "planned",
+      "write_allowlist": [
+        "app/**",
+        "src/**",
+        "components/**",
+        "public/**"
+      ]
+    }
+  ]
+}
