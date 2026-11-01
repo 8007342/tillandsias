@@ -51,6 +51,8 @@
 #     w_mib=<W>:write_ms=<>:read_ms=<>:memory_peak_mib=<>:swap_peak_mib=<>:
 #     high=<n>:max=<n>:oom=<n>:oom_kill=<n>:host_min_avail_mib=<>:verdict=<>
 set -uo pipefail
+# Bash 5: ${var//,/ }, local in functions and EPOCHREALTIME in --spill.
+[ "${BASH_VERSINFO[0]:-0}" -ge 5 ] || { echo "could-not-run:needs-bash-5:have=${BASH_VERSION:-unknown}"; exit 3; }
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 jobs=4; mem=8g; swap=16g; guard=1200; image=""; spill=""; spill_mem=2048; spill_swap=4096; spill_payload=""
@@ -82,7 +84,8 @@ avail_mib() { awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo; }
 echo "regime:host=$(hostname -s):kernel=$(uname -r):nproc=$(nproc):mem_total_mib=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo):swap=$(swapon --noheadings --show=NAME,TYPE,SIZE 2>/dev/null | tr -s ' ' ',' | paste -sd';'):swappiness=$(cat /proc/sys/vm/swappiness):image=$image:image_id=${image_id:0:12}"
 
 if [ -n "$spill" ]; then
-    now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+    # EPOCHREALTIME (bash 5), not GNU date +%s%N; the guard above refuses older bash.
+    now_ms() { local t="${EPOCHREALTIME/[.,]/}"; echo $(( t / 1000 )); }
     sname=""; svol=""
     spill_cleanup() {
         [ -n "$sname" ] && podman rm -f "$sname" >/dev/null 2>&1
@@ -166,7 +169,7 @@ if [ -n "$spill" ]; then
         [ "$have" -ge "$wmax" ] || { echo "could-not-run:payload-too-small:${have}<${wmax}mib"; rm -rf "$pdir"; exit 3; }
         ratio="?"
         if command -v zstd >/dev/null 2>&1; then
-            raw=$(stat -c %s "$pdir/c0000"); packed=$(zstd -1 -c "$pdir/c0000" | wc -c)
+            raw=$(wc -c < "$pdir/c0000"); packed=$(zstd -1 -c "$pdir/c0000" | wc -c)
             ratio=$(awk -v r="$raw" -v p="$packed" 'BEGIN { printf "%.2f", r / p }')
         fi
         echo "payload=$spill_payload:payload_zstd1_ratio=$ratio:zram_alg=$(grep -o '\[[a-z0-9-]*\]' /sys/block/zram0/comp_algorithm 2>/dev/null | tr -d '[]')"
