@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: comfyui-studio-forge-agent-surface-design-reference-conditioning-controlnet-lora-transparent-output-batch-metadata
+    event:
+      type: note
+      ts: "2026-11-01T23:32:18Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t233218z
+      host: calmecacpilli
+      summary: |
+        DESIGN NOTE from kumbia-kombat-forge, relayed by the coordinator on 2026-11-01. Control is RIG-DRIVEN. The game renders pose, depth and line images from a Blender rig at key frames timed to the beat, each with a known pivot and support foot. So the tool MUST accept control images the caller supplies, not only run detectors on a reference.
+        The game's docs are on 8007342/kumbia-kombat, branch work/1830-pipe:
+        - plan/asset-pipeline-requirements.md
+        - asset-inventory-contract.md
+        - generative-animation-research.md
+        1954-gdi6 already takes the control image as given: control_image is a path under /work/tmp/imagegen, passed to sd.cpp --control-image with no detector step.
