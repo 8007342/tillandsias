@@ -1023,6 +1023,22 @@ until curl -sI https://mirrors.fedoraproject.org >/dev/null 2>&1; do
   sleep 1
 done
 
+# Order 1925-gupg. UPGRADE THE GUEST OS FIRST. The base is Fedora's
+# release-day Cloud image, pinned by checksum, and nothing upgraded it: every
+# Mac VM ran the 6.19.10 kernel Fedora 44 launched with while F44 stable had
+# moved to 7.2.x (Bodhi, 2026-10-28). A btrfs extent-map shrinker NULL
+# dereference in that kernel wedged a forge build under memory pressure
+# (2026-11-01, soft lockup, whole VM stuck). The guest is ephemeral and rebuilt
+# from scratch, so it is brought fully up to date here, before anything is
+# installed on top. A new kernel takes effect on the NEXT boot; provisioning
+# runs once, on the first. NON-FATAL but loud: a mirror hiccup leaves a working
+# guest on the release-day packages and says so in the marker.
+if dnf -y upgrade --refresh; then
+  echo "tillandsias-guest-upgrade ok installed_kernel=$(rpm -q --last kernel-core | head -1 | cut -d' ' -f1) running_kernel=$(uname -r) $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
+else
+  echo "tillandsias-guest-upgrade FAILED rc=$? running_kernel=$(uname -r) (continuing on release-day packages) $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
+fi
+
 # socat is the readiness probe's only external dependency (order 740-3k4s).
 #
 # MEASURED, and the reason this line exists: the packet recorded "socat ships
@@ -4829,6 +4845,34 @@ mod tests {
     /// The provisioning script sets up both swap tiers, and does so without
     /// being able to fail provisioning.
     #[cfg(target_os = "macos")]
+    /// Order 1925-gupg: provisioning upgrades the guest OS after the network
+    /// is up and BEFORE installing anything on the release-day image, and a
+    /// failed upgrade is recorded but does not fail provisioning. Before this
+    /// the guest kept Fedora 44's launch kernel (6.19.10) forever.
+    #[test]
+    fn provision_user_data_upgrades_the_guest_os_before_installing() {
+        let script = provision_user_data("off");
+        let network = script
+            .find("until curl -sI https://mirrors.fedoraproject.org")
+            .expect("the network wait");
+        let upgrade = script
+            .find("if dnf -y upgrade --refresh; then")
+            .expect("the guest OS upgrade, non-fatal");
+        let install = script
+            .find("dnf install -y podman socat")
+            .expect("the first install");
+        assert!(network < upgrade, "the upgrade needs the network first");
+        assert!(
+            upgrade < install,
+            "upgrade before installing on top of the image"
+        );
+        assert!(
+            script.contains("tillandsias-guest-upgrade ok installed_kernel=")
+                && script.contains("tillandsias-guest-upgrade FAILED"),
+            "both outcomes are recorded in the provision marker"
+        );
+    }
+
     #[test]
     fn provision_user_data_sets_up_zram_and_disk_swap_non_fatally() {
         let ud = super::provision_user_data_for_test();
