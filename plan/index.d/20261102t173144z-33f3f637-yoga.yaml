@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-provider-usage-limit-deadline-recorded-on-one-host-holds-every-host-of-the-fleet
+    event:
+      type: note
+      ts: "2026-11-02T17:31:44Z"
+      agent_id: linux-yoga-opus5-20261102t173143z
+      host: yoga
+      summary: |-
+        DESIGN (macuahuitl 2026-11-02): host relay. On forge EXIT with a recorded limit the host writes an event fragment (provider, retry_after, recorded_by, recorded) and pushes it on the plan-only lane, detached and bounded; a failed push leaves one deferred line retried by the next slot run. Launch stays offline: it folds the local plan copy and seeds the forge (recorded_by=<host>). The event maps 1:1 to a coordinator-queue message (1824-58bm) with TTL = the hold; this channel moves there once that queue is live.
