@@ -798,7 +798,10 @@ mod tests {
         assert!(after("--vae").ends_with("/ae.safetensors"));
         assert!(after("--clip_l").contains("clip_l"));
         assert!(after("--t5xxl").contains("t5xxl"));
-        assert!(!a.contains(&"--model".to_string()), "no full checkpoint for FLUX");
+        assert!(
+            !a.contains(&"--model".to_string()),
+            "no full checkpoint for FLUX"
+        );
         assert_eq!(after("--cfg-scale"), "1");
         assert_eq!(after("--sampling-method"), "euler");
     }

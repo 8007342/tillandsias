@@ -753,7 +753,10 @@ mod tests {
                 "{tier} transformer {}",
                 transformer.file
             );
-            assert!(rows.iter().all(|r| r.licence == "apache-2.0"), "{tier} licence");
+            assert!(
+                rows.iter().all(|r| r.licence == "apache-2.0"),
+                "{tier} licence"
+            );
             for row in &rows {
                 register_admits(REGISTER_TSV, row).unwrap();
             }
