@@ -56,14 +56,6 @@ changed=0
 say() { printf '%s\n' "$*"; }
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 
-host_kind() {
-    if [ -e /run/ostree-booted ] || command -v rpm-ostree >/dev/null 2>&1; then
-        echo "linux_immutable"
-    else
-        echo "linux_mutable"
-    fi
-}
-
 api_up() { curl -fsS --max-time 3 "$ENDPOINT/api/version" >/dev/null 2>&1; }
 
 # WHICH LANE IS ANSWERING? (order 1249-xngp, and this script needed it itself.)
@@ -96,8 +88,10 @@ else
         # affordance-ok: the WHY and WHAT TO DO lines that follow explain this refusal
         say "blocked:configure-ollama:install-failed"
         say "  curl is required to fetch the runtime and is not on PATH."
-        say "  WHAT TO DO: install it, then re-run this script."
-        say "    $( [ "$(host_kind)" = linux_immutable ] && echo 'rpm-ostree install curl   # then reboot' || echo 'sudo dnf install -y curl' )"
+        say "  WHAT TO DO: do not install host tools; run this script inside the builder"
+        say "  toolbox, where curl exists. The toolbox shares $HOME, so the binary still lands"
+        say "  in $BIN_DIR on this host:"
+        say "    $REPO_ROOT/scripts/with-tillandsias-builder.sh $0"
         exit 1
     fi
     mkdir -p "$BIN_DIR" || { _afford "$BIN_DIR could not be created (a file in the way, or a read-only parent)" "remove what blocks $BIN_DIR, or set TILLANDSIAS_OLLAMA_BIN_DIR to a writable directory, then re-run"; say "blocked:configure-ollama:install-failed"; say "  cannot create $BIN_DIR"; exit 1; }

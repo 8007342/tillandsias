@@ -16,6 +16,8 @@
 --     downloads nothing;
 --   2 STATIC: every verdict the script emits carries an _afford call on its
 --     line or an `affordance-ok:` marker on the line above.
+--   3 STATIC: no remedy tells the operator to sudo, dnf install or
+--     rpm-ostree install; host tools come from the builder toolbox.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-configure-ollama-affordances.lua
 -- Verdict: ok:configure-ollama-affordances:<n> arms | violation:configure-ollama-affordances:<arm>
@@ -68,6 +70,21 @@ for line in (src .. "\n"):gmatch("([^\n]*)\n") do
 end
 arm("2 every verdict site carries _afford or an affordance-ok reason",
     #src > 0 and #bare == 0, "bare verdict lines: " .. table.concat(bare, ","))
+
+-- 3 static: no remedy tells the operator to sudo, layer a package or install a
+-- host tool (standing operator rules); host tools come from the builder toolbox.
+local hostinstall = {}
+n = 0
+for line in (src .. "\n"):gmatch("([^\n]*)\n") do
+    n = n + 1
+    if (line:find("say ", 1, true) or line:find("_afford ", 1, true)) and not line:match("^%s*#")
+        and (line:find("sudo", 1, true) or line:find("dnf install", 1, true)
+            or line:find("rpm-ostree install", 1, true)) then
+        hostinstall[#hostinstall + 1] = tostring(n)
+    end
+end
+arm("3 no remedy says sudo, dnf install or rpm-ostree install",
+    #src > 0 and #hostinstall == 0, "host-install remedy lines: " .. table.concat(hostinstall, ","))
 
 proc.run{ argv = { "rm", "-rf", scratch } }
 if #failed > 0 then
