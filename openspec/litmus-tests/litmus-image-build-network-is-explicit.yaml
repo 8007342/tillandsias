@@ -1,0 +1,42 @@
+# @trace spec:default-image
+# @trace order:1955-hq7k
+#
+# Measured on macuahuitl 2026-11-02: with containers.conf pasta_options
+# --ipv4-only and the host's IPv6 egress dead, `podman run` fetched in 1 s but
+# a default `podman build` RUN step ignored the option and hung ~2 min per
+# fetch; `--network=private` took 1 s. Both Rust build paths now name the build
+# network (the tray / ensure-image argv and tillandsias-podman's build_image),
+# and a build on a host whose default IPv6 routes carry nothing prints
+# note:image-build:host-ipv6-egress-dead instead of stalling silently.
+name: litmus:image-build-network-is-explicit
+spec: default-image
+phase: pre-build
+description: Image builds pass an explicit network so the user's pasta options apply, and a dead IPv6 path is named
+severity: high
+size: quick
+
+preconditions:
+  - cargo (the builder toolbox); offline
+
+critical_path:
+  - step: "the tray / ensure-image build argv names its network"
+    command: "cargo test -p tillandsias-headless tests::image_build_argv_uses_docker_format_for_healthchecks -- --exact"
+    timeout_ms: 300000
+  - step: "tillandsias-podman's build_image names its network"
+    command: "cargo test -p tillandsias-podman client::tests::existing_unsquashed_or_mislabeled_image_is_rebuilt_once -- --exact"
+    timeout_ms: 300000
+  - step: "a dead IPv6 path is named, and working, absent or unmeasured IPv6 is not"
+    command: "cargo test -p tillandsias-headless tests::a_build_names_a_dead_ipv6_path_and_only_that -- --exact"
+    timeout_ms: 300000
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "three tests pass: two build argvs carry --network=private; the dead-IPv6 note fires only for routes that carry nothing"
+  log_fields:
+    spec: "default-image"
+    test: "image-build-network-is-explicit"
+
+rollback:
+  on_failure: "put --network=private back in the build argv the failing test names; a default podman build does not apply containers.conf pasta_options to RUN steps"
+  command: "grep -n 'network=private' crates/tillandsias-headless/src/main.rs crates/tillandsias-podman/src/client.rs scripts/build-image.sh"

@@ -330,6 +330,7 @@ specs:
   - litmus:npm-harness-install-idempotent-shape
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
+  - litmus:image-build-network-is-explicit
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
