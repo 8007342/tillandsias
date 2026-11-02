@@ -64,7 +64,14 @@ case "$PROVIDER" in
             # Start $BIN in background, track its exact PID, and signal ONLY that PID once the
             # exact credential file ($AUTH_FILE or ~/.gemini/antigravity-cli/antigravity-oauth-token) appears.
             _agy_default_token="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
-            "$BIN" &
+            # 1925-agin: hand agy THIS script's stdin explicitly. A
+            # non-interactive bash gives a background job /dev/null as stdin
+            # unless it is redirected, so the sign-in screen drew in the
+            # person's terminal and ignored every key (operator, macOS,
+            # 2026-11-01). The same reason the forge session wrapper keeps the
+            # agent in the foreground.
+            exec 3<&0
+            "$BIN" <&3 &
             _agy_pid=$!
             while kill -0 "$_agy_pid" 2>/dev/null; do
                 if [[ -s "$AUTH_FILE" || -s "$_agy_default_token" ]]; then
