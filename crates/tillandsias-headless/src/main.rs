@@ -100,6 +100,10 @@ mod studio_tool;
 mod progress_sink;
 #[cfg(feature = "host-services")]
 mod studio_contract;
+// 1956-ecpb (implements 1954-dvz9): the restricted licence register, the
+// signed acknowledgement record, the obligations spec and the consent gate.
+#[cfg(feature = "host-services")]
+mod licence_consent;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(feature = "listen-vsock")]
