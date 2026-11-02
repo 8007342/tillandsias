@@ -1088,7 +1088,7 @@ specs:
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
   - litmus:studio-grapesjs-saves-through-the-shared-endpoint
-  - litmus:web-studio-decap-saves-a-hugo-entry
+  - litmus:studio-decap-commits-a-hugo-entry-through-the-front
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape

@@ -11,10 +11,13 @@ clone_project_from_mirror
 checkout="/home/forge/src/${TILLANDSIAS_PROJECT:?TILLANDSIAS_PROJECT names the project the studio edits}"
 [ -d "$checkout/.git" ] || { echo "refused:studio-grapesjs:no-checkout:$checkout" >&2; exit 1; }
 
-STUDIO_PROJECT="$checkout" STUDIO_HOST=127.0.0.1 STUDIO_PORT=4097 \
-  node /opt/studio/grapesjs/server.mjs &
+# Started outside the checkout: a studio's own caches must never land in it.
+(cd /opt/studio/grapesjs && \
+  STUDIO_PROJECT="$checkout" STUDIO_HOST=127.0.0.1 STUDIO_PORT=4097 \
+  exec node /opt/studio/grapesjs/server.mjs) &
 editor_pid=$!
 trap 'kill "$editor_pid" 2>/dev/null || true' INT TERM EXIT
 
 export LISTEN_PORT=4096 UPSTREAM=127.0.0.1:4097 STUDIO_CHECKOUT="$checkout"
+cd /opt/studio
 exec node /opt/studio/studio-front.js

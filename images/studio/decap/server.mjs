@@ -4,7 +4,10 @@
 // as a child bound to loopback (@decap/cli's dev server binds 127.0.0.1 and
 // ::1 unless BIND_HOST is set; this never sets it). decap-server runs in its
 // "fs" mode, writing entries straight into STUDIO_PROJECT, the forge's git
-// checkout, so a save shows up as a repo diff. No network access is needed
+// checkout. This server is the UPSTREAM of the studio front
+// (images/studio/studio-front.js), which brackets every write request: what
+// decap-server wrote is committed when the registry allowlist admits it and
+// put back when not (save_adapter "own-writer"). No network access is needed
 // or attempted.
 //
 //   GET  /healthz            200 once decap-server answers
@@ -19,9 +22,10 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const PROJECT = process.env.STUDIO_PROJECT || "/project";
-const PORT = Number(process.env.STUDIO_PORT || 8090);
+const HOST = process.env.STUDIO_HOST || "127.0.0.1";
+const PORT = Number(process.env.STUDIO_PORT || 4097);
 const DECAP_PORT = Number(process.env.STUDIO_DECAP_PORT || 8081);
-const HERE = "/opt/studio";
+const HERE = "/opt/studio/decap";
 const BUNDLE = join(HERE, "vendor", "decap-cms", "dist", "decap-cms.js");
 const MAX_BODY = 32 * 1024 * 1024;
 
@@ -177,4 +181,4 @@ createServer(async (req, res) => {
     res.writeHead(e.status || 500, { "content-type": "text/plain" });
     res.end(`${e.message}\n`);
   }
-}).listen(PORT, "0.0.0.0", () => console.log(`decap studio on :${PORT}, decap-server on 127.0.0.1:${DECAP_PORT}`));
+}).listen(PORT, HOST, () => console.log(`decap studio on ${HOST}:${PORT}, decap-server on 127.0.0.1:${DECAP_PORT}`));
