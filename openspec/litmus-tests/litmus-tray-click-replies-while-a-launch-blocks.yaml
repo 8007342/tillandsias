@@ -1,0 +1,38 @@
+# @trace spec:tray-app
+# @trace order:1954-btht
+#
+# Operator, macuahuitl 2026-11-01: the tray icon stopped answering for the
+# whole forge image build (10+ min). A cloud-project click ran its launch
+# inline in the dbusmenu Event handler, and that launch can wait out a whole
+# image build (try_build_forge_image_on_demand), so the click's reply was held
+# for the build. The test drives the real dbusmenu interface over a private
+# peer-to-peer bus with a launch that blocks, and asserts the Event reply and
+# a GetLayout both come back inside 2 s while the launch is still blocked.
+# Red on the tree before 1954-btht: the Event reply was held 30 s, the stub's
+# whole block.
+name: litmus:tray-click-replies-while-a-launch-blocks
+spec: tray-app
+phase: pre-build
+description: A cloud-project menu click replies, and the menu answers GetLayout, while the launch it started is still blocked
+severity: high
+size: quick
+
+preconditions:
+  - cargo (the builder toolbox); offline, no session bus, no desktop
+
+critical_path:
+  - step: "a click whose launch blocks still replies, and GetLayout answers"
+    command: "cargo test -p tillandsias-headless --features tray tray::tests::a_cloud_click_replies_and_get_layout_answers_while_the_launch_blocks -- --exact"
+    timeout_ms: 300000
+
+observability:
+  traces:
+    - "@trace spec:tray-app"
+  expected_log: "the Event reply and GetLayout return inside the 2 s budget; the launch stub records that it started"
+  log_fields:
+    spec: "tray-app"
+    test: "tray-click-replies-while-a-launch-blocks"
+
+rollback:
+  on_failure: "a menu action that can block (a launch, a build, a login wait) must run on the tray's task_executor, never inline in an interface method"
+  command: "grep -n 'cloud_launcher' crates/tillandsias-headless/src/tray/mod.rs"
