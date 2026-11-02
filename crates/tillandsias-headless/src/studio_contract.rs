@@ -66,6 +66,14 @@ pub fn validate_family(spec_path: &Path, project_root: &Path) -> Vec<Verdict> {
     let mut out = Vec::new();
     check_shape(&spec, &mut out);
     check_inputs_exist(&spec, project_root, &mut out);
+    // 1959-xsy5: the outline must be a palette colour (D12), and a declared
+    // layout must parse the way image.generate reads it (D11).
+    check_palette_contains_outline(&spec, project_root, &mut out);
+    if let Some(l) = spec.get("layout")
+        && let Err(e) = crate::imagegen_init_mask::parse_layout(l)
+    {
+        out.push(Verdict::refused("schema", format!("layout: {e}")));
+    }
     if spec.get("reservedRamps").is_some() {
         check_palette_fails_all_gates(&spec, project_root, &mut out);
     }
@@ -668,7 +676,12 @@ impl Shape<'_> {
             self.one_of(
                 &format!("qa.static[{i}].id"),
                 &c["id"],
-                &["palette_fails_all_gates", "region_mask_colours_declared"],
+                &[
+                    "palette_fails_all_gates",
+                    "region_mask_colours_declared",
+                    "palette_contains_outline",
+                    "reserved_regions_empty",
+                ],
             );
         }
     }
@@ -859,6 +872,57 @@ fn gate_matches(gate: &Value, rgb: [f64; 3]) -> bool {
 fn unit_rgb(hex: &str) -> Option<[f64; 3]> {
     let (r, g, b) = parse_hex(hex)?;
     Some([r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0])
+}
+
+// ─── palette_contains_outline (mandatory with outline + palette.locked) ──────
+
+/// 1959-xsy5 (design D12): the family's `outline` must be a colour of its
+/// locked palette, because the pixel finish quantises to that palette and an
+/// outline it lacks would be snapped to the nearest other colour. A
+/// `tillandsias.palette/v1` file is read strictly (its `colours`); any other
+/// palette shape through the tolerant reader the gate below uses.
+fn check_palette_contains_outline(spec: &Value, root: &Path, out: &mut Vec<Verdict>) {
+    const CHECK: &str = "palette_contains_outline";
+    let (Some(outline), Some(rel)) = (spec["outline"].as_str(), spec["palette"]["locked"].as_str())
+    else {
+        return;
+    };
+    let Ok(text) = std::fs::read_to_string(root.join(rel)) else {
+        return; // reported by missing_input
+    };
+    let Ok(palette) = serde_json::from_str::<Value>(&text) else {
+        out.push(Verdict::refused(
+            CHECK,
+            format!("palette {rel} is not JSON"),
+        ));
+        return;
+    };
+    let colours: Vec<String> = if palette["schema"] == crate::pixel_finish::PALETTE_SCHEMA {
+        match crate::pixel_finish::Palette::parse(&text) {
+            Ok(p) => p
+                .colours
+                .iter()
+                .map(|c| format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2]))
+                .collect(),
+            Err(e) => {
+                out.push(Verdict::refused(CHECK, format!("palette {rel}: {e}")));
+                return;
+            }
+        }
+    } else {
+        let mut found = Vec::new();
+        collect_palette(&palette, "", &BTreeSet::new(), false, &mut found);
+        found
+            .into_iter()
+            .map(|(_, c)| c.to_ascii_uppercase())
+            .collect()
+    };
+    if !colours.contains(&outline.to_ascii_uppercase()) {
+        out.push(Verdict::refused(
+            CHECK,
+            format!("outline {outline} is not a colour of {rel}; add it, or change the outline"),
+        ));
+    }
 }
 
 // ─── palette_fails_all_gates (mandatory with reservedRamps) ──────────────────
@@ -1130,6 +1194,65 @@ mod tests {
 
     /// The example in the contract directory validates ok against a project
     /// tree that holds every file it names.
+    /// 1959-xsy5 (D12): the outline must be a colour of the locked palette,
+    /// read strictly from a tillandsias.palette/v1 file and tolerantly from
+    /// any other shape; and a declared layout must parse as image.generate
+    /// reads it (D11).
+    #[test]
+    fn pixel_finish_palette_contains_outline_and_layout_shape_are_checked() {
+        let spec = example();
+        let rel = spec["palette"]["locked"]
+            .as_str()
+            .unwrap_or("palette.json")
+            .to_string();
+        let run = |palette: Value, layout: Option<Value>| {
+            let mut s = spec.clone();
+            if let Some(l) = layout {
+                s["layout"] = l;
+            }
+            let (dir, spec_path) = project_with(&s);
+            write_json(dir.path(), &rel, &palette);
+            lines(&validate_family(&spec_path, dir.path()))
+        };
+        let v1 = |colours: &[&str]| {
+            serde_json::json!({
+            "schema": "tillandsias.palette/v1", "name": "t", "colours": colours, "transparent": null })
+        };
+
+        let ok = run(v1(&["#1a1018", "#F2C9A0", "#1F8A8A"]), None);
+        assert!(
+            ok.iter().all(|l| !l.contains("palette_contains_outline")),
+            "{ok:?}"
+        );
+        let missing = run(v1(&["#F2C9A0", "#1F8A8A"]), None);
+        assert!(
+            missing
+                .iter()
+                .any(|l| l.starts_with("refused:palette_contains_outline:outline #1A1018")),
+            "{missing:?}"
+        );
+        let legacy = run(serde_json::json!({ "skin": ["#F2C9A0"] }), None);
+        assert!(
+            legacy
+                .iter()
+                .any(|l| l.starts_with("refused:palette_contains_outline:")),
+            "{legacy:?}"
+        );
+
+        let lane = serde_json::json!({ "reserved": [ { "id": "centre-lane", "rect": [0.4, 0.0, 0.6, 1.0], "fill": "transparent" } ],
+                                       "units": "fraction-of-generation-canvas" });
+        let good = run(v1(&["#1A1018"]), Some(lane));
+        assert!(good.iter().all(|l| !l.contains("layout")), "{good:?}");
+        let bad = run(
+            v1(&["#1A1018"]),
+            Some(serde_json::json!({ "reserved": [], "units": "px" })),
+        );
+        assert!(
+            bad.iter().any(|l| l.starts_with("refused:schema:layout:")),
+            "{bad:?}"
+        );
+    }
+
     #[test]
     fn studio_contract_example_validates_ok() {
         let spec = example();
@@ -1170,8 +1293,14 @@ mod tests {
         spec["outline"] = Value::from("#1A1020");
         let (dir, spec_path) = project_with(&spec);
         let got = lines(&validate_family(&spec_path, dir.path()));
+        // The gate refusal is this test's subject. Since 1959-xsy5 the same
+        // spec also fails palette_contains_outline (#1A1020 is not in the
+        // example palette), which is right and is pinned by its own test.
         assert_eq!(
-            got,
+            got.iter()
+                .filter(|l| l.starts_with("refused:palette_fails_all_gates:"))
+                .cloned()
+                .collect::<Vec<_>>(),
             vec![
                 "refused:palette_fails_all_gates:outline #1A1020 passes gate cool of ramp kumbia-outfit"
             ]

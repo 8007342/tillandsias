@@ -95,11 +95,28 @@ mod gpu_queue;
 mod provenance;
 #[cfg(feature = "host-services")]
 mod studio_tool;
+// 1959-xsy5 (D12): the GPU-free, byte-reproducible pixel finish.
+#[cfg(feature = "host-services")]
+mod pixel_finish;
+// 1959-xsy5 (D13): the deterministic review contact sheet.
+#[cfg(feature = "host-services")]
+mod contact_sheet;
+// 1959-xsy5 (D11): init image, mask, strength and layout on the sd.cpp tiers.
+#[cfg(feature = "host-services")]
+mod imagegen_init_mask;
+// @trace order:1956-ucix — CorridorKey 2.0 proof of concept behind
+// `studio.key_footage`; opt-in per project, consent-gated, CUDA only.
+#[cfg(feature = "host-services")]
+mod studio_key;
 // @trace order:1956-26qh — the family contract v1 static checker behind
 // `studio.validate_family`; pure, gated with imagegen_tool.
 mod progress_sink;
 #[cfg(feature = "host-services")]
 mod studio_contract;
+// 1956-ecpb (implements 1954-dvz9): the restricted licence register, the
+// signed acknowledgement record, the obligations spec and the consent gate.
+#[cfg(feature = "host-services")]
+mod licence_consent;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(feature = "listen-vsock")]
@@ -2696,6 +2713,10 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
         // only for a project with `[imagegen] studio = true`.
         "imagegen-studio" => "images/imagegen-studio",
+        // 1956-ucix: the CorridorKey 2.0 proof of concept. Never an INIT
+        // image; built on the first studio.key_footage of a project with
+        // `[imagegen] corridorkey = true`.
+        "imagegen-corridorkey" => "images/imagegen-corridorkey",
         "vault" => "images/vault",
         // 1861-nmpp: a studio lane image, built on first use on the forge.
         name if runtime_assets::studio_image_id(name).is_some() => "images/studio",

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-record-another-host-process-writes-into-the-shared-timing-fallback-never-evicts-the-gate-step-running-beside-it
+    order: 1966-ubsw
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags:
+      - gate
+      - metrics
+      - land-queue
+    estimated_hours: 3
+    title: A record another host process writes into the shared timing fallback never evicts the gate step running beside it
+    context: 'The 1204-3s2s leak check (build.sh step loop, attributed by run id since 1916-tsel) refuses a gate step when /tmp/tillandsias-timing.jsonl gains an id-less record while no other gate is live. Any NON-gate writer on the host (the operator''s running tray or an agent''s out-of-checkout call) therefore evicts whichever innocent step is running. Seen twice: #831 on 2026-11-01 and #840 on 2026-11-02 on macuahuitl''s full gate, both while test-gate-step-host-state-retry.sh ran, reported as "leaked record(s) ... unattributed=1".'
+    exit_criteria:
+      - 'A record written into the host''s shared timing fallback by a process outside the gate, during a clean step, does not refuse that step (pre-fix: refuses with unattributed=1).'
+      - 'A gate step whose own children write into the timing fallback is still refused (the 1204-3s2s teeth), including a child that inherited the gate''s environment and wrote no run id.'
+      - 'Two gates on one host still do not blame each other (1916-tsel arms stay green).'
+    verifiable_closure: 'A fixture drives the gate''s step loop with a clean step while a concurrent FOREIGN writer appends id-less records to the shared fallback: red on the pre-fix tree (refused), green after; and a leaking step in the same harness is still refused. Named by a litmus.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'yoga: get the offending id-less record from macuahuitl to name the writer, then give each gate a private timing fallback (TILLANDSIAS_METRICS_FALLBACK_DIR honoured by scripts/metrics-log-path.sh, the plan binary''s metrics_default_log and cycle-metrics.sh) and check that file.'
+    provenance: macuahuitl-fedora 2026-11-02 (coordinator), after the second eviction (#840); filed and claimed by yoga.
+    depends_on: []
+    related: [1204-3s2s, 1916-tsel]
+    events:
+      - type: filed
+        ts: '2026-11-02T18:01:37Z'
+        host: yoga
+        summary: filed p1 at the coordinator's request and claimed by yoga

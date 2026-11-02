@@ -39,7 +39,8 @@ These users are the design target, together with sibling projects of the same sh
    - the skill writes an OpenSpec obligations spec into that project ("This project depends on X and must now adhere to Y").
 
    The fetch gate admits a non-permissive artefact only when such a record exists. Nothing is enforced beyond recording.
-5. **Follow-ons, designed here and built after the P0 set:**
+5. **Finishing tools for the game forges (E):** image-to-image, inpaint and a reserved-region layout mask at every tier on both engines; a deterministic pixel finish (grid snap, palette quantise, transparent background) as a pure post-process; and a labelled contact sheet across tiers and seeds for human review.
+6. **Follow-ons, designed here and built after the P0 set:**
    - CorridorKey 2.0 as a proof-of-concept studio job, under the per-user standing approval;
    - project LoRA training and storage;
    - a BPM flipbook review UI.
@@ -50,7 +51,7 @@ These users are the design target, together with sibling projects of the same sh
 - `third-party-licence-consent`: signed acceptance of a third-party licence, the per-project acknowledgement record, the generated obligations spec, and the fetch gate that reads the record.
 
 ### Modified Capabilities
-- `imagegen-studio`: the forge-callable workflow tool, the family contract and its checker, the pinned nodes and models, provenance, and the shared GPU queue.
+- `imagegen-studio`: the forge-callable workflow tool, the family contract and its checker, the pinned nodes and models, provenance, the shared GPU queue, img2img and inpaint with a layout mask, the pixel finish, and the contact sheet.
 
 ## Impact
 
@@ -62,3 +63,4 @@ These users are the design target, together with sibling projects of the same sh
   - P0, needed for the next launches: 1956-x7xp, 1956-26qh, 1956-bh6j, 1935-svxq.
   - P1: 1956-ecpb (implements 1954-dvz9), 1956-ucix (implements 1954-xy5m).
   - P2: 1956-m8wx.
+  - E: 1959-xsy5 (D11–D13).

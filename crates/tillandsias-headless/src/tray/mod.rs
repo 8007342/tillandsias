@@ -4945,10 +4945,14 @@ mod tests {
             "image.generate is advertised (1874-kkrc): {tools:?}"
         );
         // The studio tools, by name: 1956-x7xp run_workflow, 1956-26qh
-        // validate_family.
+        // validate_family, 1959-xsy5 (D12, D13) finish_pixels and contact_sheet.
         for t in ["studio.run_workflow", "studio.validate_family"] {
             assert!(tools.contains(&t), "{t} is advertised: {tools:?}");
         }
+        assert!(
+            tools.contains(&"studio.finish_pixels") && tools.contains(&"studio.contact_sheet"),
+            "studio.finish_pixels and studio.contact_sheet are advertised (1959-xsy5): {tools:?}"
+        );
         // 1860-auhm: the four studio co-edit tools, by name.
         for studio in [
             "studio_options",
@@ -5524,9 +5528,10 @@ mod tests {
             // 1874-kkrc: image.generate, by name.
             assert!(tools.iter().any(|t| t["name"] == "image.generate"));
             // 1860-auhm: + the four studio co-edit tools.
-            // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family.
+            // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family;
+            // 1959-xsy5: + studio.finish_pixels, studio.contact_sheet;
             // 1957-emar: + gpu.status, gpu.unload_model.
-            assert_eq!(tools.len() - cloudflare, 28);
+            assert_eq!(tools.len() - cloudflare, 30);
 
             drop(writer);
             drop(lines);

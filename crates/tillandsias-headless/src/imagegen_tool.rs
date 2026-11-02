@@ -68,6 +68,10 @@ pub fn descriptor() -> Value {
                 "count": { "type": "integer", "minimum": 1, "maximum": MAX_COUNT, "default": 1 },
                 "control_net": { "type": "string", "description": "A pinned ControlNet (e.g. openpose); needs control_image. Refused unless its licence is approved." },
                 "control_image": { "type": "string", "description": format!("Path of the control PNG under {FORGE_SCRATCH}/.") },
+                "init_image": { "type": "string", "description": format!("1959-xsy5: the starting PNG under {FORGE_SCRATCH}/, the job's size. Alone: image-to-image.") },
+                "mask": { "type": "string", "description": "Greyscale PNG the canvas size: white repainted, black kept (byte-identical), grey blended. Needs init_image." },
+                "strength": { "type": "number", "minimum": 0, "maximum": 1, "description": "How far the result may leave the init image." },
+                "layout": { "type": "string", "description": "A family's reserved regions (art/families/x.json#layout) or a mask PNG; kept, and each region restored to its fill." },
                 "loras": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "weight": { "type": "number", "minimum": 0, "maximum": 2 } }, "required": ["name"] }, "description": "Pinned LoRAs; each refused unless its licence is approved." },
                 "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"], "description": "Omit to use the biggest model already on this computer (up to what it can run). Any smaller tier may be named." },
                 "consent_token": { "type": "string", "description": "From a download offer (consent_required or bigger_tier_offer), only after the user said yes to its ask. Needed once per tier per computer." },
@@ -105,6 +109,9 @@ pub struct Aux {
     pub control: Option<(imagegen_models::ModelFile, String)>,
     /// Each LoRA file and its weight.
     pub loras: Vec<(imagegen_models::ModelFile, f32)>,
+    /// 1959-xsy5 (D11): the init image, effective mask and strength as the
+    /// engine sees them (/out/in/...), staged by imagegen_init_mask.
+    pub init: Option<(String, Option<String>, Option<f32>)>,
 }
 
 impl Aux {
@@ -565,6 +572,22 @@ pub fn call(
     let names: Vec<String> = (0..job.count)
         .map(|i| format!("img-{stamp}-{}-{i}.png", job.seed))
         .collect();
+    // 1959-xsy5 (D11): stage init image, effective mask and layout before
+    // the GPU turn; a bad file is refused before anything queues.
+    let staged = match crate::imagegen_init_mask::parse(args)? {
+        Some(req) => Some(crate::imagegen_init_mask::Staged::stage(
+            project,
+            instance,
+            &req,
+            (job.width, job.height),
+            &out_dir,
+            stamp,
+        )?),
+        None => None,
+    };
+    if let Some(s) = &staged {
+        job.aux.init = Some(s.engine.clone());
+    }
     // D3 (1956-x7xp): one GPU queue per host, shared with the studio.
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
     // 1957-emar: with the device ours, make room: the weights plus 1 GiB of
@@ -582,6 +605,13 @@ pub fn call(
         .map_err(|e| gpu_queue::explain_engine_failure(&e, gpu_queue::vram_holders()));
     drop(turn);
     let out = out?;
+    // 1959-xsy5 (D11): kept pixels and reserved regions are restored on
+    // every output, whatever the engine did at a soft mask edge.
+    if let Some(s) = &staged {
+        for n in &names {
+            s.composite_file(&out_dir.join(n))?;
+        }
+    }
     let elapsed = t0.elapsed().as_secs_f64();
     let licence = job.tier.licence.clone();
     // D5 (1956-x7xp): the same provenance schema the studio writes.
@@ -594,6 +624,26 @@ pub fn call(
             sha256: control_image_sha256(&out_dir, img)?,
         })
     });
+    // 1959-xsy5 (D11 "Provenance"): the init image and the effective mask the
+    // engine was given, each with its sha256.
+    let d11_inputs: Vec<crate::provenance::Input> = staged
+        .as_ref()
+        .map(|s| {
+            let mut v = vec![crate::provenance::Input {
+                name: "init_image".into(),
+                path: args["init_image"].as_str().unwrap_or("").to_string(),
+                sha256: s.init_sha256.clone(),
+            }];
+            if let (Some(m), Some(sha)) = (&s.engine.1, &s.mask_sha256) {
+                v.push(crate::provenance::Input {
+                    name: "mask".into(),
+                    path: m.replacen("/out", FORGE_SCRATCH, 1),
+                    sha256: sha.clone(),
+                });
+            }
+            v
+        })
+        .unwrap_or_default();
     let mut images = Vec::new();
     for (i, name) in names.iter().enumerate() {
         let host = out_dir.join(name);
@@ -605,13 +655,19 @@ pub fn call(
             engine: crate::provenance::Engine::SdCpp,
             workflow: None,
             models: models.clone(),
-            inputs: control_input.iter().cloned().collect(),
+            inputs: control_input
+                .iter()
+                .cloned()
+                .chain(d11_inputs.iter().cloned())
+                .collect(),
             seed: job.seed + i as u64,
             prompt: job.prompt.clone(),
             negative_prompt: job.negative_prompt.clone(),
             tier: Some(job.tier.tier.clone()),
             placement: out.backend.clone(),
             family: None,
+            consent: None,
+            cli: None,
         };
         let prov = record.write_beside(&host)?;
         images.push(json!({
@@ -875,6 +931,17 @@ impl PodmanSdCli {
                 image.clone(),
             ]);
         }
+        // 1959-xsy5 (D11): sd-cli's image-to-image and inpaint flags
+        // (examples/common/common.cpp: -i/--init-img, --mask, --strength).
+        if let Some((init, mask, strength)) = &job.aux.init {
+            a.extend(["--init-img".into(), init.clone()]);
+            if let Some(m) = mask {
+                a.extend(["--mask".into(), m.clone()]);
+            }
+            if let Some(s) = strength {
+                a.extend(["--strength".into(), format!("{s}")]);
+            }
+        }
         let mut prompt = job.prompt.clone();
         if let Some((first, _)) = job.aux.loras.first() {
             a.extend(["--lora-model-dir".into(), format!("/models/{}", first.tier)]);
@@ -1040,6 +1107,58 @@ mod tests {
             Some((1, 4))
         );
         assert_eq!(step_from_row("  |#####| 140/140 - 469.6MB/s"), None);
+    }
+
+    /// 1959-xsy5 (D11): a staged init image, mask and strength reach sd-cli
+    /// as -i/--init-img, --mask and --strength, at the engine's /out paths;
+    /// no init, no flags.
+    #[test]
+    fn imagegen_init_mask_flags_reach_sdcpp_args() {
+        let args = json!({ "prompt": "ship hull" });
+        let mut job = parse_job(&args, &imagegen_tiers::ladder(), "I0", false).unwrap();
+        let e = PodmanSdCli {
+            image: "img".into(),
+            models_dir: PathBuf::from("/m"),
+        };
+        let run = |job: &Job| {
+            e.run_args(
+                job,
+                &[("model".into(), PathBuf::from("/m/I0/sdxs09.safetensors"))],
+                Path::new("/o"),
+                &["img-1-2-0.png".into()],
+                1,
+            )
+        };
+        let plain = run(&job);
+        for f in ["--init-img", "--mask", "--strength"] {
+            assert!(
+                !plain.contains(&f.to_string()),
+                "{f} without an init image: {plain:?}"
+            );
+        }
+        job.aux.init = Some((
+            "/out/in/7-init.png".into(),
+            Some("/out/in/7-mask.png".into()),
+            Some(0.55),
+        ));
+        let a = run(&job);
+        let after = |flag: &str| {
+            a.iter()
+                .position(|s| s == flag)
+                .and_then(|i| a.get(i + 1))
+                .cloned()
+                .unwrap_or_else(|| panic!("{flag} missing from {a:?}"))
+        };
+        assert_eq!(after("--init-img"), "/out/in/7-init.png");
+        assert_eq!(after("--mask"), "/out/in/7-mask.png");
+        assert_eq!(after("--strength"), "0.55");
+        job.aux.init = Some(("/out/in/8-init.png".into(), None, None));
+        let img2img = run(&job);
+        assert!(img2img.contains(&"--init-img".to_string()));
+        assert!(
+            !img2img.contains(&"--mask".to_string()),
+            "image-to-image over the canvas: no mask"
+        );
     }
 
     /// Order 1954-gdi6: a ControlNet image and LoRAs reach sd-cli, and a

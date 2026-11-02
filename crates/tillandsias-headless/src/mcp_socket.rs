@@ -344,6 +344,16 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(validate_family_descriptor());
             // 1957-emar: the GPU arbiter's status and unload, beside them.
             tools.extend(crate::gpu_queue::tool_descriptors());
+            // 1959-xsy5 (D12): the GPU-free pixel finish, beside it.
+            tools.push(crate::pixel_finish::descriptor());
+            // 1959-xsy5 (D13): the review contact sheet, beside it.
+            tools.push(crate::contact_sheet::descriptor());
+            // 1956-ucix: the CorridorKey 2.0 proof of concept, listed ONLY for
+            // a project with `[imagegen] corridorkey = true` (no automatic
+            // wiring for other users until Corridor has seen the demo).
+            if crate::studio_key::enabled(project_label, instance) {
+                tools.push(crate::studio_key::descriptor());
+            }
             tools.extend(browser_tool_descriptors(browser, rt));
             // 1772-irs3: the read-only Cloudflare tools, after the browser
             // family (both lists above are pinned).
@@ -506,10 +516,62 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
+                // 1956-ucix: CorridorKey 2.0 proof of concept; the call itself
+                // re-checks the opt-in, CUDA and the consent gate.
+                "studio.key_footage" => {
+                    let token = req["params"]["_meta"]["progressToken"].clone();
+                    let mut seq = 0u64;
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    match crate::studio_key::call(project_label, instance, arguments, &mut |p| {
+                        if let Some(line) =
+                            crate::imagegen_tool::progress_notification(&token, &mut seq, &p)
+                        {
+                            emit(line);
+                        }
+                    }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
                 // 1956-26qh: pure static check of a family spec read from the
                 // lane's own checkout; no GPU, nothing queued.
                 "studio.validate_family" => {
                     match validate_family_in_lane(
+                        project_label,
+                        instance,
+                        &req["params"]["arguments"],
+                    ) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 1959-xsy5 (D13): a deterministic labelled review grid; no GPU.
+                "studio.contact_sheet" => {
+                    match crate::contact_sheet::call(
+                        project_label,
+                        instance,
+                        &req["params"]["arguments"],
+                    ) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 1959-xsy5 (D12): pure, integer, deterministic; no GPU.
+                "studio.finish_pixels" => {
+                    match crate::pixel_finish::call(
                         project_label,
                         instance,
                         &req["params"]["arguments"],

@@ -26,7 +26,7 @@ pull_recipe: see-section-pull-on-demand
 
 # WSL browser isolation (Chromium)
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-core
 
 **Version baseline**: WSL2 on Windows 10 build 19044+ / Windows 11; systemd integration requires Win 10 19044+ or Win 11 22H2+.
 **Use when**: hosting a hardened Chromium browser as a sibling WSL distro alongside `tillandsias-forge`/`tillandsias-git`/`tillandsias-proxy`/etc. Goal: full filesystem + credential isolation from the host, all egress forced through `tillandsias-proxy:3128`. The Windows arm of `spec:browser-isolation-core`.
@@ -271,7 +271,7 @@ This cheatsheet documents hardened Chromium deployment in a WSL2 distro alongsid
 ```bash
 #!/bin/bash
 # Build WSL2 browser-chrome distro with Chromium hardening
-# @trace spec:browser-isolation-core, spec:windows-wsl-runtime
+# @trace spec:browser-isolation-core, spec:wsl-runtime
 
 # Build base distro from fedora-minimal:44 + Chromium + hardening tools
 podman create registry.fedoraproject.org/fedora-minimal:44 /bin/sh -c 'true' > "$BUILD_CONTAINER"

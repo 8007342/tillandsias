@@ -407,6 +407,13 @@ pub struct ImagegenConfig {
     /// is never built and its container never runs (order 1874-zry8).
     #[serde(default)]
     pub studio: bool,
+    /// Opt in to the CorridorKey 2.0 proof of concept, `studio.key_footage`
+    /// (order 1956-ucix). Absent or false: the tool is not listed and the
+    /// imagegen-corridorkey image is never built. No automatic wiring ships
+    /// to other users until Corridor has seen the demo (operator ruling on
+    /// 1954-xy5m).
+    #[serde(default)]
+    pub corridorkey: bool,
 }
 
 /// The `[browser]` section of per-project config.
