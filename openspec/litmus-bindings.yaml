@@ -1089,7 +1089,8 @@ specs:
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
-  - litmus:web-studio-grapesjs-stores-as-a-repo-diff
+  - litmus:studio-grapesjs-saves-through-the-shared-endpoint
+  - litmus:studio-decap-commits-a-hugo-entry-through-the-front
   - litmus:web-studio-tina-saves-through-local-graphql
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e

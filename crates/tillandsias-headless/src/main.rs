@@ -2686,18 +2686,15 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // only for a project with `[imagegen] studio = true`.
         "imagegen-studio" => "images/imagegen-studio",
         "vault" => "images/vault",
+        // 1861-nmpp: a studio lane image, built on first use on the forge.
+        name if runtime_assets::studio_image_id(name).is_some() => "images/studio",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
     };
 
     let context_dir = root.join(rel);
-    let containerfile = match image_name {
-        "forge-base" => context_dir.join("Containerfile.base"),
-        "chromium-core" => context_dir.join("Containerfile.core"),
-        "chromium-framework" => context_dir.join("Containerfile.framework"),
-        _ => context_dir.join("Containerfile"),
-    };
+    let containerfile = context_dir.join(runtime_assets::containerfile_name(image_name));
 
     if !containerfile.is_file() {
         return Err(format!(
@@ -2735,6 +2732,12 @@ fn image_build_inputs(
             .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
+    } else if runtime_assets::studio_image_id(image_name).is_some() {
+        let forge = identities
+            .get("forge")
+            .ok_or_else(|| format!("{image_name} identity requires forge identity"))?;
+        build_args.insert("FORGE_IMAGE".to_string(), forge.canonical_tag.clone());
+        dependency_digests.insert("forge".to_string(), forge.source_digest.clone());
     }
     Ok((build_args, dependency_digests))
 }
@@ -2973,6 +2976,8 @@ fn image_dependency(image_name: &str) -> Option<&'static str> {
     match image_name {
         "forge" => Some("forge-base"),
         "chromium-framework" => Some("chromium-core"),
+        // 1861-nmpp: a studio lane image is stacked on the forge.
+        name if runtime_assets::studio_image_id(name).is_some() => Some("forge"),
         _ => None,
     }
 }
@@ -36062,6 +36067,41 @@ esac
             dependency_digests.get("forge-base"),
             Some(&"sha256:forge-base".to_string())
         );
+    }
+
+    /// 1861-nmpp: a studio lane image is built from images/studio on top of
+    /// the forge, its own Containerfile per studio; an id outside the
+    /// registry is not an image.
+    #[test]
+    fn a_studio_image_builds_from_images_studio_on_the_forge() {
+        let forge = ImageBuildIdentity {
+            source_digest: "sha256:forge".to_string(),
+            canonical_tag: "localhost/tillandsias-forge:sha256-forge".to_string(),
+            version_alias: "localhost/tillandsias-forge:v1.0.0".to_string(),
+            latest_alias: "localhost/tillandsias-forge:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+        let identities = HashMap::from([("forge".to_string(), forge)]);
+        let (build_args, dependency_digests) =
+            image_build_inputs("studio-grapesjs", &identities).unwrap();
+        assert_eq!(
+            build_args.get("FORGE_IMAGE").map(String::as_str),
+            Some("localhost/tillandsias-forge:sha256-forge")
+        );
+        assert_eq!(
+            dependency_digests.get("forge").map(String::as_str),
+            Some("sha256:forge")
+        );
+        assert_eq!(image_dependency("studio-grapesjs"), Some("forge"));
+
+        let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets it"))
+            .join("../..");
+        let (containerfile, context) = image_specs(&root, "studio-grapesjs").unwrap();
+        assert!(context.ends_with("images/studio"), "{}", context.display());
+        assert!(containerfile.is_file(), "{}", containerfile.display());
+        assert!(containerfile.ends_with("images/studio/Containerfile.grapesjs"));
+        assert!(image_specs(&root, "studio-silex").is_err());
+        assert!(image_dependency("studio-silex").is_none());
     }
 
     #[test]
