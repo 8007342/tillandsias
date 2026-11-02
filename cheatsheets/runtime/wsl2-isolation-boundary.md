@@ -23,10 +23,10 @@ pull_recipe: see-section-pull-on-demand
 
 # WSL2 isolation boundary — what crosses, what doesn't
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-core
 
 **Version baseline**: WSL2 on Windows 10 build 19044+ / Windows 11; latest knobs (`sparseVhd`, `dnsTunneling`, `autoProxy`, `firewall`, `hostAddressLoopback`) require Windows 11 22H2+.
-**Use when**: deciding whether the WSL2 layer is providing a security boundary for a given concern, OR designing the host-side configuration that closes a host↔distro bridge. The architectural premise of `spec:windows-wsl-runtime` after 2026-04-28: a vanilla WSL2 distro is a **porous Hyper-V utility VM**, not a container. Real container isolation requires podman *inside* the distro plus the wsl.conf hardening below.
+**Use when**: deciding whether the WSL2 layer is providing a security boundary for a given concern, OR designing the host-side configuration that closes a host↔distro bridge. The architectural premise of `spec:wsl-runtime` after 2026-04-28: a vanilla WSL2 distro is a **porous Hyper-V utility VM**, not a container. Real container isolation requires podman *inside* the distro plus the wsl.conf hardening below.
 
 ## Provenance
 
@@ -82,7 +82,7 @@ The distro the tray imports as `tillandsias` SHALL ship with the following `wsl.
 ### `/etc/wsl.conf` (per-distro, baked into the rootfs)
 
 ```ini
-# @trace spec:windows-wsl-runtime, spec:cross-platform
+# @trace spec:wsl-runtime, spec:cross-platform
 # @cheatsheet runtime/wsl2-isolation-boundary.md
 # Tillandsias hardening profile — closes every documented host↔distro bridge
 # that Microsoft Learn flags as default-on. See cheatsheet for citations.
@@ -113,7 +113,7 @@ systemd = true                   # podman wants it (containers.conf events_logge
 ### `%UserProfile%\.wslconfig` (per-host, written by `tillandsias --init`)
 
 ```ini
-# @trace spec:windows-wsl-runtime, spec:cross-platform
+# @trace spec:wsl-runtime, spec:cross-platform
 # @cheatsheet runtime/wsl2-isolation-boundary.md
 
 [wsl2]
@@ -151,7 +151,7 @@ When a new spec demands a host↔distro bridge be closed:
 
 1. Find the bridge in this cheatsheet's table. If absent, file a follow-up to grow the table from a vendor citation.
 2. Add the disable knob to `/etc/wsl.conf` (per-distro) or `.wslconfig` (per-host).
-3. Add a `@trace spec:<new-spec>, spec:windows-wsl-runtime` near the knob with a 1-line rationale.
+3. Add a `@trace spec:<new-spec>, spec:wsl-runtime` near the knob with a 1-line rationale.
 4. Update `cheatsheets/runtime/wsl2-isolation-boundary.md` (this file) and re-run the cheatsheet INDEX regenerator.
 5. Smoke: `tillandsias --init` rebuilds the distro; verify the bridge is closed (`ls /mnt/c` should return nothing; `which cmd.exe` should fail; etc.).
 
@@ -188,7 +188,7 @@ This cheatsheet documents the security boundary between Windows host and WSL2 di
 ```bash
 #!/bin/bash
 # Generate WSL2 isolation boundary hardening reference
-# @trace spec:windows-wsl-runtime, spec:cross-platform
+# @trace spec:wsl-runtime, spec:cross-platform
 
 cat > wsl2-hardening.md <<'EOF'
 # WSL2 Isolation Boundary Hardening

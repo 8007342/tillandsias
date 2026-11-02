@@ -22,7 +22,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Windows installer prerequisites — WSL2 hard requirement
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core, spec:install-progress
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-core, spec:install-progress
 
 **Version baseline**: Windows 10 build 19041+ / Windows 11 (any SKU including Home).
 **Use when**: implementing the one-line `install.ps1` / `install.sh` curl installer's prerequisite-check prelude. WSL2 is a HARD requirement; the installer SHALL short-circuit with a clear remediation message if any check fails, BEFORE downloading the tray binary or distro tarball.
@@ -84,7 +84,7 @@ function Test-Tillandsias-WslPrereqs {
     [CmdletBinding()]
     param([switch]$Quiet)
 
-    # @trace spec:install-progress, spec:windows-wsl-runtime, spec:cross-platform
+    # @trace spec:install-progress, spec:wsl-runtime, spec:cross-platform
     # @cheatsheet runtime/windows-installer-prereqs.md
     # SHALL short-circuit BEFORE downloading any Tillandsias artifact.
 
@@ -194,7 +194,7 @@ For users running curl-pipe-bash from Git Bash or Cygwin on Windows. Most prereq
 
 ```bash
 #!/usr/bin/env bash
-# @trace spec:install-progress, spec:windows-wsl-runtime, spec:cross-platform
+# @trace spec:install-progress, spec:wsl-runtime, spec:cross-platform
 # @cheatsheet runtime/windows-installer-prereqs.md
 set -euo pipefail
 
@@ -233,7 +233,7 @@ This cheatsheet documents the hard-requirement checks that the Tillandsias Windo
 ```bash
 #!/bin/bash
 # WSL2 prerequisite validation for Tillandsias on Windows
-# @trace spec:install-progress, spec:windows-wsl-runtime
+# @trace spec:install-progress, spec:wsl-runtime
 
 # Run PowerShell-based checks (hardware, OS version, features)
 powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "

@@ -20,7 +20,7 @@ committed_for_project: false
 
 # WSL2 mount points and 9p drvfs
 
-@trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+@trace spec:cross-platform, spec:wsl-runtime, spec:git-mirror-service
 @cheatsheet runtime/wsl-on-windows.md, runtime/wsl-daemon-patterns.md
 
 **Use when**: writing code that crosses the Windows↔Linux filesystem boundary in WSL2 — anything that translates `C:\Users\...` to `/mnt/c/...`, mounts host paths into a distro, or shares files across distros (mirrors, caches, sockets).
