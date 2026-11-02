@@ -135,6 +135,10 @@
 
 set -uo pipefail
 
+# 1247-amcu: every refusal says why it refused and what would clear it, on
+# stderr, so the verdict token on stdout stays what callers parse.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 
 # ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
 # toolbox-fallback dispatch instead of assuming the host has it.
@@ -183,13 +187,13 @@ while [ "$#" -gt 0 ]; do
         --tier)    MODEL_TIER="${2:-}"; shift 2 ;;
         --tier=*)  MODEL_TIER="${1#--tier=}"; shift ;;
         --tier-any) TIER_ANY=1; shift ;;
-        *) echo "refused:bad-role:unknown argument $1"; exit 1 ;;
+        *) _afford "this script takes the role as its first argument, then only --budget, --release, --seed, --topk, --tier and --tier-any" "put the role first (select-work-batch.sh linux --budget 4) and drop or correct the argument"; echo "refused:bad-role:unknown argument $1"; exit 1 ;;
     esac
 done
 
 case "$ROLE" in
     linux|macos|windows|any) ;;
-    *) echo "refused:bad-role:${ROLE:-<empty>} (want linux|macos|windows|any)"; exit 1 ;;
+    *) _afford "the role, the first argument, decides which packets are claimable here and must name a platform lane" "pass linux, macos, windows or any as the first argument (scripts/derive-host-identity.sh reports this host's lane)"; echo "refused:bad-role:${ROLE:-<empty>} (want linux|macos|windows|any)"; exit 1 ;;
 esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -219,8 +223,8 @@ if [ -z "$BUDGET" ]; then
         BUDGET=10
     fi
 fi
-case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac
-[ "$BUDGET" -ge 1 ] || { echo "refused:bad-role:budget must be >= 1"; exit 1; }
+case "$BUDGET" in ''|*[!0-9]*) _afford "the budget is the number of packets one cycle may take, so it must be a whole number" "pass --budget N with N >= 1, or unset TILLANDSIAS_CYCLE_BUDGET to take the default"; echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac
+[ "$BUDGET" -ge 1 ] || { _afford "a budget of 0 would select nothing and report it as a batch" "pass --budget N with N >= 1"; echo "refused:bad-role:budget must be >= 1"; exit 1; }
 
 # TILLANDSIAS_PLAN_BIN overrides the probe so the litmus can point this script at
 # a stub that fails the way a stale binary fails. Without it the stale-binary and
@@ -240,9 +244,9 @@ case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive 
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
 PLAN="$(resolve_plan_binary)" || {
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
-        echo "refused:no-plan-binary:TILLANDSIAS_PLAN_BIN=${TILLANDSIAS_PLAN_BIN} did not run"
+        _afford "the binary TILLANDSIAS_PLAN_BIN names did not run, and an explicit override is never replaced by a search" "point TILLANDSIAS_PLAN_BIN at a tillandsias-plan that runs, or unset it to use the checkout's own"; echo "refused:no-plan-binary:TILLANDSIAS_PLAN_BIN=${TILLANDSIAS_PLAN_BIN} did not run"
     else
-        echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"
+        _afford "every query here goes through tillandsias-plan and none could be found that runs" "build it in this checkout: cargo build --release -p tillandsias-plan (target/release/tillandsias-plan)"; echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"
     fi
     exit 1
 }
@@ -417,10 +421,10 @@ if [ "$query_rc" -ne 0 ]; then
     # the binaries in the fleet — the failure this guard is about.
     case "$reason" in
         *"unknown query"* | *"unknown"*"select-rows"* | *"usage:"*)
-            echo "refused:stale-plan-binary:${PLAN} does not support select-rows, which this script requires (${reason}); rebuild with cargo build --release -p tillandsias-plan"
+            _afford "the plan binary is older than the select-rows query this script is built on" "rebuild it from this checkout: cargo build --release -p tillandsias-plan"; echo "refused:stale-plan-binary:${PLAN} does not support select-rows, which this script requires (${reason}); rebuild with cargo build --release -p tillandsias-plan"
             ;;
         *)
-            echo "refused:query-failed:${PLAN} select-rows exited ${query_rc}: ${reason:-<no stderr>}"
+            _afford "the select-rows query failed, so no claimable set is known and nothing is guessed" "read the quoted stderr; run the same select-rows by hand to reproduce, then fix the plan tree or the binary it names"; echo "refused:query-failed:${PLAN} select-rows exited ${query_rc}: ${reason:-<no stderr>}"
             ;;
     esac
     exit 1
@@ -474,10 +478,10 @@ rm -f "$query_err"
 # (order 569), so a binary too old to project rows says so about itself.
 if [ -z "$rows" ]; then
     if ! "$PLAN" capabilities 2>/dev/null | grep -qx "select-rows"; then # sigpipe-ok: safe pipeline
-        echo "refused:stale-plan-binary:${PLAN} does not declare select-rows; rebuild with cargo build --release -p tillandsias-plan"
+        _afford "the plan binary does not declare select-rows, so an empty answer could be its age, not an empty queue" "rebuild it from this checkout: cargo build --release -p tillandsias-plan"; echo "refused:stale-plan-binary:${PLAN} does not declare select-rows; rebuild with cargo build --release -p tillandsias-plan"
         exit 1
     fi
-    echo "refused:no-eligible-work:no ready packet for role ${ROLE} is claimable, dependency-clear, and unleased"
+    _afford "no ready packet for this role is claimable, dependency-clear and unleased on this tree" "check tillandsias-plan next <role> and blocked-by for what is holding the queue, release an expired claim, or file the work"; echo "refused:no-eligible-work:no ready packet for role ${ROLE} is claimable, dependency-clear, and unleased"
     exit 1
 fi
 
@@ -503,7 +507,7 @@ for tier_tag in $TIER_TAGS; do
     if [ "$tier_rc" -ne 0 ]; then
         reason="$(tr -d '\r' < "$tier_err" | grep -m1 . || true)"
         rm -f "$tier_err"
-        echo "refused:query-failed:${PLAN} select-rows --tag ${tier_tag} exited ${tier_rc}: ${reason:-<no stderr>}"
+        _afford "the tier-tagged query failed, and the low-end tier gate refuses rather than fall back to the general queue" "read the quoted stderr and reproduce the select-rows --tag call by hand; fix the plan tree or rebuild the binary"; echo "refused:query-failed:${PLAN} select-rows --tag ${tier_tag} exited ${tier_rc}: ${reason:-<no stderr>}"
         exit 1
     fi
     rm -f "$tier_err"
@@ -526,13 +530,13 @@ ROUTING_ROWS="$rows"
 if [ "$HOST_TIER" = "low-end" ]; then
     rows="$(printf '%s\n' "${TIER_POOL:-}" | awk -F'\t' 'NF >= 4 && !seen[$4]++')"
     if [ -z "$rows" ]; then
-        echo "refused:no-tier-work:this is a low-end host (tier gate, 847-wgy4) and no ready packet tagged [${TIER_TAGS}] is claimable by role ${ROLE} — the mandate forbids the general queue; file or free tier work rather than draining generally"
+        _afford "a low-end host takes only tier-tagged work (847-wgy4), and none of it is claimable now" "file or free a packet tagged for this tier, or run on a host outside the low-end tier"; echo "refused:no-tier-work:this is a low-end host (tier gate, 847-wgy4) and no ready packet tagged [${TIER_TAGS}] is claimable by role ${ROLE} — the mandate forbids the general queue; file or free tier work rather than draining generally"
         exit 1
     fi
 fi
 
 if [ -z "$rows" ]; then
-    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} is tier-reserved for the low-end floor (tier_filtered=${TIER_FILTERED})"
+    _afford "every claimable packet is reserved for the low-end floor and this host is not on it" "leave them to a low-end host, or file work for this host's tier"; echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} is tier-reserved for the low-end floor (tier_filtered=${TIER_FILTERED})"
     exit 1
 fi
 
@@ -679,7 +683,7 @@ for tool in $TOOL_CAP_TAGS; do
         rm -f "$cap_err"
         # Fail LOUD, never open: silently skipping the subtraction would hand
         # tool-gated work to a host that cannot run it — the exact defect.
-        echo "refused:query-failed:${PLAN} select-rows --tag ${tool} exited ${cap_rc}: ${reason:-<no stderr>}"
+        _afford "the capability query failed, and skipping it would hand tool-gated work to a host that cannot run it" "read the quoted stderr and reproduce the select-rows --tag call by hand; fix the plan tree or rebuild the binary"; echo "refused:query-failed:${PLAN} select-rows --tag ${tool} exited ${cap_rc}: ${reason:-<no stderr>}"
         exit 1
     fi
     rm -f "$cap_err"
@@ -697,7 +701,7 @@ for tool in $TOOL_CAP_TAGS; do
 done
 
 if [ -z "$rows" ]; then
-    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs a tool this host lacks (caps_filtered=${CAPS_FILTERED}; install the tool or declare TILLANDSIAS_HOST_CAPS)"
+    _afford "every claimable packet needs a tool this host does not have" "install the tool, or declare it in TILLANDSIAS_HOST_CAPS when the host already has it"; echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs a tool this host lacks (caps_filtered=${CAPS_FILTERED}; install the tool or declare TILLANDSIAS_HOST_CAPS)"
     exit 1
 fi
 
@@ -789,7 +793,7 @@ if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
         if [ "$accel_rc" -ne 0 ]; then
             reason="$(tr -d '\r' < "$accel_err" | grep -m1 . || true)"
             rm -f "$accel_err"
-            echo "refused:query-failed:${PLAN} select-rows --tag ${accel} exited ${accel_rc}: ${reason:-<no stderr>}"
+            _afford "the accelerator query failed, and skipping it would hand GPU-gated work to a host that cannot run it" "read the quoted stderr and reproduce the select-rows --tag call by hand; fix the plan tree or rebuild the binary"; echo "refused:query-failed:${PLAN} select-rows --tag ${accel} exited ${accel_rc}: ${reason:-<no stderr>}"
             exit 1
         fi
         rm -f "$accel_err"
@@ -814,7 +818,7 @@ if [ -n "${TILLANDSIAS_HOST_ACCELS+x}" ] || [ -n "$MY_CAP_LINE" ]; then
 fi
 
 if [ -z "$rows" ]; then
-    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs an accelerator this host lacks (accel_filtered=${ACCEL_FILTERED}(${ACCEL_FILTERED_TAGS}))"
+    _afford "every claimable packet needs an accelerator this host does not have" "leave them to a host with that accelerator, or correct the host's accelerator probe if it has one"; echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs an accelerator this host lacks (accel_filtered=${ACCEL_FILTERED}(${ACCEL_FILTERED_TAGS}))"
     exit 1
 fi
 
@@ -899,7 +903,7 @@ _score_epics() {
 
 scored="$(_score_epics "$rows")"
 
-[ -n "$scored" ] || { echo "refused:no-eligible-work:could not score any epic"; exit 1; }
+[ -n "$scored" ] || { _afford "rows were selected but none could be scored into an epic, so no cohesive batch exists" "run the select-rows query by hand and check each row carries rank, epic, order and packet id (the four columns _score_epics reads)"; echo "refused:no-eligible-work:could not score any epic"; exit 1; }
 
 # UNGROUPED is not an epic and must not win on size. It scores highest whenever
 # epic coverage is poor (80 of 140 eligible on 2026-08-09), and letting it win
@@ -1068,7 +1072,7 @@ fi
 chosen="$(printf '%s\n' "$scored" | sed -n "${pick}p" | cut -f2)"
 chosen_score="$(printf '%s\n' "$scored" | sed -n "${pick}p" | cut -f1)"
 
-[ -n "$chosen" ] || { echo "refused:no-eligible-work:could not choose an epic"; exit 1; }
+[ -n "$chosen" ] || { _afford "the scored epics yielded no choice for this seed" "re-run without --seed or with another one, and widen --topk if few epics scored"; echo "refused:no-eligible-work:could not choose an epic"; exit 1; }
 
 batch="$(printf '%s\n' "$rows" \
     | LC_ALL=C awk -F'\t' -v e="$chosen" -v maxo="$maxorder" '
