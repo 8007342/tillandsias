@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora), from demon_attack-forge on macuahuitl, 2026-11-01.
+packets:
+- packet_id: image-generate-serialises-gpu-jobs-per-host-reports-queue-position-names-the-vram-holder-and-reports-mixed-placement-as-degraded
+  order: 1955-rjv3
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, gpu, mcp]
+  estimated_hours: 4
+  related: [1954-gdi6, 1874-4b88, 1913-ebv8]
+  owned_files:
+  - crates/tillandsias-headless/src/imagegen_tool.rs
+  title: "Six parallel image.generate calls crash sd-cli (one 'cannot make enough memory available' on Vulkan0, the rest exit 139) and several report backend 'mixed' as success; sequential calls all succeed"
+  context: |
+    LIVE (demon_attack-forge, macuahuitl, RTX A5000 24 GB): six parallel image.generate calls. One sd-cli failed with "model manager memory on Vulkan0: reported free 180.38 MB / total 24564.00 MB ... cannot make enough memory available"; the rest exited 139 (segfault). Several responses reported backend "mixed". Sequential runs all succeed. Something else held about 24 GB of VRAM at the time; the inference (ollama) container is the suspect.
+    imagegen_tool::call runs engine.generate with no host-wide lock, so concurrent calls start concurrent engines on one device.
+  exit_criteria:
+  - GPU jobs are serialised per host by a queue, not refused; a waiting call reports its queue position through progress notifications
+  - when free VRAM is below the tier's need, the call names the process or container holding it, or waits, instead of starting an engine that segfaults
+  - a "mixed" placement is returned as a degraded result that says so, not as plain success
+  - FIXTURE red on today's tree: N concurrent call()s through a stub engine never overlap inside generate
+  unscoreable: unpinnable-until-the-guard-exists — the deliverable includes a cargo test in tillandsias-headless (name it imagegen_concurrent_calls_never_overlap_on_the_device) that drives N threads through call() with a stub engine recording overlap; write it red first, in the same commit as the queue.
+  next_action: Take after 1954-gdi6 lands (same file). Write the overlap test first, then add a host-wide queue around engine.generate.
+  provenance: coordinator relay of operator forge evidence, 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:32:33Z'
+    host: calmecacpilli
+    summary: filed p1 bug; calmecacpilli takes it after 1954-gdi6

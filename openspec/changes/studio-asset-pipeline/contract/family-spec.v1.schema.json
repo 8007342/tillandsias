@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tillandsias.dev/schemas/family-spec.v1.schema.json",
+  "title": "Tillandsias studio family contract 1935-k2ib/v1",
+  "description": "One contract for every asset family a game or app forge generates through the studio (design D7 of studio-asset-pipeline). Stages branch on `kind`: character-frames uses frame, clips and poses; layered-parts uses slots, dock and wear. `kind` is an open enum: a sibling project adds a kind by contributing a branch under $defs and allOf; the checker refuses an unknown kind with the list of known ones. Paths are project-relative; the caller copies inputs to the lane volume.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["contract", "pipelineVersion", "family", "version", "project", "kind"],
+  "properties": {
+    "contract": {
+      "const": "1935-k2ib/v1",
+      "description": "The contract revision these rules come from."
+    },
+    "pipelineVersion": {
+      "type": "null",
+      "description": "Always null in a spec. The tool stamps the running version into provenance (D5)."
+    },
+    "family": { "$ref": "#/$defs/slug" },
+    "version": { "type": "integer", "minimum": 1 },
+    "project": { "$ref": "#/$defs/slug" },
+    "kind": {
+      "type": "string",
+      "description": "Open enum. Known kinds are listed in $defs/knownKinds; an unknown kind is refused naming them.",
+      "$ref": "#/$defs/knownKinds"
+    },
+    "outline": { "$ref": "#/$defs/hexColour", "description": "The outline colour. With reservedRamps it must fail every gate." },
+    "symmetry": { "type": "string", "enum": ["none", "mirror-x"] },
+    "transparency": { "$ref": "#/$defs/transparency" },
+    "adapters": { "$ref": "#/$defs/adapters" },
+    "references": { "type": "array", "items": { "$ref": "#/$defs/reference" } },
+    "regions": { "$ref": "#/$defs/regions" },
+    "regionsRender": { "$ref": "#/$defs/regionsRender" },
+    "reservedRamps": { "type": "array", "items": { "$ref": "#/$defs/reservedRamp" } },
+    "palette": {
+      "type": "object",
+      "required": ["locked"],
+      "properties": {
+        "locked": { "$ref": "#/$defs/projectPath", "description": "A JSON file of hex colours: the locked palette the finish snaps to." }
+      }
+    },
+    "style_prompt": { "type": "string" },
+    "style_negative": { "type": "string" },
+    "character_prompt": { "type": "string" },
+    "generation": { "$ref": "#/$defs/generation" },
+    "qa": { "$ref": "#/$defs/qa" },
+    "targets": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/target" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "character-frames" } }, "required": ["kind"] },
+      "then": { "$ref": "#/$defs/characterFrames" }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "layered-parts" } }, "required": ["kind"] },
+      "then": { "$ref": "#/$defs/layeredParts" }
+    },
+    {
+      "description": "D7(a): palette_fails_all_gates is mandatory for any family that declares reservedRamps.",
+      "if": { "required": ["reservedRamps"] },
+      "then": {
+        "required": ["outline", "palette", "qa"],
+        "properties": {
+          "qa": {
+            "required": ["static"],
+            "properties": {
+              "static": { "contains": { "properties": { "id": { "const": "palette_fails_all_gates" } } } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "D7(a): region_mask_colours_declared is mandatory for any family that declares regions.",
+      "if": { "required": ["regions"] },
+      "then": {
+        "required": ["qa"],
+        "properties": {
+          "qa": {
+            "required": ["static"],
+            "properties": {
+              "static": { "contains": { "properties": { "id": { "const": "region_mask_colours_declared" } } } }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "knownKinds": {
+      "description": "The kinds defined now. Add a kind here AND as an allOf branch above.",
+      "enum": ["character-frames", "layered-parts"]
+    },
+    "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+    "hexColour": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+    "projectPath": {
+      "type": "string",
+      "description": "Project-relative, forward slashes, never absolute, never leaving the project.",
+      "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).+$"
+    },
+    "camera": {
+      "type": "string",
+      "enum": ["floor-perspective", "side-on"],
+      "description": "D7(b): floor-perspective measures baseline_drift on a projected ground line; side-on on a flat one."
+    },
+    "room": { "$ref": "#/$defs/slug" },
+    "nativeSize": {
+      "type": "object",
+      "required": ["width", "height", "pixelScale"],
+      "properties": {
+        "width": { "type": ["integer", "null"], "minimum": 1 },
+        "height": { "type": ["integer", "null"], "minimum": 1 },
+        "pixelScale": { "type": ["number", "null"], "exclusiveMinimum": 0 }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "required": ["units", "scale", "native", "margin", "generationCanvas"],
+      "properties": {
+        "units": { "const": "native-px", "description": "Pixels from the frame's top-left on the final native grid; pivots are not normalised." },
+        "baselineY": { "type": ["integer", "null"] },
+        "pivot": {
+          "type": "object",
+          "properties": {
+            "x": { "type": ["number", "null"] },
+            "y": { "type": ["number", "null"] },
+            "normalized": { "const": false }
+          }
+        },
+        "scale": {
+          "type": "object",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "enum": ["fixed-per-family"] },
+            "referencePose": { "type": "string", "description": "The pose whose bounding-box height resolves the scale once; stored in provenance." },
+            "resolved": { "type": ["number", "null"] }
+          }
+        },
+        "camera": { "$ref": "#/$defs/camera", "description": "The family default. A target may override it." },
+        "native": {
+          "description": "Per-room native size (revision 1): {perRoom: true, <room>: {width, height, pixelScale}}. A single-room family may still give one size, or null while the owner decides.",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/nativeSize" },
+            {
+              "type": "object",
+              "required": ["perRoom"],
+              "properties": { "perRoom": { "const": true } },
+              "additionalProperties": { "$ref": "#/$defs/nativeSize" },
+              "minProperties": 2
+            }
+          ]
+        },
+        "margin": {
+          "type": "object",
+          "required": ["minClear", "units"],
+          "properties": {
+            "minClear": { "type": "number", "minimum": 0, "maximum": 0.5, "description": "A fraction of the generation canvas." },
+            "units": { "const": "fraction-of-generation-canvas" },
+            "failOnBorderTouch": { "type": "boolean", "default": true }
+          }
+        },
+        "generationCanvas": {
+          "type": "object",
+          "required": ["width", "height"],
+          "properties": {
+            "width": { "type": "integer", "minimum": 64 },
+            "height": { "type": "integer", "minimum": 64 }
+          }
+        }
+      }
+    },
+    "transparency": {
+      "type": "object",
+      "properties": {
+        "byBackend": {
+          "type": "object",
+          "description": "sdxl uses LayerDiffuse; every other backend uses a BiRefNet matte. rmbg-1.4 and rmbg-2.0 are never shippable.",
+          "additionalProperties": { "enum": ["layerdiffuse", "matte"] }
+        },
+        "matte": { "enum": ["birefnet"] },
+        "alpha": { "enum": ["binary"] }
+      }
+    },
+    "adapters": {
+      "type": "object",
+      "required": ["enum"],
+      "properties": {
+        "enum": {
+          "type": "array",
+          "description": "Only approved identity adapters. FLUX Redux is excluded (dev-only licence).",
+          "items": { "enum": ["ip-adapter-sdxl", "qwen-image-edit", "img2img"] }
+        }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "required": ["role", "image"],
+      "properties": {
+        "role": { "enum": ["identity", "style", "palette"] },
+        "image": { "$ref": "#/$defs/projectPath" },
+        "crop": { "type": ["string", "object", "null"] },
+        "adapter": { "enum": ["ip-adapter-sdxl", "qwen-image-edit", "img2img"] },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "regions": {
+      "type": "object",
+      "description": "Flat ID colour -> region name. Every pixel of a regionMask PNG must be one of these keys.",
+      "propertyNames": { "pattern": "^#[0-9A-Fa-f]{6}$" },
+      "additionalProperties": { "$ref": "#/$defs/slug" },
+      "minProperties": 1
+    },
+    "regionsRender": {
+      "type": "object",
+      "description": "Masks are rendered without antialiasing or filtering so their colours stay exact.",
+      "properties": {
+        "antialias": { "const": false },
+        "filtering": { "const": "none" }
+      },
+      "required": ["antialias", "filtering"]
+    },
+    "channel": { "enum": ["r", "g", "b"] },
+    "gateLhs": {
+      "description": "A channel, or the difference of two channels. RGB is unpremultiplied, 0-1.",
+      "oneOf": [
+        { "$ref": "#/$defs/channel" },
+        {
+          "type": "object",
+          "required": ["sub"],
+          "additionalProperties": false,
+          "properties": {
+            "sub": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/channel" } }
+          }
+        }
+      ]
+    },
+    "gateRhs": {
+      "description": "A literal, or k times a channel.",
+      "oneOf": [
+        { "type": "number" },
+        {
+          "type": "object",
+          "required": ["mul"],
+          "additionalProperties": false,
+          "properties": {
+            "mul": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [{ "type": "number" }, { "$ref": "#/$defs/channel" }],
+              "items": false
+            }
+          }
+        }
+      ]
+    },
+    "gateCondition": {
+      "type": "object",
+      "required": ["lhs", "op", "rhs"],
+      "additionalProperties": false,
+      "properties": {
+        "lhs": { "$ref": "#/$defs/gateLhs" },
+        "op": { "enum": [">=", "<=", ">", "<", "=="] },
+        "rhs": { "$ref": "#/$defs/gateRhs" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "description": "Data, never evaluated as code. A colour matches a ramp when ANY gate has ALL of its conditions true.",
+      "required": ["id", "all"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "all": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/gateCondition" } }
+      }
+    },
+    "reservedRamp": {
+      "type": "object",
+      "required": ["id", "appliesToRegions", "gates"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "appliesToRegions": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/slug" } },
+        "recolor": { "type": "boolean" },
+        "gates": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/gate" } }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "properties": {
+        "count_per_pose": { "type": "integer", "minimum": 1, "maximum": 16 },
+        "seed_base": { "type": "integer", "minimum": 0 },
+        "seed_policy": { "type": "string" },
+        "backend": { "enum": ["comfyui-api", "sdcpp"] },
+        "workflow": { "$ref": "#/$defs/projectPath", "description": "A committed ComfyUI API-format workflow." },
+        "tiers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": { "model": { "type": "string" }, "steps": { "type": "integer", "minimum": 1 } }
+          }
+        }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "properties": {
+        "inherit": { "type": "array", "items": { "type": "string" } },
+        "add": {
+          "type": "array",
+          "description": "Per-run checks, after generation.",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "enum": ["baseline_drift", "head_size_variance", "region_gate_agreement", "identity_similarity"] },
+              "maxPx": { "type": "number", "minimum": 0 },
+              "maxPct": { "type": "number", "minimum": 0 },
+              "scope": { "type": "string" },
+              "rule": { "type": "string" },
+              "against": { "type": "string" },
+              "threshold": { "type": ["number", "string", "null"] },
+              "embedding": {
+                "type": "object",
+                "properties": { "model": { "type": "string" }, "licence": { "type": "string" } }
+              }
+            }
+          }
+        },
+        "static": {
+          "type": "array",
+          "description": "Checks that run before generation, with no GPU.",
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "enum": ["palette_fails_all_gates", "region_mask_colours_declared"] },
+              "rule": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "description": "A per-project writer. One target per room atlas; each names its room and its camera.",
+      "required": ["type", "room", "out", "requireHumanAcceptance"],
+      "properties": {
+        "type": { "enum": ["kumbiaManifest", "layeredAtlas"] },
+        "room": { "$ref": "#/$defs/room" },
+        "camera": { "$ref": "#/$defs/camera", "description": "Overrides frame.camera for this target." },
+        "atlas": { "type": "string" },
+        "out": { "$ref": "#/$defs/projectPath" },
+        "manifest": { "$ref": "#/$defs/projectPath" },
+        "frameId": { "type": "string" },
+        "fields": { "type": "array", "items": { "type": "string" } },
+        "packing": {
+          "type": "object",
+          "properties": {
+            "gutterPx": { "type": "integer", "minimum": 0 },
+            "trim": { "type": "boolean" },
+            "anchorRelativeTo": { "enum": ["trimmed-rect"] }
+          }
+        },
+        "requireHumanAcceptance": { "type": "boolean" }
+      }
+    },
+    "clip": {
+      "type": "object",
+      "required": ["id", "drawings", "durationBeats"],
+      "properties": {
+        "id": { "$ref": "#/$defs/slug" },
+        "drawings": { "type": "integer", "minimum": 1 },
+        "view": { "type": "string" },
+        "loop": { "type": "boolean" },
+        "durationBeats": { "type": "number", "exclusiveMinimum": 0 },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["beat", "type"],
+            "properties": {
+              "beat": { "type": "number", "minimum": 0 },
+              "type": { "enum": ["accent"] },
+              "drawing": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "controlImage": {
+      "type": "object",
+      "required": ["type", "image"],
+      "properties": {
+        "type": { "enum": ["openpose", "depth", "lineart", "canny", "normal"] },
+        "image": { "$ref": "#/$defs/projectPath" },
+        "strength": { "type": "number", "minimum": 0, "maximum": 2 }
+      }
+    },
+    "pose": {
+      "type": "object",
+      "description": "Rendered from a hand-keyed rig at a beat-timed key frame. Camera-agnostic: camera is a render parameter on the target, never a pose field (D7(b)).",
+      "required": ["id", "clip", "control"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "clip": { "$ref": "#/$defs/slug" },
+        "order": { "type": "integer", "minimum": 0 },
+        "view": { "type": "string" },
+        "control": {
+          "allOf": [{ "$ref": "#/$defs/controlImage" }],
+          "properties": {
+            "aux": { "type": "array", "items": { "$ref": "#/$defs/controlImage" } }
+          }
+        },
+        "regionMask": { "$ref": "#/$defs/projectPath", "description": "A flat-colour ID PNG aligned to the control image." },
+        "supportFoot": { "enum": ["left", "right", "both", "none"] },
+        "accent": { "type": "boolean" }
+      },
+      "not": { "required": ["camera"] }
+    },
+    "characterFrames": {
+      "required": ["frame", "clips", "poses", "targets"],
+      "properties": {
+        "frame": { "$ref": "#/$defs/frame" },
+        "clips": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/clip" } },
+        "poses": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/pose" } }
+      }
+    },
+    "layeredParts": {
+      "description": "demon_attack's ship.json shape. Kept minimal and permissive: the details live in that project and tighten here when it contributes them.",
+      "required": ["slots"],
+      "properties": {
+        "slots": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id"],
+            "properties": { "id": { "$ref": "#/$defs/slug" } }
+          }
+        },
+        "dock": { "type": ["object", "array"] },
+        "wear": {
+          "type": ["object", "array"],
+          "description": "Wear states; each is a named level or a list of them."
+        }
+      }
+    }
+  }
+}
