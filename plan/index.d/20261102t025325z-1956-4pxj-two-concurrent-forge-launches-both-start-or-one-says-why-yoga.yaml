@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl-fedora, 2026-11-02).
+packets:
+- packet_id: two-concurrent-forge-launches-on-a-cold-enclave-both-start-or-the-second-fails-with-a-named-visible-reason
+  order: 1956-4pxj
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - tray
+  - lane
+  - images
+  - linux
+  estimated_hours: 6
+  title: Two forge launches during a cold enclave both waited on the same image ensures and one forge died before starting with no trace; both must start, or the second must fail with a named, visible reason
+  context: 'Operator report on macuahuitl 2026-11-02 (gist relayed verbatim by macuahuitl-fedora): "I ended up launching two forges, one of them died before starting, they both waited for the same containers, one of them is running now, the other one died." The enclave was cold (every image rebuilding after the 1955-hq7k fix); its logs died with it (no journal trace). Shape of the shared wait, from source: crates/tillandsias-headless/src/main.rs ensure_image_exists hands a build to SetsidImageEnsure, whose doc says a second attach "blocks on the image flock (held by the HELPER, never the parent) and then reads the cached image" — so the second launch is designed to join the first''s wait, and something on that path ends it instead. Possibly related, not assumed: 1953-stsk (in progress: a launch that takes the launcher singleton SIGTERMs the running tray) and 1944-trsp (completed: a CLI lane attaches to a live tray). Which process died, and by what (signal, timeout, an error swallowed by a detached path), is not yet known.'
+  exit_criteria:
+  - 'Two launches started together against one in-flight image ensure both reach a running forge (the second joins the first''s wait), or the second stops with a named reason shown where the operator launched it (tray status or terminal) and written to a log that survives the process.'
+  - 'Every exit of a launch before its forge starts leaves a line in a persistent log (the image build log or the tray log) naming why: never a silent death.'
+  - 'The root cause is named from a reproduction, not from the shape above.'
+  verifiable_closure: 'A fixture that starts two launches against one stubbed ensure that blocks (no podman), releases it, and asserts both launches proceed to the forge-start step, or that the second exits with the named reason and its persistent log line. It fails on today''s tree (the second dies without a reason) and passes after; named by a litmus.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Reproduce on yoga: wipe one image, start two `tillandsias --cloud 8007342/tillandsias --bash` lanes a second apart, and record each process''s exit status, signals and last log lines; then read the image flock and lane-singleton paths for what ends the second.'
+  provenance: operator report on macuahuitl 2026-11-02, relayed by macuahuitl-fedora.
+  events:
+  - type: filed
+    ts: '2026-11-02T02:53:25Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request; 1953-stsk and 1944-trsp cited as possibly related

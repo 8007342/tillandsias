@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl-fedora, 2026-11-02).
+packets:
+- packet_id: image-builds-pass-an-explicit-build-network-so-the-users-pasta-ipv4-only-applies-and-a-dead-ipv6-path-is-named
+  order: 1955-hq7k
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - podman
+  - images
+  - network
+  - linux
+  estimated_hours: 4
+  title: A default `podman build` RUN step ignores the user's pasta --ipv4-only and stalls ~2 min per fetch on a dead host IPv6; builds pass an explicit network and name the dead v6 path
+  context: 'Measured on macuahuitl 2026-11-02 (relayed by macuahuitl-fedora): after a reboot the host IPv6 egress is dead (curl -6 hangs, v4 fine; two RA prefixes on enp131s0). ~/.config/containers/containers.conf carries pasta_options = ["--ipv4-only"] (written by main.rs ensure_pasta_options_ipv4_only when is_ipv6_functional says no, 1548-mhyk). `podman run` honours it (apk add in 1 s), but a default `podman build` RUN step does not: it sees the host v6 routes and `apk add` hangs about 2 min per fetch, so a build with the tray''s flags times out. `podman build --network=pasta` or `--network=private` takes 1 s. default_rootless_network_cmd and netns settings do not change the default build. Build argv sites: crates/tillandsias-headless/src/main.rs podman_build_argv (the tray and ensure-image path), crates/tillandsias-podman/src/client.rs build_image, scripts/build-image.sh.'
+  exit_criteria:
+  - 'Every image build path passes an explicit build network (`--network=private`) so the user''s containers.conf network options apply to RUN steps; valid for rootless Linux, the macOS VM and any WSL path that still runs podman build.'
+  - 'Before a build, when the host has a default IPv6 route but is_ipv6_functional reports no egress, the builder prints a named note (host IPv6 egress dead; RUN steps use IPv4 through pasta) instead of stalling silently.'
+  verifiable_closure: 'A test that the argv every build path produces carries the explicit network (red on today''s tree), plus a live arm on a host with dead IPv6 (macuahuitl) where a RUN step that fetches finishes in seconds on the built binary. A stub that fakes a dead v6 path inside a build RUN step is not attempted offline: the network namespace is podman''s, so the live arm is the measurement.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the argv tests and names litmus-image-build-network-is-explicit.yaml in the same commit (1136-n8sh).'
+  next_action: 'Add --network=private to the three build argv sites with a test per site; reuse is_ipv6_functional for the note; ask macuahuitl for the live arm.'
+  provenance: macuahuitl-fedora measurement 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T02:19:56Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request; prior detection work 1548-mhyk cited
