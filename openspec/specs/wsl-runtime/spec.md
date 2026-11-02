@@ -19,12 +19,36 @@ active
 Tillandsias containers on WSL2 MUST run in a Linux distribution with:
 1. systemd enabled (WSL2 20H2+, configured in `/etc/wsl.conf`): `[boot] systemd=true`
 2. podman installed (podman ≥ 4.0 for rootless networking support)
-3. Ability to bind Windows mount points (via `mount.wslg` or WSL interop): `/mnt/c/Users/<USER>/...` accessible
-4. Network connectivity (WSL automatic host gateway at `172.17.0.1`)
+3. `/mnt/c` is NOT reachable from the `tillandsias` distro. AMENDED
+   2026-11-02 (1410-ugvw follow-up; measured on yoga, live Windows guest,
+   relayed by macuahuitl-fedora): the tray writes `[automount] enabled=false`
+   (`crates/tillandsias-vm-layer/src/wsl.rs:739-749`), so `/mnt/c` exists as an
+   EMPTY directory with nothing mounted on it. The workspace reaches the distro
+   through the explicit `/home/forge/src` share (Requirement 3 and
+   `cheatsheets/runtime/wsl2-provisioning.md`), never through drvfs. The
+   pre-amendment text ("`/mnt/c/Users/<USER>/...` accessible") described the
+   WSL default, not what Tillandsias provisions.
+4. Windows interop ENABLED but off `$PATH`: `[interop] enabled=true` and
+   `appendWindowsPath=false` (`wsl.rs:743-745`; measured on yoga 2026-11-02:
+   `/proc/sys/fs/binfmt_misc/WSLInterop` reports `enabled`). Windows binaries
+   are runnable via interop by a process holding a path to the `.exe`
+   (`wsl.exe`, `wslpath`, the tray's `wsl.exe --exec` round-trips), but are NOT
+   on the Linux `$PATH`: `which cmd.exe` fails. This is what makes
+   `WSL_INTEROP_ENABLED=true` in Requirement 4.2 truthful.
+5. Network connectivity (WSL automatic host gateway at `172.17.0.1`)
 
-**Measurable:** `systemctl --version` returns version info (systemd present); `podman --version` returns ≥4.0; `ls /mnt/c` shows Windows C: drive; `ping 172.17.0.1` succeeds from WSL container.
+**Measurable:** `systemctl --version` returns version info (systemd present); `podman --version` returns ≥4.0; `ls -A /mnt/c` prints NOTHING (directory exists, empty) and `mount | grep ' /mnt/c '` matches nothing; `cat /proc/sys/fs/binfmt_misc/WSLInterop` prints `enabled`; `which cmd.exe` exits non-zero; `cat /etc/wsl.conf` contains exactly `[boot] systemd=true`, `[interop] enabled=true`, `appendWindowsPath=false`, `[automount] enabled=false` (plus `[user] default=forge` on the `provision` path); `ping 172.17.0.1` succeeds from WSL container.
 
-**Scenario:** Fresh WSL2 distribution installation. Verify systemd is enabled, podman is installed, and Windows interop is working.
+**Scenario:** Fresh WSL2 distribution installation. Verify systemd is enabled, podman is installed, `/mnt/c` is empty, and Windows interop answers through binfmt while `cmd.exe` is not on `$PATH`.
+
+**Design note / drift risk (2026-11-02):** the `/etc/wsl.conf` template is
+written TWICE in `crates/tillandsias-vm-layer/src/wsl.rs` — at `739-749`
+(recipe-materialized distro, post-import wiring) and at `864-877`
+(`VmRuntime::provision`, which also adds `[user] default=forge`). Two copies
+of one heredoc drift: a knob added to one path and not the other changes what
+this requirement measures depending on which provisioning path ran. Tracked
+as a p3 dedupe packet in the ledger (closure: ONE writer, a named cargo test
+in `tillandsias-vm-layer` asserting both paths emit the same keys).
 
 ---
 
@@ -52,7 +76,7 @@ Tillandsias workspace (e.g., `C:\Users\<USER>\src\tillandsias`) MUST:
 1. Be bind-mounted into containers at `/workspace` (read-only for cache; read-write for project directories)
 2. Use mount type `type=bind` with `--bind-propagation=rslave` to avoid mount storms
 3. Include correct ownership: mounted with `--userns=keep-id` to preserve user UID/GID
-4. Support both WSL paths (`/mnt/c/Users/...`) and Windows paths (via WSL interop)
+4. Support both WSL paths (`/mnt/c/Users/...`) and Windows paths (via WSL interop). NOTE 2026-11-02: in the `tillandsias` distro `/mnt/c` is empty (Requirement 1.3), so the `/mnt/c/...` form only resolves where drvfs is mounted (e.g. the `tillandsias-build` distro); the runtime distro's workspace path is `/home/forge/src/...`.
 
 **Measurable:** `podman inspect <container> | jq '.Mounts[]'` shows workspace mount; files are readable/writable with correct user ownership; `stat /workspace` shows correct UID/GID.
 
@@ -81,7 +105,7 @@ Containers launched in WSL MUST receive:
 **Modality:** SHOULD
 
 Containers SHOULD support automatic Windows ↔ Linux path translation:
-1. Input: Windows path `C:\Users\bullo\src\project` SHOULD be translated to `/mnt/c/Users/bullo/src/project` inside container
+1. Input: Windows path `C:\Users\bullo\src\project` SHOULD be translated to `/mnt/c/Users/bullo/src/project` inside container (the drvfs form; reachable only where `[automount]` is on — NOT in the `tillandsias` runtime distro, per Requirement 1.3)
 2. Output: Linux path `/workspace/project` SHOULD be mountable to Windows host without manual translation
 3. SHOULD NOT use hardcoded drive letters (use environment variables or symlinks instead)
 
@@ -335,6 +359,7 @@ systemctl start tillandsias-router
 
 ## Sources of Truth
 
+- `cheatsheets/runtime/wsl2-isolation-boundary.md` — the measured `/etc/wsl.conf` (automount off, interop on, appendWindowsPath off) and its writer `crates/tillandsias-vm-layer/src/wsl.rs:739-749`
 - `cheatsheets/runtime/wsl-daemon-patterns.md` — WSL boot config, systemd integration, daemon patterns
 - `cheatsheets/runtime/podman.md` — Podman on WSL, networking, secret mount, port forwarding
 - `cheatsheets/runtime/unix-socket-ipc.md` — Socket communication, non-blocking I/O, protocol design
