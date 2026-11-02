@@ -91,9 +91,14 @@ pub struct ModelFile {
 }
 
 impl ModelFile {
-    /// 1954-gdi6: a ControlNet (`controlnet:<name>`) or LoRA (`lora`) row.
+    /// 1954-gdi6: a ControlNet (`controlnet:<name>`) or LoRA (`lora`) row;
+    /// 1956-bh6j: or a studio-only weight (`studio:<kind>`: ipadapter,
+    /// clip_vision, layer_model, birefnet). Aux rows are never part of a tier
+    /// download; they are fetched only when a request or workflow names them.
     pub fn is_aux(&self) -> bool {
-        self.role == "lora" || self.role.starts_with("controlnet:")
+        self.role == "lora"
+            || self.role.starts_with("controlnet:")
+            || self.role.starts_with("studio:")
     }
 
     /// The base tier an aux row pairs with: the first segment of its `tier`
@@ -732,6 +737,39 @@ mod tests {
             + &"0".repeat(64)
             + "\t1\tcc-by-nc-4.0";
         assert!(parse_manifest(&nc).is_err());
+    }
+
+    #[test]
+    fn studio_rows_are_aux_and_never_part_of_a_tier_download() {
+        // 1956-bh6j: a studio:<kind> row pairs with its base tier but is not
+        // fetched by the tier download; a plain model row is.
+        let rev = "0".repeat(40);
+        let sha = "0".repeat(64);
+        let body = format!(
+            "I1\tmodel\ta/b\t{rev}\tm.safetensors\t{sha}\t1\topenrail++\n\
+             I1/ipadapter\tstudio:ipadapter\th94/IP-Adapter\t{rev}\tsdxl_models/ip.safetensors\t{sha}\t1\tapache-2.0\n\
+             I1/controlnet-union\tcontrolnet:union\txinsir/u\t{rev}\tu.safetensors\t{sha}\t1\tapache-2.0\n\
+             I1/lora\tlora\tn/p\t{rev}\tp.safetensors\t{sha}\t1\tcreativeml-openrail-m\n"
+        );
+        let m = parse_manifest(&body).unwrap();
+        assert_eq!(m.len(), 4);
+        assert!(!m[0].is_aux());
+        for row in &m[1..] {
+            assert!(row.is_aux(), "{} is aux", row.role);
+            assert_eq!(row.base_tier(), "I1");
+        }
+        assert_eq!(m[1].cache_name(), "ip.safetensors");
+        let i1 = files_for_tier(&m, "I1");
+        assert_eq!(i1.len(), 1, "only the model row belongs to the I1 download");
+        // The shipped manifest: every studio row is aux, under I1, and in the register.
+        let shipped = manifest();
+        let studio: Vec<_> = shipped.iter().filter(|r| r.role.starts_with("studio:")).collect();
+        assert!(studio.len() >= 5, "the D4 studio weights are pinned");
+        for row in studio {
+            assert!(row.is_aux());
+            assert_eq!(row.base_tier(), "I1");
+            register_admits(REGISTER_TSV, row).unwrap();
+        }
     }
 
     /// LIVE, opt-in: fetch tier `TILLANDSIAS_IMAGEGEN_LIVE_TIER` (default I0)
