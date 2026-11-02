@@ -738,6 +738,7 @@ mod tests {
             }),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I0".into(),
+            present: None,
         }));
         let r = crate::imagegen_tool::call(
             "emar-proj",
