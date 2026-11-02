@@ -1375,6 +1375,32 @@ pub fn provision_once() -> i32 {
                 if let Ok(Some(uuid)) = crate::installation_uuid::read_installation_uuid() {
                     crate::wsl_lifecycle::write_guest_ready_record(&uuid.to_string());
                 }
+                // Order 1965-zrjq: the handshake above answers at phase
+                // Starting, before a fresh guest has initialised Vault. Exiting
+                // here let the guest stop mid-handover, and the next boot wiped
+                // the store it could not open (v56.11.1.1 cold smoke). Hold the
+                // VM open and collect the first handover before exiting. A
+                // timeout is loud but does not fail a provision that succeeded.
+                let _keepalive = lifecycle.spawn_keepalive(false);
+                match retry_until_done(
+                    std::time::Duration::from_secs(180),
+                    std::time::Duration::from_secs(3),
+                    collect_first_vault_handover,
+                )
+                .await
+                {
+                    Ok(attempts) => {
+                        tracing::info!(attempts, "provision-once: vault handover collected");
+                        println!("{}", console.line("vault handover collected \u{2713}"));
+                    }
+                    Err(err) => {
+                        tracing::warn!(%err, "provision-once: vault handover not collected");
+                        eprintln!(
+                            "{}",
+                            console.line(&format!("WARNING: vault handover not collected: {err}"))
+                        );
+                    }
+                }
                 0
             }
             Err(err) => {
@@ -1388,6 +1414,81 @@ pub fn provision_once() -> i32 {
             }
         }
     })
+}
+
+/// Order 1965-zrjq: call `probe` every `interval` until it reports done
+/// (`Ok(true)`) or `budget` runs out. Returns the attempt count on success,
+/// or the last probe error on timeout.
+async fn retry_until_done<F, Fut>(
+    budget: std::time::Duration,
+    interval: std::time::Duration,
+    mut probe: F,
+) -> Result<u32, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<bool, String>>,
+{
+    let deadline = tokio::time::Instant::now() + budget;
+    let mut attempts = 0u32;
+    loop {
+        attempts += 1;
+        let last = match probe().await {
+            Ok(true) => return Ok(attempts),
+            Ok(false) => "not ready".to_string(),
+            Err(err) => err,
+        };
+        if tokio::time::Instant::now() + interval > deadline {
+            return Err(last);
+        }
+        tokio::time::sleep(interval).await;
+    }
+}
+
+/// Order 1965-zrjq: one probe for the provision-once wait. Connects, asks the
+/// guest's phase and, at Ready, collects the Vault handover on the same
+/// connection. `Ok(false)` means not Ready yet.
+async fn collect_first_vault_handover() -> Result<bool, String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, VmPhase, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT)
+        .await
+        .map_err(|e| format!("connect: {e}"))?;
+    let mut client = Client::from_stream(
+        stream,
+        Transport::Vsock {
+            cid: 0,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("handshake: {e}"))?;
+    let seq = client.allocate_seq();
+    let reply = client
+        .request(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::VmStatusRequest { seq },
+        })
+        .await
+        .map_err(|e| format!("VmStatusRequest: {e}"))?;
+    match reply.body {
+        ControlMessage::VmStatusReply {
+            phase: VmPhase::Ready,
+            ..
+        } => {
+            crate::installation_uuid::capture_vault_handover(&mut client).await?;
+            Ok(true)
+        }
+        ControlMessage::VmStatusReply { .. } => Ok(false),
+        other => Err(format!(
+            "unexpected reply to VmStatusRequest: {}",
+            other.kind()
+        )),
+    }
 }
 
 /// What a Windows SOFT reset announces about the Vault store, from what
@@ -5701,6 +5802,74 @@ mod tests {
             body.contains("collect_vault_handover_on_ready()"),
             "the push listener must collect the handover on the Ready transition"
         );
+    }
+
+    /// Order 1965-zrjq: the provision-once wait stops at the first `Ok(true)`,
+    /// rides through not-ready answers and transient errors, and reports the
+    /// attempt count.
+    #[tokio::test]
+    async fn retry_until_done_stops_at_the_first_done() {
+        let answers = std::cell::RefCell::new(vec![Ok(true), Err("wire".to_string()), Ok(false)]);
+        let calls = std::cell::Cell::new(0u32);
+        let got = retry_until_done(
+            std::time::Duration::from_secs(5),
+            std::time::Duration::from_millis(1),
+            || {
+                calls.set(calls.get() + 1);
+                let next = answers.borrow_mut().pop().unwrap_or(Ok(true));
+                async move { next }
+            },
+        )
+        .await;
+        assert_eq!(got, Ok(3));
+        assert_eq!(calls.get(), 3, "no probe after the first done");
+    }
+
+    /// Order 1965-zrjq: a guest that never reaches Ready ends the wait with
+    /// the last error rather than hanging provision-once.
+    #[tokio::test]
+    async fn retry_until_done_gives_up_with_the_last_error() {
+        let got = retry_until_done(
+            std::time::Duration::from_millis(30),
+            std::time::Duration::from_millis(5),
+            || async { Err::<bool, _>("phase Starting".to_string()) },
+        )
+        .await;
+        assert_eq!(got, Err("phase Starting".to_string()));
+    }
+
+    /// Order 1965-zrjq: after a successful provision, provision-once holds a
+    /// keepalive and collects the first Vault handover BEFORE it exits. It
+    /// used to exit at phase=Starting; the guest stopped mid-handover and the
+    /// next boot wiped that store (v56.11.1.1 cold smoke, yolanda).
+    #[test]
+    fn provision_once_collects_the_first_handover_before_exit() {
+        // source-pin-ok: the property is ordering inside provision_once, which only the source shows
+        let source = include_str!("notify_icon.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the file has a production half");
+        let code: String = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = code
+            .find("pub fn provision_once() -> i32 {")
+            .expect("provision_once exists");
+        let body = &code[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let ready = body
+            .find("\"provision-once: VM Ready\"")
+            .expect("the Ready log line");
+        let keepalive = body
+            .find("spawn_keepalive(")
+            .expect("provision-once must hold a keepalive while it waits");
+        let collect = body
+            .find("collect_first_vault_handover")
+            .expect("provision-once must collect the first handover");
+        assert!(ready < keepalive && keepalive < collect);
     }
 
     /// SC-07: the steady-state VmStatusRequest poll is fallback-only —
