@@ -37306,6 +37306,26 @@ mod keep_id_warm_tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
+        // 1954-rfpd: the gate runs this binary inside the tillandsias-builder
+        // toolbox, where podman is the HOST's (passthrough) and reports the
+        // host's GraphRoot, but the toolbox's own tree is what std::fs reads.
+        // A graphroot under $HOME is shared into the toolbox; one elsewhere
+        // (macuahuitl 2026-11-01: /srv/fastbuild/containers/storage, xfs) is
+        // visible only under /run/host, so the count below read an absent
+        // file and said 0 on every gate while the arm passed on the host.
+        // Measure the store where it is.
+        let root = {
+            let host_view = Path::new("/run/host").join(root.trim_start_matches('/'));
+            if !Path::new(&root).is_dir() && host_view.is_dir() {
+                eprintln!(
+                    "store root {root} is not visible here; reading it through {}",
+                    host_view.display()
+                );
+                host_view.to_string_lossy().into_owned()
+            } else {
+                root
+            }
+        };
         let layers_json = PathBuf::from(&root).join("overlay-layers/layers.json");
         let scratch = PathBuf::from(
             std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),

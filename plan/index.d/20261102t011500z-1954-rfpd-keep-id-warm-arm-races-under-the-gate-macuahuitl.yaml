@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Fable agent, 2026-11-02) while gating work/1953-jmvb.
+# An earlier draft of this row (never pushed) called the failure a race; three
+# red gate runs against three green host runs, then a probe inside the toolbox,
+# showed it deterministic. The filename keeps the word; the row does not.
+packets:
+- packet_id: a-toolbox-run-gate-reads-the-podman-graphroot-at-the-hosts-path-which-the-toolbox-does-not-mount-once-the-store-leaves-home
+  order: 1954-rfpd
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  size: S
+  implementer_tier: sonnet
+  capability_tags:
+  - podman
+  - tests
+  - gate
+  estimated_hours: 3
+  title: Inside the tillandsias-builder toolbox, podman is the host's and reports the host's GraphRoot, but std::fs reads the toolbox's tree; when the graphroot left $HOME (macuahuitl 2026-11-01, /srv/fastbuild/containers/storage) keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start read an absent layers.json and every ./build.sh --check on the host went red while the test passed on the host
+  context: 'Measured on macuahuitl 2026-11-02 at work/1953-jmvb (a diff touching no Rust until this fix). ./build.sh --check reported new-red tillandsias::keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start in 3 of 3 runs, each `assertion left == right failed: the warm made the mapped copy, left: 0, right: 1`; the same test passed 4/4 by name and 937/937 with the whole headless binary, both run on the host. build.sh re-execs inside the tillandsias-builder toolbox. Probe from inside that toolbox: `podman info` reports GraphRoot /srv/fastbuild/containers/storage, Supports shifting false, Backing Filesystem xfs (the host''s store, through podman passthrough); `ls /srv/fastbuild/containers/storage/overlay-layers/layers.json` is No such file (the toolbox mounts its own /srv); the host''s tree is at /run/host/srv/... The arm derives layers.json from the reported GraphRoot and counts rows there, so inside the toolbox it counts an absent file: 0, deterministically. Until the coordinator moved rootless storage to the RAID on 2026-11-01 the graphroot was under $HOME, which toolbox shares, so the path agreed by accident; on the previous store Supports shifting was true, so the arm also skipped. Sibling site, production: image_build_scope.rs graph_root() feeds free_bytes_at(Path::new(root)) — a headless run inside a toolbox measures free space on the toolbox''s filesystem, not the store''s, once the store is outside $HOME.'
+  exit_criteria:
+  - 'The arm resolves the reported GraphRoot through /run/host when the path is not a directory here and the host view is (landed in this fix, in the test), prints which view it read, and ./build.sh --check on macuahuitl (toolbox, xfs store outside $HOME) is green on it; the pre-fix tree is red there (3 of 3 runs, 2026-11-02).'
+  - 'image_build_scope.rs graph_root() (or free_bytes_at''s caller) applies the same host-view resolution, with a unit test that feeds a root absent here and present under a fake /run/host prefix and asserts the resolved path; red on today''s code.'
+  - 'A shared helper owns the resolution (one place for "the host path as this process can read it"), and the two browser_open.rs harness assertions on `store` still pass on a host where the store is under target/work/.'
+  verifiable_closure: 'The cargo test itself, run by ./build.sh --check inside the toolbox on a host whose podman graphroot is outside $HOME: red before this fix (3 of 3 on macuahuitl 2026-11-02), green after; plus the unit test of the second criterion. No litmus wraps a cargo test; the gate''s test-baseline is the scorer.'
+  unscoreable: 'the scorer is the cargo test under the gate''s test-baseline, not a litmus; a litmus naming it would only re-run the gate'
+  next_action: 'Land the test-side resolution with 1953-jmvb (it is what lets that PR gate on macuahuitl). Then move the resolution into a helper beside graph_root(), use it for free_bytes_at, write the fake-/run/host unit test red first.'
+  provenance: macuahuitl gate transcripts 2026-11-02 (three runs, each new-red on the same arm); host runs of the same binary (937/937) and test (4/4); podman exec probes inside tillandsias-builder 2026-11-02 (podman info GraphRoot/shifting/fs; ls of the layers.json path; /srv vs /run/host/srv); coordinator message 2026-11-01 announcing the graphroot move.
+  events:
+  - type: filed
+    ts: '2026-11-02T01:15:00Z'
+    host: macuahuitl
+    summary: filed p2 as a suspected race after two red gate runs and one green whole-binary run
+  - type: progress
+    ts: '2026-11-02T03:20:00Z'
+    host: macuahuitl
+    summary: corrected to p1 deterministic — probe inside the toolbox shows the host GraphRoot path absent and the host tree under /run/host; test-side resolution written and folded into work/1953-jmvb; production sibling named
