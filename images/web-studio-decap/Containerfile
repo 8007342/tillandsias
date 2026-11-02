@@ -1,0 +1,38 @@
+# @trace order:1862-wrx5
+# The Decap CMS studio lane: the decap-cms admin UI (vendored, sha512-pinned
+# npm tarball) in front of decap-server's local fs proxy (every package pinned
+# by package-lock.json integrity), serving one forge checkout at /project.
+#
+# Licences approved by the operator 2026-11-01 (relayed by macuahuitl-fedora):
+# decap-cms 3.17.3 MIT, decap-server 3.11.6 MIT, and decap-server's installed
+# tree (180 package.json files: MIT 161, ISC 8, BSD-3-Clause 8, BSD-2-Clause 2,
+# 0BSD 1). The build fetches; the RUN of the studio has no network.
+FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90
+
+ARG DECAP_CMS_VERSION=3.17.3
+ARG DECAP_CMS_INTEGRITY=sha512-aoNAV1throw76ieMmCVe5qb3EbhbbFdXwG+fTupQqvKVwJYnJVQiFdAwvWeP9+H5prNeXS6mrVbW9cxGD/m6tg==
+
+LABEL io.tillandsias.web-studio.engine="decap" \
+      io.tillandsias.web-studio.decap-cms-version="${DECAP_CMS_VERSION}" \
+      io.tillandsias.web-studio.decap-cms-integrity="${DECAP_CMS_INTEGRITY}" \
+      io.tillandsias.web-studio.decap-server-version="3.11.6" \
+      io.tillandsias.web-studio.licence="MIT" \
+      io.tillandsias.web-studio.dependency-licences="MIT,ISC,BSD-3-Clause,BSD-2-Clause,0BSD"
+
+WORKDIR /opt/studio
+COPY vendor.mjs /opt/studio/vendor.mjs
+RUN node /opt/studio/vendor.mjs "$DECAP_CMS_VERSION" "$DECAP_CMS_INTEGRITY" /opt/studio/vendor/decap-cms \
+    && test -f /opt/studio/vendor/decap-cms/dist/decap-cms.js \
+    && test -f /opt/studio/vendor/decap-cms/package.json \
+    && rm /opt/studio/vendor.mjs
+COPY package.json package-lock.json /opt/studio/
+RUN npm ci --ignore-scripts --omit=dev --no-audit --no-fund \
+    && test -f /opt/studio/node_modules/decap-server/dist/index.js \
+    && npm cache clean --force
+COPY server.mjs /opt/studio/
+RUN useradd -u 1001 -m -s /usr/sbin/nologin studio \
+    && mkdir -p /project && chown studio:studio /project
+USER studio
+EXPOSE 8090
+ENV STUDIO_PROJECT=/project STUDIO_PORT=8090
+ENTRYPOINT ["node", "/opt/studio/server.mjs"]

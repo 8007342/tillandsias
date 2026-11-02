@@ -1,0 +1,10 @@
+{
+  "name": "tillandsias-web-studio-decap",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Decap CMS studio lane: decap-server's local fs proxy, pinned by package-lock.json (1862-wrx5)",
+  "license": "MIT",
+  "dependencies": {
+    "decap-server": "3.11.6"
+  }
+}

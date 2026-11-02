@@ -416,6 +416,24 @@ mod tests {
         assert!(registry().studios.iter().all(|s| !s.brief.is_empty()));
     }
 
+    /// 1862-wrx5: a Hugo site (hugo.toml, or the older config.toml) is a
+    /// markdown SSG, and the one recommended studio for it is Decap CMS.
+    #[test]
+    fn a_hugo_site_recommends_decap() {
+        for marker in ["hugo.toml", "config.toml"] {
+            let fw = detect_framework(&[marker.into(), "content".into()], None);
+            assert_eq!(fw, Some("markdown-ssg"), "{marker}");
+            let opts = options(fw);
+            let rec: Vec<&str> = opts
+                .iter()
+                .filter(|o| o.recommended)
+                .map(|o| o.id.as_str())
+                .collect();
+            assert_eq!(rec, ["decap"], "{marker}");
+            assert!(opts.iter().any(|o| o.label == "Decap CMS [Recommended]"));
+        }
+    }
+
     #[test]
     fn a_static_html_site_recommends_grapesjs_and_onlook_never_is() {
         let fw = detect_framework(&["index.html".into(), "style.css".into()], None);
