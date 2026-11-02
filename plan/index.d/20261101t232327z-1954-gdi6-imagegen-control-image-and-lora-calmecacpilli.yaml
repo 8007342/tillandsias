@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora), for kumbia-kombat-forge, 2026-11-01.
+packets:
+- packet_id: image-generate-accepts-control-image-and-lora-inputs-through-stable-diffusion-cpp-before-comfyui-lands
+  order: 1954-gdi6
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, mcp, licences]
+  estimated_hours: 4
+  related: [1935-k2ib, 1874-4b88]
+  owned_files:
+  - crates/tillandsias-headless/src/imagegen_tool.rs
+  title: "image.generate accepts a control_image (ControlNet) and lora inputs through stable-diffusion.cpp, which supports both, so game forges get pose-controlled human sprites before the ComfyUI studio lands"
+  context: |
+    kumbia-kombat-forge needs pose-controlled human opponents now. stable-diffusion.cpp already supports ControlNet (--control-net, --control-image) and LoRA (--lora-model-dir, <lora:name:weight> in the prompt). image.generate (crates/tillandsias-headless/src/imagegen_tool.rs) does not expose either. This is the interim path; 1935-k2ib is the full studio.
+  exit_criteria:
+  - image.generate accepts an optional control_image (a path the forge can read) with a ControlNet model name, and an optional list of lora names with weights, and passes them to sd.cpp
+  - a ControlNet or LoRA file is used only if the licence register has an operator-approved entry for it; otherwise the call returns a licence refusal naming the file and downloads nothing
+  - the result's provenance names the ControlNet and LoRA files with their sha256, and the control image's hash
+  unscoreable: unpinnable-until-the-guard-exists — the deliverable includes a cargo test in tillandsias-headless (name it imagegen_control_image_and_lora_reach_sdcpp_args_and_licence_gate) that builds the sd.cpp argv from a request and refuses an unregistered file; write it in the same commit as the feature.
+  next_action: Read how imagegen_tool.rs builds the sd.cpp argv, add the two inputs, gate each file on the licence register, and write the test first.
+  provenance: coordinator relay of kumbia-kombat-forge request, 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:23:27Z'
+    host: calmecacpilli
+    summary: filed p1 interim feature for kumbia-kombat human opponents

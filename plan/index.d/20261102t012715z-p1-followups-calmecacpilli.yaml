@@ -1,0 +1,76 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: gaps found while building 1956-ecpb and 1956-ucix (studio-asset-pipeline P1), 2026-11-02.
+packets:
+- packet_id: os-verified-approval-signer-and-enrolment-on-linux-and-windows-so-accept-licence-can-sign
+  order: 1958-22yh
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [approvals, licences, linux, windows, security]
+  estimated_hours: 10
+  related: [1956-ecpb, 1954-dvz9]
+  title: "accept-licence cannot sign on Linux or Windows: the only os-verified approval signer is the macOS tray's Secure Enclave one; there is no enrolment, no allowed-signers writer, no grant store and no broker nonce"
+  context: |
+    1956-ecpb verifies SSHSIG approvals with ssh-keygen -Y verify in namespace tillandsias-approval@v1, against $TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS or <state_dir>/approvals/allowed_signers. Nothing on Linux or Windows produces those signatures or enrols a key (openspec/changes/os-verified-approval-gates D1, D2 and R2). The operator's acknowledgement #1 records therefore ship unsigned.
+  exit_criteria:
+  - Linux (fprintd, polkit or FIDO) and Windows (Windows Hello) produce an SSHSIG over the D3 statement with an enrolled per-host key, and the host writes allowed_signers
+  - the operator re-signs acknowledgement #1 through accept-licence, and licence_consent verifies it
+  unscoreable: "unpinnable-until-the-guard-exists — the deliverable includes a cargo test that signs with the host signer under a software-key test double and verifies it through licence_consent; a live Hello or fingerprint prompt needs a human."
+  next_action: Read os-verified-approval-gates design D1-D5 and R1-R4 and the macOS approval_signer.rs; implement the Linux signer first.
+  provenance: 1956-ecpb agent report, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T01:27:15Z'
+    host: calmecacpilli
+    summary: filed p1
+- packet_id: the-tray-reads-a-projects-licence-acknowledgements-from-its-checkout-not-a-state-dir-copy
+  order: 1958-fc3y
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [licences, studio]
+  estimated_hours: 3
+  related: [1956-ecpb]
+  title: "admits_restricted reads acknowledgements from a state-dir copy (<state_dir>/licence-acknowledgements/<project>/) because the host gate only receives a project label; the record of truth is the project's committed licences/acknowledgements/"
+  context: |
+    1956-ecpb had to add a copy step, because the gate cannot read the agreeing project's checkout. The copy can drift from the signed commit.
+  exit_criteria:
+  - the gate reads licences/acknowledgements/ from the lane's live checkout (as validate_family_in_lane reads a family spec) and verifies signatures there; the state-dir copy is removed
+  unscoreable: "unpinnable-until-the-guard-exists — a cargo test with a stub checkout reader that admits from the checkout and refuses a state-dir-only record, written red first."
+  next_action: Reuse mcp_socket::validate_family_in_lane's podman-exec checkout read.
+  provenance: 1956-ecpb agent report, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T01:27:15Z'
+    host: calmecacpilli
+    summary: filed p2
+- packet_id: pin-the-nvidia-open-model-licence-text-hash-and-handle-the-moge-pickle-so-corridorkey-can-be-admitted
+  order: 1958-p4sw
+  status: ready
+  kind: maintenance
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [licences, corridorkey, studio]
+  estimated_hours: 2
+  related: [1956-ucix, 1956-ecpb, 1954-xy5m]
+  title: "CorridorKey stays refused: the 30 C-RADIOv4 rows carry licence_sha256 pending (the NVIDIA Open Model License text was unreachable from calmecacpilli), and MoGe's model.pt is a pickle the generic fetcher refuses"
+  context: |
+    The two Hub repos that list a LICENSE ship it empty, and developer.download.nvidia.com reset the connection. vfms/moge/model.pt is a pickle; imagegen_models ALLOWED_SUFFIXES refuses it, so the CorridorKey image must load it in its own sandbox, or a safetensors conversion must be pinned.
+  exit_criteria:
+  - every C-RADIOv4 row in licence-register-restricted.tsv carries the sha256 of the NVIDIA Open Model License text, with its obligations quoted verbatim in licence_consent
+  - the MoGe weight is either pinned as safetensors or fetched through a CorridorKey-only path that loads it only inside the network-less CUDA sandbox, recorded in the TSV
+  - scripts/lua/test-licence-register-restricted.lua passes with no pending hashes
+  verifiable_closure: |
+    litmus:studio-custom-nodes-come-only-from-the-manifest (its step runs scripts/lua/test-licence-register-restricted.lua); after this order it reports no pending licence hash. Today 30 rows are pending.
+  next_action: From a host with a browser, fetch the NVIDIA Open Model License, hash it, and update the 30 rows and the obligation quotes.
+  provenance: 1956-ecpb and 1956-ucix agent reports, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T01:27:15Z'
+    host: calmecacpilli
+    summary: filed p1

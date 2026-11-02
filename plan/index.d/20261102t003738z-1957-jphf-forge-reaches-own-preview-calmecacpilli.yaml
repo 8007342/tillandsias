@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora), from the 1935-svxq investigation, 2026-11-02.
+packets:
+- packet_id: an-agent-in-a-forge-reaches-its-own-projects-preview-through-the-router-and-never-a-siblings
+  order: 1957-jphf
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [local-web-preview, router, forge, dns]
+  estimated_hours: 4
+  related: [1935-svxq, 1763-nc9d, 1651-5t7n]
+  title: "An agent inside a forge cannot reach its own project's preview: *.localhost resolves to the forge's own loopback, so curl or fetch of https://www.<label>.localhost:<port>/ returns 000"
+  context: |
+    Found while root-causing 1935-svxq. The browser reaches a preview through the window forwarder and the router. A forge resolves *.localhost to 127.0.0.1 inside its own container, where nothing listens. So an agent cannot self-test its preview with curl or fetch, for any project name.
+  exit_criteria:
+  - inside a forge, https://www.<own label>.localhost:<preview port>/ reaches the project's route through the router, with TLS that verifies against the forge's trust store, the same as the browser
+  - a sibling project's preview host is NOT reachable from that forge
+  - FIXTURE red on today's tree: the forge's resolver or hosts configuration maps its own preview host to the router, and does not map a sibling's
+  unscoreable: unpinnable-until-the-guard-exists — the deliverable includes a cargo test in tillandsias-headless (name it forge_resolves_only_its_own_preview_host_to_the_router) over the pure function that builds the forge's host mapping, written red first; the live in-forge curl check needs a podman host.
+  next_action: Find how the forge container gets its DNS and hosts entries at launch (podman --add-host, or the enclave DNS). Add an entry for www.<own label>.localhost pointing at the router's enclave address, own project only.
+  provenance: coordinator request after the 1935-svxq root cause, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:37:38Z'
+    host: calmecacpilli
+    summary: filed p1 bug

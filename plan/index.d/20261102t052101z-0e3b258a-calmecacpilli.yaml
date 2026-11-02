@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: img2img-inpaint-and-layout-mask-at-every-tier-plus-a-deterministic-pixel-finish-and-a-contact-sheet
+    event:
+      type: note
+      ts: "2026-11-02T05:21:01Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t052101z
+      host: calmecacpilli
+      summary: |
+        Coordinator ruling (macuahuitl-fedora, 2026-11-02, a coordinator call, not an operator question): D12 grid snap defaults to sample: centre, which keeps 1-px outlines; majority stays as an option. design.md D12, the risk note and the v1 schema default now say centre.
