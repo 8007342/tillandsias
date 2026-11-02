@@ -646,6 +646,42 @@ mod tests {
         }
     }
 
+    /// The live arm's independent check: decodes the files a REAL sd.cpp run
+    /// left in target/d11-live (init.png, mask.png, out.png) and verifies
+    /// every kept pixel and the centre lane itself, not via the tool's own
+    /// success line. Run explicitly after the live run copies them there.
+    #[test]
+    #[ignore]
+    fn imagegen_init_mask_live_verify() {
+        let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/d11-live"));
+        let rd = |n: &str| std::fs::read(dir.join(n)).unwrap_or_else(|e| panic!("{n}: {e}"));
+        let init = decode_rgba(&rd("init.png"), "init").unwrap();
+        let (_, _, mask) = decode_grey(&rd("mask.png"), "mask").unwrap();
+        let out = decode_rgba(&rd("out.png"), "out").unwrap();
+        let lane = lane();
+        let eff = effective_mask(init.width, init.height, Some(&mask), None, &lane);
+        let (mut kept, mut repainted_changed, mut repainted) = (0u32, 0u32, 0u32);
+        for y in 0..init.height {
+            for x in 0..init.width {
+                let i = ((y * init.width + x) * 4) as usize;
+                if lane[0].contains(x, y, init.width, init.height) {
+                    assert_eq!(out.pixels[i + 3], 0, "lane ({x},{y}) is not empty");
+                } else if eff[(y * init.width + x) as usize] == 0 {
+                    assert_eq!(&out.pixels[i..i + 4], &init.pixels[i..i + 4], "kept ({x},{y}) changed");
+                    kept += 1;
+                } else {
+                    repainted += 1;
+                    if out.pixels[i..i + 3] != init.pixels[i..i + 3] {
+                        repainted_changed += 1;
+                    }
+                }
+            }
+        }
+        reserved_regions_empty(&out, &lane).expect("reserved_regions_empty");
+        eprintln!("live-verify: kept={kept} byte-identical; repainted={repainted} of which changed={repainted_changed}; lane empty");
+        assert!(repainted_changed > repainted / 10, "the engine barely repainted: is the mask honoured?");
+    }
+
     #[test]
     fn imagegen_init_mask_prepare_fills_regions_before_the_run() {
         let init = noise(10, 2, 3);
