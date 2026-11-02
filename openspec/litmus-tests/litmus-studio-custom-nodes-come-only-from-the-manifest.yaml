@@ -16,6 +16,16 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "ok:studio-custom-nodes:6-arms"
 
+  - step: "1956-bh6j: every pinned node has a commit, a lock and a licence; no weight names RMBG or InsightFace; every aux weight has a folder in extra_model_paths.yaml"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-studio-node-pins.lua"
+    timeout_ms: 60000
+    expected_behavior: "ok:studio-node-pins:"
+
+  - step: "1956-ecpb: the restricted licence register refuses a row with no obligation classes, an unknown class or no licence text hash; the live register passes; the permissive check never reads it"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-licence-register-restricted.lua"
+    timeout_ms: 60000
+    expected_behavior: "ok:licence-register-restricted:"
+
 observability:
   traces:
     - "@trace order:1921-7aa5"

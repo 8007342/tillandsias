@@ -1,0 +1,5 @@
+# Hashed lock for ComfyUI_IPAdapter_plus (a0f451a5): the package has no
+# requirements.txt; everything it imports (torch, torchvision, comfy.*) comes
+# from ComfyUI's own requirements. insightface is NOT installed: the FaceID
+# path is not shipped (design D4), and the loader only imports it when a FaceID
+# model is selected. This file is deliberately empty of requirements.

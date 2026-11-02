@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: family-contract-v1-json-schema-and-static-checker-studio-validate-family
+    event:
+      type: progress
+      ts: "2026-11-02T00:37:00Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t002735z
+      host: calmecacpilli
+      summary: |
+        Family contract v1 schema (contract/family-spec.v1.schema.json), the v1 Gatekeeper example, studio_contract.rs (schema shape, palette_fails_all_gates, region_mask_colours_declared, missing_input, unknown_kind) and the studio.validate_family tool on the lane socket, reading the spec and its inputs from the lane's live checkout. Tests red first then green on calmecacpilli; branch work/1956-26qh.

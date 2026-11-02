@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: licence-acknowledgement-flow-user-accepts-quoted-restrictions-durably-before-any-non-permissive-model-or-tool-is-fetched
+    event:
+      type: note
+      ts: "2026-11-01T23:57:53Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t235753z
+      host: calmecacpilli
+      summary: |
+        OPERATOR RULING, verbatim, relayed by the coordinator, 2026-11-01: "Yes, OpenRAIL aligns well with our principles." openrail and openrail-m were added to PERMISSIVE_LICENCES on work/1957-pins. Obligation for this design: the OpenRAIL family (openrail, openrail-m, creativeml-openrail-m, openrail++) attaches use restrictions (its Attachment A) that MUST pass downstream to anyone who receives the model or its derivatives. The obligations spec generated for an agreeing project therefore carries that use-restriction passdown for every OpenRAIL artefact it depends on, alongside attribution.

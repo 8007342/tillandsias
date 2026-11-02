@@ -1,0 +1,48 @@
+# Third-party licence acknowledgement (order 1956-ecpb, implements 1954-dvz9).
+# Signed over `statement` as SSHSIG in namespace tillandsias-approval@v1; verify with
+#   ssh-keygen -Y verify -n tillandsias-approval@v1 -I <grantor> -f <allowed_signers> -s <sig> < <statement>
+#
+# ACKNOWLEDGEMENT #1 (one record per licence text): the operator's standing
+# approval, relayed by the coordinator (macuahuitl-fedora) on 2026-11-01 and
+# confirmed to the calmecacpilli session the same day, verbatim: "For our own
+# projects we shall have a standing approval to use all of those free models,
+# we'll not be selling any of those assets." It covers the free models on
+# demon_attack's licence-review.md and kumbia-kombat's list, plus the
+# restricted-free ones (non-commercial weights and CorridorKey 2.0 with its
+# three foundation models). It does NOT cover bundling or redistributing
+# restricted weights for other users, or clicking through gated terms (for
+# example FLUX.1-schnell) on the operator's behalf.
+#
+# The signature is empty: no approval key is enrolled on this host yet
+# (os-verified-approval-gates D1 is implemented for macOS only). Until the
+# operator signs this statement through the accept-licence skill, the gate
+# refuses the rows it covers with licence_acknowledgement_required, which is
+# the honest state. The seed is also in code:
+# licence_consent::operator_standing_acknowledgements().
+# This record's licence hash is `pending:<url>`: the NVIDIA Open Model License
+# PDF was unreachable from this host, so the gate refuses the C-RADIO rows with
+# licence_text_unpinned until someone pins the text and re-records this.
+record: tillandsias-licence-acknowledgement v1
+licence: nvidia-open-model-license
+licence_sha256: pending:https://developer.download.nvidia.com/licenses/nvidia-open-model-license-agreement-june-2024.pdf
+covers: [nvidia/C-RADIOv4-SO400M]
+grantor: operator
+scope: operator-projects
+use: non-sale
+expiry: "standing"
+signed_at: "2026-11-01T23:45:35Z"
+strength: software-password
+host: calmecacpilli
+statement: |
+  tillandsias-licence-acknowledgement v1
+  licence: nvidia-open-model-license
+  licence_sha256: pending:https://developer.download.nvidia.com/licenses/nvidia-open-model-license-agreement-june-2024.pdf
+  covers: nvidia/C-RADIOv4-SO400M
+  grantor: operator
+  scope: operator-projects
+  use: non-sale
+  expiry: standing
+  host: calmecacpilli
+  strength: software-password
+  issued: 2026-11-01T23:45:35Z
+signature: ""

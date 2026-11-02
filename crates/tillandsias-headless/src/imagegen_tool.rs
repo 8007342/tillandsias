@@ -29,6 +29,7 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
+use crate::gpu_queue;
 use crate::imagegen_consent;
 use crate::imagegen_models::{self, FetchEvent};
 use crate::imagegen_tiers::{self, TierRow};
@@ -66,7 +67,10 @@ pub fn descriptor() -> Value {
                 "seed": { "type": "integer", "minimum": 0 },
                 "count": { "type": "integer", "minimum": 1, "maximum": MAX_COUNT, "default": 1 },
                 "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"], "description": "Omit to use the smallest model." },
-                "consent_token": { "type": "string", "description": "From a bigger_tier_offer, only after the user said yes to its ask." }
+                "consent_token": { "type": "string", "description": "From a bigger_tier_offer, only after the user said yes to its ask." },
+                "control_net": { "type": "string", "description": "A pinned ControlNet (e.g. openpose); needs control_image. Refused unless its licence is approved." },
+                "control_image": { "type": "string", "description": format!("Path of the control PNG under {FORGE_SCRATCH}/.") },
+                "loras": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "weight": { "type": "number", "minimum": 0, "maximum": 2 } }, "required": ["name"] }, "description": "Pinned LoRAs; each refused unless its licence is approved." }
             },
             "required": ["prompt"]
         }
@@ -88,6 +92,133 @@ pub struct Job {
     pub rounded: Option<((u32, u32), (u32, u32))>,
     /// The lane volume the engine mounts at /out (None: bind `out_dir`).
     pub out_volume: Option<String>,
+    /// Order 1954-gdi6: ControlNet and LoRA inputs, each licence-admitted.
+    pub aux: Aux,
+}
+
+/// Order 1954-gdi6: optional ControlNet conditioning and LoRAs. Every file is
+/// a pinned row of images/imagegen/models.tsv that the licence register admits.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Aux {
+    /// The ControlNet file and the control image's path inside the engine (/out/...).
+    pub control: Option<(imagegen_models::ModelFile, String)>,
+    /// Each LoRA file and its weight.
+    pub loras: Vec<(imagegen_models::ModelFile, f32)>,
+}
+
+impl Aux {
+    /// Every ControlNet and LoRA must pair with the request's base tier: an
+    /// SD1.5 ControlNet on an SDXL model fails inside sd-cli, so refuse it here.
+    pub fn check_base(&self, tier: &str) -> Result<(), String> {
+        for m in self.files() {
+            if m.base_tier() != tier {
+                return Err(format!(
+                    "invalid_arguments: {} pairs with tier {}, not {tier}; pass tier {} or pick a file for {tier}",
+                    m.label(),
+                    m.base_tier(),
+                    m.base_tier()
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// The pinned files this request adds to the tier's own.
+    pub fn files(&self) -> Vec<imagegen_models::ModelFile> {
+        self.control
+            .iter()
+            .map(|(m, _)| m.clone())
+            .chain(self.loras.iter().map(|(m, _)| m.clone()))
+            .collect()
+    }
+}
+
+fn admitted(
+    manifest: &[imagegen_models::ModelFile],
+    register: &str,
+    role: &str,
+    name: &str,
+) -> Result<imagegen_models::ModelFile, String> {
+    let row = manifest
+        .iter()
+        .find(|m| match role {
+            // A ControlNet is named by its role (`controlnet:openpose`): upstream
+            // files are all called diffusion_pytorch_model*.safetensors.
+            "controlnet" => m.role == format!("controlnet:{name}"),
+            // A LoRA is named by its file stem, which is what sd.cpp's
+            // `<lora:NAME:w>` looks up.
+            _ => m.role == role && lora_stem(m) == name,
+        })
+        .ok_or_else(|| {
+            format!(
+                "model_refused: no pinned {role} named {name}; a {role} is used only when \
+                 images/imagegen/models.tsv pins it and images/models/licence-register.tsv admits it \
+                 (the operator approves each licence)"
+            )
+        })?;
+    imagegen_models::register_admits(register, row)?;
+    Ok(row.clone())
+}
+
+fn lora_stem(m: &imagegen_models::ModelFile) -> &str {
+    m.cache_name()
+        .trim_end_matches(".safetensors")
+        .trim_end_matches(".gguf")
+}
+
+/// Parse `control_net`, `control_image` and `loras` against the manifest and
+/// the licence register. Nothing is fetched here: a refusal downloads nothing.
+pub fn parse_aux(
+    args: &Value,
+    manifest: &[imagegen_models::ModelFile],
+    register: &str,
+) -> Result<Aux, String> {
+    let mut aux = Aux::default();
+    let cn = args.get("control_net").and_then(Value::as_str);
+    let img = args.get("control_image").and_then(Value::as_str);
+    match (cn, img) {
+        (None, None) => {}
+        (Some(cn), Some(img)) => {
+            let rel = img
+                .strip_prefix(FORGE_SCRATCH)
+                .and_then(|r| r.strip_prefix('/'))
+                .filter(|r| {
+                    !r.is_empty() && !r.split('/').any(|p| p == ".." || p == "." || p.is_empty())
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "invalid_arguments: control_image must be a file under {FORGE_SCRATCH}/"
+                    )
+                })?;
+            let row = admitted(manifest, register, "controlnet", cn)?;
+            aux.control = Some((row, format!("/out/{rel}")));
+        }
+        _ => {
+            return Err("invalid_arguments: control_net and control_image go together".into());
+        }
+    }
+    if let Some(list) = args.get("loras").and_then(Value::as_array) {
+        for l in list {
+            let name = l
+                .get("name")
+                .and_then(Value::as_str)
+                .ok_or("invalid_arguments: each lora needs a name")?;
+            let weight = l.get("weight").and_then(Value::as_f64).unwrap_or(1.0) as f32;
+            if !(0.0..=2.0).contains(&weight) {
+                return Err(format!(
+                    "invalid_arguments: lora {name} weight must be 0..=2"
+                ));
+            }
+            aux.loras
+                .push((admitted(manifest, register, "lora", name)?, weight));
+        }
+        let mut tiers: Vec<&str> = aux.loras.iter().map(|(m, _)| m.tier.as_str()).collect();
+        tiers.dedup();
+        if tiers.len() > 1 {
+            return Err("invalid_arguments: every lora must share one models folder".into());
+        }
+    }
+    Ok(aux)
 }
 
 fn round_to_grid(v: u32) -> u32 {
@@ -154,6 +285,7 @@ pub fn parse_job(
         count,
         rounded: (asked != got).then_some((asked, got)),
         out_volume: None,
+        aux: Aux::default(),
         tier,
     })
 }
@@ -163,7 +295,14 @@ pub fn parse_job(
 pub enum Progress {
     Building,
     Fetch(FetchEvent),
-    Step { done: u32, total: u32 },
+    Step {
+        done: u32,
+        total: u32,
+    },
+    /// 1955-rjv3: waiting for the host's GPU; `position` jobs are ahead.
+    Queued {
+        position: usize,
+    },
 }
 
 /// What a generate produced.
@@ -340,8 +479,13 @@ pub fn call(
             )
         }
     };
-    let job = parse_job(args, &ladder, &ceiling, false)?;
-    let mut job = job;
+    let mut job = parse_job(args, &ladder, &ceiling, false)?;
+    job.aux = parse_aux(
+        args,
+        &imagegen_models::manifest(),
+        imagegen_models::register_tsv(),
+    )?;
+    job.aux.check_base(&job.tier.tier)?;
     // 1874-p8w7: a tier above what this lane accepted runs only on a token.
     let lane = imagegen_consent::lane_key(project, instance);
     let request = imagegen_consent::request_hash(args);
@@ -364,23 +508,56 @@ pub fn call(
     let names: Vec<String> = (0..job.count)
         .map(|i| format!("img-{stamp}-{}-{i}.png", job.seed))
         .collect();
+    // D3 (1956-x7xp): one GPU queue per host, shared with the studio.
+    let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
     let t0 = Instant::now();
-    let out = engine.generate(&job, &out_dir, &names, progress)?;
+    let out = engine
+        .generate(&job, &out_dir, &names, progress)
+        .map_err(|e| gpu_queue::explain_engine_failure(&e, gpu_queue::vram_holders()));
+    drop(turn);
+    let out = out?;
     let elapsed = t0.elapsed().as_secs_f64();
     let licence = job.tier.licence.clone();
+    // D5 (1956-x7xp): the same provenance schema the studio writes.
+    let mut models = imagegen_models::files_for_tier(&imagegen_models::manifest(), &job.tier.tier);
+    models.extend(job.aux.files());
+    let control_input = job.aux.control.as_ref().and_then(|(_, img)| {
+        Some(crate::provenance::Input {
+            name: "control_image".into(),
+            path: img.replacen("/out", FORGE_SCRATCH, 1),
+            sha256: control_image_sha256(&out_dir, img)?,
+        })
+    });
     let mut images = Vec::new();
-    for name in &names {
+    for (i, name) in names.iter().enumerate() {
         let host = out_dir.join(name);
         let bytes =
             std::fs::read(&host).map_err(|e| format!("engine_failed: no output {name}: {e}"))?;
         let (w, h, alpha) =
             png_facts(&bytes).ok_or_else(|| format!("engine_failed: {name} is not a PNG"))?;
+        let record = crate::provenance::Record {
+            engine: crate::provenance::Engine::SdCpp,
+            workflow: None,
+            models: models.clone(),
+            inputs: control_input.iter().cloned().collect(),
+            seed: job.seed + i as u64,
+            prompt: job.prompt.clone(),
+            negative_prompt: job.negative_prompt.clone(),
+            tier: Some(job.tier.tier.clone()),
+            placement: out.backend.clone(),
+            family: None,
+            consent: None,
+            cli: None,
+        };
+        let prov = record.write_beside(&host)?;
         images.push(json!({
             "path": forge_path(&host),
             "width": w,
             "height": h,
             "has_alpha": alpha,
             "thumbnail_path": thumbnail(&host).map(|t| forge_path(&t)),
+            "provenance_path": format!("{}.provenance.json", forge_path(&host)),
+            "provenance": prov,
         }));
     }
     let first = images[0].clone();
@@ -413,7 +590,31 @@ pub fn call(
         "ephemeral": true,
         "note": EPHEMERAL_NOTE,
         "bigger_tier_offer": bigger,
+        "provenance": first["provenance"],
+        // 1955-rjv3: part of the model ran on the CPU; slower, and a sign the
+        // GPU was short of memory. Reported, never passed off as a GPU run.
+        "degraded": (out.backend == "mixed").then(|| json!({
+            "backend": "mixed",
+            "why": "part of the model did not fit in GPU memory and ran on the CPU; \
+                    the image is valid but generation was slower. Free GPU memory and retry for a full GPU run."
+        })),
+        "control": job.aux.control.as_ref().map(|(m, img)| json!({
+            "model": m.label(), "sha256": m.sha256, "licence": m.licence,
+            "image": img.replacen("/out", FORGE_SCRATCH, 1),
+            "image_sha256": control_image_sha256(&out_dir, img),
+        })),
+        "loras": job.aux.loras.iter().map(|(m, w)| json!({
+            "model": m.label(), "sha256": m.sha256, "licence": m.licence, "weight": w,
+        })).collect::<Vec<_>>(),
     }))
+}
+
+/// sha256 of the control image, read from the lane's scratch dir on the host.
+fn control_image_sha256(out_dir: &Path, engine_path: &str) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let rel = engine_path.strip_prefix("/out/")?;
+    let bytes = std::fs::read(out_dir.join(rel)).ok()?;
+    Some(format!("{:x}", Sha256::digest(&bytes)))
 }
 
 /// One `notifications/progress` line for `event`, or `None` when the
@@ -441,6 +642,11 @@ pub fn progress_notification(token: &Value, seq: &mut u64, event: &Progress) -> 
         Progress::Fetch(FetchEvent::Verified { .. }) => {
             (100.0, Some(100.0), "model verified".to_string())
         }
+        Progress::Queued { position } => (
+            0.0,
+            None,
+            format!("waiting for the GPU: {position} job(s) ahead"),
+        ),
         Progress::Step { done, total } => (
             f64::from(*done),
             Some(f64::from(*total)),
@@ -569,6 +775,9 @@ impl PodmanSdCli {
             self.image.clone(),
         ]);
         for (role, path) in files {
+            if role == "controlnet" || role == "lora" {
+                continue;
+            }
             let rel = path.strip_prefix(&self.models_dir).unwrap_or(path);
             let flag = match role.as_str() {
                 "model" => "--model",
@@ -579,12 +788,31 @@ impl PodmanSdCli {
             };
             a.extend([flag.into(), format!("/models/{}", rel.display())]);
         }
+        if let Some((cn, image)) = &job.aux.control {
+            a.extend([
+                "--control-net".into(),
+                format!("/models/{}/{}", cn.tier, cn.cache_name()),
+                "--control-image".into(),
+                image.clone(),
+            ]);
+        }
+        let mut prompt = job.prompt.clone();
+        if let Some((first, _)) = job.aux.loras.first() {
+            a.extend(["--lora-model-dir".into(), format!("/models/{}", first.tier)]);
+            for (m, w) in &job.aux.loras {
+                let stem = m
+                    .cache_name()
+                    .trim_end_matches(".safetensors")
+                    .trim_end_matches(".gguf");
+                prompt.push_str(&format!(" <lora:{stem}:{w}>"));
+            }
+        }
         let threads = std::thread::available_parallelism().map_or(4, |n| (n.get() / 2).max(1));
         // sd-cli writes batch image i to the printf pattern; names are `<stem>-<i>.png`.
         let stem = names[0].trim_end_matches("-0.png");
         a.extend([
             "--prompt".into(),
-            job.prompt.clone(),
+            prompt,
             "--negative-prompt".into(),
             job.negative_prompt.clone(),
             "-W".into(),
@@ -631,6 +859,8 @@ impl Engine for PodmanSdCli {
                 job.tier.tier
             ));
         }
+        let mut pins = pins;
+        pins.extend(job.aux.files());
         let mut fetched = false;
         let files = imagegen_models::ensure_files(
             &self.models_dir,
@@ -733,6 +963,96 @@ mod tests {
         assert_eq!(step_from_row("  |#####| 140/140 - 469.6MB/s"), None);
     }
 
+    /// Order 1954-gdi6: a ControlNet image and LoRAs reach sd-cli, and a
+    /// file the licence register does not admit is refused before anything runs.
+    #[test]
+    fn imagegen_control_image_and_lora_reach_sdcpp_args_and_licence_gate() {
+        let rev = "c".repeat(40);
+        let sha_cn = "a".repeat(64);
+        let sha_lo = "b".repeat(64);
+        let sha_un = "d".repeat(64);
+        let manifest = format!(
+            "I0/controlnet-openpose\tcontrolnet:openpose\tacme/cn-openpose-sdxl\t{rev}\topenpose.safetensors\t{sha_cn}\t10\tapache-2.0\n\
+             I0/lora\tlora\tacme/robot-lora\t{rev}\trobot.safetensors\t{sha_lo}\t5\tmit\n\
+             I0/lora\tlora\tacme/unlisted-lora\t{rev}\tunlisted.safetensors\t{sha_un}\t5\tmit\n"
+        );
+        let manifest = imagegen_models::parse_manifest(&manifest).unwrap();
+        let register = format!(
+            "cn\tacme/cn-openpose-sdxl\t{rev}\topenpose.safetensors\t{sha_cn}\tapache-2.0\tfalse\thttps://x\n\
+             lo\tacme/robot-lora\t{rev}\trobot.safetensors\t{sha_lo}\tmit\tfalse\thttps://x\n"
+        );
+        let args = json!({
+            "prompt": "a dancing robot",
+            "control_net": "openpose",
+            "control_image": format!("{FORGE_SCRATCH}/poses/pose-03.png"),
+            "loras": [{"name": "robot", "weight": 0.8}],
+        });
+        let aux = parse_aux(&args, &manifest, &register).expect("registered files admitted");
+        let mut job = parse_job(&args, &imagegen_tiers::ladder(), "I0", false).unwrap();
+        job.aux = aux;
+        let e = PodmanSdCli {
+            image: "img".into(),
+            models_dir: PathBuf::from("/m"),
+        };
+        let a = e.run_args(
+            &job,
+            &[("model".into(), PathBuf::from("/m/I0/sdxs09.safetensors"))],
+            Path::new("/o"),
+            &["img-1-2-0.png".into()],
+            1,
+        );
+        let after = |flag: &str| {
+            a.iter()
+                .position(|s| s == flag)
+                .and_then(|i| a.get(i + 1))
+                .cloned()
+                .unwrap_or_else(|| panic!("{flag} missing from {a:?}"))
+        };
+        assert_eq!(
+            after("--control-net"),
+            "/models/I0/controlnet-openpose/openpose.safetensors"
+        );
+        assert_eq!(after("--control-image"), "/out/poses/pose-03.png");
+        assert_eq!(after("--lora-model-dir"), "/models/I0/lora");
+        // A file pinned for another base tier is refused before sd-cli runs.
+        assert!(job.aux.check_base("I0").is_ok());
+        assert!(
+            job.aux
+                .check_base("I1")
+                .unwrap_err()
+                .starts_with("invalid_arguments:")
+        );
+        assert!(after("--prompt").ends_with("<lora:robot:0.8>"), "{a:?}");
+
+        // A file the manifest lists but the register does not admit is refused.
+        let bad = json!({"prompt": "x", "loras": [{"name": "unlisted"}]});
+        let err = parse_aux(&bad, &manifest, &register).expect_err("unregistered refused");
+        assert!(err.starts_with("model_refused:"), "{err}");
+        // A name nothing pins is refused the same way, and downloads nothing.
+        let bad = json!({"prompt": "x", "control_net": "canny",
+                         "control_image": format!("{FORGE_SCRATCH}/a.png")});
+        assert!(
+            parse_aux(&bad, &manifest, &register)
+                .unwrap_err()
+                .starts_with("model_refused:")
+        );
+        // The control image must be a file in the lane's scratch folder.
+        let bad = json!({"prompt": "x", "control_net": "openpose",
+                         "control_image": "/etc/passwd"});
+        assert!(
+            parse_aux(&bad, &manifest, &register)
+                .unwrap_err()
+                .starts_with("invalid_arguments:")
+        );
+        let bad = json!({"prompt": "x", "control_net": "openpose",
+                         "control_image": format!("{FORGE_SCRATCH}/../x.png")});
+        assert!(
+            parse_aux(&bad, &manifest, &register)
+                .unwrap_err()
+                .starts_with("invalid_arguments:")
+        );
+    }
+
     #[test]
     fn the_engine_runs_with_no_network() {
         let e = PodmanSdCli {
@@ -781,6 +1101,86 @@ mod tests {
         }
     }
 
+    /// Records how many generates are in flight at once, and reports "mixed".
+    #[derive(Default)]
+    struct Overlap {
+        now: std::sync::atomic::AtomicUsize,
+        max: std::sync::atomic::AtomicUsize,
+    }
+    impl Engine for Overlap {
+        fn generate(
+            &self,
+            job: &Job,
+            out_dir: &Path,
+            names: &[String],
+            _progress: &mut dyn FnMut(Progress),
+        ) -> Result<EngineOut, String> {
+            use std::sync::atomic::Ordering::SeqCst;
+            let n = self.now.fetch_add(1, SeqCst) + 1;
+            self.max.fetch_max(n, SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            for n in names {
+                image::RgbImage::new(job.width, job.height)
+                    .save(out_dir.join(n))
+                    .map_err(|e| e.to_string())?;
+            }
+            self.now.fetch_sub(1, SeqCst);
+            Ok(EngineOut {
+                backend: "mixed".into(),
+                first_use: false,
+            })
+        }
+    }
+
+    /// 1955-rjv3 verifiable closure. Pre-fix: FAILS (six parallel calls ran
+    /// six engines on one device; "mixed" came back as plain success).
+    #[test]
+    fn imagegen_concurrent_calls_never_overlap_on_the_device() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        imagegen_consent::reset_for_test();
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let engine = Arc::new(Overlap::default());
+        install_seam(Some(Seam {
+            engine: engine.clone(),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I0".into(),
+        }));
+        let handles: Vec<_> = (0..6)
+            .map(|i| {
+                std::thread::spawn(move || {
+                    let mut queued = Vec::new();
+                    let r = call(
+                        "rjv3-proj",
+                        &format!("lane{i}"),
+                        &json!({"prompt":"a fox","width":64,"height":64,"seed":i}),
+                        &mut |p| {
+                            if let Progress::Queued { position } = p {
+                                queued.push(position)
+                            }
+                        },
+                    );
+                    (r, queued)
+                })
+            })
+            .collect();
+        let mut saw_queue = false;
+        for h in handles {
+            let (r, queued) = h.join().unwrap();
+            let r = r.expect("a queued call runs, it is not refused");
+            assert_eq!(r["degraded"]["backend"], "mixed", "mixed is degraded: {r}");
+            assert!(r["degraded"]["why"].as_str().is_some_and(|w| !w.is_empty()));
+            saw_queue |= queued.iter().any(|p| *p >= 1);
+        }
+        install_seam(None);
+        assert_eq!(
+            engine.max.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "two engines ran on the device at once"
+        );
+        assert!(saw_queue, "a waiting call reports its queue position");
+    }
+
     /// 1874-p8w7 verifiable closure. Pre-fix: FAILS (bigger_tier_offer is
     /// always null and an I1 request runs without any consent).
     #[test]
@@ -808,6 +1208,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r["tier"], "I0");
+        // D5: image.generate speaks the same provenance schema as the studio.
+        assert_eq!(r["provenance"]["schema"], "tillandsias.provenance/v1");
+        assert_eq!(r["provenance"]["engine"]["name"], "sd.cpp");
+        assert_eq!(
+            r["provenance"]["engine"]["ref"],
+            crate::provenance::SDCPP_TAG
+        );
+        assert_eq!(r["provenance"]["models"][0]["file"], "sdxs09.safetensors");
+        assert_eq!(r["provenance"]["placement"], "cuda");
+        let side = scratch.path().join(lane_volume(p, i)).join(format!(
+            "{}.provenance.json",
+            r["path"].as_str().unwrap().rsplit('/').next().unwrap()
+        ));
+        assert!(side.is_file(), "{}", side.display());
         let offer = &r["bigger_tier_offer"];
         assert_eq!(offer["tier"], "I1", "the next tier only: {offer}");
         let token = offer["consent_token"]
