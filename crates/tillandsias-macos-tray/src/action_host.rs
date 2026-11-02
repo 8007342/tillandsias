@@ -1087,9 +1087,12 @@ async fn poll_cloudflare_login_once(
 /// waiting `--cloudflare-login` (`CloudflareCallbackForward`, acked with
 /// `IssueAck`). Sent only when the guest advertises the variant. The line is
 /// a single-use code, never a token; it is not logged here.
-async fn forward_cloudflare_callback(vz: &VzRuntime, line: &str) -> Result<(), String> {
+async fn forward_cloudflare_callback(
+    vz: &VzRuntime,
+    cb: &tillandsias_host_shell::cloudflare_callback::Callback,
+) -> Result<(), String> {
+    use tillandsias_control_wire::ControlMessage;
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
-    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
     let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
         .await
@@ -1113,14 +1116,7 @@ async fn forward_cloudflare_callback(vz: &VzRuntime, line: &str) -> Result<(), S
         return Err("the guest does not accept CloudflareCallbackForward (older headless)".into());
     }
     let seq = client.allocate_seq();
-    let envelope = ControlEnvelope {
-        wire_version: WIRE_VERSION,
-        seq,
-        body: ControlMessage::CloudflareCallbackForward {
-            seq,
-            line: line.to_string(),
-        },
-    };
+    let envelope = tillandsias_host_shell::cloudflare_callback::forward_envelope(seq, cb);
     match client.request(&envelope).await.map(|r| r.body) {
         Ok(ControlMessage::IssueAck { .. }) => Ok(()),
         Ok(other) => Err(format!("unexpected reply {}", other.kind())),
@@ -1661,9 +1657,7 @@ impl TrayActionHost {
                     tokio::task::spawn_blocking(move || listener.serve_one(deadline)).await;
                 match served {
                     Ok(Ok(cb)) => {
-                        if let Err(e) =
-                            forward_cloudflare_callback(&vz_forward, &cb.as_line()).await
-                        {
+                        if let Err(e) = forward_cloudflare_callback(&vz_forward, &cb).await {
                             eprintln!(
                                 "[tillandsias-tray] cloudflare-login: callback forward failed ({e})"
                             );

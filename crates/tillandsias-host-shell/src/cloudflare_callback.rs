@@ -24,6 +24,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
+use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+
 use crate::pty::PtyOpenOpts;
 
 /// The loopback ports registered on the Cloudflare App (EXACT match on the
@@ -115,6 +117,23 @@ pub fn callback_from_query(query: &str) -> Option<Callback> {
         state: state.to_string(),
         code: code.to_string(),
     })
+}
+
+/// The control-wire frame the tray sends the guest for a served callback:
+/// `CloudflareCallbackForward { seq, line }` under `seq`, where `line` is
+/// [`Callback::as_line`]. The ONE place the forward is shaped, so the macOS
+/// (and any later) tray and the test below cannot drift apart. Carries no
+/// token: the line is the browser's single-use code (or Cloudflare's error)
+/// and the state.
+pub fn forward_envelope(seq: u64, cb: &Callback) -> ControlEnvelope {
+    ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::CloudflareCallbackForward {
+            seq,
+            line: cb.as_line(),
+        },
+    }
 }
 
 /// The host-side loopback listener: bound on `127.0.0.1` (never `0.0.0.0`)
@@ -351,6 +370,53 @@ mod tests {
         assert_eq!(cb.as_line(), "code=CODE-abc.123~_&state=STATE_xyz");
         // The port is closed after the one callback.
         assert!(TcpStream::connect(("127.0.0.1", port)).is_err());
+    }
+
+    /// 1955-cfhf, end to end at the unit level: the browser hits the HOST
+    /// listener, the served callback becomes the forward frame, the frame
+    /// crosses the wire codec, and what the guest decodes is
+    /// `CloudflareCallbackForward` (pinned index 40) carrying exactly
+    /// `code=…&state=…` under the request seq — no token, no other field.
+    /// RED without the forwarding: no `forward_envelope`, no variant.
+    #[test]
+    fn a_served_callback_becomes_the_forward_frame_the_guest_decodes() {
+        let l = HostCallbackListener::bind_one_of(&[0]).unwrap();
+        let port = l.port();
+        let server =
+            std::thread::spawn(move || l.serve_one(Instant::now() + Duration::from_secs(10)));
+        let _ = get(port, &format!("{CALLBACK_PATH}?state=S-1&code=C-1"));
+        let cb = server.join().unwrap().unwrap();
+        let env = forward_envelope(7, &cb);
+        let bytes = tillandsias_control_wire::encode(&env).unwrap();
+        let back = tillandsias_control_wire::decode(&bytes).unwrap();
+        assert_eq!(back.wire_version, WIRE_VERSION);
+        assert_eq!(back.seq, 7);
+        assert_eq!(back.body.kind(), "CloudflareCallbackForward");
+        match back.body {
+            ControlMessage::CloudflareCallbackForward { seq, line } => {
+                assert_eq!(seq, 7);
+                assert_eq!(line, "code=C-1&state=S-1");
+            }
+            other => panic!(
+                "decoded {} instead of CloudflareCallbackForward",
+                other.kind()
+            ),
+        }
+        // A denial travels by name, with its state, and no code.
+        let denied = forward_envelope(
+            8,
+            &Callback::Denied {
+                state: "S-2".into(),
+                error: "access_denied".into(),
+            },
+        );
+        let back =
+            tillandsias_control_wire::decode(&tillandsias_control_wire::encode(&denied).unwrap())
+                .unwrap();
+        assert!(matches!(
+            back.body,
+            ControlMessage::CloudflareCallbackForward { seq: 8, ref line } if line == "error=access_denied&state=S-2"
+        ));
     }
 
     #[test]
