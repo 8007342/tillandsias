@@ -1,0 +1,12 @@
+# Gate step 1951-vv5m — a flaky-optional install cannot hold a forge build or a
+# forge start hostage. Replaces 900-1771-4iw3 (the build-time pip step it
+# bounded no longer exists). The fixture checks that no Containerfile.base RUN
+# installs with pip3, that every forge entrypoint starts the background family,
+# and runs lib-flaky-installs.sh against a hanging, a timed-out, a failing and a
+# healthy (negative control) installer.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking flaky-optional installs run in the background behind first-use shims (1951-vv5m)"
+STEP_LUA="scripts/lua/test-flaky-installs-background.lua"
+STEP_ERROR="a flaky-optional install can block the forge build or start, or its shim stopped telling the truth (1951-vv5m) — see the FAIL lines above"
+STEP_OK="flaky-installs background fixture passed"

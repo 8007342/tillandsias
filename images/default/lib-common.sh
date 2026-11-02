@@ -3808,6 +3808,75 @@ if [ "${TILLANDSIAS_BREW_SHIMS:-1}" != "0" ]; then
     install_brew_shims || true
 fi
 
+# ── Flaky-optional installs, in the background (order 1951-vv5m) ──
+# Operator direction 2026-11-01: separate the flaky installs into their own
+# family, install them as background processes with longer timeouts, and make
+# their first-use shims aware they may still be installing. The audit that
+# classified each install: plan/issues/flaky-optional-installs-audit-2026-11-01-yoga.md.
+# lib-flaky-installs.sh holds the runner and the shim writer.
+
+# The Python and Node dev tools forge-base used to install at BUILD time, where
+# a stalled PyPI read held the whole image build (macuahuitl 2026-11-01).
+# Idempotent: a second start with every binary present does nothing.
+ensure_forge_dev_tools() {
+    export PYTHONUSERBASE="${PYTHONUSERBASE:-$PROJECT_CACHE/pip-user}"
+    local need=0 b
+    for b in pyright bandit; do [ -x "$PYTHONUSERBASE/bin/$b" ] || need=1; done
+    if [ "$need" -eq 1 ]; then
+        pip3 install --user --timeout 30 --retries 2 --no-cache-dir \
+            pyright==1.1.410 \
+            bandit==1.9.2 || return 1
+    fi
+    need=0
+    for b in tsc typescript-language-server prettier eslint markdownlint; do
+        [ -x "${NPM_CONFIG_PREFIX:-/usr/local}/bin/$b" ] || need=1
+    done
+    if [ "$need" -eq 1 ]; then
+        npm install -g --no-audit --no-fund \
+            typescript@6.0.3 \
+            typescript-language-server@5.3.0 \
+            prettier@3.8.3 \
+            eslint@10.4.1 \
+            markdownlint-cli@0.48.0 || return 1
+    fi
+    return 0
+}
+
+# start_flaky_installs — returns at once. Every member runs
+# detached under TILLANDSIAS_FLAKY_INSTALL_TIMEOUT_S with a status file; the
+# tools a member installs get a first-use shim LAST on PATH that waits or says
+# "still installing" instead of command-not-found.
+FLAKY_SHIM_DIR="$HOME/.local/share/tillandsias/flaky-shims"
+export TILLANDSIAS_FLAKY_LOG="${TILLANDSIAS_FLAKY_LOG:-/tmp/forge-lifecycle.log}"
+start_flaky_installs() {
+    local t
+    [ -r /usr/local/lib/tillandsias/lib-flaky-installs.sh ] || {
+        trace_lifecycle "tools" "lib-flaky-installs.sh missing; running the dev-tool installs in the background without status"
+        ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
+        return 0
+    }
+    # shellcheck source=/dev/null
+    . /usr/local/lib/tillandsias/lib-flaky-installs.sh
+    export PYTHONUSERBASE="${PYTHONUSERBASE:-$PROJECT_CACHE/pip-user}"
+    case ":$PATH:" in *":$PYTHONUSERBASE/bin:"*) ;; *) export PATH="$PYTHONUSERBASE/bin:$PATH" ;; esac
+    for t in pyright bandit tsc typescript-language-server prettier eslint markdownlint; do
+        command -v "$t" >/dev/null 2>&1 || flaky_install_shim "$t" dev-tools "$FLAKY_SHIM_DIR"
+    done
+    for t in cargo-nextest cargo-chef cargo-watch cargo-audit wasm-pack typos watchexec \
+        cargo-upgrade cargo-expand cargo-criterion cargo-wasi cargo-outdated trunk \
+        cargo-llvm-cov cargo-semver-checks actionlint vale wasmtime dart marksman; do
+        command -v "$t" >/dev/null 2>&1 || flaky_install_shim "$t" prebuilt-tools "$FLAKY_SHIM_DIR"
+    done
+    case ":$PATH:" in *":$FLAKY_SHIM_DIR:"*) ;; *) export PATH="$PATH:$FLAKY_SHIM_DIR" ;; esac
+    flaky_install_start dev-tools ensure_forge_dev_tools
+    flaky_install_start prebuilt-tools ensure_forge_prebuilt_tools
+    # The OpenSpec pin stays in the FOREGROUND for now: openspec_init_if_absent
+    # must run on the pinned CLI (1441-myz3, scripts/test-openspec-pin.sh case
+    # 10). Moving it here needs the init chained behind it; see the audit.
+    trace_lifecycle "tools" "flaky-optional installs started in the background (status: $(flaky_status_dir))"
+    return 0
+}
+
 # ── OpenCode config overlay ─────────────────────────────────
 # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:layered-tools-overlay
 # The Containerfile bakes a minimal stub at ~/.config/opencode/config.json

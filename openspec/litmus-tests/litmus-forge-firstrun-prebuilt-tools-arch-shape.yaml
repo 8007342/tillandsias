@@ -45,7 +45,9 @@ critical_path:
     expected_behavior: "ok: timeout-guarded"
 
   - step: "forge entrypoints trigger the first-run tool install (backgrounded)"
-    command: "grep -qF 'ensure_forge_prebuilt_tools' images/default/entrypoint-forge-codex.sh && grep -qF 'ensure_forge_prebuilt_tools' images/default/entrypoint-forge-claude.sh && echo 'ok: entrypoints wired'"
+    # Since 1951-vv5m the entrypoints start it through start_flaky_installs
+    # (lib-common.sh), the background family with status files and shims.
+    command: "grep -qF 'start_flaky_installs' images/default/entrypoint-forge-codex.sh && grep -qF 'start_flaky_installs' images/default/entrypoint-forge-claude.sh && grep -qF 'flaky_install_start prebuilt-tools ensure_forge_prebuilt_tools' images/default/lib-common.sh && echo 'ok: entrypoints wired'"
     timeout_ms: 3000
     expected_behavior: "ok: entrypoints wired"
 
