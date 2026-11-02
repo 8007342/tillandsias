@@ -1,0 +1,39 @@
+# @trace spec:ci-release
+# @trace order:1958-yfib
+#
+# Operator request 2026-11-01: "our files might have the wrong licenses, some
+# agents randomly hallucinate licenses for new files and we rarely check. The
+# other day I saw some MIT license in one of our own files." The MIT was an OCI
+# label inherited from fedora-minimal by every Tillandsias-built image
+# (measured on tillandsias-inference and, as Apache-2.0 from caddy, on
+# tillandsias-router). The guard refuses a non-GPL-3.0-or-later licence
+# declared on a file of ours and an image whose Containerfile sets no licence
+# label; vendored upstream files are listed with reasons. Red on the tree
+# before 1958-yfib (20 images).
+name: litmus:own-licence-declarations
+spec: ci-release
+phase: pre-build
+description: Every licence declared on Tillandsias's own files is GPL-3.0-or-later and every image declares its own OCI licence label instead of inheriting the base image's
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary) and git; offline, reads tracked files only
+
+critical_path:
+  - step: "a mislabelled file of ours and an unlabelled image are refused; a vendored licence passes; an empty tree is could-not-run; the live tree passes"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-own-licence-declarations.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:own-licence-declarations-fixture:5"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "five arms: the unlabelled image and the MIT crate are refused by line, the vendored LICENSE passes, an empty population is could-not-run, the live tree passes"
+  log_fields:
+    spec: "ci-release"
+    test: "own-licence-declarations"
+
+rollback:
+  on_failure: "read the refused: lines; set license.workspace = true / LABEL org.opencontainers.image.licenses=\"GPL-3.0-or-later\", or add the third-party path to VENDORED in scripts/lua/check-own-licence-declarations.lua with its reason"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-own-licence-declarations.lua"

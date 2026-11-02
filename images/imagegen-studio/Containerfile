@@ -12,6 +12,11 @@
 # stays in /opt/comfyui. CUDA comes from the torch wheels (bundled CUDA 12.8
 # libraries); the driver is the host's, injected by CDI (nvidia.com/gpu=all).
 FROM docker.io/library/python:3.12.16-slim-bookworm
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 ARG COMFYUI_REF=v0.40.0
 ARG COMFYUI_SHA=3541246a9c997f4b8c32f9f88f3c985d02021c79

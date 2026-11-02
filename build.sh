@@ -3813,6 +3813,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    # ORDER 1958-yfib. Tillandsias is GPL-3.0-or-later; a file of ours declaring
+    # another licence, or an image leaving the OCI licence label to its base
+    # layer (measured: tillandsias-inference shipped fedora-minimal's MIT), is
+    # refused. Vendored upstream files are listed in the guard with reasons.
+    if ! _run_lua_decider "scripts/lua/check-own-licence-declarations.lua" 2>&1; then
+        _error "a file of ours declares a licence other than GPL-3.0-or-later, or an image inherits its base image's licence label (1958-yfib) — see the refused: lines above"
+        exit 1
+    fi
+
+    # ORDER 1958-yfib. The stack ledger (docs/credits/stack.v1.json) is generated
+    # from cargo metadata, the Containerfiles, the lockfiles and the model
+    # register. ADVISORY here: it is refreshed at each stable release (1958-jyfk),
+    # not on every dependency bump, so a stale ledger warns and does not red the gate.
+    if ! _run_lua_decider "scripts/lua/build-stack-ledger.lua" --check 2>&1; then
+        _warn "advisory: docs/credits/stack.v1.json is stale against the sources of truth — regenerate with \`tillandsias-plan script run scripts/lua/build-stack-ledger.lua\` (refreshed at each stable release, 1958-jyfk)"
+    fi
+
     # ORDER 1484-uf29. The typed Lua runner is the decision path. Every input
     # is named here rather than discovered by the evaluator or a manifest.
     if ! _run_lua_decider "scripts/lua/source-agreements.lua" \

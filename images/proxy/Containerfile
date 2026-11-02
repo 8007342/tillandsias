@@ -32,6 +32,11 @@
 # once while chasing a memory bug. If 6.12 does not stop it, evaluate 7.x as
 # its own packet.
 FROM docker.io/library/alpine:3.22
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # @trace spec:proxy-container, spec:reverse-proxy-internal
 # Squid + SSL for MITM proxy; squid + openssl for SSL bump support
