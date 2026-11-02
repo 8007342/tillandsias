@@ -80,6 +80,9 @@ COPY harness-supervisor.sh /usr/local/bin/harness-supervisor
 # 1385-h6uz: announce each opencode tool call as it STARTS (opencode run prints
 # a call only on completion, so a long build was silent for hours).
 COPY opencode-tool-start-follower.sh /usr/local/bin/opencode-tool-start-follower
+# 1941-rlim: a provider usage limit is reported as itself and holds later
+# launches; sourced by the follower, harness-supervisor and the entrypoint.
+COPY lib-provider-limit.sh /usr/local/lib/tillandsias/lib-provider-limit.sh
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 COPY codex-device-auth.sh /usr/local/bin/codex-device-auth
 COPY codex-oauth-vault.sh /usr/local/bin/codex-oauth-vault

@@ -60,6 +60,7 @@ forward() { # <signal>
 trap 'forward TERM' TERM
 trap 'forward INT' INT
 
+supervise_start="$(date -u +%s)"
 "$@" &
 child_pid=$!
 
@@ -76,6 +77,23 @@ while :; do
         kill -0 "$child_pid" 2>/dev/null || break
     fi
 done
+
+# 1941-rlim: a provider usage limit recorded DURING this run (by the log
+# follower, lib-provider-limit.sh) ends it as itself: one verdict line on
+# both streams and exit 75 (try again later), whatever the harness exit was.
+# No record from this run, no output: the happy path is unchanged.
+if [ -r "${TILLANDSIAS_PROVIDER_LIMIT_LIB:-/usr/local/lib/tillandsias/lib-provider-limit.sh}" ]; then
+    # shellcheck source=/dev/null
+    . "${TILLANDSIAS_PROVIDER_LIMIT_LIB:-/usr/local/lib/tillandsias/lib-provider-limit.sh}"
+    limit_file="$(provider_limit_dir)/${HARNESS_NAME}"
+    if [ -e "$limit_file" ] && [ "$(stat -c %Y "$limit_file" 2>/dev/null || stat -f %m "$limit_file" 2>/dev/null || echo 0)" -ge "$supervise_start" ] \
+        && limit_until="$(provider_limit_active "${HARNESS_NAME}")"; then
+        limit_verdict="blocked:provider-usage-limit:provider=${HARNESS_NAME}:retry_after=${limit_until}:rc=${rc}"
+        echo "$limit_verdict"
+        echo "$limit_verdict" >&2
+        exit 75
+    fi
+fi
 
 if [ "$rc" -lt 128 ]; then
     # Clean (or ordinary-failure) exit: pass through untouched, say nothing.

@@ -39,7 +39,14 @@ done
 
 # -n 0: only lines written from now on, never an earlier run's history.
 # -F: keep following across rotation or re-creation.
+# 1941-rlim: the same log carries a provider usage limit; report and record it.
+# shellcheck source=/dev/null
+[ -r "${TILLANDSIAS_PROVIDER_LIMIT_LIB:-/usr/local/lib/tillandsias/lib-provider-limit.sh}" ] && . "${TILLANDSIAS_PROVIDER_LIMIT_LIB:-/usr/local/lib/tillandsias/lib-provider-limit.sh}"
+
 tail -n 0 -F "$LOG" 2>/dev/null | while IFS= read -r line; do
+    if command -v provider_limit_watch_line >/dev/null 2>&1; then
+        provider_limit_watch_line opencode "$line"
+    fi
     case "$line" in
         *"message=evaluated permission="*) ;;
         *) continue ;;

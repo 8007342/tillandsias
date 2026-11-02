@@ -1,0 +1,37 @@
+# @trace spec:default-image
+# @trace order:1941-rlim
+#
+# Yoga 2026-11-01: after 11 opencode sessions the shared free tier answered
+# 429, Retry-After 78443, "Free usage limit reached"; the lane had reported
+# earlier refusals only as "EPROTO: The TLS handshake failed" and later lanes
+# kept calling. The fixture replays the recorded lines: the limit is reported
+# as itself with its deadline, a supervised run that hit it ends rc 75 with
+# blocked:provider-usage-limit, a launch before the deadline refuses, and the
+# EPROTO line records nothing. Red before 1941-rlim (4 failed).
+name: litmus:provider-usage-limit
+spec: default-image
+phase: pre-build
+description: A provider usage limit is reported as itself, stops the lane, and holds later launches until it lifts
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, git; offline, no provider traffic
+
+critical_path:
+  - step: "the recorded 429 is reported as a usage limit and holds the next launch"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-provider-usage-limit.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:provider-usage-limit:static + record + default + control + refuse + supervise arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "seventeen arms: three static, four record, one default, one control, four refuse, four supervise"
+  log_fields:
+    spec: "default-image"
+    test: "provider-usage-limit"
+
+rollback:
+  on_failure: "read the FAIL lines; the limit is detected in lib-provider-limit.sh, recorded by the log follower, ended by harness-supervisor, refused by the opencode entrypoint"
+  command: "grep -n 'provider_limit' images/default/*.sh"
