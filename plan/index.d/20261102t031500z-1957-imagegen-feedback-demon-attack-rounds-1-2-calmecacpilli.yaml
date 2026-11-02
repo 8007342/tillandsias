@@ -1,0 +1,139 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli (claude) from the demon_attack-forge image.generate rounds 1+2, 2026-11-02.
+#
+# Evidence the rows cite: I0 (SDXS) 1.4 s warm / 136 s cold, ignores composition;
+# I1 (SDXL-Lightning) 3.7 s at 512x768 on vulkan, palette drift, will not keep the
+# centre empty, drops named objects. Code under crates/tillandsias-headless/src/
+# imagegen_tool.rs, imagegen_tiers.rs, imagegen_consent.rs.
+packets:
+- packet_id: imagegen-consent-is-a-grant-tier-scope-expiry-so-an-approved-tier-is-callable-directly-without-another-ladder-walk
+  order: 1957-5m8g
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [imagegen, consent, mcp, headless]
+  estimated_hours: 6
+  title: 'image.generate consent is a GRANT (tier, scope, expiry) held for the session, so an approved tier is callable directly; today every I1 image costs an extra I0 run plus a user prompt because the token is single-use and tier=I1 without a token is refused even after approval'
+  context: 'demon_attack-forge round 1+2, calmecacpilli 2026-11-02: each image at I1 needed the ladder walked from I0 (1.4 s warm, 136 s cold) to earn a fresh bigger_tier_offer, the user re-asked, and the one-shot consent_token spent on one call. Calling tier=I1 directly after the user had already said yes was refused with consent_required. Operator framing: tier prompts are RESOURCE gates protecting the host, not quality choices — once a tier works and its runtime is reasonable (or the user accepts it may take hours) the operator approves it, and asking again per image is noise. imagegen_consent.rs mints a single-use token bound to lane, tier and request.'
+  exit_criteria:
+  - 'A redeemed consent_token becomes a grant {tier, scope: lane|project|session, expiry: session|TTL}; while expiry is unenforced the grant is held for the session. A later image.generate at the granted tier within scope needs no ladder walk and no token.'
+  - 'tier=<granted> with no token succeeds; tier above the grant still returns consent_required with a fresh offer; the result names the grant it ran under.'
+  - 'The ask sentence says what it protects (host RAM/VRAM/time), not image quality.'
+  verifiable_closure: 'cargo test -p tillandsias-headless imagegen_consent -- grant_at_approved_tier_admits_a_direct_call_without_a_token passes, alongside the existing single-use token tests.'
+  next_action: 'Add a Grant store next to the token store in imagegen_consent.rs; redeem() records a grant; the admit path in imagegen_tool.rs consults grants before offering. Write the red test first.'
+  provenance: demon_attack-forge image.generate rounds 1+2, calmecacpilli 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:15:00Z'
+    host: calmecacpilli
+    summary: filed p1 ready from demon_attack-forge rounds 1+2; single-use tokens make every I1 image cost an I0 run and a prompt.
+- packet_id: imagegen-offers-only-installed-or-installable-tiers-and-states-download-size-and-minutes-for-an-installable-one
+  order: 1957-8hkf
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [imagegen, consent, models, headless]
+  estimated_hours: 3
+  title: 'image.generate offers only tiers that are installed or installable, and an installable offer says "download N GB, ~M min"; it offered I2 with no pinned files'
+  context: 'demon_attack-forge round 2, calmecacpilli 2026-11-02: bigger_tier_offer named I2 although imagegen_models.rs pins no files for it on this host, so saying yes could only fail. An offer the host cannot honour is a broken resource gate. When the tier IS installable the user needs the cost to decide: size on disk and an estimate of the fetch time at the measured link rate.'
+  exit_criteria:
+  - 'A tier row with no pinned, resolvable weight files is never offered; the offer skips to the next tier that is installed or installable, or omits bigger_tier_offer.'
+  - 'An installable-but-not-installed tier''s ask sentence carries the download size in GB and an estimated minutes figure.'
+  verifiable_closure: 'cargo test -p tillandsias-headless imagegen_tiers -- a_tier_without_pinned_files_is_never_offered passes; a sibling test asserts the installable offer text carries GB and minutes.'
+  next_action: 'In imagegen_tiers.rs filter the ladder by imagegen_models pin presence; carry size and rate into imagegen_consent::offer.'
+  provenance: demon_attack-forge image.generate round 2, calmecacpilli 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:15:00Z'
+    host: calmecacpilli
+    summary: filed p1 ready; I2 was offered with nothing pinned for it.
+- packet_id: imagegen-dest-path-saves-the-image-inside-the-project-not-only-under-the-ephemeral-work-tmp-imagegen
+  order: 1957-cq79
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [imagegen, mcp, headless, filesystem]
+  estimated_hours: 3
+  title: 'image.generate takes dest_path and saves the image inside the project (and only inside the project), instead of only under the ephemeral /work/tmp/imagegen'
+  context: 'demon_attack-forge rounds 1+2, calmecacpilli 2026-11-02: every result landed in /work/tmp/imagegen, which the forge loses; the agent had to copy each keeper by hand. A dest_path that resolves inside the project root (after canonicalising, refusing .. and symlink escapes) lets the asset land where the game reads it.'
+  exit_criteria:
+  - 'dest_path relative to the project root writes the image there and the result reports that path; an absolute path outside the project, or one that escapes via .. or a symlink, is refused by name.'
+  - 'Without dest_path the behaviour is unchanged.'
+  verifiable_closure: 'cargo test -p tillandsias-headless imagegen_tool -- dest_path_outside_the_project_is_refused_and_inside_is_written passes.'
+  next_action: 'Add dest_path to the tool schema in imagegen_tool.rs; reuse the project-root containment check the other project-writing tools use.'
+  provenance: demon_attack-forge image.generate rounds 1+2, calmecacpilli 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:15:00Z'
+    host: calmecacpilli
+    summary: filed p2 ready; results only land in the ephemeral tmp dir.
+- packet_id: imagegen-long-cold-calls-report-progress-percent-and-eta-in-the-result-and-the-offer
+  order: 1957-b8va
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [imagegen, mcp, headless, progress]
+  estimated_hours: 4
+  title: 'A long image.generate call (cold model load, 136 s measured at I0) reports progress percent and an ETA in its result and the offer states the expected cold and warm runtimes'
+  context: 'demon_attack-forge round 1, calmecacpilli 2026-11-02: the I0 cold call took 136 s against 1.4 s warm with no sign of life in between, and the offer for the next tier gave no runtime at all, so the user could not judge the resource ask. imagegen_tool.rs already measures the run; the offer should carry the last measured cold/warm figures and a long call should stream or at least return step progress and ETA.'
+  exit_criteria:
+  - 'bigger_tier_offer carries expected_runtime {cold_s, warm_s} from the tier row or the last measured run.'
+  - 'A run longer than a threshold (default 10 s) reports progress percent and ETA through the MCP progress channel, and the final result carries elapsed_s and whether the load was cold.'
+  verifiable_closure: 'cargo test -p tillandsias-headless imagegen_tool -- a_slow_run_reports_progress_and_the_result_carries_elapsed_and_cold passes against a stubbed backend.'
+  next_action: 'Stub the backend with a controllable delay; record warm/cold timings per tier row; emit progress notifications from the run loop.'
+  provenance: demon_attack-forge image.generate round 1, calmecacpilli 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:15:00Z'
+    host: calmecacpilli
+    summary: filed p2 ready; 136 s cold call gave no progress and the offer no runtime.
+- packet_id: imagegen-count-greater-than-one-returns-each-images-actual-seed
+  order: 1957-5pg6
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [imagegen, mcp, headless, provenance]
+  estimated_hours: 2
+  title: 'image.generate with count>1 returns each image''s actual seed, so a keeper can be regenerated or varied; today only the request seed (or none) comes back'
+  context: 'demon_attack-forge round 2, calmecacpilli 2026-11-02: adherence at I1 was roughly a coin flip per seed, so the loop is "generate 4, keep 1, iterate on its seed" — impossible when the per-image seed is not returned. The backend derives seed+i or draws random seeds; either way the result must list them.'
+  exit_criteria:
+  - 'The result carries images[] with {path, seed} per image; seed is the one the backend actually used, and re-running with that seed and count=1 reproduces the image byte-for-byte on the same host and tier.'
+  verifiable_closure: 'cargo test -p tillandsias-headless imagegen_tool -- count_above_one_returns_one_actual_seed_per_image passes.'
+  next_action: 'Thread the per-image seed from the backend response into the result in imagegen_tool.rs.'
+  provenance: demon_attack-forge image.generate round 2, calmecacpilli 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:15:00Z'
+    host: calmecacpilli
+    summary: filed p2 ready; per-image seeds are not returned.
+- packet_id: imagegen-i1-baseline-negative-prompt-does-not-suppress-frame-artefacts-on-portrait-and-adherence-is-a-coin-flip-per-seed
+  order: 1957-2cjr
+  status: ready
+  kind: data
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [imagegen, data, baseline]
+  estimated_hours: 1
+  title: 'DATA — I1 (SDXL-Lightning, 512x768 portrait, vulkan) baseline: the negative prompt does not suppress frame/border artefacts, prompt adherence is roughly a coin flip per seed; recorded as the baseline I2/I3 are compared against'
+  context: 'demon_attack-forge rounds 1+2, calmecacpilli 2026-11-02. I0 (SDXS): 1.4 s warm, 136 s cold, ignores composition entirely. I1 (SDXL-Lightning): 3.7 s at 512x768 on vulkan; palette drifts from the supplied one; will not keep the centre lane empty when asked; drops named objects; a negative prompt listing frame, border, vignette did not remove the frame/border artefacts on portrait output; across seeds about half the images honoured the main subject. This row holds the numbers so a later I2/I3 run can be scored against them.'
+  exit_criteria:
+  - 'When I2 or I3 runs on the same prompts, its adherence and artefact rates are appended here as a measurement event beside these.'
+  unscoreable: 'data-baseline — a recorded observation, not a change; the comparison rows that use it carry their own closures.'
+  next_action: 'Keep the prompt set and seeds with the demon_attack project so the comparison is like-for-like.'
+  provenance: demon_attack-forge image.generate rounds 1+2, calmecacpilli 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:15:00Z'
+    host: calmecacpilli
+    summary: filed p3 data baseline for I1 artefacts and adherence.
