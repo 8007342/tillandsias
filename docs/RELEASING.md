@@ -63,3 +63,21 @@ Cosign keyless signing through GitHub OIDC, release upload, and rolling tags.
 Do not run hosted CI, litmus metadata, convergence dashboard, cache warm, or
 integration jobs for normal releases. Those checks are local through
 `scripts/release-preflight-local.sh` and `scripts/local-ci.sh`.
+
+## Stable promotion: refresh the stack ledger and the website's Powered By page
+
+Plan order 1958-jyfk. The credits ledger `docs/credits/stack.v1.json` is
+generated from the sources of truth (cargo metadata, the Containerfiles, the
+npm lockfiles, the model licence register, the studio registry) and only
+WARNS when stale in `./build.sh --check`. Before `scripts/promote-stable.sh`:
+
+```bash
+PLAN="$(. scripts/plan-binary-probe.sh && resolve_plan_binary)"
+"$PLAN" script run scripts/lua/build-stack-ledger.lua -- --check || "$PLAN" script run scripts/lua/build-stack-ledger.lua
+```
+
+Land a stale ledger's regeneration on a work ref before the cut. After the
+promotion, in the tillandsias.org checkout, `scripts/refresh.py --tag <tag>`
+copies the ledger from the tagged runtime checkout (`scripts/snapshot-stack.py`)
+and rebuilds the Powered By page; open the site PR. Deploying the site is the
+operator's intentional step (`npx wrangler deploy`), never automatic.

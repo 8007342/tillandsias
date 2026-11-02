@@ -16,6 +16,11 @@ RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -D
     && test -x build/bin/sd-server
 
 FROM docker.io/nvidia/cuda:13.3.1-runtime-ubuntu24.04
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 ARG SDCPP_TAG=master-1015-e41fbcf
 LABEL io.tillandsias.imagegen.sdcpp-tag="${SDCPP_TAG}"
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
