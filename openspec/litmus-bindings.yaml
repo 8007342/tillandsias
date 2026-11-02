@@ -13,6 +13,7 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
+  - litmus:accel-envelope-carries-discrete-vram
   - litmus:imagegen-tier-ladder-from-the-envelope
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
@@ -166,7 +167,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
-  - litmus:release-cache-is-saved-only-by-main
+  - litmus:release-is-one-cloud-build
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
@@ -331,6 +332,7 @@ specs:
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:image-build-network-is-explicit
+  - litmus:flaky-installs-background
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
@@ -1109,6 +1111,7 @@ specs:
   - litmus:binary-e2e-smoke
   - litmus:tray-parity-matrix-complete
   - litmus:tray-new-surface-parity-gate
+  - litmus:tray-click-replies-while-a-launch-blocks
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
