@@ -669,6 +669,7 @@ specs:
   - litmus:inference-readiness-probe-shape
   - litmus:dev-inference-ensure-refusals-carry-affordance
   - litmus:inference-deferred-model-pulls
+  - litmus:configure-ollama-refusals-carry-affordance
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
   - litmus:inference-tier-probe-shape
