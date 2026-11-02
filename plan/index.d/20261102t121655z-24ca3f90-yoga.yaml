@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-agents-generate-images-locally-through-one-mcp-tool-on-stable-diffusion-cpp-sized-to-the-host
+    event:
+      type: progress
+      ts: "2026-11-02T12:16:55Z"
+      agent_id: linux-yoga-opus5-20261102t121655z
+      host: yoga
+      summary: |-
+        Timing ask CLOSED for yoga (coordinator 2026-11-02: time what ships, the ladder has no SD1.5 tier). Measured on yoga 2026-11-02 (Radeon 840M iGPU gfx1152, UMA, 512 MiB VRAM carve-out, 14 GB RAM; inference container up with no model resident per /api/ps) via the real image.generate over the lane MCP socket (ignored test mcp_socket::live_image_generate_through_the_lane_socket, linux-next a2923ca3c), seed 7, one image per call, backend=vulkan every run. elapsed_s (engine wall) / reply: I0 SDXS 512x512 first run 3.23 s / 3.58 s, warm 2.69 s / 2.81 s and 2.67 s / 2.79 s; I0 1024x1024 6.30 s / 6.57 s and 6.14 s / 6.42 s. Model already cached (the 2026-10-30 event has the cold fetch, 308 s). I1 SDXL-Lightning: NOT RUNNABLE on yoga through the shipped tool, refused tier_unavailable: I1 is above what this computer can run (I0); tiers.tsv gives I1 a 16 GB memory floor and yoga has 14 GB, so the ceiling is I0 by design, not a defect. I2/I3 likewise above the ceiling.
