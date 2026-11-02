@@ -18,8 +18,11 @@
 --              passes with every proxy pointed at a closed port
 --   7 NO RECORD fails closed: blocked, exit 2
 --   8 LIVE     this checkout passes, every FROM under images/ and
---              observatorium/ counted (from=17 at the time of writing; pinned=4
---              since 1861-nmpp added the GrapesJS studio on the node pin)
+--              observatorium/ counted (from=17 at the time of writing). pinned
+--              is a FLOOR of 3 (web-wrangler, webkit, flutter): the studio lanes
+--              add and drop pins as they land in parallel (1861-nmpp moved
+--              GrapesJS onto the forge image), so an exact count refuses a
+--              green tree whenever a sibling lands first
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-image-pins.lua
 
@@ -158,8 +161,10 @@ arm("7 NO RECORD fails closed", rc == 2 and o == "blocked:image-pins:no-record",
 local live = proc.run({ argv = { PLAN, "script", "run", SUBJECT_REL }, cwd = ROOT, timeout_ms = 60000 })
 local lo = text.trim(live.stdout or "")
 local from_n = tonumber(lo:match("from=(%d+)") or "")
+local pinned_n = tonumber(lo:match("pinned=(%d+)") or "")
 arm("8 LIVE this checkout passes, every FROM counted",
-    live.code == 0 and from_n ~= nil and from_n >= 17 and lo:find("pinned=4", 1, true) ~= nil, tostring(live.code) .. " " .. lo)
+    live.code == 0 and from_n ~= nil and from_n >= 17 and pinned_n ~= nil and pinned_n >= 3,
+    tostring(live.code) .. " " .. lo)
 
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })
 if #failed > 0 then

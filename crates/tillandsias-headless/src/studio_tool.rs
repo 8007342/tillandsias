@@ -1803,6 +1803,7 @@ mod tests {
             engine: Arc::new(ImgBusy(busy.clone())),
             scratch_root: fx.scratch_root.clone(),
             ceiling: "I0".into(),
+            present: None,
         }));
         let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
         let mut handles = Vec::new();

@@ -11,6 +11,8 @@
 <body>
 <div id="gjs"></div>
 <script>
+const page = (html) =>
+  `<!doctype html>\n<html>\n<head>\n<meta charset="utf-8">\n<link rel="stylesheet" href="styles.css">\n</head>\n<body>\n${html}\n</body>\n</html>\n`;
 (async () => {
   const loaded = await (await fetch("/load")).json();
   const editor = grapesjs.init({
@@ -27,13 +29,23 @@
           async load() {
             return loaded.projectData || {};
           },
+          // Every write goes through the studio front, one path per POST; the
+          // front guards each path and commits it (1860-auhm).
           async store(projectData) {
-            const res = await fetch("/store", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ html: ed.getHtml(), css: ed.getCss(), projectData }),
-            });
-            if (!res.ok) throw new Error("store failed: " + res.status);
+            const css = ed.getCss();
+            const files = [
+              ["index.html", page(ed.getHtml())],
+              ["styles.css", css.endsWith("\n") ? css : css + "\n"],
+              [".tillandsias/studio/grapesjs/project.json", JSON.stringify(projectData ?? {}, null, 2) + "\n"],
+            ];
+            for (const [path, content] of files) {
+              const res = await fetch("/__studio/save", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ path, content }),
+              });
+              if (!res.ok) throw new Error("save " + path + " failed: " + res.status);
+            }
           },
         }),
     ],
@@ -48,7 +60,7 @@
     clearTimeout(pending);
     pending = setTimeout(() => editor.store(), 300);
   });
-  // Fixture hook (scripts/test-web-studio-grapesjs.sh): one real edit, saved
+  // Fixture hook (scripts/test-studio-grapesjs.sh): one real edit, saved
   // by the editor's own autosave, proves the browser path end to end.
   if (location.hash === "#selftest") {
     const mark = (k, v) => document.documentElement.setAttribute("data-selftest-" + k, String(v));
