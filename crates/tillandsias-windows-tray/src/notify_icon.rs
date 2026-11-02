@@ -5998,6 +5998,7 @@ mod tests {
             .find("collect_first_vault_handover()")
             .expect("provision-once must collect the first handover");
         assert!(ready < keepalive && keepalive < collect);
+        // source-pin-ok: the bound around the collect inside provision_once is placement, which only the source shows; the wait itself is driven in the ready_wait tests
         assert!(
             body.contains("tokio::time::timeout("),
             "one deadline bounds the wait, not a poll loop"
