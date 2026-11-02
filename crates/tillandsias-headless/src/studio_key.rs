@@ -120,13 +120,17 @@ pub fn parse_request(args: &Value) -> Result<Request, String> {
         .as_str()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .ok_or_else(|| "invalid_arguments: input (a path under /work/tmp/imagegen/) is required".to_string())?;
+        .ok_or_else(|| {
+            "invalid_arguments: input (a path under /work/tmp/imagegen/) is required".to_string()
+        })?;
     let rel = input.strip_prefix(&format!("{FORGE_SCRATCH}/")).ok_or_else(|| {
         format!("invalid_arguments: input {input:?} must be under {FORGE_SCRATCH}/ (the lane's scratch volume)")
     })?;
     if rel.is_empty()
         || rel.contains('\\')
-        || rel.split('/').any(|c| c.is_empty() || c == "." || c == "..")
+        || rel
+            .split('/')
+            .any(|c| c.is_empty() || c == "." || c == "..")
     {
         return Err(format!(
             "invalid_arguments: input {input:?} must name a file or directory inside {FORGE_SCRATCH}/"
@@ -214,7 +218,10 @@ pub fn parse_weights(body: &str) -> Result<Vec<ModelFile>, String> {
             ));
         }
         if row.licence.is_empty() || c[7].is_empty() {
-            return Err(format!("weights.tsv line {}: licence and source are required", n + 1));
+            return Err(format!(
+                "weights.tsv line {}: licence and source are required",
+                n + 1
+            ));
         }
         rows.push(row);
     }
@@ -314,7 +321,10 @@ fn host_has_cuda() -> bool {
 
 /// The project's `.tillandsias/config.toml`, read from the lane's checkout
 /// (the seam's directory, else through the live forge as studio_tool does).
-fn project_config(project: &str, instance: &str) -> Option<tillandsias_core::config::ProjectConfig> {
+fn project_config(
+    project: &str,
+    instance: &str,
+) -> Option<tillandsias_core::config::ProjectConfig> {
     const REL: &str = ".tillandsias/config.toml";
     let text = match with_seam(|s| s.project_root.clone()) {
         Some(root) => std::fs::read_to_string(root.join(REL)).ok()?,
@@ -394,8 +404,8 @@ fn cli_of(argv: &[String], image: &str) -> Vec<String> {
 /// The input's digest(s): one for a file, one per regular file (sorted) for
 /// a frame directory. `forge_path` is how the record names it.
 pub fn hash_inputs(host: &Path, forge_path: &str) -> Result<Vec<provenance::Input>, String> {
-    let md = std::fs::metadata(host)
-        .map_err(|e| format!("invalid_arguments: {forge_path}: {e}"))?;
+    let md =
+        std::fs::metadata(host).map_err(|e| format!("invalid_arguments: {forge_path}: {e}"))?;
     if md.is_file() {
         return Ok(vec![provenance::Input {
             name: "input".into(),
@@ -613,7 +623,14 @@ impl KeyEngine for PodmanKey {
             .map_err(|e| format!("engine_failed: podman run: {e}"))?;
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
-            let tail: Vec<&str> = err.lines().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect();
+            let tail: Vec<&str> = err
+                .lines()
+                .rev()
+                .take(12)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
             return Err(format!(
                 "engine_failed: infer.py exited {}: {}",
                 out.status.code().unwrap_or(-1),
@@ -700,7 +717,11 @@ mod tests {
     #[test]
     fn corridorkey_key_footage_builds_argv_and_refuses_without_consent() {
         let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // Read at run time (1590-j20f: never compile-time env!).
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
         let fx = fixture(true);
         let mut sink = |_: Progress| {};
 
@@ -714,16 +735,29 @@ mod tests {
         assert_eq!(req.outputs, vec!["alpha", "fg", "cutout"]);
         let bad = parse_request(&json!({"input": "/etc/passwd"})).unwrap_err();
         assert!(bad.starts_with("invalid_arguments:"), "{bad}");
-        let bad = parse_request(&json!({"input": "/work/tmp/imagegen/in/x.mp4", "outputs": ["depth"]}))
-            .unwrap_err();
-        assert!(bad.starts_with("invalid_arguments:") && bad.contains("depth"), "{bad}");
+        let bad =
+            parse_request(&json!({"input": "/work/tmp/imagegen/in/x.mp4", "outputs": ["depth"]}))
+                .unwrap_err();
+        assert!(
+            bad.starts_with("invalid_arguments:") && bad.contains("depth"),
+            "{bad}"
+        );
 
         // The argv: one-shot container, no network, /models read-only, the
         // lane volume at /out, the CDI GPU, infer.py's own flags.
-        let argv = run_args(&req, "ck-1", fx.models.path(), LANE_VOLUME, "imagegen-corridorkey:v1");
+        let argv = run_args(
+            &req,
+            "ck-1",
+            fx.models.path(),
+            LANE_VOLUME,
+            "imagegen-corridorkey:v1",
+        );
         let s = |x: &str| argv.iter().any(|a| a == x);
         assert!(s("run") && s("--rm") && s("--network=none"), "{argv:?}");
-        assert!(s("--cap-drop=ALL") && s("--security-opt=no-new-privileges"), "{argv:?}");
+        assert!(
+            s("--cap-drop=ALL") && s("--security-opt=no-new-privileges"),
+            "{argv:?}"
+        );
         assert!(
             s(&format!(
                 "type=bind,source={},target=/models,readonly=true",
@@ -731,18 +765,34 @@ mod tests {
             )),
             "{argv:?}"
         );
-        assert!(s(&format!("type=volume,source={LANE_VOLUME},target=/out")), "{argv:?}");
+        assert!(
+            s(&format!("type=volume,source={LANE_VOLUME},target=/out")),
+            "{argv:?}"
+        );
         assert!(s("nvidia.com/gpu=all"), "{argv:?}");
-        assert!(!argv.iter().any(|a| a.to_ascii_lowercase().contains("proxy")), "{argv:?}");
+        assert!(
+            !argv
+                .iter()
+                .any(|a| a.to_ascii_lowercase().contains("proxy")),
+            "{argv:?}"
+        );
         assert!(!s("--network=tillandsias-enclave"), "{argv:?}");
-        let image_at = argv.iter().position(|a| a == "imagegen-corridorkey:v1").unwrap();
+        let image_at = argv
+            .iter()
+            .position(|a| a == "imagegen-corridorkey:v1")
+            .unwrap();
         let tail: Vec<&str> = argv[image_at + 1..].iter().map(String::as_str).collect();
         assert_eq!(
             tail,
             vec![
-                "--input", "/out/in/clip.mp4",
-                "--output_dir", "/out/studio/ck-1",
-                "--outputs", "alpha", "fg", "cutout",
+                "--input",
+                "/out/in/clip.mp4",
+                "--output_dir",
+                "/out/studio/ck-1",
+                "--outputs",
+                "alpha",
+                "fg",
+                "cutout",
                 "--low_vram",
             ],
             "{tail:?}"
@@ -750,7 +800,11 @@ mod tests {
         let no_low = parse_request(&json!({"input": "/work/tmp/imagegen/in/clip.mp4"})).unwrap();
         let argv2 = run_args(&no_low, "ck-2", fx.models.path(), LANE_VOLUME, "img");
         assert!(!argv2.iter().any(|a| a == "--low_vram"), "{argv2:?}");
-        assert_eq!(no_low.outputs, vec!["alpha", "fg", "cutout"], "the D9 default set");
+        assert_eq!(
+            no_low.outputs,
+            vec!["alpha", "fg", "cutout"],
+            "the D9 default set"
+        );
 
         // Refusal without consent: the gate says no, nothing is queued or run.
         let engine = Arc::new(Stub::default());
@@ -798,7 +852,10 @@ mod tests {
         // every weight with sha256 and licence, the input hash, the CLI args.
         let inputs = hash_inputs(&fx.lane_dir.join("in/clip.mp4"), &req.input).unwrap();
         assert_eq!(inputs.len(), 1);
-        assert_eq!(inputs[0].sha256, provenance::sha256_hex(b"not really an mp4"));
+        assert_eq!(
+            inputs[0].sha256,
+            provenance::sha256_hex(b"not really an mp4")
+        );
         assert_eq!(inputs[0].path, "/work/tmp/imagegen/in/clip.mp4");
         let rec = provenance_record(&req, &inputs, "cuda", &argv[image_at + 1..]).to_json();
         assert_eq!(rec["schema"], provenance::SCHEMA);
@@ -807,18 +864,27 @@ mod tests {
         assert_eq!(rec["engine"]["ref"], UPSTREAM);
         let models = rec["models"].as_array().unwrap();
         assert_eq!(models.len(), weights().len());
-        assert!(models.len() >= 5, "corridorkey + stats + three foundation models");
+        assert!(
+            models.len() >= 5,
+            "corridorkey + stats + three foundation models"
+        );
         for m in models {
             assert_eq!(m["sha256"].as_str().unwrap().len(), 64, "{m}");
             assert!(!m["licence"].as_str().unwrap().is_empty(), "{m}");
         }
         assert!(
-            models.iter().any(|m| m["file"] == "corridorkey_v2.safetensors"
-                && m["licence"] == CORRIDOR_LICENCE
-                && m["repo"] == "nikopueringer/CorridorKey2.0"),
+            models
+                .iter()
+                .any(|m| m["file"] == "corridorkey_v2.safetensors"
+                    && m["licence"] == CORRIDOR_LICENCE
+                    && m["repo"] == "nikopueringer/CorridorKey2.0"),
             "{models:?}"
         );
-        assert!(models.iter().any(|m| m["licence"] == "nvidia-open-model-license"));
+        assert!(
+            models
+                .iter()
+                .any(|m| m["licence"] == "nvidia-open-model-license")
+        );
         assert!(models.iter().any(|m| m["licence"] == "mit"));
         assert!(models.iter().any(|m| m["licence"] == "cc-by-4.0"));
         assert_eq!(rec["inputs"][0]["sha256"], inputs[0].sha256);
@@ -839,14 +905,32 @@ mod tests {
         assert!(ctx.ends_with("images/imagegen-corridorkey") && cf.is_file());
         assert!(!crate::INIT_IMAGES.contains(&IMAGE));
         let containerfile = std::fs::read_to_string(&cf).unwrap();
-        assert!(containerfile.contains(&format!("CORRIDORKEY_SHA={COMMIT}")), "pinned commit");
-        assert!(containerfile.contains("TORCH_VERSION=2.9.1+cu128"), "pinned torch cu128");
+        assert!(
+            containerfile.contains(&format!("CORRIDORKEY_SHA={COMMIT}")),
+            "pinned commit"
+        );
+        assert!(
+            containerfile.contains("TORCH_VERSION=2.9.1+cu128"),
+            "pinned torch cu128"
+        );
         assert!(containerfile.contains("useradd"), "non-root");
         assert!(containerfile.contains("USER "), "non-root");
-        assert!(!containerfile.contains("download_weights.py"), "no weights baked in");
-        assert!(!containerfile.contains("huggingface.co/nikopueringer"), "no weights baked in");
-        assert!(containerfile.contains("ln -s /models/corridorkey/weights"), "weights shim");
-        assert!(containerfile.contains("ln -s /models/corridorkey/vfms"), "vfms shim");
+        assert!(
+            !containerfile.contains("download_weights.py"),
+            "no weights baked in"
+        );
+        assert!(
+            !containerfile.contains("huggingface.co/nikopueringer"),
+            "no weights baked in"
+        );
+        assert!(
+            containerfile.contains("ln -s /models/corridorkey/weights"),
+            "weights shim"
+        );
+        assert!(
+            containerfile.contains("ln -s /models/corridorkey/vfms"),
+            "vfms shim"
+        );
         // Every weight row names a destination the runtime's shim resolves.
         for w in weights() {
             assert!(
