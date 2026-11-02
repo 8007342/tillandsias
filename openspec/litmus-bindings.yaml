@@ -558,6 +558,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
   - litmus:bare-metal-lane-command-is-runnable
@@ -1088,6 +1089,7 @@ specs:
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
   - litmus:web-studio-grapesjs-stores-as-a-repo-diff
+  - litmus:web-studio-tina-saves-through-local-graphql
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape
@@ -1110,6 +1112,7 @@ specs:
   - litmus:binary-e2e-smoke
   - litmus:tray-parity-matrix-complete
   - litmus:tray-new-surface-parity-gate
+  - litmus:tray-click-replies-while-a-launch-blocks
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
