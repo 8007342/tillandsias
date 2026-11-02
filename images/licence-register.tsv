@@ -1,0 +1,31 @@
+# @trace order:1864-ay3x, order:1940-lcns
+# THE COMPONENT LICENCE REGISTER: one row per third-party software component
+# the stack fetches, bundles or runs, beside images/models/licence-register.tsv
+# (media models). TAB-separated, no interpreter. Grammar from the licence
+# management design (plan/issues/third-party-licence-management-2026-10-31.md
+# D1, PR #781); this file starts with the web-studio lanes, the first
+# components approved under that rule, and the stack ledger (the "Powered By"
+# graph) reads its rows.
+#
+# Columns:
+#   component     package or project name
+#   version       exact version pinned
+#   source        where it is fetched from (registry, tarball URL)
+#   kind          base-image | distro-packages | npm | pip | binary | git-build | model | cli
+#   licence_id    SPDX id (LicenseRef-<name> for anything else)
+#   licence_url   where the licence text was read
+#   licence_sha256  sha256 of the licence text shown to a user; - when none is shown
+#   distribution  fetched (installed and run in an image) | bundled (compiled
+#                 into a shipped file) | build-only (used in a discarded build
+#                 stage; NOT in any final image) | redistributed
+#   tier          acknowledge | accept | refuse
+#   reaccept_on   text | version | never
+#   image         the image (images/<dir>) the component belongs to
+#   verified      ISO date and who approved it
+#component	version	source	kind	licence_id	licence_url	licence_sha256	distribution	tier	reaccept_on	image	verified
+@measured/puck	0.20.2	https://registry.npmjs.org/@measured/puck	npm	MIT	https://github.com/puckeditor/puck/blob/main/LICENSE	-	bundled	acknowledge	never	web-studio-puck	2026-11-02 operator ("Yes I approve  Puck")
+react	19.2.0	https://registry.npmjs.org/react	npm	MIT	https://github.com/facebook/react/blob/main/LICENSE	-	bundled	acknowledge	never	web-studio-puck	2026-11-02 operator (Puck tree)
+react-dom	19.2.0	https://registry.npmjs.org/react-dom	npm	MIT	https://github.com/facebook/react/blob/main/LICENSE	-	bundled	acknowledge	never	web-studio-puck	2026-11-02 operator (Puck tree)
+puck-tree	0.20.2	package-lock.json of images/web-studio-puck/build (21 packages)	npm	MIT AND BSD-3-Clause AND 0BSD	images/web-studio-puck/build/package-lock.json	-	bundled	acknowledge	never	web-studio-puck	2026-11-02 operator (census MIT 19, BSD-3-Clause 1, 0BSD 1)
+esbuild	0.28.2	https://registry.npmjs.org/esbuild	npm	MIT	https://github.com/evanw/esbuild/blob/main/LICENSE.md	-	build-only	acknowledge	never	web-studio-puck	2026-11-02 operator ("I approve the required licenses"; builder stage only)
+@esbuild/linux-x64	0.28.2	https://registry.npmjs.org/@esbuild/linux-x64	binary	MIT	https://github.com/evanw/esbuild/blob/main/LICENSE.md	-	build-only	acknowledge	never	web-studio-puck	2026-11-02 operator (builder stage only; linux-arm64 on an aarch64 builder, same licence)

@@ -6,14 +6,23 @@
 # anywhere else (source files, a path escaping the checkout, a non-JSON
 # file), leaving the checkout untouched. The studio runs with --network none.
 #
-# Runs images/web-studio-puck/server.mjs in the pinned node image on a
-# throwaway React checkout. Exit: 0 pass, 1 fail, 3 could-not-run (no podman).
+# Builds images/web-studio-puck (two stages: esbuild bundles Puck + React 19 in
+# a DISCARDED builder stage) and runs the final image on a throwaway React
+# checkout. Also checks the operator's build-time-only rule: the final image has
+# no esbuild and no node_modules, and React exists only inside the bundle.
+# Exit: 0 pass, 1 fail, 3 could-not-run (no podman, or the build cannot fetch).
 set -u
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-NODE_IMAGE="docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90"
+TAG="localhost/tillandsias-web-studio-puck:v$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
 command -v podman >/dev/null 2>&1 || { echo "could-not-run:web-studio-puck:no-podman"; exit 3; }
-podman image exists "$NODE_IMAGE" || podman pull -q "$NODE_IMAGE" >/dev/null 2>&1 \
-  || { echo "could-not-run:web-studio-puck:no-node-image"; exit 3; }
+err="${TMPDIR:-/tmp}/web-studio-puck-build.$$.err"
+if ! podman build -q -t "$TAG" "$PROJECT_ROOT/images/web-studio-puck" >/dev/null 2>"$err"; then
+  if grep -qE 'fetch https://registry.npmjs.org|ENOTFOUND|EAI_AGAIN' "$err"; then
+    echo "could-not-run:web-studio-puck:registry-fetch-failed"; rm -f "$err"; exit 3
+  fi
+  cat "$err"; rm -f "$err"; echo "FAIL: Puck studio image did not build"; exit 1
+fi
+rm -f "$err"
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/web-studio-puck.XXXXXX")"
 name="web-studio-puck-test-$$"
@@ -25,10 +34,8 @@ printf 'export default function App() { return <h1>Before</h1>; }\n' > "$work/sr
 git -C "$work" add -A
 git -C "$work" -c user.email=fixture@tillandsias.invalid -c user.name=fixture commit -q -m site
 
-podman run -d --rm --name "$name" --network none --userns keep-id \
-  -v "$PROJECT_ROOT/images/web-studio-puck/server.mjs:/opt/studio/server.mjs:ro,Z" \
-  -v "$work:/project:Z" -e STUDIO_PROJECT=/project -e STUDIO_PORT=8090 \
-  --entrypoint node "$NODE_IMAGE" /opt/studio/server.mjs >/dev/null
+podman run -d --rm --name "$name" --network none --userns keep-id:uid=1001,gid=1001 \
+  -v "$work:/project:Z" "$TAG" >/dev/null
 for _ in $(seq 1 30); do
   podman exec "$name" node -e 'fetch("http://127.0.0.1:8090/healthz").then(r=>process.exit(r.ok?0:1),()=>process.exit(1))' 2>/dev/null && break
   sleep 1
@@ -43,6 +50,11 @@ esc=$(save "{path:\".tillandsias/studio/puck/../../src/App.json\",data:$data}")
 abs=$(save "{path:\"/etc/passwd.json\",data:$data}")
 loaded=$(podman exec "$name" node -e 'fetch("http://127.0.0.1:8090/__studio/load?path=.tillandsias/studio/puck/pages/home.json").then(async r=>console.log(r.status,await r.text()))' 2>&1)
 egress=$(podman exec "$name" node -e 'fetch("https://registry.npmjs.org/").then(()=>console.log("reached"),()=>console.log("blocked"))' 2>&1)
+page=$(podman exec "$name" node -e 'fetch("http://127.0.0.1:8090/").then(async r=>{const t=await r.text();console.log(r.status,/https?:\/\//.test(t)?"external-url":"self-contained")})' 2>&1)
+bundle=$(podman exec "$name" node -e 'fetch("http://127.0.0.1:8090/editor.js").then(async r=>{const t=await r.text();console.log(r.status,t.length>100000?"big":"small",/react\.dev\/errors|Minified React error/.test(t)?"react-inside":"no-react",/onPublish/.test(t)?"puck-inside":"no-puck")})' 2>&1)
+# The build-time-only rule: no esbuild file, no node_modules, no React package
+# directory anywhere in the FINAL image's filesystem.
+leftovers=$(podman run --rm --network none --entrypoint sh "$TAG" -c 'find / -xdev \( -path /proc -o -path /sys \) -prune -o \( -iname "*esbuild*" -o \( -name node_modules -path "/opt/*" \) -o \( -name react-dom -type d \) \) -print 2>/dev/null' | tr '\n' ' ')
 echo "save-in-allowlist=$ok"; echo "save-source=$src"; echo "save-json-outside=$src_json"
 echo "save-escape=$esc"; echo "save-absolute=$abs"; echo "load=$loaded"; echo "egress=$egress"
 echo "repo-changes=$(git -C "$work" status --porcelain --untracked-files=all | awk '{print $2}' | sort | tr '\n' ' ')"
@@ -60,6 +72,10 @@ git -C "$work" diff --quiet -- src || { echo "FAIL: a refused write changed src/
   || { echo "FAIL: the checkout changed beyond the one allowed file"; fail=1; }
 grep -q '"After"' <<<"$loaded" || { echo "FAIL: /__studio/load did not return the stored page"; fail=1; }
 [ "$egress" = "blocked" ] || { echo "FAIL: the studio reached the network"; fail=1; }
+echo "page=$page"; echo "bundle=$bundle"; echo "final-image-leftovers=${leftovers:-none}"
+[ "$page" = "200 self-contained" ] || { echo "FAIL: the editor page is missing or references an external URL"; fail=1; }
+[ "$bundle" = "200 big react-inside puck-inside" ] || { echo "FAIL: the bundle does not carry Puck and React"; fail=1; }
+[ -z "$leftovers" ] || { echo "FAIL: the final image carries build-time-only files: $leftovers"; fail=1; }
 
 [ "$fail" -eq 0 ] && echo "PASS: Puck page data is stored under the lane allowlist only, refused elsewhere, no egress"
 exit "$fail"

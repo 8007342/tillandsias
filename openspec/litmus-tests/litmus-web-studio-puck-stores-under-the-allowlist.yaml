@@ -1,0 +1,57 @@
+# @trace spec:local-web-preview
+# @trace order:1864-ay3x (spec: openspec/changes/web-studio-lanes, not yet archived)
+#
+# Order 1864-ay3x: the Puck studio image. Puck and React 19 are bundled by
+# esbuild in a DISCARDED builder stage (operator ruling 2026-11-02); the final
+# image carries only the bundle, its CSS, the editor page and the studio
+# server. Licences in images/licence-register.tsv (esbuild as build-only).
+#
+# The fixture builds images/web-studio-puck and runs it with --network none on
+# a throwaway React checkout. It asserts:
+#   - Puck's onPublish page data, POSTed to /__studio/save, lands as JSON under
+#     .tillandsias/studio/puck/ and is the only change in the checkout;
+#   - writes to src/, a .json outside the allowlist, a ../ escape and an
+#     absolute path are each refused with 403 and the rule;
+#   - the editor page is self-contained, and the bundle carries Puck and React;
+#   - the final image has no esbuild, no node_modules and no react-dom package
+#     (the same probe finds 6 entries in the builder stage);
+#   - egress is blocked.
+name: litmus:web-studio-puck-stores-under-the-allowlist
+spec: local-web-preview
+phase: post-build
+description: >
+  Pin 1864-ay3x: the Puck studio stores onPublish page data under the lane
+  allowlist only, refuses writes elsewhere, and its final image carries no
+  build-time-only esbuild or React package.
+severity: high
+size: long
+
+preconditions:
+  - workspace contains images/web-studio-puck and scripts/test-web-studio-puck.sh
+  - podman can build images
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-web-studio-puck.sh && test -x scripts/test-web-studio-puck.sh && echo 'ok: web-studio-puck-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: web-studio-puck-suite-parses"
+
+  - step: "page data stored under the allowlist only, no build-time leftovers, no egress"
+    command: "bash scripts/test-web-studio-puck.sh"
+    timeout_ms: 900000
+    expected_behavior: "PASS: Puck page data is stored under the lane allowlist only, refused elsewhere, no egress"
+
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "PASS: Puck page data is stored under the lane allowlist only, refused elsewhere, no egress"
+  log_fields:
+    spec: local-web-preview
+    test: web-studio-puck-stores-under-the-allowlist
+    artifact: images/web-studio-puck/server.mjs
+
+rollback:
+  on_failure: >
+    The endpoint wrote outside the allowlist, the bundle lost Puck or React, or
+    a build-time-only file reached the final image.
+  command: "grep -n 'ALLOW\\|allowed(' images/web-studio-puck/server.mjs"
