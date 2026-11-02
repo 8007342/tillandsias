@@ -10,3 +10,4 @@ STEP_DESC="Checking flaky-optional installs run in the background behind first-u
 STEP_LUA="scripts/lua/test-flaky-installs-background.lua"
 STEP_ERROR="a flaky-optional install can block the forge build or start, or its shim stopped telling the truth (1951-vv5m) — see the FAIL lines above"
 STEP_OK="flaky-installs background fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:flaky-installs-background:static + hang + budget + fail + control arms"
