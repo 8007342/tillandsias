@@ -171,6 +171,7 @@ specs:
   litmus_tests:
   - litmus:release-is-one-cloud-build
   - litmus:gate-step-private-metrics-fallback
+  - litmus:promote-stable-refusals-carry-affordance
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
