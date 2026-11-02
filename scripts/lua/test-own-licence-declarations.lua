@@ -123,7 +123,7 @@ do
         ["images/forge/Containerfile"] = LABELLED,
         ["images/studio/Containerfile.decap"] = "ARG FORGE_IMAGE=localhost/tillandsias-forge\nFROM ${FORGE_IMAGE}\nRUN true\n",
         ["images/studio/Containerfile.puck"] = "ARG FORGE_IMAGE=localhost/tillandsias-forge\nFROM docker.io/library/node:22-bookworm-slim AS builder\nRUN true\nFROM ${FORGE_IMAGE}\nRUN true\n",
-        ["images/tool/Containerfile"] = "FROM localhost/tillandsias-forge:latest\nRUN true\n",
+        ["images/tool/Containerfile"] = "FROM localhost/tillandsias-forge:v56.11.2.1\nRUN true\n",
         ["crates/x/Cargo.toml"] = WS_CRATE,
     })
     local last, out = guard(abs)
