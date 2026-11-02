@@ -1,0 +1,38 @@
+# @trace spec:tray-app
+# @trace order:1956-4pxj
+#
+# Operator ruling 2026-11-01: two concurrent forges of one project are a
+# normal case. Reproduced on yoga 2026-11-02 before the fix: a second launch
+# waited on the first forge's RAM-workspace lock and died after 120 s. The
+# test drives claim_forge_instance: the first launch keeps the default
+# instance, the second takes instance 2 with a different RAM workspace and
+# container name, an explicit instance and a host-mount lane are left alone,
+# and the default slot is reused once the first launch ends. The mirror
+# bring-up serialisation (acquire_mirror_bringup_lock) is proven by the live
+# arm recorded on the row, not by this test.
+name: litmus:a-second-forge-of-a-project-takes-its-own-instance
+spec: tray-app
+phase: pre-build
+description: A second launch of a project takes the next forge instance with its own workspace instead of waiting on the first's lock
+severity: high
+size: quick
+
+preconditions:
+  - cargo (the builder toolbox); offline
+
+critical_path:
+  - step: "the second launch of a project is instance 2 with its own workspace"
+    command: "cargo test -p tillandsias-headless tests::a_second_launch_of_a_project_takes_the_next_instance -- --exact"
+    timeout_ms: 300000
+
+observability:
+  traces:
+    - "@trace spec:tray-app"
+  expected_log: "first launch default, second launch instance 2 on a distinct tillandsias-source volume, slot reused after release"
+  log_fields:
+    spec: "tray-app"
+    test: "a-second-forge-of-a-project-takes-its-own-instance"
+
+rollback:
+  on_failure: "claim_forge_instance must run at the top of each lane entry, before any instance-derived name"
+  command: "grep -n '_instance_claim = claim_forge_instance' crates/tillandsias-headless/src/main.rs"
