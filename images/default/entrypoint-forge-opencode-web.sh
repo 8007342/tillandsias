@@ -54,8 +54,8 @@ trap 'exit_pause' EXIT
 
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
-# so it never blocks the agent launch, and fail-soft.
-ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
+# so it never blocks the agent launch, and fail-soft. Started by
+# start_flaky_installs below (order 1951-vv5m).
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 # EVERY_LAUNCH agent harness update; backgrounded, fail-soft.
 ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
@@ -115,6 +115,9 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # The CLI is the project's pinned version when openspec/cli-version exists
 # (order 1441-myz3; see ensure_openspec_pinned).
 ensure_openspec_pinned "$PROJECT_DIR"
+# Flaky-optional installs (dev tools, prebuilt tools) run in
+# the background with status files and first-use shims (order 1951-vv5m).
+start_flaky_installs
 openspec_init_if_absent "$PROJECT_DIR" opencode
 
 # ── Host lane before the agent (order 1863-eckw) ────────────
