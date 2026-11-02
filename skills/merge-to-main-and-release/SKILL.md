@@ -534,25 +534,25 @@ so this one push unblocks the fleet. No `--no-verify` is ever needed —
 
 ## 6 — Trigger the release workflow
 
-`release.yml` is `workflow_dispatch`-only. The skill explicitly triggers it with the new tag, never via `on: push: tags:` (the workflow is intentionally manual to keep release authorship traceable).
+`release.yml` is `workflow_dispatch`-only. The skill explicitly triggers it, never via `on: push: tags:` (the workflow is intentionally manual to keep release authorship traceable).
 
-**One dispatch, on the tag; no warm-up run (order 1950-b4f3).** The release
-is the operator's ONE cloud build per day. The 1942-mijg `cache_seed`
-dispatch on main was a second full build (run 41352565247: 66 min cold
-build, cancelled by the operator) spent to warm an Actions cache that the
-tag run would then restore; measured over five releases the cache steps
-restored nothing (GitHub scopes a cache to the saving ref) and each release
-only paid 49–87 s to save a 3.3 GB store nobody could read. The workflow no
-longer has cache steps or a `cache_seed` input, and
-litmus:release-is-one-cloud-build refuses a second dispatch here. The Linux
-job cold-builds (~67 min, 41 of them the aarch64-musl cross GCC) until the
-cache redesign filed under 1950-b4f3 lands; do not work around that with an
-extra run.
+**One dispatch, ON MAIN, with the version as input (order 1953-jmvb).**
+Operator ruling 2026-11-01: "let's drop the compiler build, and start the
+release from main". The run's ref is `refs/heads/main`, so the Nix and
+cargo caches it saves are restored by the next release inside the ONE daily
+cloud build — from a tag ref they never were (1950-b4f3: five releases, zero
+restores, 66-min seed run cancelled by the operator). The workflow refuses
+any other ref, reads VERSION from main's tree, and creates `v<VERSION>` at
+its own SHA or verifies the tag step 5 pushed points there. The Sigstore SAN
+is `release.yml@refs/heads/main`. litmus:release-is-one-cloud-build refuses
+a dispatch on any other ref or a seed input. Main's HEAD must be the
+bump-merge SHA the tag names (step 5 asserts that) — do not push anything
+to main between step 5 and this dispatch.
 
 ```bash
-gh workflow run release.yml --ref "${new_tag}"
+gh workflow run release.yml --ref main -f version="${new_version}"
 sleep 5
-gh run list --workflow=release.yml --branch="${new_tag}" --limit 1
+gh run list --workflow=release.yml --branch=main --limit 1
 ```
 
 (The old `recipe-publish.yml` custom-rootfs workflow was removed in the 2026-06 Fedora pivot — Windows/macOS now fetch official Fedora WSL/Cloud images directly, so there is no rootfs CI to coordinate with anymore.)
@@ -759,7 +759,7 @@ If any STEP fails:
 - **STEP 3 CI fails**: surface the failing run URL, do NOT merge, do NOT tag. The next 24-hour cycle retries. The work-loop continues to land fixes meanwhile.
 - **STEP 5 tag-push fails (existing tag)**: another run beat us. Skip release; cycle ends successfully (someone else released).
 - **STEP 5 back-merge push fails**: the fleet is blocked until it lands. Fixing and pushing the back-merge takes priority over everything else in the cycle — the refusal siblings are seeing names this exact remedy, so leaving it undone strands every host that reads it (order 800-vk2p).
-- **STEP 6 workflow trigger fails**: the tag is on main; user can manually run `gh workflow run release.yml --ref ${new_tag}`. Surface a clear next-step instruction.
+- **STEP 6 workflow trigger fails**: the tag is on main; user can manually run `gh workflow run release.yml --ref main -f version=${new_version}` (1953-jmvb: on main, never on the tag). Surface a clear next-step instruction.
 - **STEP 7 release build fails**: the tag exists on main but no GitHub Release was published. Next cycle does NOT retry the tag — it bumps to N+1. The orchestrator deals with the failed build separately.
 
 ---

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: spec-windows-wsl-runtime-is-cited-71-times-in-32-files-and-has-never-existed-so-every-one-of-those-traces-points-at-nothing
+    event:
+      type: note
+      ts: "2026-11-02T16:10:32Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t161032z
+      host: calmecacpilli
+      summary: |
+        Resolved the spec/cheatsheet conflict noted on this row on 2026-11-02 against a MEASUREMENT, not a guess. yolanda (live Windows guest, 2026-11-02, relayed by macuahuitl-fedora): /etc/wsl.conf = [boot] systemd=true; [interop] enabled=true, appendWindowsPath=false; [automount] enabled=false; /mnt/c exists empty with nothing mounted; binfmt WSLInterop "enabled". Writer confirmed at crates/tillandsias-vm-layer/src/wsl.rs:739-749 (recipe post-import wiring) with a second copy at wsl.rs:864-877 (VmRuntime::provision, adds [user] default=forge). Fixes: cheatsheets/runtime/wsl2-isolation-boundary.md now says interop is ENABLED (row 2 open) and automount off is correct; appendWindowsPath=false means Windows binaries are runnable via interop but not on PATH; the [network]/[gpu]/[time] keys are marked "(not written)"; provenance cites the measurement + wsl.rs lines; last_verified bumped. openspec/specs/wsl-runtime/spec.md Requirement 1.3 amended: /mnt/c is NOT reachable (automount off, directory exists empty); new 1.4 states interop enabled + appendWindowsPath=false (keeps Req 4.2 WSL_INTEROP_ENABLED=true truthful); Measurable rewritten to the measured facts; design note records the duplicate wsl.conf writer as a drift risk; Req 3.4 kept with a note that /mnt/c resolves only where drvfs is mounted; Req 5.1 same note. Also corrected the same claim in cheatsheets/runtime/wsl-mount-points.md (said Tillandsias relies on /mnt/c cross-distro sharing), wsl-daemon-patterns.md (recommended /mnt/c socket paths), wsl-browser-isolation.md (scope note: its interop=false recipe is the separate browser distro, not the tillandsias distro). images/default/cheatsheets re-staged (scripts/stage-image-cheatsheets.sh --stage, --verify ok, 262 files). Duplicate-writer dedupe filed as p3 1963-xgr5 (Windows/compiling host). Text-only on calmecacpilli; no cargo run.
