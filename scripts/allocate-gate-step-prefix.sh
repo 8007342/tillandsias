@@ -47,6 +47,8 @@
 # Usage: scripts/allocate-gate-step-prefix.sh --base <ref> [--exclude <ref>]... [--commit | --dry-run]
 set -euo pipefail
 
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 BASE=""; MODE="stage"; EXCLUDES=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -55,18 +57,19 @@ while [ $# -gt 0 ]; do
         --commit) MODE="commit"; shift ;;
         --dry-run) MODE="dry"; shift ;;
         -h|--help) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 0 ;;
-        *) echo "refused:gate-step-prefix:usage:$1"; exit 2 ;;
+        *) _afford "$1 is not a flag this script takes" "use --base <ref> [--exclude <ref>]... [--commit | --dry-run]; --help prints the full usage"; echo "refused:gate-step-prefix:usage:$1"; exit 2 ;;
     esac
 done
-[ -n "$BASE" ] || { echo "refused:gate-step-prefix:usage:--base <ref> is required"; exit 2; }
+[ -n "$BASE" ] || { _afford "without --base the script cannot tell which .step files this branch added" "pass --base <the remote tip you just integrated>, e.g. --base origin/linux-next"; echo "refused:gate-step-prefix:usage:--base <ref> is required"; exit 2; }
 
-ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "refused:gate-step-prefix:not-a-git-checkout"; exit 2; }
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { _afford "the working directory is not inside a git checkout, so there is no tree to read" "cd into the tillandsias checkout and re-run"; echo "refused:gate-step-prefix:not-a-git-checkout"; exit 2; }
 cd "$ROOT"
 DIR="scripts/gate-steps.d"
 for r in $BASE $EXCLUDES; do
-    git rev-parse --verify --quiet "$r^{commit}" >/dev/null || { echo "refused:gate-step-prefix:usage:$r does not resolve"; exit 2; }
+    git rev-parse --verify --quiet "$r^{commit}" >/dev/null || { _afford "$r names no commit in this repository" "git fetch origin, or pass a ref that git rev-parse resolves"; echo "refused:gate-step-prefix:usage:$r does not resolve"; exit 2; }
     if ! git merge-base --is-ancestor "$r" HEAD 2>/dev/null; then
         echo "gate-step-prefix: $r is not an ancestor of HEAD — the integrate has not happened, so HEAD cannot see the remote's steps; integrate first" >&2
+        # affordance-ok: the stderr line above says why and what to do
         echo "refused:gate-step-prefix:usage:$r is not an ancestor of HEAD (integrate first)"; exit 2
     fi
 done
@@ -157,6 +160,7 @@ while IFS= read -r f; do
         if [ -z "$new" ]; then
             _undo
             echo "gate-step-prefix: $b shares prefix $p with $other and no integer between $n and the next occupied prefix $next is free — renumber by hand (above $next if the step's place allows)" >&2
+            # affordance-ok: the stderr line above says why and what to do
             echo "refused:gate-step-prefix:no-gap:$f"; exit 1
         fi
     else
@@ -166,6 +170,7 @@ while IFS= read -r f; do
     if [ -z "$new" ] || [ "$new" -ge "$limit" ]; then
         _undo
         echo "gate-step-prefix: $b shares prefix $p with $other and the next free slot would not fit $width digits (a wider prefix sorts FIRST under the runner's glob) — renumber by hand" >&2
+        # affordance-ok: the stderr line above says why and what to do
         echo "refused:gate-step-prefix:overflow:$f"; exit 1
     fi
     newp="$(printf "%0${width}d" "$new")"
