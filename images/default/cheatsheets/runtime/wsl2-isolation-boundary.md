@@ -2,7 +2,7 @@
 tags: [windows, wsl2, isolation, hyper-v, security-boundary, drvfs, interop, wslg, networking, threat-model]
 languages: []
 since: 2026-04-28
-last_verified: 2026-04-28
+last_verified: 2026-11-02
 sources:
   - https://learn.microsoft.com/en-us/windows/wsl/about
   - https://learn.microsoft.com/en-us/windows/wsl/wsl-config
@@ -36,7 +36,9 @@ pull_recipe: see-section-pull-on-demand
 - <https://learn.microsoft.com/en-us/windows/wsl/filesystems> — DrvFs `/mnt/c`, 9P bridge, runtime interop disable
 - <https://learn.microsoft.com/en-us/windows/wsl/disk-space> — VHD elasticity, `--manage --resize`
 - <https://learn.microsoft.com/en-us/windows/wsl/basic-commands> — `wsl --status`, `wsl --shutdown`, `wsl --terminate`
-- **Last updated:** 2026-04-28
+- `crates/tillandsias-vm-layer/src/wsl.rs:739-749` — the `/etc/wsl.conf` the tray writes into the `tillandsias` distro (recipe path): `[boot] systemd=true`, `[interop] enabled=true`, `appendWindowsPath=false`, `[automount] enabled=false`. A second, near-identical writer at `wsl.rs:864-877` (`VmRuntime::provision`, adds `[user] default=forge`) — two copies of the same template is a drift risk, tracked in the ledger (see 1410-ugvw note of 2026-11-02).
+- **Measured 2026-11-02** on yoga (live Windows guest, relayed by macuahuitl-fedora): `/etc/wsl.conf` = `[boot] systemd=true; [interop] enabled=true, appendWindowsPath=false; [automount] enabled=false`. `/mnt/c` exists and is EMPTY (nothing mounted); `/proc/sys/fs/binfmt_misc/WSLInterop` reports `enabled`.
+- **Last updated:** 2026-11-02 (interop state corrected from the measurement; 2026-04-28 before)
 
 ## Threat model — what the WSL2 boundary IS and IS NOT
 
@@ -77,34 +79,40 @@ Every row: a documented host↔distro bridge, its default state, the exact knob 
 
 ## Tillandsias hardening profile
 
-The distro the tray imports as `tillandsias` SHALL ship with the following `wsl.conf` and the host SHALL ship the matching `.wslconfig`. Knobs whose defaults already match the desired state are repeated explicitly so the configuration is self-documenting.
+The distro the tray imports as `tillandsias` ships with the following `wsl.conf` and the host SHALL ship the matching `.wslconfig`. Knobs whose defaults already match the desired state are repeated explicitly so the configuration is self-documenting.
 
-### `/etc/wsl.conf` (per-distro, baked into the rootfs)
+**What is actually written vs. what this profile wishes for.** The tray's writer (`crates/tillandsias-vm-layer/src/wsl.rs:739-749`, second copy at `:864-877`) emits ONLY `[boot]`, `[interop]`, `[automount]` (and `[user]` in the second copy). Measured on yoga 2026-11-02: `[boot] systemd=true; [interop] enabled=true, appendWindowsPath=false; [automount] enabled=false`; `/mnt/c` exists empty; binfmt `WSLInterop` is `enabled`. So:
+
+- **automount off is real** — `/mnt/c` is NOT reachable from the `tillandsias` distro (the directory exists, nothing is mounted on it). Row 1 is closed.
+- **interop is ENABLED, not disabled** — row 2 is OPEN. Windows binaries are runnable via interop (binfmt `WSLInterop` is on) but are NOT on `$PATH`, because `appendWindowsPath=false` (row 3 closed). `which cmd.exe` fails, yet a process holding a path to a Windows `.exe` can still invoke it through the interop pipe. The earlier text of this cheatsheet claimed `enabled = false`; that was never what the tray wrote.
+- The `[network]`, `[gpu]`, `[time]` and `mountFsTab` keys below are NOT written by the tray today; they stay in the profile as the intended target, marked `(not written)`.
+
+### `/etc/wsl.conf` (per-distro, written by the tray at provision — `wsl.rs:739-749`)
 
 ```ini
 # @trace spec:wsl-runtime, spec:cross-platform
 # @cheatsheet runtime/wsl2-isolation-boundary.md
-# Tillandsias hardening profile — closes every documented host↔distro bridge
-# that Microsoft Learn flags as default-on. See cheatsheet for citations.
+# Tillandsias hardening profile. Keys marked (not written) are the intended
+# target, not what wsl.rs emits today. See cheatsheet for citations.
 
 [automount]
-enabled = false                  # row 1: drvfs gone — forge can't see /mnt/c
-mountFsTab = false               # don't process /etc/fstab from a 9P-bridged file
+enabled = false                  # row 1: drvfs gone — forge can't see /mnt/c (MEASURED yoga 2026-11-02: /mnt/c empty)
+mountFsTab = false               # (not written) don't process /etc/fstab from a 9P-bridged file
 
 [interop]
-enabled = false                  # row 2: no wsl.exe reverse-call from Linux to Windows
-appendWindowsPath = false        # row 3: don't pollute $PATH with Windows tools
+enabled = true                   # row 2 OPEN: wsl.rs:743-744 writes true (MEASURED yoga 2026-11-02: binfmt WSLInterop enabled)
+appendWindowsPath = false        # row 3: Windows tools runnable via interop but NOT on $PATH (wsl.rs:745)
 
 [network]
-generateResolvConf = false       # we ship our own /etc/resolv.conf pointing at our proxy
-generateHosts = false            # ditto for /etc/hosts
+generateResolvConf = false       # (not written) we ship our own /etc/resolv.conf pointing at our proxy
+generateHosts = false            # (not written) ditto for /etc/hosts
 
 [gpu]
-enabled = true                   # row 5: needed for ollama inference + Chromium GPU
+enabled = true                   # (not written; WSL default) row 5: needed for ollama inference + Chromium GPU
                                  # acceptable: GPU driver attack surface < usability win
 
 [time]
-useWindowsTimezone = true        # row 6: privacy-non-issue for our use case
+useWindowsTimezone = true        # (not written; WSL default) row 6: privacy-non-issue for our use case
 
 [boot]
 systemd = true                   # podman wants it (containers.conf events_logger=journald)
@@ -153,7 +161,8 @@ When a new spec demands a host↔distro bridge be closed:
 2. Add the disable knob to `/etc/wsl.conf` (per-distro) or `.wslconfig` (per-host).
 3. Add a `@trace spec:<new-spec>, spec:wsl-runtime` near the knob with a 1-line rationale.
 4. Update `cheatsheets/runtime/wsl2-isolation-boundary.md` (this file) and re-run the cheatsheet INDEX regenerator.
-5. Smoke: `tillandsias --init` rebuilds the distro; verify the bridge is closed (`ls /mnt/c` should return nothing; `which cmd.exe` should fail; etc.).
+5. Smoke: `tillandsias --init` rebuilds the distro; verify the bridge is closed (`ls /mnt/c` should return nothing; `which cmd.exe` should fail because `appendWindowsPath=false`, NOT because interop is off — `cat /proc/sys/fs/binfmt_misc/WSLInterop` reports `enabled` today; etc.).
+6. Change the writer in ONE place: `crates/tillandsias-vm-layer/src/wsl.rs:739-749` AND its copy at `:864-877` carry the same heredoc; until they are deduplicated, a knob added to one and not the other silently drifts between the recipe and `provision` paths.
 
 ## Common pitfalls
 
@@ -193,9 +202,10 @@ This cheatsheet documents the security boundary between Windows host and WSL2 di
 cat > wsl2-hardening.md <<'EOF'
 # WSL2 Isolation Boundary Hardening
 
-## Default Bridges (Closed by Tillandsias wsl.conf)
-1. /mnt/c auto-mount (drvfs) → [automount] enabled=false
-2. Windows binary interop → [interop] enabled=false
+## Default Bridges (state of the Tillandsias wsl.conf, measured yoga 2026-11-02)
+1. /mnt/c auto-mount (drvfs) → [automount] enabled=false (CLOSED; /mnt/c exists empty)
+2. Windows binary interop → [interop] enabled=true (OPEN; binfmt WSLInterop enabled);
+   appendWindowsPath=false keeps Windows binaries off $PATH
 3. WSLg X11/Wayland → [gui] gui=false
 4. /mnt/wsl vGPU → [gpu] memory limit + disable vGPU
 5. /mnt/wslg → [wsl2] guiApplications=false
@@ -207,8 +217,8 @@ cat > wsl2-hardening.md <<'EOF'
 - firewall enabled (Hyper-V boundary)
 
 ## Verification
-- ls /mnt/c should fail (auto-mount disabled)
-- which cmd.exe should fail (interop disabled)
+- ls /mnt/c should be empty (auto-mount disabled)
+- which cmd.exe should fail (appendWindowsPath=false; interop itself is enabled)
 - wsl --status shows mirrored mode, firewall enabled
 EOF
 ```

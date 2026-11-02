@@ -179,3 +179,7 @@ node_modules/
 *.wasm
 *.pdb
 .claude/settings.local.json
+
+# 1964-ppid: tempfile dirs a test leaves in a crate (an isolated podman store
+# swept pause.pid onto trunk in 8440f948f).
+/crates/*/.tmp*/
