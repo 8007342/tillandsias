@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: one-shared-project-name-to-host-label-function-feeds-the-router-the-preview-cert-publish-local-and-browser-open-so-a-project-named-devxsd-gamejam-gets-a-local-preview
+    event:
+      type: note
+      ts: "2026-11-01T23:09:46Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t230946z
+      host: calmecacpilli
+      summary: |
+        Missed caller found live (demon_attack, 2026-11-01): crates/tillandsias-browser-mcp/src/server.rs container-mode https-only refusal formatted its remedy 'open https://www.{}.localhost:<preview port> instead' from the RAW project_label, so it named www.demon_attack.localhost, which allowlist then refused. Fixed by 1935-mwxr. Holder: re-check other user-facing strings that interpolate project_label for host names; the :18443 connection-closed defect is 1935-svxq.

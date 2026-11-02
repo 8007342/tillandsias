@@ -11,3 +11,37 @@ repo = "https://github.com/city96/ComfyUI-GGUF"
 commit = "6ea2651e7df66d7585f6ffee804b20e92fb38b8a"
 license = "Apache-2.0"
 lock = "locks/ComfyUI-GGUF.txt"
+
+# 1956-bh6j (studio-asset-pipeline design D4). Each node reads its weights from
+# a folder extra_model_paths.yaml maps under /models; none may fetch at run time
+# (the studio has no egress). Reviewed at the pinned commit, 2026-11-02:
+#   IPAdapter_plus  folders ipadapter + clip_vision; no download code; insightface
+#                   is imported lazily by the FaceID path only, which is not shipped.
+#   layerdiffuse    folder layer_model; load_file_from_url downloads ONLY when the
+#                   file is absent, so the three pinned files (attn, conv,
+#                   vae_transparent_decoder) make it offline.
+#   BiRefNet_ll     folder birefnet (models/BiRefNet); LoadRembgByBiRefNetModel
+#                   reads the folder; only the AutoDownloadBiRefNetModel node
+#                   fetches (ZhengPeng7/BiRefNet* only, never RMBG) and it is
+#                   not used; bb_pretrained defaults to False (no backbone fetch).
+
+[[node]]
+name = "ComfyUI_IPAdapter_plus"
+repo = "https://github.com/cubiq/ComfyUI_IPAdapter_plus"
+commit = "a0f451a5113cf9becb0847b92884cb10cbdec0ef"
+license = "GPL-3.0"
+lock = "locks/ComfyUI_IPAdapter_plus.txt"
+
+[[node]]
+name = "ComfyUI-layerdiffuse"
+repo = "https://github.com/huchenlei/ComfyUI-layerdiffuse"
+commit = "b4f6a9e024064a4489f774a8b91049ce0b606ea3"
+license = "Apache-2.0"
+lock = "locks/ComfyUI-layerdiffuse.txt"
+
+[[node]]
+name = "ComfyUI_BiRefNet_ll"
+repo = "https://github.com/lldacing/ComfyUI_BiRefNet_ll"
+commit = "5443a2aa16cfbd98bb2f7dcc8bdcb70439e08529"
+license = "MIT"
+lock = "locks/ComfyUI_BiRefNet_ll.txt"
