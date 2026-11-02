@@ -52,7 +52,9 @@ populate_hot_paths
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft.
-ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
+# Flaky-optional installs run in the background with status files and
+# first-use shims (order 1951-vv5m).
+start_flaky_installs
 # Refresh every provider harness on each forge launch.  The updater is
 # idempotent and fail-soft; require_antigravity below remains the primary
 # lane's actionable gate when no cached binary exists.

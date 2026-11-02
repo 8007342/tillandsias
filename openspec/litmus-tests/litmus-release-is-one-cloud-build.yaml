@@ -1,0 +1,41 @@
+# @trace spec:ci-release, order:1950-b4f3
+# Supersedes litmus:release-cache-is-saved-only-by-main (1942-mijg).
+#
+# Measured on five releases (runs 39495753986 41137103161 41212733409
+# 41249590255 41283100284): the Nix cache restore found nothing in 5/5 runs
+# (GitHub scopes a cache to the ref that saved it; a release runs on a fresh
+# tag), each tag run then saved a 3.3 GB store nobody could restore (49-87 s,
+# evicting its siblings from the 10 GB quota), and the only main-scoped
+# producer — the cache_seed run dispatched on main — is a second full build
+# (run 41352565247: 66 min, cancelled by the operator). The release is ONE
+# cloud build a day; a warm-up that costs a whole build is not a cache.
+name: litmus:release-is-one-cloud-build
+spec: ci-release
+phase: pre-build
+description: >
+  release.yml carries no GitHub Actions cache step and no cache_seed input, and
+  every release.yml dispatch the release skill writes runs on the tag (none on
+  main, none with a seed input); the check is red on the pre-fix workflow and
+  skill (1942-mijg, pinned at b6af09947).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains .github/workflows/release.yml and skills/merge-to-main-and-release/SKILL.md
+  - git history contains b6af0994732f9b5ada66874665f51e605fa72fa6 (the 1942-mijg linux-next)
+
+critical_path:
+  - step: "release.yml has no cache step or seed input, and the skill dispatches only on the tag"
+    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && \"$P\" script run scripts/lua/check-release-one-cloud-build.lua"
+    timeout_ms: 5000
+    expected_behavior: "ok:release-one-cloud-build:"
+
+  - step: "the check refuses the pre-fix workflow (cache steps, seed input) and skill (a dispatch on main)"
+    command: ". scripts/plan-binary-probe.sh; P=$(resolve_plan_binary) && d=target/litmus-release-one-cloud-build && mkdir -p \"$d\" && git show b6af0994732f9b5ada66874665f51e605fa72fa6:.github/workflows/release.yml > \"$d/release.yml\" && git show b6af0994732f9b5ada66874665f51e605fa72fa6:skills/merge-to-main-and-release/SKILL.md > \"$d/SKILL.md\" && v=$(\"$P\" script run scripts/lua/check-release-one-cloud-build.lua -- \"$d/release.yml\" \"$d/SKILL.md\"); grep -q 'seed-input=cache_seed' <<<\"$v\" && grep -q 'cache-step=nix-community/cache-nix-action' <<<\"$v\" && grep -q 'dispatch-not-on-tag@' <<<\"$v\" && echo 'ok: pre-fix refused'"
+    timeout_ms: 5000
+    expected_behavior: "ok: pre-fix refused"
+
+failure_modes:
+  - "a cache step returns to release.yml without a producer the tag run can restore, and every release pays its save for nothing"
+  - "a cache_seed or warm-up dispatch returns to the release skill, so a release costs two cloud builds"
+  - "a push or schedule trigger is added to produce a main cache (refused by litmus:github-actions-budget instead)"

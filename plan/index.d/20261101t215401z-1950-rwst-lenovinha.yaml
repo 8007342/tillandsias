@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01),
+# from the 1378-7w2p spill benchmark.
+packets:
+- packet_id: a-forge-that-reads-files-while-its-tmpfs-spills-is-measured-for-read-thrash-under-a-low-swappiness
+  order: 1950-rwst
+  status: ready
+  kind: measurement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [linux, forge, measurement, tmpfs, swap, cgroup]
+  estimated_hours: 3
+  title: Measure whether a forge that reads files while its tmpfs spills thrashes under a low swappiness, before the HOT budget assumes it does not
+  context: 'lenovinha 2026-11-01, 1378-7w2p spill benchmark (swappiness=10, zram-only, memory.max=2 GiB, memory.swap.max=4 GiB): a run that copied a 4 GiB real build payload from a bind mount into a tmpfs ran 25 minutes, swapped only 312 MiB and was SIGKILLed (no oom_kill). The payload page cache is charged to the same cgroup; with low swappiness the kernel evicts those clean file pages rather than swap the tmpfs, so every read goes back to disk. The same run with 256 MiB of cached payload finished in 6 s. A forge whose HOT tmpfs nears memory.max while cargo reads sources and registry files may hit this. Unmeasured: the datum above is a benchmark artefact, not a build.'
+  exit_criteria:
+  - 'A measurement with a real forge build (sources and registry read from disk) whose HOT tmpfs is pushed past memory.high records wall time, memory.events, swap peak and major faults against the same build with HOT resident, at the host swappiness and at swappiness 60; it states whether read thrash occurs and at what HOT fill.'
+  verifiable_closure: 'Verbatim measurement lines with regime on this row and on 1375-xxzj.'
+  unscoreable: 'measurement row: it closes with recorded numbers, not a pass/fail fixture.'
+  next_action: 'Extend scripts/measure-forge-memory-budget.sh with a build-under-spill mode (fill HOT to a set fraction, then build), run on lenovinha at swappiness 10 and 60 (setting it needs the operator), and record.'
+  provenance: 1378-7w2p discarded first real-payload attempt, lenovinha 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T21:54:01Z'
+    host: lenovinha
+    summary: filed p1 ready, read-while-spilling thrash seen in the spill benchmark

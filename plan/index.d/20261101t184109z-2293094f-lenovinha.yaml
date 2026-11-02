@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: plan-next-answers-from-the-trunk-ledger-or-says-how-stale-its-index-is
+    event:
+      type: note
+      ts: "2026-11-01T18:41:09Z"
+      agent_id: linux-lenovinha-opus5-20261101t184109z
+      host: lenovinha
+      summary: |-
+        PR 795. Design: confidence left at exact; the stale verdict is its own field stale_ledger plus line 2 of the answer (796-4ydb: an omission is not a citation weakness), which departs from criterion 1 wording. Criterion 2 evidence corrected: 1233/1236/1237 are in_progress on trunk itself; 776-jcf3 is ready on trunk and check-claims-across-branches.sh reports it held only because windows-next, an ancestor of trunk last moved 2026-09-25, still folds an old claim.

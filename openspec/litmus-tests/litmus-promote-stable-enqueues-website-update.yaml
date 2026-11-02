@@ -1,0 +1,45 @@
+# @trace spec:ci-release
+# @trace order:1846-dykd
+#
+# Operator request 2026-10-24: some releases need a website update (the first
+# retires local host-checkout launches, a main feature on tillandsias.org).
+# A `Website-Update: <reason>` trailer anywhere in previous-stable..release
+# marks it; promote-stable.sh step 5, after the stable tag and the deploy ref
+# landed, enqueues ONE website-update task (tag + reasons only) on the
+# 8007342/tillandsias.org coordinator namespace through the 1826 client.
+# Idempotent per tag; a missing client, token or coordinator defers with
+# website-update:deferred:<tag>:<why> and never fails the promotion.
+#
+# The fixture extracts step 5 from promote-stable.sh and drives it against a
+# throwaway repo and a stub client: one call with the namespace, tag and
+# reason; no second call for the same tag; no call and no line without a
+# trailer (vacuous, recorded on the row); a failing or absent client defers
+# with rc 0 and no marker. Static arms: step 5 sits between step 4 and
+# promoted:, and the previous stable is read before step 3 moves the tag.
+name: litmus:promote-stable-enqueues-website-update
+spec: ci-release
+phase: pre-build
+description: Stable promotion enqueues one website-update task per tag when the release range carries a Website-Update trailer, and never blocks promotion
+severity: medium
+size: instant
+
+preconditions:
+  - bash, git, jq; offline (a stub coordinator client)
+
+critical_path:
+  - step: "one website-update per tag, deferred never fails promotion"
+    command: "bash scripts/test-promote-stable-enqueues-website-update.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: step 5 enqueues one website-update per tag and never blocks promotion"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "PASS: step 5 enqueues one website-update per tag and never blocks promotion"
+  log_fields:
+    spec: ci-release
+    test: promote-stable-enqueues-website-update
+
+rollback:
+  on_failure: "read the FAIL lines; step 5 is _enqueue_website_update in promote-stable.sh, the reasons come from scripts/release-website-marker.sh"
+  command: "grep -n 'website-update' scripts/promote-stable.sh"

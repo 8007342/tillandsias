@@ -11,7 +11,10 @@
 --     and evented;
 --   3 the same bytes again commit nothing;
 --   4 the real HTTP front refuses a traversal POST (403), commits an
---     allowlisted one, 404s a PWA path and 400s a malformed body.
+--     allowlisted one, 404s a PWA path and 400s a malformed body;
+--   5 an own-writer studio (decap): what a proxied write request wrote is
+--     committed when allowlisted and removed when not, and an edit made
+--     before the request (the agent's) is left untouched.
 -- Also checks the committed registry JSON is what registry.lua generates.
 --
 -- The verdict is the container's STDOUT alone (1926-pjn8): pull progress on
