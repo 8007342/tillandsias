@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl, 2026-11-02).
+packets:
+- packet_id: land-queue-reads-the-whole-queue-not-ghs-first-page-of-30
+  order: 1959-tdn5
+  status: completed
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - scripts
+  - ci
+  - linux
+  estimated_hours: 2
+  title: land-queue.sh lists the queue with `gh pr list` and no --limit, so gh returns only the newest 30 open PRs and with 30+ open (drafts count) the oldest non-draft PRs never land
+  context: 'Coordinator report, macuahuitl 2026-11-02: scripts/land-queue.sh reads its queue with `gh pr list --base linux-next --state open --json …` and no --limit. gh pages that at 30, newest first. With 30+ PRs open against linux-next (drafts count toward the 30) the OLDEST non-draft PRs are not in the capture at all: #679 was invisible to the queue, which reported a smaller queue than existed and never landed it. The fixture scripts/test-land-queue.sh could not see it because its fake gh ignored --limit and returned the whole file.'
+  exit_criteria:
+  - 'Every `gh … list` call in scripts/land-queue.sh passes an explicit --limit from one named constant (GH_LIST_LIMIT, default 500, overridable via TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT).'
+  - 'A capture whose length equals the limit is refused non-zero with a named line (fail:land-queue:queue-may-be-truncated) rather than landed from, so a queue larger than the limit cannot silently lose its oldest rows.'
+  - 'scripts/test-land-queue.sh gains an arm whose fake gh honours --limit (default 30, newest first) over 31 open PRs where only the oldest is non-draft; the arm fails on the unfixed script and passes after, plus a twin that asserts the refusal when the capture equals the limit.'
+  - 'Other scripts/ `gh pr list` / `gh run list` sites are audited: scripts/resolve-release-run.sh and skills/merge-to-main-and-release (gh pr list --head linux-next) are single-item lookups, not queue enumerations, and are left as they are.'
+  verifiable_closure: 'scripts/test-land-queue.sh arms 21 and 21b: ARM 21 (fake gh with gh''s real paging, 31 open PRs, 30 newer drafts) lands PR #1; ARM 21b (600 PRs, capture equal to the limit) prints fail:land-queue:queue-may-be-truncated and exits 1. Both red on the pre-fix script (queue read as empty, rc=0), green after. The fixture is already a build.sh --check step (1316-bnzt).'
+  next_action: none — completed in the filing commit.
+  provenance: coordinator report (macuahuitl, 2026-11-02); the bug was first observed as PR #679 missing from the queue.
+  events:
+  - type: filed
+    ts: '2026-11-02T04:00:00Z'
+    host: calmecacpilli
+    summary: filed p1 at the coordinator's request; fixture arm written red first (ARM 21 and 21b both FAIL on the unfixed script, rc=0 with "the queue is empty")
+  - type: completed
+    ts: '2026-11-02T04:30:00Z'
+    host: calmecacpilli
+    summary: 'explicit --limit "$GH_LIST_LIMIT" (500) on the queue read plus a truncation guard; scripts/test-land-queue.sh ARM 21/21b green. ARM 20a/20b fail identically on the pristine origin/linux-next tree on this host and are unrelated (not touched).'
