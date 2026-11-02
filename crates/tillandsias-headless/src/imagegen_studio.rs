@@ -153,7 +153,10 @@ mod tests {
         // Default: no plan, so no build and no container.
         assert_eq!(plan(&ProjectConfig::default(), cache.path()), None);
         let off = ProjectConfig {
-            imagegen: Some(ImagegenConfig { studio: false }),
+            imagegen: Some(ImagegenConfig {
+                studio: false,
+                ..Default::default()
+            }),
             ..Default::default()
         };
         assert_eq!(plan(&off, cache.path()), None);

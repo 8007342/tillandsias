@@ -28,6 +28,12 @@ pub enum Engine {
     SdCpp,
     /// ComfyUI at the pinned ref, with the custom-node packages (name, commit).
     ComfyUi { nodes: Vec<(String, String)> },
+    /// CorridorKey 2.0 infer.py at the pinned upstream commit (1956-ucix,
+    /// design D9); `upstream` is the repository, `commit` its 40-hex sha.
+    CorridorKey {
+        upstream: &'static str,
+        commit: &'static str,
+    },
 }
 
 impl Engine {
@@ -39,6 +45,9 @@ impl Engine {
             Engine::ComfyUi { nodes } => json!({
                 "name": "comfyui", "ref": COMFYUI_REF, "sha": COMFYUI_SHA,
                 "nodes": nodes.iter().map(|(n, c)| json!({ "name": n, "commit": c })).collect::<Vec<_>>(),
+            }),
+            Engine::CorridorKey { upstream, commit } => json!({
+                "name": "corridorkey", "ref": upstream, "sha": commit, "nodes": [],
             }),
         }
     }
@@ -69,6 +78,11 @@ pub struct Record {
     pub placement: String,
     /// `(path, sha256)` of the family spec, when one was given.
     pub family: Option<(String, String)>,
+    /// D6: acknowledgement ids admitting each of `models`, in order, when
+    /// the weights are restricted (1956-ucix); `None` for permissive rows.
+    pub consent: Option<Vec<String>>,
+    /// The engine's command-line arguments, for a CLI engine (1956-ucix).
+    pub cli: Option<Vec<String>>,
 }
 
 impl Record {
@@ -78,10 +92,12 @@ impl Record {
             "pipelineVersion": crate::VERSION.trim(),
             "engine": self.engine.to_json(),
             "workflow": self.workflow.as_ref().map(|(p, s)| json!({ "path": p, "sha256": s })),
-            "models": self.models.iter().map(|m| json!({
+            "models": self.models.iter().enumerate().map(|(i, m)| json!({
                 "file": m.cache_name(), "repo": m.repo, "revision": m.revision,
-                "sha256": m.sha256, "licence": m.licence, "consent": null,
+                "sha256": m.sha256, "licence": m.licence,
+                "consent": self.consent.as_ref().and_then(|c| c.get(i)),
             })).collect::<Vec<_>>(),
+            "cli": self.cli,
             "inputs": self.inputs.iter().map(|i| json!({
                 "name": i.name, "path": i.path, "sha256": i.sha256,
             })).collect::<Vec<_>>(),
@@ -176,6 +192,8 @@ mod tests {
             tier: Some("I0".into()),
             placement: "cuda".into(),
             family: None,
+            consent: None,
+            cli: None,
         };
         let v = rec.write_beside(&out).unwrap();
         assert_eq!(v["schema"], SCHEMA);

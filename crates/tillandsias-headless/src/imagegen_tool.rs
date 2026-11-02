@@ -546,6 +546,8 @@ pub fn call(
             tier: Some(job.tier.tier.clone()),
             placement: out.backend.clone(),
             family: None,
+            consent: None,
+            cli: None,
         };
         let prov = record.write_beside(&host)?;
         images.push(json!({

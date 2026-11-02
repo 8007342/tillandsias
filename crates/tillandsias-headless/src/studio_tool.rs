@@ -602,7 +602,11 @@ fn scratch_dir(project: &str, instance: &str) -> Result<PathBuf, String> {
 /// in the live forge of this lane (studio.rs `checkout_dir`), so the read
 /// goes through `podman exec` there after `realpath` proves the resolved file
 /// stays under the checkout; the seam reads from a directory.
-fn read_checkout_file(project: &str, instance: &str, rel: &str) -> Result<String, String> {
+pub(crate) fn read_checkout_file(
+    project: &str,
+    instance: &str,
+    rel: &str,
+) -> Result<String, String> {
     let rel = checkout_relative(rel)?;
     if let Some(root) = seam()
         .lock()
@@ -782,6 +786,8 @@ pub fn call(
             tier: plan.tier.clone(),
             placement: placement.clone(),
             family: plan.family.clone(),
+            consent: None,
+            cli: None,
         };
         let prov = record.write_beside(&host)?;
         let forge = format!("{FORGE_SCRATCH}/{sub}/{file}");
