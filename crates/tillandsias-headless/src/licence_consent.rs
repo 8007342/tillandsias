@@ -244,7 +244,9 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
             ob(C::FieldOfUse, ""),
             ob(C::Review { clause: NVIDIA_UNREAD.into() }, NVIDIA_UNREAD),
         ],
-        "corridor-key-licence-v2" => vec![
+        // The id images/imagegen-corridorkey/weights.tsv (1956-ucix) spells,
+        // and the older spelling of the same licence.
+        "corridor-key-licence-2.0" | "corridor-key-licence-v2" => vec![
             ob(C::Attribution { text: "CorridorKey".into() }, CK_ATTRIBUTION),
             ob(C::Notice, CC_NOTICE),
             ob(C::ShareAlike, CK_SA),
@@ -563,16 +565,15 @@ impl Acknowledgement {
 /// redistribution, or clicking through gated terms on the operator's behalf.
 /// It is unsigned here: the operator signs it with an enrolled key through
 /// the accept-licence skill, and the signed record lives in each project.
-pub fn operator_standing_acknowledgement() -> Acknowledgement {
-    Acknowledgement {
-        licence: "corridor-key-licence-v2".into(),
-        licence_sha256: "c92ce56f64162b231c7ce08ce3ed7d8cae15f01a560ca05a8e8db67878eb0065".into(),
-        covers: vec![
-            "nikopueringer/CorridorKey2.0".into(),
-            "nvidia/C-RADIOv4-SO400M".into(),
-            "Ruicheng/moge-2-vitb-normal".into(),
-            "google-deepmind/representations4d".into(),
-        ],
+///
+/// One record per licence TEXT (a record binds one licence hash), so the one
+/// grant is four records: CorridorKey 2.0 and its three foundation models.
+/// They are the seeds in `licences/acknowledgements/`.
+pub fn operator_standing_acknowledgements() -> Vec<Acknowledgement> {
+    let seed = |licence: &str, licence_sha256: &str, repo: &str| Acknowledgement {
+        licence: licence.into(),
+        licence_sha256: licence_sha256.into(),
+        covers: vec![repo.into()],
         grantor: "operator".into(),
         scope: "operator-projects".into(),
         r#use: "non-sale".into(),
@@ -581,7 +582,34 @@ pub fn operator_standing_acknowledgement() -> Acknowledgement {
         strength: "software-password".into(),
         host: "calmecacpilli".into(),
         signature: String::new(),
-    }
+    };
+    vec![
+        seed(
+            "corridor-key-licence-2.0",
+            "c92ce56f64162b231c7ce08ce3ed7d8cae15f01a560ca05a8e8db67878eb0065",
+            "nikopueringer/CorridorKey2.0",
+        ),
+        seed(
+            "nvidia-open-model-license",
+            "pending:https://developer.download.nvidia.com/licenses/nvidia-open-model-license-agreement-june-2024.pdf",
+            "nvidia/C-RADIOv4-SO400M",
+        ),
+        seed(
+            "mit",
+            "ad7d951c80c5fc2b2bce035f2041bc0a0dbf9028c8ecc4c9a8e1fba8130b6b59",
+            "Ruicheng/moge-2-vitb-normal",
+        ),
+        seed(
+            "cc-by-4.0",
+            "d557539df68e771cc1eedcc91d13f70fca930e508d11eedcafa4b15db49e3744",
+            "google-deepmind/representations4d",
+        ),
+    ]
+}
+
+/// The CorridorKey record of acknowledgement #1.
+pub fn operator_standing_acknowledgement() -> Acknowledgement {
+    operator_standing_acknowledgements().swap_remove(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -605,8 +633,12 @@ pub fn obligations_spec(artefact: &str, licence_id: &str, obligations: &[Obligat
     };
     let mut s = String::new();
     s.push_str(&format!("# Third-party licence: {licence_id}\n\n"));
+    // The trace names a spec in the AGREEING project, not in Tillandsias, so
+    // the id is assembled here and the ghost-trace check does not read it as
+    // a reference into this checkout.
     s.push_str(&format!(
-        "@trace spec:third-party-licence-{}\n\n",
+        "@trace {}:third-party-licence-{}\n\n",
+        "spec",
         slugify(licence_id)
     ));
     s.push_str("## Purpose\n\n");
@@ -899,35 +931,61 @@ pub fn register_admits_with_consent_in(
         Err(e) => e,
     };
     let rows = parse_restricted(restricted_register)?;
-    let Some(r) = rows.iter().find(|r| {
-        r.repo == row.repo
-            && r.revision == row.revision
-            && r.file == row.file
-            && r.sha256.eq_ignore_ascii_case(&row.sha256)
-    }) else {
+    let Some(r) = find_restricted(&rows, &row.repo, &row.revision, &row.file, &row.sha256) else {
         return Err(format!(
             "{permissive_err}; nor in images/models/licence-register-restricted.tsv"
         ));
     };
+    admit_restricted_row(
+        r,
+        &row.label(),
+        project_ack_dir,
+        &[requester_scope],
+        verifier,
+    )
+}
+
+fn find_restricted<'a>(
+    rows: &'a [RestrictedRow],
+    repo: &str,
+    revision: &str,
+    file: &str,
+    sha256: &str,
+) -> Option<&'a RestrictedRow> {
+    rows.iter().find(|r| {
+        r.repo == repo
+            && r.revision == revision
+            && r.file == file
+            && r.sha256.eq_ignore_ascii_case(sha256)
+    })
+}
+
+/// The D6 gate for one restricted row: not gated, not forbidden outright, its
+/// licence text pinned, and an acknowledgement in `project_ack_dir` that
+/// covers the repo, names the same licence id and text hash, carries one of
+/// `requester_scopes`, is in force, and whose SSHSIG verifies.
+fn admit_restricted_row(
+    r: &RestrictedRow,
+    label: &str,
+    project_ack_dir: &Path,
+    requester_scopes: &[&str],
+    verifier: &Verifier,
+) -> Result<Admission, String> {
     if r.gated != "false" {
         return Err(format!(
-            "model_refused: {} is gated; clicking through gated terms on a user's behalf is never authorised",
-            row.label()
+            "model_refused: {label} is gated; clicking through gated terms on a user's behalf is never authorised"
         ));
     }
     if let Some(why) = forbidden_outright(&r.spdx) {
         return Err(format!(
-            "licence_forbids_use: {} licence {}: {why}",
-            row.label(),
+            "licence_forbids_use: {label} licence {}: {why}",
             r.spdx
         ));
     }
     if r.licence_sha256.starts_with("pending:") {
         return Err(format!(
-            "licence_text_unpinned: {} licence {} has no licence text hash in the register ({}); nothing can be acknowledged against it",
-            row.label(),
-            r.spdx,
-            r.licence_sha256
+            "licence_text_unpinned: {label} licence {} has no licence text hash in the register ({}); nothing can be acknowledged against it",
+            r.spdx, r.licence_sha256
         ));
     }
     let now = chrono::Utc::now();
@@ -949,10 +1007,11 @@ pub fn register_admits_with_consent_in(
             ));
             continue;
         }
-        if ack.scope != requester_scope {
+        if !requester_scopes.contains(&ack.scope.as_str()) {
             reasons.push(format!(
-                "{slug}: scope {} does not cover the requester's scope {requester_scope}",
-                ack.scope
+                "{slug}: scope {} does not cover the requester's scope {}",
+                ack.scope,
+                requester_scopes.join(" or ")
             ));
             continue;
         }
@@ -982,11 +1041,102 @@ pub fn register_admits_with_consent_in(
         reasons.join("; ")
     };
     Err(format!(
-        "licence_acknowledgement_required: {} licence {} ({}): {detail}. Run the accept-licence skill in the project.",
-        row.label(),
+        "licence_acknowledgement_required: {label} licence {} ({}): {detail}. Run the accept-licence skill in the project.",
         r.spdx,
         ObligationClass::render_list(&r.obligations)
     ))
+}
+
+// ---------------------------------------------------------------------------
+// The one-call gate studio jobs use (1956-ucix: studio_key.rs)
+// ---------------------------------------------------------------------------
+
+/// One restricted artefact a job wants to use: enough to match a register row
+/// (repo, revision, file, sha256) and the acknowledgement that covers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestrictedArtefact {
+    pub licence: String,
+    pub repo: String,
+    pub revision: String,
+    pub file: String,
+    pub sha256: String,
+}
+
+/// Where the gate reads `project`'s acknowledgement records on this host:
+/// `TILLANDSIAS_LICENCE_ACK_DIR`, or
+/// `<state dir>/licence-acknowledgements/<project slug>/`. The durable record
+/// is the one committed in the project (D6); the tray keeps this copy when it
+/// signs, because the host has no checkout handle for a bare project label.
+pub fn project_acknowledgement_dir(project: &str) -> PathBuf {
+    if let Some(p) = std::env::var_os("TILLANDSIAS_LICENCE_ACK_DIR") {
+        return PathBuf::from(p);
+    }
+    tillandsias_core::config::state_dir()
+        .join("licence-acknowledgements")
+        .join(slugify(project))
+}
+
+/// Does a recorded acknowledgement admit every artefact for `project`?
+/// `Ok(ids)` carries one acknowledgement id (the record's slug) per artefact,
+/// in order, for the provenance `consent` field; `Err` names the first
+/// artefact refused, prefixed `consent_required:`. A request from `project`
+/// is covered by a record of scope `project:<project>` or, for the operator's
+/// own projects, `operator-projects` (acknowledgement #1).
+pub fn admits_restricted(
+    project: &str,
+    artefacts: &[RestrictedArtefact],
+) -> Result<Vec<String>, String> {
+    admits_restricted_in(
+        RESTRICTED_REGISTER_TSV,
+        project,
+        artefacts,
+        &project_acknowledgement_dir(project),
+        &Verifier::for_host(),
+    )
+}
+
+/// [`admits_restricted`] against an explicit register, record dir and
+/// verifier (fixtures).
+pub fn admits_restricted_in(
+    restricted_register: &str,
+    project: &str,
+    artefacts: &[RestrictedArtefact],
+    project_ack_dir: &Path,
+    verifier: &Verifier,
+) -> Result<Vec<String>, String> {
+    if artefacts.is_empty() {
+        return Err(format!(
+            "consent_required: {project}: no artefact named (nothing to admit)"
+        ));
+    }
+    let rows = parse_restricted(restricted_register)
+        .map_err(|e| format!("consent_required: {project}: {e}"))?;
+    let project_scope = format!("project:{project}");
+    let scopes = [project_scope.as_str(), "operator-projects"];
+    let mut ids = Vec::with_capacity(artefacts.len());
+    for a in artefacts {
+        let label = format!("{}@{} {}", a.repo, a.revision, a.file);
+        let Some(r) = find_restricted(&rows, &a.repo, &a.revision, &a.file, &a.sha256) else {
+            return Err(format!(
+                "consent_required: {project}: {label} (sha256 {}) is not in images/models/licence-register-restricted.tsv; nothing was fetched or queued",
+                a.sha256
+            ));
+        };
+        if !r.spdx.eq_ignore_ascii_case(&a.licence) {
+            return Err(format!(
+                "consent_required: {project}: {label} is registered under licence {} but the job names {}; nothing was fetched or queued",
+                r.spdx, a.licence
+            ));
+        }
+        let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
+            .map_err(|e| format!("consent_required: {project}: {e} Nothing was fetched or queued."))?;
+        ids.push(
+            admitted
+                .acknowledgement_slug
+                .unwrap_or_else(|| "permissive".to_string()),
+        );
+    }
+    Ok(ids)
 }
 
 #[cfg(test)]
@@ -1036,6 +1186,9 @@ mod tests {
     /// is the Linux signer) and return the record carrying the armored SSHSIG.
     fn sign(dir: &Path, key: &Path, mut ack: Acknowledgement) -> Acknowledgement {
         let msg = dir.join("statement");
+        // ssh-keygen -Y sign keeps an existing .sig; a stale one would be
+        // read back as this record's signature.
+        let _ = fs::remove_file(dir.join("statement.sig"));
         fs::write(&msg, ack.statement_text()).unwrap();
         let st = Command::new("ssh-keygen")
             .args(["-Y", "sign", "-n", NAMESPACE, "-f"])
@@ -1210,14 +1363,15 @@ mod tests {
     /// required text, in the generated OpenSpec spec.
     #[test]
     fn an_attribution_licence_yields_an_attribution_requirement_in_the_spec() {
-        let obligations = obligations_for("corridor-key-licence-v2");
+        let obligations = obligations_for("corridor-key-licence-2.0");
+        assert_eq!(obligations, obligations_for("corridor-key-licence-v2"));
         assert!(obligations.iter().any(|o| matches!(
             &o.class,
             ObligationClass::Attribution { text } if text == "CorridorKey"
         )));
         let spec = obligations_spec(
-            "nikopueringer/CorridorKey2.0@cf44a8db3f024bb49fd59daa408848ccf05f7477/corridorkey_v2.safetensors",
-            "corridor-key-licence-v2",
+            "nikopueringer/CorridorKey2.0@cf44a8db3f024bb49fd59daa408848ccf05f7477/weights/corridorkey_v2.safetensors",
+            "corridor-key-licence-2.0",
             &obligations,
         );
         assert!(spec.contains("This project depends on nikopueringer/CorridorKey2.0"), "{spec}");
@@ -1364,7 +1518,7 @@ mod tests {
         let ck = parse_restricted(restricted_register_tsv())
             .unwrap()
             .into_iter()
-            .find(|r| r.file == "corridorkey_v2.safetensors")
+            .find(|r| r.file.ends_with("corridorkey_v2.safetensors"))
             .unwrap();
         let row = ModelFile {
             tier: "I1/corridorkey".into(),
@@ -1406,15 +1560,121 @@ mod tests {
                 r.spdx
             );
         }
-        // The yaml record round-trips, and the committed seed is that record.
-        let ack = operator_standing_acknowledgement();
-        let back = Acknowledgement::from_yaml(&ack.to_yaml()).unwrap();
-        assert_eq!(back, ack);
-        let seed = Acknowledgement::from_yaml(include_str!(
-            "../../../licences/acknowledgements/operator-standing-approval.yaml"
-        ))
-        .unwrap();
-        assert_eq!(seed, ack);
-        assert!(seed.signature.is_empty(), "the seed is signed by the operator, not by a build");
+        // The yaml record round-trips, and the committed seeds are the four
+        // records of acknowledgement #1, unsigned.
+        let seeds = [
+            include_str!("../../../licences/acknowledgements/nikopueringer-corridorkey2-0.yaml"),
+            include_str!("../../../licences/acknowledgements/nvidia-c-radiov4-so400m.yaml"),
+            include_str!("../../../licences/acknowledgements/ruicheng-moge-2-vitb-normal.yaml"),
+            include_str!("../../../licences/acknowledgements/google-deepmind-representations4d.yaml"),
+        ];
+        let acks = operator_standing_acknowledgements();
+        assert_eq!(acks.len(), seeds.len());
+        for (ack, seed) in acks.iter().zip(seeds) {
+            let back = Acknowledgement::from_yaml(&ack.to_yaml()).unwrap();
+            assert_eq!(&back, ack);
+            let seed = Acknowledgement::from_yaml(seed).unwrap();
+            assert_eq!(&seed, ack, "committed seed differs from the code's record");
+            assert!(seed.signature.is_empty(), "the seed is signed by the operator, not by a build");
+            assert_eq!(seed.slug(), slugify(&ack.covers[0]));
+        }
+        // Every repo in the register is covered by one seed record.
+        for r in &rows {
+            assert!(
+                acks.iter().any(|a| a.covers.contains(&r.repo) && a.licence == r.spdx),
+                "{}: no seed record covers {} under {}",
+                r.name,
+                r.repo,
+                r.spdx
+            );
+        }
+    }
+
+    /// The one-call gate studio_key.rs uses (1956-ucix): with the four signed
+    /// standing records in the project's record dir, every artefact of the
+    /// CorridorKey weight set is admitted for an operator project, in order,
+    /// one acknowledgement id each; a project with no record is refused with
+    /// consent_required naming the first artefact. The fixture register is
+    /// the shipped one with the NVIDIA licence hash pinned, since the shipped
+    /// row is pending; against the shipped register the C-RADIO rows are
+    /// refused as licence_text_unpinned, which is the honest state.
+    #[test]
+    fn admits_restricted_admits_the_corridorkey_set_for_operator_projects() {
+        let dir = disk_scratch("admits");
+        let (key, signers) = enrol(&dir, "operator");
+        let verifier = Verifier::new(&signers);
+        let acks = dir.join("acks");
+        fs::create_dir_all(&acks).unwrap();
+        let nvidia_hash = "9".repeat(64);
+        let shipped = restricted_register_tsv();
+        let pinned: String = shipped
+            .lines()
+            .map(|l| {
+                let l = match l.split_once("\tpending:") {
+                    Some((head, _)) => format!("{head}\t{nvidia_hash}"),
+                    None => l.to_string(),
+                };
+                l + "\n"
+            })
+            .collect();
+        for mut ack in operator_standing_acknowledgements() {
+            if ack.licence_sha256.starts_with("pending:") {
+                ack.licence_sha256 = nvidia_hash.clone();
+            }
+            let signed = sign(&dir, &key, ack);
+            fs::write(acks.join(signed.slug() + ".yaml"), signed.to_yaml()).unwrap();
+        }
+        let rows = parse_restricted(shipped).unwrap();
+        let artefacts: Vec<RestrictedArtefact> = rows
+            .iter()
+            .map(|r| RestrictedArtefact {
+                licence: r.spdx.clone(),
+                repo: r.repo.clone(),
+                revision: r.revision.clone(),
+                file: r.file.clone(),
+                sha256: r.sha256.clone(),
+            })
+            .collect();
+        assert!(artefacts.len() >= 30, "{}", artefacts.len());
+
+        let ids = admits_restricted_in(&pinned, "demon_attack", &artefacts, &acks, &verifier).unwrap();
+        assert_eq!(ids.len(), artefacts.len());
+        assert_eq!(ids[0], "nikopueringer-corridorkey2-0");
+        assert!(ids.iter().any(|i| i == "nvidia-c-radiov4-so400m"));
+        assert!(ids.iter().any(|i| i == "ruicheng-moge-2-vitb-normal"));
+        assert!(ids.iter().any(|i| i == "google-deepmind-representations4d"));
+
+        // No record: refused, naming the first artefact.
+        let err = admits_restricted_in(&pinned, "someone-elses-game", &artefacts, &dir.join("empty"), &verifier)
+            .unwrap_err();
+        assert!(err.starts_with("consent_required: someone-elses-game:"), "{err}");
+        assert!(err.contains("nikopueringer/CorridorKey2.0"), "{err}");
+
+        // A project-scoped record admits only its own project.
+        let mut mine = operator_standing_acknowledgement();
+        mine.scope = "project:my-game".into();
+        mine.grantor = "operator".into();
+        let mine = sign(&dir, &key, mine);
+        let mine_dir = dir.join("mine");
+        fs::create_dir_all(&mine_dir).unwrap();
+        fs::write(mine_dir.join(mine.slug() + ".yaml"), mine.to_yaml()).unwrap();
+        let ck: Vec<RestrictedArtefact> = artefacts.iter().filter(|a| a.repo.contains("CorridorKey")).cloned().collect();
+        assert_eq!(admits_restricted_in(&pinned, "my-game", &ck, &mine_dir, &verifier).unwrap().len(), 2);
+        let err = admits_restricted_in(&pinned, "other-game", &ck, &mine_dir, &verifier).unwrap_err();
+        assert!(err.contains("scope project:my-game"), "{err}");
+
+        // The shipped register: C-RADIO stays unpinned, so the set is refused there.
+        let err = admits_restricted_in(shipped, "demon_attack", &artefacts, &acks, &verifier).unwrap_err();
+        assert!(err.contains("licence_text_unpinned"), "{err}");
+        assert!(err.contains("nvidia/C-RADIOv4-SO400M"), "{err}");
+
+        // Empty input is a refusal, not an admission.
+        assert!(admits_restricted_in(&pinned, "demon_attack", &[], &acks, &verifier).is_err());
+        // The production entry point reads the record dir from the environment.
+        // SAFETY: tests in this module run in one process; the variable only
+        // names a scratch directory and is read back immediately.
+        unsafe { std::env::set_var("TILLANDSIAS_LICENCE_ACK_DIR", &acks) };
+        assert_eq!(project_acknowledgement_dir("demon_attack"), acks);
+        let _ = admits_restricted("demon_attack", &ck);
     }
 }

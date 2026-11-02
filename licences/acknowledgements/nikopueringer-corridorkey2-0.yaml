@@ -2,27 +2,27 @@
 # Signed over `statement` as SSHSIG in namespace tillandsias-approval@v1; verify with
 #   ssh-keygen -Y verify -n tillandsias-approval@v1 -I <grantor> -f <allowed_signers> -s <sig> < <statement>
 #
-# ACKNOWLEDGEMENT #1: the operator's standing approval, relayed by the
-# coordinator (macuahuitl-fedora) on 2026-11-01 and confirmed to the
-# calmecacpilli session the same day, verbatim: "For our own projects we shall
-# have a standing approval to use all of those free models, we'll not be
-# selling any of those assets." It covers the free models on demon_attack's
-# licence-review.md and kumbia-kombat's list, plus the restricted-free ones
-# (non-commercial weights and CorridorKey 2.0 with its three foundation
-# models). It does NOT cover bundling or redistributing restricted weights for
-# other users, or clicking through gated terms (for example FLUX.1-schnell) on
-# the operator's behalf.
+# ACKNOWLEDGEMENT #1 (one record per licence text): the operator's standing
+# approval, relayed by the coordinator (macuahuitl-fedora) on 2026-11-01 and
+# confirmed to the calmecacpilli session the same day, verbatim: "For our own
+# projects we shall have a standing approval to use all of those free models,
+# we'll not be selling any of those assets." It covers the free models on
+# demon_attack's licence-review.md and kumbia-kombat's list, plus the
+# restricted-free ones (non-commercial weights and CorridorKey 2.0 with its
+# three foundation models). It does NOT cover bundling or redistributing
+# restricted weights for other users, or clicking through gated terms (for
+# example FLUX.1-schnell) on the operator's behalf.
 #
 # The signature is empty: no approval key is enrolled on this host yet
 # (os-verified-approval-gates D1 is implemented for macOS only). Until the
 # operator signs this statement through the accept-licence skill, the gate
 # refuses the rows it covers with licence_acknowledgement_required, which is
 # the honest state. The seed is also in code:
-# licence_consent::operator_standing_acknowledgement().
+# licence_consent::operator_standing_acknowledgements().
 record: tillandsias-licence-acknowledgement v1
-licence: corridor-key-licence-v2
+licence: corridor-key-licence-2.0
 licence_sha256: c92ce56f64162b231c7ce08ce3ed7d8cae15f01a560ca05a8e8db67878eb0065
-covers: [nikopueringer/CorridorKey2.0, nvidia/C-RADIOv4-SO400M, Ruicheng/moge-2-vitb-normal, google-deepmind/representations4d]
+covers: [nikopueringer/CorridorKey2.0]
 grantor: operator
 scope: operator-projects
 use: non-sale
@@ -32,9 +32,9 @@ strength: software-password
 host: calmecacpilli
 statement: |
   tillandsias-licence-acknowledgement v1
-  licence: corridor-key-licence-v2
+  licence: corridor-key-licence-2.0
   licence_sha256: c92ce56f64162b231c7ce08ce3ed7d8cae15f01a560ca05a8e8db67878eb0065
-  covers: nikopueringer/CorridorKey2.0, nvidia/C-RADIOv4-SO400M, Ruicheng/moge-2-vitb-normal, google-deepmind/representations4d
+  covers: nikopueringer/CorridorKey2.0
   grantor: operator
   scope: operator-projects
   use: non-sale
