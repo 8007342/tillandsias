@@ -20,7 +20,7 @@ use std::env;
 use std::fs;
 use std::io::{Read, Write};
 use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::{UnixListener, UnixStream};
+use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -534,10 +534,9 @@ impl Drop for AsyncTaskExecutor {
 type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>;
 
 fn control_socket_path() -> PathBuf {
-    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })));
-    runtime_dir.join("tillandsias/control.sock")
+    // 1944-trsp: the same directory the CLI probes and the lock lives in (an
+    // empty XDG_RUNTIME_DIR used to resolve differently here).
+    crate::control_socket_host_dir().join("control.sock")
 }
 
 // Env var that overrides the default Linux-native host project root.
@@ -1395,13 +1394,14 @@ fn start_control_socket_server(shutdown: Arc<ShutdownLatch>) -> Result<(), Strin
         fs::create_dir_all(parent)
             .map_err(|err| format!("failed to create control socket directory: {err}"))?;
     }
-    if socket_path.exists() {
-        fs::remove_file(&socket_path)
-            .map_err(|err| format!("failed to remove stale control socket: {err}"))?;
+    // ORDER 1944-trsp: never unlinks a socket someone still answers on.
+    let listener = crate::tray_presence::bind_control_socket(&socket_path)?;
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        if let Ok(m) = fs::symlink_metadata(&socket_path) {
+            let _ = crate::BOUND_CONTROL_SOCKET.set((m.dev(), m.ino()));
+        }
     }
-
-    let listener = UnixListener::bind(&socket_path)
-        .map_err(|err| format!("failed to bind control socket: {err}"))?;
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod control socket: {err}"))?;
 
@@ -1491,6 +1491,11 @@ struct TrayService {
     /// 679-vdi6: wakes the idle wait when a burst is deferred, so the trailing
     /// flush needs no periodic tick.
     emit_pending_notify: tokio::sync::Notify,
+    /// 1954-btht: the cloud-project launch a menu click runs. It can block for
+    /// a whole forge image build (try_build_forge_image_on_demand), so it must
+    /// never run on the path that answers GetLayout. A field, not a call, so a
+    /// fixture can put a launch that blocks behind a real menu click.
+    cloud_launcher: fn(Arc<TrayService>, ProjectEntry, LaunchKind),
 }
 
 /// Minimum spacing between tray signal-emission groups (944-jaef).
@@ -1594,6 +1599,7 @@ impl TrayService {
             ),
             emit_pending: AtomicBool::new(false),
             emit_pending_notify: tokio::sync::Notify::new(),
+            cloud_launcher: handle_launch_cloud_project,
         }
     }
 
@@ -3745,7 +3751,33 @@ impl DbusMenuIface {
                                 if let Some(cloud_entry) =
                                     self.0.cloud_project_by_name(&project_name)
                                 {
-                                    handle_launch_cloud_project(self.0.clone(), cloud_entry, kind);
+                                    // 1954-btht: off the method's own path. The
+                                    // launch can wait out a whole forge image
+                                    // build, and inline it held this Event
+                                    // reply for that long, so the desktop saw
+                                    // a frozen tray (macuahuitl 2026-11-01).
+                                    let launcher = self.0.cloud_launcher;
+                                    let service = self.0.clone();
+                                    let name = cloud_entry.name.clone();
+                                    if self
+                                        .0
+                                        .task_executor
+                                        .spawn_task(move || launcher(service, cloud_entry, kind))
+                                        .is_err()
+                                    {
+                                        let msg = format!(
+                                            "too many tray actions in flight; launch of '{name}' not started — try again"
+                                        );
+                                        eprintln!("error: {msg}");
+                                        let _ = self
+                                            .0
+                                            .set_status(
+                                                format!("🥀 {msg}"),
+                                                TrayIconState::Dried,
+                                                None,
+                                            )
+                                            .await;
+                                    }
                                 }
                             }
                         }
@@ -3974,6 +4006,10 @@ fn ensure_desktop_icon() {
 }
 
 pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
+    // ORDER 1944-trsp: FIRST, before the run marker, the socket, the
+    // schedulers or the vault probe. A second tray refuses here and touches
+    // nothing; the kernel releases the lock when this process exits.
+    let _tray_lock = crate::tray_presence::acquire(&crate::control_socket_host_dir())?;
     // Order 1859-v5iv: mint and export this run's id before any thread exists
     // (forges launched under it carry it as a label), then reap the previous
     // run if it died without its graceful exit — before anything launches.
@@ -7920,6 +7956,120 @@ mod tests {
         assert_eq!(
             shared_id_to_int(ids::CLOUD_PROJECTS_OVERFLOW),
             CLOUD_OVERFLOW_ID
+        );
+    }
+
+    // 1954-btht FIXTURE. Operator, macuahuitl 2026-11-01: the tray icon stopped
+    // answering for the whole forge image build (10+ min). A cloud-project
+    // click runs a launch that can block for a build
+    // (try_build_forge_image_on_demand). This drives the REAL dbusmenu
+    // interface over a private peer-to-peer bus with a launch that blocks.
+    //
+    // MEASURED on yoga 2026-11-02 with the launch still inline: GetLayout from
+    // a second call DID answer (zbus serves calls concurrently), but the
+    // click's own Event reply was held for the whole launch. A desktop client
+    // that waits on that reply before its next request sees a frozen icon. So
+    // the property is the Event REPLY returning inside the budget, plus
+    // GetLayout answering, both while the launch is still blocked. The STARTED
+    // check proves the launch ran, so a dropped click cannot pass.
+    #[test]
+    fn a_cloud_click_replies_and_get_layout_answers_while_the_launch_blocks() {
+        use std::sync::atomic::AtomicBool;
+        static STARTED: AtomicBool = AtomicBool::new(false);
+        static RELEASE: AtomicBool = AtomicBool::new(false);
+        fn blocking_launch(_: Arc<TrayService>, _: ProjectEntry, _: LaunchKind) {
+            STARTED.store(true, Ordering::SeqCst);
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            while !RELEASE.load(Ordering::SeqCst) && std::time::Instant::now() < until {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .cloud_projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: Some("owner/tillandsias".to_string()),
+            }])
+            .build();
+        let mut service = TrayService::new(state);
+        service.cloud_launcher = blocking_launch;
+        let service = Arc::new(service);
+        let leaf = cloud_project_base("tillandsias") + LeafAction::OpenCode.offset();
+
+        let rt = test_rt();
+        let budget = std::time::Duration::from_secs(2);
+        let outcome = rt.block_on(async move {
+            let (a, b) = tokio::net::UnixStream::pair().expect("socket pair");
+            let guid = zbus::Guid::generate();
+            let server = ConnectionBuilder::unix_stream(a)
+                .server(guid)
+                .expect("server guid")
+                .p2p()
+                .serve_at(MENU_PATH, DbusMenuIface(service.clone()))
+                .expect("serve menu")
+                .build();
+            let client = ConnectionBuilder::unix_stream(b).p2p().build();
+            let (server, client) = tokio::join!(server, client);
+            let (_server, client) = (server.expect("server"), client.expect("client"));
+
+            let t0 = std::time::Instant::now();
+            let click = tokio::time::timeout(
+                budget,
+                client.call_method(
+                    None::<&str>,
+                    MENU_PATH,
+                    Some("com.canonical.dbusmenu"),
+                    "Event",
+                    &(leaf, "clicked", zbus::zvariant::Value::from(0i32), 0u32),
+                ),
+            )
+            .await;
+            let click_replied = matches!(click, Ok(Ok(_)));
+            let click_took = t0.elapsed();
+            let started_by = std::time::Instant::now() + budget;
+            while !STARTED.load(Ordering::SeqCst) && std::time::Instant::now() < started_by {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            let started = STARTED.load(Ordering::SeqCst);
+            let layout = tokio::time::timeout(
+                budget,
+                client.call_method(
+                    None::<&str>,
+                    MENU_PATH,
+                    Some("com.canonical.dbusmenu"),
+                    "GetLayout",
+                    &(0i32, -1i32, Vec::<String>::new()),
+                ),
+            )
+            .await;
+            let layout_answered = matches!(layout, Ok(Ok(_)));
+            let still_blocked = !RELEASE.load(Ordering::SeqCst);
+            RELEASE.store(true, Ordering::SeqCst);
+            (
+                started,
+                click_replied,
+                click_took,
+                layout_answered,
+                still_blocked,
+            )
+        });
+        let (started, click_replied, click_took, layout_answered, still_blocked) = outcome;
+        assert!(
+            started,
+            "the click never reached the launch, so nothing was measured"
+        );
+        assert!(
+            click_replied,
+            "the Event reply for a cloud-project click was held {click_took:?} (budget {budget:?}) \
+             by the launch: a client waiting on it sees a frozen tray"
+        );
+        assert!(
+            layout_answered && still_blocked,
+            "GetLayout did not answer within {budget:?} while the cloud launch blocked"
         );
     }
 }

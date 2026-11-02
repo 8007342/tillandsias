@@ -923,24 +923,40 @@ fn cmd_coord(args: &[String], index: &Path, ledger: &Ledger) {
                 Ok(r) => (cc::orders_in_claims(&r), "coordinator+git-ledger", None),
                 Err(e) => (Default::default(), "git-ledger", Some(e.reason())),
             };
+            let held = tillandsias_plan::sibling_claims::held_on_siblings(
+                ledger,
+                index,
+                &root,
+                &sibling_refs()
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            );
+            let mut hidden = overlaid.clone();
+            hidden.extend(held.keys().cloned());
             let envelope = answer::answer_next_excluding(
                 ledger,
                 pos.first().map(String::as_str),
                 None,
                 None,
                 &citation_path(index, &root),
-                &overlaid,
+                &hidden,
             );
-            let verified = stamp_frame(self_verified(envelope, &root), &root).with_skipped_sources(
-                ledger
-                    .skipped_fragments()
-                    .iter()
-                    .map(|p| citation_path(p, &root))
-                    .collect(),
-            );
+            let verified = stamp_frame(self_verified(envelope, &root), &root)
+                .with_skipped_sources(
+                    ledger
+                        .skipped_fragments()
+                        .iter()
+                        .map(|p| citation_path(p, &root))
+                        .collect(),
+                )
+                .with_stale_ledger(answer::stale_ledger(&root, &trunk_ref()));
             let mut v = serde_json::to_value(&verified).unwrap_or(Value::Null);
             v["source"] = json!(source);
             v["overlaid"] = json!(overlaid);
+            if !held.is_empty() {
+                v["held_on_siblings"] = json!(held);
+            }
             if let Some(r) = reason {
                 v["coordinator"] = json!(r)
             }
@@ -1063,6 +1079,28 @@ fn coord_argv_from_mcp(raw: &str) -> Result<Vec<String>, String> {
         argv.extend(["--ttl".into(), x.to_string()]);
     }
     Ok(argv)
+}
+
+/// ORDER 1947-pnst — the trunk a served ledger is compared with.
+/// `TILLANDSIAS_PLAN_TRUNK_REF` overrides it (another project's trunk, or a
+/// fixture's).
+fn trunk_ref() -> String {
+    std::env::var("TILLANDSIAS_PLAN_TRUNK_REF")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| answer::DEFAULT_TRUNK_REF.to_string())
+}
+
+/// ORDER 1947-pnst — the sibling platform refs whose claims `next` respects.
+/// `TILLANDSIAS_PLAN_SIBLING_REFS` (space-separated) overrides them.
+fn sibling_refs() -> Vec<String> {
+    match std::env::var("TILLANDSIAS_PLAN_SIBLING_REFS") {
+        Ok(v) if !v.trim().is_empty() => v.split_whitespace().map(str::to_string).collect(),
+        _ => tillandsias_plan::sibling_claims::DEFAULT_SIBLING_REFS
+            .iter()
+            .map(|r| r.to_string())
+            .collect(),
+    }
 }
 
 fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[PathBuf]) {
@@ -9419,14 +9457,47 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 i += 1;
             }
             let root = root_for(&index);
-            let envelope = answer::answer_next(
+            // 1947-pnst: rows a sibling platform branch already holds are not
+            // offered; they are listed beside the answer instead.
+            let held = tillandsias_plan::sibling_claims::held_on_siblings(
+                &ledger,
+                &index,
+                &root,
+                &sibling_refs()
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            );
+            let held_ids: std::collections::BTreeSet<String> = held.keys().cloned().collect();
+            let envelope = answer::answer_next_excluding(
                 &ledger,
                 role.as_deref(),
                 release.as_deref(),
                 limit,
                 &citation_path(&index, &root),
+                &held_ids,
             );
-            emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
+            // 1947-pnst: the selector says when its ledger lags trunk.
+            let verified = stamp_frame(self_verified(envelope, &root), &root)
+                .with_skipped_sources(
+                    ledger
+                        .skipped_fragments()
+                        .iter()
+                        .map(|p| citation_path(p, &root))
+                        .collect(),
+                )
+                .with_stale_ledger(answer::stale_ledger(&root, &trunk_ref()));
+            let mut v = serde_json::to_value(&verified).unwrap_or(serde_json::Value::Null);
+            if !held.is_empty() {
+                v["held_on_siblings"] = serde_json::json!(held);
+            }
+            match serde_json::to_string_pretty(&v) {
+                Ok(json) => println!("{json}"),
+                Err(e) => {
+                    eprintln!("error: serialize envelope: {e}");
+                    std::process::exit(1);
+                }
+            }
         }
         "append-event" => {
             // append-event <ref> <type> <summary> --ts <ISO> [--agent A] [--host H]

@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Fable agent, 2026-11-01) on operator order: "Why are our
+# builds so ridiculously expensive? … remove immediately the redundant bits
+# that are clearly not working."
+packets:
+- packet_id: release-is-one-cloud-build-remove-dead-caches-and-the-seed-run
+  order: 1950-b4f3
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  size: M
+  implementer_tier: sonnet
+  capability_tags:
+  - ci
+  - release
+  - nix
+  estimated_hours: 6
+  title: The release workflow's GitHub Actions caches never restored in any run and the 1942-mijg seed run costs a second full build; remove them, then give the 41 min aarch64 cross-GCC a producer inside the one daily run
+  context: 'Measured on five releases (runs 39495753986 41137103161 41212733409 41249590255 41283100284, per-step timings from the jobs API): cache-nix-action restore found nothing in 5/5 runs ("Could not find a cache", 0-1 s) because GitHub scopes a cache to the saving ref and a release runs on a fresh tag; each tag run then saved a 3.3 GB store (49-87 s) plus two rust-caches (618 + 468 MB) nobody could read, and three such saves exceed the 10 GB quota and evict each other. The Linux Nix step was 61-67 min in every run; on v56.11.1.1 the aarch64-unknown-linux-musl cross GCC was built from source in two stages 07:04->07:44 (41 min), seven crane buildDepsOnly derivations and six crate builds were the other ~24 min. The 2 h 10 min wall clock of run 41283100284 was 71 min of steps plus a 60 min runner stall after "Complete job" (log ends 08:11:54Z, job closed 09:11:56Z; GitHub infrastructure, absent from the other four runs). The 1942-mijg cache_seed dispatch on main is a second full build: run 41352565247 cold-built 66 min before the operator cancelled it; it costs more than it saves and breaks the one-cloud-build-per-day rule. flake.lock changed twice since August, so the cross toolchain closure is stable across nearly every release.'
+  exit_criteria:
+  - 'release.yml has no GitHub Actions cache step (cache-nix-action, rust-cache, actions/cache) and no cache_seed input, and skills/merge-to-main-and-release/SKILL.md dispatches release.yml only on the tag — pinned by litmus:release-is-one-cloud-build (scripts/lua/check-release-one-cloud-build.lua), red on b6af09947, green after.'
+  - 'litmus:ci-release-toolchain-shape asserts the installer that is actually used (it passed on a comment literal for the retired one since 1933-ysbq) and carries a negative control.'
+  - 'An operator ruling is recorded on the cross-toolchain producer: (i) dispatch the release on main with version as input and tag from the workflow so the Actions cache saves and restores under main inside the one daily run (cosign SAN becomes refs/heads/main, which RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP already admits), or (ii) drop the cross GCC (rust-lld self-contained linking plus zig cc for C deps), or (iii) a non-Actions substituter. Until it is, no cache step returns.'
+  - 'After the chosen redesign lands, a release run shows the Nix step under 25 min with an unchanged flake.lock (measured from the jobs API, cited in the closure event).'
+  verifiable_closure: 'litmus:release-is-one-cloud-build (scripts/lua/check-release-one-cloud-build.lua; red on b6af09947, green after) for the removal; for the redesign, the jobs-API timing of the first release after it, cited by run id in the closure event.'
+  next_action: 'Land the removal PR (work/1950-b4f3 into linux-next). Then put the three-option cross-toolchain question to the operator in one action-shaped sentence and implement the chosen one; share one buildDepsOnly per target (7 -> 2) in the same pass.'
+  provenance: operator order 2026-11-01; gh api jobs timings for the five runs named in context; gh cache list 2026-11-01; run 41283100284 Linux job log.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:45:00Z'
+    host: macuahuitl
+    summary: filed p1 from the operator's build-cost order with the measured per-step breakdown; removal in flight on work/1950-b4f3
+  - type: claimed
+    ts: '2026-11-01T23:45:00Z'
+    host: macuahuitl
+    summary: removal of the dead cache steps, the seed input and the seed dispatch, with the replacement litmus

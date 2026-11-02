@@ -103,6 +103,9 @@ COPY lib-push-capability.sh /usr/local/lib/tillandsias/lib-push-capability.sh
 # @trace order:1874-6p63 — the lane MCP socket's state, side-effect free.
 # Sourced by lib-common.sh from its own directory and by tillandsias-doctor.
 COPY lib-lane.sh /usr/local/lib/tillandsias/lib-lane.sh
+# @trace order:1951-vv5m — the background family for flaky-optional installs
+# and its first-use shims; sourced by lib-common.sh start_flaky_installs.
+COPY lib-flaky-installs.sh /usr/local/lib/tillandsias/lib-flaky-installs.sh
 # @trace order:569 — expert capability skew (now vs after-relaunch vs blocked).
 # Sourced by BOTH lib-common.sh (from its own directory) and the forge-plan MCP
 # wrapper (which cannot source lib-common.sh: that file hard-fails on the vendor

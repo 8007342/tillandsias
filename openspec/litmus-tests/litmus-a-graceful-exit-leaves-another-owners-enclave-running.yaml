@@ -1,0 +1,34 @@
+# @trace order:1946-shsc, spec:graceful-shutdown
+# lenovinha 2026-11-01: an exiting companion stopped the proxy, inference,
+# nix-cache, router and git mirror that a 16 h tray owned. The enclave now has
+# one owner, the holder of tray.lock (1944-trsp); any other process that exits
+# gracefully stops nothing of it.
+name: litmus:a-graceful-exit-leaves-another-owners-enclave-running
+spec: graceful-shutdown
+phase: pre-build
+description: Run A holds the tray lock and owns the shared stack; run B exits gracefully and its shutdown targets are empty, while A's own exit still sweeps its enclave
+severity: critical
+size: quick
+
+preconditions:
+  - cargo can build the tillandsias bin with --features tray,listen-vsock
+  - /dev/shm is writable
+
+critical_path:
+  - step: "B's exit leaves A's enclave running; the lock holder is the enclave owner"
+    command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- a_graceful_exit_leaves_another_owners_enclave_running the_enclave_owner_is_the_lock_holder 2>&1); grep -E 'test result' <<<\"$out\""
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 2 passed"
+
+observability:
+  traces:
+    - "@trace order:1946-shsc"
+  expected_log: "test result: ok. 2 passed"
+  log_fields:
+    spec: "graceful-shutdown"
+    test: "a-graceful-exit-leaves-another-owners-enclave-running"
+    artifact: "crates/tillandsias-headless/src/main.rs"
+
+rollback:
+  on_failure: "read shutdown_targets_for and tray_presence::owner_elsewhere"
+  command: "grep -n -A12 'fn shutdown_targets_for' crates/tillandsias-headless/src/main.rs"

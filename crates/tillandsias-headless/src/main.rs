@@ -102,6 +102,8 @@ mod forge_swap;
 // 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
 #[cfg(target_os = "linux")]
 mod oom_posture;
+// 1944-trsp: one tray per enclave (a lifetime flock), and a CLI that can tell.
+mod tray_presence;
 // RAM-only source-volume identity is needed by default CLI launchers too.
 mod launch_images;
 mod local_projects;
@@ -1016,6 +1018,9 @@ fn main() {
         || bash
         || antigravity
         || opencode_web
+        // 1953-stsk: --studio was missing, so a studio launch SIGTERMed the
+        // running tray (lenovinha 2026-11-01).
+        || studio_id.is_some()
         || observatorium
         || init
         || status_check
@@ -2681,18 +2686,15 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // only for a project with `[imagegen] studio = true`.
         "imagegen-studio" => "images/imagegen-studio",
         "vault" => "images/vault",
+        // 1861-nmpp: a studio lane image, built on first use on the forge.
+        name if runtime_assets::studio_image_id(name).is_some() => "images/studio",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
     };
 
     let context_dir = root.join(rel);
-    let containerfile = match image_name {
-        "forge-base" => context_dir.join("Containerfile.base"),
-        "chromium-core" => context_dir.join("Containerfile.core"),
-        "chromium-framework" => context_dir.join("Containerfile.framework"),
-        _ => context_dir.join("Containerfile"),
-    };
+    let containerfile = context_dir.join(runtime_assets::containerfile_name(image_name));
 
     if !containerfile.is_file() {
         return Err(format!(
@@ -2730,6 +2732,12 @@ fn image_build_inputs(
             .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
+    } else if runtime_assets::studio_image_id(image_name).is_some() {
+        let forge = identities
+            .get("forge")
+            .ok_or_else(|| format!("{image_name} identity requires forge identity"))?;
+        build_args.insert("FORGE_IMAGE".to_string(), forge.canonical_tag.clone());
+        dependency_digests.insert("forge".to_string(), forge.source_digest.clone());
     }
     Ok((build_args, dependency_digests))
 }
@@ -2968,6 +2976,8 @@ fn image_dependency(image_name: &str) -> Option<&'static str> {
     match image_name {
         "forge" => Some("forge-base"),
         "chromium-framework" => Some("chromium-core"),
+        // 1861-nmpp: a studio lane image is stacked on the forge.
+        name if runtime_assets::studio_image_id(name).is_some() => Some("forge"),
         _ => None,
     }
 }
@@ -5943,6 +5953,24 @@ fn build_git_run_args(
         "--env".into(),
         "GIT_TRACE=1".into(),
     ];
+    // 1956-4pxj: the post-receive hook announces each accepted ref update to
+    // every host process serving a lane of this project, through the sockets
+    // in this directory. Read-only: the hook only sends to sockets the host
+    // bound; it never creates one.
+    #[cfg(feature = "host-services")]
+    {
+        let events = crate::lane_events::event_dir(project_name);
+        if std::fs::create_dir_all(&events).is_ok() {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=bind,source={},target={},readonly=true",
+                    events.display(),
+                    crate::lane_events::MIRROR_EVENT_DIR
+                ),
+            ]);
+        }
+    }
     // @trace spec:proxy-container, spec:git-mirror-service
     // Proxy env vars route post-receive hook's `git push` to GitHub through
     // the enclave proxy. Uses enclave_no_proxy() — the canonical full NO_PROXY
@@ -8976,6 +9004,22 @@ const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
 /// 2026-09-04 at 01:09Z and 12:42:21Z; order 1019-ba6e). Both phases now
 /// share this one predicate, so ownership cannot be honoured in one loop and
 /// forgotten in the next.
+/// ORDER 1946-shsc: the enclave has ONE owner, the process holding
+/// `tray.lock` (1944-trsp). A process that exits while ANOTHER process holds
+/// it stops nothing: the shared stack and the forges it launched are that
+/// owner's to stop. On lenovinha 2026-11-01 an exiting companion stopped the
+/// proxy, inference, nix-cache, router and git mirror a 16 h tray relied on.
+/// Leaving a container running is recoverable; stopping a live owner's is not.
+fn shutdown_targets_for(
+    containers: Vec<tillandsias_podman::ContainerListEntry>,
+    owner_elsewhere: Option<Option<u32>>,
+) -> Vec<tillandsias_podman::ContainerListEntry> {
+    if owner_elsewhere.is_some() {
+        return Vec::new();
+    }
+    shutdown_escalation_targets(containers)
+}
+
 fn shutdown_escalation_targets(
     containers: Vec<tillandsias_podman::ContainerListEntry>,
 ) -> Vec<tillandsias_podman::ContainerListEntry> {
@@ -9483,6 +9527,60 @@ fn env_or(name: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// 1956-4pxj: the forge instance of `project` whose enclave address is
+/// `addr` (the pusher git-daemon saw), so its own push is not announced back
+/// to it. Called once per push event, never on a timer.
+#[cfg(feature = "host-services")]
+fn forge_instance_at_address(project: &str, addr: &str) -> Option<String> {
+    let listed = podman_command()
+        .args([
+            "ps",
+            "--filter",
+            &format!("name=^tillandsias-{project}-forge"),
+            "--format",
+            "{{.Names}}",
+        ])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .ok()?;
+    for name in String::from_utf8_lossy(&listed.stdout).lines() {
+        let ips = podman_command()
+            .args([
+                "inspect",
+                name,
+                "--format",
+                "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+            ])
+            .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+            .ok()?;
+        if String::from_utf8_lossy(&ips.stdout)
+            .split_whitespace()
+            .any(|ip| ip == addr)
+        {
+            return Some(forge_instance_from_container_name(project, name));
+        }
+    }
+    None
+}
+
+/// The lane instance a forge container name carries: `default` for no
+/// suffix, else the sanitized instance before its 32-hex digest
+/// (`tillandsias-<project>-forge[-<mode>]-<instance>-<digest>`).
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+fn forge_instance_from_container_name(project: &str, name: &str) -> String {
+    let rest = name
+        .strip_prefix(&format!("tillandsias-{project}-forge"))
+        .unwrap_or("");
+    let parts: Vec<&str> = rest.split('-').filter(|p| !p.is_empty()).collect();
+    match parts.as_slice() {
+        [.., instance, digest]
+            if digest.len() == 32 && digest.chars().all(|c| c.is_ascii_hexdigit()) =>
+        {
+            (*instance).to_string()
+        }
+        _ => "default".to_string(),
+    }
+}
+
 /// Serve a forge's lane MCP socket before the forge (and its agent's MCP
 /// client) starts. 1863-eckw: a web-mode forge outlives the CLI that launches
 /// it, and a listener bound here died with the CLI, so the agent's
@@ -9498,6 +9596,13 @@ fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debu
                 let deadline = Instant::now() + Duration::from_secs(5);
                 while Instant::now() < deadline {
                     if mcp_socket::lane_accepting(project, instance) {
+                        // 1961-8ats: the tray that took the lane must be this build.
+                        if let Some(refusal) =
+                            mcp_socket::lane_served_by_other_build(project, instance)
+                        {
+                            eprintln!("{refusal}");
+                            std::process::exit(1);
+                        }
                         if debug {
                             eprintln!("[tillandsias] the tray serves lane {project}-{instance}");
                         }
@@ -10350,6 +10455,42 @@ fn probe_ipv6_via_router(router: &str) -> RouterProbe {
         Ok(o) if o.status.code() == Some(1) => RouterProbe::Blackhole,
         _ => RouterProbe::CouldNotMeasure,
     }
+}
+
+/// 1955-hq7k: name a dead IPv6 path before an image build instead of letting a
+/// RUN step stall on it silently. Only a host that HAS default IPv6 routes and
+/// none of them carries traffic is reported; a host without IPv6 says nothing.
+#[cfg(target_os = "linux")]
+fn note_dead_ipv6_before_build(image_name: &str) {
+    let table = std::process::Command::new("ip")
+        .args(["-6", "route", "show", "default"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    if let Some(line) = dead_ipv6_note(
+        image_name,
+        ipv6_egress_report(&table, probe_ipv6_via_router),
+    ) {
+        eprintln!("{line}");
+    }
+}
+
+/// The note for one probe result `(ok, routers, unmeasured)`, or `None`.
+#[cfg(target_os = "linux")]
+fn dead_ipv6_note(
+    image_name: &str,
+    (ok, routers, unmeasured): (usize, usize, usize),
+) -> Option<String> {
+    if routers == 0 || ipv6_egress_functional(ok, routers) || unmeasured == routers {
+        return None;
+    }
+    Some(format!(
+        "note:image-build:host-ipv6-egress-dead:{image_name}: {routers} default IPv6 route(s), \
+         {ok} carry traffic; RUN steps fetch over IPv4 through pasta (--network=private and \
+         containers.conf pasta_options --ipv4-only). If a fetch still stalls, check \
+         ~/.config/containers/containers.conf has pasta_options = [\"--ipv4-only\"] \
+         (tillandsias --init writes it)"
+    ))
 }
 
 #[cfg(target_os = "linux")]
@@ -11418,6 +11559,8 @@ pub(crate) fn build_image_with_logging(
     if _debug {
         eprintln!("[tillandsias] build-{image_name}: scope {scope:?}");
     }
+    #[cfg(target_os = "linux")]
+    note_dead_ipv6_before_build(image_name);
     let mut command = tillandsias_podman::podman_cmd_sync_under(&image_build_scope::prefix(scope));
     let argv = podman_build_argv(&containerfile, &context_dir, identity, build_args)?;
     command.args(&argv);
@@ -11606,6 +11749,11 @@ fn podman_build_argv(
         // scripts/build-image.sh has carried --http-proxy=false since the
         // first instance; this runtime build path missed it.
         "--http-proxy=false".to_string(),
+        // 1955-hq7k: an EXPLICIT build network, so RUN steps get the user's
+        // containers.conf pasta_options. A default build ignored
+        // --ipv4-only on a host with dead IPv6 and hung ~2 min per fetch
+        // (macuahuitl 2026-11-02); --network=private took 1 s.
+        "--network=private".to_string(),
         "--dns".to_string(),
         "8.8.8.8".to_string(),
         "-t".to_string(),
@@ -15526,11 +15674,30 @@ fn maybe_spawn_detached_tray_for_cli(
     // false positive used to cause `--observatorium` / `--opencode-web` to
     // race past this helper and then fail in `send_issue_web_session` with
     // `Connection refused`.
-    if control_socket_is_listening(&socket_path) {
-        if debug {
-            eprintln!("[tillandsias] reusing existing tray control socket");
+    // ORDER 1944-trsp: the socket can be gone while its tray lives (a second
+    // tray's start and exit unlinked it on lenovinha, 2026-11-01), so a failed
+    // connect is not "no tray". The tray's lifetime lock decides; a companion
+    // is started only when nobody holds it.
+    match tray_presence::presence(
+        &control_socket_host_dir(),
+        control_socket_is_listening(&socket_path),
+    ) {
+        tray_presence::Presence::Listening => {
+            if debug {
+                eprintln!("[tillandsias] reusing existing tray control socket");
+            }
+            return;
         }
-        return;
+        tray_presence::Presence::AliveWithoutSocket { pid } => {
+            eprintln!(
+                "[tillandsias] a tray is running ({}) but its control socket {} does not answer; \
+                 not starting a second tray over it. Quit and restart the tray to restore the socket.",
+                pid.map_or_else(|| "pid unknown".to_string(), |p| format!("pid {p}")),
+                socket_path.display()
+            );
+            return;
+        }
+        tray_presence::Presence::Absent => {}
     }
 
     let Ok(exe) = std::env::current_exe() else {
@@ -15668,6 +15835,25 @@ fn cli_reserved_lane(project_path: Option<&str>, is_cloud: bool) -> Option<Strin
 /// stale socket file left over from a crashed tray.
 ///
 /// @trace spec:tray-host-control-socket
+/// (dev, inode) of the control socket this process bound, if any (1944-trsp).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) static BOUND_CONTROL_SOCKET: std::sync::OnceLock<(u64, u64)> =
+    std::sync::OnceLock::new();
+
+#[cfg(unix)]
+pub(crate) fn control_socket_is_ours(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    match (BOUND_CONTROL_SOCKET.get(), fs::symlink_metadata(path)) {
+        (Some(&(dev, ino)), Ok(m)) => m.dev() == dev && m.ino() == ino,
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+pub(crate) fn control_socket_is_ours(_path: &Path) -> bool {
+    false
+}
+
 #[cfg(unix)]
 fn control_socket_is_listening(socket_path: &Path) -> bool {
     if !socket_path.exists() {
@@ -16568,6 +16754,14 @@ fn run_opencode_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1956-4pxj: a second launch of this project takes the next free instance
+    // (its own workspace and container, the same git mirror) instead of
+    // dying on the first forge's workspace lock. Held for the whole launch.
+    let _instance_claim = claim_forge_instance(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+        debug,
+    )?;
     // 1783-k5hm: before any podman call, so a refused launch starts nothing.
     refuse_lane_socket_owned_elsewhere(
         project_name,
@@ -16795,24 +16989,36 @@ fn run_opencode_mode(
         } else {
             None
         };
-        client
-            .run_container_observed(
-                "opencode-git",
-                &git_container_name,
-                &build_git_run_args(
-                    project_name,
-                    Some(&opencode_mirror_id),
-                    &certs_dir,
-                    &versioned_image_tag("git", version),
-                    project_remote_url.as_deref(),
-                    project_default_branch.as_deref(),
-                    git_vault_secret.as_deref(),
-                    git_signer_secret.as_deref(),
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode] failed to start git: {e}"))?;
+        // 1956-4pxj: serialise the mirror bring-up with every other launch of
+        // this project (held until the seed gate below), and REUSE a running
+        // mirror: this lane used to `--replace` it unconditionally, so a second
+        // OpenCode launch destroyed the mirror a sibling forge was using
+        // (order 443's rule, which the shared launch path already follows).
+        let mirror_bringup = acquire_mirror_bringup_lock(project_name, debug).await?;
+        if crate::vault_bootstrap::container_running(&git_container_name) {
+            if debug {
+                eprintln!("[tillandsias] [OpenCode] reusing running {git_container_name}");
+            }
+        } else {
+            client
+                .run_container_observed(
+                    "opencode-git",
+                    &git_container_name,
+                    &build_git_run_args(
+                        project_name,
+                        Some(&opencode_mirror_id),
+                        &certs_dir,
+                        &versioned_image_tag("git", version),
+                        project_remote_url.as_deref(),
+                        project_default_branch.as_deref(),
+                        git_vault_secret.as_deref(),
+                        git_signer_secret.as_deref(),
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode] failed to start git: {e}"))?;
+        }
         if local_inference_disabled() {
             eprintln!(
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
@@ -16850,6 +17056,7 @@ fn run_opencode_mode(
             debug,
         )
         .await?;
+        drop(mirror_bringup);
 
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
         // terminal (run_container_attached_observed below). Tailing the SUPPORT
@@ -18217,6 +18424,14 @@ pub(crate) fn run_opencode_web_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1956-4pxj: a second launch of this project takes the next free instance
+    // (its own workspace and container, the same git mirror) instead of
+    // dying on the first forge's workspace lock. Held for the whole launch.
+    let _instance_claim = claim_forge_instance(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+        debug,
+    )?;
     // 1783-k5hm: before any podman call, so a refused launch starts nothing.
     refuse_lane_socket_owned_elsewhere(
         project_name,
@@ -18923,6 +19138,8 @@ pub(crate) fn ensure_enclave_for_project(
         // ad-hoc proxy container start that duplicated ensure_proxy_running.
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
+        // 1956-4pxj: held until the seed gate below passes.
+        let mirror_bringup = acquire_mirror_bringup_lock(project_name, debug).await?;
         let mirror_identity = ensure_shared_git_and_inference_for_launch(
             &client,
             project_name,
@@ -18979,6 +19196,7 @@ pub(crate) fn ensure_enclave_for_project(
             ),
         )
         .await?;
+        drop(mirror_bringup);
         Ok::<Option<String>, String>(mirror_identity)
     })?;
 
@@ -18994,6 +19212,33 @@ pub(crate) fn ensure_enclave_for_project(
 
     Ok((certs_dir, mirror_identity))
 }
+
+/// 1956-4pxj: one launch at a time decides whether a project's git mirror is
+/// running, creates it if not, and waits for its seed. Reproduced on yoga
+/// 2026-11-02: two launches 1 s apart both saw no mirror at the same instant
+/// and both ran `podman run --replace`; the second replace killed the first's
+/// mirror, whose launch then waited for a ready signal that never came. Held
+/// from the running-check through the seed gate, so the later launch finds a
+/// running, seeded mirror and reuses it. Taken off the async runtime because
+/// the wait is a blocking flock poll.
+async fn acquire_mirror_bringup_lock(
+    project_name: &str,
+    debug: bool,
+) -> Result<resource_lock::ResourceLockGuard, String> {
+    let resource = format!("git-mirror-bringup-{project_name}");
+    let project = project_name.to_string();
+    tokio::task::spawn_blocking(move || {
+        resource_lock::acquire(&resource, Duration::from_secs(600), debug).map_err(|e| {
+            format!(
+                "{e}. Another launch of {project} has been bringing its git mirror up for \
+                 10 minutes; check `podman logs tillandsias-git-{project}`, then launch again."
+            )
+        })
+    })
+    .await
+    .map_err(|e| format!("mirror bring-up lock task failed: {e}"))?
+}
+
 /// Ensure the project's git mirror and the shared inference container for a
 /// forge launch, per the operator's order-443 per-component concurrency rule:
 /// the STATEFUL mirror is ensure-if-running (never replace a healthy one a
@@ -19396,9 +19641,85 @@ fn refuse_lane_socket_owned_elsewhere(project: &str, host_mount: bool) -> Result
         if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, &instance) {
             return Err(lane_socket_owned_refusal(project, instance.trim(), &path));
         }
+        if let Some(refusal) = mcp_socket::lane_served_by_other_build(project, &instance) {
+            return Err(refusal);
+        }
     }
     let _ = (project, host_mount);
     Ok(())
+}
+
+/// Instance slots an interactive launch may take before refusing (1956-4pxj).
+const FORGE_INSTANCE_SLOTS: usize = 16;
+
+/// The instance name for slot `n` (1-based): slot 1 is the unset default.
+fn forge_instance_for_slot(n: usize) -> Option<String> {
+    (n > 1).then(|| n.to_string())
+}
+
+/// 1956-4pxj — operator ruling 2026-11-01: "Two concurrent forges, same
+/// harness, same project, should be a perfectly normal case." Before this, a
+/// second launch of a project contended for the DEFAULT instance's RAM
+/// workspace lock, which the first forge holds for its whole life, and died
+/// after 120 s (reproduced on yoga 2026-11-02).
+///
+/// An interactive launch with no explicit `TILLANDSIAS_FORGE_INSTANCE` takes
+/// the first free slot: default, then "2", "3", ... A slot is free when its
+/// claim lock is free (no live launch of this binary holds it) and no other
+/// process serves its lane socket (the tray's own lane). The claim is taken
+/// NON-BLOCKING and held for the caller's life, so two launches a second
+/// apart can never pick the same slot. A taken slot other than the default is
+/// exported as `TILLANDSIAS_FORGE_INSTANCE`, before any name is derived, so
+/// container, workspace, socket and Vault names all follow it.
+///
+/// An explicit instance (a dispatcher's worker) and a host-mount lane (one
+/// shared checkout) keep today's behaviour: no claim.
+fn claim_forge_instance(
+    project: &str,
+    host_mount: bool,
+    debug: bool,
+) -> Result<Option<resource_lock::ResourceLockGuard>, String> {
+    let explicit = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .is_some_and(|s| !s.trim().is_empty());
+    if explicit || host_mount {
+        return Ok(None);
+    }
+    for slot in 1..=FORGE_INSTANCE_SLOTS {
+        let instance = forge_instance_for_slot(slot);
+        let label = instance.as_deref().unwrap_or("default");
+        #[cfg(feature = "host-services")]
+        if mcp_socket::lane_socket_foreign_owner(project, label).is_some() {
+            continue;
+        }
+        let resource = format!("forge-instance-{project}-{label}");
+        let guard = match resource_lock::acquire(&resource, Duration::ZERO, false) {
+            Ok(guard) => guard,
+            // Held by another launch: try the next slot.
+            Err(e) if e.starts_with("resource-lock: timed out") => continue,
+            // An unusable lock dir is not "every slot is busy".
+            Err(e) => return Err(e),
+        };
+        if let Some(name) = &instance {
+            // The env write runs at the top of a lane launch, before any
+            // thread that reads the instance is spawned.
+            unsafe {
+                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", name);
+            }
+            eprintln!(
+                "[tillandsias] {project}: another forge holds the default instance; \
+                 this launch is instance {name} with its own workspace, sharing the \
+                 project's git mirror (1956-4pxj)"
+            );
+        } else if debug {
+            eprintln!("[tillandsias] {project}: forge instance default");
+        }
+        return Ok(Some(guard));
+    }
+    Err(format!(
+        "refused:forge-instance-slots-full:{project}: {FORGE_INSTANCE_SLOTS} forges of this \
+         project are already running or starting; stop one, then launch again. Nothing was started."
+    ))
 }
 
 /// The named refusal for [`refuse_lane_socket_owned_elsewhere`].
@@ -20442,6 +20763,14 @@ fn run_forge_agent_cli_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1956-4pxj: a second launch of this project takes the next free instance
+    // (its own workspace and container, the same git mirror) instead of
+    // dying on the first forge's workspace lock. Held for the whole launch.
+    let _instance_claim = claim_forge_instance(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+        debug,
+    )?;
     // 1783-k5hm: before any podman call, so a refused launch starts nothing.
     refuse_lane_socket_owned_elsewhere(
         project_name,
@@ -20588,6 +20917,9 @@ mod tray;
 mod dead_run;
 #[cfg(feature = "host-services")]
 mod mcp_socket;
+// 1956-4pxj: push events from the git mirror to every forge of a project.
+#[cfg(feature = "host-services")]
+mod lane_events;
 
 // @trace order:1772-irs3 — read-only Cloudflare tools on the lane's MCP
 // socket: a GET-only allowlist over the Vault-stored sign-in, the account
@@ -22193,6 +22525,13 @@ fn load_config(_path: &str) -> Result<(), String> {
 /// @trace spec:graceful-shutdown, spec:app-lifecycle
 pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     debug!("starting graceful shutdown sequence");
+    let owner_elsewhere = crate::tray_presence::owner_elsewhere(&control_socket_host_dir());
+    if let Some(pid) = owner_elsewhere {
+        info!(
+            owner = ?pid,
+            "another process owns the enclave; leaving its containers running"
+        );
+    }
 
     // 2. Stop all tillandsias-managed containers
     let client = PodmanClient::new();
@@ -22224,7 +22563,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                 // stopper). Ownership is decided by is_stack_managed_name —
                 // the same vocabulary the teardown and reset scopes speak —
                 // never by prefix alone.
-                let running_at_start = shutdown_escalation_targets(containers);
+                let running_at_start = shutdown_targets_for(containers, owner_elsewhere);
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -22263,7 +22602,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                         Ok(Ok(remaining)) => {
                             // 1019-ba6e: ownership, not prefix — the same
                             // predicate the stop phase applied.
-                            let running = shutdown_escalation_targets(remaining);
+                            let running = shutdown_targets_for(remaining, owner_elsewhere);
                             if running.is_empty() {
                                 debug!(
                                     "verification clean: zero running managed containers remain"
@@ -22295,8 +22634,10 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 
     // 4. Cleanup ephemeral resources (sockets and logs)
     // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
+    // ORDER 1944-trsp: only the socket THIS process bound. A headless exit or
+    // a refused tray removing it left a live tray unreachable.
     let socket_path = control_socket_host_dir().join("control.sock");
-    if socket_path.exists() {
+    if control_socket_is_ours(&socket_path) {
         debug!(path = %socket_path.display(), "removing control socket");
         let _ = fs::remove_file(&socket_path);
     }
@@ -25134,6 +25475,49 @@ mod tests {
         );
     }
 
+    /// 1946-shsc, the 2026-11-01 case: run A holds the tray lock and owns
+    /// the shared stack; run B exits gracefully. B stops NOTHING of A's.
+    /// Pre-fix B's sweep took every running stack container. Once no other
+    /// owner exists, the sweep is the 936-kdev ownership filter as before.
+    #[test]
+    fn a_graceful_exit_leaves_another_owners_enclave_running() {
+        let entry = |name: &str| tillandsias_podman::ContainerListEntry {
+            name: name.to_string(),
+            state: "running".to_string(),
+            exit_code: 0,
+            exited_at: 0,
+            restarts: 0,
+        };
+        let enclave = || {
+            vec![
+                entry("tillandsias-proxy"),
+                entry("tillandsias-inference"),
+                entry("tillandsias-vault"),
+                entry("tillandsias-git-kumbia-kombat"),
+            ]
+        };
+        let dir = std::path::PathBuf::from("/dev/shm")
+            .join(format!("shsc-two-runs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_a = crate::tray_presence::acquire(&dir).expect("A owns the enclave");
+        // B is another process: the lock names A's pid, which is not B's.
+        std::fs::write(crate::tray_presence::lock_path(&dir), "1").unwrap();
+        let b_owner = crate::tray_presence::owner_elsewhere(&dir);
+        assert_eq!(b_owner, Some(Some(1)));
+        assert!(
+            shutdown_targets_for(enclave(), b_owner).is_empty(),
+            "B must leave A's enclave running"
+        );
+        // Pre-fix behaviour, for the record: B's sweep took all four.
+        assert_eq!(shutdown_escalation_targets(enclave()).len(), 4);
+        // A, the owner, still sweeps its own enclave on exit.
+        drop(run_a);
+        crate::tray_presence::wait_released(&dir);
+        let owner = crate::tray_presence::owner_elsewhere(&dir);
+        assert_eq!(shutdown_targets_for(enclave(), owner).len(), 4);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// Order 477 (the packet's steady-state criterion): after the LAST lane
     /// exits, the container set must converge in ONE step — the set the
     /// teardown leaves standing must be exactly the set the liveness
@@ -25549,6 +25933,40 @@ mod tests {
                  singleton-kill the running headless service (2026-07-12 repro)"
             );
         }
+
+        // ORDER 1953-stsk: the hand-kept list above drifts. A lane added
+        // after it (--studio, 1860-auhm) was never put on it, so a studio
+        // launch SIGTERMed the running tray on lenovinha 2026-11-01 and the
+        // tray's companion then SIGTERMed the launch. Every lane in the
+        // positional-launch refusal table (`(flag_expr, "--lane")`) must be
+        // counted too, so a lane added there cannot be missed here.
+        let table = source
+            .split("let Some(flag) = [")
+            .nth(1)
+            .and_then(|tail| tail.split("]\n").next())
+            .expect("positional-launch lane table");
+        let mut lanes = 0;
+        // One entry per line: `(flag_expr, "--lane"),`.
+        for line in table.lines() {
+            let Some(entry) = line.trim().strip_prefix('(') else {
+                continue;
+            };
+            let Some((expr, _lane)) = entry.split_once(", \"--") else {
+                continue;
+            };
+            lanes += 1;
+            let expr = expr.trim();
+            assert!(
+                window.split(&['|', '\n', ' '][..]).any(|tok| tok == expr),
+                "lane `{expr}` from the positional-launch table is missing from is_cli_mode — \
+                 that lane would take the launcher singleton and SIGTERM the running tray \
+                 (1953-stsk)"
+            );
+        }
+        assert!(
+            lanes >= 8,
+            "parsed only {lanes} lanes from the table: {table}"
+        );
     }
 
     #[test]
@@ -25851,6 +26269,41 @@ mod tests {
         assert!(!ipv6_egress_functional(ok, n));
     }
 
+    /// 1955-hq7k: a build names a dead IPv6 path (macuahuitl 2026-11-02: two RA
+    /// prefixes, no egress) and says nothing when IPv6 works, is absent, or
+    /// could not be measured at all (unmeasured is not dead).
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_build_names_a_dead_ipv6_path_and_only_that() {
+        let dead = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::Blackhole);
+        let note = dead_ipv6_note("forge-base", dead).expect("two dead routers are named");
+        assert!(
+            note.starts_with("note:image-build:host-ipv6-egress-dead:forge-base:"),
+            "{note}"
+        );
+        assert!(
+            note.contains("2 default IPv6 route(s), 0 carry traffic"),
+            "{note}"
+        );
+        let working = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::Ok);
+        assert_eq!(
+            dead_ipv6_note("forge-base", working),
+            None,
+            "working IPv6 says nothing"
+        );
+        assert_eq!(
+            dead_ipv6_note("forge-base", (0, 0, 0)),
+            None,
+            "no IPv6 says nothing"
+        );
+        let unmeasured = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::CouldNotMeasure);
+        assert_eq!(
+            dead_ipv6_note("forge-base", unmeasured),
+            None,
+            "unmeasured is not dead"
+        );
+    }
+
     /// Live measurement; run explicitly. Reads only the route table and pings.
     #[test]
     #[ignore]
@@ -25871,6 +26324,96 @@ mod tests {
         // serialise nothing. Delegates to the canonical lock (order 434 unified
         // this after that fix pointed one test at a different mutex).
         crate::runtime_assets::env_lock()
+    }
+
+    /// 1956-4pxj: a second interactive launch of a project takes instance 2
+    /// (its own workspace and container names) instead of contending for the
+    /// default instance's lock; an explicit instance and a host-mount lane are
+    /// left alone. Reproduced on yoga before this: the second launch waited on
+    /// the first forge's workspace lock and died after 120 s.
+    #[test]
+    fn a_second_launch_of_a_project_takes_the_next_instance() {
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let project = format!("twin-{}-{}", std::process::id(), line!());
+
+        let first = claim_forge_instance(&project, false, false)
+            .expect("first claim")
+            .expect("an interactive launch claims a slot");
+        assert!(
+            std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err(),
+            "the first launch keeps the default instance"
+        );
+        let default_volume = forge_ram_workspace_volume(&project);
+
+        let second = claim_forge_instance(&project, false, false)
+            .expect("second claim")
+            .expect("a second launch claims the next slot");
+        assert_eq!(
+            std::env::var("TILLANDSIAS_FORGE_INSTANCE").as_deref(),
+            Ok("2"),
+            "the second launch is instance 2"
+        );
+        assert_ne!(
+            forge_ram_workspace_volume(&project),
+            default_volume,
+            "instance 2 gets its own RAM workspace, so it never waits on the first's lock"
+        );
+        assert!(
+            forge_container_name(&project).starts_with(&format!("tillandsias-{project}-forge-2")),
+            "instance 2 gets its own container name: {}",
+            forge_container_name(&project)
+        );
+
+        // Already explicit (this process now carries "2"), and host-mount: no claim.
+        assert!(
+            claim_forge_instance(&project, false, false)
+                .expect("explicit")
+                .is_none()
+        );
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        assert!(
+            claim_forge_instance(&project, true, false)
+                .expect("host mount")
+                .is_none()
+        );
+
+        // The default slot frees when the first launch ends.
+        drop(first);
+        let again = claim_forge_instance(&project, false, false)
+            .expect("third claim")
+            .expect("the freed default slot is reused");
+        assert!(std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err());
+        drop((second, again));
+    }
+
+    /// 1956-4pxj: the pusher's instance is read back from its container name,
+    /// for every naming shape the launch produces.
+    #[test]
+    fn a_forge_container_name_names_its_instance() {
+        let digest = "d4735e3a265e16eee03f59718b9b5d03";
+        for (name, want) in [
+            ("tillandsias-p-forge".to_string(), "default"),
+            ("tillandsias-p-forge-maintenance".to_string(), "default"),
+            (format!("tillandsias-p-forge-2-{digest}"), "2"),
+            (format!("tillandsias-p-forge-maintenance-2-{digest}"), "2"),
+            (format!("tillandsias-p-forge-claude-w3-{digest}"), "w3"),
+        ] {
+            assert_eq!(
+                forge_instance_from_container_name("p", &name),
+                want,
+                "{name}"
+            );
+        }
+        // The real suffix the launch produced on yoga 2026-11-02.
+        assert_eq!(
+            forge_container_name_for_mode_with_instance(
+                "p",
+                ForgeAgentMode::Maintenance,
+                Some("2")
+            ),
+            format!("tillandsias-p-forge-maintenance-2-{digest}")
+        );
     }
 
     struct TestEnvRestore(Vec<(&'static str, Option<std::ffi::OsString>)>);
@@ -35611,6 +36154,41 @@ esac
         );
     }
 
+    /// 1861-nmpp: a studio lane image is built from images/studio on top of
+    /// the forge, its own Containerfile per studio; an id outside the
+    /// registry is not an image.
+    #[test]
+    fn a_studio_image_builds_from_images_studio_on_the_forge() {
+        let forge = ImageBuildIdentity {
+            source_digest: "sha256:forge".to_string(),
+            canonical_tag: "localhost/tillandsias-forge:sha256-forge".to_string(),
+            version_alias: "localhost/tillandsias-forge:v1.0.0".to_string(),
+            latest_alias: "localhost/tillandsias-forge:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+        let identities = HashMap::from([("forge".to_string(), forge)]);
+        let (build_args, dependency_digests) =
+            image_build_inputs("studio-grapesjs", &identities).unwrap();
+        assert_eq!(
+            build_args.get("FORGE_IMAGE").map(String::as_str),
+            Some("localhost/tillandsias-forge:sha256-forge")
+        );
+        assert_eq!(
+            dependency_digests.get("forge").map(String::as_str),
+            Some("sha256:forge")
+        );
+        assert_eq!(image_dependency("studio-grapesjs"), Some("forge"));
+
+        let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets it"))
+            .join("../..");
+        let (containerfile, context) = image_specs(&root, "studio-grapesjs").unwrap();
+        assert!(context.ends_with("images/studio"), "{}", context.display());
+        assert!(containerfile.is_file(), "{}", containerfile.display());
+        assert!(containerfile.ends_with("images/studio/Containerfile.grapesjs"));
+        assert!(image_specs(&root, "studio-silex").is_err());
+        assert!(image_dependency("studio-silex").is_none());
+    }
+
     #[test]
     fn image_inspect_metadata_reads_nested_labels_and_ids() {
         let json = r#"[{"Id":"sha256:image","Config":{"Labels":{"io.tillandsias.image.source-digest":"sha256:source"}}}]"#;
@@ -35804,6 +36382,11 @@ esac
             argv.contains(&"--http-proxy=false".to_string()),
             "runtime image builds must exempt the containers.conf enclave proxy \
              env (proxy-exemption class; build containers cannot resolve `proxy`): {argv:?}"
+        );
+        assert!(
+            argv.contains(&"--network=private".to_string()),
+            "runtime image builds must name their network so RUN steps get the user's \
+             pasta_options (1955-hq7k; a default build ignored --ipv4-only): {argv:?}"
         );
         assert_eq!(
             argv.iter().filter(|arg| *arg == "--squash").count(),
@@ -37274,7 +37857,12 @@ mod keep_id_warm_tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
-        let layers_json = PathBuf::from(&root).join("overlay-layers/layers.json");
+        // 1960-kidw: podman may run on the HOST (the builder toolbox's podman
+        // is a flatpak-spawn shim), so the GraphRoot it reports is a host
+        // path. A store under $HOME is visible here at the same path; one
+        // elsewhere (/srv/...) is only under /run/host. Read the file podman
+        // writes, wherever this process sees it.
+        let layers_json = keep_id_layers_json(&root);
         let scratch = PathBuf::from(
             std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
         )
@@ -37316,14 +37904,23 @@ mod keep_id_warm_tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
-        let mapped = || -> usize {
+        let rows_of_layer = || -> Vec<serde_json::Value> {
             let text = std::fs::read_to_string(&layers_json).unwrap_or_default();
             let rows: Vec<serde_json::Value> = serde_json::from_str(&text).unwrap_or_default();
-            rows.iter()
+            rows.into_iter()
                 .filter(|l| l["diff-digest"] == layer.as_str())
+                .collect()
+        };
+        let mapped = || -> usize {
+            rows_of_layer()
+                .iter()
                 .filter(|l| l["uidmap"].as_array().is_some_and(|m| !m.is_empty()))
                 .count()
         };
+        // 1960-kidw: the population. An unreadable layers.json counts zero
+        // mapped rows everywhere, which made the premise below hollow; the
+        // image's own unmapped layer must be visible first.
+        let seen = rows_of_layer().len();
         let after_build = mapped();
         warm_keep_id_mapping("keepid-warm-test", &tag, false);
         let after_warm = mapped();
@@ -37339,6 +37936,11 @@ mod keep_id_warm_tests {
             .args(["rmi", "-f", &tag])
             .output_bounded(OperationKind::Image.default_budget());
         assert!(!layer.is_empty(), "the image's layer digest");
+        assert!(
+            seen >= 1,
+            "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
+            layers_json.display()
+        );
         assert_eq!(
             after_build, 0,
             "a fresh image starts with no mapped copy (the premise)"
@@ -37348,6 +37950,20 @@ mod keep_id_warm_tests {
             after_start, 1,
             "the first keep-id start made no copy of its own"
         );
+    }
+
+    /// 1960-kidw: `<graphroot>/overlay-layers/layers.json` as this process
+    /// sees it: at the reported path when present, else under `/run/host`
+    /// (toolbox and flatpak mount the host root there).
+    fn keep_id_layers_json(graphroot: &str) -> PathBuf {
+        let direct = PathBuf::from(graphroot).join("overlay-layers/layers.json");
+        if direct.exists() {
+            return direct;
+        }
+        let hosted = PathBuf::from("/run/host")
+            .join(graphroot.trim_start_matches('/'))
+            .join("overlay-layers/layers.json");
+        if hosted.exists() { hosted } else { direct }
     }
 
     /// The `_warm_keep_id_mapping` function from scripts/build-image.sh, run

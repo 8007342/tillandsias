@@ -180,6 +180,60 @@ impl GitView {
         }
     }
 
+    /// ORDER 1947-pnst: the full sha `rev` names, when it names a commit
+    /// this store has (a remote-tracking ref such as `origin/linux-next`).
+    pub fn resolve_commit(&self, rev: &str) -> Option<String> {
+        let sha = self
+            .run(&[
+                "rev-parse",
+                "--verify",
+                "--quiet",
+                &format!("{rev}^{{commit}}"),
+            ])?
+            .trim()
+            .to_string();
+        looks_like_sha(&sha).then_some(sha)
+    }
+
+    /// ORDER 1947-pnst: how many commits reachable from `to` but not from
+    /// `from` touch `path`. `None` when git cannot answer.
+    pub fn count_missing(&self, from: &str, to: &str, path: &str) -> Option<u64> {
+        self.run(&["rev-list", "--count", &format!("{from}..{to}"), "--", path])?
+            .trim()
+            .parse()
+            .ok()
+    }
+
+    /// ORDER 1947-pnst: paths under `path` that exist at `to` and not at
+    /// `from` (added on that side). `None` when git cannot answer.
+    pub fn added_paths(&self, from: &str, to: &str, path: &str) -> Option<Vec<String>> {
+        Some(
+            self.run(&[
+                "diff",
+                "--name-only",
+                "--diff-filter=A",
+                from,
+                to,
+                "--",
+                path,
+            ])?
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect(),
+        )
+    }
+
+    /// ORDER 1947-pnst: a commit's committer date, ISO 8601.
+    pub fn commit_date(&self, rev: &str) -> Option<String> {
+        let d = self
+            .run(&["log", "-1", "--format=%cI", rev])?
+            .trim()
+            .to_string();
+        (!d.is_empty()).then_some(d)
+    }
+
     /// The bytes of `path` as of `commit`. `None` when the commit is unfetched,
     /// the path did not exist there, or the blob is not valid UTF-8.
     pub fn file_at(&self, commit: &str, path: &str) -> Option<String> {

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-cli-lane-attaches-to-a-live-tray-and-a-second-tray-never-reconciles-the-enclave
+    field: status
+    value: completed
+    ts: "2026-11-01T14:34:11Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-cli-lane-attaches-to-a-live-tray-and-a-second-tray-never-reconciles-the-enclave
+    event:
+      type: completed
+      ts: "2026-11-01T14:34:11Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: b50105855
+  - packet_id: a-cli-lane-attaches-to-a-live-tray-and-a-second-tray-never-reconciles-the-enclave
+    event:
+      type: note
+      ts: "2026-11-01T14:34:11Z"
+      host: lenovinha
+      summary: |-
+        landed as PR 790, full gate green
