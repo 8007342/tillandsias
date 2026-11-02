@@ -4913,8 +4913,7 @@ mod tests {
             "image.generate is advertised (1874-kkrc): {tools:?}"
         );
         // The studio tools, by name: 1956-x7xp run_workflow, 1956-26qh
-        // validate_family (listed by the studio set without updating the count
-        // below), 1959-xsy5 (D12) finish_pixels.
+        // validate_family, 1959-xsy5 (D12, D13) finish_pixels and contact_sheet.
         for t in ["studio.run_workflow", "studio.validate_family"] {
             assert!(tools.contains(&t), "{t} is advertised: {tools:?}");
         }
@@ -5493,9 +5492,8 @@ mod tests {
             // 1874-kkrc: image.generate, by name.
             assert!(tools.iter().any(|t| t["name"] == "image.generate"));
             // 1860-auhm: + the four studio co-edit tools.
-            // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family
-            // (the studio set listed them without updating this pin); 1959-xsy5:
-            // + studio.finish_pixels, studio.contact_sheet.
+            // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family;
+            // 1959-xsy5: + studio.finish_pixels, studio.contact_sheet.
             assert_eq!(tools.len() - cloudflare, 28);
 
             drop(writer);
