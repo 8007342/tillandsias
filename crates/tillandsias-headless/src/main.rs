@@ -10370,6 +10370,42 @@ fn probe_ipv6_via_router(router: &str) -> RouterProbe {
     }
 }
 
+/// 1955-hq7k: name a dead IPv6 path before an image build instead of letting a
+/// RUN step stall on it silently. Only a host that HAS default IPv6 routes and
+/// none of them carries traffic is reported; a host without IPv6 says nothing.
+#[cfg(target_os = "linux")]
+fn note_dead_ipv6_before_build(image_name: &str) {
+    let table = std::process::Command::new("ip")
+        .args(["-6", "route", "show", "default"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    if let Some(line) = dead_ipv6_note(
+        image_name,
+        ipv6_egress_report(&table, probe_ipv6_via_router),
+    ) {
+        eprintln!("{line}");
+    }
+}
+
+/// The note for one probe result `(ok, routers, unmeasured)`, or `None`.
+#[cfg(target_os = "linux")]
+fn dead_ipv6_note(
+    image_name: &str,
+    (ok, routers, unmeasured): (usize, usize, usize),
+) -> Option<String> {
+    if routers == 0 || ipv6_egress_functional(ok, routers) || unmeasured == routers {
+        return None;
+    }
+    Some(format!(
+        "note:image-build:host-ipv6-egress-dead:{image_name}: {routers} default IPv6 route(s), \
+         {ok} carry traffic; RUN steps fetch over IPv4 through pasta (--network=private and \
+         containers.conf pasta_options --ipv4-only). If a fetch still stalls, check \
+         ~/.config/containers/containers.conf has pasta_options = [\"--ipv4-only\"] \
+         (tillandsias --init writes it)"
+    ))
+}
+
 #[cfg(target_os = "linux")]
 fn is_ipv6_functional(debug: bool) -> bool {
     let table = std::process::Command::new("ip")
@@ -11436,6 +11472,8 @@ pub(crate) fn build_image_with_logging(
     if _debug {
         eprintln!("[tillandsias] build-{image_name}: scope {scope:?}");
     }
+    #[cfg(target_os = "linux")]
+    note_dead_ipv6_before_build(image_name);
     let mut command = tillandsias_podman::podman_cmd_sync_under(&image_build_scope::prefix(scope));
     let argv = podman_build_argv(&containerfile, &context_dir, identity, build_args)?;
     command.args(&argv);
@@ -11624,6 +11662,11 @@ fn podman_build_argv(
         // scripts/build-image.sh has carried --http-proxy=false since the
         // first instance; this runtime build path missed it.
         "--http-proxy=false".to_string(),
+        // 1955-hq7k: an EXPLICIT build network, so RUN steps get the user's
+        // containers.conf pasta_options. A default build ignored
+        // --ipv4-only on a host with dead IPv6 and hung ~2 min per fetch
+        // (macuahuitl 2026-11-02); --network=private took 1 s.
+        "--network=private".to_string(),
         "--dns".to_string(),
         "8.8.8.8".to_string(),
         "-t".to_string(),
@@ -25886,6 +25929,41 @@ mod tests {
         assert!(!ipv6_egress_functional(ok, n));
     }
 
+    /// 1955-hq7k: a build names a dead IPv6 path (macuahuitl 2026-11-02: two RA
+    /// prefixes, no egress) and says nothing when IPv6 works, is absent, or
+    /// could not be measured at all (unmeasured is not dead).
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn a_build_names_a_dead_ipv6_path_and_only_that() {
+        let dead = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::Blackhole);
+        let note = dead_ipv6_note("forge-base", dead).expect("two dead routers are named");
+        assert!(
+            note.starts_with("note:image-build:host-ipv6-egress-dead:forge-base:"),
+            "{note}"
+        );
+        assert!(
+            note.contains("2 default IPv6 route(s), 0 carry traffic"),
+            "{note}"
+        );
+        let working = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::Ok);
+        assert_eq!(
+            dead_ipv6_note("forge-base", working),
+            None,
+            "working IPv6 says nothing"
+        );
+        assert_eq!(
+            dead_ipv6_note("forge-base", (0, 0, 0)),
+            None,
+            "no IPv6 says nothing"
+        );
+        let unmeasured = ipv6_egress_report(TWO_ROUTERS, |_| RouterProbe::CouldNotMeasure);
+        assert_eq!(
+            dead_ipv6_note("forge-base", unmeasured),
+            None,
+            "unmeasured is not dead"
+        );
+    }
+
     /// Live measurement; run explicitly. Reads only the route table and pings.
     #[test]
     #[ignore]
@@ -35837,6 +35915,11 @@ esac
             argv.contains(&"--http-proxy=false".to_string()),
             "runtime image builds must exempt the containers.conf enclave proxy \
              env (proxy-exemption class; build containers cannot resolve `proxy`): {argv:?}"
+        );
+        assert!(
+            argv.contains(&"--network=private".to_string()),
+            "runtime image builds must name their network so RUN steps get the user's \
+             pasta_options (1955-hq7k; a default build ignored --ipv4-only): {argv:?}"
         );
         assert_eq!(
             argv.iter().filter(|arg| *arg == "--squash").count(),

@@ -792,6 +792,10 @@ impl PodmanClient {
         let mut args = vec![
             "build".into(),
             "--http-proxy=false".into(),
+            // 1955-hq7k: an explicit build network so RUN steps get the user's
+            // containers.conf pasta_options (a default build ignored
+            // --ipv4-only on a host with dead IPv6, macuahuitl 2026-11-02).
+            "--network=private".into(),
             "--squash".into(),
             "--label".into(),
             format!("{IMAGE_LAYER_POLICY_LABEL}={IMAGE_LAYER_POLICY}"),
@@ -3116,6 +3120,12 @@ mod tests {
             let seen = backend.seen();
             assert_eq!(seen.len(), 3, "exists, inspect, then build");
             assert_eq!(seen[2].1.first().map(String::as_str), Some("build"));
+            assert!(
+                seen[2].1.iter().any(|arg| arg == "--network=private"),
+                "image builds must name their network so RUN steps get the user's \
+                 pasta_options (1955-hq7k): {:?}",
+                seen[2].1
+            );
         }
     }
 
