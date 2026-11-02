@@ -16859,24 +16859,36 @@ fn run_opencode_mode(
         } else {
             None
         };
-        client
-            .run_container_observed(
-                "opencode-git",
-                &git_container_name,
-                &build_git_run_args(
-                    project_name,
-                    Some(&opencode_mirror_id),
-                    &certs_dir,
-                    &versioned_image_tag("git", version),
-                    project_remote_url.as_deref(),
-                    project_default_branch.as_deref(),
-                    git_vault_secret.as_deref(),
-                    git_signer_secret.as_deref(),
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode] failed to start git: {e}"))?;
+        // 1956-4pxj: serialise the mirror bring-up with every other launch of
+        // this project (held until the seed gate below), and REUSE a running
+        // mirror: this lane used to `--replace` it unconditionally, so a second
+        // OpenCode launch destroyed the mirror a sibling forge was using
+        // (order 443's rule, which the shared launch path already follows).
+        let mirror_bringup = acquire_mirror_bringup_lock(project_name, debug).await?;
+        if crate::vault_bootstrap::container_running(&git_container_name) {
+            if debug {
+                eprintln!("[tillandsias] [OpenCode] reusing running {git_container_name}");
+            }
+        } else {
+            client
+                .run_container_observed(
+                    "opencode-git",
+                    &git_container_name,
+                    &build_git_run_args(
+                        project_name,
+                        Some(&opencode_mirror_id),
+                        &certs_dir,
+                        &versioned_image_tag("git", version),
+                        project_remote_url.as_deref(),
+                        project_default_branch.as_deref(),
+                        git_vault_secret.as_deref(),
+                        git_signer_secret.as_deref(),
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode] failed to start git: {e}"))?;
+        }
         if local_inference_disabled() {
             eprintln!(
                 "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
@@ -16914,6 +16926,7 @@ fn run_opencode_mode(
             debug,
         )
         .await?;
+        drop(mirror_bringup);
 
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
         // terminal (run_container_attached_observed below). Tailing the SUPPORT
@@ -18922,6 +18935,8 @@ pub(crate) fn ensure_enclave_for_project(
         // ad-hoc proxy container start that duplicated ensure_proxy_running.
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
+        // 1956-4pxj: held until the seed gate below passes.
+        let mirror_bringup = acquire_mirror_bringup_lock(project_name, debug).await?;
         let mirror_identity = ensure_shared_git_and_inference_for_launch(
             &client,
             project_name,
@@ -18978,6 +18993,7 @@ pub(crate) fn ensure_enclave_for_project(
             ),
         )
         .await?;
+        drop(mirror_bringup);
         Ok::<Option<String>, String>(mirror_identity)
     })?;
 
@@ -18993,6 +19009,33 @@ pub(crate) fn ensure_enclave_for_project(
 
     Ok((certs_dir, mirror_identity))
 }
+
+/// 1956-4pxj: one launch at a time decides whether a project's git mirror is
+/// running, creates it if not, and waits for its seed. Reproduced on yoga
+/// 2026-11-02: two launches 1 s apart both saw no mirror at the same instant
+/// and both ran `podman run --replace`; the second replace killed the first's
+/// mirror, whose launch then waited for a ready signal that never came. Held
+/// from the running-check through the seed gate, so the later launch finds a
+/// running, seeded mirror and reuses it. Taken off the async runtime because
+/// the wait is a blocking flock poll.
+async fn acquire_mirror_bringup_lock(
+    project_name: &str,
+    debug: bool,
+) -> Result<resource_lock::ResourceLockGuard, String> {
+    let resource = format!("git-mirror-bringup-{project_name}");
+    let project = project_name.to_string();
+    tokio::task::spawn_blocking(move || {
+        resource_lock::acquire(&resource, Duration::from_secs(600), debug).map_err(|e| {
+            format!(
+                "{e}. Another launch of {project} has been bringing its git mirror up for \
+                 10 minutes; check `podman logs tillandsias-git-{project}`, then launch again."
+            )
+        })
+    })
+    .await
+    .map_err(|e| format!("mirror bring-up lock task failed: {e}"))?
+}
+
 /// Ensure the project's git mirror and the shared inference container for a
 /// forge launch, per the operator's order-443 per-component concurrency rule:
 /// the STATEFUL mirror is ensure-if-running (never replace a healthy one a
