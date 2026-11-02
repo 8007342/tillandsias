@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue from operator direction relayed by macuahuitl-fedora, 2026-11-01.
+packets:
+- packet_id: heavy-scratch-lands-on-the-hosts-declared-fast-tier-and-hosts-without-one-keep-todays-behaviour
+  order: 1958-fstr
+  status: in_progress
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [storage, imagegen, studio, forge, builder]
+  estimated_hours: 6
+  title: Heavy scratch (imagegen /out lane volume, studio ComfyUI temp and output, forge /work/tmp, buildah layer temp) lands on the host's declared fast tier; hosts with no declaration keep today's behaviour
+  context: 'Operator 2026-11-01: models and temp work belong on the fast RAID, alongside the ramdisk; macuahuitl forges benefit most, laptops keep working. Measured on macuahuitl: md127 RAID0 (xfs, 515 GB free) already backs cache_root/models, sccache, cargo and target. Not on it: the podman store (nvme0 root, 91 percent full), which holds the lane volumes behind /work/tmp/imagegen and forge /work/tmp, plus buildah image_copy_tmp_dir defaulting to /var/tmp (yoga 821 live check; operator containers.conf stopgap set by the coordinator). The single-root design (openspec/changes/forge-storage-single-root-and-disk-discipline) is ruled but not yet implemented. Hot small scratch stays on tmpfs sized by the 1378-7w2p rule (fits RAM, never spills); bulk goes to the declared tier.'
+  exit_criteria:
+  - 'On a host declaring a fast tier, the imagegen /out lane volume backing path is on that tier. Pre-fix result: FAILS (volume lives in the podman store).'
+  - 'On a host declaring a fast tier, buildah layer temp (TMPDIR or image_copy_tmp_dir per invocation) is on that tier, not /var/tmp; no edit to the operator containers.conf.'
+  - 'Studio ComfyUI temp/output and forge /work/tmp follow the same declaration.'
+  - 'With no declaration, the argv is byte-identical to today.'
+  - 'The studio image mounts the same cache_root/models dir imagegen uses, read-only; no second download.'
+  verifiable_closure: 'Unit tests on the pure argv builders for declared and undeclared hosts, plus one live check on macuahuitl. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: litmus-heavy-scratch-on-declared-fast-tier.yaml lands with the resolver (1136-n8sh).'
+  next_action: 'Add a fast-tier declaration resolver in tillandsias-core; route lane volume create (bind-backed volume on the tier), buildah TMPDIR, and studio scratch through it.'
+  provenance: macuahuitl-fedora relay of operator direction 2026-11-01, plus the coordinator's measurements on macuahuitl.
+  events:
+  - type: filed
+    ts: '2026-11-02T06:50:32Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: image-builds-pass-an-explicit-build-network-so-the-users-pasta-ipv4-only-applies-and-a-dead-ipv6-path-is-named
+    event:
+      type: note
+      ts: "2026-11-02T07:01:40Z"
+      agent_id: linux-yoga-opus5-20261102t070140z
+      host: yoga
+      summary: |-
+        WITHDRAWN (operator 2026-11-02, relayed by macuahuitl-fedora): the follow-up in the 2026-11-02T02:53Z note on this row, that the tray could set buildah image_copy_tmp_dir to the declared fast tier, is cancelled. Operator: a one-off for our own development environment, never for end user runtime. The --network=private fix on PR #821 stands.
