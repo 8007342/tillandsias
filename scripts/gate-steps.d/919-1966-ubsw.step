@@ -11,3 +11,4 @@ STEP_DESC="Checking a host writer in the shared timing fallback never evicts a g
 STEP_LUA="scripts/lua/test-gate-step-private-metrics-fallback.lua"
 STEP_ERROR="the gate's leak check again blames a step for a record written outside the gate, or stopped refusing a step whose children fall back (1966-ubsw) — see the FAIL lines above"
 STEP_OK="private metrics fallback fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:gate-step-private-metrics-fallback:6 arms"
