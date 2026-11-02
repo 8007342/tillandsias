@@ -11,7 +11,9 @@
 # @measured/puck 0.20.2 MIT and its tree with React 19 (MIT 19, BSD-3-Clause 1,
 # 0BSD 1), shipped inside the bundle; esbuild 0.28.2 MIT and its platform
 # binary @esbuild/linux-x64 MIT (linux-arm64 on an aarch64 builder, also MIT),
-# BUILD-TIME ONLY. Recorded in images/licence-register.tsv.
+# BUILD-TIME ONLY. For the stack ledger (scripts/lua/build-stack-ledger.lua,
+# #833) the source is build/package-lock.json: Puck and React as the bundle,
+# esbuild as build-stage only. The ledger does not read it yet (follow-up).
 FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90 AS builder
 WORKDIR /build
 COPY build/package.json build/package-lock.json /build/

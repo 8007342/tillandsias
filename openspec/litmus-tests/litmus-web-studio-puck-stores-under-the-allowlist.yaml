@@ -4,7 +4,8 @@
 # Order 1864-ay3x: the Puck studio image. Puck and React 19 are bundled by
 # esbuild in a DISCARDED builder stage (operator ruling 2026-11-02); the final
 # image carries only the bundle, its CSS, the editor page and the studio
-# server. Licences in images/licence-register.tsv (esbuild as build-only).
+# server. Licences: the operator rulings in the Containerfile header; the
+# stack ledger's source is build/package-lock.json (#833; not read yet).
 #
 # The fixture builds images/web-studio-puck and runs it with --network none on
 # a throwaway React checkout. It asserts:
