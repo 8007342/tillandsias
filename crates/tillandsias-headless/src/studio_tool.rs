@@ -109,7 +109,11 @@ pub fn descriptor() -> Value {
                 "count": { "type": "integer", "minimum": 1, "maximum": MAX_COUNT, "default": 1,
                            "description": "Batch size; items run consecutively with seed, seed+1, ..." },
                 "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"] },
-                "family": { "type": "string", "description": "Optional family spec path in the checkout (studio.validate_family runs first)." }
+                "family": { "type": "string", "description": "Optional family spec path in the checkout (studio.validate_family runs first)." },
+                "init_image": { "type": "string", "description": format!("1959-xsy5 (D11): bound to a LoadImage whose image is \"$init_image\"; under {FORGE_SCRATCH}/.") },
+                "mask": { "type": "string", "description": "Bound to a LoadImage whose image is \"$mask\" (white repainted, black kept)." },
+                "layout_mask": { "type": "string", "description": "Bound to a LoadImage whose image is \"$layout_mask\"." },
+                "strength": { "type": "number", "minimum": 0, "maximum": 1, "description": "The denoise of the KSampler titled $strength. A workflow without the node is refused workflow_has_no_input:<name>." }
             },
             "required": ["workflow"]
         }
@@ -125,7 +129,7 @@ pub struct Overrides {
     pub negative_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Request {
     pub workflow: String,
     pub inputs: BTreeMap<String, String>,
@@ -133,7 +137,16 @@ pub struct Request {
     pub count: u32,
     pub tier: Option<String>,
     pub family: Option<String>,
+    /// 1959-xsy5 (D11): the image keys this request binds (init_image, mask,
+    /// layout_mask), each also present in `inputs` under the same name. A
+    /// workflow with no `$<name>` LoadImage for one is refused.
+    pub d11_keys: Vec<String>,
+    /// 1959-xsy5 (D11): bound to the KSampler titled `$strength`.
+    pub strength: Option<f32>,
 }
+
+/// D11's image keys, in the order they are checked.
+const D11_IMAGE_KEYS: &[&str] = &["init_image", "mask", "layout_mask"];
 
 /// A relative path that stays inside the checkout: no root, no `..`, no
 /// empty component.
@@ -182,7 +195,30 @@ pub fn parse_request(args: &Value) -> Result<Request, String> {
     if let Some(f) = &family {
         checkout_relative(f)?;
     }
+    // 1959-xsy5 (D11): the same keys image.generate takes, as named inputs.
+    let mut d11_keys = Vec::new();
+    for key in D11_IMAGE_KEYS {
+        if let Some(p) = args.get(*key).and_then(Value::as_str) {
+            if inputs.contains_key(*key) {
+                return Err(format!(
+                    "invalid_arguments: {key} is given both as a key and in inputs; pass it once"
+                ));
+            }
+            inputs.insert((*key).to_string(), p.to_string());
+            d11_keys.push((*key).to_string());
+        }
+    }
+    let strength = match args.get("strength") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(
+            v.as_f64()
+                .filter(|s| (0.0..=1.0).contains(s))
+                .ok_or("invalid_arguments: strength must be a number 0..=1")? as f32,
+        ),
+    };
     Ok(Request {
+        d11_keys,
+        strength,
         workflow: workflow.to_string(),
         inputs,
         overrides: Overrides {
@@ -418,6 +454,8 @@ pub fn validate(
     let mut prompt_nodes = 0;
     let mut negative_nodes = 0;
     let mut base_seed = None;
+    let mut placeholders: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut strength_bound = false;
     for (id, node) in wf.as_object_mut().expect("object") {
         match title_of(node) {
             Some("$seed") => {
@@ -444,9 +482,47 @@ pub fn validate(
             let bound = inputs.iter().find(|b| b.name == name).ok_or_else(|| {
                 format!("invalid_arguments: node {id} {key} wants input ${name}, which `inputs` does not bind")
             })?;
+            placeholders.insert(name.to_string());
             let rel = scratch_relative(&bound.forge_path)?;
             obj.insert((*key).to_string(), json!(format!("{rel} [output]")));
         }
+        // 1959-xsy5 (D11): strength is the denoise of the sampler titled
+        // $strength; a KSamplerAdvanced (no denoise input) starts that far in.
+        if title_of(node) == Some("$strength")
+            && let Some(s) = req.strength
+        {
+            let class = node["class_type"].as_str().unwrap_or("").to_string();
+            let obj = node["inputs"].as_object_mut().expect("object");
+            match class.as_str() {
+                "KSampler" => {
+                    obj.insert("denoise".into(), json!(s));
+                    strength_bound = true;
+                }
+                "KSamplerAdvanced" => {
+                    let steps = obj.get("steps").and_then(Value::as_u64).unwrap_or(20);
+                    let start = (steps as f64 * (1.0 - s as f64)).round() as u64;
+                    obj.insert("start_at_step".into(), json!(start));
+                    strength_bound = true;
+                }
+                _ => {}
+            }
+        }
+    }
+    // D11: a requested key the workflow has no node for is refused here,
+    // before anything queues, naming the knob the workflow does not open.
+    for key in &req.d11_keys {
+        if !placeholders.contains(key.as_str()) {
+            return Err(format!(
+                "workflow_has_no_input:{key}: no LoadImage in {} has image \"${key}\"",
+                req.workflow
+            ));
+        }
+    }
+    if req.strength.is_some() && !strength_bound {
+        return Err(format!(
+            "workflow_has_no_input:strength: no KSampler or KSamplerAdvanced in {} is titled $strength",
+            req.workflow
+        ));
     }
     if req.overrides.prompt.is_some() && prompt_nodes == 0 {
         return Err(
@@ -1435,6 +1511,106 @@ mod tests {
         assert_eq!(prompts[1]["5"]["inputs"]["seed"], 930002);
         drop(prompts);
         install_seam(None);
+    }
+
+    /// 1959-xsy5 (D11): run_workflow binds init_image / mask / layout_mask to
+    /// LoadImage nodes whose image is "$<name>", strength to the sampler
+    /// titled $strength (denoise; start_at_step for KSamplerAdvanced), and a
+    /// workflow that lacks the node is refused workflow_has_no_input:<name>
+    /// before anything queues.
+    #[test]
+    fn imagegen_init_mask_run_workflow_binds_d11_keys_or_names_the_missing_input() {
+        let fx = fixture("xsy5-wf", "a");
+        std::fs::write(fx.lane_dir.join("in/gk/init.png"), b"\x89PNG init").unwrap();
+        std::fs::write(fx.lane_dir.join("in/gk/mask.png"), b"\x89PNG mask").unwrap();
+        let mut w: Value = serde_json::from_str(&workflow(I1_CKPT, None)).unwrap();
+        w["11"] = json!({"class_type":"LoadImage","inputs":{"image":"$init_image"}});
+        w["12"] = json!({"class_type":"LoadImage","inputs":{"image":"$mask"}});
+        w["5"]["_meta"]["title"] = json!("$strength");
+        let with_nodes = serde_json::to_string(&w).unwrap();
+        let args = json!({
+            "workflow":"tool/art/workflows/ok.api.json",
+            "inputs":{"pose":format!("{FORGE_SCRATCH}/in/gk/left_hand.png")},
+            "init_image": format!("{FORGE_SCRATCH}/in/gk/init.png"),
+            "mask": format!("{FORGE_SCRATCH}/in/gk/mask.png"),
+            "strength": 0.55,
+        });
+        let req = parse_request(&args).unwrap();
+        assert_eq!(req.d11_keys, ["init_image", "mask"]);
+        let run = |wf: &str| {
+            validate(
+                &req,
+                wf,
+                &Allowlist::shipped(),
+                &crate::imagegen_models::manifest(),
+                crate::imagegen_models::register_tsv(),
+                &fx.lane_dir,
+            )
+        };
+        let plan = run(&with_nodes).unwrap_or_else(|e| panic!("{e}"));
+        let p = prompt_for(&plan, "st-1", 0);
+        assert!(
+            p["11"]["inputs"]["image"]
+                .as_str()
+                .unwrap()
+                .contains("in/gk/init.png")
+        );
+        assert!(
+            p["12"]["inputs"]["image"]
+                .as_str()
+                .unwrap()
+                .contains("in/gk/mask.png")
+        );
+        assert_eq!(
+            p["5"]["inputs"]["denoise"]
+                .as_f64()
+                .map(|d| (d * 100.0).round()),
+            Some(55.0)
+        );
+
+        // The plain fixture workflow opens none of these knobs.
+        let err = run(&workflow(I1_CKPT, None)).unwrap_err();
+        assert!(
+            err.starts_with("workflow_has_no_input:init_image:"),
+            "{err}"
+        );
+        let only_strength = parse_request(&json!({
+            "workflow":"tool/art/workflows/ok.api.json",
+            "inputs":{"pose":format!("{FORGE_SCRATCH}/in/gk/left_hand.png")},
+            "strength": 0.3,
+        }))
+        .unwrap();
+        let err = validate(
+            &only_strength,
+            &workflow(I1_CKPT, None),
+            &Allowlist::shipped(),
+            &crate::imagegen_models::manifest(),
+            crate::imagegen_models::register_tsv(),
+            &fx.lane_dir,
+        )
+        .unwrap_err();
+        assert!(err.starts_with("workflow_has_no_input:strength:"), "{err}");
+
+        // KSamplerAdvanced has no denoise: strength 0.55 of 4 steps starts at
+        // round(4 * 0.45) = 2.
+        let mut adv = w.clone();
+        adv["5"]["class_type"] = json!("KSamplerAdvanced");
+        let plan = run(&serde_json::to_string(&adv).unwrap()).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            prompt_for(&plan, "st-1", 0)["5"]["inputs"]["start_at_step"],
+            2
+        );
+
+        // The same key both ways is refused.
+        let both = json!({ "workflow":"tool/art/workflows/ok.api.json",
+            "inputs":{"init_image":format!("{FORGE_SCRATCH}/in/gk/init.png")},
+            "init_image": format!("{FORGE_SCRATCH}/in/gk/init.png") });
+        assert!(
+            parse_request(&both)
+                .unwrap_err()
+                .contains("both as a key and in inputs")
+        );
+        assert!(parse_request(&json!({"workflow":"w.json","strength":2})).is_err());
     }
 
     /// D1: overrides reach only nodes titled $seed, $prompt, $negative_prompt.

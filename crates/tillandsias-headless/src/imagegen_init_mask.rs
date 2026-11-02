@@ -653,7 +653,10 @@ mod tests {
     #[test]
     #[ignore]
     fn imagegen_init_mask_live_verify() {
-        let dir = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/d11-live"));
+        let dir = std::path::Path::new(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../target/d11-live"
+        ));
         let rd = |n: &str| std::fs::read(dir.join(n)).unwrap_or_else(|e| panic!("{n}: {e}"));
         let init = decode_rgba(&rd("init.png"), "init").unwrap();
         let (_, _, mask) = decode_grey(&rd("mask.png"), "mask").unwrap();
@@ -667,7 +670,11 @@ mod tests {
                 if lane[0].contains(x, y, init.width, init.height) {
                     assert_eq!(out.pixels[i + 3], 0, "lane ({x},{y}) is not empty");
                 } else if eff[(y * init.width + x) as usize] == 0 {
-                    assert_eq!(&out.pixels[i..i + 4], &init.pixels[i..i + 4], "kept ({x},{y}) changed");
+                    assert_eq!(
+                        &out.pixels[i..i + 4],
+                        &init.pixels[i..i + 4],
+                        "kept ({x},{y}) changed"
+                    );
                     kept += 1;
                 } else {
                     repainted += 1;
@@ -678,8 +685,13 @@ mod tests {
             }
         }
         reserved_regions_empty(&out, &lane).expect("reserved_regions_empty");
-        eprintln!("live-verify: kept={kept} byte-identical; repainted={repainted} of which changed={repainted_changed}; lane empty");
-        assert!(repainted_changed > repainted / 10, "the engine barely repainted: is the mask honoured?");
+        eprintln!(
+            "live-verify: kept={kept} byte-identical; repainted={repainted} of which changed={repainted_changed}; lane empty"
+        );
+        assert!(
+            repainted_changed > repainted / 10,
+            "the engine barely repainted: is the mask honoured?"
+        );
     }
 
     #[test]

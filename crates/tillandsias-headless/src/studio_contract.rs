@@ -69,10 +69,10 @@ pub fn validate_family(spec_path: &Path, project_root: &Path) -> Vec<Verdict> {
     // 1959-xsy5: the outline must be a palette colour (D12), and a declared
     // layout must parse the way image.generate reads it (D11).
     check_palette_contains_outline(&spec, project_root, &mut out);
-    if let Some(l) = spec.get("layout") {
-        if let Err(e) = crate::imagegen_init_mask::parse_layout(l) {
-            out.push(Verdict::refused("schema", format!("layout: {e}")));
-        }
+    if let Some(l) = spec.get("layout")
+        && let Err(e) = crate::imagegen_init_mask::parse_layout(l)
+    {
+        out.push(Verdict::refused("schema", format!("layout: {e}")));
     }
     if spec.get("reservedRamps").is_some() {
         check_palette_fails_all_gates(&spec, project_root, &mut out);
