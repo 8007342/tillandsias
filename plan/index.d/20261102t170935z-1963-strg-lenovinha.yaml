@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's request, from the 2026-11-02 live rerun.
+packets:
+- packet_id: a-merge-that-leaves-the-generated-studio-registry-stale-goes-red-in-the-gate-not-first-in-a-litmus
+  order: 1963-strg
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, gate, generated-files]
+  estimated_hours: 2
+  title: A merge that leaves the generated studio registry stale goes red in the gate with the regenerate remedy, not first in a litmus
+  context: 'lenovinha 2026-11-02: merging trunk into the 2krx, sthg and q7q3 branches left crates/tillandsias-headless/data/studios.json and images/studio/studios.json out of step with images/studio/registry.lua. Nothing in ./build.sh --check runs build-studio-registry.lua --check, so the drift first showed as two litmus failures (comfyui-studio-is-a-sibling-behind-the-otp-route, studio-saves-pass-one-guard-and-are-committed). The check names the remedy; the trap is that the gate never asks it.'
+  exit_criteria:
+  - 'The gate runs build-studio-registry.lua --check, and a fixture with a stale studios.json makes the gate refuse with the remedy line naming build-studio-registry.lua. Pre-fix result: FAILS (the gate passes a stale registry).'
+  verifiable_closure: 'Gate transcript on a deliberately stale tree, before and after.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the gate step and its fixture land together (1136-n8sh).'
+  next_action: 'Wire build-studio-registry.lua --check into the gate check list with its remedy line; add a fixture with a stale JSON.'
+  provenance: live rerun 2026-11-02 on lenovinha; coordinator request.
+  events:
+  - type: filed
+    ts: '2026-11-02T17:09:35Z'
+    host: lenovinha
+    summary: filed p2 ready
+- packet_id: a-podman-pause-pid-scratch-file-committed-under-the-headless-crate-is-removed-and-the-tree-refuses-tmp-dirs
+  order: 1964-ppid
+  status: ready
+  kind: bug
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [hygiene, git]
+  estimated_hours: 1
+  title: The podman pause.pid scratch file committed under crates/tillandsias-headless/.tmpKuptFo is removed, and a check refuses such dirs
+  context: 'crates/tillandsias-headless/.tmpKuptFo/libpod/tmp/pause.pid reached trunk in 8440f948f (style(1947-pnst): cargo fmt, mine: a test left a podman tmp dir in the crate and the commit swept it in). It is runtime junk from an isolated podman store.'
+  exit_criteria:
+  - 'The file is gone from trunk, and a .gitignore or check refuses .tmp* dirs under crates/. Pre-fix result: FAILS (git ls-tree lists it).'
+  verifiable_closure: 'git ls-tree on trunk before and after.'
+  unscoreable: 'unpinnable-until-the-guard-exists: hygiene removal plus ignore rule (1136-n8sh).'
+  next_action: 'git rm the dir and add crates/*/.tmp*/ to .gitignore.'
+  provenance: found merging trunk into work/1921-2krx on 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T17:09:35Z'
+    host: lenovinha
+    summary: filed p3 ready
