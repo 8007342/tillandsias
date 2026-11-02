@@ -1,5 +1,5 @@
 #!/bin/sh
-# @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:cross-platform, spec:wsl-runtime
 # Post-receive bookkeeping for Tillandsias mirrors.
 #
 # The must-succeed upstream relay runs in pre-receive. Post-receive cannot

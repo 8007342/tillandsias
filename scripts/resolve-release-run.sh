@@ -49,8 +49,18 @@ GH="${GH:-gh}"
 # and `gh` succeeding with nothing to say are DIFFERENT facts and the caller
 # needs to tell them apart -- collapsing them is a smaller version of the same
 # bug this script exists to fix.
-out="$("$GH" run list --workflow=release.yml --branch="$tag" \
-        --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)"
+# ORDER 1953-jmvb: the release is dispatched on main, not on the tag (operator
+# ruling 2026-11-01), so the run's branch is main and the tag names its SHA.
+# When the tag resolves locally, pick the main dispatch whose headSha is that
+# commit; when it does not (a fixture, or a tag not yet fetched), the newest
+# main dispatch. One gh call either way, so the stubbed-gh fixture still holds.
+tag_sha="$(git rev-parse --verify --quiet "refs/tags/${tag}^{commit}" 2>/dev/null || true)"
+jq_expr='.[0].databaseId'
+if [ -n "$tag_sha" ]; then
+    jq_expr="[.[] | select(.headSha == \"${tag_sha}\")][0].databaseId"
+fi
+out="$("$GH" run list --workflow=release.yml --branch=main --event=workflow_dispatch \
+        --limit 10 --json databaseId,headSha --jq "$jq_expr" 2>/dev/null)"
 rc=$?
 
 if [ "$rc" -ne 0 ]; then
