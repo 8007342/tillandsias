@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl-fedora, 2026-11-02), from yoga's 840M live run.
+packets:
+- packet_id: a-lane-never-silently-hands-its-host-services-socket-to-a-tray-of-a-different-version
+  order: 1961-8ats
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - tray
+  - lane
+  - mcp
+  - testing
+  estimated_hours: 4
+  title: A --bash lane from a newer build silently hands its host-services socket to an older running tray, so its tools run OLD code and a test can look green against the wrong binary
+  context: 'Measured on yoga 2026-11-02 (1959-xsy5 live arm, PR #841): a lane started from the work/1959-xsy5 release binary (`target/release/tillandsias --cloud 8007342/tillandsias --bash`, v56.11.1.2) called image.generate with the new D11 keys init_image/mask/strength/layout. The installed tray (`~/.local/bin/tillandsias --tray`, v56.11.1.1, running since 2026-11-01) answered: main.rs serve_forge_lane hands the lane to a running tray (mcp_socket::mark_lane_tray_owned, outlives_launcher) and the launcher stops serving. The old code ignored the unknown keys and generated a fresh image; the call SUCCEEDED (vulkan, 3 s) and looked like a pass. It was caught only by an independent pixel check (imagegen_init_mask_live_verify: kept pixel (0,0) changed; the output still carried sd-cli''s tEXt chunk; no staged files or provenance, which the branch writes). Rerun with the tray stopped and TILLANDSIAS_NO_TRAY=1: the branch served, and the check passed. Any test of a new build on a host with a tray running is exposed the same way, silently.'
+  exit_criteria:
+  - 'A lane whose binary version or build digest differs from the running tray''s does NOT hand its lane to that tray: it either refuses with a named reason naming both (`refused:lane-tray-version-mismatch:lane=<A> tray=<B>`, why, remedy) or serves its own host-services, and says which.'
+  - 'Same version and digest: the hand-off works as today.'
+  - 'Whichever process serves a lane is visible to the forge (the MCP initialize serverInfo carries the serving binary''s version and build id), so a test can assert what answered it.'
+  verifiable_closure: 'A fixture with a stub "tray" answering the lane hand-off with a different version/build id: the lane serves its own host-services or refuses with refused:lane-tray-version-mismatch naming both, never delegates; with a matching version it delegates. Red on today''s tree (the lane delegates regardless of version). Named by a litmus.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Read serve_forge_lane and mcp_socket::mark_lane_tray_owned / lane_accepting: the hand-off has no version handshake. Add one (the tray''s control socket or a marker carrying version + build id), then the fixture.'
+  provenance: macuahuitl-fedora 2026-11-02, from yoga's 1959-xsy5 live arm (the CAUGHT note on that row).
+  events:
+  - type: filed
+    ts: '2026-11-02T08:36:02Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request; cites the 840M incident on 1959-xsy5

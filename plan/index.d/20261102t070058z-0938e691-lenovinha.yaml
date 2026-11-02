@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: heavy-scratch-lands-on-the-hosts-declared-fast-tier-and-hosts-without-one-keep-todays-behaviour
+    field: status
+    value: obsoleted
+    ts: "2026-11-02T07:00:58Z"
+    host: lenovinha
+
+events:
+  - packet_id: heavy-scratch-lands-on-the-hosts-declared-fast-tier-and-hosts-without-one-keep-todays-behaviour
+    event:
+      type: note
+      ts: "2026-11-02T07:00:58Z"
+      host: lenovinha
+      summary: |-
+        Operator ruling 2026-11-02 (relayed by macuahuitl-fedora): finding each host fast drive was never approved; RAID use is a one-off for our own dev environment, never end-user runtime. No code pushed; branch discarded. macuahuitl handles it in its own podman config.

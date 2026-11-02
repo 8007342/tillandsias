@@ -1023,6 +1023,22 @@ until curl -sI https://mirrors.fedoraproject.org >/dev/null 2>&1; do
   sleep 1
 done
 
+# Order 1925-gupg. UPGRADE THE GUEST OS FIRST. The base is Fedora's
+# release-day Cloud image, pinned by checksum, and nothing upgraded it: every
+# Mac VM ran the 6.19.10 kernel Fedora 44 launched with while F44 stable had
+# moved to 7.2.x (Bodhi, 2026-10-28). A btrfs extent-map shrinker NULL
+# dereference in that kernel wedged a forge build under memory pressure
+# (2026-11-01, soft lockup, whole VM stuck). The guest is ephemeral and rebuilt
+# from scratch, so it is brought fully up to date here, before anything is
+# installed on top. A new kernel takes effect on the NEXT boot; provisioning
+# runs once, on the first. NON-FATAL but loud: a mirror hiccup leaves a working
+# guest on the release-day packages and says so in the marker.
+if dnf -y upgrade --refresh; then
+  echo "tillandsias-guest-upgrade ok installed_kernel=$(rpm -q --last kernel-core | head -1 | cut -d' ' -f1) running_kernel=$(uname -r) $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
+else
+  echo "tillandsias-guest-upgrade FAILED rc=$? running_kernel=$(uname -r) (continuing on release-day packages) $(date -u +%FT%TZ)" >> /var/log/tillandsias-provision-marker
+fi
+
 # socat is the readiness probe's only external dependency (order 740-3k4s).
 #
 # MEASURED, and the reason this line exists: the packet recorded "socat ships
@@ -4828,6 +4844,98 @@ mod tests {
 
     /// The provisioning script sets up both swap tiers, and does so without
     /// being able to fail provisioning.
+    #[cfg(target_os = "macos")]
+    /// Order 1925-gupg: provisioning upgrades the guest OS after the network
+    /// is up and BEFORE installing anything on the release-day image, and a
+    /// failed upgrade is recorded but does not fail provisioning. Before this
+    /// the guest kept Fedora 44's launch kernel (6.19.10) forever.
+    /// Order 1925-gupg: EXECUTE the upgrade block, not just read it. Under the
+    /// provisioning script's own `set -euo pipefail` and ERR trap, a failing
+    /// `dnf upgrade` (offline mirror) must not trip the trap: provisioning goes
+    /// on, and the marker says FAILED. A working `dnf` records ok. The block is
+    /// cut from the generated script, so a later edit is what gets run.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_failed_guest_upgrade_is_recorded_and_provisioning_continues() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let script = provision_user_data("off");
+        let start = script
+            .find("if dnf -y upgrade --refresh; then")
+            .expect("the upgrade block");
+        let end = start + script[start..].find("\nfi\n").expect("its fi") + "\nfi\n".len();
+        let dir = tempfile::tempdir().expect("tempdir");
+        let marker = dir.path().join("marker");
+        let block = script[start..end].replace(
+            "/var/log/tillandsias-provision-marker",
+            marker.to_str().unwrap(),
+        );
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        let fake = |name: &str, body: &str| {
+            let p = bin.join(name);
+            std::fs::write(&p, format!("#!/bin/bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        fake("rpm", "echo kernel-core-7.2.13-200.fc44.aarch64 Sun");
+        fake("uname", "echo 6.19.10-300.fc44.aarch64");
+        let run = |dnf_rc: i32| -> String {
+            fake("dnf", &format!("exit {dnf_rc}"));
+            let _ = std::fs::remove_file(&marker);
+            let out = std::process::Command::new("/bin/bash")
+                .arg("-c")
+                .arg(format!(
+                    "set -euo pipefail\ntrap 'echo TRAPPED; exit 99' ERR\n{block}echo CONTINUED\n"
+                ))
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
+                .output()
+                .expect("bash");
+            let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
+            assert!(out.status.success(), "dnf rc={dnf_rc}: {stdout}");
+            assert!(!stdout.contains("TRAPPED"), "the ERR trap fired: {stdout}");
+            assert!(
+                stdout.contains("CONTINUED"),
+                "provisioning stopped: {stdout}"
+            );
+            std::fs::read_to_string(&marker).unwrap_or_default()
+        };
+        let failed = run(1);
+        assert!(
+            failed.contains("tillandsias-guest-upgrade FAILED rc=1")
+                && failed.contains("running_kernel=6.19.10"),
+            "{failed}"
+        );
+        let ok = run(0);
+        assert!(
+            ok.contains("tillandsias-guest-upgrade ok installed_kernel=kernel-core-7.2.13"),
+            "{ok}"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn provision_user_data_upgrades_the_guest_os_before_installing() {
+        let script = provision_user_data("off");
+        let network = script
+            .find("until curl -sI https://mirrors.fedoraproject.org")
+            .expect("the network wait");
+        let upgrade = script
+            .find("if dnf -y upgrade --refresh; then")
+            .expect("the guest OS upgrade, non-fatal");
+        let install = script
+            .find("dnf install -y podman socat")
+            .expect("the first install");
+        assert!(network < upgrade, "the upgrade needs the network first");
+        assert!(
+            upgrade < install,
+            "upgrade before installing on top of the image"
+        );
+        assert!(
+            script.contains("tillandsias-guest-upgrade ok installed_kernel=")
+                && script.contains("tillandsias-guest-upgrade FAILED"),
+            "both outcomes are recorded in the provision marker"
+        );
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn provision_user_data_sets_up_zram_and_disk_swap_non_fatally() {

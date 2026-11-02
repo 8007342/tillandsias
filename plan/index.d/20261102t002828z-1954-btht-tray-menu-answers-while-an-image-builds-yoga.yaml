@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl-fedora, 2026-11-02).
+packets:
+- packet_id: the-tray-menu-answers-getlayout-within-budget-while-a-forge-image-builds
+  order: 1954-btht
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - tray
+  - linux
+  - dbus
+  - images
+  estimated_hours: 6
+  title: The Linux tray icon stops answering for the whole forge image build (10+ min); the menu must answer GetLayout within budget while ensure-image runs
+  context: 'Observed by the operator on macuahuitl 2026-11-01 ~14:25 PST (relayed by macuahuitl-fedora): tray v56.11.1.2, the icon unresponsive for the whole forge image build, about 10+ minutes, while an `--internal-ensure-image` forge child ran (the pip stall of 1951-vv5m). PRIOR SERIES, cited so this is read as a possible recurrence and not a duplicate: 944-jaef (sni-windowid-type-wedges-shell, plan/archive/packets-2026-09.yaml) fixed five GNOME-shell freezes caused by StatusNotifierItem / dbusmenu WIRE content (Event/EventGroup/AboutToShow/WindowId types, GetLayout parent_id, the id-0 cycle). Those were the shell wedging on bad replies; this one is the tray not replying while a build runs, which points at a new path. Candidate, unverified: crates/tillandsias-headless/src/main.rs SetsidImageEnsure::run spawns `--internal-ensure-image` and WAITS for the helper by design (the DetachedImageEnsure doc: "the wait stays in the parent so foreground lanes keep their ordering"). If a tray-originated launch reaches that wait on the thread or runtime that serves the dbusmenu interface, every GetLayout queues behind the build. Not yet measured which thread waits.'
+  exit_criteria:
+  - 'While an image ensure is in progress (started from the tray, the path the operator used), the tray answers GetLayout and the SNI property reads within a stated budget (for example 1 s), and the menu shows the build as in progress.'
+  - 'The launch that needed the image still waits for it, but off the thread that serves the menu, so the ordering the DetachedImageEnsure doc protects is kept.'
+  - 'The root cause is named from a measurement (which thread or task held the wait), not from the candidate above.'
+  verifiable_closure: 'A fixture that runs the tray menu service with a stubbed ensure-image that blocks (no podman, no network), triggers a launch that needs the image, and calls GetLayout over a private session bus: it asserts a reply inside the budget while the stub is still blocking. It fails on today''s code if the wait is on the menu''s path, and passes after; wired into a gate and named by a litmus. If the measurement shows today''s code already answers (the freeze is elsewhere), the fixture still lands as the guard and the row records where the freeze actually was.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Reproduce on yoga: start the tray, launch a lane whose image is missing with a forge-base build that is made to stall, and probe GetLayout with busctl or gdbus while it builds; record which thread holds the wait (py-spy is not available, use the tray debug log and a thread dump via gdb or /proc/<pid>/task).'
+  provenance: operator observation on macuahuitl 2026-11-01, relayed by macuahuitl-fedora; yoga's 1951-vv5m audit, finding 3.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:28:28Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request; prior freeze series 944-jaef cited

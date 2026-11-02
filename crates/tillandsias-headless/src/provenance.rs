@@ -150,7 +150,11 @@ mod tests {
     use super::*;
 
     fn containerfile_arg(rel: &str, arg: &str) -> String {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        // Read at run time (1590-j20f: never compile-time env!).
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
         let text = std::fs::read_to_string(root.join(rel)).unwrap();
         text.lines()
             .find_map(|l| l.trim().strip_prefix(&format!("ARG {arg}=")))
