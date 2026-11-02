@@ -1,0 +1,22 @@
+TinaCMS studio lane (Tillandsias order 1863-dmke)
+
+tinacms 3.15.1 and @tinacms/cli 4.0.4 are Apache-2.0 (Forestry.io Holdings
+Inc.). @tinacms/graphql and @tinacms/search declare "SEE LICENSE IN LICENSE";
+the LICENSE files they ship are Apache-2.0, and the Tina Data Layer they
+point to (@tinacms/datalayer) ships Apache-2.0 too. Treated as Apache-2.0 as
+shipped (operator ruling 2026-11-01).
+
+The installed tree (1026 packages, pinned by package-lock.json integrity) is
+MIT, ISC, Apache-2.0, BSD-2/3-Clause, 0BSD and Unlicense, with these
+individually: argparse Python-2.0; dompurify MPL-2.0 OR Apache-2.0;
+expand-template MIT OR WTFPL; mdn-data CC0-1.0; type-fest MIT OR CC0-1.0;
+pako MIT AND Zlib; sha.js MIT AND BSD-3-Clause; rc BSD-2-Clause OR MIT OR
+Apache-2.0; fast-shallow-equal and react-universal-interface Unlicense (no
+package.json licence; LICENSE file); khroma MIT (LICENSE file).
+
+Attribution (CC-BY-4.0): browser support data from caniuse-lite, derived
+from Can I Use (https://caniuse.com) by Alexis Deveria, licensed CC BY 4.0
+(https://creativecommons.org/licenses/by/4.0/).
+
+Telemetry: tinacms bundles posthog-js. This lane runs `tinacms dev
+--noTelemetry` and the studio container has no network.
