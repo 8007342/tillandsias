@@ -582,8 +582,12 @@ for _, f in ipairs(containerfiles) do
         local imgname = dir .. (suffix and ("-" .. suffix) or "")
         if dir == "default" and suffix == "base" then imgname = "default-base" end
         local comp = component("image:" .. imgname, "tillandsias-" .. imgname .. " image", "container-image", "built from " .. f)
-        components[comp].optional = IMAGE_OPTIONAL[imgname]
-        components[comp].optional_source = "generator-table"
+        local opt = IMAGE_OPTIONAL[imgname]
+        -- a studio image (images/studio/Containerfile.<studio>, images/web-studio-*) is
+        -- always a user's choice; an image the table does not know is reported as such.
+        if opt == nil and imgname:match("studio") then opt = true end
+        components[comp].optional = opt
+        components[comp].optional_source = (IMAGE_OPTIONAL[imgname] ~= nil) and "generator-table" or (opt ~= nil and "studio-by-name" or "unknown")
         parse_containerfile(f, comp, imgname)
     end
 end
