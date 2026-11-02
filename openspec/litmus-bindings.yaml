@@ -53,7 +53,6 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-readiness-probe-shape
-  - litmus:dev-inference-ensure-refusals-carry-affordance
   - litmus:async-inference-launch-entrypoint-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
@@ -668,6 +667,7 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:inference-readiness-probe-shape
+  - litmus:dev-inference-ensure-refusals-carry-affordance
   - litmus:inference-deferred-model-pulls
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
