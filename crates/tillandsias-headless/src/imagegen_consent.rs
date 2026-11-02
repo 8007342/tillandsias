@@ -319,4 +319,75 @@ mod tests {
         assert_eq!(r["status"], "consent_required", "{r}");
         imagegen_tool::install_seam(None);
     }
+
+    /// 1957-5m8g field report (demon_attack-forge): a granted tier is never
+    /// re-offered. Grant I2, grant I3, then three I3 calls with no token and no
+    /// offer. Pre-fix: FAILS (an I2 result re-offered the granted I3).
+    #[test]
+    fn a_granted_tier_is_never_re_offered_and_the_top_grant_needs_no_token() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        reset_for_test();
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let engine = Arc::new(Counting(Default::default()));
+        imagegen_tool::install_seam(Some(Seam {
+            engine: engine.clone(),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I3".into(),
+        }));
+        let runs = || engine.0.load(Ordering::SeqCst);
+        let (p, i) = ("5m8g-reoffer", "a");
+        let mut sink = |_: Progress| {};
+        let call = |tier: Option<&str>, token: Option<&str>, sink: &mut dyn FnMut(Progress)| {
+            let mut a = json!({"prompt": "a demon", "width": 64, "height": 64});
+            if let Some(t) = tier {
+                a["tier"] = json!(t);
+            }
+            if let Some(t) = token {
+                a["consent_token"] = json!(t);
+            }
+            imagegen_tool::call(p, i, &a, sink).unwrap()
+        };
+        let token_of = |r: &Value, tier: &str| {
+            assert_eq!(r["bigger_tier_offer"]["tier"], tier, "{r}");
+            r["bigger_tier_offer"]["consent_token"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+
+        // Walk up once: I0 -> grant I1 -> grant I2 -> grant I3.
+        let r = call(None, None, &mut sink);
+        let t1 = token_of(&r, "I1");
+        let r = call(Some("I1"), Some(&t1), &mut sink);
+        let t2 = token_of(&r, "I2");
+        let r = call(Some("I2"), Some(&t2), &mut sink);
+        assert_eq!(r["grant"]["tier"], "I2", "{r}");
+        let t3 = token_of(&r, "I3");
+        let r = call(Some("I3"), Some(&t3), &mut sink);
+        assert_eq!(r["tier"], "I3", "{r}");
+        assert_eq!(r["grant"]["tier"], "I3", "{r}");
+        assert!(r["bigger_tier_offer"].is_null(), "null at the ceiling: {r}");
+        let before = runs();
+
+        // Three I3 calls: no token, no offer, each runs once.
+        for n in 1..=3 {
+            let r = call(Some("I3"), None, &mut sink);
+            assert_eq!(r["tier"], "I3", "call {n}: {r}");
+            assert_eq!(r["grant"]["tier"], "I3", "call {n}: {r}");
+            assert!(r["bigger_tier_offer"].is_null(), "call {n} re-offered: {r}");
+            assert_eq!(runs(), before + n);
+        }
+        // From a granted lower tier the offer skips every granted rung: I2 and
+        // I1 calls offer nothing once I3 is granted.
+        for t in ["I1", "I2"] {
+            let r = call(Some(t), None, &mut sink);
+            assert_eq!(r["tier"], t, "{r}");
+            assert!(
+                r["bigger_tier_offer"].is_null(),
+                "{t} re-offered a granted tier: {r}"
+            );
+        }
+        imagegen_tool::install_seam(None);
+    }
 }
