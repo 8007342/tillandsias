@@ -16624,6 +16624,14 @@ fn run_opencode_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1956-4pxj: a second launch of this project takes the next free instance
+    // (its own workspace and container, the same git mirror) instead of
+    // dying on the first forge's workspace lock. Held for the whole launch.
+    let _instance_claim = claim_forge_instance(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+        debug,
+    )?;
     // 1783-k5hm: before any podman call, so a refused launch starts nothing.
     refuse_lane_socket_owned_elsewhere(
         project_name,
@@ -18200,6 +18208,14 @@ pub(crate) fn run_opencode_web_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1956-4pxj: a second launch of this project takes the next free instance
+    // (its own workspace and container, the same git mirror) instead of
+    // dying on the first forge's workspace lock. Held for the whole launch.
+    let _instance_claim = claim_forge_instance(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+        debug,
+    )?;
     // 1783-k5hm: before any podman call, so a refused launch starts nothing.
     refuse_lane_socket_owned_elsewhere(
         project_name,
@@ -19384,6 +19400,79 @@ fn refuse_lane_socket_owned_elsewhere(project: &str, host_mount: bool) -> Result
     Ok(())
 }
 
+/// Instance slots an interactive launch may take before refusing (1956-4pxj).
+const FORGE_INSTANCE_SLOTS: usize = 16;
+
+/// The instance name for slot `n` (1-based): slot 1 is the unset default.
+fn forge_instance_for_slot(n: usize) -> Option<String> {
+    (n > 1).then(|| n.to_string())
+}
+
+/// 1956-4pxj — operator ruling 2026-11-01: "Two concurrent forges, same
+/// harness, same project, should be a perfectly normal case." Before this, a
+/// second launch of a project contended for the DEFAULT instance's RAM
+/// workspace lock, which the first forge holds for its whole life, and died
+/// after 120 s (reproduced on yoga 2026-11-02).
+///
+/// An interactive launch with no explicit `TILLANDSIAS_FORGE_INSTANCE` takes
+/// the first free slot: default, then "2", "3", ... A slot is free when its
+/// claim lock is free (no live launch of this binary holds it) and no other
+/// process serves its lane socket (the tray's own lane). The claim is taken
+/// NON-BLOCKING and held for the caller's life, so two launches a second
+/// apart can never pick the same slot. A taken slot other than the default is
+/// exported as `TILLANDSIAS_FORGE_INSTANCE`, before any name is derived, so
+/// container, workspace, socket and Vault names all follow it.
+///
+/// An explicit instance (a dispatcher's worker) and a host-mount lane (one
+/// shared checkout) keep today's behaviour: no claim.
+fn claim_forge_instance(
+    project: &str,
+    host_mount: bool,
+    debug: bool,
+) -> Result<Option<resource_lock::ResourceLockGuard>, String> {
+    let explicit = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .is_some_and(|s| !s.trim().is_empty());
+    if explicit || host_mount {
+        return Ok(None);
+    }
+    for slot in 1..=FORGE_INSTANCE_SLOTS {
+        let instance = forge_instance_for_slot(slot);
+        let label = instance.as_deref().unwrap_or("default");
+        #[cfg(feature = "host-services")]
+        if mcp_socket::lane_socket_foreign_owner(project, label).is_some() {
+            continue;
+        }
+        let resource = format!("forge-instance-{project}-{label}");
+        let guard = match resource_lock::acquire(&resource, Duration::ZERO, false) {
+            Ok(guard) => guard,
+            // Held by another launch: try the next slot.
+            Err(e) if e.starts_with("resource-lock: timed out") => continue,
+            // An unusable lock dir is not "every slot is busy".
+            Err(e) => return Err(e),
+        };
+        if let Some(name) = &instance {
+            // The env write runs at the top of a lane launch, before any
+            // thread that reads the instance is spawned.
+            unsafe {
+                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", name);
+            }
+            eprintln!(
+                "[tillandsias] {project}: another forge holds the default instance; \
+                 this launch is instance {name} with its own workspace, sharing the \
+                 project's git mirror (1956-4pxj)"
+            );
+        } else if debug {
+            eprintln!("[tillandsias] {project}: forge instance default");
+        }
+        return Ok(Some(guard));
+    }
+    Err(format!(
+        "refused:forge-instance-slots-full:{project}: {FORGE_INSTANCE_SLOTS} forges of this \
+         project are already running or starting; stop one, then launch again. Nothing was started."
+    ))
+}
+
 /// The named refusal for [`refuse_lane_socket_owned_elsewhere`].
 #[cfg(feature = "host-services")]
 fn lane_socket_owned_refusal(project: &str, instance: &str, socket: &Path) -> String {
@@ -20425,6 +20514,14 @@ fn run_forge_agent_cli_mode(
             "cannot use TILLANDSIAS_FORGE_HOST_MOUNT for ephemeral cloud project".to_string(),
         );
     }
+    // 1956-4pxj: a second launch of this project takes the next free instance
+    // (its own workspace and container, the same git mirror) instead of
+    // dying on the first forge's workspace lock. Held for the whole launch.
+    let _instance_claim = claim_forge_instance(
+        project_name,
+        forge_host_mount_granted(forge_uses_host_mount(), canonical_path.as_deref()),
+        debug,
+    )?;
     // 1783-k5hm: before any podman call, so a refused launch starts nothing.
     refuse_lane_socket_owned_elsewhere(
         project_name,
@@ -25906,6 +26003,67 @@ mod tests {
         // serialise nothing. Delegates to the canonical lock (order 434 unified
         // this after that fix pointed one test at a different mutex).
         crate::runtime_assets::env_lock()
+    }
+
+    /// 1956-4pxj: a second interactive launch of a project takes instance 2
+    /// (its own workspace and container names) instead of contending for the
+    /// default instance's lock; an explicit instance and a host-mount lane are
+    /// left alone. Reproduced on yoga before this: the second launch waited on
+    /// the first forge's workspace lock and died after 120 s.
+    #[test]
+    fn a_second_launch_of_a_project_takes_the_next_instance() {
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let project = format!("twin-{}-{}", std::process::id(), line!());
+
+        let first = claim_forge_instance(&project, false, false)
+            .expect("first claim")
+            .expect("an interactive launch claims a slot");
+        assert!(
+            std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err(),
+            "the first launch keeps the default instance"
+        );
+        let default_volume = forge_ram_workspace_volume(&project);
+
+        let second = claim_forge_instance(&project, false, false)
+            .expect("second claim")
+            .expect("a second launch claims the next slot");
+        assert_eq!(
+            std::env::var("TILLANDSIAS_FORGE_INSTANCE").as_deref(),
+            Ok("2"),
+            "the second launch is instance 2"
+        );
+        assert_ne!(
+            forge_ram_workspace_volume(&project),
+            default_volume,
+            "instance 2 gets its own RAM workspace, so it never waits on the first's lock"
+        );
+        assert!(
+            forge_container_name(&project).starts_with(&format!("tillandsias-{project}-forge-2")),
+            "instance 2 gets its own container name: {}",
+            forge_container_name(&project)
+        );
+
+        // Already explicit (this process now carries "2"), and host-mount: no claim.
+        assert!(
+            claim_forge_instance(&project, false, false)
+                .expect("explicit")
+                .is_none()
+        );
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        assert!(
+            claim_forge_instance(&project, true, false)
+                .expect("host mount")
+                .is_none()
+        );
+
+        // The default slot frees when the first launch ends.
+        drop(first);
+        let again = claim_forge_instance(&project, false, false)
+            .expect("third claim")
+            .expect("the freed default slot is reused");
+        assert!(std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err());
+        drop((second, again));
     }
 
     struct TestEnvRestore(Vec<(&'static str, Option<std::ffi::OsString>)>);
