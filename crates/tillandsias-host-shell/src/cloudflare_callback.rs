@@ -209,6 +209,12 @@ impl HostCallbackListener {
                     if !peer.ip().is_loopback() {
                         continue;
                     }
+                    // macOS (BSD) hands the accepted socket the listener's
+                    // O_NONBLOCK; Linux does not. Blocking reads with the
+                    // timeouts below are what a slow browser request needs:
+                    // non-blocking, a request not yet arrived read as
+                    // WouldBlock and the real callback was answered 404.
+                    let _ = stream.set_nonblocking(false);
                     let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
                     let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
                     match read_request_target(&mut stream) {
@@ -323,6 +329,17 @@ mod tests {
     use super::*;
     use std::io::Read;
 
+    /// The listener tests bind ephemeral loopback ports, and one asserts its
+    /// port is CLOSED by connecting to it. In parallel the OS may hand that
+    /// port to another test's listener, so they run one at a time. (The
+    /// intermittent darwin failure that prompted this was the inherited
+    /// O_NONBLOCK in `serve_one`, fixed there; this guard is precautionary.)
+    static LISTENER_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn one_listener_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+        LISTENER_TESTS.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     fn get(port: u16, target: &str) -> String {
         let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
         write!(s, "GET {target} HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n").unwrap();
@@ -336,6 +353,7 @@ mod tests {
     /// code, and 404s everything else while it waits.
     #[test]
     fn the_host_listener_serves_one_live_callback_and_forwards_code_and_state() {
+        let _serial = one_listener_at_a_time();
         let l = HostCallbackListener::bind_one_of(&[0]).unwrap();
         let port = l.port();
         assert_eq!(
@@ -372,6 +390,41 @@ mod tests {
         assert!(TcpStream::connect(("127.0.0.1", port)).is_err());
     }
 
+    /// A browser may connect before it sends its request. On macOS the
+    /// accepted socket inherits the listener's O_NONBLOCK (Linux does not),
+    /// so reading a slow request hit WouldBlock, the real callback was
+    /// answered 404 and the listener waited out its deadline (measured: an
+    /// intermittent failure of the suite under load on darwin). A request sent
+    /// 300 ms after connecting must still be served.
+    #[test]
+    fn a_request_that_arrives_after_the_connect_is_still_served() {
+        let _serial = one_listener_at_a_time();
+        let l = HostCallbackListener::bind_one_of(&[0]).unwrap();
+        let port = l.port();
+        let server =
+            std::thread::spawn(move || l.serve_one(Instant::now() + Duration::from_secs(5)));
+        let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        write!(
+            s,
+            "GET {CALLBACK_PATH}?state=S-slow&code=C-slow HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+        )
+        .unwrap();
+        let mut page = String::new();
+        let _ = s.read_to_string(&mut page);
+        assert!(
+            page.starts_with("HTTP/1.1 200"),
+            "a slow request was refused:\n{page}"
+        );
+        assert_eq!(
+            server.join().unwrap(),
+            Ok(Callback::Code {
+                state: "S-slow".into(),
+                code: "C-slow".into()
+            })
+        );
+    }
+
     /// 1955-cfhf, end to end at the unit level: the browser hits the HOST
     /// listener, the served callback becomes the forward frame, the frame
     /// crosses the wire codec, and what the guest decodes is
@@ -380,6 +433,7 @@ mod tests {
     /// RED without the forwarding: no `forward_envelope`, no variant.
     #[test]
     fn a_served_callback_becomes_the_forward_frame_the_guest_decodes() {
+        let _serial = one_listener_at_a_time();
         let l = HostCallbackListener::bind_one_of(&[0]).unwrap();
         let port = l.port();
         let server =
@@ -442,6 +496,7 @@ mod tests {
 
     #[test]
     fn the_launch_spec_carries_the_host_port_to_the_guest() {
+        let _serial = one_listener_at_a_time();
         let l = HostCallbackListener::bind_one_of(&[0]).unwrap();
         let mut opts = PtyOpenOpts {
             rows: 24,
