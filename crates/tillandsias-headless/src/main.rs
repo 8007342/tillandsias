@@ -9519,6 +9519,13 @@ fn serve_forge_lane(project: &str, instance: &str, outlives_launcher: bool, debu
                 let deadline = Instant::now() + Duration::from_secs(5);
                 while Instant::now() < deadline {
                     if mcp_socket::lane_accepting(project, instance) {
+                        // 1961-8ats: the tray that took the lane must be this build.
+                        if let Some(refusal) =
+                            mcp_socket::lane_served_by_other_build(project, instance)
+                        {
+                            eprintln!("{refusal}");
+                            std::process::exit(1);
+                        }
                         if debug {
                             eprintln!("[tillandsias] the tray serves lane {project}-{instance}");
                         }
@@ -19381,6 +19388,9 @@ fn refuse_lane_socket_owned_elsewhere(project: &str, host_mount: bool) -> Result
             .unwrap_or_else(|| "default".into());
         if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, &instance) {
             return Err(lane_socket_owned_refusal(project, instance.trim(), &path));
+        }
+        if let Some(refusal) = mcp_socket::lane_served_by_other_build(project, &instance) {
+            return Err(refusal);
         }
     }
     let _ = (project, host_mount);
