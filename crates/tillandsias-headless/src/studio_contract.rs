@@ -89,12 +89,22 @@ pub fn referenced_inputs(spec: &Value) -> Vec<(String, String)> {
         }
     };
     push("palette.locked".into(), &spec["palette"]["locked"]);
-    for (i, r) in spec["references"].as_array().into_iter().flatten().enumerate() {
+    for (i, r) in spec["references"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
         push(format!("references[{i}].image"), &r["image"]);
     }
     for (i, p) in spec["poses"].as_array().into_iter().flatten().enumerate() {
         push(format!("poses[{i}].control.image"), &p["control"]["image"]);
-        for (j, a) in p["control"]["aux"].as_array().into_iter().flatten().enumerate() {
+        for (j, a) in p["control"]["aux"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
             push(format!("poses[{i}].control.aux[{j}].image"), &a["image"]);
         }
         push(format!("poses[{i}].regionMask"), &p["regionMask"]);
@@ -118,10 +128,14 @@ pub fn project_relative(path: &str) -> Result<String, String> {
         return Err("invalid_arguments: spec path is empty".into());
     }
     if segments.contains(&"..") {
-        return Err(format!("invalid_arguments: {path:?} leaves the project ('..' is not allowed)"));
+        return Err(format!(
+            "invalid_arguments: {path:?} leaves the project ('..' is not allowed)"
+        ));
     }
     if segments.iter().any(|s| s.starts_with('.')) {
-        return Err(format!("invalid_arguments: {path:?} names a hidden or private segment"));
+        return Err(format!(
+            "invalid_arguments: {path:?} names a hidden or private segment"
+        ));
     }
     Ok(segments.join("/"))
 }
@@ -134,7 +148,14 @@ fn check_shape(spec: &Value, out: &mut Vec<Verdict>) {
         s.err("", "spec must be a JSON object");
         return;
     };
-    for key in ["contract", "pipelineVersion", "family", "version", "project", "kind"] {
+    for key in [
+        "contract",
+        "pipelineVersion",
+        "family",
+        "version",
+        "project",
+        "kind",
+    ] {
         if !obj.contains_key(key) {
             s.err(key, "is required");
         }
@@ -143,7 +164,10 @@ fn check_shape(spec: &Value, out: &mut Vec<Verdict>) {
         s.err("contract", format!("must be {CONTRACT:?}"));
     }
     if obj.contains_key("pipelineVersion") && !spec["pipelineVersion"].is_null() {
-        s.err("pipelineVersion", "must be null in a spec; the tool stamps it into provenance");
+        s.err(
+            "pipelineVersion",
+            "must be null in a spec; the tool stamps it into provenance",
+        );
     }
     s.slug("family", &spec["family"]);
     s.slug("project", &spec["project"]);
@@ -161,7 +185,10 @@ fn check_shape(spec: &Value, out: &mut Vec<Verdict>) {
         Some(k) if !KNOWN_KINDS.contains(&k) => {
             s.out.push(Verdict::refused(
                 "unknown_kind",
-                format!("{k} is not a known kind; known kinds: {}", KNOWN_KINDS.join(", ")),
+                format!(
+                    "{k} is not a known kind; known kinds: {}",
+                    KNOWN_KINDS.join(", ")
+                ),
             ));
         }
         Some("character-frames") => s.character_frames(spec),
@@ -181,9 +208,18 @@ fn check_shape(spec: &Value, out: &mut Vec<Verdict>) {
     if let Some(a) = spec.get("adapters") {
         s.adapters(a);
     }
-    for (i, r) in spec["references"].as_array().into_iter().flatten().enumerate() {
+    for (i, r) in spec["references"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+    {
         let at = format!("references[{i}]");
-        s.one_of(&format!("{at}.role"), &r["role"], &["identity", "style", "palette"]);
+        s.one_of(
+            &format!("{at}.role"),
+            &r["role"],
+            &["identity", "style", "palette"],
+        );
         s.path(&format!("{at}.image"), &r["image"]);
         if let Some(w) = r.get("weight")
             && !w.as_f64().is_some_and(|w| (0.0..=1.0).contains(&w))
@@ -219,7 +255,10 @@ fn check_shape(spec: &Value, out: &mut Vec<Verdict>) {
             s.err("outline", "is required when reservedRamps is declared");
         }
         if spec["palette"]["locked"].is_null() {
-            s.err("palette.locked", "is required when reservedRamps is declared");
+            s.err(
+                "palette.locked",
+                "is required when reservedRamps is declared",
+            );
         }
         s.require_static(spec, "reservedRamps", "palette_fails_all_gates");
     }
@@ -244,7 +283,8 @@ struct Shape<'a> {
 impl Shape<'_> {
     fn err(&mut self, at: &str, what: impl fmt::Display) {
         let at = if at.is_empty() { "spec" } else { at };
-        self.out.push(Verdict::refused("schema", format!("{at} {what}")));
+        self.out
+            .push(Verdict::refused("schema", format!("{at} {what}")));
     }
 
     fn slug(&mut self, at: &str, v: &Value) {
@@ -253,7 +293,8 @@ impl Shape<'_> {
         }
         let ok = v.as_str().is_some_and(|s| {
             let mut c = s.chars();
-            c.next().is_some_and(|f| f.is_ascii_lowercase() || f.is_ascii_digit())
+            c.next()
+                .is_some_and(|f| f.is_ascii_lowercase() || f.is_ascii_digit())
                 && c.all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || "._-".contains(ch))
         });
         if !ok {
@@ -289,7 +330,10 @@ impl Shape<'_> {
             .as_array()
             .is_some_and(|a| a.iter().any(|c| c["id"] == id));
         if !listed {
-            self.err("qa.static", format!("must list {id} when {because} is declared (D7(a))"));
+            self.err(
+                "qa.static",
+                format!("must list {id} when {because} is declared (D7(a))"),
+            );
         }
     }
 
@@ -346,10 +390,18 @@ impl Shape<'_> {
                 _ => {}
             }
             if p.get("control").is_none() {
-                self.err(&format!("{at}.control"), "is required: the caller supplies the control image");
+                self.err(
+                    &format!("{at}.control"),
+                    "is required: the caller supplies the control image",
+                );
             } else {
                 self.control(&format!("{at}.control"), &p["control"]);
-                for (j, a) in p["control"]["aux"].as_array().into_iter().flatten().enumerate() {
+                for (j, a) in p["control"]["aux"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .enumerate()
+                {
                     self.control(&format!("{at}.control.aux[{j}]"), a);
                 }
             }
@@ -357,7 +409,11 @@ impl Shape<'_> {
                 self.path(&format!("{at}.regionMask"), m);
             }
             if let Some(sf) = p.get("supportFoot") {
-                self.one_of(&format!("{at}.supportFoot"), sf, &["left", "right", "both", "none"]);
+                self.one_of(
+                    &format!("{at}.supportFoot"),
+                    sf,
+                    &["left", "right", "both", "none"],
+                );
             }
         }
     }
@@ -386,7 +442,11 @@ impl Shape<'_> {
             self.err("frame.units", "must be \"native-px\"");
         }
         if f.get("scale").is_some() {
-            self.one_of("frame.scale.mode", &f["scale"]["mode"], &["fixed-per-family"]);
+            self.one_of(
+                "frame.scale.mode",
+                &f["scale"]["mode"],
+                &["fixed-per-family"],
+            );
         }
         if let Some(c) = f.get("camera") {
             self.camera("frame.camera", c);
@@ -395,17 +455,29 @@ impl Shape<'_> {
             self.native(n);
         }
         if let Some(m) = f.get("margin") {
-            if !m["minClear"].as_f64().is_some_and(|x| (0.0..=0.5).contains(&x)) {
-                self.err("frame.margin.minClear", "must be a fraction of the canvas in 0..=0.5");
+            if !m["minClear"]
+                .as_f64()
+                .is_some_and(|x| (0.0..=0.5).contains(&x))
+            {
+                self.err(
+                    "frame.margin.minClear",
+                    "must be a fraction of the canvas in 0..=0.5",
+                );
             }
             if m["units"] != "fraction-of-generation-canvas" {
-                self.err("frame.margin.units", "must be \"fraction-of-generation-canvas\"");
+                self.err(
+                    "frame.margin.units",
+                    "must be \"fraction-of-generation-canvas\"",
+                );
             }
         }
         if let Some(c) = f.get("generationCanvas") {
             for k in ["width", "height"] {
                 if !c[k].as_u64().is_some_and(|n| n >= 64) {
-                    self.err(&format!("frame.generationCanvas.{k}"), "must be an integer >= 64");
+                    self.err(
+                        &format!("frame.generationCanvas.{k}"),
+                        "must be an integer >= 64",
+                    );
                 }
             }
         }
@@ -416,7 +488,10 @@ impl Shape<'_> {
             return; // a decision the owner has not made yet
         }
         let Some(m) = n.as_object() else {
-            self.err("frame.native", "must be null, a size, or {perRoom: true, <room>: size}");
+            self.err(
+                "frame.native",
+                "must be null, a size, or {perRoom: true, <room>: size}",
+            );
             return;
         };
         if m.get("perRoom").is_some() {
@@ -425,7 +500,10 @@ impl Shape<'_> {
             }
             let rooms: Vec<_> = m.keys().filter(|k| *k != "perRoom").collect();
             if rooms.is_empty() {
-                self.err("frame.native", "perRoom needs at least one <room>: {width, height, pixelScale}");
+                self.err(
+                    "frame.native",
+                    "perRoom needs at least one <room>: {width, height, pixelScale}",
+                );
             }
             for r in rooms {
                 self.slug(&format!("frame.native[{r:?}]"), &Value::from(r.as_str()));
@@ -479,7 +557,11 @@ impl Shape<'_> {
 
     fn transparency(&mut self, t: &Value) {
         for (k, v) in t["byBackend"].as_object().into_iter().flatten() {
-            self.one_of(&format!("transparency.byBackend.{k}"), v, &["layerdiffuse", "matte"]);
+            self.one_of(
+                &format!("transparency.byBackend.{k}"),
+                v,
+                &["layerdiffuse", "matte"],
+            );
         }
         if let Some(m) = t.get("matte") {
             self.one_of("transparency.matte", m, &["birefnet"]);
@@ -521,7 +603,10 @@ impl Shape<'_> {
                         self.slug(&format!("{at}.appliesToRegions[{j}]"), r);
                     }
                 }
-                _ => self.err(&format!("{at}.appliesToRegions"), "must name at least one region"),
+                _ => self.err(
+                    &format!("{at}.appliesToRegions"),
+                    "must name at least one region",
+                ),
             }
             match ramp["gates"].as_array() {
                 Some(g) if !g.is_empty() => {
@@ -599,18 +684,33 @@ impl Shape<'_> {
         let per_room: Option<BTreeSet<&str>> = spec["frame"]["native"]
             .as_object()
             .filter(|m| m.get("perRoom").is_some())
-            .map(|m| m.keys().map(String::as_str).filter(|k| *k != "perRoom").collect());
+            .map(|m| {
+                m.keys()
+                    .map(String::as_str)
+                    .filter(|k| *k != "perRoom")
+                    .collect()
+            });
         for (i, target) in list.iter().enumerate() {
             let at = format!("targets[{i}]");
-            self.one_of(&format!("{at}.type"), &target["type"], &["kumbiaManifest", "layeredAtlas"]);
+            self.one_of(
+                &format!("{at}.type"),
+                &target["type"],
+                &["kumbiaManifest", "layeredAtlas"],
+            );
             match target["room"].as_str() {
-                None => self.err(&format!("{at}.room"), "is required: every target names its room"),
+                None => self.err(
+                    &format!("{at}.room"),
+                    "is required: every target names its room",
+                ),
                 Some(r) => {
                     self.slug(&format!("{at}.room"), &target["room"]);
                     if let Some(rooms) = &per_room
                         && !rooms.contains(r)
                     {
-                        self.err(&format!("{at}.room"), format!("{r:?} has no frame.native entry"));
+                        self.err(
+                            &format!("{at}.room"),
+                            format!("{r:?} has no frame.native entry"),
+                        );
                     }
                 }
             }
@@ -625,7 +725,11 @@ impl Shape<'_> {
                 self.err(&format!("{at}.requireHumanAcceptance"), "must be a boolean");
             }
             if let Some(a) = target["packing"].get("anchorRelativeTo") {
-                self.one_of(&format!("{at}.packing.anchorRelativeTo"), a, &["trimmed-rect"]);
+                self.one_of(
+                    &format!("{at}.packing.anchorRelativeTo"),
+                    a,
+                    &["trimmed-rect"],
+                );
             }
         }
     }
@@ -743,15 +847,13 @@ impl Condition {
 /// A gate matches when ALL its parseable conditions hold. Unparseable
 /// conditions were already refused by the shape check.
 fn gate_matches(gate: &Value, rgb: [f64; 3]) -> bool {
-    gate["all"]
-        .as_array()
-        .is_some_and(|all| {
-            !all.is_empty()
-                && all
-                    .iter()
-                    .filter_map(|c| Condition::parse(c).ok())
-                    .all(|c| c.holds(rgb))
-        })
+    gate["all"].as_array().is_some_and(|all| {
+        !all.is_empty()
+            && all
+                .iter()
+                .filter_map(|c| Condition::parse(c).ok())
+                .all(|c| c.holds(rgb))
+    })
 }
 
 fn unit_rgb(hex: &str) -> Option<[f64; 3]> {
@@ -787,7 +889,10 @@ fn check_palette_fails_all_gates(spec: &Value, root: &Path, out: &mut Vec<Verdic
         Ok(t) => match serde_json::from_str(&t) {
             Ok(v) => v,
             Err(e) => {
-                out.push(Verdict::refused(CHECK, format!("palette {rel} is not JSON: {e}")));
+                out.push(Verdict::refused(
+                    CHECK,
+                    format!("palette {rel} is not JSON: {e}"),
+                ));
                 return;
             }
         },
@@ -813,7 +918,10 @@ fn check_palette_fails_all_gates(spec: &Value, root: &Path, out: &mut Vec<Verdic
 
     for (label, hex) in entries {
         let Some(rgb) = unit_rgb(&hex) else {
-            out.push(Verdict::refused(CHECK, format!("{label} {hex} is not a #RRGGBB colour")));
+            out.push(Verdict::refused(
+                CHECK,
+                format!("{label} {hex} is not a #RRGGBB colour"),
+            ));
             continue;
         };
         for ramp in ramps {
@@ -893,7 +1001,10 @@ fn check_region_mask_colours_declared(spec: &Value, root: &Path, out: &mut Vec<V
         let img = match image::open(&path) {
             Ok(i) => i.to_rgba8(),
             Err(e) => {
-                out.push(Verdict::refused(CHECK, format!("{rel} is not a readable PNG: {e}")));
+                out.push(Verdict::refused(
+                    CHECK,
+                    format!("{rel} is not a readable PNG: {e}"),
+                ));
                 continue;
             }
         };
@@ -950,8 +1061,7 @@ mod tests {
     /// A project tree in a tempdir beside the test binary (never bare mktemp,
     /// never /tmp), with every file the spec names present.
     fn project_with(spec: &Value) -> (tempfile::TempDir, PathBuf) {
-        let dir =
-            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let dir = tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
         let root = dir.path().to_path_buf();
         let spec_path = root.join("art/families/family.json");
         fs::create_dir_all(spec_path.parent().unwrap()).unwrap();
@@ -1122,7 +1232,9 @@ mod tests {
         let got = lines(&validate_family(&spec_path, dir.path()));
         assert_eq!(
             got,
-            vec!["refused:unknown_kind:ship-hulls is not a known kind; known kinds: character-frames, layered-parts"]
+            vec![
+                "refused:unknown_kind:ship-hulls is not a known kind; known kinds: character-frames, layered-parts"
+            ]
         );
     }
 
@@ -1131,8 +1243,11 @@ mod tests {
     fn studio_contract_refuses_missing_input_files() {
         let spec = example();
         let (dir, spec_path) = project_with(&spec);
-        fs::remove_file(dir.path().join("art_runs/inputs/gatekeeper-v3/left_hand.peak.depth.png"))
-            .unwrap();
+        fs::remove_file(
+            dir.path()
+                .join("art_runs/inputs/gatekeeper-v3/left_hand.peak.depth.png"),
+        )
+        .unwrap();
         fs::remove_file(dir.path().join("assets/art/ensemble/gatekeeper-v2.png")).unwrap();
         let got = lines(&validate_family(&spec_path, dir.path()));
         assert_eq!(
@@ -1155,11 +1270,13 @@ mod tests {
         let (dir, spec_path) = project_with(&spec);
         let got = lines(&validate_family(&spec_path, dir.path()));
         assert!(
-            got.iter().any(|l| l.starts_with("refused:schema:poses[0].camera")),
+            got.iter()
+                .any(|l| l.starts_with("refused:schema:poses[0].camera")),
             "{got:?}"
         );
         assert!(
-            got.iter().any(|l| l.starts_with("refused:schema:targets[1].room")),
+            got.iter()
+                .any(|l| l.starts_with("refused:schema:targets[1].room")),
             "{got:?}"
         );
         assert!(

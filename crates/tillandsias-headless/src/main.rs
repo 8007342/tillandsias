@@ -97,9 +97,9 @@ mod provenance;
 mod studio_tool;
 // @trace order:1956-26qh — the family contract v1 static checker behind
 // `studio.validate_family`; pure, gated with imagegen_tool.
+mod progress_sink;
 #[cfg(feature = "host-services")]
 mod studio_contract;
-mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(feature = "listen-vsock")]

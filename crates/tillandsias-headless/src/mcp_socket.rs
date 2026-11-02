@@ -493,7 +493,11 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 // 1956-26qh: pure static check of a family spec read from the
                 // lane's own checkout; no GPU, nothing queued.
                 "studio.validate_family" => {
-                    match validate_family_in_lane(project_label, instance, &req["params"]["arguments"]) {
+                    match validate_family_in_lane(
+                        project_label,
+                        instance,
+                        &req["params"]["arguments"],
+                    ) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
@@ -669,7 +673,7 @@ fn validate_family_descriptor() -> serde_json::Value {
 /// it. The forge is the one `local_web_preview` proves belongs to this lane;
 /// nothing in the request names a container, and every path is proven
 /// project-relative before it reaches `podman exec`.
-fn validate_family_in_lane(
+pub(crate) fn validate_family_in_lane(
     project: &str,
     instance: &str,
     args: &serde_json::Value,
@@ -716,7 +720,9 @@ fn validate_family_in_lane(
     };
 
     let Some(spec_bytes) = fetch(&spec_rel)? else {
-        return Err(format!("not_found: {spec_rel} is not a file in the project"));
+        return Err(format!(
+            "not_found: {spec_rel} is not a file in the project"
+        ));
     };
     place(&spec_rel, &spec_bytes)?;
     // Inputs the spec names: copy those that exist; the checker reports the
@@ -725,7 +731,9 @@ fn validate_family_in_lane(
     if let Ok(spec) = serde_json::from_slice::<serde_json::Value>(&spec_bytes) {
         let mut seen = HashSet::new();
         for (rel, _) in referenced_inputs(&spec) {
-            let Ok(rel) = project_relative(&rel) else { continue };
+            let Ok(rel) = project_relative(&rel) else {
+                continue;
+            };
             if !seen.insert(rel.clone()) {
                 continue;
             }

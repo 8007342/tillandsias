@@ -174,9 +174,7 @@ ComfyUI-GGUF	DualCLIPLoaderGGUF
 ComfyUI-GGUF	TripleCLIPLoaderGGUF
 ComfyUI-GGUF	QuadrupleCLIPLoaderGGUF
 
-# ---- EXPECTED, NOT YET PINNED: order 1956-bh6j adds these packages to -------
-# ---- custom-nodes.toml. Until a [[node]] with the same name is there, ---------
-# ---- every row below admits nothing. Package names must match bh6j's pins. ---
+# ---- 1956-bh6j: these packages are pinned in custom-nodes.toml (names match). ----
 ComfyUI_IPAdapter_plus	IPAdapterModelLoader
 ComfyUI_IPAdapter_plus	IPAdapterUnifiedLoader
 ComfyUI_IPAdapter_plus	IPAdapter

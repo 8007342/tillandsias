@@ -763,7 +763,10 @@ mod tests {
         assert_eq!(i1.len(), 1, "only the model row belongs to the I1 download");
         // The shipped manifest: every studio row is aux, under I1, and in the register.
         let shipped = manifest();
-        let studio: Vec<_> = shipped.iter().filter(|r| r.role.starts_with("studio:")).collect();
+        let studio: Vec<_> = shipped
+            .iter()
+            .filter(|r| r.role.starts_with("studio:"))
+            .collect();
         assert!(studio.len() >= 5, "the D4 studio weights are pinned");
         for row in studio {
             assert!(row.is_aux());

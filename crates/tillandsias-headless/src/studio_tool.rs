@@ -650,13 +650,25 @@ fn read_checkout_file(project: &str, instance: &str, rel: &str) -> Result<String
     exec(&["cat", "--", real.trim()])
 }
 
-/// D1: a `family` spec runs `studio.validate_family` first and is refused on
-/// any static failure. The checker is studio_contract.rs (order 1956-26qh,
-/// landing concurrently); until it does, this call site admits every family
-/// and the provenance record still names the spec and its digest.
-/// TODO(1956-26qh): replace the body with `crate::studio_contract::validate_family(spec_json)`.
-fn family_admits(_spec_json: &str) -> Result<(), String> {
-    Ok(())
+/// D1: a `family` spec runs `studio.validate_family` first (order 1956-26qh)
+/// and the run is refused, with nothing queued, on any static failure.
+fn family_admits(project: &str, instance: &str, family: &str) -> Result<(), String> {
+    let v = crate::mcp_socket::validate_family_in_lane(
+        project,
+        instance,
+        &serde_json::json!({ "spec": family }),
+    )?;
+    if v["ok"].as_bool() == Some(true) {
+        return Ok(());
+    }
+    let lines: Vec<&str> = v["verdicts"]
+        .as_array()
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    Err(format!(
+        "family_refused: {family} fails the family contract; nothing was queued. {}",
+        lines.join("; ")
+    ))
 }
 
 /// A ≤256 px thumbnail is not made here: studio outputs can be sprite
@@ -699,8 +711,8 @@ pub fn call(
         &scratch,
     )?;
     if let Some(fam) = &req.family {
+        family_admits(project, instance, fam)?;
         let spec = read_checkout_file(project, instance, fam)?;
-        family_admits(&spec)?;
         plan.family = Some((fam.clone(), provenance::sha256_hex(spec.as_bytes())));
     }
     // Admitted files the cache lacks are fetched now, before the GPU turn.
