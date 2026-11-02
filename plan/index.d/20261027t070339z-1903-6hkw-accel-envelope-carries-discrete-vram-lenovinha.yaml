@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5) at the coordinator's request; related to 1874-bair.
+packets:
+  - packet_id: the-accel-envelope-carries-a-discrete-gpus-own-vram-so-the-imagegen-ceiling-can-offer-gpu-tiers
+    order: 1903-6hkw
+    parent: 1874-4b88
+    status: in_progress
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [accel, gpu, imagegen, probe]
+    size: S
+    title: "The accel envelope appends accel_vram_gb: a DISCRETE GPU's own memory (nvidia-smi memory.total on NVIDIA, mem_info_vram_total on amdgpu), '-' when unknown or integrated, never 0"
+    context: |
+      1874-bair's imagegen ceiling reads accel_vram_gb to offer GPU tiers;
+      the envelope carried no VRAM figure (accel_mem_budget_gb is RAM), so
+      a discrete RTX 3070 could earn only what RAM earns.
+      Required (coordinator 2026-10-27):
+      - NVIDIA: nvidia-smi --query-gpu=memory.total; amdgpu:
+        mem_info_vram_total. Absent ('-') when unknown, never 0.
+      - An iGPU's carve-out is not VRAM (yolanda's 860M: 512 MB carved from
+        system RAM): only a device whose memory_model is discrete reports it.
+      - Appended LAST, so every existing key keeps its position.
+    exit_criteria:
+      - "Unit fixtures: a discrete NVIDIA reporting 8192 MiB renders accel_vram_gb=8; an integrated amdgpu with mem_info_vram_total of 2 GiB renders accel_vram_gb=-; an unknown or 0 reading renders '-'; the key is the last in the line; and imagegen_tiers' ceiling for the rendered 3070 envelope is I2. Pre-fix result: FAILS, the envelope has no accel_vram_gb key."
+    verifiable_closure: "litmus:accel-envelope-carries-discrete-vram"
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the litmus named in verifiable_closure in the same commit (1136-n8sh).
+    next_action: >
+      Write the envelope fixtures red, then add vram_gb to DeviceRecord and the envelope.
+    provenance: |
+      Coordinator-assigned 2026-10-27 as the follow-up gap found while building 1874-bair.
+    events:
+      - type: filed
+        ts: "2026-10-27T07:03:39Z"
+        host: lenovinha
+        summary: "filed and claimed in_progress by lenovinha opus5"
