@@ -75,7 +75,7 @@ return {
     },
     {
       id = "onlook", name = "Onlook", license = "Apache-2.0",
-      brief = "Visual editor for Next.js and Tailwind that edits the code directly.",
+      brief = "Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
       frameworks = {},
       entry = { "/usr/local/bin/studio-onlook" }, port = 4096,
       save_adapter = "own-writer",
