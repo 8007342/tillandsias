@@ -21,7 +21,7 @@ critical_path:
   - step: "the uncreatable-bin-dir refusal carries why and remedy, and no verdict site lacks an affordance"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-configure-ollama-affordances.lua 2>&1"
     timeout_ms: 120000
-    success_pattern: "ok:configure-ollama-affordances:2 arms"
+    success_pattern: "ok:configure-ollama-affordances:3 arms"
 
 observability:
   traces:
