@@ -21,15 +21,15 @@ preconditions:
   - the plan binary (resolve_plan_binary) and git; offline, reads tracked files only
 
 critical_path:
-  - step: "a mislabelled file of ours and an unlabelled image are refused; a vendored licence passes; an empty tree is could-not-run; the live tree passes"
+  - step: "a mislabelled file of ours and an unlabelled third-party-based image are refused; a vendored licence passes; an empty tree is could-not-run; the live tree passes; an image FROM our own labelled image inherits the label"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-own-licence-declarations.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "ok:own-licence-declarations-fixture:5"
+    expected_behavior: "ok:own-licence-declarations-fixture:6"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "five arms: the unlabelled image and the MIT crate are refused by line, the vendored LICENSE passes, an empty population is could-not-run, the live tree passes"
+  expected_log: "six arms (the sixth: inheritance from our own labelled image): the unlabelled image and the MIT crate are refused by line, the vendored LICENSE passes, an empty population is could-not-run, the live tree passes"
   log_fields:
     spec: "ci-release"
     test: "own-licence-declarations"
