@@ -48,7 +48,14 @@
 
 use std::io::{BufRead, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
-use std::os::unix::net::UnixListener;
+// 1955-cfhf: the host-callback forward is a guest Unix socket. The guest is
+// always Linux; this crate also builds for Windows and macOS hosts, where the
+// forward is unreachable (host_callback_from_env is None) and the type is
+// uninhabited so the compiler proves it.
+#[cfg(unix)]
+type ForwardListener = std::os::unix::net::UnixListener;
+#[cfg(not(unix))]
+type ForwardListener = std::convert::Infallible;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -130,6 +137,10 @@ pub fn host_callback_socket_path() -> PathBuf {
 /// [`HostCallback`] from the launch environment: `Some` only when the host
 /// set a registered port.
 pub fn host_callback_from_env() -> Option<HostCallback> {
+    if cfg!(not(unix)) {
+        // No guest socket off Unix: the login keeps Loopback/Paste.
+        return None;
+    }
     let port: u16 = std::env::var(HOST_CALLBACK_PORT_ENV)
         .ok()?
         .trim()
@@ -148,6 +159,7 @@ pub fn host_callback_from_env() -> Option<HostCallback> {
 /// logged. `Err` when no login is waiting (socket absent or refusing).
 // Used by vsock_server, which is built only with the guest vsock feature.
 #[allow(dead_code)]
+#[cfg(unix)]
 pub async fn forward_callback_line(socket: &Path, line: &str) -> Result<(), String> {
     use tokio::io::AsyncWriteExt;
     let mut s = tokio::net::UnixStream::connect(socket)
@@ -160,11 +172,21 @@ pub async fn forward_callback_line(socket: &Path, line: &str) -> Result<(), Stri
     s.shutdown().await.map_err(|e| e.kind().to_string())
 }
 
+#[allow(dead_code)]
+#[cfg(not(unix))]
+pub async fn forward_callback_line(socket: &Path, _line: &str) -> Result<(), String> {
+    Err(format!(
+        "{}: the host callback forward needs a Unix guest",
+        socket.display()
+    ))
+}
+
 /// The forwarded receiver: bind the guest socket (replacing a stale file),
 /// so it exists BEFORE the URL is shown.
-fn bind_forward_socket(path: &Path) -> Result<UnixListener, Refusal> {
+#[cfg(unix)]
+fn bind_forward_socket(path: &Path) -> Result<ForwardListener, Refusal> {
     let _ = std::fs::remove_file(path);
-    let l = UnixListener::bind(path).map_err(|e| {
+    let l = ForwardListener::bind(path).map_err(|e| {
         Refusal::login(
             "forward-socket-unbindable",
             format!(
@@ -177,11 +199,21 @@ fn bind_forward_socket(path: &Path) -> Result<UnixListener, Refusal> {
     Ok(l)
 }
 
+#[cfg(not(unix))]
+fn bind_forward_socket(_path: &Path) -> Result<ForwardListener, Refusal> {
+    Err(Refusal::login(
+        "forward-socket-unbindable",
+        "the host callback forward needs a Unix guest".to_string(),
+        "use `--via qr` or `--via paste`",
+    ))
+}
+
 /// Take ONE forwarded line from the host (`code=…&state=…` or
 /// `error=…&state=…`) and judge it exactly as a loopback callback is judged:
 /// state first. Bounded by `deadline`; the socket file is removed on return.
+#[cfg(unix)]
 fn receive_forwarded(
-    listener: &UnixListener,
+    listener: &ForwardListener,
     path: &Path,
     expected_state: &str,
     deadline: Instant,
@@ -236,6 +268,16 @@ fn receive_forwarded(
             }
         }
     }
+}
+
+#[cfg(not(unix))]
+fn receive_forwarded(
+    listener: &ForwardListener,
+    _path: &Path,
+    _expected_state: &str,
+    _deadline: Instant,
+) -> Result<AuthCode, Refusal> {
+    match *listener {}
 }
 
 /// The relay and poll URLs from their env values (`None` = unset). A set but
@@ -1003,7 +1045,7 @@ fn login_code_flow(
         ));
     }
     let mut listener = None;
-    let mut forward: Option<(UnixListener, PathBuf)> = None;
+    let mut forward: Option<(ForwardListener, PathBuf)> = None;
     let redirect_uri = match via {
         Via::Qr => match deps.relay_url.clone() {
             Some(r) => r,
@@ -1095,11 +1137,9 @@ fn login_code_flow(
         Via::Loopback => {
             let _ = (deps.follow_url)(&pending.authorize_url);
             match forward.take() {
-                Some((l, path)) => {
-                    let r = receive_forwarded(&l, &path, &pending.state, deadline);
-                    drop(l);
-                    r?
-                }
+                // The listener is closed at the end of this arm (it goes out
+                // of scope); off Unix the arm is unreachable (Infallible).
+                Some((l, path)) => receive_forwarded(&l, &path, &pending.state, deadline)?,
                 None => {
                     let l = listener.take().expect("loopback bound above");
                     let r = receive_loopback(&l, &pending.state, deadline);
@@ -2488,6 +2528,7 @@ mod tests {
     /// socket, and the forwarded line must be judged state-first and
     /// exchanged. FAILS pre-fix: no host port reaches the redirect and
     /// nothing listens on the socket.
+    #[cfg(unix)]
     #[test]
     fn cloudflare_login_with_a_host_held_loopback_redirects_to_the_host_port_and_takes_the_forwarded_line()
      {
@@ -2523,7 +2564,7 @@ mod tests {
         );
         // The receiver: a forwarded line with the right state is judged and
         // returned; a wrong state is refused before the code is read.
-        let l = UnixListener::bind(dir.join("cb2.sock")).unwrap();
+        let l = std::os::unix::net::UnixListener::bind(dir.join("cb2.sock")).unwrap();
         let p = dir.join("cb2.sock");
         let writer = {
             let p = p.clone();
@@ -2542,7 +2583,7 @@ mod tests {
         writer.join().unwrap();
         assert_eq!(code.expose_to_token_endpoint(), "GOODCODE-1");
         assert!(!p.exists(), "the socket file is removed after the one line");
-        let l = UnixListener::bind(dir.join("cb3.sock")).unwrap();
+        let l = std::os::unix::net::UnixListener::bind(dir.join("cb3.sock")).unwrap();
         let p = dir.join("cb3.sock");
         let writer = {
             let p = p.clone();
