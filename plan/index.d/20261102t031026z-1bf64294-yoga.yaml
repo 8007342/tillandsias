@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: two-concurrent-forge-launches-on-a-cold-enclave-both-start-or-the-second-fails-with-a-named-visible-reason
+    event:
+      type: note
+      ts: "2026-11-02T03:10:26Z"
+      agent_id: linux-yoga-opus5-20261102t031026z
+      host: yoga
+      summary: |-
+        REPRODUCED on yoga 2026-11-02 (v56.11.1.1, forge image removed, two --cloud 8007342/tillandsias --bash lanes 1 s apart). Lane 2 got the forge and reached its shell. Lane 1 waited, then exited 1 with: Error - resource-lock timed out after 120s waiting for tillandsias-source-<sha256(project, instance)> (Exclusive; held by another tillandsias process). ROOT CAUSE from source: main.rs prepare_forge_ram_workspace takes an Exclusive resource_lock on the per-(project, TILLANDSIAS_FORGE_INSTANCE) RAM workspace volume with a 120 s timeout and RETURNS the guard, which the winning launch holds for its forge's whole life. Two launches of one project on the default instance therefore cannot both run: the loser waits 120 s and dies. The reason IS printed, but only to the losing lane's own terminal, which closes with it; nothing reaches the tray status or a persistent log, which is why the operator saw a silent death. Fix direction: when the holder is a live forge for the same project and instance, refuse at once with a named reason (attach to the running forge, or launch another instance) shown where launched and logged persistently; keep the bounded wait only for a holder that is still starting.
