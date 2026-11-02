@@ -265,8 +265,8 @@ The steps run in this order, and only this order:
 
    Alpha is binarised at 128. The contract already rules alpha binary.
 2. **Grid snap.** The native size comes from `frame.native[room]`, or from `finish.native` for a kind without `frame`. Each native cell covers `canvas/native` source pixels per axis, computed in fixed point. `finish.sample` chooses:
-   - `majority` (default): the palette index that most source pixels in the cell quantise to, ties to the lowest index; a cell is transparent when more than half its source pixels are;
-   - `centre`: the source pixel at the cell centre, nearest-neighbour, no filtering.
+   - `centre` (default): the source pixel at the cell centre, nearest-neighbour, no filtering. It keeps one-pixel outlines. Coordinator ruling, 2026-11-02, recorded on 1959-xsy5;
+   - `majority`: the palette index that most source pixels in the cell quantise to, ties to the lowest index; a cell is transparent when more than half its source pixels are.
 
    There is no interpolation anywhere.
 3. **Quantise.** Every opaque pixel becomes the nearest palette colour by squared distance in 8-bit sRGB, ties to the lowest index. `finish.dither` is `none` (default) or `ordered-bayer4`, the fixed 4×4 Bayer matrix. Error-diffusion dithers are excluded because their output depends on scan order and would make `majority` sampling order-dependent.
@@ -286,7 +286,7 @@ The steps run in this order, and only this order:
 
 **Determinism is tested, not promised.** A cargo test runs the finish twice on a fixture and compares sha256s, and runs it once against a committed golden sha256. A platform whose output differs fails the test, and that is the signal to find the float.
 
-**Contract.** The `finish` block is added to the v1 schema as optional, with these keys only: `alpha`, `sample`, `dither`, `native`. The example family gains one. A spec without `finish` means `alpha.source` follows `transparency.byBackend`, `sample: majority`, `dither: none`.
+**Contract.** The `finish` block is added to the v1 schema as optional, with these keys only: `alpha`, `sample`, `dither`, `native`. The example family gains one. A spec without `finish` means `alpha.source` follows `transparency.byBackend`, `sample: centre`, `dither: none`.
 
 ### D13. A contact sheet for human review across tiers and seeds
 
@@ -312,7 +312,7 @@ A reserved region (D11) is outlined on the sheet in the family's outline colour 
 - **sd.cpp SDXL ControlNet may not load** (its README names SD1.5 only). Mitigation: the studio path covers SDXL ControlNet natively, and the interim path is tested live on macuahuitl.
 - **VRAM thrash between the inference container and the studio.** Mitigation: the shared queue, `/free` after each job, and named holders. A long-term host-wide VRAM broker is out of scope.
 - **sd.cpp flag names drift between tags.** D11 cites master. Mitigation: the build reads `sd-cli -h` of the pinned tag and fails on a missing flag.
-- **A majority-sampled finish can erase thin lines.** A one-pixel outline that covers less than half a cell loses the vote. Mitigation: `sample: centre` per family, and the outline is a palette entry, so a lost line is visible on the contact sheet, not hidden by blending.
+- **A majority-sampled finish can erase thin lines.** A one-pixel outline that covers less than half a cell loses the vote. Mitigation: `centre` is the default. A family that opts into `majority` still sees a lost line on the contact sheet, because the outline is a palette entry and is not hidden by blending.
 - **Generated obligations specs can be wrong about a licence.** Mitigation: the clauses are quoted verbatim, the classes are conservative (an unknown clause is listed as "review"), and the project owner signs the acceptance after reading the quotes.
 
 ## Migration Plan

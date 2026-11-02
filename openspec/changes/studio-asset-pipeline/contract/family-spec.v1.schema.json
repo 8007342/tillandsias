@@ -494,7 +494,7 @@
     },
     "finish": {
       "type": "object",
-      "description": "D12. The pixel finish: a pure post-process in integer arithmetic, run as alpha, grid snap, quantise, write. Absent keys take the defaults named here; an absent block means alpha from transparency.byBackend, sample majority, dither none.",
+      "description": "D12. The pixel finish: a pure post-process in integer arithmetic, run as alpha, grid snap, quantise, write. Absent keys take the defaults named here; an absent block means alpha from transparency.byBackend, sample centre, dither none.",
       "properties": {
         "alpha": {
           "type": "object",
@@ -512,7 +512,7 @@
         },
         "sample": {
           "enum": ["majority", "centre"],
-          "default": "majority",
+          "default": "centre",
           "description": "majority: the palette index most source pixels in a cell quantise to, ties to the lowest index, transparent when more than half are; centre: the source pixel at the cell centre. Never interpolated."
         },
         "dither": {
