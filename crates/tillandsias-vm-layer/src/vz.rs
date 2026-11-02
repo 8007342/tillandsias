@@ -2291,12 +2291,12 @@ pub const SHUTDOWN_TOKEN_CIDATA_FILE: &str = "tillandsias-shutdown-token";
 pub const CLEAN_OFF_PREFIX: &str = "tillandsias-clean-off:";
 
 /// A fresh per-boot token: 128 random bits, hex.
+///
+/// From the OS CSPRNG through `getrandom`, not `/dev/urandom`: this crate also
+/// builds and tests on native Windows, which has no such file (yolanda).
 pub fn mint_shutdown_token() -> Result<String, String> {
-    use std::io::Read;
     let mut bytes = [0u8; 16];
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut bytes))
-        .map_err(|e| format!("could not mint the shutdown token: {e}"))?;
+    getrandom::fill(&mut bytes).map_err(|e| format!("could not mint the shutdown token: {e}"))?;
     Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
 }
 
