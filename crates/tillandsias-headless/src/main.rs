@@ -95,6 +95,9 @@ mod gpu_queue;
 mod provenance;
 #[cfg(feature = "host-services")]
 mod studio_tool;
+// 1959-xsy5 (D12): the GPU-free, byte-reproducible pixel finish.
+#[cfg(feature = "host-services")]
+mod pixel_finish;
 // @trace order:1956-ucix — CorridorKey 2.0 proof of concept behind
 // `studio.key_footage`; opt-in per project, consent-gated, CUDA only.
 #[cfg(feature = "host-services")]

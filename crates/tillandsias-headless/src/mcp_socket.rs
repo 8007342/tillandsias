@@ -341,6 +341,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::studio_tool::descriptor());
             // 1956-26qh: the GPU-free family contract checker, beside it.
             tools.push(validate_family_descriptor());
+            // 1959-xsy5 (D12): the GPU-free pixel finish, beside it.
+            tools.push(crate::pixel_finish::descriptor());
             // 1956-ucix: the CorridorKey 2.0 proof of concept, listed ONLY for
             // a project with `[imagegen] corridorkey = true` (no automatic
             // wiring for other users until Corridor has seen the demo).
@@ -522,6 +524,21 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 // lane's own checkout; no GPU, nothing queued.
                 "studio.validate_family" => {
                     match validate_family_in_lane(
+                        project_label,
+                        instance,
+                        &req["params"]["arguments"],
+                    ) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 1959-xsy5 (D12): pure, integer, deterministic; no GPU.
+                "studio.finish_pixels" => {
+                    match crate::pixel_finish::call(
                         project_label,
                         instance,
                         &req["params"]["arguments"],

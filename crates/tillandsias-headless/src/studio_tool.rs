@@ -322,7 +322,7 @@ fn pinned_model<'a>(manifest: &'a [ModelFile], named: &str) -> Option<&'a ModelF
 }
 
 /// A forge path under `FORGE_SCRATCH/` → its path relative to the volume.
-fn scratch_relative(forge_path: &str) -> Result<&str, String> {
+pub(crate) fn scratch_relative(forge_path: &str) -> Result<&str, String> {
     forge_path
         .strip_prefix(FORGE_SCRATCH)
         .and_then(|r| r.strip_prefix('/'))
@@ -585,7 +585,7 @@ pub static SEAM_TEST_LOCK: Mutex<()> = Mutex::new(());
 
 /// The lane's scratch volume on the host (the studio seam's root when one
 /// is installed, else the shared lane volume image.generate uses).
-fn scratch_dir(project: &str, instance: &str) -> Result<PathBuf, String> {
+pub(crate) fn scratch_dir(project: &str, instance: &str) -> Result<PathBuf, String> {
     if let Some(root) = seam()
         .lock()
         .ok()
