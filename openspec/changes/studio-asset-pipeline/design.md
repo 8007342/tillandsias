@@ -198,11 +198,121 @@ This implements 1954-xy5m.
 
 For the next launches people review in the stock ComfyUI frontend through `browser.open`, and in the project's own tools. A BPM flipbook (onion skin, accept/reject, pivot edit, manifest export) belongs to the web-studio-lanes work and is filed after the P0 set lands.
 
+### D11. Image-to-image, inpaint and a layout mask, at every tier
+
+Both game forges start from something: a previous frame, a rig render, a block-in. demon_attack also needs an empty centre lane in every ship part, so the player's shot path is never painted over. These are the same tool in three uses, so one request shape serves both engines.
+
+`image.generate` gains four optional keys. `studio.run_workflow` accepts the same keys and binds them to nodes the workflow marks as open.
+
+```json
+{ "prompt": "...", "tier": "I1",
+  "init_image": "/work/tmp/imagegen/in/ship/hull.v3.png",
+  "mask":       "/work/tmp/imagegen/in/ship/hull.repaint.png",
+  "strength":   0.55,
+  "layout":     "art/families/ship-v4.json#layout" }
+```
+
+- `init_image` is the starting picture. Without `mask` the run is image-to-image over the whole canvas.
+- `mask` is a greyscale PNG the size of the canvas. White is repainted, black is kept, grey is blended. The tray converts to whatever the engine expects, so the caller learns one convention.
+- `strength` is how far the result may leave the init image, 0 to 1. The default is the engine's.
+- `layout` names the family's reserved regions (below), or a mask PNG. The tray renders the regions to a mask, unions it with `mask` as kept area, and binds the result.
+
+**sd.cpp tiers (I0–I3).** The tray passes these flags of `sd-cli`, quoted from `examples/common/common.cpp` on master, read 2026-11-02:
+
+- `-i, --init-img` — "path to the init image";
+- `--mask` — "path to the mask image";
+- `--strength` — "strength for noising/unnoising (default: 0.75)";
+- `--control-image` — "path to control image, control net", and `--control-strength` — "strength to apply Control Net (default: 0.9)", which 1954-gdi6 already uses;
+- `-W, --width`, `-H, --height`, `-s, --seed`, `-b, --batch-count` as today.
+
+The implementer re-reads `sd-cli -h` of the pinned sd.cpp tag at build time and fails the build if a flag is missing, because the names above come from master and the ladder pins a tag.
+
+**Studio workflows.** A `LoadImage` whose `image` is `"$init_image"`, `"$mask"` or `"$layout_mask"` receives the bound file. A `KSampler` or `KSamplerAdvanced` with `_meta.title` `$strength` receives `strength` as its `denoise`. A workflow that lacks the node is refused with `workflow_has_no_input:<name>` before anything queues, so the caller learns which knob the workflow does not open.
+
+**Kept pixels are kept.** Whatever the engine does inside a soft mask edge, the tray composites the init image back over the fully black mask area after the run. A kept pixel is byte-identical to the input on every tier. A reserved region of the layout is kept the same way, so an empty centre lane stays empty whichever model drew the part.
+
+**Reserved regions in the family contract.** A family may declare:
+
+```json
+"layout": { "reserved": [ { "id": "centre-lane", "rect": [0.40, 0.0, 0.60, 1.0],
+                            "fill": "transparent" } ],
+            "units": "fraction-of-generation-canvas" }
+```
+
+- `rect` is `[x0, y0, x1, y1]` as fractions of the generation canvas, so one spec serves every room size.
+- `fill` is `transparent` or a hex colour. The region is filled with it before the run and restored after.
+- A new static check, `reserved_regions_empty`, runs on each output after the finish (D12): every pixel inside a reserved region is alpha 0, or equals `fill`. It is mandatory for any family that declares `layout`.
+
+**Provenance.** D5 gains `init` `{path, sha256}`, `mask` `{path, sha256}`, `strength`, and `layout` `{source, sha256}`, all `null` when unused.
+
+### D12. The pixel finish is a pure post-process, and its bytes are reproducible
+
+kumbia-kombat finishes each accepted high-resolution frame once per room, at that room's native size and palette. demon_attack snaps parts to a near-black navy palette. Neither step needs a model, so neither runs on the GPU or in a container. The tool is `studio.finish_pixels` on the tool socket, implemented in the tray in integer arithmetic, so the same inputs give the same bytes on every host and every run.
+
+```json
+{ "input": "/work/tmp/imagegen/studio/st-…/0003.png",
+  "family": "art/families/gatekeeper-v3.json", "room": "plaza",
+  "matte": "/work/tmp/imagegen/studio/st-…/0003.matte.png",
+  "out":   "/work/tmp/imagegen/finish/gatekeeper-v3/plaza/groove_3.png" }
+```
+
+The steps run in this order, and only this order:
+
+1. **Alpha.** From `finish.alpha.source`:
+   - `engine`: the input's own alpha channel (LayerDiffuse output);
+   - `matte`: the `matte` PNG, which BiRefNet wrote in the studio;
+   - `colour-key`: every pixel within `tolerance` (0–255, per channel, Chebyshev) of `key` becomes transparent.
+
+   Alpha is binarised at 128. The contract already rules alpha binary.
+2. **Grid snap.** The native size comes from `frame.native[room]`, or from `finish.native` for a kind without `frame`. Each native cell covers `canvas/native` source pixels per axis, computed in fixed point. `finish.sample` chooses:
+   - `majority` (default): the palette index that most source pixels in the cell quantise to, ties to the lowest index; a cell is transparent when more than half its source pixels are;
+   - `centre`: the source pixel at the cell centre, nearest-neighbour, no filtering.
+
+   There is no interpolation anywhere.
+3. **Quantise.** Every opaque pixel becomes the nearest palette colour by squared distance in 8-bit sRGB, ties to the lowest index. `finish.dither` is `none` (default) or `ordered-bayer4`, the fixed 4×4 Bayer matrix. Error-diffusion dithers are excluded because their output depends on scan order and would make `majority` sampling order-dependent.
+4. **Write.** An 8-bit RGBA PNG, or an indexed PNG when the palette has a `transparent` entry and at most 256 colours. The encoder runs with fixed settings and writes no time, text or gamma chunks. A `.finish.json` sidecar records the sha256 of the input, the matte, the palette file and the family spec, plus every parameter, and the provenance record gains a `finish` entry pointing at it.
+
+**The palette file.** `palette.locked` names a JSON file in the project:
+
+```json
+{ "schema": "tillandsias.palette/v1", "name": "gatekeeper",
+  "colours": ["#1A1018", "#F2E6C8", "#5A2A6B", "#2FA3A0"],
+  "transparent": null }
+```
+
+- `colours` is an ordered list of 1 to 256 `#RRGGBB` entries. The order is the tie-break order and the index order of an indexed PNG, so reordering a palette changes bytes and is a version change.
+- `transparent` is `null`, or one `#RRGGBB` entry that the finish writes for alpha 0 in an indexed PNG.
+- The family's `outline` must be in `colours`. The static check `palette_contains_outline` says so, and `palette_fails_all_gates` reads the same file.
+
+**Determinism is tested, not promised.** A cargo test runs the finish twice on a fixture and compares sha256s, and runs it once against a committed golden sha256. A platform whose output differs fails the test, and that is the signal to find the float.
+
+**Contract.** The `finish` block is added to the v1 schema as optional, with these keys only: `alpha`, `sample`, `dither`, `native`. The example family gains one. A spec without `finish` means `alpha.source` follows `transparency.byBackend`, `sample: majority`, `dither: none`.
+
+### D13. A contact sheet for human review across tiers and seeds
+
+People choose by looking. The forges compared tiers by opening files one at a time, which loses the seed, the tier and the model as soon as the file is renamed. `studio.contact_sheet` lays a set of outputs on one labelled grid, with its provenance beside it. It runs in the tray, uses no GPU, and is deterministic like D12.
+
+```json
+{ "cells": [ { "path": "…/st-a/0000.png", "row": "I1", "col": "930001" },
+             { "path": "…/st-b/0000.png", "row": "SDXL-base", "col": "930001" } ],
+  "cell_px": 256, "out": "/work/tmp/imagegen/review/gatekeeper-v3.groove.sheet.png" }
+```
+
+- `rows` and `cols` are free labels. The default use is rows for tiers and columns for seeds, which `image.generate` and `studio.run_workflow` produce when the caller passes `contact_sheet: true`: one sheet per job, with the tier on the row and the seeds across.
+- Cells are scaled nearest-neighbour to `cell_px`, so pixel art stays crisp and a soft render stays soft. A transparent cell is drawn on a checkerboard.
+- Each cell carries its row and column labels, the model's short name, and the first eight hex characters of the output's sha256. The sheet footer names the workflow or tier, its sha256, and the pipeline version. Text is drawn with a bitmap font embedded in the tray, so the sheet does not depend on the host's fonts.
+- `<sheet>.contact.json` lists every cell with its output path, its provenance path and its labels, so a reviewer's "row 2, column 3" resolves to a file and a seed.
+- The sheet is for looking. Accept and reject stay with the project's targets (`requireHumanAcceptance`) and the flipbook of D10.
+
+A reserved region (D11) is outlined on the sheet in the family's outline colour when `family` is given, so a filled lane is visible at a glance.
+
 ## Risks / Trade-offs
 
 - **Custom-node supply chain.** Nodes run Python inside the studio. Mitigation: every node is pinned to a commit with a lock, the node directory is read-only, the studio has no egress, and the licence is checked at pin.
 - **sd.cpp SDXL ControlNet may not load** (its README names SD1.5 only). Mitigation: the studio path covers SDXL ControlNet natively, and the interim path is tested live on macuahuitl.
 - **VRAM thrash between the inference container and the studio.** Mitigation: the shared queue, `/free` after each job, and named holders. A long-term host-wide VRAM broker is out of scope.
+- **sd.cpp flag names drift between tags.** D11 cites master. Mitigation: the build reads `sd-cli -h` of the pinned tag and fails on a missing flag.
+- **A majority-sampled finish can erase thin lines.** A one-pixel outline that covers less than half a cell loses the vote. Mitigation: `sample: centre` per family, and the outline is a palette entry, so a lost line is visible on the contact sheet, not hidden by blending.
 - **Generated obligations specs can be wrong about a licence.** Mitigation: the clauses are quoted verbatim, the classes are conservative (an unknown clause is listed as "review"), and the project owner signs the acceptance after reading the quotes.
 
 ## Migration Plan
@@ -210,6 +320,7 @@ For the next launches people review in the stock ComfyUI frontend through `brows
 1. P0 (1956-x7xp, 1956-26qh, 1956-bh6j, 1935-svxq) lands on linux-next and is built into the next release.
 2. The game forges relaunch on that release. They run `studio.validate_family` on their families, then `studio.run_workflow` with their committed workflows.
 3. P1 (1956-ecpb, 1956-ucix) follows. P2 (1956-m8wx, flipbook) after that.
+4. E (1959-xsy5): img2img, inpaint and the layout mask on both engines, the pixel finish, and the contact sheet (D11–D13). It needs only `image.generate` and the lane volume, so it can land beside P0.
 
 ## Open Questions
 

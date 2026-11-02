@@ -14,3 +14,11 @@
 
 - [ ] 3.1 Order 1956-m8wx: project LoRA training and storage (D8)
 - [ ] 3.2 The BPM flipbook review UI, filed after the P0 set lands (D10)
+
+## 4. E: img2img, inpaint, layout mask, pixel finish, contact sheet (order 1959-xsy5)
+
+- [ ] 4.1 `image.generate` gains `init_image`, `mask`, `strength` and `layout`, passed as `--init-img`, `--mask`, `--strength`; the build reads `sd-cli -h` of the pinned tag and fails on a missing flag; kept pixels are composited back; provenance gains `init`, `mask`, `strength`, `layout` (D11)
+- [ ] 4.2 `studio.run_workflow` binds the same keys to `$init_image`, `$mask`, `$layout_mask` and `$strength`, and refuses `workflow_has_no_input:<name>` before queueing (D11)
+- [ ] 4.3 Family contract: `layout.reserved[]`, the `reserved_regions_empty` check, the `finish` block, the `palette_contains_outline` check, and the `tillandsias.palette/v1` file; the example gains `finish` (D11, D12)
+- [ ] 4.4 `studio.finish_pixels` in the tray: alpha, grid snap, quantise, fixed encoder, `.finish.json`; a cargo test runs it twice and against a golden sha256 (D12)
+- [ ] 4.5 `studio.contact_sheet` with the embedded bitmap font and `.contact.json`; `contact_sheet: true` on both generators (D13)

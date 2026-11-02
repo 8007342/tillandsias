@@ -31,13 +31,15 @@
     "regions": { "$ref": "#/$defs/regions" },
     "regionsRender": { "$ref": "#/$defs/regionsRender" },
     "reservedRamps": { "type": "array", "items": { "$ref": "#/$defs/reservedRamp" } },
+    "layout": { "$ref": "#/$defs/layout" },
     "palette": {
       "type": "object",
       "required": ["locked"],
       "properties": {
-        "locked": { "$ref": "#/$defs/projectPath", "description": "A JSON file of hex colours: the locked palette the finish snaps to." }
+        "locked": { "$ref": "#/$defs/projectPath", "description": "A tillandsias.palette/v1 JSON file: {schema, name, colours: [\"#RRGGBB\", ...] (1 to 256, ordered), transparent: null | \"#RRGGBB\"}. The order is the tie-break and index order, so a reorder is a version change. The family's outline must be one of its colours (palette_contains_outline). D12." }
       }
     },
+    "finish": { "$ref": "#/$defs/finish" },
     "style_prompt": { "type": "string" },
     "style_negative": { "type": "string" },
     "character_prompt": { "type": "string" },
@@ -79,6 +81,21 @@
             "required": ["static"],
             "properties": {
               "static": { "contains": { "properties": { "id": { "const": "region_mask_colours_declared" } } } }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "D11: reserved_regions_empty is mandatory for any family that declares layout.",
+      "if": { "required": ["layout"] },
+      "then": {
+        "required": ["qa"],
+        "properties": {
+          "qa": {
+            "required": ["static"],
+            "properties": {
+              "static": { "contains": { "properties": { "id": { "const": "reserved_regions_empty" } } } }
             }
           }
         }
@@ -441,6 +458,71 @@
         "wear": {
           "type": ["object", "array"],
           "description": "Wear states; each is a named level or a list of them."
+        }
+      }
+    },
+    "layout": {
+      "type": "object",
+      "description": "D11. Regions the generator must leave alone, as fractions of the generation canvas. Each is filled before the run, restored byte-for-byte after it, and checked by reserved_regions_empty after the finish.",
+      "required": ["reserved"],
+      "properties": {
+        "units": { "const": "fraction-of-generation-canvas" },
+        "reserved": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "rect"],
+            "properties": {
+              "id": { "$ref": "#/$defs/slug" },
+              "rect": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": { "type": "number", "minimum": 0, "maximum": 1 },
+                "description": "[x0, y0, x1, y1] with x0 < x1 and y0 < y1."
+              },
+              "fill": {
+                "description": "transparent, or a hex colour the region is held at.",
+                "oneOf": [{ "const": "transparent" }, { "$ref": "#/$defs/hexColour" }],
+                "default": "transparent"
+              }
+            }
+          }
+        }
+      }
+    },
+    "finish": {
+      "type": "object",
+      "description": "D12. The pixel finish: a pure post-process in integer arithmetic, run as alpha, grid snap, quantise, write. Absent keys take the defaults named here; an absent block means alpha from transparency.byBackend, sample majority, dither none.",
+      "properties": {
+        "alpha": {
+          "type": "object",
+          "required": ["source"],
+          "properties": {
+            "source": {
+              "enum": ["engine", "matte", "colour-key"],
+              "description": "engine: the output's own alpha (LayerDiffuse); matte: a BiRefNet matte PNG; colour-key: pixels within tolerance of key become transparent. Alpha is binarised at 128."
+            },
+            "key": { "$ref": "#/$defs/hexColour" },
+            "tolerance": { "type": "integer", "minimum": 0, "maximum": 255, "description": "Per-channel Chebyshev distance from key, 8-bit." }
+          },
+          "if": { "properties": { "source": { "const": "colour-key" } } },
+          "then": { "required": ["key", "tolerance"] }
+        },
+        "sample": {
+          "enum": ["majority", "centre"],
+          "default": "majority",
+          "description": "majority: the palette index most source pixels in a cell quantise to, ties to the lowest index, transparent when more than half are; centre: the source pixel at the cell centre. Never interpolated."
+        },
+        "dither": {
+          "enum": ["none", "ordered-bayer4"],
+          "default": "none",
+          "description": "Error-diffusion dithers are excluded: their output depends on scan order."
+        },
+        "native": {
+          "$ref": "#/$defs/nativeSize",
+          "description": "Target size for a kind without frame.native. Ignored when frame.native is declared."
         }
       }
     }

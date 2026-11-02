@@ -65,6 +65,7 @@
     }
   ],
   "palette": { "locked": "tool/art/palettes/gatekeeper.json" },
+  "finish": { "alpha": { "source": "matte" }, "sample": "majority", "dither": "none" },
   "style_prompt": "pixel art game sprite, full body, single character, warm festive party, crisp clusters, clean dark outline, flat shading, plain background",
   "style_negative": "multiple characters, sprite sheet, grid, text, logo, blur, motion blur, cropped feet, cropped hat, shadow on floor",
   "character_prompt": "cheerful mustached man in a cream panama hat with teal band, purple guayabera shirt with teal embroidery panels, cream trousers, teal shoes",
