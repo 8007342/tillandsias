@@ -45,7 +45,7 @@ next pass.
 
 | Site | What | Class | Today |
 |---|---|---|---|
-| ensure_forge_prebuilt_tools → install_prebuilt (18 GitHub release fetches, 120 s each, 2 retries) + ensure_dart_sdk (300 s) + marksman | cargo dev tools, actionlint, vale, wasmtime, Dart SDK, marksman | **flaky-optional** | backgrounded (`&`) in entrypoint-forge-claude.sh, -codex.sh, -opencode.sh, entrypoint-terminal.sh; **foreground** in entrypoint-forge-antigravity.sh and entrypoint-forge-opencode-web.sh. No status file and no shim anywhere: a call during the install is `command not found` |
+| ensure_forge_prebuilt_tools → install_prebuilt (18 GitHub release fetches, 120 s each, 2 retries) + ensure_dart_sdk (300 s) + marksman | cargo dev tools, actionlint, vale, wasmtime, Dart SDK, marksman | **flaky-optional** | backgrounded (`&`) in all six forge entrypoints. No status file and no shim anywhere: a call during the install is `command not found` |
 | ensure_openspec_pinned (npm -g @fission-ai/openspec) | OpenSpec CLI | **flaky-optional** | **foreground** in entrypoint-forge-claude.sh, -opencode.sh, -opencode-web.sh, entrypoint-terminal.sh |
 | ensure_forge_harnesses → _require_harness (npm -g `<harness>@latest`), claude_validate_or_rollback (claude.ai/install.sh), require_antigravity | the lane's own agent | required for its lane | backgrounded; the tray already reports "initializing" while it runs (tillandsias-headless main.rs, the attach-readiness comment) |
 | warm_tier_model_fail_soft (curl, 300 s) | inference model warm-up | flaky-optional | fail-soft, `|| true`; check whether its caller waits |
@@ -73,8 +73,8 @@ next pass.
    build-time change is one move: take the Containerfile.base pip3 + npm
    dev-tools step out of the build and into the first-run background family.
 2. **A background family half-exists already** (ensure_forge_prebuilt_tools
-   behind `&` in four entrypoints) but has no status files and no shims, runs in
-   the foreground in two entrypoints, and ensure_openspec_pinned runs in the
+   behind `&` in all six entrypoints) but has no status files and no shims, and
+   ensure_openspec_pinned runs in the
    foreground in four. The packet's work is: one family runner with a status
    file per install, every entrypoint calling it in the background, and a
    generated shim per tool modelled on brew-shim-exec.sh.
@@ -82,3 +82,17 @@ next pass.
    inference model fetches) and whether the tray menu freeze on macuahuitl is
    the build blocking the tray's event loop. That second one is its own defect:
    a slow build must not freeze the menu, whatever the install.
+
+## Corrections and decisions (2026-11-02)
+
+- **Corrected:** the first version of this file said ensure_forge_prebuilt_tools
+  ran in the foreground in entrypoint-forge-antigravity.sh and
+  entrypoint-forge-opencode-web.sh. It did not: at 752fec60d all six entrypoints
+  background it. My grep output had been cut at 110 columns, which dropped the
+  trailing `&`.
+- **Kept in the foreground, needs a decision:** ensure_openspec_pinned. It is a
+  flaky npm install, but openspec_init_if_absent runs straight after it and must
+  run on the pinned CLI (1441-myz3; scripts/test-openspec-pin.sh case 10 asserts
+  pin-before-init). Backgrounding it needs the init chained behind the pin in
+  the same background member, which changes when the project's openspec/
+  directory appears for the agent. Not done in 1951-vv5m.

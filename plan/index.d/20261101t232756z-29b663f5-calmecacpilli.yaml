@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: comfyui-studio-forge-agent-surface-design-reference-conditioning-controlnet-lora-transparent-output-batch-metadata
+    event:
+      type: note
+      ts: "2026-11-01T23:27:56Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t232756z
+      host: calmecacpilli
+      summary: |
+        OPERATOR RULING on open decision (c), batch consent, relayed verbatim by the coordinator (macuahuitl-fedora), 2026-11-01: "Yes, those approvals should be standing, remember our approval system has expirations per session, or by time, and until we have support to enforce them we allow them always. I approve of those image runs."
+        How it binds the design: a consent is a GRANT with a scope and an expiry, either per session or a time limit (TTL). Until expiry is enforced, a granted tier approval holds, so a batch at an approved tier needs no per-call consent token. Model LICENCES are separate: each model, ControlNet and LoRA file still needs its own operator approval before download.
