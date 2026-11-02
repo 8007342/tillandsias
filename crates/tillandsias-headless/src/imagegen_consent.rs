@@ -94,12 +94,78 @@ fn mint_token() -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-/// Whether the user granted `tier`'s download on this host.
+/// Where download grants persist: beside the model cache, one row per grant,
+/// `tier<TAB>sha256,sha256,...<TAB>granted_at` (1957-5m8g: once per HOST, so a
+/// headless/tray restart does not re-ask). Fixtures persist nothing unless
+/// they name a file.
+fn grants_path() -> Option<std::path::PathBuf> {
+    #[cfg(test)]
+    {
+        GRANTS_PATH_FOR_TEST.lock().ok().and_then(|p| p.clone())
+    }
+    #[cfg(not(test))]
+    {
+        crate::imagegen_models::models_dir()
+            .parent()
+            .map(|d| d.join("imagegen-download-grants.tsv"))
+    }
+}
+
+/// The pinned sha256 set of `tier`, sorted and comma-joined: a grant holds
+/// only for the files it was given for, so a re-pin asks again.
+fn pin_key(tier: &str) -> String {
+    let mut shas: Vec<String> =
+        crate::imagegen_models::files_for_tier(&crate::imagegen_models::manifest(), tier)
+            .into_iter()
+            .map(|m| m.sha256)
+            .collect();
+    shas.sort();
+    shas.join(",")
+}
+
+fn persisted(tier: &str) -> bool {
+    let Some(body) = grants_path().and_then(|p| std::fs::read_to_string(p).ok()) else {
+        return false;
+    };
+    let key = pin_key(tier);
+    body.lines().any(|row| {
+        let mut c = row.split('\t');
+        c.next() == Some(tier) && c.next() == Some(key.as_str())
+    })
+}
+
+fn persist(tier: &str) {
+    let Some(path) = grants_path() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let at = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ");
+    let row = format!("{tier}\t{}\t{at}\n", pin_key(tier));
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+    {
+        let _ = f.write_all(row.as_bytes());
+    }
+}
+
+/// Whether the user granted `tier`'s download on this host: this process's
+/// memory first, then the persisted grants for the same pinned files.
 pub fn download_granted(tier: &str) -> bool {
-    state()
+    if state()
         .lock()
         .map(|s| s.downloads.contains(tier))
         .unwrap_or(false)
+    {
+        return true;
+    }
+    let held = persisted(tier);
+    if held && let Ok(mut s) = state().lock() {
+        s.downloads.insert(tier.to_string());
+    }
+    held
 }
 
 /// Mint a download offer of `tier` for `lane`/`request`, costing `bytes`.
@@ -170,6 +236,8 @@ pub fn redeem(
         return Err(Refusal::Mismatch);
     }
     s.downloads.insert(tier.tier.clone());
+    drop(s);
+    persist(&tier.tier);
     Ok(())
 }
 
@@ -185,6 +253,22 @@ pub fn consent_required(offer: Value, refusal: Refusal) -> Value {
         "bigger_tier_offer": offer,
         "ran": false,
     })
+}
+
+/// Fixture override of where download grants persist; `None` (the test
+/// default) persists nothing, so no fixture writes into the real cache.
+#[cfg(test)]
+static GRANTS_PATH_FOR_TEST: Mutex<Option<std::path::PathBuf>> = Mutex::new(None);
+
+#[cfg(test)]
+pub fn set_grants_path_for_test(p: Option<std::path::PathBuf>) {
+    *GRANTS_PATH_FOR_TEST.lock().unwrap() = p;
+}
+
+/// A process restart: in-memory state is gone, the host's files stay.
+#[cfg(test)]
+pub fn restart_for_test() {
+    reset_for_test();
 }
 
 #[cfg(test)]
@@ -222,5 +306,41 @@ mod tests {
             Err(Refusal::Mismatch)
         );
         assert!(!download_granted("I2"));
+    }
+
+    /// 1957-5m8g spec review: a download grant is ONCE per host, so it
+    /// survives a headless/tray restart. Pre-fix: FAILS (held in memory only).
+    #[test]
+    fn a_download_grant_survives_a_restart_and_is_not_asked_again() {
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        reset_for_test();
+        let dir = tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let file = dir.path().join("download-grants.tsv");
+        set_grants_path_for_test(Some(file.clone()));
+        let l = ladder();
+        let o = offer("p/a", "req", &l[3], 18_300_000_000);
+        let t = o["consent_token"].as_str().unwrap().to_string();
+        assert_eq!(redeem(Some(&t), "p/a", &l[3], "req"), Ok(()));
+        restart_for_test();
+        assert!(
+            download_granted("I3"),
+            "the grant is read back after a restart"
+        );
+        assert!(!download_granted("I2"), "only the granted tier");
+        let body = std::fs::read_to_string(&file).unwrap_or_default();
+        let pins =
+            crate::imagegen_models::files_for_tier(&crate::imagegen_models::manifest(), "I3");
+        assert!(
+            body.lines()
+                .any(|r| r.starts_with("I3\t") && pins.iter().all(|m| r.contains(&m.sha256))),
+            "the record carries the tier and its files' sha256: {body}"
+        );
+        // A grant for other pinned files (a re-pin) does not carry over.
+        std::fs::write(&file, "I3\tdeadbeef\t2026-11-01T00:00:00Z\n").unwrap();
+        restart_for_test();
+        assert!(!download_granted("I3"), "a re-pinned tier asks again");
+        set_grants_path_for_test(None);
     }
 }
