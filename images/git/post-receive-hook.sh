@@ -28,9 +28,25 @@ log_msg() {
 }
 
 COUNT=0
+# 1956-4pxj: announce each accepted ref update to every host process that
+# serves a lane of this project (one datagram per ref to each socket in the
+# mounted event directory), so every OTHER forge of the project hears about
+# it. REMOTE_ADDR is the pusher as git-daemon saw it, so the host can skip the
+# pusher. Best-effort and bounded: a push never waits on a listener.
+EVENT_DIR=/run/tillandsias/push-events
+announce_push() {
+    [ -d "$EVENT_DIR" ] || return 0
+    command -v socat >/dev/null 2>&1 || return 0
+    for sock in "$EVENT_DIR"/*.sock; do
+        [ -S "$sock" ] || continue
+        printf "push %s %s %s %s\n" "$3" "$1" "$2" "${REMOTE_ADDR:--}" \
+            | timeout 2 socat -u - "UNIX-SENDTO:$sock" 2>/dev/null || true
+    done
+}
 while read -r OLDSHA NEWSHA REFNAME; do
     [ -n "$REFNAME" ] || continue
     COUNT=$((COUNT + 1))
+    announce_push "$OLDSHA" "$NEWSHA" "$REFNAME"
 done
 
 if git remote get-url origin >/dev/null 2>&1; then
