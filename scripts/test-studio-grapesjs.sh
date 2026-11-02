@@ -18,8 +18,10 @@ VERSION="$(tr -d '[:space:]' < "$PROJECT_ROOT/VERSION")"
 TAG="localhost/tillandsias-studio-grapesjs:test-$$"
 command -v podman >/dev/null 2>&1 || { echo "could-not-run:studio-grapesjs:no-podman"; exit 3; }
 FORGE_IMAGE="${TILLANDSIAS_TEST_FORGE_IMAGE:-localhost/tillandsias-forge:v$VERSION}"
-podman image exists "$FORGE_IMAGE" || FORGE_IMAGE="localhost/tillandsias-forge:latest"
-podman image exists "$FORGE_IMAGE" || { echo "could-not-run:studio-grapesjs:no-local-forge-image"; exit 3; }
+# Any local tag of an image when this VERSION's is absent (as test-studio-front.lua).
+local_tag() { podman images --format '{{.Repository}}:{{.Tag}}' --filter "reference=$1" | awk '!/<none>/ { print; exit }'; }
+podman image exists "$FORGE_IMAGE" || FORGE_IMAGE="$(local_tag localhost/tillandsias-forge)"
+[ -n "$FORGE_IMAGE" ] && podman image exists "$FORGE_IMAGE" || { echo "could-not-run:studio-grapesjs:no-local-forge-image"; exit 3; }
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/studio-grapesjs.XXXXXX")"
 name="studio-grapesjs-test-$$"
@@ -97,8 +99,8 @@ podman rm -f "$name" >/dev/null 2>&1 || true
 # Browser arm: the real editor in headless chromium, in a pod with no network,
 # makes one edit (#selftest) that its own storage saves through the front.
 CHROMIUM_IMAGE="${TILLANDSIAS_TEST_CHROMIUM_IMAGE:-localhost/tillandsias-chromium-framework:v$VERSION}"
-podman image exists "$CHROMIUM_IMAGE" || CHROMIUM_IMAGE="localhost/tillandsias-chromium-framework:latest"
-if podman image exists "$CHROMIUM_IMAGE"; then
+podman image exists "$CHROMIUM_IMAGE" || CHROMIUM_IMAGE="$(local_tag localhost/tillandsias-chromium-framework)"
+if [ -n "$CHROMIUM_IMAGE" ] && podman image exists "$CHROMIUM_IMAGE"; then
   podman pod create --name "$pod" --network none --userns keep-id >/dev/null
   podman run -d --rm --pod "$pod" --entrypoint /usr/local/bin/studio-grapesjs \
     -e TILLANDSIAS_STUDIO=grapesjs -e TILLANDSIAS_PROJECT=site -e TILLANDSIAS_PROJECT_HOST_MOUNT=1 \
