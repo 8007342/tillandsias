@@ -1,29 +1,22 @@
 <!doctype html>
 <!--
-  @trace order:1505-kc5f, openspec/changes/cloudflare-login-and-fleet-vpn/design.md (Decision 1)
+  The Tillandsias Cloudflare sign-in page, https://cloudflare.tillandsias.org/cloudflare/callback.
+  Derived from 8007342/tillandsias assets/cloudflare-relay/index.html (order 1505-kc5f);
+  since 2026-11-01 the sign-in is hands-free and this page is only the landing screen.
 
-  The Tillandsias Cloudflare sign-in relay page. The operator hosts this ONE
-  static file at https://<relay-host>/cloudflare/callback and registers that
-  URL with the Cloudflare App; `tillandsias --cloudflare-login --via qr` then
-  points the phone's redirect here.
+  How the phone gets here: Cloudflare redirects to /cloudflare/callback?code=..&state=..;
+  the Worker (src/worker.mjs) stores the one-time code under its state in KV for at most
+  120 s and redirects here with ?done=1, so the code never reaches this page. The
+  Tillandsias host on the computer polls /cloudflare/poll and finishes by itself.
 
-  The operator's copy (1757-n45b) is served at
-  https://cloudflare.tillandsias.org/cloudflare/callback as static assets only
-  (no Worker script, no storage, logs off) from the private repo
-  8007342/cloudflare.tillandsias.org, whose README names THIS file as the
-  page's source of truth.
+  What this page sees: only `done`, `error` or `bad` flags. If an old deployment or a
+  host with no poll still sends `code`+`state` straight here, a collapsed manual
+  fallback shows the paste line. Never a token, never the PKCE verifier.
 
-  What it sees: the `code` and `state` from its own query string. Never a
-  token, never the PKCE verifier: those exist only inside the tillandsias
-  process that started the login, and the code is single-use and useless
-  without that verifier, so a compromised relay can at most deny a login.
-
-  What it does: shows ONE line to paste into the waiting terminal
-  (`code=...&state=...`) and a copy button. It NEVER calls out: no fetch, no
-  XHR, no beacon, no form, no external script, style, font or image, and the
-  Content-Security-Policy below forbids all of them (connect-src 'none').
-  Values are written with textContent only, and the query is removed from the
-  address bar and history as soon as it has been read.
+  It NEVER calls out: no fetch, no XHR, no beacon, no form, no external script, style,
+  font or image; the Content-Security-Policy forbids all of them (connect-src 'none').
+  Values are written with textContent only and the query is removed from the address
+  bar and history as soon as it has been read.
 -->
 <html lang="en">
 <head>
@@ -34,27 +27,39 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tillandsias sign-in</title>
 <style>
-  :root { color-scheme: light dark; --fg: #1e4a32; --bg: #f4f8f5; --box: #ffffff; --muted: #4d6b58; }
-  @media (prefers-color-scheme: dark) { :root { --fg: #dcebe1; --bg: #10231a; --box: #173327; --muted: #9dbba5; } }
+  :root { color-scheme: light dark; --fg: #1e4a32; --bg: #f4f8f5; --box: #ffffff; --muted: #4d6b58; --ok: #2e7d4f; }
+  @media (prefers-color-scheme: dark) { :root { --fg: #dcebe1; --bg: #10231a; --box: #173327; --muted: #9dbba5; --ok: #7fd3a1; } }
   body { margin: 0; padding: 16px; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
   main { max-width: 36rem; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 8px 0 16px; }
+  figure { margin: 0 0 16px; }
+  svg { display: block; width: 100%; max-width: 240px; height: auto; margin: 0 auto; }
+  .big { font-size: 1.15rem; }
+  .ok { color: var(--ok); font-weight: 600; }
   #line { display: block; width: 100%; box-sizing: border-box; padding: 12px; font: 14px/1.4 ui-monospace, monospace;
           word-break: break-all; background: var(--box); border: 1px solid var(--muted); border-radius: 6px; }
   button { margin-top: 12px; padding: 10px 16px; font: inherit; border-radius: 6px; border: 1px solid var(--muted);
            background: var(--box); color: var(--fg); }
+  details { margin-top: 24px; border-top: 1px solid var(--muted); padding-top: 12px; }
+  summary { cursor: pointer; }
   .muted { color: var(--muted); font-size: 14px; }
   [hidden] { display: none; }
 </style>
 </head>
 <body>
 <main>
+  <figure>
+    <!-- MACRON ART SLOT: replace with the Mācron pose from the macron.dev canon (assets/Tlatoāni + Mācron cannon guidelines.md); keep inline SVG, no external resources -->
+    <svg id="macron-art" role="img" aria-label="Mācron" viewBox="0 0 240 160">
+      <rect x="4" y="4" width="232" height="152" rx="16" fill="var(--box)" stroke="var(--muted)" stroke-width="2" stroke-dasharray="6 6"/>
+      <text x="120" y="86" text-anchor="middle" font-family="system-ui, sans-serif" font-size="16" fill="var(--muted)">Mācron art slot</text>
+    </svg>
+  </figure>
   <h1>Tillandsias sign-in</h1>
-  <section id="ok" hidden>
-    <p>Paste this line into the terminal that is running <code>tillandsias --cloudflare-login</code>:</p>
-    <output id="line"></output>
-    <button id="copy" type="button">Copy</button>
-    <p class="muted">This is a one-time authorization code, not a password or a token. It only works in the terminal
-      that started this sign-in, and only once.</p>
+  <section id="done" hidden>
+    <p class="big ok">You're signed in.</p>
+    <p class="big">Go back to Tillandsias on your computer; it finishes by itself.</p>
+    <p class="muted">You can close this tab.</p>
   </section>
   <section id="denied" hidden>
     <p>The sign-in was not approved (<span id="err"></span>). Run <code>tillandsias --cloudflare-login</code> again to retry.</p>
@@ -62,12 +67,23 @@
   <section id="bad" hidden>
     <p>This page did not receive a usable sign-in. Run <code>tillandsias --cloudflare-login</code> again.</p>
   </section>
+  <section id="manual" hidden>
+    <p class="big">Almost there.</p>
+    <details>
+      <summary>Finish by hand (older Tillandsias)</summary>
+      <p>Paste this line into the terminal that is running <code>tillandsias --cloudflare-login</code>:</p>
+      <output id="line"></output>
+      <button id="copy" type="button">Copy</button>
+      <p class="muted">This is a one-time authorization code, not a password or a token. It only works in the terminal
+        that started this sign-in, and only once.</p>
+    </details>
+  </section>
 </main>
 <script>
 (function () {
   "use strict";
   var q = new URLSearchParams(window.location.search);
-  // Remove the code from the address bar and the session history at once.
+  // Remove the query from the address bar and the session history at once.
   try { window.history.replaceState(null, "", window.location.pathname); } catch (e) { /* best effort */ }
   var safe = /^[A-Za-z0-9._~-]{1,2048}$/;
   var code = q.get("code"), state = q.get("state"), error = q.get("error");
@@ -77,13 +93,18 @@
     show("denied");
     return;
   }
-  if (code === null || state === null || !safe.test(code) || !safe.test(state)) {
+  if (q.get("done") === "1") {
+    show("done");
+    return;
+  }
+  if (q.get("bad") === "1" || code === null || state === null || !safe.test(code) || !safe.test(state)) {
     show("bad");
     return;
   }
+  // Fallback: an old deployment or a host without a poll endpoint sent the code here.
   var line = "code=" + code + "&state=" + state;
   document.getElementById("line").textContent = line;
-  show("ok");
+  show("manual");
   document.getElementById("copy").addEventListener("click", function () {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(line);

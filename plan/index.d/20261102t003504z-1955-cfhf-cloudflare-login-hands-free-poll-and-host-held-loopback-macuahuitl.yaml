@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-11-02, on the operator's follow-up (2026-11-01): "No apple-iphone exclusives for qr signing, it should work on any old android the same. Cloud only callback, or fix properly the local browser one, with pretty mācron graphics from our local image pipeline ;) macron.dev has the guidelines ;)"
+packets:
+  - packet_id: the-cloudflare-sign-in-completes-hands-free-from-any-phone-through-a-one-shot-poll-endpoint-and-the-local-browser-callback-on-a-vm-tray-lands-on-a-live-host-page-forwarded-to-the-guest
+    order: 1955-cfhf
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [cloudflare, oauth, qr, macos, windows, tray, control-wire, credentials, privacy]
+    estimated_hours: 8
+    related: [1954-cfqr, 1757-n45b, 1719-83po, 1758-wdvf, 1505-kc5f]
+    owned_files:
+      - crates/tillandsias-headless/src/cloudflare_login.rs
+      - crates/tillandsias-headless/src/vsock_server.rs
+      - crates/tillandsias-control-wire/src/lib.rs
+      - crates/tillandsias-host-shell/src/cloudflare_callback.rs
+      - crates/tillandsias-macos-tray/src/action_host.rs
+      - assets/cloudflare-relay/index.html
+    title: |
+      Cloudflare sign-in completes hands-free from any Android or iOS phone (the relay Worker keeps the code by its state for at most 120 s and one host poll reads and deletes it), and on a VM tray the local-browser callback lands on a live page because the HOST holds the 127.0.0.1 listener and forwards code+state to the guest over the control wire; both landing pages carry an inline Mācron artwork slot
+    context: |
+      Stacked on work/1954-cfqr (PR #812), which turned the registered relay on by default; that left a paste step (phone shows code=…&state=…) the operator ruled unacceptable (Universal Clipboard is Apple-only).
+      (A) HANDS-FREE. Sibling repo 8007342/cloudflare.tillandsias.org PR #1 (branch poll-endpoint, every commit [skip ci], NOT deployed): src/worker.mjs runs first on /cloudflare/callback and /cloudflare/poll; the callback stores code under state in Workers KV (expirationTtl 120), strips the code and 303s to ?done=1; the poll returns 204 until present, then deletes and answers 200 {state, code} exactly once; no console output; Workers Logs stay off; README privacy text amended to say exactly that. The Tillandsias host already polls (poll_relay); DEFAULT_RELAY_POLL_URL is added GATED OFF (RELAY_POLL_DEFAULT_ON=false, pinned arm) because the undeployed path answers 404, which poll_relay reads as "not yet" and would wait the whole window. assets/cloudflare-relay/index.html is synced from the sibling page (done screen, paste line only as a collapsed fallback, no xmlns URL so the relay-page litmus still passes).
+      (B) LOCAL BROWSER ON A VM TRAY. New tillandsias_host_shell::cloudflare_callback: HostCallbackListener binds 127.0.0.1 on the first free registered port ON THE HOST, hands TILLANDSIAS_CLOUDFLARE_HOST_CALLBACK_PORT to the guest through the PTY launch environment (the guest child's env is exactly opts.env), serves ONE shape-checked callback with a live page (no script, code never echoed), and the macOS tray forwards Callback::as_line over the control wire as the new trailing variant ControlMessage::CloudflareCallbackForward {seq, line} (index 40, acked with IssueAck, sent only when the guest advertises it). vsock_server writes the line to $XDG_RUNTIME_DIR/tillandsias-cloudflare-callback.sock; the guest login (LoginDeps.host_callback, default_via third argument) binds that socket BEFORE the URL is shown, redirects to the HOST port, and judges the forwarded line state-first through the same judge_callback as every receiver. The host never has the state expectation or the PKCE verifier; the line is a single-use code, never a token, never logged on either side.
+      (C) ART. No local image pipeline is reachable from this host (no sd.cpp/ComfyUI service running; imagegen_placement.rs is code, not a service), so both pages ship an inline <svg id="macron-art"> placeholder with a MACRON ART SLOT comment pointing at the canon (macron.dev assets/Tlatoāni + Mācron cannon guidelines.md). The art itself is the follow-up packet below; no model licence was added.
+      MEASURED ON LINUX ONLY: the macOS tray wiring (action_host.rs: bind before launch, extra_env into run_pty_attach, forward task) is cfg-gated off this host and compiles only on macOS; the macOS host's build (build-macos-tray) is the first compile of it.
+    exit_criteria:
+      - "host-shell: the host listener serves one shape-valid callback with a 200 page containing id=\"macron-art\" and no script, never echoes the code, 404s a stray path first, and closes the port after the one callback; a denial is forwarded by name; repeated, missing or non-URL-safe parameters are not forwarded; apply_to puts TILLANDSIAS_CLOUDFLARE_HOST_CALLBACK_PORT=<port> in the launch env (arms in cloudflare_callback.rs, all RED pre-fix: the module does not exist)"
+      - "guest: with host_callback set and no relay, login(None) redirects to http://127.0.0.1:<host port>/tillandsias/cloudflare/callback and the forward socket exists before the URL is shown; receive_forwarded returns the code for a line with the expected state and refuses state-mismatch before reading the code, removing the socket file (arm cloudflare_login_with_a_host_held_loopback_…, RED pre-fix); default_via(false,false,true) is Loopback and default_via(false,true,true) is Qr"
+      - "control-wire: CloudflareCallbackForward is pinned at index 40, sampled, and DECLARED_VARIANTS is 41 (the contiguity arm fails on a missing sample)"
+      - "RELAY_POLL_DEFAULT_ON is false and resolve_relay(None,None,true).1 is None; with the poll default on, the default relay brings DEFAULT_RELAY_POLL_URL and a custom relay or an empty poll env does not (arm relay_poll_default_is_gated_off_until_the_worker_is_deployed)"
+      - "sibling PR #1: npm test 14/14 (callback stores and strips, poll 204→200 once→204, 400/405, no console); not deployed"
+      - "./build.sh --preflight refused=0; scripts/test-cloudflare-login.sh relay-page arms stay green on the synced page"
+    unscoreable: "the live Safari→host page→guest exchange needs the macOS tray built on a Mac and the operator's account; the Worker deploy is the operator's click"
+    next_action: >
+      OPERATOR (one-time): in 8007342/cloudflare.tillandsias.org after merging PR #1: `npx wrangler kv namespace create RELAY` (paste the id into wrangler.jsonc, commit), `npm test`, `npx wrangler deploy`. Then a Linux agent flips RELAY_POLL_DEFAULT_ON to true and inverts its arm; until then hosts may set TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL=https://cloudflare.tillandsias.org/cloudflare/poll. macOS host: build the tray from this ref (build-macos-tray), then Cloudflare Login → open the printed URL in Safari → the host page says "You're signed in" and the tray reads stored.
+    events:
+      - type: filed
+        ts: "2026-11-02T00:39:00Z"
+        host: macuahuitl
+        summary: |-
+          Filed and claimed on the operator's follow-up. Sibling PR #1 open (not deployed). Work ref: work/1955-cfhf, stacked on work/1954-cfqr.
+  - packet_id: the-two-cloudflare-sign-in-landing-pages-carry-canon-macron-artwork-produced-by-the-local-image-pipeline-replacing-the-inline-svg-placeholder-slots
+    order: 1955-mart
+    status: open
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [design, macron, image-pipeline, cloudflare]
+    estimated_hours: 3
+    related: [1955-cfhf, 1883-c8xr]
+    owned_files:
+      - assets/cloudflare-relay/index.html
+      - crates/tillandsias-host-shell/src/cloudflare_callback.rs
+    title: |
+      The relay success page (assets/cloudflare-relay/index.html, mirrored to 8007342/cloudflare.tillandsias.org) and the host-held local callback page (cloudflare_callback::MACRON_ART_SLOT) show a canon Mācron pose ("done, go back to your computer" / "not approved") as inline SVG produced with the local image pipeline, replacing the placeholder groups marked MACRON ART SLOT
+    context: |
+      Operator 2026-11-01: "pretty mācron graphics from our local image pipeline ;) macron.dev has the guidelines". Canon: macron.dev repository, assets/Tlatoāni + Mācron cannon guidelines.md (curated reference images outrank prose). Constraints the pages impose: inline SVG only (CSP default-src 'none', img-src 'none'; the relay litmus refuses any http(s):// in the page body, so no xmlns URL), no external resources, both themes legible. Needs a host where the local image pipeline (sd.cpp image MCP / ComfyUI, 1921-media) is running; none was reachable from macuahuitl on 2026-11-02. No new model licence without the operator.
+    exit_criteria:
+      - "both pages render a Mācron pose that passes the canon's immutable rules (reviewed against the curated references), as inline SVG under 40 KB each, with the MACRON ART SLOT comments removed"
+      - "scripts/test-cloudflare-login.sh relay-page arms and the sibling repo's npm test stay green; the sibling copy is updated in the same change"
+    unscoreable: "artwork fidelity to the canon is a human review against the curated reference images; the only machine-scorable part (the pages stay static) is already pinned by the relay-page arms of scripts/test-cloudflare-login.sh"
+    next_action: >
+      On a host with the image pipeline up: generate the two poses per the canon, vectorise to inline SVG, replace the slot groups, run the page arms, open PRs in both repos.
+    events:
+      - type: filed
+        ts: "2026-11-02T00:39:00Z"
+        host: macuahuitl
+        summary: |-
+          Filed from 1955-cfhf: the pages ship with placeholder slots because no local image pipeline was reachable here.
