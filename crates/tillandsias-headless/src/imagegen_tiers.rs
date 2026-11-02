@@ -370,13 +370,10 @@ mod tests {
     fn an_installable_offer_states_download_gb_and_minutes() {
         crate::imagegen_consent::reset_for_test();
         let l = ladder();
-        let o = crate::imagegen_consent::offer("x/y", "req", &l[2], Some(9_907_763_780));
+        let o = crate::imagegen_consent::offer("x/y", "req", &l[2], 9_907_763_780);
         let ask = o["ask"].as_str().unwrap();
         assert!(ask.contains("9.9 GB"), "size in GB: {ask}");
         assert!(ask.contains(" min"), "minutes: {ask}");
         assert_eq!(o["download_bytes"], 9_907_763_780u64);
-        // A cached tier's ask carries no download figure.
-        let o = crate::imagegen_consent::offer("x/y", "req", &l[2], None);
-        assert!(!o["ask"].as_str().unwrap().contains("GB"));
     }
 }

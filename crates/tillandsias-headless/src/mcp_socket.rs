@@ -1679,6 +1679,7 @@ mod image_generate_fixtures {
             engine: std::sync::Arc::new(Stub),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I1".into(),
+            present: None,
         }));
         let rt = tokio::runtime::Runtime::new().unwrap();
         let browser = lane_browser_server("kkrc-proj", "a", None, true);
