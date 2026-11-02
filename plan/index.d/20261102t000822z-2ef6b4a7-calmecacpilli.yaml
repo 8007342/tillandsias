@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: comfyui-studio-forge-agent-surface-design-reference-conditioning-controlnet-lora-transparent-output-batch-metadata
+    event:
+      type: note
+      ts: "2026-11-02T00:08:22Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t000822z
+      host: calmecacpilli
+      summary: |
+        DESIGN DELIVERED and CONTRACT RATIFIED. The operator delegated the remaining decisions and the architecture to the calmecacpilli session on 2026-11-02, verbatim: "You own the remainder of the decisions and architecture ... the design should serve those two projects, and others like sibling project cannonball."
+        Design: openspec/changes/studio-asset-pipeline (proposal, design D1-D10, specs imagegen-studio and third-party-licence-consent, tasks). openspec validate: valid.
+        Contract 1935-k2ib/v1 is ratified as v0 plus both revisions, with these rulings:
+        - (a) ACCEPTED: palette_fails_all_gates is mandatory with reservedRamps, and region_mask_colours_declared is mandatory with regions.
+        - (b) ACCEPTED: camera lives on targets[], frame.camera is a family default, and poses carry no camera.
+        - kind is an open enum, so a sibling project such as cannonball contributes a schema branch for a new kind.
+        Open decisions resolved:
+        - shared I/O = the lane scratch volume, which lives as long as the forge (D2);
+        - project LoRAs live in the shared cache under the project, with a project-scoped consent record (D8);
+        - batch consent = the standing grant.
+        Implementation orders:
+        - P0: 1956-26qh, 1956-bh6j, 1956-x7xp, 1935-svxq;
+        - P1: 1956-ecpb (implements 1954-dvz9), 1956-ucix (implements 1954-xy5m);
+        - P2: 1956-m8wx.
+        This row's design deliverable is met; it closes once the change lands on linux-next.

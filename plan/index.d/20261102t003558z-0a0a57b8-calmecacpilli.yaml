@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: studio-pins-ip-adapter-plus-layerdiffuse-birefnet-nodes-and-weights-and-union-controlnet
+    event:
+      type: note
+      ts: "2026-11-02T00:35:58Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t003558z
+      host: calmecacpilli
+      summary: |
+        OPERATOR RULING, verbatim, relayed by the coordinator: "yes, GPL-3.0 is fine for studio plugins, our source code is already available in our public github repo".
+        - Scope: GPL-3.0 is admitted for studio plugin CODE (custom-node packages in images/imagegen-studio/custom-nodes.toml), as ComfyUI itself is.
+        - Weights still follow the model licence rules (PERMISSIVE_LICENCES and the register, or a 1956-ecpb consent record).
+        - Obligation for the 1956-ecpb obligations spec: GPL-3.0 node packages carry a source-availability obligation. It is met because the Tillandsias source is public (github.com/8007342/tillandsias) and each node is pinned to a public upstream commit.

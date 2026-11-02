@@ -66,6 +66,26 @@ pub(crate) fn host_resolver_rules(project: &str) -> String {
     )
 }
 
+/// The forwarder's admission rule, as `browser_window_forwarder.js` applies
+/// it to a ClientHello: the SNI, lowercased, must end in
+/// `.<TILLANDSIAS_FWD_PROJECT>.localhost`. `fwd_project` is the env value
+/// the forwarder was started with; the ONE Rust copy of the rule so the
+/// readiness probe can be held to the same check a client faces.
+pub(crate) fn forwarder_admits_sni(fwd_project: &str, sni: &str) -> bool {
+    let suffix = format!(".{fwd_project}.localhost").to_lowercase();
+    sni.to_lowercase().ends_with(&suffix)
+}
+
+/// The project as the SNI forwarder knows it (order 1935-svxq): its HOST
+/// label, the one the leaf certifies, the router routes and a client sends
+/// as SNI. The forwarder script only lowercases, so a raw `demon_attack`
+/// here refused every `*.demon-attack.localhost` hello and closed the
+/// connection (net::ERR_CONNECTION_CLOSED) while the readiness probe, which
+/// dials the router directly, reported serving.
+pub(crate) fn forwarder_project(project: &str) -> String {
+    crate::local_web_preview::host_label(project)
+}
+
 /// The forwarder's container name, derived from the window's network so
 /// `stop` can name it from the handle alone.
 fn forwarder_name(handle: &ContainerHandle) -> String {
@@ -134,7 +154,7 @@ pub(crate) fn forwarder_spec(
     )
     .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host().sibling(5, 32))
     .tmpfs("/tmp:size=8m")
-    .env("TILLANDSIAS_FWD_PROJECT", project)
+    .env("TILLANDSIAS_FWD_PROJECT", forwarder_project(project))
     .env("TILLANDSIAS_FWD_UPSTREAM_HOST", router_ip)
     .env("TILLANDSIAS_FWD_UPSTREAM_PORT", ROUTER_TLS_PORT)
     .env("TILLANDSIAS_FWD_EXTRA_PORTS", extra.join(","))

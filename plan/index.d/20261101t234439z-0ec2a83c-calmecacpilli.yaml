@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: image-generate-serialises-gpu-jobs-per-host-reports-queue-position-names-the-vram-holder-and-reports-mixed-placement-as-degraded
+    event:
+      type: progress
+      ts: "2026-11-01T23:44:39Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t234439z
+      host: calmecacpilli
+      summary: |
+        Implemented on work/1955-rjv3. image.generate now waits in a per-host GPU queue (a ticket per call; it never refuses) and sends progress 'waiting for the GPU: N job(s) ahead'. An engine VRAM refusal becomes gpu_memory_busy, naming the holders from nvidia-smi compute apps, or the usual suspect when nvidia-smi cannot say. Exit 139 says the engine crashed and names the likely cause. A 'mixed' placement returns degraded {backend, why}. Test imagegen_concurrent_calls_never_overlap_on_the_device (six threads through call() with a stub engine; max in flight must be 1) failed to compile on the pre-fix tree; it passes now. The queue is per tray process, which is one per host.
