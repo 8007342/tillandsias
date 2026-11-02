@@ -178,6 +178,25 @@ pub fn ceiling<'a>(ladder: &'a [TierRow], envelope: &str) -> &'a TierRow {
     top
 }
 
+/// 1957-8hkf: the next rung above `above` (a ladder index), up to and including
+/// `upto`, that is installed or installable — i.e. has pinned files in
+/// models.tsv. Unpinned rungs are skipped: an offer the host cannot honour is
+/// a broken resource gate. `None` when no such rung exists.
+pub fn next_offerable<'a>(
+    ladder: &'a [TierRow],
+    above: usize,
+    upto: usize,
+    manifest: &[crate::imagegen_models::ModelFile],
+) -> Option<&'a TierRow> {
+    ladder
+        .iter()
+        .enumerate()
+        .skip(above + 1)
+        .take_while(|(i, _)| *i <= upto)
+        .map(|(_, t)| t)
+        .find(|t| manifest.iter().any(|m| m.tier == t.tier))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +322,60 @@ mod tests {
         assert_eq!(mac(8), "I0");
         assert_eq!(mac(16), "I2");
         assert_eq!(mac(32), "I3");
+    }
+
+    fn pins(tiers: &[&str]) -> Vec<crate::imagegen_models::ModelFile> {
+        tiers
+            .iter()
+            .map(|t| crate::imagegen_models::ModelFile {
+                tier: t.to_string(),
+                role: "model".into(),
+                repo: "r/r".into(),
+                revision: "0".repeat(40),
+                file: format!("{t}.safetensors"),
+                sha256: "0".repeat(64),
+                bytes: 2_500_000_000,
+                licence: "apache-2.0".into(),
+            })
+            .collect()
+    }
+
+    /// 1957-8hkf verifiable closure. Pre-fix: FAILS (the next rung is offered
+    /// whether or not anything is pinned for it).
+    #[test]
+    fn a_tier_without_pinned_files_is_never_offered() {
+        let l = ladder();
+        // I1 pinned, I2 not, I3 pinned: from I0 the offer is I1.
+        let m = pins(&["I0", "I1", "I3"]);
+        assert_eq!(
+            next_offerable(&l, 0, 3, &m).map(|t| t.tier.as_str()),
+            Some("I1")
+        );
+        // From I1 the unpinned I2 is skipped for the installable I3.
+        assert_eq!(
+            next_offerable(&l, 1, 3, &m).map(|t| t.tier.as_str()),
+            Some("I3")
+        );
+        // Nothing pinned above: no offer at all.
+        let m = pins(&["I0", "I1"]);
+        assert_eq!(next_offerable(&l, 1, 3, &m), None);
+        // Never above the cap (the host ceiling or the asked tier).
+        let m = pins(&["I0", "I1", "I2", "I3"]);
+        assert_eq!(next_offerable(&l, 1, 1, &m), None);
+    }
+
+    /// 1957-8hkf sibling: an installable offer says what it costs to fetch.
+    #[test]
+    fn an_installable_offer_states_download_gb_and_minutes() {
+        crate::imagegen_consent::reset_for_test();
+        let l = ladder();
+        let o = crate::imagegen_consent::offer("x/y", "req", &l[2], Some(9_907_763_780));
+        let ask = o["ask"].as_str().unwrap();
+        assert!(ask.contains("9.9 GB"), "size in GB: {ask}");
+        assert!(ask.contains(" min"), "minutes: {ask}");
+        assert_eq!(o["download_bytes"], 9_907_763_780u64);
+        // A cached tier's ask carries no download figure.
+        let o = crate::imagegen_consent::offer("x/y", "req", &l[2], None);
+        assert!(!o["ask"].as_str().unwrap().contains("GB"));
     }
 }

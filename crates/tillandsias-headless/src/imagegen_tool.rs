@@ -304,12 +304,26 @@ fn tier_index(ladder: &[TierRow], tier: &str) -> usize {
     ladder.iter().position(|t| t.tier == tier).unwrap_or(0)
 }
 
-/// Whether every pinned file of `tier` is already in the model cache, which
-/// picks the honest ask (no download vs a download first).
-fn tier_cached(tier: &TierRow) -> bool {
+/// The bytes still to fetch for `tier`: `None` when every pinned file is
+/// already in the model cache, which picks the honest ask (1957-8hkf).
+fn download_bytes(tier: &TierRow) -> Option<u64> {
     let files = imagegen_models::files_for_tier(&imagegen_models::manifest(), &tier.tier);
     let dir = imagegen_models::models_dir().join(&tier.tier);
-    !files.is_empty() && files.iter().all(|m| dir.join(m.cache_name()).is_file())
+    let missing: u64 = files
+        .iter()
+        .filter(|m| !dir.join(m.cache_name()).is_file())
+        .map(|m| m.bytes)
+        .sum();
+    (missing > 0).then_some(missing)
+}
+
+/// The offer of the next installed-or-installable rung above `above`, up to
+/// `upto`; `Null` when there is none (1957-8hkf).
+fn offer_above(lane: &str, request: &str, ladder: &[TierRow], above: usize, upto: usize) -> Value {
+    match imagegen_tiers::next_offerable(ladder, above, upto, &imagegen_models::manifest()) {
+        Some(next) => imagegen_consent::offer(lane, request, next, download_bytes(next)),
+        None => Value::Null,
+    }
 }
 
 /// Serialises tests that install the process-wide seam.
@@ -340,18 +354,32 @@ pub fn call(
             )
         }
     };
-    let job = parse_job(args, &ladder, &ceiling, false)?;
-    let mut job = job;
-    // 1874-p8w7: a tier above what this lane accepted runs only on a token.
     let lane = imagegen_consent::lane_key(project, instance);
+    // 1957-5m8g: an untiered call runs at the session's granted tier (capped
+    // at the host ceiling), not back at the bottom of the ladder.
+    let mut args = args.clone();
+    if args.get("tier").is_none()
+        && let Some(g) = imagegen_consent::grant_for(&lane)
+    {
+        let ceil = tier_index(&ladder, &ceiling);
+        args["tier"] = json!(ladder[g.tier_index.min(ceil)].tier);
+    }
+    let args = &args;
+    let mut job = parse_job(args, &ladder, &ceiling, false)?;
+    // 1874-p8w7: a tier above what this session granted runs only on a token.
     let request = imagegen_consent::request_hash(args);
     let idx = tier_index(&ladder, &job.tier.tier);
     let accepted = imagegen_consent::accepted_index(&lane);
     if idx > accepted {
         let token = args.get("consent_token").and_then(Value::as_str);
         if let Err(refusal) = imagegen_consent::redeem(token, &lane, &job.tier, idx, &request) {
-            let next = &ladder[(accepted + 1).min(idx)];
-            let offer = imagegen_consent::offer(&lane, &request, next, tier_cached(next));
+            let offer = offer_above(&lane, &request, &ladder, accepted, idx);
+            if offer.is_null() {
+                return Err(format!(
+                    "tier_unavailable: no pinned model files for {} or any tier below it",
+                    job.tier.tier
+                ));
+            }
             return Ok(imagegen_consent::consent_required(offer, refusal));
         }
     }
@@ -385,12 +413,11 @@ pub fn call(
     }
     let first = images[0].clone();
     let ceil = tier_index(&ladder, &ceiling);
-    let bigger = if idx < ceil {
-        let next = &ladder[idx + 1];
-        imagegen_consent::offer(&lane, &request, next, tier_cached(next))
-    } else {
-        Value::Null
-    };
+    let held = imagegen_consent::accepted_index(&lane);
+    let bigger = offer_above(&lane, &request, &ladder, idx.max(held), ceil);
+    let grant = imagegen_consent::grant_for(&lane)
+        .filter(|g| idx > 0 && idx <= g.tier_index)
+        .map(|g| g.to_json());
     Ok(json!({
         "path": first["path"],
         "width": first["width"],
@@ -413,6 +440,7 @@ pub fn call(
         "ephemeral": true,
         "note": EPHEMERAL_NOTE,
         "bigger_tier_offer": bigger,
+        "grant": grant,
     }))
 }
 
@@ -798,7 +826,10 @@ mod tests {
         assert!(after("--vae").ends_with("/ae.safetensors"));
         assert!(after("--clip_l").contains("clip_l"));
         assert!(after("--t5xxl").contains("t5xxl"));
-        assert!(!a.contains(&"--model".to_string()), "no full checkpoint for FLUX");
+        assert!(
+            !a.contains(&"--model".to_string()),
+            "no full checkpoint for FLUX"
+        );
         assert_eq!(after("--cfg-scale"), "1");
         assert_eq!(after("--sampling-method"), "euler");
     }
@@ -861,13 +892,13 @@ mod tests {
             .to_string();
         let ask = offer["ask"].as_str().unwrap();
         let lower = ask.to_ascii_lowercase();
-        assert!(
-            !ask.chars().any(|c| c.is_ascii_digit())
-                && !["gb", "mb", "byte", "second"]
-                    .iter()
-                    .any(|w| lower.contains(w)),
-            "the ask carries no size or time figure: {ask}"
-        );
+        // 1957-8hkf: a cached tier's ask carries no figures; one that must be
+        // fetched states the download in GB and minutes.
+        if offer["download_bytes"].is_null() {
+            assert!(!lower.contains("gb"), "{ask}");
+        } else {
+            assert!(lower.contains(" gb") && lower.contains(" min"), "{ask}");
+        }
         assert_eq!(runs(), 1);
 
         // I1 without the token: consent_required, the engine is not invoked.
