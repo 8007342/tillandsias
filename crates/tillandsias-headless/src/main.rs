@@ -101,6 +101,9 @@ mod pixel_finish;
 // 1959-xsy5 (D13): the deterministic review contact sheet.
 #[cfg(feature = "host-services")]
 mod contact_sheet;
+// 1959-xsy5 (D11): init image, mask, strength and layout on the sd.cpp tiers.
+#[cfg(feature = "host-services")]
+mod imagegen_init_mask;
 // @trace order:1956-ucix — CorridorKey 2.0 proof of concept behind
 // `studio.key_footage`; opt-in per project, consent-gated, CUDA only.
 #[cfg(feature = "host-services")]
