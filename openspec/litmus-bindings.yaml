@@ -1086,6 +1086,7 @@ specs:
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
   - litmus:web-studio-grapesjs-stores-as-a-repo-diff
+  - litmus:web-studio-tina-saves-through-local-graphql
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape

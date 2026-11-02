@@ -1,0 +1,11 @@
+{
+  "name": "tillandsias-web-studio-tina",
+  "private": true,
+  "version": "0.0.0",
+  "description": "TinaCMS studio lane in local mode (tinacms dev), pinned by package-lock.json (1863-dmke)",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@tinacms/cli": "4.0.4",
+    "tinacms": "3.15.1"
+  }
+}
