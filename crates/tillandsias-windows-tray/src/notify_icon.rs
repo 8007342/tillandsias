@@ -1375,6 +1375,33 @@ pub fn provision_once() -> i32 {
                 if let Ok(Some(uuid)) = crate::installation_uuid::read_installation_uuid() {
                     crate::wsl_lifecycle::write_guest_ready_record(&uuid.to_string());
                 }
+                // Order 1965-zrjq: the handshake above answers at phase
+                // Starting, before a fresh guest has initialised Vault. Exiting
+                // here let the guest stop mid-handover, and the next boot wiped
+                // the store it could not open (v56.11.1.1 cold smoke). Hold the
+                // VM open and collect the first handover on the Ready event
+                // before exiting: one deadline, no poll. A timeout is loud but
+                // does not fail a provision that succeeded.
+                let _keepalive = lifecycle.spawn_keepalive(false);
+                let collected = tokio::time::timeout(
+                    std::time::Duration::from_secs(180),
+                    collect_first_vault_handover(),
+                )
+                .await
+                .unwrap_or_else(|_| Err("no Ready event within 180 s".to_string()));
+                match collected {
+                    Ok(()) => {
+                        tracing::info!("provision-once: vault handover collected");
+                        println!("{}", console.line("vault handover collected \u{2713}"));
+                    }
+                    Err(err) => {
+                        tracing::warn!(%err, "provision-once: vault handover not collected");
+                        eprintln!(
+                            "{}",
+                            console.line(&format!("WARNING: vault handover not collected: {err}"))
+                        );
+                    }
+                }
                 0
             }
             Err(err) => {
@@ -1388,6 +1415,97 @@ pub fn provision_once() -> i32 {
             }
         }
     })
+}
+
+/// Order 1965-zrjq: wait for the guest to report Ready, event-driven. Subscribe
+/// to VmStatus FIRST, then ask for the current phase once: pushes come from a
+/// broadcast with no replay, so a guest already Ready would never push it, and
+/// subscribing before the query means a later transition cannot slip between
+/// the two. No cadence; the caller bounds the whole wait with one timeout.
+///
+/// The query goes out with `send_envelope`, not `request`: a push can arrive
+/// before the reply, and `request` would take it as the reply.
+async fn wait_for_vm_ready(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+) -> Result<(), String> {
+    use tillandsias_control_wire::{
+        ControlEnvelope, ControlMessage, SubscriptionTopic, VmPhase, WIRE_VERSION,
+    };
+
+    let seq = client.allocate_seq();
+    let ack = client
+        .request(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::Subscribe {
+                topics: vec![SubscriptionTopic::VmStatus],
+            },
+        })
+        .await
+        .map_err(|e| format!("subscribe: {e}"))?;
+    if !matches!(ack.body, ControlMessage::SubscribeAck) {
+        return Err(format!("expected SubscribeAck, got {}", ack.body.kind()));
+    }
+    let seq = client.allocate_seq();
+    client
+        .send_envelope(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::VmStatusRequest { seq },
+        })
+        .await
+        .map_err(|e| format!("VmStatusRequest: {e}"))?;
+    loop {
+        let env = client
+            .next_envelope()
+            .await
+            .map_err(|e| format!("status stream: {e}"))?;
+        match env.body {
+            ControlMessage::VmStatusReply {
+                phase: VmPhase::Ready,
+                ..
+            }
+            | ControlMessage::VmStatusPush {
+                phase: VmPhase::Ready,
+                ..
+            } => return Ok(()),
+            ControlMessage::Error { message, .. } => {
+                return Err(format!("guest error while waiting for Ready: {message}"));
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Order 1965-zrjq: wait for Ready over one connection, then collect the Vault
+/// handover over a fresh one, so the reply cannot interleave with a push.
+async fn collect_first_vault_handover() -> Result<(), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    async fn connect() -> Result<Client, String> {
+        let stream = crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT)
+            .await
+            .map_err(|e| format!("connect: {e}"))?;
+        let mut client = Client::from_stream(
+            stream,
+            Transport::Vsock {
+                cid: 0,
+                port: CONTROL_WIRE_VSOCK_PORT,
+            },
+        );
+        client
+            .handshake()
+            .await
+            .map_err(|e| format!("handshake: {e}"))?;
+        Ok(client)
+    }
+
+    let mut watch = connect().await?;
+    wait_for_vm_ready(&mut watch).await?;
+    drop(watch);
+    let mut client = connect().await?;
+    crate::installation_uuid::capture_vault_handover(&mut client).await
 }
 
 /// What a Windows SOFT reset announces about the Vault store, from what
@@ -5701,6 +5819,189 @@ mod tests {
         assert!(
             body.contains("collect_vault_handover_on_ready()"),
             "the push listener must collect the handover on the Ready transition"
+        );
+    }
+
+    /// Order 1965-zrjq: a fake guest for the Ready wait. Acks the Subscribe,
+    /// answers the one VmStatusRequest with `reply`, sends `pushes` (an
+    /// optional push before the reply first), then holds the stream open.
+    async fn fake_status_guest(
+        io: tokio::io::DuplexStream,
+        early_push: Option<tillandsias_control_wire::VmPhase>,
+        reply: tillandsias_control_wire::VmPhase,
+        pushes: Vec<tillandsias_control_wire::VmPhase>,
+    ) {
+        use futures_util::{SinkExt, StreamExt};
+        use tillandsias_control_wire::{
+            ControlEnvelope, ControlMessage, SubscriptionTopic, WIRE_VERSION,
+        };
+        type Io = tokio_util::codec::Framed<
+            tokio::io::DuplexStream,
+            tokio_util::codec::LengthDelimitedCodec,
+        >;
+        let mut io: Io = tokio_util::codec::Framed::new(
+            io,
+            tillandsias_control_wire::transport::control_frame_codec(),
+        );
+        async fn recv(io: &mut Io) -> ControlEnvelope {
+            let frame = io.next().await.expect("frame").expect("frame ok");
+            tillandsias_control_wire::decode(&frame).expect("decode")
+        }
+        async fn send(io: &mut Io, seq: u64, body: ControlMessage) {
+            let bytes = tillandsias_control_wire::encode(&ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body,
+            })
+            .unwrap();
+            io.send(bytes.into()).await.unwrap();
+        }
+        let push = |phase| ControlMessage::VmStatusPush {
+            seq: 0,
+            phase,
+            podman_ready: true,
+            last_event: None,
+        };
+        let env = recv(&mut io).await;
+        let ControlMessage::Subscribe { topics } = env.body else {
+            panic!("expected Subscribe first, got {:?}", env.body)
+        };
+        assert!(topics.contains(&SubscriptionTopic::VmStatus));
+        send(&mut io, env.seq, ControlMessage::SubscribeAck).await;
+        let env = recv(&mut io).await;
+        let ControlMessage::VmStatusRequest { seq } = env.body else {
+            panic!(
+                "expected one VmStatusRequest after the Subscribe, got {:?}",
+                env.body
+            )
+        };
+        if let Some(phase) = early_push {
+            send(&mut io, 0, push(phase)).await;
+        }
+        send(
+            &mut io,
+            env.seq,
+            ControlMessage::VmStatusReply {
+                seq_in_reply_to: seq,
+                phase: reply,
+                podman_ready: true,
+                last_event: None,
+            },
+        )
+        .await;
+        for phase in pushes {
+            send(&mut io, 0, push(phase)).await;
+        }
+        // Hold the stream until the host hangs up. Any frame here is a second
+        // request, i.e. a poll, and fails the test through guest.await.
+        if let Some(Ok(frame)) = io.next().await {
+            let env = tillandsias_control_wire::decode(&frame).expect("decode");
+            panic!(
+                "the Ready wait sent a frame after its one query: {:?}",
+                env.body
+            );
+        }
+    }
+
+    async fn run_ready_wait(
+        early_push: Option<tillandsias_control_wire::VmPhase>,
+        reply: tillandsias_control_wire::VmPhase,
+        pushes: Vec<tillandsias_control_wire::VmPhase>,
+    ) -> Result<Result<(), String>, tokio::time::error::Elapsed> {
+        let (host, guest) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(fake_status_guest(guest, early_push, reply, pushes));
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        let got = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            wait_for_vm_ready(&mut client),
+        )
+        .await;
+        drop(client);
+        guest.await.expect("fake guest did not panic");
+        got
+    }
+
+    /// Order 1965-zrjq: Ready arrives as a PUSH after the one query answered
+    /// Starting; the wait returns on that event.
+    #[tokio::test]
+    async fn ready_wait_returns_on_the_ready_push() {
+        use tillandsias_control_wire::VmPhase;
+        let got = run_ready_wait(None, VmPhase::Starting, vec![VmPhase::Ready]).await;
+        assert_eq!(got.ok(), Some(Ok(())));
+    }
+
+    /// Order 1965-zrjq: a guest already Ready at subscribe time pushes
+    /// nothing (broadcast, no replay); the one query's reply is the answer.
+    #[tokio::test]
+    async fn ready_wait_returns_when_already_ready() {
+        use tillandsias_control_wire::VmPhase;
+        let got = run_ready_wait(None, VmPhase::Ready, vec![]).await;
+        assert_eq!(got.ok(), Some(Ok(())));
+    }
+
+    /// Order 1965-zrjq: a push that lands before the reply is not taken as the
+    /// reply, and a later Ready push still ends the wait.
+    #[tokio::test]
+    async fn ready_wait_tolerates_a_push_before_the_reply() {
+        use tillandsias_control_wire::VmPhase;
+        let got = run_ready_wait(
+            Some(VmPhase::Starting),
+            VmPhase::Starting,
+            vec![VmPhase::Ready],
+        )
+        .await;
+        assert_eq!(got.ok(), Some(Ok(())));
+    }
+
+    /// Order 1965-zrjq: no Ready event means the wait does not return; the
+    /// caller's single deadline ends it, and no second request (a poll) is
+    /// sent meanwhile: the fake guest panics on any frame after the query.
+    #[tokio::test]
+    async fn ready_wait_without_a_ready_event_hits_the_deadline() {
+        use tillandsias_control_wire::VmPhase;
+        let got = run_ready_wait(None, VmPhase::Starting, vec![VmPhase::Starting]).await;
+        assert!(got.is_err(), "expected the deadline, got {got:?}");
+    }
+
+    /// Order 1965-zrjq: after a successful provision, provision-once holds a
+    /// keepalive and collects the first Vault handover BEFORE it exits. It
+    /// used to exit at phase=Starting; the guest stopped mid-handover and the
+    /// next boot wiped that store (v56.11.1.1 cold smoke, yolanda).
+    #[test]
+    fn provision_once_collects_the_first_handover_before_exit() {
+        // source-pin-ok: the property is ordering inside provision_once, which only the source shows
+        let source = include_str!("notify_icon.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the file has a production half");
+        let code: String = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = code
+            .find("pub fn provision_once() -> i32 {")
+            .expect("provision_once exists");
+        let body = &code[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let ready = body
+            .find("\"provision-once: VM Ready\"")
+            .expect("the Ready log line");
+        let keepalive = body
+            .find("spawn_keepalive(")
+            .expect("provision-once must hold a keepalive while it waits");
+        let collect = body
+            .find("collect_first_vault_handover()")
+            .expect("provision-once must collect the first handover");
+        assert!(ready < keepalive && keepalive < collect);
+        // source-pin-ok: the bound around the collect inside provision_once is placement, which only the source shows; the wait itself is driven in the ready_wait tests
+        assert!(
+            body.contains("tokio::time::timeout("),
+            "one deadline bounds the wait, not a poll loop"
         );
     }
 
