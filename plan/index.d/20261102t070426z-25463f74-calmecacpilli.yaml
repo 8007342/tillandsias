@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots
+    event:
+      type: note
+      ts: "2026-11-02T07:04:26Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t070426z
+      host: calmecacpilli
+      summary: |
+        Operator ruling, verbatim, 2026-11-02 (relayed by macuahuitl-fedora): "make sure that home/.tillandsias storage supports config overrides, and make sure we're using them ourselves, so our images and random downloaded crap happens in our fast drive. We're our own power user using our own override"
