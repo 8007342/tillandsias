@@ -31,3 +31,6 @@
 #tier	role	repo	revision	file	sha256	bytes	licence
 I0	model	akleine/sdxs-09	baed838f4d9dadf5ac369570d45ddc72c1cb1ad4	sdxs09.safetensors	2618f142ad9f3884785884216d41fdcc033fde529f30a180f50ea6a05de6a89c	1342124230	openrail++
 I1	model	ByteDance/SDXL-Lightning	c9a24f48e1c025556787b0c58dd67a091ece2e44	sdxl_lightning_4step.safetensors	e0d996ee0013e79d9d3561f50fcafb9a17e3ff07b780358e3b66d67932c4d490	6938040682	openrail++
+# 1957-pins (operator standing approval 2026-11-01; 1954-gdi6 control_net/loras): aux rows. The tier column is <base tier>/<folder>; they are fetched only when a request names them.
+I1/controlnet-openpose	controlnet:openpose	xinsir/controlnet-openpose-sdxl-1.0	23f966cd5cfdd3f7729c903e243d87152162d2b7	diffusion_pytorch_model.safetensors	b8524e557a7df60d081f5d4a0eb109967d107df217943bf88c2d99b9ebcc06c5	2502139104	apache-2.0
+I1/lora	lora	nerijs/pixel-art-xl	8bf4a4d9ea283e00a51fafda8e0539f8248ea037	pixel-art-xl.safetensors	4234637cb80c998f41e348e6a6cb6bc20d8d038b2b0f256b6129b3b5e353eef7	170543052	creativeml-openrail-m

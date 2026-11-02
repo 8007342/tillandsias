@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: licence-acknowledgement-flow-user-accepts-quoted-restrictions-durably-before-any-non-permissive-model-or-tool-is-fetched
+    event:
+      type: note
+      ts: "2026-11-01T23:52:15Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t235215z
+      host: calmecacpilli
+      summary: |
+        OPERATOR DIRECTION, given directly to the calmecacpilli session on 2026-11-01. It confirms the standing approval (acknowledgement #1) and shapes this design. Verbatim:
+        "Yes, mostly. When a license is accepted, we shall distinguish which licenses have requirements, like attributions, and make sure the project's with open spec include durable specs to honor said licenses, included in the signed commit, not the enforcement, the spec. Since enforcement could take the lifetime of the app, enforcement could merely be displaying attribution on a website, or other things. Let's to the best of our abilities make sure the skill accepting the license with a signed token from Windows Hello / TouchID / Fingerprint / FIDO / Etc parses the license and turns it into a spec for the agreeing project. "This project depends on <blah> and must now adhere to <blah>", in the end it's all a delicate balance and we cannot enforce anything, just like we should not restrict users, but users should durably record their consent to the third party license."
+        What this adds to the design:
+        - Acceptance happens through a skill and is signed with an OS-verified token: Windows Hello, Touch ID, fingerprint or FIDO (related: openspec change os-verified-approval-gates).
+        - The skill parses the licence and classifies its obligations: attribution, share-alike, non-commercial, notice, field-of-use, seat or revenue limits.
+        - The skill writes a durable OpenSpec spec INTO THE AGREEING PROJECT, for example "This project depends on <artefact> and must now adhere to <obligations>". That spec goes in the same signed commit as the acceptance record.
+        - Tillandsias records consent and the obligation specs. It does NOT enforce them and does not restrict users. Honouring an obligation (such as attribution shown on a website) is the project's own work over its lifetime, guided by the spec.
+        New exit criterion: accepting a licence that carries an attribution obligation produces, in the agreeing project, an openspec spec naming the artefact, its licence and each obligation, in a signed commit with the acknowledgement record.

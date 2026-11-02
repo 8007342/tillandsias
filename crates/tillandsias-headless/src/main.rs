@@ -95,6 +95,10 @@ mod gpu_queue;
 mod provenance;
 #[cfg(feature = "host-services")]
 mod studio_tool;
+// @trace order:1956-26qh — the family contract v1 static checker behind
+// `studio.validate_family`; pure, gated with imagegen_tool.
+#[cfg(feature = "host-services")]
+mod studio_contract;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
@@ -25170,6 +25174,7 @@ mod tests {
         assert_eq!(shutdown_escalation_targets(enclave()).len(), 4);
         // A, the owner, still sweeps its own enclave on exit.
         drop(run_a);
+        crate::tray_presence::wait_released(&dir);
         let owner = crate::tray_presence::owner_elsewhere(&dir);
         assert_eq!(shutdown_targets_for(enclave(), owner).len(), 4);
         let _ = std::fs::remove_dir_all(&dir);
