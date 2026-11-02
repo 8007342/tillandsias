@@ -173,6 +173,7 @@ specs:
   - litmus:shell-ratchet
   - litmus:source-agreement-lua-cutover
   - litmus:own-licence-declarations
+  - litmus:stack-ledger-stages
   - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance

@@ -314,6 +314,8 @@ end
 -- from the package manager inside each locally built image (operator ruling
 -- 2026-11-01); a package no image declares stays "unknown".
 local PKG_LICENCE = {}
+-- component id -> { lockfile path -> role } as read from its Containerfile stages
+local LOCKFILE_ROLES = {}
 do
     local reg = read("docs/credits/package-licences.tsv")
     for _, l in ipairs(lines(reg)) do
@@ -357,6 +359,13 @@ local function parse_containerfile(path, comp, imgname)
     -- join `\` continuations so a RUN is one logical line
     local logical = src:gsub("\\\r?\n", " ")
     local stage_base = {}
+    -- STAGES. Each FROM opens a stage {name, index, workdir, lockfiles, npm, copied_from}.
+    -- A lockfile COPYed into a stage and installed there by `npm ci|install`
+    -- belongs to that stage; the final stage's `COPY --from=<stage> <src>` lines
+    -- say what of a builder stage ships. Read, never guessed: an unreferenced
+    -- lockfile is link=unknown.
+    local stages, stage = {}, nil
+    local cf_dir = path:match("^(.*)/[^/]+$") or "."
     local function expand(str_)
         return (str_:gsub("%${([%w_]+)}", function(k) return args[k] or ("${" .. k .. "}") end)
                     :gsub("%$([%w_]+)", function(k) return args[k] or ("$" .. k) end))
@@ -366,6 +375,41 @@ local function parse_containerfile(path, comp, imgname)
         local a, v = l:match("^ARG%s+([%w_]+)=(.*)$")
         if a then args[a] = v:gsub('^"(.*)"$', "%1") end
         local from = l:match("^FROM%s+(%S+)")
+        if from then
+            local as = l:match("%s[Aa][Ss]%s+(%S+)%s*$")
+            stage = { name = as, index = #stages, workdir = "/", lockfiles = {}, npm = nil, copied_from = {}, tools = {} }
+            stages[#stages + 1] = stage
+        end
+        if stage then
+            local wd = l:match("^WORKDIR%s+(%S+)")
+            if wd then stage.workdir = expand(wd) end
+            local copy = l:match("^COPY%s+(.*)$")
+            if copy then
+                local from_stage = copy:match("%-%-from=(%S+)")
+                local toks = {}
+                for tok in copy:gmatch("%S+") do if not tok:match("^%-%-") then toks[#toks + 1] = tok end end
+                if from_stage then
+                    -- what a later stage takes from an earlier one
+                    for i = 1, #toks - 1 do stage.copied_from[#stage.copied_from + 1] = { from = from_stage, src = expand(toks[i]) } end
+                else
+                    for i = 1, #toks - 1 do
+                        if toks[i]:match("package%-lock%.json$") then
+                            local rel = cf_dir .. "/" .. toks[i]:gsub("^%./", "")
+                            stage.lockfiles[#stage.lockfiles + 1] = rel
+                        end
+                    end
+                end
+            end
+            if l:match("^RUN%s") and (l:match("npm%s+ci") or l:match("npm%s+install%s") and not l:match("npm%s+install%s+%-g")) then
+                stage.npm = { omit_dev = (l:match("%-%-omit=dev") or l:match("%-%-production") or l:match("%-%-omit%s+dev")) and true or false }
+            end
+            if l:match("^RUN%s") then
+                -- a package the stage EXECUTES is a build tool: node_modules/.bin/<x>, npx <x>, node node_modules/<x>/...
+                for t in l:gmatch("node_modules/%.bin/([^%s/]+)") do stage.tools[t] = true end
+                for t in l:gmatch("npx%s+(@?[%w_%.%-/]+)") do stage.tools[t] = true end
+                for t in l:gmatch("node%s+node_modules/(@?[%w_%.%-]+/?[%w_%.%-]*)") do stage.tools[t:gsub("/.*$", "")] = true end
+            end
+        end
         if from and not from:match("^%$") and not from:match("^scratch$") then
             local hp, tag = image_homepage(from)
             local id = "oci:" .. from:gsub("@sha256:.*$", "")
@@ -484,6 +528,39 @@ local function parse_containerfile(path, comp, imgname)
             end
         end
     end
+    -- Resolve each lockfile's stage role for parse_lock.
+    local final = stages[#stages]
+    local roles = {}
+    for _, st in ipairs(stages) do
+        for _, lf in ipairs(st.lockfiles) do
+            local role
+            if not st.npm then
+                role = { link = "unknown", why = "copied into the image but no npm ci/install runs on it in " .. path }
+            elseif st == final then
+                role = { link = "container-image", omit_dev = st.npm.omit_dev,
+                    why = "installed in the final stage of " .. path }
+            else
+                -- what does the final stage take from this builder stage?
+                local ships_modules, ships_other = false, false
+                for _, c in ipairs(final.copied_from) do
+                    if c.from == st.name or c.from == tostring(st.index) then
+                        if c.src:match("node_modules") then ships_modules = true else ships_other = true end
+                    end
+                end
+                if ships_modules then
+                    role = { link = "container-image", omit_dev = st.npm.omit_dev, why = "node_modules copied from builder stage into the final stage of " .. path }
+                elseif ships_other then
+                    role = { link = "bundled-file", omit_dev = true, why = "built in a builder stage of " .. path .. "; only the bundle it produced is copied into the final stage" }
+                else
+                    role = { link = "build-stage-only", omit_dev = true, why = "installed in a builder stage of " .. path .. " that the final stage copies nothing from" }
+                end
+            end
+            role.tools = st.tools
+            roles[lf] = role
+        end
+    end
+    LOCKFILE_ROLES[comp] = LOCKFILE_ROLES[comp] or {}
+    for lf, role in pairs(roles) do LOCKFILE_ROLES[comp][lf] = role end
     return args
 end
 -- Which images the launcher needs for any project (required) and which it pulls
@@ -534,8 +611,14 @@ for _, n in pairs(nodes) do
 end
 
 -- ---------------------------------------------------------------------------
--- 3. npm lockfiles beside Containerfiles (the pinned members of an npm ci).
-local function parse_lock(path, comp)
+-- 3. npm lockfiles: DISCOVERED, never listed. Every package-lock.json under an
+-- image's directory (and the Containerfiles' own COPY lines) is read; the stage
+-- that installs it decides the link kind:
+--   container-image   installed where the image's final stage can run it
+--   bundled-file      built in a builder stage; only the bundle it produced ships
+--   build-stage-only  a build tool (dev dependency, or a builder stage nothing is copied from): not shipped
+--   unknown           a lockfile no RUN installs (built outside the image, or prebuilt files copied in)
+local function parse_lock(path, comp, role)
     local src = read(path)
     if not src then return end
     local okl, lock = pcall(json.parse, src)
@@ -546,20 +629,62 @@ local function parse_lock(path, comp)
     for _, k in ipairs(keys) do
         local p = lock.packages[k]
         local nm = k:gsub("^.*node_modules/", "")
-        local id = "npm:" .. nm .. "@" .. (str(p.version) or "unknown")
+        local ver = str(p.version) or "unknown"
+        local id = "npm:" .. nm .. "@" .. ver
         local direct = not k:match("node_modules/.*node_modules/")
-        node(id, { name = nm, version = (str(p.version) or "unknown"), homepage = "https://www.npmjs.com/package/" .. nm,
-            homepage_kind = "registry", source = path, link = "container-image",
-            link_note = "npm package installed into the image from its lockfile" })
+        local dev = nn(p.dev) and true or false
+        local link, note = role.link, role.why
+        local is_tool = false
+        for t in pairs(role.tools or {}) do
+            if nm == t or nm:sub(1, #t + 2) == "@" .. t .. "/" then is_tool = true end
+        end
+        if link ~= "unknown" and is_tool then
+            link = "build-stage-only"
+            note = "a build tool the Containerfile stage executes (RUN … " .. nm:gsub("^@([^/]+)/.*$", "%1") .. "); it is not in the image (" .. role.why .. ")"
+        elseif link ~= "unknown" and dev then
+            link = "build-stage-only"
+            note = "a devDependency: used to build, " .. (role.omit_dev and "omitted from the image" or "present only at build") .. " (" .. role.why .. ")"
+        end
+        local n = node(id, { name = nm, version = ver, homepage = "https://www.npmjs.com/package/" .. nm,
+            homepage_kind = "registry", source = path, link = link, link_note = note, shipped = (link == "container-image" or link == "bundled-file") })
+        -- a package reached through two images keeps the MORE shipped reading
+        local RANKL = { ["container-image"] = 1, ["bundled-file"] = 2, ["build-stage-only"] = 3, unknown = 4 }
+        if (RANKL[link] or 9) < (RANKL[n.link] or 9) then n.link, n.link_note, n.shipped = link, note, (link == "container-image" or link == "bundled-file") end
+        -- the same package can ship from one image and be a build tool of another: say so per component
+        n.link_by_component = n.link_by_component or {}
+        n.link_by_component[comp] = link
         finish(id, str(p.license))
-        nodes[id].optional = components[comp].optional and true or false
+        local comp_opt = components[comp] and components[comp].optional
+        if n.optional == nil then n.optional = comp_opt and true or false elseif not comp_opt then n.optional = false end
         pulled(id, comp)
         edge(comp, id, direct and "direct" or "transitive", nn(p.optional) and true or false)
-        if nn(p.dev) then nodes[id].dev_only = true end
+        if dev then n.dev_only = true end
     end
 end
-parse_lock("images/web-wrangler/package-lock.json", "image:web-wrangler")
-if components["image:observatorium"] then parse_lock("observatorium/package-lock.json", "image:observatorium") end
+do
+    local seen_lock = {}
+    for comp, c in pairs(components) do
+        if c.kind == "container-image" then
+            local dir = c.description:match("built from (.*)/[^/]+$")
+            if dir then
+                local roles = LOCKFILE_ROLES[comp] or {}
+                local locks = {}
+                for lf in pairs(roles) do locks[#locks + 1] = lf end
+                for _, f in ipairs(fs.walk(dir, { suffix = "package-lock.json" })) do
+                    if not f:match("node_modules/") and not roles[f] then locks[#locks + 1] = f end
+                end
+                table.sort(locks)
+                for _, lf in ipairs(locks) do
+                    if not seen_lock[comp .. "\0" .. lf] then
+                        seen_lock[comp .. "\0" .. lf] = true
+                        local role = roles[lf] or { link = "unknown", why = "a lockfile beside " .. dir .. " that no Containerfile stage installs" }
+                        parse_lock(lf, comp, role)
+                    end
+                end
+            end
+        end
+    end
+end
 
 -- ---------------------------------------------------------------------------
 -- 4. Media models: the licence register is the source; models.tsv names tiers.
@@ -804,8 +929,8 @@ local doc = {
         "optional means a user turns the feature on and the dependency is pulled then; required ships with every install.",
         "Licence families are a reading of the SPDX expression for the page's rings; the raw expression is beside each node.",
     }),
-    inputs = L({ "cargo metadata (Cargo.lock)", "images/*/Containerfile*", "observatorium/Containerfile", "images/web-wrangler/package-lock.json",
-        "observatorium/package-lock.json", "images/models/licence-register.tsv", "images/imagegen/models.tsv",
+    inputs = L({ "cargo metadata (Cargo.lock)", "images/*/Containerfile*", "observatorium/Containerfile",
+        "every package-lock.json under an image directory (discovered, stage-aware)", "images/models/licence-register.tsv", "images/imagegen/models.tsv",
         "crates/tillandsias-headless/data/studios.json", "images/imagegen-studio/custom-nodes.toml",
         "crates/tillandsias-core/data/devices/upstream/*-LICENSE", "cheatsheets/license-allowlist.toml", "docs/credits/package-licences.tsv" }),
     generator = "scripts/lua/build-stack-ledger.lua",
