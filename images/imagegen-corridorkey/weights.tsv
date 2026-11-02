@@ -1,0 +1,62 @@
+# @trace order:1956-ucix, order:1954-xy5m (spec: openspec/changes/studio-asset-pipeline, design D9, not yet archived)
+# THE CORRIDORKEY 2.0 WEIGHT MANIFEST, read by crates/tillandsias-headless/src/studio_key.rs.
+# One row per FILE infer.py needs, pinned by publisher revision, sha256 and size.
+# NONE of these files is ever baked into an image or redistributed by Tillandsias:
+# they are fetched on the user's own machine, through the licence consent gate of
+# order 1956-ecpb (design D6), into the shared model cache at
+#   <cache_root>/models/imagegen/corridorkey/<file>
+# which the container sees read-only as /models/corridorkey/<file>. The image
+# symlinks /opt/corridorkey/{weights,vfms} to /models/corridorkey/{weights,vfms},
+# which is exactly where upstream's RuntimePaths.from_package looks (hard-coded
+# package-relative paths; no environment variable selects them).
+#
+# Columns (tab-separated):
+#   role        weights | vfm:cradio | vfm:moge | vfm:rvm
+#   repo        publisher repository (Hugging Face id, or the GitHub project for RVM)
+#   revision    the publisher's pinned revision (a commit sha; RVM has none and
+#               carries the publisher's md5 instead, as upstream verifies it)
+#   file        the path under /models/corridorkey/ — upstream's package-relative path
+#   sha256      of the file
+#   bytes       size
+#   licence     licence id (corridor-key-licence-2.0 is a CC BY-NC-SA 4.0 variant
+#               and RESTRICTED; the restricted register of 1956-ecpb carries its terms)
+#   source      where the user's machine fetches it from
+#
+# Pinned from upstream scripts/download_weights.py at commit
+# 485f5e9ab759ead6138cc990776184b59d6ea971 (2026-10-15) and the publishers'
+# trees on 2026-11-02. The C-RADIO snapshot needs its config and the
+# trust_remote_code modules beside model.safetensors (foundations.py loads the
+# directory with local_files_only=True), so every file of that snapshot is a row.
+weights	nikopueringer/CorridorKey2.0	cf44a8db3f024bb49fd59daa408848ccf05f7477	weights/corridorkey_v2.safetensors	c43596de98cc8866d577c8a9f9ea239acdf3f7a130ff24e25db4375a50590436	2661698720	corridor-key-licence-2.0	https://huggingface.co/nikopueringer/CorridorKey2.0
+weights	nikopueringer/CorridorKey2.0	cf44a8db3f024bb49fd59daa408848ccf05f7477	weights/foundation_stats.safetensors	924783ceddd293fd470126332ce328166faea6c4c8d2f36402d5b95187166af3	18864	corridor-key-licence-2.0	https://huggingface.co/nikopueringer/CorridorKey2.0
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/model.safetensors	23e0c117de49d4ce909150fe6658d470829e6639647c7a5b035ce82e0d5b763c	1724986512	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/config.json	6e49e911ff6e980125c208b10ed4b51bb4a92061862cbb8947473f1b33f88fd4	7571	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/preprocessor_config.json	6ca88d165592015b02a183d26a20fc96748e837d1cb21bde5f611141aca593cf	331	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/hf_model.py	d28c0a0238ca8854a9af5a9f003761332bfc9182601b3b7466d9242be91ee96f	7935	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/adaptor_attn.py	baa112b58158d75077e9bba8baba51b2c75f6a6deed2d8046aa5e5f2d5cb669a	1796	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/adaptor_base.py	f9d285cc76e70f977f9c78e748f610765f0bd068a13f86d804c07c765cece577	1693	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/adaptor_generic.py	3d1b5a015ff3754a9eb64cd56b4d04cae01e537a1ffa606adaf904c55fff07a1	3747	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/adaptor_mlp.py	e75a9ed1f7f58c749dec5a510d699f36f32fdb7f3b61cd8a7e3ccd5afd2c9b77	4025	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/adaptor_module_factory.py	2beac17dc5824c7d9f925dc782cdd4b49bd15cf206bf1cbaa9108a8966e33316	3278	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/adaptor_registry.py	16963e07de300e5f3cbd5e343aed111d04e4e55a50e07f50ccc2ab930883ea1e	1371	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/cls_token.py	64ee35f128380c3bb9bc1a913e98ac328220be88964f2092686c637ef866fc79	1787	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/common.py	6cc79e1f7b61f4917602d2efc9e0a833fa74d60563f6aac74e4625de23723bab	7160	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/dinov2_arch.py	5433d08522c28f46a69e710da1a86fc1d76fc03562dbb9b2b49baf5db21195d3	35529	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/dual_hybrid_vit.py	86853ae2ed28c902529cd9b78201350e7dba1cf54ea9e57578241ecc0d88d867	7179	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/enable_cpe_support.py	3c1e3df656960f5c83b38ba5f632fc5b335edf1d6de67731396a865aaa5ce1ed	6557	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/enable_damp.py	7e2a0b6f8934ac6e4a4768e5ca84cb4ff09ba3726a470f1cf046bd5169b2e334	1290	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/enable_spectral_reparam.py	b8e703400604ee5f9cdfac0de9b857b7f5126aad8bba03604b04f52f7641d6cb	11004	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/eradio_model.py	bf76c60b991813eef45c76246cd7dcee3fefbf39bde3d2b6ac8576067012d05f	58289	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/extra_models.py	a938b96715266d2f65325e56d0d8e42465d23e944e905d2820023472785c55a9	5763	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/extra_timm_models.py	d7364d5abf5b617782366948f0e593d7a2df275b076094afa1ebc5276a9f7102	9892	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/feature_normalizer.py	a74401f5220c2e5960d39addce9ba40f481efca9ab44bb9d96535ed23e1ef62b	4399	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/forward_intermediates.py	eb5a562d11edc655876eeb95bc1c3b4c7484b963dae41a3f76f7acd2a6906b9e	5604	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/input_conditioner.py	72062d3b71877e1469e069cf090e5f35d6ad7abaeb451e56502f7f32dc6c1075	1492	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/open_clip_adaptor.py	c2eb9166de48f5eb5f90f8a750e8ebe67da93698e794dc0bbdab5f013bab8e66	1623	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/radio_model.py	2be659f5cd5b9db9c49db70387b65253c74bc16b3eb86e976f0f693271d4b183	14018	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/siglip2_adaptor.py	1f40f7d77beefd69ad86aac61b12c82ed915b4012e6bea1628fc8abe80782851	3307	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/utils.py	3b83163ce2650ef04973538dd79716ab015d24344ea25d52cfb0c37b093ba4ba	1109	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/vit_patch_generator.py	092e9a0b8eca4fee162484ef3ef77b399f686e5e0ffc7be85fb2d69bc2f9ebd9	11475	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:cradio	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/vitdet.py	5b83b4c7b90b797d854a6da2fd4093ce9210a52533d3f7ba6bf505793b6c68c3	6318	nvidia-open-model-license	https://huggingface.co/nvidia/C-RADIOv4-SO400M
+vfm:moge	Ruicheng/moge-2-vitb-normal	ca5f0e07ff01d3e5a364c1d954ed12ee1814b368	vfms/moge/model.pt	16b8110e86d5dc5a849db120ca96ef3a223fd30b0c9146d1d81db504073da5f6	419110160	mit	https://huggingface.co/Ruicheng/moge-2-vitb-normal
+vfm:rvm	google-deepmind/representations4d	md5:ZJb6kj8+tasiJbVeplXu7Q==	vfms/rvm/pretrain_rvm_small16_256_204031069.npz	8821ba9f5d983b9a3746bb5fe86b9c2ea834fe9985ab7b02438b917438bf2ede	270086372	cc-by-4.0	https://storage.googleapis.com/representations4d/checkpoints/pretrain_rvm_small16_256_204031069.npz

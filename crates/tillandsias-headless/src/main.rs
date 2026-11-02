@@ -95,6 +95,14 @@ mod gpu_queue;
 mod provenance;
 #[cfg(feature = "host-services")]
 mod studio_tool;
+// @trace order:1956-ucix — CorridorKey 2.0 proof of concept behind
+// `studio.key_footage`; opt-in per project, consent-gated, CUDA only.
+#[cfg(feature = "host-services")]
+mod studio_key;
+// @trace order:1956-ecpb — the licence consent gate. Until that order lands
+// this is a shim that admits nothing (see the module).
+#[cfg(feature = "host-services")]
+mod licence_consent;
 // @trace order:1956-26qh — the family contract v1 static checker behind
 // `studio.validate_family`; pure, gated with imagegen_tool.
 mod progress_sink;
@@ -2693,6 +2701,10 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
         // only for a project with `[imagegen] studio = true`.
         "imagegen-studio" => "images/imagegen-studio",
+        // 1956-ucix: the CorridorKey 2.0 proof of concept. Never an INIT
+        // image; built on the first studio.key_footage of a project with
+        // `[imagegen] corridorkey = true`.
+        "imagegen-corridorkey" => "images/imagegen-corridorkey",
         "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
