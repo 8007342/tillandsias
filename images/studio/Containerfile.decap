@@ -1,0 +1,45 @@
+# @trace order:1862-wrx5, order:1860-auhm (spec: openspec/changes/web-studio-lanes)
+# The Decap CMS studio lane: the forge image plus the studio front, the
+# decap-cms admin UI (vendored, sha512-pinned npm tarball) and decap-server's
+# local fs proxy (every package pinned by package-lock.json integrity). Built
+# on first use as studio-decap, never part of the INIT set.
+#
+# Licences approved by the operator 2026-11-01 (relayed by macuahuitl-fedora):
+# decap-cms 3.17.3 MIT, decap-server 3.11.6 MIT, and decap-server's installed
+# tree (180 package.json files: MIT 161, ISC 8, BSD-3-Clause 8, BSD-2-Clause 2,
+# 0BSD 1). The build fetches; the RUN of the studio has no network.
+ARG FORGE_IMAGE=localhost/tillandsias-forge
+FROM ${FORGE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours. The label is Tillandsias's own recipe; every base image and
+# package it carries is credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+ARG DECAP_CMS_VERSION=3.17.3
+ARG DECAP_CMS_INTEGRITY=sha512-aoNAV1throw76ieMmCVe5qb3EbhbbFdXwG+fTupQqvKVwJYnJVQiFdAwvWeP9+H5prNeXS6mrVbW9cxGD/m6tg==
+
+LABEL io.tillandsias.studio="decap" \
+      io.tillandsias.studio.decap-cms-version="${DECAP_CMS_VERSION}" \
+      io.tillandsias.studio.decap-cms-integrity="${DECAP_CMS_INTEGRITY}" \
+      io.tillandsias.studio.decap-server-version="3.11.6" \
+      io.tillandsias.studio.licence="MIT" \
+      io.tillandsias.studio.dependency-licences="MIT,ISC,BSD-3-Clause,BSD-2-Clause,0BSD"
+
+USER root
+WORKDIR /opt/studio/decap
+COPY decap/vendor.mjs /tmp/vendor.mjs
+RUN node /tmp/vendor.mjs "$DECAP_CMS_VERSION" "$DECAP_CMS_INTEGRITY" /opt/studio/decap/vendor/decap-cms \
+    && test -f /opt/studio/decap/vendor/decap-cms/dist/decap-cms.js \
+    && test -f /opt/studio/decap/vendor/decap-cms/package.json \
+    && rm /tmp/vendor.mjs
+COPY decap/package.json decap/package-lock.json /opt/studio/decap/
+RUN npm ci --ignore-scripts --omit=dev --no-audit --no-fund \
+    && test -f /opt/studio/decap/node_modules/decap-server/dist/index.js \
+    && npm cache clean --force
+COPY studio-front.js /opt/studio/studio-front.js
+# Written by scripts/lua/build-studio-registry.lua beside data/studios.json.
+COPY studios.json /usr/local/share/tillandsias/studios.json
+COPY decap/server.mjs /opt/studio/decap/
+COPY --chmod=0755 decap/studio-decap /usr/local/bin/studio-decap
+WORKDIR /
+USER 1000:1000

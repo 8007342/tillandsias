@@ -1,0 +1,39 @@
+# @trace order:1861-nmpp, order:1860-auhm (spec: openspec/changes/web-studio-lanes)
+# The GrapesJS studio lane: the forge image plus the studio front and the
+# GrapesJS editor, built on first use as studio-grapesjs (design.md, "Image on
+# first use") and never part of the INIT set.
+#
+# Operator scope (2026-10-31, relayed by macuahuitl): the open-source GrapesJS
+# CORE only (BSD-3-Clause), never the GrapesJS Studio SDK, its cloud, or
+# anything needing a licence key. The core is vendored at build time from the
+# npm tarball, verified against its pinned sha512 integrity, so nothing is
+# fetched at run time. Its LICENSE ships in /opt/studio/grapesjs/vendor/LICENSE.
+ARG FORGE_IMAGE=localhost/tillandsias-forge
+FROM ${FORGE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours. The label is Tillandsias's own recipe; every base image and
+# package it carries is credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+ARG GRAPESJS_VERSION=0.23.8
+ARG GRAPESJS_INTEGRITY=sha512-4+HvGRnWK0IbFva2FUxu6GXA3/BFGq0vRaeJ8MhhFR5O42wq9T7rKxChYLKgEmplHb2ea9HsfIzJtsEibeYv7w==
+LABEL io.tillandsias.studio="grapesjs" \
+      io.tillandsias.studio.grapesjs-version="${GRAPESJS_VERSION}" \
+      io.tillandsias.studio.grapesjs-integrity="${GRAPESJS_INTEGRITY}" \
+      io.tillandsias.studio.licence="BSD-3-Clause"
+
+USER root
+COPY grapesjs/vendor.mjs /tmp/vendor.mjs
+# The tarball is verified against the pinned integrity, not trusted from the
+# version name; only dist/ and LICENSE are kept.
+RUN node /tmp/vendor.mjs "$GRAPESJS_VERSION" "$GRAPESJS_INTEGRITY" /opt/studio/grapesjs/vendor \
+    && test -f /opt/studio/grapesjs/vendor/LICENSE \
+    && test -f /opt/studio/grapesjs/vendor/dist/grapes.min.js \
+    && test -f /opt/studio/grapesjs/vendor/dist/css/grapes.min.css \
+    && rm /tmp/vendor.mjs
+COPY studio-front.js /opt/studio/studio-front.js
+# Written by scripts/lua/build-studio-registry.lua beside data/studios.json.
+COPY studios.json /usr/local/share/tillandsias/studios.json
+COPY grapesjs/server.mjs grapesjs/editor.html /opt/studio/grapesjs/
+COPY --chmod=0755 grapesjs/studio-grapesjs /usr/local/bin/studio-grapesjs
+USER 1000:1000

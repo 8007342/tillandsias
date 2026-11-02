@@ -47,7 +47,7 @@
       "packet": "1861-nmpp",
       "port": 4096,
       "save_adapter": "endpoint",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         "*.html",
         "**/*.html",
@@ -70,7 +70,7 @@
       "packet": "1862-wrx5",
       "port": 4096,
       "save_adapter": "own-writer",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         "content/**",
         "_posts/**",
