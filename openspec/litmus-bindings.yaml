@@ -53,6 +53,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-readiness-probe-shape
+  - litmus:dev-inference-ensure-refusals-carry-affordance
   - litmus:async-inference-launch-entrypoint-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
