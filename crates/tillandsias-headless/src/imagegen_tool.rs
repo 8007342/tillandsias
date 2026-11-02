@@ -570,12 +570,17 @@ impl PodmanSdCli {
         ]);
         for (role, path) in files {
             let rel = path.strip_prefix(&self.models_dir).unwrap_or(path);
+            // The manifest's role column IS the sd-cli flag (docs/flux.md loads
+            // FLUX as four files: --diffusion-model, --vae, --clip_l, --t5xxl).
+            // A role the parser admits is one of these five; anything else is a
+            // manifest bug and is named, not silently passed as a checkpoint.
             let flag = match role.as_str() {
                 "model" => "--model",
+                "diffusion_model" => "--diffusion-model",
                 "vae" => "--vae",
                 "clip_l" => "--clip_l",
                 "t5xxl" => "--t5xxl",
-                _ => "--diffusion-model",
+                other => panic!("models.tsv role {other} has no sd-cli flag"),
             };
             a.extend([flag.into(), format!("/models/{}", rel.display())]);
         }
@@ -756,6 +761,46 @@ mod tests {
         assert!(a.contains(&"--network=none".to_string()));
         assert!(a.contains(&"/models/I0/sdxs09.safetensors".to_string()));
         assert!(a.contains(&"/out/img-1-2-%d.png".to_string()));
+    }
+
+    /// 1959-flux: the I2 pins reach sd-cli the way docs/flux.md loads FLUX:
+    /// `--diffusion-model <transformer> --vae <ae> --clip_l <clip> --t5xxl <t5>`,
+    /// `--cfg-scale 1`, `--sampling-method euler`. Each flag is followed by its
+    /// own file; `--model` (a full checkpoint) is not passed at all.
+    #[test]
+    fn flux_pins_are_passed_as_the_four_separate_sd_cpp_flags() {
+        let e = PodmanSdCli {
+            image: "img".into(),
+            models_dir: PathBuf::from("/m"),
+        };
+        let job = parse_job(
+            &json!({"prompt":"a fox"}),
+            &imagegen_tiers::ladder(),
+            "I2",
+            false,
+        )
+        .unwrap();
+        let pins = imagegen_models::files_for_tier(&imagegen_models::manifest(), "I2");
+        assert!(!pins.is_empty(), "I2 has pinned files");
+        let files: Vec<(String, PathBuf)> = pins
+            .iter()
+            .map(|p| (p.role.clone(), PathBuf::from("/m/I2").join(p.cache_name())))
+            .collect();
+        let a = e.run_args(&job, &files, Path::new("/o"), &["img-0.png".into()], 1);
+        let after = |flag: &str| -> String {
+            let i = a
+                .iter()
+                .position(|s| s == flag)
+                .unwrap_or_else(|| panic!("{flag} missing from {a:?}"));
+            a[i + 1].clone()
+        };
+        assert!(after("--diffusion-model").contains("flux1-schnell"));
+        assert!(after("--vae").ends_with("/ae.safetensors"));
+        assert!(after("--clip_l").contains("clip_l"));
+        assert!(after("--t5xxl").contains("t5xxl"));
+        assert!(!a.contains(&"--model".to_string()), "no full checkpoint for FLUX");
+        assert_eq!(after("--cfg-scale"), "1");
+        assert_eq!(after("--sampling-method"), "euler");
     }
 
     /// Counts engine runs, so a fixture can prove a refusal ran nothing.
