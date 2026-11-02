@@ -10,3 +10,4 @@ STEP_DESC="Checking a provider usage limit stops the lane and holds later launch
 STEP_LUA="scripts/lua/test-provider-usage-limit.lua"
 STEP_ERROR="a provider usage limit is no longer reported as itself, or a launch before its deadline calls the provider again (1941-rlim) — see the FAIL lines above"
 STEP_OK="provider usage-limit fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:provider-usage-limit:static + record + default + control + refuse + supervise arms"

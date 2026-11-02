@@ -27,7 +27,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "nineteen arms: three static, four record, one default, one control, four refuse, four supervise"
+  expected_log: "seventeen arms: three static, four record, one default, one control, four refuse, four supervise"
   log_fields:
     spec: "default-image"
     test: "provider-usage-limit"
