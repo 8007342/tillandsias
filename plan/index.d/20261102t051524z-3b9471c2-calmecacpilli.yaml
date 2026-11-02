@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-offers-only-installed-or-installable-tiers-and-states-download-size-and-minutes-for-an-installable-one
+    field: next_action
+    value: 'Land with #825 (c56e9cb65). Verify on linux-next: imagegen_tiers -- a_tier_without_pinned_files_is_never_offered green and the offer-text test (host-services gated, 78f221d0a) asserts GB + minutes, then close. Open residue to file or fold here: the minutes figure uses an assumed 10 MB/s, not the measured link rate the exit criterion asks for — measure from the proxy''s first chunk or the last model fetch, and say "about" until then.'
+    ts: "2026-11-02T05:15:24Z"
+    host: calmecacpilli
+    replaces_sha256: "0dd10260c56e0992fd934a4acd733ff8f78db1879bbfe9de07387fe7186723df"
+
+events:
+  - packet_id: imagegen-offers-only-installed-or-installable-tiers-and-states-download-size-and-minutes-for-an-installable-one
+    event:
+      type: note
+      ts: "2026-11-02T05:15:24Z"
+      host: calmecacpilli
+      summary: |-
+        operator ruling 2026-11-01 on #825: the filter/size step is done at c56e9cb65

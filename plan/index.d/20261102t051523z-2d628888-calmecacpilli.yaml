@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-consent-is-a-grant-tier-scope-expiry-so-an-approved-tier-is-callable-directly-without-another-ladder-walk
+    field: context
+    value: |-
+      demon_attack-forge round 1+2, calmecacpilli 2026-11-02: each image at I1 needed the ladder walked from I0 (1.4 s warm, 136 s cold) to earn a fresh bigger_tier_offer, the user re-asked, and the one-shot consent_token spent on one call. Calling tier=I1 directly after the user had already said yes was refused with consent_required. Operator framing: tier prompts are RESOURCE gates protecting the host, not quality choices — once a tier works and its runtime is reasonable (or the user accepts it may take hours) the operator approves it, and asking again per image is noise. imagegen_consent.rs mints a single-use token bound to lane, tier and request.
+
+      [2026-11-02T05:15:23Z calmecacpilli] SUPERSEDING RULING 2026-11-01 on #825 (verbatim): "the bigger models gate should be asked only for downloading models the first time ... there's no real reason to use the smaller models" — so the gate is a one-time per-host DOWNLOAD gate, not a session grant: a tierless call runs the highest tier within the ceiling already present/approved, direct tier requests are allowed, there is no ladder walk, I0 still auto-downloads, smaller tiers stay available by name. Implemented at c56e9cb65 on origin/work/1957-5m8g (grant {tier, kind: download, scope: host, expiry: none}); spec aligned in openspec/changes/local-image-generation design.md section 5 (work/1959-dlgate).
+    ts: "2026-11-02T05:15:23Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: imagegen-consent-is-a-grant-tier-scope-expiry-so-an-approved-tier-is-callable-directly-without-another-ladder-walk
+    event:
+      type: note
+      ts: "2026-11-02T05:15:23Z"
+      host: calmecacpilli
+      summary: |-
+        operator ruling 2026-11-01 on #825
