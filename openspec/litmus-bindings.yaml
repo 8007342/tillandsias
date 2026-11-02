@@ -793,6 +793,7 @@ specs:
   - litmus:gate-step-prefix-allocation
   - litmus:gate-step-prefix-refusals-carry-affordance
   - litmus:skills-single-source-refusals-carry-affordance
+  - litmus:tracked-files-unwritten-refusals-carry-affordance
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
