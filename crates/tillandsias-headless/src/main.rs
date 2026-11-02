@@ -37307,7 +37307,12 @@ mod keep_id_warm_tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
-        let layers_json = PathBuf::from(&root).join("overlay-layers/layers.json");
+        // 1960-kidw: podman may run on the HOST (the builder toolbox's podman
+        // is a flatpak-spawn shim), so the GraphRoot it reports is a host
+        // path. A store under $HOME is visible here at the same path; one
+        // elsewhere (/srv/...) is only under /run/host. Read the file podman
+        // writes, wherever this process sees it.
+        let layers_json = keep_id_layers_json(&root);
         let scratch = PathBuf::from(
             std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
         )
@@ -37349,14 +37354,23 @@ mod keep_id_warm_tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
-        let mapped = || -> usize {
+        let rows_of_layer = || -> Vec<serde_json::Value> {
             let text = std::fs::read_to_string(&layers_json).unwrap_or_default();
             let rows: Vec<serde_json::Value> = serde_json::from_str(&text).unwrap_or_default();
-            rows.iter()
+            rows.into_iter()
                 .filter(|l| l["diff-digest"] == layer.as_str())
+                .collect()
+        };
+        let mapped = || -> usize {
+            rows_of_layer()
+                .iter()
                 .filter(|l| l["uidmap"].as_array().is_some_and(|m| !m.is_empty()))
                 .count()
         };
+        // 1960-kidw: the population. An unreadable layers.json counts zero
+        // mapped rows everywhere, which made the premise below hollow; the
+        // image's own unmapped layer must be visible first.
+        let seen = rows_of_layer().len();
         let after_build = mapped();
         warm_keep_id_mapping("keepid-warm-test", &tag, false);
         let after_warm = mapped();
@@ -37372,6 +37386,11 @@ mod keep_id_warm_tests {
             .args(["rmi", "-f", &tag])
             .output_bounded(OperationKind::Image.default_budget());
         assert!(!layer.is_empty(), "the image's layer digest");
+        assert!(
+            seen >= 1,
+            "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
+            layers_json.display()
+        );
         assert_eq!(
             after_build, 0,
             "a fresh image starts with no mapped copy (the premise)"
@@ -37381,6 +37400,20 @@ mod keep_id_warm_tests {
             after_start, 1,
             "the first keep-id start made no copy of its own"
         );
+    }
+
+    /// 1960-kidw: `<graphroot>/overlay-layers/layers.json` as this process
+    /// sees it: at the reported path when present, else under `/run/host`
+    /// (toolbox and flatpak mount the host root there).
+    fn keep_id_layers_json(graphroot: &str) -> PathBuf {
+        let direct = PathBuf::from(graphroot).join("overlay-layers/layers.json");
+        if direct.exists() {
+            return direct;
+        }
+        let hosted = PathBuf::from("/run/host")
+            .join(graphroot.trim_start_matches('/'))
+            .join("overlay-layers/layers.json");
+        if hosted.exists() { hosted } else { direct }
     }
 
     /// The `_warm_keep_id_mapping` function from scripts/build-image.sh, run
