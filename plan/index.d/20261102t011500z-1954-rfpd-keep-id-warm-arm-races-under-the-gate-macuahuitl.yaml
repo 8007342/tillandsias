@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Fable agent, 2026-11-02) while gating work/1953-jmvb.
+# An earlier draft of this row (never landed) called the failure a race; three
+# red gate runs against three green host runs, then a probe inside the toolbox,
+# showed it deterministic. The filename keeps the word; the row does not.
+packets:
+- packet_id: a-toolbox-run-process-reads-the-podman-graphroot-at-the-hosts-path-which-the-toolbox-does-not-mount-once-the-store-leaves-home
+  order: 1954-rfpd
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  size: S
+  implementer_tier: sonnet
+  capability_tags:
+  - podman
+  - tests
+  - gate
+  estimated_hours: 2
+  title: Inside the tillandsias-builder toolbox, podman is the host's and reports the host's GraphRoot, but std::fs reads the toolbox's tree; 1960-kidw fixed the keep-id warm test's read, and image_build_scope.rs graph_root() -> free_bytes_at still measures free space at the host path, so a headless run inside a toolbox reads the wrong filesystem once the store leaves $HOME
+  context: 'Measured on macuahuitl 2026-11-02 at work/1953-jmvb. ./build.sh --check reported new-red tillandsias::keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start in 3 of 3 runs (`the warm made the mapped copy, left: 0, right: 1`); the same test passed 4/4 by name and 937/937 with the whole headless binary, both on the host. build.sh re-execs inside the tillandsias-builder toolbox. Probe from inside it: `podman info` reports GraphRoot /srv/fastbuild/containers/storage, Supports shifting false, Backing Filesystem xfs (the host''s store through the passthrough shim); `ls /srv/fastbuild/containers/storage/overlay-layers/layers.json` is No such file (the toolbox mounts its own /srv); the host tree is at /run/host/srv/... Until the coordinator moved rootless storage to the RAID on 2026-11-01 the graphroot was under $HOME, which toolbox shares, so the paths agreed by accident. The test-side read was fixed independently as 1960-kidw (keep_id_layers_json, landed on linux-next 2026-11-02, f5380abb0); the same fix written on work/1953-jmvb was dropped at the merge in its favour. What remains is the PRODUCTION site: image_build_scope.rs graph_root() returns the host path and free_bytes_at(Path::new(root)) measures the filesystem at that path in THIS process — inside a toolbox that is the toolbox''s overlay (or an absent path), not the store''s xfs — so the disk refusal for an image build reads the wrong free-space number whenever headless runs inside a toolbox with a store outside $HOME.'
+  exit_criteria:
+  - 'One helper beside graph_root() answers "the host path as this process can read it" (the path itself when it is a directory here, else /run/host/<path> when that is), and both keep_id_layers_json and the free_bytes_at caller use it.'
+  - 'A unit test feeds a root absent here and present under a fake /run/host prefix and asserts the resolved path; red on today''s code (today''s code returns the absent path).'
+  - 'The two browser_open.rs harness assertions on `store` still pass on a host where the store is under target/work/.'
+  verifiable_closure: 'The unit test of the second criterion, run by the gate''s test-baseline; red before, green after. No litmus wraps a cargo unit test.'
+  unscoreable: 'the scorer is a cargo unit test under the gate''s test-baseline, not a litmus; a litmus naming it would only re-run the gate'
+  next_action: 'Write the fake-/run/host unit test red first beside graph_root(); add the helper; route free_bytes_at and keep_id_layers_json through it; run the headless binary inside the builder toolbox on macuahuitl (store outside $HOME) as the live check.'
+  provenance: macuahuitl gate transcripts 2026-11-02 (three runs, each new-red on the same arm); host runs of the same binary (937/937) and test (4/4); podman exec probes inside tillandsias-builder 2026-11-02; linux-next f5380abb0 (1960-kidw); coordinator message 2026-11-01 announcing the graphroot move.
+  events:
+  - type: filed
+    ts: '2026-11-02T01:15:00Z'
+    host: macuahuitl
+    summary: filed as a suspected race after two red gate runs and one green whole-binary run
+  - type: progress
+    ts: '2026-11-02T03:20:00Z'
+    host: macuahuitl
+    summary: corrected to deterministic — probe inside the toolbox shows the host GraphRoot path absent and the host tree under /run/host; test-side resolution written on work/1953-jmvb
+  - type: progress
+    ts: '2026-11-02T15:30:00Z'
+    host: macuahuitl
+    summary: the test-side fix landed independently as 1960-kidw (f5380abb0); the copy on work/1953-jmvb was dropped at the linux-next merge; this row keeps only the production sibling and the shared helper, back to ready

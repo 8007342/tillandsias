@@ -9,8 +9,25 @@ on:
         required: false
         type: string
 
-# ORDER 1950-b4f3 — NO GITHUB ACTIONS CACHE IN THIS WORKFLOW. READ BEFORE
-# ADDING ONE BACK.
+# ORDER 1953-jmvb — THE RELEASE IS DISPATCHED ON main, NOT ON A TAG.
+# Operator ruling 2026-11-01 (verbatim): "let's drop the compiler build, and
+# start the release from main, those two look like low hanging fruit, we
+# could probably do those easily."
+#   * `gh workflow run release.yml --ref main -f version=<v>`. The workflow
+#     resolves VERSION from main's tree, refuses any other ref, and creates
+#     the tag v<VERSION> at GITHUB_SHA (or verifies an existing one points
+#     there). Still ONE dispatch, ONE cloud build (litmus:release-is-one-
+#     cloud-build) and no automatic trigger (litmus:github-actions-budget).
+#   * Because the run's ref is refs/heads/main, the Actions caches below are
+#     saved AND restored inside the same daily run — the 1950-b4f3 history
+#     under the next header is why that was impossible from a tag.
+#   * The Sigstore SAN is therefore release.yml@refs/heads/main;
+#     RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP pins exactly that.
+#   * The aarch64 cross GCC (41 min/release) is gone from flake.nix: zig +
+#     cargo-zigbuild, both substituted from cache.nixos.org.
+#
+# ORDER 1950-b4f3 — WHY NO CACHE EVER HIT FROM A TAG. READ BEFORE MOVING THE
+# DISPATCH BACK TO A TAG.
 #
 # Measured on five releases (runs 39495753986 41137103161 41212733409
 # 41249590255 41283100284; per-step timings via the jobs API):
@@ -30,12 +47,10 @@ on:
 #     main, is a second full build (run 41352565247: 66 min before the
 #     operator cancelled it). It costs more than it saves and breaks the
 #     one-cloud-build-per-day rule.
-# A cache that pays off needs a producer INSIDE the one daily run (dispatch
-# the release on main and tag from the workflow — SAN becomes refs/heads/main,
-# which RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP already admits) or a substituter
-# for the cross toolchain that is not the Actions cache. Either is a redesign
-# with an operator ruling, filed under 1950-b4f3; neither is a flag here.
-# litmus:release-is-one-cloud-build refuses a cache step or a seed input.
+# A cache that pays off needs a producer INSIDE the one daily run; 1953-jmvb
+# (header above) dispatches the release on main, so the saves below are
+# restorable by the next release. litmus:release-is-one-cloud-build refuses a
+# seed input or a dispatch on any ref but main.
 
 permissions:
   contents: write
@@ -52,16 +67,18 @@ concurrency:
 # 15 bundles, all with SAN .../workflows/release.yml@refs/tags/v56.9.25.2):
 # cosign v3.0.5 (what the pinned cosign-installer v4.1.1 installs) passes
 # 15/15 with this regexp; ci.yml and a foreign-owner regexp fail 15/15 on
-# SAN mismatch; a tampered asset fails on its signature. The refs/heads
-# alternative (a workflow_dispatch run) is an ASSUMPTION until a dispatched
-# release exists to measure.
+# SAN mismatch; a tampered asset fails on its signature.
+# ORDER 1953-jmvb: the release is dispatched on main (operator ruling
+# 2026-11-01, header above), so the SAN is release.yml@refs/heads/main and
+# the regexp pins THAT, anchored — a tag-ref or any other branch's run fails
+# SAN mismatch. The first main-dispatched release measures it.
 # `[.]`, never `\.`: the Windows job runs this through Git Bash, whose MSYS
 # argument conversion rewrote every `\.` to `/.` before cosign.exe saw it, so
 # all five freshly signed Windows assets of v56.9.27.1 failed on SAN mismatch
 # (measured by yolanda, cosign v3.0.5: `\.` rc=1 "github/.com", `[.]` rc=0
 # plain and through an env var; Linux and macOS are unaffected either way).
 env:
-  RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP: '^https://github[.]com/8007342/tillandsias/[.]github/workflows/release[.]yml@refs/(tags|heads)/'
+  RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP: '^https://github[.]com/8007342/tillandsias/[.]github/workflows/release[.]yml@refs/heads/main$'
 
 jobs:
   release:
@@ -79,6 +96,9 @@ jobs:
         # installer stays because it works (5 s, run 41283100284).
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
         with:
+          # cache-nix-action's compatible-installer list is why this is the
+          # cachix installer (1933-ysbq; checked by
+          # scripts/lua/check-nix-cache-installer-compatible.lua).
           # v56.9.25.1's Linux job failed three times on ONE NAR: the CDN edge
           # serving the runners dropped cache.nixos.org's cargo-package-winapi-
           # i686 NAR at exactly 2 MiB ("Stream error in the HTTP/2 framing
@@ -92,6 +112,25 @@ jobs:
             experimental-features = nix-command flakes
             http2 = false
             fallback = true
+
+      - name: Nix Cache
+        # 1953-jmvb: this run's ref is refs/heads/main (enforced above), so
+        # what this saves is restored by the next release — the property every
+        # tag-dispatched release lacked (1950-b4f3 header). The key covers both
+        # locks; the prefix restore hands a lock-bumped run the nearest older
+        # store, which still carries the toolchain and most crates.
+        # gc-max-store-size keeps the saved store under the 10 GB repo quota
+        # (the v56.11.1.1 store was 8.3 GB uncompressed, 3.3 GB saved).
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
+          restore-prefixes-first-match: |
+            nix-${{ runner.os }}-
+          gc-max-store-size-linux: 6G
+          purge: true
+          purge-prefixes: nix-${{ runner.os }}-
+          purge-created: 0
+          purge-primary-key: never
 
       # ── Gates that used to live here now run on local hardware ───────────────
       #
@@ -132,6 +171,31 @@ jobs:
 
           echo "VERSION=${FILE_VERSION}" >> "$GITHUB_ENV"
           echo "Version validated: v${FILE_VERSION}"
+
+      - name: Require main and create or verify the release tag (1953-jmvb)
+        run: |
+          # The release runs on main so its caches and its Sigstore SAN are
+          # main's (header). Any other ref is refused before a minute is spent.
+          if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::release.yml must be dispatched on main (got ${GITHUB_REF}); see the 1953-jmvb header"
+            exit 1
+          fi
+          TAG="v${VERSION}"
+          git fetch --quiet origin "refs/tags/${TAG}:refs/tags/${TAG}" 2>/dev/null || true
+          if git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}" >/dev/null; then
+            TAG_SHA="$(git rev-parse "refs/tags/${TAG}^{commit}")"
+            if [ "${TAG_SHA}" != "${GITHUB_SHA}" ]; then
+              echo "::error::${TAG} already points at ${TAG_SHA}, not at this run's ${GITHUB_SHA}; releases are fixed forward — bump VERSION"
+              exit 1
+            fi
+            echo "Tag ${TAG} exists at ${GITHUB_SHA}; using it"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "${TAG}" -m "Release ${TAG}" "${GITHUB_SHA}"
+            git push origin "refs/tags/${TAG}"
+            echo "Created ${TAG} at ${GITHUB_SHA}"
+          fi
 
 
       - name: Record Nix Build Start Time
@@ -518,6 +582,13 @@ jobs:
         with:
           toolchain: ${{ steps.rust-pin.outputs.channel }}
 
+      - name: Rust cache
+        # 1953-jmvb: saved and restored under refs/heads/main, the run's own ref.
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+        with:
+          workspaces: . -> target
+          shared-key: release-${{ runner.os }}
+
       - name: Install guest cross-build tools
         run: |
           brew install zig
@@ -656,6 +727,13 @@ jobs:
         uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9
         with:
           toolchain: ${{ steps.rust-pin.outputs.channel }}
+
+      - name: Rust cache
+        # 1953-jmvb: saved and restored under refs/heads/main, the run's own ref.
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+        with:
+          workspaces: . -> target
+          shared-key: release-${{ runner.os }}
 
       - name: Resolve version (same as Linux job)
         id: version
