@@ -14,6 +14,7 @@
 
 #![allow(dead_code)]
 
+pub mod cloudflare_callback;
 pub mod lifecycle;
 
 /// Shared tray strings, generated from `locales/en.toml` at build time

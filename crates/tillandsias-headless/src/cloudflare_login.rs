@@ -17,8 +17,9 @@
 //!   operator's static relay page (`TILLANDSIAS_CLOUDFLARE_RELAY_URL`,
 //!   `assets/cloudflare-relay/index.html`); the code comes back by paste, or
 //!   by polling `TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL` when set. The default
-//!   relay is [`DEFAULT_RELAY_URL`], GATED OFF ([`RELAY_DEFAULT_ON`]) until
-//!   the operator confirms its registration (1757-n45b).
+//!   relay is [`DEFAULT_RELAY_URL`], ON ([`RELAY_DEFAULT_ON`]) since its
+//!   registration was confirmed (1757-n45b, 2026-10-17; flipped by
+//!   1954-cfqr). An EMPTY `TILLANDSIAS_CLOUDFLARE_RELAY_URL` turns it off.
 //! - **paste**: the operator pastes the line the relay page shows
 //!   (`code=…&state=…`) or the whole address-bar URL. This is an
 //!   AUTHORIZATION CODE — single-use and useless without the PKCE verifier
@@ -47,6 +48,8 @@
 
 use std::io::{BufRead, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
+use std::os::unix::net::UnixListener;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use crate::cloudflare_oauth::{self, HttpClient, Pending};
@@ -77,13 +80,163 @@ pub const RELAY_POLL_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL";
 /// so there is no default poll: the phone shows the paste line. A poll URL is
 /// used only when the operator sets [`RELAY_POLL_URL_ENV`] themselves.
 pub const DEFAULT_RELAY_URL: &str = "https://cloudflare.tillandsias.org/cloudflare/callback";
-/// GATED OFF until the operator confirms DEFAULT_RELAY_URL is registered as a
-/// redirect URI on the Cloudflare App. Before that, Cloudflare refuses the
-/// authorize request outright, so defaulting to the relay would break every
-/// login, not only QR. Flip it in the release after the confirmation, and
-/// invert `relay_default_is_gated_off_until_registration_is_confirmed` in
-/// the same commit.
-pub const RELAY_DEFAULT_ON: bool = false;
+/// ON since the coordinator confirmed DEFAULT_RELAY_URL is live and
+/// registered as a redirect URI on the Cloudflare App (ledger event
+/// 2026-10-17, 1757-n45b). It was gated off before that because an
+/// unregistered redirect makes Cloudflare refuse the authorize request, which
+/// would break every login, not only QR.
+///
+/// WHY ON MATTERS (1954-cfqr, operator 2026-11-01): the macOS tray runs this
+/// login inside the Linux VM guest, which has no desktop, so with no relay
+/// `default_via` fell through to `Paste` whose redirect is
+/// `http://127.0.0.1:<port>/…` WITH NO LISTENER. Safari on the host resolved
+/// that to the host's own loopback: a dead page the operator had to copy the
+/// address bar from. With the relay on, the guest shows a QR whose redirect
+/// is the https relay page, reachable from any phone or browser.
+///
+/// `relay_default_is_on_since_registration_was_confirmed` pins this; a
+/// retreat (an empty `TILLANDSIAS_CLOUDFLARE_RELAY_URL`) is per host, not a
+/// code change.
+pub const RELAY_DEFAULT_ON: bool = true;
+
+/// ORDER 1955-cfhf. On a VM tray (macOS, Windows) the HOST owns the loopback
+/// listener and tells this guest-side login the port through this launch
+/// environment variable (`tillandsias_host_shell::cloudflare_callback`). The
+/// redirect then names the host's `127.0.0.1:<port>`, which the operator's
+/// browser can reach, and the callback comes back over the control wire to
+/// [`host_callback_socket_path`].
+pub const HOST_CALLBACK_PORT_ENV: &str =
+    tillandsias_host_shell::cloudflare_callback::HOST_CALLBACK_PORT_ENV;
+
+/// The host-held loopback callback: the host port the redirect names, and
+/// the guest unix socket on which the forwarded line arrives.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HostCallback {
+    pub port: u16,
+    pub socket: PathBuf,
+}
+
+/// The guest unix socket the forwarded callback line is written to:
+/// `$XDG_RUNTIME_DIR/tillandsias-cloudflare-callback.sock` (the login shell
+/// preamble guarantees the directory, mode 0700).
+pub fn host_callback_socket_path() -> PathBuf {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    dir.join("tillandsias-cloudflare-callback.sock")
+}
+
+/// [`HostCallback`] from the launch environment: `Some` only when the host
+/// set a registered port.
+pub fn host_callback_from_env() -> Option<HostCallback> {
+    let port: u16 = std::env::var(HOST_CALLBACK_PORT_ENV)
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    REGISTERED_LOOPBACK_PORTS
+        .contains(&port)
+        .then(|| HostCallback {
+            port,
+            socket: host_callback_socket_path(),
+        })
+}
+
+/// vsock_server's side (1955-cfhf): connect to the login's socket and write
+/// the one line. The line is a single-use code, never a token; it is not
+/// logged. `Err` when no login is waiting (socket absent or refusing).
+// Used by vsock_server, which is built only with the guest vsock feature.
+#[allow(dead_code)]
+pub async fn forward_callback_line(socket: &Path, line: &str) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
+    let mut s = tokio::net::UnixStream::connect(socket)
+        .await
+        .map_err(|e| format!("{}: {}", socket.display(), e.kind()))?;
+    s.write_all(line.as_bytes())
+        .await
+        .map_err(|e| e.kind().to_string())?;
+    s.write_all(b"\n").await.map_err(|e| e.kind().to_string())?;
+    s.shutdown().await.map_err(|e| e.kind().to_string())
+}
+
+/// The forwarded receiver: bind the guest socket (replacing a stale file),
+/// so it exists BEFORE the URL is shown.
+fn bind_forward_socket(path: &Path) -> Result<UnixListener, Refusal> {
+    let _ = std::fs::remove_file(path);
+    let l = UnixListener::bind(path).map_err(|e| {
+        Refusal::login(
+            "forward-socket-unbindable",
+            format!(
+                "the guest socket for the host's callback could not be bound ({})",
+                e.kind()
+            ),
+            "check XDG_RUNTIME_DIR in the login shell, or use `--via qr`",
+        )
+    })?;
+    Ok(l)
+}
+
+/// Take ONE forwarded line from the host (`code=…&state=…` or
+/// `error=…&state=…`) and judge it exactly as a loopback callback is judged:
+/// state first. Bounded by `deadline`; the socket file is removed on return.
+fn receive_forwarded(
+    listener: &UnixListener,
+    path: &Path,
+    expected_state: &str,
+    deadline: Instant,
+) -> Result<AuthCode, Refusal> {
+    struct Cleanup<'a>(&'a Path);
+    impl Drop for Cleanup<'_> {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(self.0);
+        }
+    }
+    let _cleanup = Cleanup(path);
+    listener.set_nonblocking(true).map_err(|_| {
+        Refusal::login(
+            "forward-socket-unusable",
+            "the guest socket for the host's callback could not be configured",
+            "use `--via qr`",
+        )
+    })?;
+    loop {
+        if Instant::now() >= deadline {
+            return Err(Refusal::login(
+                "timeout",
+                "no callback was forwarded by the host within the login window",
+                "run Cloudflare Login again and open the printed URL on this computer, or use `--via qr`",
+            ));
+        }
+        match listener.accept() {
+            Ok((stream, _)) => {
+                let _ = stream.set_nonblocking(false);
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                let mut line = String::new();
+                let _ = std::io::BufReader::new(stream).read_line(&mut line);
+                let line = line.trim();
+                let Some(params) = parse_query(line) else {
+                    return Err(Refusal::login(
+                        "forwarded-line-malformed",
+                        "the host forwarded a line that is not valid URL encoding, so its state cannot be verified",
+                        REMEDY_RETRY,
+                    ));
+                };
+                return judge_callback(&params, expected_state);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(_) => {
+                return Err(Refusal::login(
+                    "forward-socket-unusable",
+                    "the guest socket for the host's callback stopped accepting",
+                    "use `--via qr`",
+                ));
+            }
+        }
+    }
+}
 
 /// The relay and poll URLs from their env values (`None` = unset). A set but
 /// empty value turns the relay off even when the default is on. The poll has
@@ -93,14 +246,43 @@ pub fn resolve_relay(
     poll_env: Option<&str>,
     default_on: bool,
 ) -> (Option<String>, Option<String>) {
+    resolve_relay_with_poll_default(relay_env, poll_env, default_on, RELAY_POLL_DEFAULT_ON)
+}
+
+/// ORDER 1955-cfhf. The hands-free poll endpoint next to the relay page
+/// (sibling repo 8007342/cloudflare.tillandsias.org, PR #1): the Worker keeps
+/// `code` by `state` for at most 120 s, one poll reads and deletes it.
+pub const DEFAULT_RELAY_POLL_URL: &str = "https://cloudflare.tillandsias.org/cloudflare/poll";
+/// GATED OFF until the operator deploys that Worker. Before the deploy the
+/// path answers 404, which `poll_relay` reads as "not yet": a default poll
+/// would wait the whole window instead of showing the paste line. Flip it,
+/// and invert `relay_poll_default_is_gated_off_until_the_worker_is_deployed`,
+/// in the release after the deploy.
+pub const RELAY_POLL_DEFAULT_ON: bool = false;
+
+/// [`resolve_relay`] with the poll default as a parameter. The poll default
+/// applies only when the relay is the default too: a custom relay has its
+/// own poll or none.
+pub fn resolve_relay_with_poll_default(
+    relay_env: Option<&str>,
+    poll_env: Option<&str>,
+    default_on: bool,
+    poll_default_on: bool,
+) -> (Option<String>, Option<String>) {
     let set = |v: Option<&str>| v.map(str::trim).map(str::to_string);
+    let relay_is_default = relay_env.is_none() && default_on;
     let relay = match set(relay_env) {
         Some(v) if v.is_empty() => None,
         Some(v) => Some(v),
         None if default_on => Some(DEFAULT_RELAY_URL.to_string()),
         None => None,
     };
-    let poll = set(poll_env).filter(|v| !v.is_empty());
+    let poll = match set(poll_env) {
+        Some(v) if v.is_empty() => None,
+        Some(v) => Some(v),
+        None if relay_is_default && poll_default_on => Some(DEFAULT_RELAY_POLL_URL.to_string()),
+        None => None,
+    };
     (relay, poll)
 }
 /// How long any receiver waits (spec: "for at most five minutes").
@@ -379,10 +561,15 @@ impl Via {
 /// loopback on a desktop session (the URL is printed, never auto-opened),
 /// else paste. Before, a desktop always took loopback and auto-opened the
 /// host browser, so a configured relay never produced a QR there.
-pub fn default_via(desktop_session: bool, relay_configured: bool) -> Via {
+///
+/// 1955-cfhf: a HOST-HELD loopback (a VM tray told this guest its port) is a
+/// desktop with a browser for this purpose: the printed URL opens on the
+/// host and lands on the host's live page. The relay, when configured, still
+/// comes first (QR + the same URL under it).
+pub fn default_via(desktop_session: bool, relay_configured: bool, host_callback: bool) -> Via {
     if relay_configured {
         Via::Qr
-    } else if desktop_session {
+    } else if host_callback || desktop_session {
         Via::Loopback
     } else {
         Via::Paste
@@ -690,6 +877,9 @@ pub struct LoginDeps<'a> {
     pub relay_url: Option<String>,
     pub relay_poll_url: Option<String>,
     pub loopback_ports: Vec<u16>,
+    /// 1955-cfhf: `Some` when the HOST holds the loopback listener and
+    /// forwards the callback to the guest socket (VM trays).
+    pub host_callback: Option<HostCallback>,
     /// TEST SEAM: what happens after the loopback URL is printed. Production
     /// passes a no-op, because the operator clicks the printed URL; nothing
     /// here launches a host browser (1713-3v3f). Tests pass a fake browser
@@ -756,7 +946,13 @@ pub fn login(
     {
         return Ok(outcome);
     }
-    let via = via.unwrap_or_else(|| default_via(deps.desktop_session, deps.relay_url.is_some()));
+    let via = via.unwrap_or_else(|| {
+        default_via(
+            deps.desktop_session,
+            deps.relay_url.is_some(),
+            deps.host_callback.is_some(),
+        )
+    });
     match login_code_flow(via, deps, out) {
         // Order 1773-dywf: the exchange failed AFTER the request was sent, so
         // the single-use code may be spent. Never resend it: run the whole
@@ -807,6 +1003,7 @@ fn login_code_flow(
         ));
     }
     let mut listener = None;
+    let mut forward: Option<(UnixListener, PathBuf)> = None;
     let redirect_uri = match via {
         Via::Qr => match deps.relay_url.clone() {
             Some(r) => r,
@@ -837,11 +1034,18 @@ fn login_code_flow(
                 ),
             }
         }
-        Via::Loopback => {
-            let (l, port) = bind_first_free(&deps.loopback_ports)?;
-            listener = Some(l);
-            format!("http://127.0.0.1:{port}{CALLBACK_PATH}")
-        }
+        Via::Loopback => match deps.host_callback.clone() {
+            // 1955-cfhf: the HOST listens; this guest waits on its socket.
+            Some(hc) => {
+                forward = Some((bind_forward_socket(&hc.socket)?, hc.socket));
+                format!("http://127.0.0.1:{}{CALLBACK_PATH}", hc.port)
+            }
+            None => {
+                let (l, port) = bind_first_free(&deps.loopback_ports)?;
+                listener = Some(l);
+                format!("http://127.0.0.1:{port}{CALLBACK_PATH}")
+            }
+        },
         Via::Device => unreachable!("login_device answers every --via device"),
     };
 
@@ -890,10 +1094,19 @@ fn login_code_flow(
     let code = match via {
         Via::Loopback => {
             let _ = (deps.follow_url)(&pending.authorize_url);
-            let l = listener.take().expect("loopback bound above");
-            let r = receive_loopback(&l, &pending.state, deadline);
-            drop(l);
-            r?
+            match forward.take() {
+                Some((l, path)) => {
+                    let r = receive_forwarded(&l, &path, &pending.state, deadline);
+                    drop(l);
+                    r?
+                }
+                None => {
+                    let l = listener.take().expect("loopback bound above");
+                    let r = receive_loopback(&l, &pending.state, deadline);
+                    drop(l);
+                    r?
+                }
+            }
         }
         Via::Qr => match deps.relay_poll_url.as_deref() {
             Some(poll) => {
@@ -1245,10 +1458,26 @@ fn show_authorize_url(via: Via, pending: &Pending, deps: &LoginDeps<'_>, out: &m
                 "Open this URL in any browser and approve the Tillandsias App:"
             );
             let _ = writeln!(out, "  {}", pending.authorize_url);
+            if redirect_is_dead_loopback(&pending.redirect_uri) {
+                // 1954-cfqr: nothing listens on this port (paste has no
+                // listener), so the browser WILL land on an unreachable
+                // 127.0.0.1 page after the approval. Say so up front, instead
+                // of letting the operator discover it on a dead Safari tab.
+                let _ = writeln!(
+                    out,
+                    "note:cloudflare-login:redirect-lands-on-a-dead-page (no relay is configured: after you approve, the browser will fail to load 127.0.0.1; copy its whole address-bar URL and paste it here)"
+                );
+            }
         }
         Via::Device => {}
     }
     let _ = out.flush();
+}
+
+/// A loopback redirect used by a receiver that binds NO listener (paste):
+/// the browser that follows it reaches nothing.
+fn redirect_is_dead_loopback(redirect_uri: &str) -> bool {
+    redirect_uri.starts_with("http://127.0.0.1:")
 }
 
 // ── the logout ─────────────────────────────────────────────────────────────
@@ -1513,6 +1742,7 @@ pub fn run_cli(args: &[String]) -> i32 {
                 loopback_ports: REGISTERED_LOOPBACK_PORTS.to_vec(),
                 follow_url: &follow,
                 desktop_session: crate::has_graphical_session(),
+                host_callback: host_callback_from_env(),
                 stdin_is_terminal: std::io::stdin().is_terminal(),
                 read_paste: &mut read,
                 litmus_stop: std::env::var_os("LITMUS_PODMAN_MODE").is_some(),
@@ -1563,22 +1793,146 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    // ── 1757-n45b: the relay default, gated off until registration ──────────
+    // ── 1757-n45b / 1954-cfqr: the relay default, on since registration ────
 
     #[test]
-    fn relay_default_is_gated_off_until_registration_is_confirmed() {
-        // FAILS if the default is baked on before the operator confirms the
-        // redirect URI: an unregistered redirect makes Cloudflare refuse the
-        // authorize request, so every login would break, not only QR.
-        // Invert this in the release that flips RELAY_DEFAULT_ON.
-        // black_box: a runtime arm (clippy refuses assertions on constants),
-        // so a flipped default is a named FAILED test, not a build break.
+    fn relay_default_is_on_since_registration_was_confirmed() {
+        // The inverse of 1757-n45b's gate arm: the coordinator confirmed
+        // DEFAULT_RELAY_URL live and registered on 2026-10-17, and while the
+        // default stayed off the macOS tray's login (a Linux guest, no
+        // desktop) could only offer a dead 127.0.0.1 redirect. FAILS on the
+        // pre-1954-cfqr code (RELAY_DEFAULT_ON = false).
+        // black_box: a runtime arm (clippy refuses assertions on constants).
         let on = std::hint::black_box(RELAY_DEFAULT_ON);
         assert!(
-            !on,
-            "RELAY_DEFAULT_ON is true before the operator confirmed {DEFAULT_RELAY_URL} is registered (1757-n45b)"
+            on,
+            "RELAY_DEFAULT_ON is false although {DEFAULT_RELAY_URL} is registered (1757-n45b, 2026-10-17)"
         );
-        assert_eq!(resolve_relay(None, None, RELAY_DEFAULT_ON), (None, None));
+        assert_eq!(
+            resolve_relay(None, None, RELAY_DEFAULT_ON),
+            (Some(DEFAULT_RELAY_URL.to_string()), None)
+        );
+        assert_eq!(default_via(false, RELAY_DEFAULT_ON, false), Via::Qr);
+    }
+
+    /// 1954-cfqr. The macOS tray's "Cloudflare Login" is `tillandsias-headless
+    /// --cloudflare-login` in the Linux VM guest: no desktop session, no env,
+    /// discovery without a device grant. This arm runs that exact production
+    /// default (`resolve_relay(None, None, RELAY_DEFAULT_ON)` as `run_cli`
+    /// does) and requires a QR whose redirect is the https relay page. On the
+    /// pre-fix code it FAILS: `default_via(false, false)` is `Paste`, the
+    /// redirect is `http://127.0.0.1:48631/…` with nothing listening (what
+    /// Safari on the host showed as a dead page), and no QR is printed.
+    #[test]
+    fn cloudflare_login_in_a_guest_without_a_desktop_shows_a_qr_whose_redirect_is_reachable() {
+        let store = MemStore::default();
+        let http = Scripted::with_discovery("");
+        let mut read = || -> Result<String, String> { panic!("no paste before the litmus stop") };
+        let mut d = deps(&http, &store, &no_open, &mut read);
+        let (relay, poll) = resolve_relay(None, None, RELAY_DEFAULT_ON);
+        d.relay_url = relay;
+        d.relay_poll_url = poll;
+        d.desktop_session = false;
+        d.stdin_is_terminal = true;
+        d.litmus_stop = true;
+        let mut out = Vec::new();
+        let r = login(None, &mut d, &mut out);
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(r, Ok(LoginOutcome::LitmusStopped), "{text}");
+        let url = text
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("Or open: "))
+            .unwrap_or_else(|| panic!("no QR fallback URL line (no QR was shown):\n{text}"));
+        let expected = format!(
+            "redirect_uri={}",
+            percent_encode_for_test(DEFAULT_RELAY_URL)
+        );
+        assert!(url.contains(&expected), "redirect is not the relay:\n{url}");
+        assert!(
+            !url.contains("127.0.0.1"),
+            "a phone cannot reach the guest's loopback:\n{url}"
+        );
+        assert!(
+            text.contains("Scan this QR code"),
+            "no QR for the phone:\n{text}"
+        );
+        assert_eq!(store.touches(), 0);
+    }
+
+    /// 1954-cfqr. When a host turns the relay off (empty env) in a guest, the
+    /// paste receiver's redirect is a loopback nobody listens on. The login
+    /// must SAY so before the operator finds out from a dead browser tab.
+    #[test]
+    fn cloudflare_login_paste_without_relay_warns_that_the_redirect_is_dead() {
+        let store = MemStore::default();
+        let http = Scripted::with_discovery("");
+        let mut read = || -> Result<String, String> { panic!("no paste before the litmus stop") };
+        let mut d = deps(&http, &store, &no_open, &mut read);
+        let (relay, poll) = resolve_relay(Some(""), None, RELAY_DEFAULT_ON);
+        assert_eq!((relay.clone(), poll.clone()), (None, None));
+        d.relay_url = relay;
+        d.relay_poll_url = poll;
+        d.stdin_is_terminal = true;
+        d.litmus_stop = true;
+        let mut out = Vec::new();
+        let r = login(None, &mut d, &mut out);
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(r, Ok(LoginOutcome::LitmusStopped), "{text}");
+        assert!(
+            text.contains("note:cloudflare-login:redirect-lands-on-a-dead-page"),
+            "{text}"
+        );
+        // CONTROL: with the relay the same paste receiver has a live redirect
+        // and says nothing of the kind.
+        let mut read = || -> Result<String, String> { panic!("no paste") };
+        let mut d = deps(&http, &store, &no_open, &mut read);
+        d.relay_url = Some(DEFAULT_RELAY_URL.into());
+        d.stdin_is_terminal = true;
+        d.litmus_stop = true;
+        let mut out = Vec::new();
+        assert_eq!(
+            login(Some(Via::Paste), &mut d, &mut out),
+            Ok(LoginOutcome::LitmusStopped)
+        );
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("redirect-lands-on-a-dead-page"), "{text}");
+    }
+
+    /// The authorize URL's `redirect_uri` as `cloudflare_oauth::begin`
+    /// encodes it: only `:` and `/` differ from the raw relay URL.
+    fn percent_encode_for_test(url: &str) -> String {
+        url.replace(':', "%3A").replace('/', "%2F")
+    }
+
+    #[test]
+    fn relay_poll_default_is_gated_off_until_the_worker_is_deployed() {
+        // FAILS if the poll default is baked on before the operator deploys
+        // the poll Worker: a 404 there reads as "not yet", so every QR login
+        // would wait the whole window. Invert this in the release after the
+        // deploy (1955-cfhf). black_box: a runtime arm.
+        let on = std::hint::black_box(RELAY_POLL_DEFAULT_ON);
+        assert!(
+            !on,
+            "RELAY_POLL_DEFAULT_ON is true before {DEFAULT_RELAY_POLL_URL} is deployed"
+        );
+        assert_eq!(resolve_relay(None, None, true).1, None);
+        // Once on: the default relay brings the default poll; a custom relay
+        // or an explicitly empty poll does not.
+        assert_eq!(
+            resolve_relay_with_poll_default(None, None, true, true),
+            (
+                Some(DEFAULT_RELAY_URL.into()),
+                Some(DEFAULT_RELAY_POLL_URL.into())
+            )
+        );
+        assert_eq!(
+            resolve_relay_with_poll_default(Some("https://r.example/cb"), None, true, true).1,
+            None
+        );
+        assert_eq!(
+            resolve_relay_with_poll_default(None, Some(""), true, true).1,
+            None
+        );
     }
 
     #[test]
@@ -2117,10 +2471,97 @@ mod tests {
     fn cloudflare_login_default_receiver_order() {
         // QR FIRST wherever a relay exists, a desktop included (operator
         // ruling 2026-10-16, 1713-3v3f); the printed URL otherwise.
-        assert_eq!(default_via(true, true), Via::Qr);
-        assert_eq!(default_via(false, true), Via::Qr);
-        assert_eq!(default_via(true, false), Via::Loopback);
-        assert_eq!(default_via(false, false), Via::Paste);
+        assert_eq!(default_via(true, true, false), Via::Qr);
+        assert_eq!(default_via(false, true, false), Via::Qr);
+        assert_eq!(default_via(true, false, false), Via::Loopback);
+        assert_eq!(default_via(false, false, false), Via::Paste);
+        // 1955-cfhf: a host-held loopback is a reachable browser path, so a
+        // guest with no desktop and no relay takes it instead of paste; the
+        // relay still wins when configured.
+        assert_eq!(default_via(false, false, true), Via::Loopback);
+        assert_eq!(default_via(false, true, true), Via::Qr);
+    }
+
+    /// 1955-cfhf. The macOS/Windows tray holds the loopback listener on the
+    /// HOST and tells the guest its port. The guest's redirect must name THAT
+    /// port (not a guest-bound one), the guest must wait on its forward
+    /// socket, and the forwarded line must be judged state-first and
+    /// exchanged. FAILS pre-fix: no host port reaches the redirect and
+    /// nothing listens on the socket.
+    #[test]
+    fn cloudflare_login_with_a_host_held_loopback_redirects_to_the_host_port_and_takes_the_forwarded_line()
+     {
+        let store = MemStore::default();
+        let http = Scripted::with_discovery("");
+        let mut read = || -> Result<String, String> { panic!("no paste") };
+        let dir = std::env::temp_dir().join(format!("cfhf-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("cb.sock");
+        let mut d = deps(&http, &store, &no_open, &mut read);
+        d.host_callback = Some(HostCallback {
+            port: 48632,
+            socket: socket.clone(),
+        });
+        d.desktop_session = false;
+        d.litmus_stop = true;
+        let mut out = Vec::new();
+        assert_eq!(
+            login(None, &mut d, &mut out),
+            Ok(LoginOutcome::LitmusStopped)
+        );
+        let text = String::from_utf8(out).unwrap();
+        assert!(
+            text.contains(&format!(
+                "redirect_uri=http%3A%2F%2F127.0.0.1%3A48632{}",
+                percent_encode_for_test(CALLBACK_PATH)
+            )),
+            "redirect does not name the host port:\n{text}"
+        );
+        assert!(
+            socket.exists(),
+            "the forward socket must exist before the URL is shown"
+        );
+        // The receiver: a forwarded line with the right state is judged and
+        // returned; a wrong state is refused before the code is read.
+        let l = UnixListener::bind(dir.join("cb2.sock")).unwrap();
+        let p = dir.join("cb2.sock");
+        let writer = {
+            let p = p.clone();
+            std::thread::spawn(move || {
+                let mut s = std::os::unix::net::UnixStream::connect(&p).unwrap();
+                s.write_all(b"code=GOODCODE-1&state=S-expected\n").unwrap();
+            })
+        };
+        let code = receive_forwarded(
+            &l,
+            &p,
+            "S-expected",
+            Instant::now() + Duration::from_secs(5),
+        )
+        .unwrap();
+        writer.join().unwrap();
+        assert_eq!(code.expose_to_token_endpoint(), "GOODCODE-1");
+        assert!(!p.exists(), "the socket file is removed after the one line");
+        let l = UnixListener::bind(dir.join("cb3.sock")).unwrap();
+        let p = dir.join("cb3.sock");
+        let writer = {
+            let p = p.clone();
+            std::thread::spawn(move || {
+                let mut s = std::os::unix::net::UnixStream::connect(&p).unwrap();
+                s.write_all(b"code=FORGED&state=S-other\n").unwrap();
+            })
+        };
+        let e = receive_forwarded(
+            &l,
+            &p,
+            "S-expected",
+            Instant::now() + Duration::from_secs(5),
+        )
+        .unwrap_err();
+        writer.join().unwrap();
+        assert_eq!(e.reason, "state-mismatch", "{e:?}");
+        assert_eq!(store.touches(), 0);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -2340,6 +2781,7 @@ mod tests {
             relay_url: None,
             relay_poll_url: None,
             loopback_ports: vec![0],
+            host_callback: None,
             follow_url: open,
             desktop_session: false,
             stdin_is_terminal: false,
