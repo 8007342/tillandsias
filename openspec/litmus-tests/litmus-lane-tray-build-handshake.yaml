@@ -1,0 +1,37 @@
+# @trace spec:mcp-tool-socket
+name: litmus:lane-tray-build-handshake
+spec: mcp-tool-socket
+phase: pre-build
+status: active
+description: >
+  Order 1961-8ats. A lane from a newer build handed its host-services socket to
+  an older running tray with no handshake, so its tools ran the tray's code and
+  a call that should have failed looked green (yoga, 2026-11-02). The lane now
+  asks whoever answers a tray-marked socket for its build (MCP initialize
+  serverInfo.buildId, `<VERSION>+<exe sha256>`) and refuses
+  refused:lane-tray-version-mismatch naming both when it is not this build; a
+  tray older than the handshake sends no buildId and is refused too. The same
+  build still takes the lane.
+severity: high
+size: instant
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/mcp_socket.rs
+critical_path:
+  - step: "Req: a stub tray of another build, or with no buildId, is refused the lane naming both builds; a stub of this build takes it; initialize names the serving build (pre-fix: the lane is handed over regardless)"
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock -- --exact mcp_socket::lane_adoption_tests::a_tray_of_another_build_is_refused_the_lane_naming_both mcp_socket::lane_adoption_tests::a_tray_without_a_build_id_is_refused_the_lane mcp_socket::lane_adoption_tests::a_tray_of_this_build_takes_the_lane mcp_socket::lane_adoption_tests::initialize_names_the_serving_build 2>&1"
+    timeout_ms: 600000
+    success_pattern: "test result: ok\\. 4 passed; 0 failed"
+observability:
+  traces:
+    - "@trace spec:mcp-tool-socket"
+  expected_log: "a lane is never served by a tray of another build"
+  log_fields:
+    spec: "mcp-tool-socket"
+    test: "lane-tray-build-handshake"
+rollback:
+  on_failure: >
+    A lane is again handed to a tray without checking its build. Restore
+    build_identity, lane_server_build and lane_served_by_other_build in
+    mcp_socket.rs and their calls in start_mcp_socket_server_for_lane,
+    serve_forge_lane and refuse_lane_socket_owned_elsewhere.
+  command: "cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock lane_adoption_tests"
