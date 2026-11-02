@@ -102,6 +102,10 @@
 #   scripts/spec-index-ensure.sh --where     # print the resolved tier, no build
 set -uo pipefail
 
+# 1247-amcu: every refusal says why it refused and what would clear it, on
+# stderr, so the verdict token on stdout stays what callers parse.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 # Portable SHA-256 (851-28b5): coreutils sha256sum on Linux/forge/WSL; stock
 # macOS before 13 ships only `shasum`. Identical "<hex>  <name>" output.
 if command -v sha256sum >/dev/null 2>&1; then
@@ -417,6 +421,7 @@ if ! mkdir -p "$INDEX_ROOT" 2>/dev/null || [ ! -w "$INDEX_ROOT" ]; then
 fi
 
 _refuse_unwritable() {
+    # affordance-ok: the stderr block right after this verdict says why it refused and what to do
     echo "blocked:spec-index:destination-unwritable:$INDEX_ROOT"
     {
         echo "Cannot write the spec index to '$INDEX_ROOT'."
@@ -462,7 +467,7 @@ work="$(mktemp -d "$_stage_parent/.spec-index-ensure.XXXXXX" 2>/dev/null)" || {
     # root is momentarily unwritable is worse off with no build at all than
     # with the pre-964-zedm behaviour.
     work="$(mktemp -d "${TMPDIR:-/tmp}/spec-index-ensure.XXXXXX")" || {
-        echo "blocked:spec-index:no-tmpdir"; exit 1; }
+        _afford "no staging directory could be made under the index root or under TMPDIR, so nothing can be built" "free space or fix permissions on TMPDIR (or point TMPDIR at a writable directory), then re-run scripts/spec-index-ensure.sh"; echo "blocked:spec-index:no-tmpdir"; exit 1; }
     echo "spec-index: staging in ${TMPDIR:-/tmp} — could not create a staging dir under $_stage_parent (964-zedm)" >&2
 }
 LOCK_DIR=""
@@ -477,8 +482,8 @@ trap _cleanup EXIT
 # 25ms of chunking buys the ability to answer "already published?" without
 # serialising behind a twelve-minute builder. This ordering IS the packet.
 "$PLAN_BIN" spec-index --root "$ROOT" --out "$work" >/dev/null 2>&1 || {
-    echo "blocked:spec-index:chunker-failed"; exit 1; }
-[ -s "$work/chunks.jsonl" ] || { echo "blocked:spec-index:no-chunks"; exit 1; }
+    _afford "tillandsias-plan spec-index (the chunker) failed on this checkout, so there is nothing to embed" "run tillandsias-plan spec-index --root <checkout> --out <dir> by hand to see its error; rebuild the binary if it is stale (cargo build --release -p tillandsias-plan)"; echo "blocked:spec-index:chunker-failed"; exit 1; }
+[ -s "$work/chunks.jsonl" ] || { _afford "the chunker ran but wrote no chunks, which means it found no specs under this root" "check that openspec/specs/ exists in the checkout this script resolved, and set TILLANDSIAS_SPEC_INDEX_CHECKOUT if it picked the wrong one"; echo "blocked:spec-index:no-chunks"; exit 1; }
 
 n_chunks="$(wc -l < "$work/chunks.jsonl" | tr -d '[:space:]')"
 
@@ -617,7 +622,7 @@ fi
 jq -c --argjson max "$MAX_CHARS" \
     '((.text // "") | .[0:$max]) | if (. | length) == 0 then " " else . end' \
     "$work/chunks.jsonl" > "$work/texts.jsonl" || {
-    echo "blocked:spec-index:text-extract-failed"; exit 1; }
+    _afford "jq could not extract chunk text from chunks.jsonl, so the chunk file is malformed or jq is missing" "check that jq runs here and that chunks.jsonl is one JSON object per line with a text field; re-run after fixing the chunker output"; echo "blocked:spec-index:text-extract-failed"; exit 1; }
 
 # ── DELTA RE-EMBED (order 552) ──────────────────────────────────────────────
 #
@@ -702,7 +707,7 @@ printf 'spec-index:delta reused=%s embed=%s of %s\n' "$n_reused" "$n_todo" "$n_c
 mkdir -p "$work/b"
 if [ "$n_todo" -gt 0 ]; then
     split -l "$BATCH" -a 5 -d "$work/todo-texts.jsonl" "$work/b/part-" || {
-        echo "blocked:spec-index:split-failed"; exit 1; }
+        _afford "split could not cut the texts to embed into batches of TILLANDSIAS_SPEC_INDEX_BATCH lines" "check free space in the staging directory and that the batch size is a positive integer, then re-run"; echo "blocked:spec-index:split-failed"; exit 1; }
 fi
 
 : > "$work/new-vecs.jsonl"
@@ -726,6 +731,7 @@ for part in "$work"/b/part-*; do
         # verdict named the step; the cause was a filesystem two layers away.
         # Same lesson as 965-sxec's refusal: a diagnosis that cannot be acted
         # on is one nobody acts on.
+        # affordance-ok: the stderr block right after this verdict says why it refused and what to do
         echo "blocked:spec-index:payload-failed"
         {
             echo "  staging dir: $work"
@@ -799,6 +805,7 @@ for part in "$work"/b/part-*; do
             0)  _subject="embed-endpoint-refused" ;;     # it ANSWERED, with >=400
             *)  _subject="embed-endpoint-unreachable" ;;
         esac
+        # affordance-ok: the stderr block right after this verdict says why it refused and what to do
         echo "blocked:spec-index:${_subject}"
         if [ "$_subject" = "embed-endpoint-absent" ]; then
             echo "  NOTHING IS LISTENING on ${EMBED_EP} — this is an absent endpoint," >&2
@@ -832,7 +839,7 @@ for part in "$work"/b/part-*; do
         exit 1
     fi
     if ! jq -c '.data[].embedding' "$work/resp.json" > "$work/batch-vecs.jsonl" 2>/dev/null; then
-        echo "blocked:spec-index:embed-response-unparseable"
+        _afford "the embedding endpoint answered with a body that has no .data[].embedding, so it is not an OpenAI-style /v1/embeddings server" "check TILLANDSIAS_EMBED_ENDPOINT points at an /v1 embeddings API and the model serves embeddings; POST one input to ${EMBED_EP}/embeddings by hand to see what it returns"; echo "blocked:spec-index:embed-response-unparseable"
         exit 1
     fi
     got="$(wc -l < "$work/batch-vecs.jsonl" | tr -d '[:space:]')"
@@ -840,7 +847,7 @@ for part in "$work"/b/part-*; do
     # input shifts every subsequent pairing, and a shifted index answers
     # plausibly and wrongly. Catch it where it happens.
     if [ "$got" != "$want" ]; then
-        echo "blocked:spec-index:batch-arity-$got-of-$want"
+        _afford "the endpoint returned a different number of vectors than inputs, which would shift every later chunk-to-vector pairing" "use an embeddings server that returns one vector per input, or lower TILLANDSIAS_SPEC_INDEX_BATCH, then re-run"; echo "blocked:spec-index:batch-arity-$got-of-$want"
         exit 1
     fi
     cat "$work/batch-vecs.jsonl" >> "$work/new-vecs.jsonl"
@@ -861,14 +868,14 @@ $1 == "R" { print $2; next }
 $1 == "E" { if ((getline nv < newf) > 0) print nv; else { print "MISSING" > "/dev/stderr"; bad=1 } }
 END { if (bad) exit 1 }
 ' "$work/decisions.tsv" > "$work/vectors.jsonl" || {
-    echo "blocked:spec-index:delta-assembly-underran"; exit 1; }
+    _afford "the delta assembly ran out of new vectors before every embed decision was filled, so the index would be misaligned" "re-run for a clean build; if it repeats, the decision list and the embed list disagree and the cached index should be removed so it rebuilds in full"; echo "blocked:spec-index:delta-assembly-underran"; exit 1; }
 
 # EVERY new vector must have been consumed. A leftover means the decision list
 # and the embed list disagreed, which is the shift this design exists to avoid.
 _new_emitted="$(wc -l < "$work/new-vecs.jsonl" | tr -d '[:space:]')"
 _new_wanted="$(awk -F'\t' '$1=="E"' "$work/decisions.tsv" | wc -l | tr -d '[:space:]')"
 if [ "$_new_emitted" != "$_new_wanted" ]; then
-    echo "blocked:spec-index:delta-embedded-$_new_emitted-for-$_new_wanted-misses"
+    _afford "more or fewer new vectors were embedded than the delta asked for, the shift this build refuses to publish" "re-run for a clean build; if it repeats, remove the cached index so it rebuilds in full"; echo "blocked:spec-index:delta-embedded-$_new_emitted-for-$_new_wanted-misses"
     exit 1
 fi
 
@@ -893,6 +900,7 @@ if [ "$n_reused" -gt 0 ] && [ "$_sample" -gt 0 ]; then
             -d "$_probe" 2>/dev/null | jq -c '.data[0].embedding' 2>/dev/null)"
         [ -n "$_got" ] && [ "$_got" != null ] || continue   # endpoint hiccup: not a mis-join
         if [ "$_got" != "$_cached" ]; then
+            # affordance-ok: the stderr block right after this verdict says why it refused and what to do
             echo "blocked:spec-index:delta-identity-mismatch-at-chunk-$_line"
             echo "  a REUSED vector is not the embedding of the chunk it was paired with;" >&2
             echo "  the delta cache is mis-joined and this index would answer plausibly and wrongly" >&2
@@ -905,7 +913,7 @@ fi
 
 n_vecs="$(wc -l < "$work/vectors.jsonl" | tr -d '[:space:]')"
 if [ "$n_vecs" != "$n_chunks" ]; then
-    echo "blocked:spec-index:arity-$n_vecs-vectors-for-$n_chunks-chunks"
+    _afford "the final vector count does not match the chunk count, so vectors and chunks would not line up" "re-run; if it repeats, remove the cached index so it rebuilds in full, and check the endpoint returns one vector per input"; echo "blocked:spec-index:arity-$n_vecs-vectors-for-$n_chunks-chunks"
     exit 1
 fi
 
@@ -914,9 +922,9 @@ fi
 # reader resolving that name sees either nothing or a complete entry — never a
 # partial one, and never a directory being rewritten under it.
 stage="$INDEX_ROOT/.staging.$$"
-rm -rf "$stage"; mkdir -p "$stage" || { echo "blocked:spec-index:cannot-stage"; exit 1; }
-cp "$work/chunks.jsonl" "$stage/chunks.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
-cp "$work/vectors.jsonl" "$stage/vectors.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
+rm -rf "$stage"; mkdir -p "$stage" || { _afford "the staging directory for the new index could not be created" "check free space and permissions under the index root, then re-run"; echo "blocked:spec-index:cannot-stage"; exit 1; }
+cp "$work/chunks.jsonl" "$stage/chunks.jsonl" || { _afford "chunks.jsonl could not be copied into the staging directory" "check free space and permissions under the index root, then re-run"; echo "blocked:spec-index:copy-failed"; exit 1; }
+cp "$work/vectors.jsonl" "$stage/vectors.jsonl" || { _afford "vectors.jsonl could not be copied into the staging directory" "check free space and permissions under the index root, then re-run"; echo "blocked:spec-index:copy-failed"; exit 1; }
 printf '%s\n' "$fingerprint" > "$stage/.fingerprint"
 # The embedding model that produced these vectors. Read by the delta cache
 # loop: a generation is reusable only by a build using the SAME model, because
@@ -958,7 +966,7 @@ if [ -d "$INDEX_DIR" ]; then
     # `mv` onto an existing directory: that NESTS the staging dir inside it.
     rm -rf "$stage"
 else
-    mv "$stage" "$INDEX_DIR" || { rm -rf "$stage"; echo "blocked:spec-index:publish-failed"; exit 1; }
+    mv "$stage" "$INDEX_DIR" || { rm -rf "$stage"; _afford "the finished index could not be moved into place, so the published index is unchanged" "check permissions on the index root and that nothing else holds the index directory, then re-run"; echo "blocked:spec-index:publish-failed"; exit 1; }
 fi
 _publish_current
 _prune_entries
