@@ -1,0 +1,58 @@
+# @trace spec:local-web-preview
+# @trace order:1863-dmke (spec: openspec/changes/web-studio-lanes, not yet archived)
+#
+# Order 1863-dmke: the TinaCMS studio image in LOCAL mode (tinacms dev, no Tina
+# Cloud account, --noTelemetry). Every package pinned by package-lock.json
+# integrity; licences approved by the operator 2026-11-01 (NOTICE in the image,
+# with the CC-BY-4.0 credit for caniuse-lite). Bound under local-web-preview
+# beside the GrapesJS and Decap studio litmus tests.
+#
+# The fixture builds images/web-studio-tina and runs it with --network none on
+# a throwaway Next.js markdown checkout. It asserts:
+#   - the studio becomes healthy and Tina lists the post;
+#   - updateDocument through the studio's /graphql rewrites
+#     content/posts/hello.md, as a git diff;
+#   - Tina's GraphQL and data-layer servers listen on loopback only (read
+#     from /proc/net), so the studio front is the one way in;
+#   - egress (content.tinajs.io, or anywhere) is blocked.
+#
+# REGIME: post-build. A build that cannot reach the npm registry exits 3.
+name: litmus:web-studio-tina-saves-through-local-graphql
+spec: local-web-preview
+phase: post-build
+description: >
+  Pin 1863-dmke: the TinaCMS studio in local mode saves a document through its
+  local GraphQL endpoint into the checkout as a git diff, loopback only, with
+  zero egress to tina.io.
+severity: high
+size: long
+
+preconditions:
+  - workspace contains images/web-studio-tina and scripts/test-web-studio-tina.sh
+  - podman can build images
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-web-studio-tina.sh && test -x scripts/test-web-studio-tina.sh && echo 'ok: web-studio-tina-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: web-studio-tina-suite-parses"
+
+  - step: "a document saved through local GraphQL lands as a repo diff, loopback only, no egress"
+    command: "bash scripts/test-web-studio-tina.sh"
+    timeout_ms: 900000
+    expected_behavior: "PASS: Tina studio saves a document through local GraphQL as a repo diff, loopback only, no egress"
+
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "PASS: Tina studio saves a document through local GraphQL as a repo diff, loopback only, no egress"
+  log_fields:
+    spec: local-web-preview
+    test: web-studio-tina-saves-through-local-graphql
+    artifact: images/web-studio-tina/server.mjs
+
+rollback:
+  on_failure: >
+    The image no longer runs tinacms dev in local mode with telemetry off, the
+    front stopped forwarding to it, or a Tina server listens beyond loopback.
+  command: "grep -n 'noTelemetry' images/web-studio-tina/server.mjs"

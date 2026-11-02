@@ -8,19 +8,34 @@ on:
         description: "Version to release. Defaults to VERSION from the selected ref."
         required: false
         type: string
-      cache_seed:
-        # Order 1916-nxcs. GitHub scopes an Actions cache to the ref that saved
-        # it: a cache saved by a tag run is restorable only by that same tag,
-        # while a cache saved on the default branch (main) is restorable by
-        # every ref. Releases run from tags, so a tag-saved cache never reaches
-        # the NEXT release. Dispatching this workflow on main with
-        # cache_seed=true builds exactly what a release builds, saves the Nix
-        # store and both rust-caches under main's scope, and skips every
-        # signing, release-creation, tag and upload step. It adds no trigger.
-        description: "Warm the caches only (run on main): build, save caches, publish nothing."
-        required: false
-        type: boolean
-        default: false
+
+# ORDER 1950-b4f3 — NO GITHUB ACTIONS CACHE IN THIS WORKFLOW. READ BEFORE
+# ADDING ONE BACK.
+#
+# Measured on five releases (runs 39495753986 41137103161 41212733409
+# 41249590255 41283100284; per-step timings via the jobs API):
+#   * cache-nix-action's restore found nothing in 5/5 runs ("Could not find a
+#     cache", 0-1 s). GitHub scopes a cache to the ref that saved it, and a
+#     release is dispatched on a fresh tag, so no tag can restore another's.
+#   * each tag run then SAVED a 3.3 GB Nix store (49-87 s) and the two
+#     rust-caches (618 MB + 468 MB, 23-40 s each) that nothing could read;
+#     three releases' worth filled the 10 GB quota and evicted each other.
+#   * the aarch64-unknown-linux-musl cross GCC is built from source every
+#     release (two stages, 07:04->07:44 on v56.11.1.1: 41 of the Nix step's
+#     67 min); the seven crane deps derivations and the six crate builds are
+#     the other ~24 min. The 2 h 10 min wall clock of that run was 71 min of
+#     steps plus a 60 min stall AFTER "Complete job" (runner infrastructure;
+#     the log ends at 08:11:54Z, the job closed at 09:11:56Z).
+#   * the only main-scoped producer, the 1942-mijg cache_seed dispatch on
+#     main, is a second full build (run 41352565247: 66 min before the
+#     operator cancelled it). It costs more than it saves and breaks the
+#     one-cloud-build-per-day rule.
+# A cache that pays off needs a producer INSIDE the one daily run (dispatch
+# the release on main and tag from the workflow — SAN becomes refs/heads/main,
+# which RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP already admits) or a substituter
+# for the cross toolchain that is not the Actions cache. Either is a redesign
+# with an operator ruling, filed under 1950-b4f3; neither is a flag here.
+# litmus:release-is-one-cloud-build refuses a cache step or a seed input.
 
 permissions:
   contents: write
@@ -59,13 +74,9 @@ jobs:
           fetch-depth: 0
 
       - name: Install Nix
-        # Order 1933-ysbq: cache-nix-action's README lists the installers it is
-        # compatible with (nix-quick-install-action, cachix/install-nix-action,
-        # determinate-nix-action); DeterminateSystems/nix-installer-action is
-        # not one. With it, every save failed in the post step ("/usr/bin/tar"
-        # failed with exit code 2, v56.10.30.1 and v56.10.31.1, run
-        # 41212733409), so 1916-nxcs's save never landed and each release
-        # rebuilt all 499 derivations (~62 min). install-nix-action is listed.
+        # Order 1933-ysbq chose cachix/install-nix-action for cache-nix-action
+        # compatibility; the cache step is gone (1950-b4f3, header) and the
+        # installer stays because it works (5 s, run 41283100284).
         uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
         with:
           # v56.9.25.1's Linux job failed three times on ONE NAR: the CDN edge
@@ -81,29 +92,6 @@ jobs:
             experimental-features = nix-command flakes
             http2 = false
             fallback = true
-
-      - name: Nix Cache
-        id: nix-cache
-        # Caches the nix store across runs via the GitHub Actions cache backend.
-        # Critical for cost: the aarch64 cross-GCC is built from source by
-        # pkgsCross (not in cache.nixos.org), so without this every release run
-        # rebuilds GCC. With it, that's a one-time cost.
-        uses: nix-community/cache-nix-action@v7
-        with:
-          # Order 1916-nxcs: the key covers BOTH locks (crane vendors from
-          # Cargo.lock), and the cache is SAVED. save: false with no other
-          # producer meant every release restored a key no run ever wrote and
-          # cold-built the crane deps (Nix build step 61 of 63 min,
-          # run 39495753986). The prefix restore still gives a lock-bumped run
-          # the nearest older store. Only a main-ref save reaches other tags;
-          # see the cache_seed input.
-          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock', 'Cargo.lock') }}
-          restore-prefixes-first-match: |
-            nix-${{ runner.os }}-
-          # Order 1942-mijg: only main saves (the cache_seed run the release
-          # skill dispatches on main before the tag). A tag-scoped save is
-          # restorable by nobody and only evicts main's from the 10 GB quota.
-          save: ${{ github.ref == 'refs/heads/main' }}
 
       # ── Gates that used to live here now run on local hardware ───────────────
       #
@@ -253,46 +241,19 @@ jobs:
             fi
           done
 
-      - name: Record Nix Build Duration and Assert Cache Performance
+      - name: Record Nix Build Duration
         if: always()
+        # 1950-b4f3: the duration only. The cache-hit column this step used to
+        # print was always "false" (no cache can hit here, see the header), and
+        # the build-timings artifact it uploaded had no reader in the repo.
         run: |
-          NIX_BUILD_END_TIME=$(date +%s)
-          DURATION=$((NIX_BUILD_END_TIME - NIX_BUILD_START_TIME))
-          echo "NIX_BUILD_DURATION_SECS=$DURATION" >> "$GITHUB_ENV"
-
-          MINUTES=$((DURATION / 60))
-          SECONDS=$((DURATION % 60))
-          DURATION_STR="${MINUTES}m ${SECONDS}s"
-
-          CACHE_HIT="${{ steps.nix-cache.outputs.hit }}"
-
+          DURATION=$(( $(date +%s) - NIX_BUILD_START_TIME ))
           echo "### Release Nix Build Performance" >> "$GITHUB_STEP_SUMMARY"
           echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Nix Cache Hit | ${CACHE_HIT:-false} |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Nix Build Duration | ${DURATION_STR} (${DURATION}s) |" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "{\"cache_hit\": \"${CACHE_HIT:-false}\", \"nix_build_duration_seconds\": $DURATION}" > build-timings.json
-
-          if [ "${CACHE_HIT}" != "true" ]; then
-            echo "::warning::Nix Cache Miss: rebuild took ${DURATION_STR}. If flake.lock is unchanged, this is a cache regression!"
-            if [ $DURATION -gt 1200 ]; then # > 20 minutes
-              echo "::warning::Nix Build exceeded 20 minutes ($DURATION_STR) with a cache miss."
-            fi
-          else
-            echo "Nix Cache Hit verified. Build completed in ${DURATION_STR}."
-          fi
-
-      - name: Upload Build Timings Artifact
-        if: always()
-        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
-        with:
-          name: build-timings
-          path: build-timings.json
-          retention-days: 14
+          echo "| Nix Build Duration | $((DURATION / 60))m $((DURATION % 60))s (${DURATION}s) |" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Collect + validate release artifacts
-        if: ${{ !inputs.cache_seed }}
         run: |
           mkdir -p release-artifacts
           install -m 0755 result-host/bin/tillandsias           release-artifacts/tillandsias-linux-x86_64
@@ -336,15 +297,12 @@ jobs:
           cat SHA256SUMS
 
       - name: Install Cosign
-        if: ${{ !inputs.cache_seed }}
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Verify Cosign installation
-        if: ${{ !inputs.cache_seed }}
         run: cosign version
 
       - name: Sign artifacts with Cosign bundles
-        if: ${{ !inputs.cache_seed }}
         run: |
           cd release-artifacts
           for artifact in *; do
@@ -362,7 +320,6 @@ jobs:
           done
 
       - name: Verify release artifact set
-        if: ${{ !inputs.cache_seed }}
         run: |
           cd release-artifacts
           test -f tillandsias-linux-x86_64
@@ -380,7 +337,6 @@ jobs:
           ls -la
 
       - name: Create or update GitHub Release
-        if: ${{ !inputs.cache_seed }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -448,7 +404,6 @@ jobs:
           fi
 
       - name: Update rolling tags
-        if: ${{ !inputs.cache_seed }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -466,7 +421,6 @@ jobs:
           echo "Updated rolling tag: unstable -> ${GITHUB_SHA}"
 
       - name: Stage the unstable channel copy (installers default to unstable)
-        if: ${{ !inputs.cache_seed }}
         run: |
           # Order 1369-sjbc. The same bytes went to v${VERSION} and to
           # `unstable`, so an installer fetched from /releases/download/unstable/
@@ -486,7 +440,6 @@ jobs:
           grep -qx 'DEFAULT_CHANNEL="unstable"' install.sh
 
       - name: Refresh unstable channel release
-        if: ${{ !inputs.cache_seed }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -565,15 +518,6 @@ jobs:
         with:
           toolchain: ${{ steps.rust-pin.outputs.channel }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
-        with:
-          workspaces: . -> target
-          # Order 1916-nxcs: a stable key shared by every ref; 1942-mijg: saved
-          # only on main (the cache_seed run), the scope every tag run restores.
-          shared-key: release-${{ runner.os }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
       - name: Install guest cross-build tools
         run: |
           brew install zig
@@ -599,7 +543,6 @@ jobs:
         run: scripts/build-macos-tray.sh
 
       - name: Verify bundle (sanity checks before signing)
-        if: ${{ !inputs.cache_seed }}
         run: |
           codesign --verify --deep --strict --verbose=2 dist/Tillandsias.app
           codesign -d --entitlements - dist/Tillandsias.app 2>&1 \
@@ -611,11 +554,9 @@ jobs:
       # Tillandsias.dmg so the releases/latest/download/ link never goes
       # stale. Appends its own line to dist/SHA256SUMS before staging.
       - name: Build styled DMG (drag to Applications)
-        if: ${{ !inputs.cache_seed }}
         run: scripts/build-macos-dmg.sh
 
       - name: Verify DMG contents
-        if: ${{ !inputs.cache_seed }}
         run: |
           hdiutil attach dist/Tillandsias.dmg -readonly -nobrowse
           test -d /Volumes/Tillandsias/Tillandsias.app
@@ -624,7 +565,6 @@ jobs:
           hdiutil detach /Volumes/Tillandsias
 
       - name: Stage release artifacts
-        if: ${{ !inputs.cache_seed }}
         run: |
           mkdir -p release-artifacts
           cp dist/tillandsias-tray-*-macos-arm64.tar.gz release-artifacts/
@@ -640,11 +580,9 @@ jobs:
           ls -la release-artifacts/
 
       - name: Install Cosign
-        if: ${{ !inputs.cache_seed }}
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Sign macOS artifacts with Cosign bundles
-        if: ${{ !inputs.cache_seed }}
         run: |
           cd release-artifacts
           for artifact in tillandsias-tray-*-macos-arm64.tar.gz Tillandsias.dmg install-macos.sh; do
@@ -658,7 +596,6 @@ jobs:
           done
 
       - name: Upload macOS assets to release
-        if: ${{ !inputs.cache_seed }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -720,15 +657,6 @@ jobs:
         with:
           toolchain: ${{ steps.rust-pin.outputs.channel }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
-        with:
-          workspaces: . -> target
-          # Order 1916-nxcs: a stable key shared by every ref; 1942-mijg: saved
-          # only on main (the cache_seed run), the scope every tag run restores.
-          shared-key: release-${{ runner.os }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
       - name: Resolve version (same as Linux job)
         id: version
         shell: bash
@@ -742,19 +670,7 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved Windows release version: v${VERSION}"
 
-      - name: Warm the Rust cache (cache_seed runs only)
-        if: ${{ inputs.cache_seed }}
-        shell: bash
-        # The release build below needs this version's published guest
-        # binaries, which a seed run never uploads; compile the same two
-        # release-profile crates the build script compiles instead, so the
-        # rust-cache post step saves their dependency graph.
-        run: |
-          cargo build --release --locked -p tillandsias-windows-tray
-          cargo build --release --locked -p tillandsias-headless --bin tillandsias
-
       - name: Stage guest headless binaries (source-matched embed)
-        if: ${{ !inputs.cache_seed }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -814,7 +730,7 @@ jobs:
       # thing that must never be long-lived, and it comes from federated OIDC
       # below (id-token: write is already granted on this job).
       - name: Azure login (federated OIDC — no stored signing credential)
-        if: ${{ !inputs.cache_seed && (vars.TILLANDSIAS_SIGNING_ACCOUNT != '') }}
+        if: ${{ vars.TILLANDSIAS_SIGNING_ACCOUNT != '' }}
         uses: azure/login@a65d910e8af852a8061c627c456678983e180302 # v2
         with:
           client-id: ${{ vars.TILLANDSIAS_SIGNING_CLIENT_ID }}
@@ -822,7 +738,7 @@ jobs:
           subscription-id: ${{ vars.TILLANDSIAS_SIGNING_SUBSCRIPTION_ID }}
 
       - name: Install Artifact Signing Client Tools
-        if: ${{ !inputs.cache_seed && (vars.TILLANDSIAS_SIGNING_ACCOUNT != '') }}
+        if: ${{ vars.TILLANDSIAS_SIGNING_ACCOUNT != '' }}
         shell: pwsh
         run: |
           # The documented MSI install. Preferred over winget on a runner
@@ -834,7 +750,6 @@ jobs:
           Remove-Item .\ArtifactSigningClientTools.msi
 
       - name: Build + package the Windows tray (windows-owned build script)
-        if: ${{ !inputs.cache_seed }}
         shell: pwsh
         env:
           TILLANDSIAS_SIGNING_ENDPOINT: ${{ vars.TILLANDSIAS_SIGNING_ENDPOINT }}
@@ -890,7 +805,6 @@ jobs:
           Get-ChildItem release-artifacts
 
       - name: Stage version-stable portable aliases
-        if: ${{ !inputs.cache_seed }}
         shell: bash
         run: |
           # The packaged zip carries the version in its NAME, so it can never be
@@ -949,11 +863,9 @@ jobs:
           ls -la tillandsias-windows-x64.zip tillandsias-tray.exe
 
       - name: Install Cosign
-        if: ${{ !inputs.cache_seed }}
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Sign Windows artifacts with Cosign bundles
-        if: ${{ !inputs.cache_seed }}
         shell: bash
         run: |
           cd release-artifacts
@@ -976,7 +888,6 @@ jobs:
           done
 
       - name: Refuse a Windows asset set with an unverifiable file
-        if: ${{ !inputs.cache_seed }}
         shell: bash
         run: |
           # Order 756-rfdr. install-windows.ps1 shipped in v0.4.260815.1 with no
@@ -991,7 +902,6 @@ jobs:
           bash scripts/check-release-asset-integrity.sh release-artifacts
 
       - name: Upload Windows assets to release
-        if: ${{ !inputs.cache_seed }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
