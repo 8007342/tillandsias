@@ -3377,6 +3377,7 @@ dependencies = [
  "keyring",
  "libc",
  "nix 0.29.0",
+ "png 0.18.1",
  "qrcode",
  "reqwest",
  "serde",

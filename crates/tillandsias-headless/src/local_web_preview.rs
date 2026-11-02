@@ -1701,6 +1701,23 @@ fn probe_error_class(e: &reqwest::Error) -> &'static str {
     }
 }
 
+/// What the readiness probe asks for, and what a client asks for: the `www`
+/// host of `project` (order 1935-svxq). ONE value serves as the URL host,
+/// the SNI and the certificate name the probe verifies against. It is
+/// `preview_hosts(project)[0]`, the host `url()` names, so the probe cannot
+/// pass under a spelling a client never sends.
+pub(crate) fn probe_host(project: &str) -> String {
+    format!("{}.localhost", subdomain("www", project))
+}
+
+/// The probe's target as a client sees it: (host, SNI, TLS port). The
+/// probe DIALS the router's own listener (see [`probe_endpoint`]), but it
+/// names, verifies and sends SNI for exactly this.
+pub(crate) fn probe_target(project: &str, tls_port: u16) -> (String, String, u16) {
+    let host = probe_host(project);
+    (host.clone(), host, tls_port)
+}
+
 async fn probe_route(project: &str, ca: &Path) -> Result<(), String> {
     let route = read_routes(false)?
         .into_iter()
@@ -1710,7 +1727,6 @@ async fn probe_route(project: &str, ca: &Path) -> Result<(), String> {
         .map_err(|_| "router_not_ready: CA certificate unavailable")?;
     let cert = reqwest::Certificate::from_pem(&cert)
         .map_err(|_| "router_not_ready: invalid CA certificate")?;
-    let host = format!("{}.localhost", subdomain("www", project));
     let rootful = crate::running_as_root();
     let enclave_ip = if rootful {
         inspect("tillandsias-router")?
@@ -1723,16 +1739,29 @@ async fn probe_route(project: &str, ca: &Path) -> Result<(), String> {
     // reqwest ignores the port of a `resolve` override and dials the URL's
     // port, so the URL carries the dialed port. The exact hostname still
     // drives SNI and verification against the preview CA.
+    let (host, sni, port) = probe_target(project, dial.port());
+    // Order 1935-svxq: a browser.open window reaches the router only through
+    // the SNI forwarder; the probe dials the router directly, so it is held
+    // to the forwarder's rule here, and cannot say "serving" for a host the
+    // forwarder would refuse.
+    if !crate::browser_open::forwarder_admits_sni(
+        &crate::browser_open::forwarder_project(project),
+        &sni,
+    ) {
+        return Err(format!(
+            "router_not_ready: the window forwarder would refuse SNI {sni} for project '{project}'"
+        ));
+    }
     let client = reqwest::Client::builder()
         .no_proxy()
         .add_root_certificate(cert)
-        .resolve(&host, dial)
+        .resolve(&sni, dial)
         .redirect(reqwest::redirect::Policy::none())
         .timeout(command_budget(Duration::from_secs(2))?)
         .build()
         .map_err(|_| "router_not_ready: TLS verifier unavailable")?;
     let response = client
-        .get(format!("https://{host}:{}/", dial.port()))
+        .get(format!("https://{host}:{port}/"))
         .send()
         .await
         .map_err(|e| {
@@ -4026,6 +4055,68 @@ mod tests {
         );
         if !args[0].contains(&"/CN=www.devxsd-gamejam.localhost".to_string()) {
             misses.push(format!("leaf CN: {:?}", args[0]));
+        }
+        assert!(misses.is_empty(), "{}", misses.join("\n"));
+    }
+
+    /// Order 1935-svxq: `demon_attack` previewed as "serving" while every
+    /// client got ERR_CONNECTION_CLOSED. The probe dials the router itself;
+    /// a browser.open window dials the SNI forwarder, whose project suffix
+    /// was the RAW name. This holds the probe's target and the forwarder's
+    /// admission to one host, the one a client sends.
+    #[test]
+    fn preview_probe_uses_client_sni_for_underscore_project() {
+        let project = "demon_attack";
+        let port = 18443;
+        let client_host = "www.demon-attack.localhost";
+        let mut misses = Vec::new();
+        // The probe names, verifies and sends SNI for the client's host.
+        let (host, sni, dialed) = probe_target(project, port);
+        if (host.as_str(), sni.as_str(), dialed) != (client_host, client_host, port) {
+            misses.push(format!("probe target: {host} sni={sni} port={dialed}"));
+        }
+        if preview_hosts(project)[0] != host {
+            misses.push(format!("preview_hosts[0]: {}", preview_hosts(project)[0]));
+        }
+        // The TLS front: the forwarder a window dials is started with the
+        // project as forwarder_spec passes it; its rule must admit the
+        // client's SNI for THIS project and refuse another project's.
+        let handle = tillandsias_browser_mcp::launcher::ContainerHandle {
+            container_name: "tillandsias-browser-demon_attack-0123456789ab".into(),
+            network_name: "tillandsias-browser-net-0123456789ab".into(),
+            profile_dir: std::path::PathBuf::from("/tmp/x"),
+            cdp_socket: None,
+            notice: None,
+        };
+        let argv = crate::browser_open::forwarder_spec(&handle, project, "10.0.42.7", &[port])
+            .build_run_argv()
+            .unwrap();
+        let fwd_project = argv
+            .iter()
+            .find_map(|a| a.strip_prefix("TILLANDSIAS_FWD_PROJECT="))
+            .expect("forwarder is started with a project")
+            .to_string();
+        if !crate::browser_open::forwarder_admits_sni(&fwd_project, &sni) {
+            misses.push(format!(
+                "forwarder started with TILLANDSIAS_FWD_PROJECT={fwd_project} refuses SNI {sni}"
+            ));
+        }
+        if crate::browser_open::forwarder_admits_sni(&fwd_project, "www.other.localhost") {
+            misses.push("forwarder admits another project's SNI".into());
+        }
+        // The router keys its site and leaf on the same label.
+        let mut route = crate::RouterRoute::public_service(subdomain("www", project), "web", 8080);
+        route.preview_tls = true;
+        let caddy = crate::generate_dynamic_caddyfile(&[route]);
+        if !caddy.contains(&format!("https://{client_host}:8443"))
+            || !caddy.contains("preview/demon-attack.crt /etc/tillandsias/preview/demon-attack.key")
+        {
+            misses.push(format!("router site or leaf file: {caddy}"));
+        }
+        // And the window's resolver sends that host to the forwarder.
+        let rules = crate::browser_open::host_resolver_rules(project);
+        if rules != "MAP *.demon-attack.localhost router:8443, MAP * ~NOTFOUND" {
+            misses.push(format!("resolver rule: {rules}"));
         }
         assert!(misses.is_empty(), "{}", misses.join("\n"));
     }
