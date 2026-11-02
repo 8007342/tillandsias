@@ -3,12 +3,18 @@
 # images/inference/tiers/tier-table.tsv, no interpreter.
 #
 # ORDER MATTERS, and it is the OPPOSITE of tier-table.tsv: rows are SMALLEST
-# FIRST. Every host STARTS at the first row (I0) whatever its hardware
-# (design.md section 3, operator 2026-10-25). The classifier
-# (crates/tillandsias-headless/src/imagegen_tiers.rs) walks down from I0 and
-# stops at the first row the host does not meet: that last met row is the
-# host's CEILING, the highest tier it may be OFFERED, one rung at a time
-# (section 5). No rung is skipped.
+# FIRST. The classifier (crates/tillandsias-headless/src/imagegen_tiers.rs)
+# walks down from I0 and stops at the first row the host does not meet: that
+# last met row is the host's CEILING, the highest tier it may run.
+#
+# CONSENT IS A DOWNLOAD GATE (order 1957-5m8g, operator 2026-11-01; supersedes
+# "start at I0, one rung at a time"): any tier up to the ceiling may be asked
+# for directly, and a call that names no tier runs the highest tier within the
+# ceiling whose files are already on this host. Only a tier whose pinned files
+# (images/imagegen/models.tsv) are missing asks, ONCE PER HOST, I0 included,
+# stating the download size and minutes; the yes is persisted beside the model
+# cache and holds across restarts until that tier is re-pinned. A tier with no
+# pinned files is never offered (1957-8hkf).
 #
 # LICENCES: permissive or open only (Apache-2.0, MIT, BSD, CreativeML
 # OpenRAIL-M, OpenRAIL++-M). No revenue cap, no non-commercial term. Never

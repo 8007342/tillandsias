@@ -18,10 +18,11 @@
 --              passes with every proxy pointed at a closed port
 --   7 NO RECORD fails closed: blocked, exit 2
 --   8 LIVE     this checkout passes, every FROM under images/ and
---              observatorium/ counted (from=17 at the time of writing; pinned=4
---              since 1861-nmpp added the GrapesJS studio on the node pin; AT
---              LEAST 4 since 1862-wrx5 added the Decap studio on the same pin,
---              so a new digest-pinned image does not red the census)
+--              observatorium/ counted (from=17 at the time of writing). pinned
+--              is a FLOOR of 3 (web-wrangler, webkit, flutter): the studio lanes
+--              add and drop pins as they land in parallel (1861-nmpp moved
+--              GrapesJS onto the forge image), so an exact count refuses a
+--              green tree whenever a sibling lands first
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-image-pins.lua
 
@@ -162,7 +163,7 @@ local lo = text.trim(live.stdout or "")
 local from_n = tonumber(lo:match("from=(%d+)") or "")
 local pinned_n = tonumber(lo:match("pinned=(%d+)") or "")
 arm("8 LIVE this checkout passes, every FROM counted",
-    live.code == 0 and from_n ~= nil and from_n >= 17 and pinned_n ~= nil and pinned_n >= 4,
+    live.code == 0 and from_n ~= nil and from_n >= 17 and pinned_n ~= nil and pinned_n >= 3,
     tostring(live.code) .. " " .. lo)
 
 proc.run({ argv = { "rm", "-rf", ROOT .. "/" .. REL }, timeout_ms = 30000 })

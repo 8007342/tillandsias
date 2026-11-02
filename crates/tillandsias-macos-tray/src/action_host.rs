@@ -1083,6 +1083,47 @@ async fn poll_cloudflare_login_once(
     }
 }
 
+/// Order 1955-cfhf: hand the host-held loopback callback line to the guest's
+/// waiting `--cloudflare-login` (`CloudflareCallbackForward`, acked with
+/// `IssueAck`). Sent only when the guest advertises the variant. The line is
+/// a single-use code, never a token; it is not logged here.
+async fn forward_cloudflare_callback(
+    vz: &VzRuntime,
+    cb: &tillandsias_host_shell::cloudflare_callback::Callback,
+) -> Result<(), String> {
+    use tillandsias_control_wire::ControlMessage;
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
+        .await
+        .map_err(|e| format!("control wire: {e}"))?;
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("handshake: {e}"))?;
+    if !client
+        .server_caps()
+        .iter()
+        .any(|c| c == "CloudflareCallbackForward")
+    {
+        return Err("the guest does not accept CloudflareCallbackForward (older headless)".into());
+    }
+    let seq = client.allocate_seq();
+    let envelope = tillandsias_host_shell::cloudflare_callback::forward_envelope(seq, cb);
+    match client.request(&envelope).await.map(|r| r.body) {
+        Ok(ControlMessage::IssueAck { .. }) => Ok(()),
+        Ok(other) => Err(format!("unexpected reply {}", other.kind())),
+        Err(e) => Err(format!("request: {e}")),
+    }
+}
+
 /// Order 1719-83po: write an observed Cloudflare login state; true when the
 /// menu must be rebuilt. Answers arrive only on events (Ready, the login
 /// session closing), each final, so a confirmed answer always replaces the
@@ -1589,8 +1630,50 @@ impl TrayActionHost {
         let status_menu_item = ivars.status_menu_item.clone();
         let self_handle = ivars.self_handle.clone();
         let vz_after = vz.clone();
+        // Order 1955-cfhf: for Cloudflare Login the HOST holds the loopback
+        // listener (the guest's 127.0.0.1 is unreachable from Safari) and
+        // tells the guest its port through the launch environment; the one
+        // callback is forwarded over the control wire. Bound BEFORE the
+        // guest launch so the redirect names a port that already listens.
+        let host_callback = if ask_cloudflare_after {
+            match tillandsias_host_shell::cloudflare_callback::HostCallbackListener::bind() {
+                Ok(l) => Some(l),
+                Err(e) => {
+                    eprintln!(
+                        "[tillandsias-tray] cloudflare-login: no host loopback listener ({e}); the guest falls back to the QR relay"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let extra_env: Vec<(String, String)> = host_callback.iter().map(|l| l.env_pair()).collect();
+        if let Some(listener) = host_callback {
+            let vz_forward = vz.clone();
+            runtime.spawn(async move {
+                let deadline = std::time::Instant::now() + Duration::from_secs(300);
+                let served =
+                    tokio::task::spawn_blocking(move || listener.serve_one(deadline)).await;
+                match served {
+                    Ok(Ok(cb)) => {
+                        if let Err(e) = forward_cloudflare_callback(&vz_forward, &cb).await {
+                            eprintln!(
+                                "[tillandsias-tray] cloudflare-login: callback forward failed ({e})"
+                            );
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        eprintln!("[tillandsias-tray] cloudflare-login: host listener ended ({e})")
+                    }
+                    Err(e) => eprintln!(
+                        "[tillandsias-tray] cloudflare-login: host listener task failed ({e})"
+                    ),
+                }
+            });
+        }
         runtime.spawn(async move {
-            let result = match run_pty_attach(vz, intent, project).await {
+            let result = match run_pty_attach(vz, intent, project, extra_env).await {
                 Ok((slave_path, pump_join)) => {
                     if ask_cloudflare_after {
                         // Order 1719-83po: when the login session closes, ask
@@ -1662,6 +1745,7 @@ async fn run_pty_attach(
     vz: std::sync::Arc<VzRuntime>,
     intent: tillandsias_host_shell::pty::PtyIntent,
     project: Option<String>,
+    extra_env: Vec<(String, String)>,
 ) -> Result<(String, tokio::task::JoinHandle<()>), String> {
     use std::sync::Arc;
     use std::time::Duration;
@@ -1797,7 +1881,11 @@ async fn run_pty_attach(
     // A project name that cannot cross the guest launch path safely is REFUSED
     // here, before any PTY or socket exists — see `validate_project_name`.
     let opts = match launch_spec(&intent, project.as_deref(), seed.0, seed.1) {
-        Ok(o) => o,
+        Ok(mut o) => {
+            // 1955-cfhf: the guest child's environment is exactly `env`.
+            o.env.extend(extra_env);
+            o
+        }
         Err(refused) => {
             eprintln!("[tillandsias-tray] pty-attach: {refused}");
             let _ = std::fs::remove_file(&sock_path);
