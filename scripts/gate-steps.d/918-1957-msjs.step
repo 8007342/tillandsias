@@ -10,3 +10,4 @@ STEP_DESC="Checking a provider usage limit recorded on one host holds every host
 STEP_LUA="scripts/lua/test-provider-limit-relay.lua"
 STEP_ERROR="a provider usage limit recorded on one host no longer reaches the others, or an expired one still holds (1957-msjs) — see the FAIL lines above"
 STEP_OK="provider-limit relay fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:provider-limit-relay:18 arms"
