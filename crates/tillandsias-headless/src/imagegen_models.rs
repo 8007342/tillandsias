@@ -38,6 +38,7 @@ const MODELS_TSV: &str = include_str!("../../../images/imagegen/models.tsv");
 const REGISTER_TSV: &str = include_str!("../../../images/models/licence-register.tsv");
 
 /// The shipped register (1954-gdi6: image.generate gates ControlNet and LoRA files on it).
+#[cfg(feature = "host-services")]
 pub fn register_tsv() -> &'static str {
     REGISTER_TSV
 }
