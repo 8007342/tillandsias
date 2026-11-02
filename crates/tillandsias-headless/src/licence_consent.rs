@@ -62,7 +62,9 @@ pub fn restricted_register_tsv() -> &'static str {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ObligationClass {
     /// Credit, with the exact text the licence requires where it names one.
-    Attribution { text: String },
+    Attribution {
+        text: String,
+    },
     /// Carry the licence text or a notice referring to it.
     Notice,
     /// Modifications go out under the same licence.
@@ -72,12 +74,16 @@ pub enum ObligationClass {
     UseRestrictionPassdown,
     /// Named uses the licence forbids or conditions.
     FieldOfUse,
-    SeatOrRevenueThreshold { detail: String },
+    SeatOrRevenueThreshold {
+        detail: String,
+    },
     NoRedistribution,
     /// GPL-3.0 and kin: conveying object code means conveying the source.
     SourceAvailability,
     /// A clause nobody classified: the project reads it before relying on it.
-    Review { clause: String },
+    Review {
+        clause: String,
+    },
 }
 
 impl ObligationClass {
@@ -137,16 +143,22 @@ impl ObligationClass {
             None => (s, ""),
         };
         Ok(match id {
-            "attribution" => Self::Attribution { text: detail.to_string() },
+            "attribution" => Self::Attribution {
+                text: detail.to_string(),
+            },
             "notice" => Self::Notice,
             "share-alike" => Self::ShareAlike,
             "non-commercial" => Self::NonCommercial,
             "use-restriction-passdown" => Self::UseRestrictionPassdown,
             "field-of-use" => Self::FieldOfUse,
-            "seat-or-revenue-threshold" => Self::SeatOrRevenueThreshold { detail: detail.to_string() },
+            "seat-or-revenue-threshold" => Self::SeatOrRevenueThreshold {
+                detail: detail.to_string(),
+            },
             "no-redistribution" => Self::NoRedistribution,
             "source-availability" => Self::SourceAvailability,
-            "review" => Self::Review { clause: detail.to_string() },
+            "review" => Self::Review {
+                clause: detail.to_string(),
+            },
             other => return Err(format!("unknown obligation class {other:?}")),
         })
     }
@@ -208,11 +220,21 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
     let id = licence_id.trim().to_ascii_lowercase();
     match id.as_str() {
         "cc-by-4.0" => vec![
-            ob(C::Attribution { text: String::new() }, CC_ATTRIBUTION),
+            ob(
+                C::Attribution {
+                    text: String::new(),
+                },
+                CC_ATTRIBUTION,
+            ),
             ob(C::Notice, CC_NOTICE),
         ],
         "cc-by-nc-sa-4.0" => vec![
-            ob(C::Attribution { text: String::new() }, CC_ATTRIBUTION),
+            ob(
+                C::Attribution {
+                    text: String::new(),
+                },
+                CC_ATTRIBUTION,
+            ),
             ob(C::Notice, CC_NOTICE),
             ob(C::ShareAlike, CC_SA),
             ob(C::NonCommercial, CC_NC),
@@ -222,7 +244,12 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
         "openrail" | "openrail-m" | "creativeml-openrail-m" | "openrail++" => vec![
             ob(C::UseRestrictionPassdown, OPENRAIL_PASSDOWN),
             ob(C::Notice, OPENRAIL_NOTICE),
-            ob(C::Attribution { text: String::new() }, OPENRAIL_ATTRIBUTION),
+            ob(
+                C::Attribution {
+                    text: String::new(),
+                },
+                OPENRAIL_ATTRIBUTION,
+            ),
         ],
         // Operator ruling 2026-11-02: GPL-3.0 plugin code carries a
         // source-availability obligation, met because the Tillandsias source
@@ -235,19 +262,30 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
         "nvidia-open-model-license" => vec![
             ob(
                 C::Attribution {
-                    text: "Licensed by NVIDIA Corporation under the NVIDIA Open Model License".into(),
+                    text: "Licensed by NVIDIA Corporation under the NVIDIA Open Model License"
+                        .into(),
                 },
                 "",
             ),
             ob(C::Notice, ""),
             ob(C::UseRestrictionPassdown, ""),
             ob(C::FieldOfUse, ""),
-            ob(C::Review { clause: NVIDIA_UNREAD.into() }, NVIDIA_UNREAD),
+            ob(
+                C::Review {
+                    clause: NVIDIA_UNREAD.into(),
+                },
+                NVIDIA_UNREAD,
+            ),
         ],
         // The id images/imagegen-corridorkey/weights.tsv (1956-ucix) spells,
         // and the older spelling of the same licence.
         "corridor-key-licence-2.0" | "corridor-key-licence-v2" => vec![
-            ob(C::Attribution { text: "CorridorKey".into() }, CK_ATTRIBUTION),
+            ob(
+                C::Attribution {
+                    text: "CorridorKey".into(),
+                },
+                CK_ATTRIBUTION,
+            ),
             ob(C::Notice, CC_NOTICE),
             ob(C::ShareAlike, CK_SA),
             ob(C::NonCommercial, CK_NC),
@@ -447,7 +485,9 @@ impl Acknowledgement {
             out
         };
         let mut y = String::new();
-        y.push_str("# Third-party licence acknowledgement (order 1956-ecpb, implements 1954-dvz9).\n");
+        y.push_str(
+            "# Third-party licence acknowledgement (order 1956-ecpb, implements 1954-dvz9).\n",
+        );
         y.push_str("# Signed over `statement` as SSHSIG in namespace tillandsias-approval@v1; verify with\n");
         y.push_str("#   ssh-keygen -Y verify -n tillandsias-approval@v1 -I <grantor> -f <allowed_signers> -s <sig> < <statement>\n");
         y.push_str(&format!("record: {STATEMENT_KIND}\n"));
@@ -653,10 +693,7 @@ pub fn obligations_spec(artefact: &str, licence_id: &str, obligations: &[Obligat
         s.push_str(&requirement_sentence(o, artefact));
         s.push('\n');
         if !o.clause.is_empty() {
-            s.push_str(&format!(
-                "\nThe licence says, verbatim: \"{}\"\n",
-                o.clause
-            ));
+            s.push_str(&format!("\nThe licence says, verbatim: \"{}\"\n", o.clause));
         }
         s.push_str("\nHow this project honours it: _to be written by the project owner; for example \"the credits screen shows 'CorridorKey'\"._\n\n");
         s.push_str(&format!("#### Scenario: {}\n", scenario_title(o)));
@@ -742,15 +779,18 @@ fn scenario_body(o: &Obligation, artefact: &str) -> String {
         ),
         C::NonCommercial => (
             "the project is offered to users".to_string(),
-            "it is offered without sale of the artefact or of outputs the licence reserves".to_string(),
+            "it is offered without sale of the artefact or of outputs the licence reserves"
+                .to_string(),
         ),
         C::UseRestrictionPassdown => (
             format!("someone receives {artefact} or a derivative from the project"),
-            "the same use restrictions bind them, in the agreement that governs the transfer".to_string(),
+            "the same use restrictions bind them, in the agreement that governs the transfer"
+                .to_string(),
         ),
         C::FieldOfUse => (
             format!("a use of {artefact} is proposed"),
-            "it is checked against the licence's forbidden and conditioned uses before it ships".to_string(),
+            "it is checked against the licence's forbidden and conditioned uses before it ships"
+                .to_string(),
         ),
         C::SeatOrRevenueThreshold { .. } => (
             "the project's legal entity is reviewed against the threshold".to_string(),
@@ -995,10 +1035,7 @@ fn admit_restricted_row(
             continue;
         }
         if ack.licence != r.spdx {
-            reasons.push(format!(
-                "{slug}: licence {} is not {}",
-                ack.licence, r.spdx
-            ));
+            reasons.push(format!("{slug}: licence {} is not {}", ack.licence, r.spdx));
             continue;
         }
         if ack.licence_sha256 != r.licence_sha256 {
@@ -1129,7 +1166,9 @@ pub fn admits_restricted_in(
             ));
         }
         let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
-            .map_err(|e| format!("consent_required: {project}: {e} Nothing was fetched or queued."))?;
+            .map_err(|e| {
+                format!("consent_required: {project}: {e} Nothing was fetched or queued.")
+            })?;
         ids.push(
             admitted
                 .acknowledgement_slug
@@ -1374,25 +1413,45 @@ mod tests {
             "corridor-key-licence-2.0",
             &obligations,
         );
-        assert!(spec.contains("This project depends on nikopueringer/CorridorKey2.0"), "{spec}");
+        assert!(
+            spec.contains("This project depends on nikopueringer/CorridorKey2.0"),
+            "{spec}"
+        );
         assert!(spec.contains("and must now adhere to"), "{spec}");
         assert!(spec.contains("### Requirement: Attribution"), "{spec}");
         assert!(spec.contains("\"CorridorKey\""), "{spec}");
         // Valid OpenSpec: every requirement has a scenario, and the clause is quoted verbatim.
         let reqs = spec.matches("### Requirement:").count();
         let scenarios = spec.matches("#### Scenario:").count();
-        assert!(reqs >= 4 && scenarios >= reqs, "reqs={reqs} scenarios={scenarios}\n{spec}");
-        assert!(spec.contains("include the name \"CorridorKey\" in any attribution notice"), "{spec}");
+        assert!(
+            reqs >= 4 && scenarios >= reqs,
+            "reqs={reqs} scenarios={scenarios}\n{spec}"
+        );
+        assert!(
+            spec.contains("include the name \"CorridorKey\" in any attribution notice"),
+            "{spec}"
+        );
         assert!(spec.contains("### Requirement: Share-alike"), "{spec}");
-        assert!(spec.contains("### Requirement: Seat or revenue threshold"), "{spec}");
+        assert!(
+            spec.contains("### Requirement: Seat or revenue threshold"),
+            "{spec}"
+        );
         assert!(spec.contains("US $20,000,000"), "{spec}");
-        assert!(spec.contains("### Requirement: No redistribution"), "{spec}");
+        assert!(
+            spec.contains("### Requirement: No redistribution"),
+            "{spec}"
+        );
     }
 
     /// Every OpenRAIL id passes its Attachment A use restrictions downstream.
     #[test]
     fn openrail_yields_use_restriction_passdown() {
-        for id in ["openrail", "openrail-m", "creativeml-openrail-m", "openrail++"] {
+        for id in [
+            "openrail",
+            "openrail-m",
+            "creativeml-openrail-m",
+            "openrail++",
+        ] {
             let obligations = obligations_for(id);
             assert!(
                 obligations
@@ -1401,7 +1460,10 @@ mod tests {
                 "{id}: {obligations:?}"
             );
             let spec = obligations_spec("fixture/openrail-model", id, &obligations);
-            assert!(spec.contains("### Requirement: Use-restriction passdown"), "{spec}");
+            assert!(
+                spec.contains("### Requirement: Use-restriction passdown"),
+                "{spec}"
+            );
             assert!(spec.contains("Attachment A"), "{spec}");
         }
     }
@@ -1410,11 +1472,16 @@ mod tests {
     #[test]
     fn gpl_3_0_yields_source_availability() {
         let obligations = obligations_for("gpl-3.0");
-        assert!(obligations
-            .iter()
-            .any(|o| matches!(o.class, ObligationClass::SourceAvailability)));
+        assert!(
+            obligations
+                .iter()
+                .any(|o| matches!(o.class, ObligationClass::SourceAvailability))
+        );
         let spec = obligations_spec("fixture/some-node", "gpl-3.0", &obligations);
-        assert!(spec.contains("### Requirement: Source availability"), "{spec}");
+        assert!(
+            spec.contains("### Requirement: Source availability"),
+            "{spec}"
+        );
         assert!(spec.contains("Corresponding Source"), "{spec}");
     }
 
@@ -1423,10 +1490,15 @@ mod tests {
     fn an_unknown_licence_becomes_review() {
         let obligations = obligations_for("some-licence-nobody-read");
         assert_eq!(obligations.len(), 1);
-        assert!(matches!(obligations[0].class, ObligationClass::Review { .. }));
+        assert!(matches!(
+            obligations[0].class,
+            ObligationClass::Review { .. }
+        ));
         assert_eq!(
             ObligationClass::parse("attribution{CorridorKey}").unwrap(),
-            ObligationClass::Attribution { text: "CorridorKey".into() }
+            ObligationClass::Attribution {
+                text: "CorridorKey".into()
+            }
         );
         assert!(ObligationClass::parse("").is_err());
         assert!(ObligationClass::parse("made-up").is_err());
@@ -1445,7 +1517,11 @@ mod tests {
         assert_eq!(seed.scope, "operator-projects");
         assert_eq!(seed.r#use, "non-sale");
         assert_eq!(seed.expiry, "standing");
-        assert!(seed.covers.iter().any(|c| c == "nikopueringer/CorridorKey2.0"));
+        assert!(
+            seed.covers
+                .iter()
+                .any(|c| c == "nikopueringer/CorridorKey2.0")
+        );
         let signed = sign(&dir, &key, seed);
         fs::write(acks.join(signed.slug() + ".yaml"), signed.to_yaml()).unwrap();
 
@@ -1453,7 +1529,10 @@ mod tests {
         let rows = parse_restricted(restricted).unwrap();
         let ck = rows
             .iter()
-            .find(|r| r.repo == "nikopueringer/CorridorKey2.0" && r.file.ends_with("corridorkey_v2.safetensors"))
+            .find(|r| {
+                r.repo == "nikopueringer/CorridorKey2.0"
+                    && r.file.ends_with("corridorkey_v2.safetensors")
+            })
             .expect("CorridorKey row in the restricted register");
         let row = ModelFile {
             tier: "I1/corridorkey".into(),
@@ -1513,7 +1592,8 @@ mod tests {
             bytes: 1,
             licence: "openrail++".into(),
         };
-        let ok = register_admits_with_consent(&permissive, &dir, "project:demo", &verifier).unwrap();
+        let ok =
+            register_admits_with_consent(&permissive, &dir, "project:demo", &verifier).unwrap();
         assert!(ok.acknowledged_by.is_none());
         let ck = parse_restricted(restricted_register_tsv())
             .unwrap()
@@ -1530,8 +1610,12 @@ mod tests {
             bytes: 1,
             licence: ck.spdx,
         };
-        let err = register_admits_with_consent(&row, &dir, "operator-projects", &verifier).unwrap_err();
-        assert!(err.starts_with("licence_acknowledgement_required:"), "{err}");
+        let err =
+            register_admits_with_consent(&row, &dir, "operator-projects", &verifier).unwrap_err();
+        assert!(
+            err.starts_with("licence_acknowledgement_required:"),
+            "{err}"
+        );
         assert!(err.contains("attribution{CorridorKey}"), "{err}");
         assert!(err.contains("accept-licence"), "{err}");
     }
@@ -1544,7 +1628,11 @@ mod tests {
         let rows = parse_restricted(restricted_register_tsv()).unwrap();
         assert!(rows.len() >= 4, "{rows:?}");
         for r in &rows {
-            assert!(!r.obligations.is_empty(), "{}: no obligation classes", r.name);
+            assert!(
+                !r.obligations.is_empty(),
+                "{}: no obligation classes",
+                r.name
+            );
             assert!(
                 r.licence_sha256.len() == 64 || r.licence_sha256.starts_with("pending:"),
                 "{}: licence hash {:?}",
@@ -1566,7 +1654,9 @@ mod tests {
             include_str!("../../../licences/acknowledgements/nikopueringer-corridorkey2-0.yaml"),
             include_str!("../../../licences/acknowledgements/nvidia-c-radiov4-so400m.yaml"),
             include_str!("../../../licences/acknowledgements/ruicheng-moge-2-vitb-normal.yaml"),
-            include_str!("../../../licences/acknowledgements/google-deepmind-representations4d.yaml"),
+            include_str!(
+                "../../../licences/acknowledgements/google-deepmind-representations4d.yaml"
+            ),
         ];
         let acks = operator_standing_acknowledgements();
         assert_eq!(acks.len(), seeds.len());
@@ -1575,13 +1665,17 @@ mod tests {
             assert_eq!(&back, ack);
             let seed = Acknowledgement::from_yaml(seed).unwrap();
             assert_eq!(&seed, ack, "committed seed differs from the code's record");
-            assert!(seed.signature.is_empty(), "the seed is signed by the operator, not by a build");
+            assert!(
+                seed.signature.is_empty(),
+                "the seed is signed by the operator, not by a build"
+            );
             assert_eq!(seed.slug(), slugify(&ack.covers[0]));
         }
         // Every repo in the register is covered by one seed record.
         for r in &rows {
             assert!(
-                acks.iter().any(|a| a.covers.contains(&r.repo) && a.licence == r.spdx),
+                acks.iter()
+                    .any(|a| a.covers.contains(&r.repo) && a.licence == r.spdx),
                 "{}: no seed record covers {} under {}",
                 r.name,
                 r.repo,
@@ -1637,7 +1731,8 @@ mod tests {
             .collect();
         assert!(artefacts.len() >= 30, "{}", artefacts.len());
 
-        let ids = admits_restricted_in(&pinned, "demon_attack", &artefacts, &acks, &verifier).unwrap();
+        let ids =
+            admits_restricted_in(&pinned, "demon_attack", &artefacts, &acks, &verifier).unwrap();
         assert_eq!(ids.len(), artefacts.len());
         assert_eq!(ids[0], "nikopueringer-corridorkey2-0");
         assert!(ids.iter().any(|i| i == "nvidia-c-radiov4-so400m"));
@@ -1645,9 +1740,18 @@ mod tests {
         assert!(ids.iter().any(|i| i == "google-deepmind-representations4d"));
 
         // No record: refused, naming the first artefact.
-        let err = admits_restricted_in(&pinned, "someone-elses-game", &artefacts, &dir.join("empty"), &verifier)
-            .unwrap_err();
-        assert!(err.starts_with("consent_required: someone-elses-game:"), "{err}");
+        let err = admits_restricted_in(
+            &pinned,
+            "someone-elses-game",
+            &artefacts,
+            &dir.join("empty"),
+            &verifier,
+        )
+        .unwrap_err();
+        assert!(
+            err.starts_with("consent_required: someone-elses-game:"),
+            "{err}"
+        );
         assert!(err.contains("nikopueringer/CorridorKey2.0"), "{err}");
 
         // A project-scoped record admits only its own project.
@@ -1658,13 +1762,24 @@ mod tests {
         let mine_dir = dir.join("mine");
         fs::create_dir_all(&mine_dir).unwrap();
         fs::write(mine_dir.join(mine.slug() + ".yaml"), mine.to_yaml()).unwrap();
-        let ck: Vec<RestrictedArtefact> = artefacts.iter().filter(|a| a.repo.contains("CorridorKey")).cloned().collect();
-        assert_eq!(admits_restricted_in(&pinned, "my-game", &ck, &mine_dir, &verifier).unwrap().len(), 2);
-        let err = admits_restricted_in(&pinned, "other-game", &ck, &mine_dir, &verifier).unwrap_err();
+        let ck: Vec<RestrictedArtefact> = artefacts
+            .iter()
+            .filter(|a| a.repo.contains("CorridorKey"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            admits_restricted_in(&pinned, "my-game", &ck, &mine_dir, &verifier)
+                .unwrap()
+                .len(),
+            2
+        );
+        let err =
+            admits_restricted_in(&pinned, "other-game", &ck, &mine_dir, &verifier).unwrap_err();
         assert!(err.contains("scope project:my-game"), "{err}");
 
         // The shipped register: C-RADIO stays unpinned, so the set is refused there.
-        let err = admits_restricted_in(shipped, "demon_attack", &artefacts, &acks, &verifier).unwrap_err();
+        let err = admits_restricted_in(shipped, "demon_attack", &artefacts, &acks, &verifier)
+            .unwrap_err();
         assert!(err.contains("licence_text_unpinned"), "{err}");
         assert!(err.contains("nvidia/C-RADIOv4-SO400M"), "{err}");
 

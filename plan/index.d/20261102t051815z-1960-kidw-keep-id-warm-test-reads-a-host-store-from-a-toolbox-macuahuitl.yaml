@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: the-keep-id-warm-live-test-reads-layers-json-where-this-process-sees-the-host-store
+  order: 1960-kidw
+  status: done
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - podman
+  - test
+  estimated_hours: 1
+  title: The keep-id warm live test read a host-only store path from inside the builder toolbox and counted zero mapped layers
+  context: 'On macuahuitl the rootless podman graphroot moved to /srv/fastbuild/containers/storage (xfs). Every gate then failed keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start (left 0, right 1). Measured: on the host a podman create --userns=keep-id of a fresh scratch image DOES add a layers.json row with the same diff-digest and a uidmap, so warming works and production is not defective. The builder toolbox podman is a flatpak-spawn host shim; it reports the host GraphRoot, but /srv is not mounted in the toolbox (only /run/host/srv is). The test read_to_string fell back to empty, so every count was 0; the old store under HOME was visible at the same path, which hid this. The after_build==0 premise passed hollowly for the same reason.'
+  exit_criteria:
+  - 'The test reads <GraphRoot>/overlay-layers/layers.json directly when present, else under /run/host, and asserts the freshly built image''s own layer row is visible before counting mapped copies.'
+  verifiable_closure: 'In the builder toolbox on the /srv store: with the /run/host fallback disabled the test fails naming the unreadable layers.json; with it, all four keep_id_warm_tests pass.'
+  unscoreable: 'live-substrate-only: the guard is the existing cargo test keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start, which skips on a store that shifts IDs, so no litmus can pin it on every host.'
+  provenance: macuahuitl-fedora 2026-11-01, gate blocker after the podman store move.
+  events:
+  - type: completed
+    ts: '2026-11-02T05:18:15Z'
+    host: macuahuitl
+    summary: root cause measured (store path invisible inside the toolbox, not a warm defect); test resolves /run/host and asserts its population
+    evidence_refs:
+    - 'cargo test -p tillandsias-headless --bin tillandsias keep_id_warm_tests in tillandsias-builder on macuahuitl /srv store: 4 passed; with the /run/host fallback disabled the test fails naming the unreadable layers.json'
