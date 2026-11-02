@@ -337,6 +337,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // 1874-kkrc: local image generation, after the pinned lifecycle
             // and toolchain tools.
             tools.push(crate::imagegen_tool::descriptor());
+            // 1956-26qh: the GPU-free family contract checker, beside it.
+            tools.push(validate_family_descriptor());
             tools.extend(browser_tool_descriptors(browser, rt));
             // 1772-irs3: the read-only Cloudflare tools, after the browser
             // family (both lists above are pinned).
@@ -458,6 +460,18 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             emit(line);
                         }
                     }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 1956-26qh: pure static check of a family spec read from the
+                // lane's own checkout; no GPU, nothing queued.
+                "studio.validate_family" => {
+                    match validate_family_in_lane(project_label, instance, &req["params"]["arguments"]) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
@@ -610,6 +624,105 @@ pub(crate) fn preview_app_dir(
         Some(serde_json::Value::String(dir)) => Ok(Some(dir.as_str())),
         Some(_) => Err("invalid_app_dir: app_dir must be a string".to_string()),
     }
+}
+
+/// 1956-26qh: `studio.validate_family {spec}` — the family contract v1 static
+/// checker (design D7). Pure: no GPU, no queue, no generation.
+fn validate_family_descriptor() -> serde_json::Value {
+    serde_json::json!({
+        "name": "studio.validate_family",
+        "description": "Check a family spec against the family contract v1 (1935-k2ib/v1) before any GPU time is spent: schema shape, palette_fails_all_gates (mandatory with reservedRamps), region_mask_colours_declared (mandatory with regions), and that every input file it names exists. spec is a path relative to the project checkout. Returns ok:family:<name>, or one refused:<check>:<detail> line per failure. Runs no generation.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "spec": { "type": "string", "description": "Project-relative path of the family spec JSON, e.g. art/families/gatekeeper-v3.json." }
+            },
+            "required": ["spec"]
+        }
+    })
+}
+
+/// Snapshot the spec and the inputs it names out of the lane's live forge
+/// checkout into a private host-side directory, then run the pure checker on
+/// it. The forge is the one `local_web_preview` proves belongs to this lane;
+/// nothing in the request names a container, and every path is proven
+/// project-relative before it reaches `podman exec`.
+fn validate_family_in_lane(
+    project: &str,
+    instance: &str,
+    args: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    use crate::studio_contract::{project_relative, referenced_inputs, validate_family};
+    let spec_rel = args
+        .get("spec")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("invalid_arguments: spec (a project-relative path) is required")?;
+    let spec_rel = project_relative(spec_rel)?;
+    let lane = crate::local_web_preview::resolve_live_source(project, instance)?;
+    let checkout = crate::studio::checkout_dir(project);
+
+    let snapshot = tempfile::Builder::new()
+        .prefix("tillandsias-family-")
+        .tempdir()
+        .map_err(|e| format!("studio.validate_family: no scratch directory: {e}"))?;
+    let root = snapshot.path();
+
+    let fetch = |rel: &str| -> Result<Option<Vec<u8>>, String> {
+        let guest = format!("{checkout}/{rel}");
+        let mut cmd = tillandsias_podman::podman_cmd_sync();
+        cmd.args(["exec", &lane.forge_id, "sh", "-c"])
+            .arg("if [ -f \"$1\" ]; then cat -- \"$1\"; else exit 3; fi")
+            .args(["sh", &guest]);
+        let out = cmd
+            .output_bounded(std::time::Duration::from_secs(20))
+            .map_err(|e| format!("studio.validate_family: read in the forge failed: {e}"))?;
+        match out.status.code() {
+            Some(0) => Ok(Some(out.stdout)),
+            Some(3) => Ok(None),
+            _ => Err(format!(
+                "studio.validate_family: reading {rel} in the forge failed: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            )),
+        }
+    };
+    let place = |rel: &str, bytes: &[u8]| -> Result<(), String> {
+        let host = root.join(rel);
+        if let Some(parent) = host.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("studio.validate_family: {e}"))?;
+        }
+        fs::write(&host, bytes).map_err(|e| format!("studio.validate_family: {e}"))
+    };
+
+    let Some(spec_bytes) = fetch(&spec_rel)? else {
+        return Err(format!("not_found: {spec_rel} is not a file in the project"));
+    };
+    place(&spec_rel, &spec_bytes)?;
+    // Inputs the spec names: copy those that exist; the checker reports the
+    // rest as missing_input. Paths that fail project_relative are left to the
+    // checker's schema refusal and never reach the forge.
+    if let Ok(spec) = serde_json::from_slice::<serde_json::Value>(&spec_bytes) {
+        let mut seen = HashSet::new();
+        for (rel, _) in referenced_inputs(&spec) {
+            let Ok(rel) = project_relative(&rel) else { continue };
+            if !seen.insert(rel.clone()) {
+                continue;
+            }
+            if let Some(bytes) = fetch(&rel)? {
+                place(&rel, &bytes)?;
+            }
+        }
+    }
+
+    let verdicts = validate_family(&root.join(&spec_rel), root);
+    let lines: Vec<String> = verdicts.iter().map(ToString::to_string).collect();
+    let ok = verdicts
+        .iter()
+        .all(|v| matches!(v, crate::studio_contract::Verdict::Ok { .. }));
+    Ok(serde_json::json!({
+        "spec": spec_rel,
+        "ok": ok,
+        "verdicts": lines,
+    }))
 }
 
 pub(crate) fn mcp_error(req: &serde_json::Value, message: String) -> serde_json::Value {
@@ -1699,6 +1812,13 @@ mod image_generate_fixtures {
         assert_eq!(desc["inputSchema"]["required"][0], "prompt");
         let d = desc["description"].as_str().unwrap();
         assert!(d.contains("deleted when the forge shuts down"), "{d}");
+        // 1956-26qh: the family checker is listed beside it, and asks only
+        // for a project-relative spec path.
+        let vf = tools
+            .iter()
+            .find(|t| t["name"] == "studio.validate_family")
+            .expect("studio.validate_family is listed");
+        assert_eq!(vf["inputSchema"]["required"][0], "spec");
 
         let mut lines = Vec::new();
         let reply = handle_mcp_jsonrpc_streaming(
