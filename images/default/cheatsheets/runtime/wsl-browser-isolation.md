@@ -90,6 +90,8 @@ hostname = tillandsias-browser-chrome
 
 `[interop] enabled = false` is the load-bearing switch for credential isolation: it removes the binary that translates Linux→Windows IPC. Without it, even with `/mnt/c` gone, a determined process could still execute Windows binaries over the WSL interop pipe.
 
+**Scope note (2026-11-02):** the recipe above is for the SEPARATE browser distro. It is NOT what the `tillandsias` runtime distro runs: there the tray writes `[interop] enabled=true, appendWindowsPath=false` with `[automount] enabled=false` (`crates/tillandsias-vm-layer/src/wsl.rs:739-749`; measured on yoga 2026-11-02 — binfmt `WSLInterop` enabled, `/mnt/c` empty). In the runtime distro Windows binaries are runnable via interop but not on `$PATH`. See `runtime/wsl2-isolation-boundary.md`.
+
 ## Recipe — Chromium command-line flags
 
 ```bash
