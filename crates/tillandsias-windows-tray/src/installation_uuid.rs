@@ -353,6 +353,18 @@ pub async fn deliver_credentials_and_check_handover(
     deliver_and_handover_with(client, &PRODUCTION_TARGETS).await
 }
 
+/// Order 1965-2fk8: read a pending Vault handover and store it, with no
+/// delivery first. The push listener calls this on the transition to Ready,
+/// because a Vault the guest initialises AFTER the tray connected holds a
+/// handover that nothing else collects: SC-07 suppresses the polls whose
+/// fresh connections used to read it (v56.11.1.1 cold smoke: Credential
+/// Manager stayed empty for 6+ minutes under a healthy subscription).
+pub async fn capture_vault_handover(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+) -> Result<(), String> {
+    capture_handover_with(client, &PRODUCTION_TARGETS).await
+}
+
 /// The three Credential Manager targets the delivery reads and the handover
 /// writes. Production uses the real names; tests pass scratch `...-test-<uuid>`
 /// names they delete, so a test never writes the operator's real credentials
@@ -431,6 +443,13 @@ pub(crate) async fn deliver_and_handover_with(
         }
     }
 
+    capture_handover_with(client, targets).await
+}
+
+pub(crate) async fn capture_handover_with(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    targets: &CredTargets<'_>,
+) -> Result<(), String> {
     let seq = client.allocate_seq();
     let env = tillandsias_control_wire::ControlEnvelope {
         wire_version: tillandsias_control_wire::WIRE_VERSION,
@@ -527,10 +546,13 @@ mod tests {
     /// A fake guest on the other end of an in-memory stream: answers the
     /// delivery with `outcome`, then (if asked) the handover with
     /// `fresh-share` / `fresh-token`. Returns whether the handover was asked.
+    /// `None` is a guest that expects the handover alone (1965-2fk8) and
+    /// panics on a delivery.
     async fn fake_guest(
         io: tokio::io::DuplexStream,
-        outcome: tillandsias_control_wire::DeliverCredentialsOutcome,
+        outcome: impl Into<Option<tillandsias_control_wire::DeliverCredentialsOutcome>>,
     ) -> bool {
+        let outcome = outcome.into();
         use futures_util::{SinkExt, StreamExt};
         use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
         type Io = tokio_util::codec::Framed<
@@ -554,22 +576,24 @@ mod tests {
             .unwrap();
             io.send(bytes.into()).await.unwrap();
         }
-        let Some(env) = recv(&mut io).await else {
-            return false;
-        };
-        let ControlMessage::DeliverCredentials { seq, .. } = env.body else {
-            panic!("expected DeliverCredentials first, got {:?}", env.body)
-        };
-        send(
-            &mut io,
-            env.seq,
-            ControlMessage::DeliverCredentialsReply {
-                seq_in_reply_to: seq,
-                success: true,
-                outcome,
-            },
-        )
-        .await;
+        if let Some(outcome) = outcome {
+            let Some(env) = recv(&mut io).await else {
+                return false;
+            };
+            let ControlMessage::DeliverCredentials { seq, .. } = env.body else {
+                panic!("expected DeliverCredentials first, got {:?}", env.body)
+            };
+            send(
+                &mut io,
+                env.seq,
+                ControlMessage::DeliverCredentialsReply {
+                    seq_in_reply_to: seq,
+                    success: true,
+                    outcome,
+                },
+            )
+            .await;
+        }
         let Some(env) = recv(&mut io).await else {
             return false;
         };
@@ -631,6 +655,45 @@ mod tests {
             read_credential_string(&token_t).unwrap().as_deref(),
             Some("fresh-token")
         );
+    }
+
+    /// Order 1965-2fk8: the Ready-transition collect stores the guest's
+    /// handover with no delivery in front of it. fake_guest(None) panics on a
+    /// DeliverCredentials, so a collect that re-delivered would fail here too.
+    #[tokio::test]
+    async fn a_ready_collect_stores_the_handover_without_delivering() {
+        let run = Uuid::new_v4();
+        let (uuid_t, share_t, token_t) = (
+            format!("tillandsias-vm-uuid-test-{run}"),
+            format!("vault-shamir-share-v1-test-{run}"),
+            format!("vault-root-token-v1-test-{run}"),
+        );
+        let targets = CredTargets {
+            uuid: &uuid_t,
+            share: &share_t,
+            token: &token_t,
+        };
+        let (host, guest) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(fake_guest(guest, None));
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        let result = capture_handover_with(&mut client, &targets).await;
+        drop(client);
+        let asked = guest.await.unwrap();
+        let (share, token) = (
+            read_credential_string(&share_t).unwrap(),
+            read_credential_string(&token_t).unwrap(),
+        );
+        let _ = clear_credentials(&[
+            Box::leak(share_t.clone().into_boxed_str()),
+            Box::leak(token_t.clone().into_boxed_str()),
+        ]);
+        assert_eq!(result, Ok(()));
+        assert!(asked, "the collect must ask for the handover");
+        assert_eq!(share.as_deref(), Some("fresh-share"));
+        assert_eq!(token.as_deref(), Some("fresh-token"));
     }
 
     /// ORDER 1562-bqcg, the fail-closed side: a REJECTED delivery is still an

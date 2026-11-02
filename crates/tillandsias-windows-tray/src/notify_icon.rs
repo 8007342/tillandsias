@@ -2740,6 +2740,16 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
+            // Order 1965-2fk8 (macOS 1925-tdlv): deliver on EVERY (re)connect,
+            // before Subscribe. SC-07 suppresses the polls whose fresh
+            // connections used to deliver, and a reconnect can mean the guest
+            // restarted and lost the share. Best-effort: the subscription must
+            // not be lost to a failed delivery, and the failure is loud.
+            if let Err(err) =
+                crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+            {
+                tracing::warn!(%err, "vault credential delivery on push connect failed");
+            }
             // ORDER 1439-p853: the topics come from the guest's HelloAck, so
             // Progress is asked for only by a guest that advertised it; an
             // older guest gets exactly the pre-change Subscribe.
@@ -2807,6 +2817,7 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
         // GUI tray has no console, so its sink is plain lines into tray.log;
         // per connection, so a resubscribe starts a fresh task list.
         let mut guest_progress = crate::provision_console::GuestProgress::to_tray_log();
+        let mut was_ready = false;
 
         loop {
             match client.next_envelope().await {
@@ -2817,6 +2828,15 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                         last_event,
                         ..
                     } => {
+                        // Order 1965-2fk8: Ready means Vault is unsealed, and a
+                        // Vault the guest just initialised holds a handover the
+                        // host must collect before the guest stops. Collect on
+                        // the transition, once per transition.
+                        let ready_now = matches!(phase, tillandsias_control_wire::VmPhase::Ready);
+                        if ready_now && !was_ready {
+                            collect_vault_handover_on_ready().await;
+                        }
+                        was_ready = ready_now;
                         hwnd.apply_vm_status(phase, podman_ready, last_event.as_deref());
                         tracing::debug!(?phase, podman_ready, "vm status pushed");
                     }
@@ -2847,6 +2867,39 @@ async fn run_vm_status_push_listener(hwnd: HwndHandle) {
                 }
             }
         }
+    }
+}
+
+/// Order 1965-2fk8: collect a pending Vault handover over a short connection
+/// of its own, so the push reader's stream is never shared with a request.
+/// Best-effort and loud: the status stream must not be lost to a failed
+/// collect.
+async fn collect_vault_handover_on_ready() {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream = match crate::hvsocket::open_and_wrap_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await
+    {
+        Ok(s) => s,
+        Err(err) => {
+            tracing::warn!(%err, "vault handover on Ready: connect failed");
+            return;
+        }
+    };
+    let mut client = Client::from_stream(
+        stream,
+        Transport::Vsock {
+            cid: 0,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(err) = client.handshake().await {
+        tracing::warn!(%err, "vault handover on Ready: handshake failed");
+        return;
+    }
+    match crate::installation_uuid::capture_vault_handover(&mut client).await {
+        Ok(()) => tracing::info!("vault handover collected on Ready"),
+        Err(err) => tracing::warn!(%err, "vault handover on Ready failed"),
     }
 }
 
@@ -5608,6 +5661,46 @@ mod tests {
                  it, but this tray is no longer a consumer (997-e4v2)"
             );
         }
+    }
+
+    /// Order 1965-2fk8 (mirrors macOS 1925-tdlv): the push listener delivers
+    /// the Vault credentials on every (re)connect BEFORE it subscribes, and
+    /// collects the handover on the transition to Ready. SC-07 suppresses the
+    /// polls whose fresh connections did both, so a Vault the guest
+    /// initialised under a healthy subscription never reached Credential
+    /// Manager (v56.11.1.1 cold smoke on yolanda, 2026-11-02).
+    #[test]
+    fn push_subscription_delivers_and_collects_vault_credentials() {
+        // source-pin-ok: the property is placement inside run_vm_status_push_listener, which only the source shows
+        let source = include_str!("notify_icon.rs");
+        let production = source
+            .split("#[cfg(test)]")
+            .next()
+            .expect("the file has a production half");
+        let code: String = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let start = code
+            .find("async fn run_vm_status_push_listener(")
+            .expect("run_vm_status_push_listener exists");
+        let body = &code[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let deliver = body
+            .find("deliver_credentials_and_check_handover(&mut client)")
+            .expect("the push listener must deliver on (re)connect");
+        let subscribe = body
+            .find("ControlMessage::Subscribe {")
+            .expect("the push listener subscribes");
+        assert!(
+            deliver < subscribe,
+            "the delivery must precede the Subscribe"
+        );
+        assert!(
+            body.contains("collect_vault_handover_on_ready()"),
+            "the push listener must collect the handover on the Ready transition"
+        );
     }
 
     /// SC-07: the steady-state VmStatusRequest poll is fallback-only —
