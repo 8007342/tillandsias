@@ -343,6 +343,9 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // family (both lists above are pinned).
             #[cfg(feature = "vault")]
             tools.extend(crate::cloudflare_mcp::tool_descriptors());
+            // 1966-47vt: cloud.usage, right after the cloudflare.* family.
+            #[cfg(feature = "vault")]
+            tools.push(crate::cloud_usage::descriptor());
             // 1860-auhm: the studio co-edit tools, last (every list above is pinned).
             tools.extend(crate::studio::tool_descriptors());
             serde_json::json!({ "result": { "tools": tools } })
@@ -375,6 +378,24 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // 1772-irs3: served by this process with the operator's stored
             // Cloudflare sign-in; the forge only names the tool. Nothing in
             // the request chooses the account, method or path.
+            // 1966-47vt: cloud.usage reads the Vault-stored GitHub App and
+            // Cloudflare tokens here, host-side; the forge only names it.
+            #[cfg(feature = "vault")]
+            if tool_name == crate::cloud_usage::TOOL_NAME {
+                let body = match crate::cloud_usage::call_live(args, debug) {
+                    Ok(result) => serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                    }),
+                    Err(e) => return Some(mcp_error(req, e)),
+                };
+                let mut resp = body;
+                resp["jsonrpc"] = serde_json::json!("2.0");
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
+
             #[cfg(feature = "vault")]
             if tool_name.starts_with("cloudflare.") {
                 let body = match crate::cloudflare_mcp::call_live(tool_name, args, debug) {

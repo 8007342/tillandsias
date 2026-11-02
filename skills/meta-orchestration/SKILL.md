@@ -2082,6 +2082,9 @@ Only `linux_mutable` performs global coordination:
 3. Run more frequent local-build e2e gates than other hosts.
 4. Run `/merge-to-main-and-release` only when `linux-next` is green, plan
    evidence is current, and no release is already in flight.
+   Read the `cloud.usage` MCP tool first (order 1966-47vt): Cloudflare at
+   ≥ 2,700 of 3,000 build minutes this month means no merge to main unless
+   the fix is urgent.
 5. After a release succeeds, ensure the plan records the new latest release so
    immutable Linux hosts know to run curl-install e2e.
 6. **Move the project's openspec CLI forward deliberately (order 1441-myz3)**.

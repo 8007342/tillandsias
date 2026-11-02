@@ -305,7 +305,7 @@ fn refusal(reason: &str, why: &str, remedy: &str) -> String {
     format!("refused:cloudflare-mcp:{reason}\n  why: {why}\n  remedy: {remedy}")
 }
 
-fn refuse_reason(reason: &str) -> String {
+pub(crate) fn refuse_reason(reason: &str) -> String {
     let (why, remedy): (&str, &str) = if let Some(scope) = reason.strip_prefix("scope-missing:") {
         return refusal(
             reason,
@@ -429,7 +429,7 @@ pub(crate) fn send(
 }
 
 /// Map a response to the tool's result, or a reason word.
-fn interpret(resp: &HttpResponse, scope: &str) -> Result<serde_json::Value, String> {
+pub(crate) fn interpret(resp: &HttpResponse, scope: &str) -> Result<serde_json::Value, String> {
     match resp.status {
         200..=299 => {}
         401 => return Err("unauthorized".into()),
@@ -543,7 +543,7 @@ pub(crate) struct Deps<'a> {
 }
 
 /// The stored token and the tray-bound account.
-fn signed_in(deps: &Deps) -> Result<(String, Option<String>, String), String> {
+pub(crate) fn signed_in(deps: &Deps) -> Result<(String, Option<String>, String), String> {
     if !crate::vault_bootstrap::cloudflare_token_endpoint_is_safe(deps.api_base) {
         return Err("api-base-not-https".into());
     }

@@ -41,6 +41,13 @@ test "$(git rev-list --count origin/linux-next..HEAD)" -eq 0
 
 If the branch is not `linux-next`, log + exit without escalating — the release flow only ships from the Linux integration branch.
 
+### Cloud minutes (order 1966-47vt)
+
+Read `cloud.usage` (MCP; on the host `tillandsias --cloud-usage`) and keep
+the used/cap per provider for step 8. A metric saying
+`unavailable: permission-missing:<provider>:<permission>` is a grant to
+report, never a zero.
+
 ### Tray-parity completeness (release-scoped gate — order 243 semantic split)
 
 The per-build litmus (`litmus:tray-parity-matrix-complete`) only gates each
@@ -319,6 +326,11 @@ ledger entry. The next cycle retries.
 Use `--merge` (not `--squash`): the linux-next history is the audit log of the daily work-loop and integration cron cycles. Preserve it.
 
 ---
+
+**Cloud budget refusal (order 1966-47vt).** Before merging, re-read
+`cloud.usage`: when Cloudflare `workers_builds_minutes` used is ≥ 2,700 of
+3,000 for the month, do NOT merge to main unless the fix is urgent; say so in
+the cycle outcome.
 
 ## 4 — Bump VERSION on main via PR (branch protection, order 476)
 
@@ -634,6 +646,8 @@ Append a one-line entry to `plan/issues/linux-next-work-queue-2026-05-25.md`:
 ```
 - <UTC>  `<merge_sha>`  Release ${new_tag} — merged PR #${existing_pr} to main, tagged, workflow_dispatch triggered. Linux build: <nix_build_duration> (Nix cache: <hit|miss>), total run: <total_run_time>. Linux artifact: <browser_download_url>.
 ```
+
+Add the `cloud.usage` reading to that entry: `cloud: cloudflare <used>/3000 min, github cache <bytes>/10GiB` (order 1966-47vt).
 
 **Also record the release in the README ledger** (operator directive
 2026-07-16; order 380) — **APPEND for a new tag, EDIT for a tag that already

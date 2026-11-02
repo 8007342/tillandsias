@@ -379,6 +379,36 @@ fn main() {
         }
     }
 
+    // Order 1966-47vt: `--cloud-usage`, the host-side read of the cloud.usage
+    // MCP tool (used vs free-tier cap per provider), so the release gate and
+    // an operator can read the same numbers a forge agent gets. Read-only;
+    // prints JSON with no token text. Also listed in known_flags (five sites).
+    if user_args.iter().any(|a| a == "--cloud-usage") {
+        #[cfg(all(feature = "host-services", feature = "vault"))]
+        {
+            let debug = user_args.iter().any(|a| a == "--debug");
+            match cloud_usage::call_live(None, debug) {
+                Ok(v) => {
+                    println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        #[cfg(not(all(feature = "host-services", feature = "vault")))]
+        {
+            eprintln!("refused:cloud-usage:not-compiled");
+            eprintln!(
+                "  why: cloud.usage reads tokens from Vault and needs the host-services and vault features"
+            );
+            eprintln!("  remedy: use the installed tray build of tillandsias");
+            std::process::exit(2);
+        }
+    }
+
     // Order 1506-q7ab: `--msg-serve [--once]`, the same-host mover. Dispatched
     // early and exits, like --cloudflare-login: it parses its own arguments,
     // takes its own singleton (<store>/.mover.lock, not the launcher's), and
@@ -945,6 +975,8 @@ fn main() {
         "--cloudflare-login",
         "--cloudflare-logout",
         "--via",
+        // Order 1966-47vt: dispatched early (cloud_usage::call_live).
+        "--cloud-usage",
         // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
         // too so no reorder can make it `Unsupported option`.
         "--msg-serve",
@@ -1914,6 +1946,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cloudflare-login [--via device|loopback|qr|paste] [--debug]");
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
+    println!("       tillandsias --cloud-usage [--debug]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -1983,6 +2016,9 @@ fn print_usage(version: &str) {
          --via qr: a phone scans a QR whose redirect is the relay page ($TILLANDSIAS_CLOUDFLARE_RELAY_URL); \
          --via paste: paste the authorization CODE the relay page (or the address bar) shows. A code, never a token: \
          it is single-use and useless without the verifier that stays in this process"
+    );
+    println!(
+        "  --cloud-usage  Read-only: used vs free-tier cap this month per provider (Cloudflare Workers Builds minutes, GitHub Actions cache/run minutes/billing), as JSON; the same numbers as the cloud.usage MCP tool"
     );
     println!(
         "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
@@ -20853,6 +20889,10 @@ mod lane_events;
 // bound to the tray. Needs the store, so `vault` as well.
 #[cfg(all(feature = "host-services", feature = "vault"))]
 mod cloudflare_mcp;
+// @trace order:1966-47vt — cloud.usage: per-provider used vs free-tier cap,
+// read-only, beside the cloudflare.* family.
+#[cfg(all(feature = "host-services", feature = "vault"))]
+mod cloud_usage;
 #[cfg(all(feature = "host-services", feature = "vault"))]
 mod cloudflare_worker_deploy;
 
