@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    field: status
+    value: completed
+    ts: "2026-11-02T00:34:53Z"
+    host: yoga
+
+events:
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: completed
+      ts: "2026-11-02T00:34:53Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: plan/index.d/20261017t110928z-0aea7258-yoga.yaml
+  - packet_id: the-github-token-in-vault-rotates-itself-before-its-8-hour-expiry-through-a-resident-due-check-so-no-host-needs-an-operator-reseed
+    event:
+      type: note
+      ts: "2026-11-02T00:34:53Z"
+      host: yoga
+      summary: |-
+        Operator ruling 2026-11-01 (verbatim, relayed by macuahuitl-fedora) - close it on yoga's evidence. Live arm in plan/index.d/20261017t110928z-0aea7258-yoga.yaml - approle login write 02.55.29Z, tray rotation write 10.32.18Z, organic forge push 11.08Z accepted upstream, ls-remote work/1747-e9d6 = 18d2eb556. Supersedes the 2026-10-19 next_action asking for an 8 h live arm on lenovinha.

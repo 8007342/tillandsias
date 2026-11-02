@@ -65,8 +65,8 @@ apply_opencode_config_overlay
 # (cargo-nextest, actionlint, wasmtime, marksman, dart) or the EVERY_LAUNCH
 # harness set (codex/claude/opencode-ai), even though the welcome banner
 # advertises the full combined tool stack. Backgrounded + fail-soft, same as
-# the agent entrypoints, so it never blocks shell startup.
-ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log &
+# the agent entrypoints, so it never blocks shell startup. The prebuilt
+# dev-tools start with start_flaky_installs below (order 1951-vv5m).
 ensure_forge_harnesses >>/tmp/forge-lifecycle.log &
 
 # ── SSH key auto-discovery ──────────────────────────────────
@@ -102,6 +102,9 @@ inject_startup_context "$PROJECT_DIR"
 # The CLI is the project's pinned version when openspec/cli-version exists
 # (order 1441-myz3; see ensure_openspec_pinned).
 ensure_openspec_pinned "$PROJECT_DIR"
+# Flaky-optional installs (dev tools, prebuilt tools) run in
+# the background with status files and first-use shims (order 1951-vv5m).
+start_flaky_installs
 openspec_init_if_absent "$PROJECT_DIR"
 
 # ── Multi-workspace quick-switch menu ──────────────────────

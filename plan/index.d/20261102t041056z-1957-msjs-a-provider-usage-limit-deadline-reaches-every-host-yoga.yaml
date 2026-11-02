@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl-fedora, 2026-11-02),
+# split out of 1941-rlim's criterion 2 so it is not lost.
+packets:
+- packet_id: a-provider-usage-limit-deadline-recorded-on-one-host-holds-every-host-of-the-fleet
+  order: 1957-msjs
+  status: ready
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - forge
+  - opencode
+  - fleet
+  - plan
+  estimated_hours: 4
+  title: A provider usage-limit deadline recorded on one host holds the forges of every host, since the free tier's quota is shared fleet-wide
+  context: '1941-rlim (PR #829, work/1941-rlim) records a provider usage limit (opencode "Free usage limit reached", Retry-After or a 24 h default) in the forge''s persistent project cache, so later forges of that project on THAT host refuse before calling the provider. The free tier''s quota is shared by every fleet host (yoga hit it on 2026-11-01 and stopped every host''s opencode traffic by coordinator order until 03:00Z the next day), so one host learning the deadline should hold all of them. Crossing hosts needs a channel the forge can write and every host reads; 1941-rlim''s own criterion 2 named a plan event or the fleet message store. Cross-host fleet messages are not delivered today (1506-7tyy), so a plan event is the likelier path.'
+  exit_criteria:
+  - 'When a forge records a provider usage limit, the deadline is published to a shared channel that every fleet host reads (a plan event on the provider''s row, or the fleet message store once it delivers across hosts), with the provider, the retry-after UTC and the recording host.'
+  - 'A forge launch on any OTHER host before that deadline refuses with the same blocked:provider-usage-limit line, naming the host that recorded it, without calling the provider.'
+  - 'An expired deadline holds nothing, and TILLANDSIAS_IGNORE_PROVIDER_LIMIT=1 still overrides.'
+  verifiable_closure: 'A fixture with two simulated hosts sharing the channel (no network): host A records a limit; host B''s launch refuses naming host A; after the deadline host B goes ahead. Red on today''s tree (the record never leaves host A); named by a litmus.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Land 1941-rlim (PR #829) first; then choose the channel with the coordinator (a plan event needs a forge that can push; the forge''s push is gated on the GitHub token).'
+  provenance: macuahuitl-fedora 2026-11-02, splitting 1941-rlim criterion 2.
+  events:
+  - type: filed
+    ts: '2026-11-02T04:10:56Z'
+    host: yoga
+    summary: filed p1 at the coordinator's request; split from 1941-rlim criterion 2
