@@ -1,0 +1,170 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: implementation orders of openspec change studio-asset-pipeline (operator delegated the design, 2026-11-02).
+packets:
+- packet_id: family-contract-v1-json-schema-and-static-checker-studio-validate-family
+  order: 1956-26qh
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, studio, mcp]
+  estimated_hours: 6
+  related: [1935-k2ib, 1954-gdi6, 1955-rjv3, 1954-dvz9, 1954-xy5m]
+  title: 'The family contract v1 has a JSON Schema and a GPU-free checker, studio.validate_family, that refuses a bad family spec before any generation'
+  context: 'Design: openspec/changes/studio-asset-pipeline (proposal, design, specs). Users: demon_attack, kumbia-kombat and sibling projects such as cannonball.'
+  owned_files:
+  - crates/tillandsias-headless/src/studio_contract.rs
+  - openspec/changes/studio-asset-pipeline/contract/family-spec.v1.schema.json
+  exit_criteria:
+  - 'the JSON Schema covers kinds character-frames and layered-parts, per-room native size, camera on targets (with a frame default), reservedRamps gates as data, regions, poses, clips, qa and targets (D7)'
+  - 'studio.validate_family is on the tool socket; it returns ok:family:<name> or one refused:<check>:<detail> per failure'
+  - 'palette_fails_all_gates is mandatory when reservedRamps is declared, and names the colour and the gate; region_mask_colours_declared is mandatory when regions is declared, and names the colour and the file'
+  - 'an unknown kind is refused, listing the known kinds'
+  unscoreable: "unpinnable-until-the-guard-exists — the deliverable is studio_contract.rs and its tests (name one studio_contract_refuses_outline_inside_a_gate), written red first, in the same commit."
+  next_action: 'Read openspec/changes/studio-asset-pipeline/design.md; write the named test red first.'
+  provenance: calmecacpilli design of studio-asset-pipeline, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:08:08Z'
+    host: calmecacpilli
+    summary: filed p0 from studio-asset-pipeline
+- packet_id: studio-pins-ip-adapter-plus-layerdiffuse-birefnet-nodes-and-weights-and-union-controlnet
+  order: 1956-bh6j
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, studio, mcp]
+  estimated_hours: 5
+  related: [1935-k2ib, 1954-gdi6, 1955-rjv3, 1954-dvz9, 1954-xy5m]
+  title: 'The studio pins the IP-Adapter Plus (non-FaceID), LayerDiffuse and BiRefNet-only nodes and their weights, plus the Union SDXL ControlNet, each licence-checked'
+  context: 'Design: openspec/changes/studio-asset-pipeline (proposal, design, specs). Users: demon_attack, kumbia-kombat and sibling projects such as cannonball.'
+  owned_files:
+  - images/imagegen-studio/custom-nodes.toml
+  - images/imagegen-studio/locks/
+  - images/imagegen/models.tsv
+  - images/models/licence-register.tsv
+  exit_criteria:
+  - 'custom-nodes.toml pins each node package to a commit with a lock and its licence; no package fetches weights at runtime from an unpinned URL'
+  - 'models.tsv and the register carry each weight with revision, sha256, size and licence, verified on the card at pin time; nothing InsightFace, and never RMBG-1.4/2.0'
+  - 'check-model-licence-register.lua and the custom-nodes verify step pass'
+  unscoreable: "unpinnable-until-the-guard-exists — the deliverable includes a fixture (scripts/lua/test-studio-node-pins.lua) that refuses an unpinned or unlocked node row and an RMBG or InsightFace weight; written with the pins."
+  next_action: 'Read openspec/changes/studio-asset-pipeline/design.md; write the named test red first.'
+  provenance: calmecacpilli design of studio-asset-pipeline, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:08:08Z'
+    host: calmecacpilli
+    summary: filed p0 from studio-asset-pipeline
+- packet_id: studio-run-workflow-mcp-tool-headless-comfyui-with-provenance-shared-gpu-queue
+  order: 1956-x7xp
+  status: ready
+  kind: feature
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, studio, mcp]
+  estimated_hours: 12
+  related: [1935-k2ib, 1954-gdi6, 1955-rjv3, 1954-dvz9, 1954-xy5m]
+  title: 'studio.run_workflow runs a committed API-format ComfyUI workflow headlessly with named inputs, seed and prompt overrides and a batch, in the shared GPU queue, and returns paths plus a provenance record per output'
+  context: 'Design: openspec/changes/studio-asset-pipeline (proposal, design, specs). Users: demon_attack, kumbia-kombat and sibling projects such as cannonball.'
+  owned_files:
+  - crates/tillandsias-headless/src/studio_tool.rs
+  - crates/tillandsias-headless/src/gpu_queue.rs
+  - crates/tillandsias-headless/src/mcp_socket.rs
+  - crates/tillandsias-headless/src/imagegen_tool.rs
+  exit_criteria:
+  - 'the request and validation follow design D1: nodes are pinned, models are register- or consent-admitted, and inputs are under /work/tmp/imagegen; refusals are named and nothing is queued'
+  - 'files cross through the lane volume (D2): inputs under in/, outputs under studio/<job>/'
+  - 'the 1955-rjv3 queue moves to gpu_queue.rs and both engines share it; /free is called after each studio job (D3)'
+  - 'provenance v1 (D5) is written beside each output and returned; image.generate adopts the same schema'
+  unscoreable: "unpinnable-until-the-guard-exists — the deliverable includes tests against a stub ComfyUI HTTP server (name one studio_run_workflow_refuses_unpinned_node_and_returns_provenance), written red first."
+  next_action: 'Read openspec/changes/studio-asset-pipeline/design.md; write the named test red first.'
+  provenance: calmecacpilli design of studio-asset-pipeline, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:08:08Z'
+    host: calmecacpilli
+    summary: filed p0 from studio-asset-pipeline
+- packet_id: accept-licence-skill-signed-acknowledgement-obligations-spec-and-restricted-register-gate
+  order: 1956-ecpb
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, studio, mcp]
+  estimated_hours: 12
+  related: [1935-k2ib, 1954-gdi6, 1955-rjv3, 1954-dvz9, 1954-xy5m]
+  title: 'The accept-licence skill shows the licence verbatim, takes an OS-verified signed approval, commits an acknowledgement plus an obligations spec to the project, and the fetch gate admits restricted rows only with it (implements 1954-dvz9)'
+  context: 'Design: openspec/changes/studio-asset-pipeline (proposal, design, specs). Users: demon_attack, kumbia-kombat and sibling projects such as cannonball.'
+  owned_files:
+  - crates/tillandsias-headless/src/licence_consent.rs
+  - images/models/licence-register-restricted.tsv
+  - skills/accept-licence/SKILL.md
+  exit_criteria:
+  - 'design D6 is implemented end to end on top of os-verified-approval-gates'
+  - 'the operator''s standing approval is seeded as acknowledgement #1 (scope operator-projects, non-sale, standing)'
+  - 'an attribution licence yields an attribution requirement in openspec/specs/third-party-licence-<id>/spec.md in the agreeing project, in the signed commit'
+  - 'a non-commercial row is refused without an acknowledgement and admitted with one'
+  unscoreable: "unpinnable-until-the-guard-exists — the deliverable includes register_admits_nc_row_only_with_recorded_acknowledgement (named on 1954-dvz9), written red first."
+  next_action: 'Read openspec/changes/studio-asset-pipeline/design.md; write the named test red first.'
+  provenance: calmecacpilli design of studio-asset-pipeline, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:08:08Z'
+    host: calmecacpilli
+    summary: filed p1 from studio-asset-pipeline
+- packet_id: corridorkey-2-proof-of-concept-studio-job-key-footage
+  order: 1956-ucix
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, studio, mcp]
+  estimated_hours: 8
+  related: [1935-k2ib, 1954-gdi6, 1955-rjv3, 1954-dvz9, 1954-xy5m]
+  title: 'studio.key_footage wraps CorridorKey 2.0 infer.py in a first-use CUDA image, behind the consent gate, under the operator''s standing approval (implements 1954-xy5m)'
+  context: 'Design: openspec/changes/studio-asset-pipeline (proposal, design, specs). Users: demon_attack, kumbia-kombat and sibling projects such as cannonball.'
+  owned_files:
+  - images/imagegen-corridorkey/
+  - crates/tillandsias-headless/src/studio_tool.rs
+  exit_criteria:
+  - 'design D9: a pinned commit, weights from the restricted register only, provenance, and outputs alpha/fg/cutout under the lane volume'
+  - 'the acceptance writes the obligations spec (attribution CorridorKey, share-alike, the commercial-integration clause, seats)'
+  - 'no automatic wiring for other users until Corridor has seen the demo'
+  unscoreable: "unpinnable-until-the-guard-exists — needs a CUDA host for the live run; the deliverable includes an argv and consent-gate unit test written red first."
+  next_action: 'Read openspec/changes/studio-asset-pipeline/design.md; write the named test red first.'
+  provenance: calmecacpilli design of studio-asset-pipeline, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:08:08Z'
+    host: calmecacpilli
+    summary: filed p1 from studio-asset-pipeline
+- packet_id: project-lora-training-and-storage-studio-train-lora
+  order: 1956-m8wx
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, studio, mcp]
+  estimated_hours: 10
+  related: [1935-k2ib, 1954-gdi6, 1955-rjv3, 1954-dvz9, 1954-xy5m]
+  title: 'studio.train_lora trains a project LoRA headless in the GPU queue and stores it in the shared cache under the project, with provenance and a project-scoped consent record'
+  context: 'Design: openspec/changes/studio-asset-pipeline (proposal, design, specs). Users: demon_attack, kumbia-kombat and sibling projects such as cannonball.'
+  owned_files:
+  - crates/tillandsias-headless/src/studio_tool.rs
+  exit_criteria:
+  - 'design D8: storage path, provenance sidecar, licence of base plus the owner''s rights, and a scope project:<name> record'
+  unscoreable: "design-p2 — not needed for the next launches; its implementation row pins its own test."
+  next_action: 'Read openspec/changes/studio-asset-pipeline/design.md; write the named test red first.'
+  provenance: calmecacpilli design of studio-asset-pipeline, 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:08:08Z'
+    host: calmecacpilli
+    summary: filed p2 from studio-asset-pipeline
