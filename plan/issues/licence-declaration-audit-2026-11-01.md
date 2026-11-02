@@ -13,7 +13,7 @@ macuahuitl, worktree outside the checkout.
 |---|---|---|
 | `Cargo.toml` `license =` | 27 workspace crates | 23 `license.workspace = true`, 4 literal `GPL-3.0-or-later` (browser-mcp, headless, plan, msg). No mismatch. |
 | `package.json` `"license"` | 3 of ours (`images/web-wrangler`, `observatorium`, `.opencode`) | none declares a licence (allowed). The one `"license": "MIT"` is `openspec/litmus-tests/groundtruth/fixtures/generic-project/git-project/package.json`, a fixture imitating a third-party repo, not shipped. Not ours. |
-| `SPDX-License-Identifier:` headers | every tracked text file | none in the tree. |
+| SPDX licence headers | every tracked text file | none in the tree. |
 | `LICENSE*` / `COPYING*` outside the root | tracked | only `crates/tillandsias-core/data/devices/upstream/{devtools,playwright}-LICENSE`: vendored upstream (BSD-3-Clause, Apache-2.0, read from the texts), kept, credited in the ledger. |
 | OCI `org.opencontainers.image.licenses` | 19 `images/*/Containerfile*` + `observatorium/Containerfile` | **NONE set the label. Every built image inherits its base layer's.** Measured on the operator's host: `localhost/tillandsias-inference:latest` -> `MIT`, vendor `Fedora Project` (fedora-minimal's label); `localhost/tillandsias-imagegen:latest` -> `MIT`; `localhost/tillandsias-router:latest` -> `Apache-2.0`, vendor `Light Code Labs` (caddy's). **This is the MIT the operator saw.** |
 | Third-party licence fields we record | `studios.json`, `images/studio/registry.lua`, `custom-nodes.toml`, `licence-register.tsv`, `models.tsv`, `tiers.tsv`, `cheatsheets/license-allowlist.toml` | describe UPSTREAM licences (GrapesJS BSD-3-Clause, Decap MIT, Tina Apache-2.0, Puck MIT, Onlook Apache-2.0, ComfyUI-GGUF Apache-2.0, models openrail++/apache-2.0). Correct as records; listed as vendored paths in the guard. |
@@ -40,7 +40,23 @@ Mislabelled source files of ours: **0**.
   service 15, unknown 188). `--check` is byte-stable and advisory in
   `./build.sh --check`; refreshed at each stable release (1958-jyfk).
 
-## Ambiguous, for the operator
+## Operator rulings, 2026-11-01 (relayed by the coordinator), applied
+
+1. Images that are mostly third-party software carry compound labels naming
+   ours AND theirs: vault `GPL-3.0-or-later AND BUSL-1.1`, CUDA imagegen
+   `GPL-3.0-or-later AND LicenseRef-NVIDIA-CUDA-EULA`, imagegen-studio
+   (ComfyUI) `GPL-3.0-or-later AND GPL-3.0-only`. The guard accepts any label
+   that starts with ours.
+2. Distro package licences are read from the package manager inside each
+   locally built image (`scripts/lua/build-package-licence-register.lua` ->
+   `docs/credits/package-licences.tsv`: rpm `%{LICENSE}`, `apk list -I`'s
+   licence field; dpkg declares none, so Debian/Ubuntu rows stay unknown). On
+   this host 10 of 19 images were present: 1551 rows; the ledger's unknowns
+   fell from 188 to 149 (105 of 157 Containerfile-named packages still unknown:
+   images not built here, Debian packages, and names that differ from the
+   installed package). Nothing is guessed.
+
+## Previously ambiguous (now ruled), kept for the record
 
 1. **Scope of the OCI label.** The label now says GPL-3.0-or-later for every
    image, meaning the Tillandsias recipe. The contents are mixed: the vault
@@ -66,8 +82,8 @@ Mislabelled source files of ours: **0**.
 
 - The guard reads `git ls-files`, so untracked scratch never counts; it
   excludes `.claude/worktrees/` and `scratch/`.
-- A guard that quotes `SPDX-License-Identifier: x` in its own header refuses
-  itself once tracked (a guard cannot tell mention from use); the header now
-  describes the pattern in prose.
+- A guard (or this record) that quotes the SPDX header pattern with a colon
+  and a value refuses itself once tracked (a guard cannot tell mention from
+  use); both now describe the pattern in prose.
 - `verdict.emit` writes straight to stdout while `io.stdout:write` buffers, so
   findings printed before the verdict appeared after it; the guard flushes.

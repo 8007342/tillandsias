@@ -76,8 +76,13 @@ local function family_of_id(id)
     if l:match("^gpl") or l:match("^agpl") then return "strong-copyleft" end
     if l:match("^lgpl") or l:match("^mpl") or l:match("^epl") or l:match("^cddl") then return "weak-copyleft" end
     if l:match("openrail") or l:match("^creativeml") then return "model" end
+    -- Fedora spells public domain as a LicenseRef; any other LicenseRef- is a
+    -- licence we cannot read from its name: unknown, unless it names an EULA.
+    if l == "licenseref-fedora-public-domain" or l:match("public%-domain") then return "permissive" end
+    if l:match("eula") then return "restricted" end
+    if l:match("^licenseref") then return "unknown" end
     if l == "busl-1.1" or l:match("non%-commercial") or l:match("^cc%-by%-nc") or l:match("research")
-        or l:match("^licenseref") or l:match("eula") or l:match("community") or l:match("^qwen") or l:match("^gemma") then
+        or l:match("community") or l:match("^qwen") or l:match("^gemma") then
         return "restricted"
     end
     if l:match("^mit") or l:match("^apache") or l:match("^bsd") or l == "isc" or l:match("^zlib") or l:match("^unicode")
@@ -304,7 +309,26 @@ do
 end
 
 -- ---------------------------------------------------------------------------
--- 2. Container images.
+-- 2. Container images. Distro package licences come from
+-- docs/credits/package-licences.tsv, written by build-package-licence-register.lua
+-- from the package manager inside each locally built image (operator ruling
+-- 2026-11-01); a package no image declares stays "unknown".
+local PKG_LICENCE = {}
+do
+    local reg = read("docs/credits/package-licences.tsv")
+    for _, l in ipairs(lines(reg)) do
+        if not l:match("^#") and l ~= "" then
+            local _, distro, pkg, ver, lic = l:match("^([^\t]*)\t([^\t]*)\t([^\t]*)\t([^\t]*)\t(.*)$")
+            if pkg and lic and lic ~= "unknown" then
+                local key = distro .. ":" .. pkg
+                -- the same package across images: keep the first in sorted order, note disagreement
+                if not PKG_LICENCE[key] then PKG_LICENCE[key] = { lic = lic, ver = ver } end
+            elseif pkg then
+                PKG_LICENCE[distro .. ":" .. pkg] = PKG_LICENCE[distro .. ":" .. pkg] or { lic = nil, ver = ver }
+            end
+        end
+    end
+end
 local function image_homepage(ref)
     local r = ref:gsub("@sha256:.*$", "")
     local repo, tag = r:match("^(.-):([^/:]+)$")
@@ -368,10 +392,12 @@ local function parse_containerfile(path, comp, imgname)
                     for tok in rest:gmatch("%S+") do
                         if not tok:match("^%-") and tok:match("^[%w][%w%.%+%-_]*$") and not tok:match("^y$") then
                             local id = "pkg:" .. di[1] .. ":" .. tok
-                            node(id, { name = tok, version = "unknown", homepage = string.format(di[2], tok), homepage_kind = "package-index",
+                            local known = PKG_LICENCE[di[1] .. ":" .. tok]
+                            node(id, { name = tok, version = known and known.ver or "unknown", homepage = string.format(di[2], tok), homepage_kind = "package-index",
                                 source = path, link = "container-image",
-                                link_note = "distro package installed into the image by " .. mgr .. "; licence is declared by the package inside the image, not by a file in this tree" })
-                            finish(id, nil)
+                                link_note = known and "distro package installed into the image by " .. mgr .. "; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)"
+                                    or "distro package installed into the image by " .. mgr .. "; no built image was asked, so no licence is recorded" })
+                            finish(id, known and known.lic or nil, { license_source = known and known.lic and "package-manager" or "none" })
                             pulled(id, comp)
                             edge(comp, id, "package", false)
                         end
@@ -781,7 +807,7 @@ local doc = {
     inputs = L({ "cargo metadata (Cargo.lock)", "images/*/Containerfile*", "observatorium/Containerfile", "images/web-wrangler/package-lock.json",
         "observatorium/package-lock.json", "images/models/licence-register.tsv", "images/imagegen/models.tsv",
         "crates/tillandsias-headless/data/studios.json", "images/imagegen-studio/custom-nodes.toml",
-        "crates/tillandsias-core/data/devices/upstream/*-LICENSE", "cheatsheets/license-allowlist.toml" }),
+        "crates/tillandsias-core/data/devices/upstream/*-LICENSE", "cheatsheets/license-allowlist.toml", "docs/credits/package-licences.tsv" }),
     generator = "scripts/lua/build-stack-ledger.lua",
     components = L(comp_list),
     nodes = L(node_list),

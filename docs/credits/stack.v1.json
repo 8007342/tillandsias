@@ -12019,7 +12019,8 @@
     "crates/tillandsias-headless/data/studios.json",
     "images/imagegen-studio/custom-nodes.toml",
     "crates/tillandsias-core/data/devices/upstream/*-LICENSE",
-    "cheatsheets/license-allowlist.toml"
+    "cheatsheets/license-allowlist.toml",
+    "docs/credits/package-licences.tsv"
   ],
   "nodes": [
     {
@@ -25775,7 +25776,7 @@
       "homepage_kind": "host",
       "id": "docs:sqlite.org",
       "license": "public-domain",
-      "license_family": "unknown",
+      "license_family": "permissive",
       "license_url": "https://www.sqlite.org/copyright.html",
       "link": "bundled-file",
       "link_note": "redistribution=bundled; tier=bundled",
@@ -25877,7 +25878,7 @@
       "homepage_kind": "host",
       "id": "docs:www.sqlite.org",
       "license": "public-domain",
-      "license_family": "unknown",
+      "license_family": "permissive",
       "license_url": "https://www.sqlite.org/copyright.html",
       "link": "bundled-file",
       "link_note": "redistribution=bundled; tier=bundled",
@@ -29035,10 +29036,11 @@
       "homepage": "https://pkgs.alpinelinux.org/packages?name=bash",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:bash",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "bash",
       "optional": false,
       "pulled_by": [
@@ -29047,7 +29049,7 @@
         "image:vault"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "5.2.26-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=busybox-extras",
@@ -29055,8 +29057,9 @@
       "id": "pkg:alpine:busybox-extras",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; no built image was asked, so no licence is recorded",
       "name": "busybox-extras",
       "optional": false,
       "pulled_by": [
@@ -29069,42 +29072,45 @@
       "homepage": "https://pkgs.alpinelinux.org/packages?name=ca-certificates",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:ca-certificates",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MPL-2.0 AND MIT",
+      "license_family": "weak-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ca-certificates",
       "optional": false,
       "pulled_by": [
         "image:proxy"
       ],
       "source": "images/proxy/Containerfile",
-      "version": "unknown"
+      "version": "20261020-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=coreutils",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:coreutils",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "coreutils",
       "optional": false,
       "pulled_by": [
         "image:vault"
       ],
       "source": "images/vault/Containerfile",
-      "version": "unknown"
+      "version": "9.5-r2"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=curl",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:curl",
-      "license": "unknown",
+      "license": "curl",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "curl",
       "optional": false,
       "pulled_by": [
@@ -29113,64 +29119,68 @@
         "image:vault"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "8.14.1-r2"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=git",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:git",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-2.0-only",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "git",
       "optional": false,
       "pulled_by": [
         "image:git"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "2.45.4-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=git-daemon",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:git-daemon",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-2.0-only",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "git-daemon",
       "optional": false,
       "pulled_by": [
         "image:git"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "2.45.4-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=github-cli",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:github-cli",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "github-cli",
       "optional": false,
       "pulled_by": [
         "image:git"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "2.47.0-r4"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=jq",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:jq",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MIT",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "jq",
       "optional": false,
       "pulled_by": [
@@ -29178,39 +29188,41 @@
         "image:vault"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "1.7.1-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=libcap",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:libcap",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "BSD-3-Clause OR GPL-2.0-only",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libcap",
       "optional": false,
       "pulled_by": [
         "image:router"
       ],
       "source": "images/router/Containerfile",
-      "version": "unknown"
+      "version": "2.78-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=nss-tools",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:nss-tools",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MPL-2.0",
+      "license_family": "weak-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "nss-tools",
       "optional": false,
       "pulled_by": [
         "image:router"
       ],
       "source": "images/router/Containerfile",
-      "version": "unknown"
+      "version": "3.123.1-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=openssh-client",
@@ -29218,8 +29230,9 @@
       "id": "pkg:alpine:openssh-client",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; no built image was asked, so no licence is recorded",
       "name": "openssh-client",
       "optional": false,
       "pulled_by": [
@@ -29232,58 +29245,62 @@
       "homepage": "https://pkgs.alpinelinux.org/packages?name=openssh-server",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:openssh-server",
-      "license": "unknown",
+      "license": "SSH-OpenSSH",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "openssh-server",
       "optional": false,
       "pulled_by": [
         "image:git"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "9.7_p1-r5"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=openssl",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:openssl",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "Apache-2.0",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "openssl",
       "optional": false,
       "pulled_by": [
         "image:proxy"
       ],
       "source": "images/proxy/Containerfile",
-      "version": "unknown"
+      "version": "3.5.9-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=ruby",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:ruby",
-      "license": "unknown",
+      "license": "Ruby AND BSD-2-Clause AND MIT",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ruby",
       "optional": false,
       "pulled_by": [
         "image:git"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "3.3.10-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=socat",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:socat",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-2.0-only WITH OpenSSL-Exception",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "socat",
       "optional": false,
       "pulled_by": [
@@ -29292,23 +29309,24 @@
         "image:vault"
       ],
       "source": "images/git/Containerfile",
-      "version": "unknown"
+      "version": "1.8.0.0-r0"
     },
     {
       "homepage": "https://pkgs.alpinelinux.org/packages?name=squid",
       "homepage_kind": "package-index",
       "id": "pkg:alpine:squid",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-2.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apk; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apk; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "squid",
       "optional": false,
       "pulled_by": [
         "image:proxy"
       ],
       "source": "images/proxy/Containerfile",
-      "version": "unknown"
+      "version": "6.12-r0"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=ca-certificates",
@@ -29316,8 +29334,9 @@
       "id": "pkg:debian:ca-certificates",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ca-certificates",
       "optional": true,
       "pulled_by": [
@@ -29327,7 +29346,7 @@
         "image:webkit"
       ],
       "source": "images/flutter/Containerfile",
-      "version": "unknown"
+      "version": "20250419~deb12u2"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=cmake",
@@ -29335,8 +29354,9 @@
       "id": "pkg:debian:cmake",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "cmake",
       "optional": true,
       "pulled_by": [
@@ -29351,8 +29371,9 @@
       "id": "pkg:debian:curl",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "curl",
       "optional": true,
       "pulled_by": [
@@ -29360,7 +29381,7 @@
         "image:webkit"
       ],
       "source": "images/flutter/Containerfile",
-      "version": "unknown"
+      "version": "7.88.1-10+deb12u15"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-liberation",
@@ -29368,8 +29389,9 @@
       "id": "pkg:debian:fonts-liberation",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "fonts-liberation",
       "optional": true,
       "pulled_by": [
@@ -29384,8 +29406,9 @@
       "id": "pkg:debian:fonts-noto-cjk",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "fonts-noto-cjk",
       "optional": true,
       "pulled_by": [
@@ -29400,8 +29423,9 @@
       "id": "pkg:debian:fonts-noto-color-emoji",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "fonts-noto-color-emoji",
       "optional": true,
       "pulled_by": [
@@ -29416,8 +29440,9 @@
       "id": "pkg:debian:fonts-noto-core",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "fonts-noto-core",
       "optional": true,
       "pulled_by": [
@@ -29432,8 +29457,9 @@
       "id": "pkg:debian:git",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "git",
       "optional": true,
       "pulled_by": [
@@ -29442,7 +29468,7 @@
         "image:imagegen-studio"
       ],
       "source": "images/flutter/Containerfile",
-      "version": "unknown"
+      "version": "1:2.39.5-0+deb12u3"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=libgl1",
@@ -29450,8 +29476,9 @@
       "id": "pkg:debian:libgl1",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "libgl1",
       "optional": true,
       "pulled_by": [
@@ -29466,8 +29493,9 @@
       "id": "pkg:debian:libglib2.0-0",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "libglib2.0-0",
       "optional": true,
       "pulled_by": [
@@ -29482,8 +29510,9 @@
       "id": "pkg:debian:libgomp1",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "libgomp1",
       "optional": true,
       "pulled_by": [
@@ -29498,8 +29527,9 @@
       "id": "pkg:debian:ninja-build",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "ninja-build",
       "optional": true,
       "pulled_by": [
@@ -29514,8 +29544,9 @@
       "id": "pkg:debian:pulseaudio",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "pulseaudio",
       "optional": true,
       "pulled_by": [
@@ -29530,8 +29561,9 @@
       "id": "pkg:debian:pulseaudio-utils",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
       "name": "pulseaudio-utils",
       "optional": true,
       "pulled_by": [
@@ -29546,8 +29578,9 @@
       "id": "pkg:debian:unzip",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "unzip",
       "optional": true,
       "pulled_by": [
@@ -29555,7 +29588,7 @@
         "image:webkit"
       ],
       "source": "images/flutter/Containerfile",
-      "version": "unknown"
+      "version": "6.0-28+deb12u1"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=xz-utils",
@@ -29563,8 +29596,9 @@
       "id": "pkg:debian:xz-utils",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by apt-get; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by apt-get; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "xz-utils",
       "optional": true,
       "pulled_by": [
@@ -29572,16 +29606,17 @@
         "image:webkit"
       ],
       "source": "images/flutter/Containerfile",
-      "version": "unknown"
+      "version": "5.4.1-1+deb12u2"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/bash/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:bash",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "bash",
       "optional": false,
       "pulled_by": [
@@ -29589,7 +29624,7 @@
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "5.3.9-3.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/bat/",
@@ -29597,8 +29632,9 @@
       "id": "pkg:fedora:bat",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "bat",
       "optional": false,
       "pulled_by": [
@@ -29613,8 +29649,9 @@
       "id": "pkg:fedora:black",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "black",
       "optional": false,
       "pulled_by": [
@@ -29627,10 +29664,11 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/ca-certificates/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:ca-certificates",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MIT AND GPL-2.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "ca-certificates",
       "optional": false,
       "pulled_by": [
@@ -29638,23 +29676,24 @@
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "2026.2.92_v9.0.319-2.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/caddy/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:caddy",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "Apache-2.0 AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND CC0-1.0 AND ISC AND MIT AND MPL-2.0",
+      "license_family": "weak-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "caddy",
       "optional": true,
       "pulled_by": [
         "image:inference"
       ],
       "source": "images/inference/Containerfile",
-      "version": "unknown"
+      "version": "2.10.2-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/cargo/",
@@ -29662,8 +29701,9 @@
       "id": "pkg:fedora:cargo",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "cargo",
       "optional": false,
       "pulled_by": [
@@ -29678,8 +29718,9 @@
       "id": "pkg:fedora:cargo-deny",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "cargo-deny",
       "optional": false,
       "pulled_by": [
@@ -29692,33 +29733,35 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/chromium/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:chromium",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND IJG AND MIT AND GPL-2.0-or-later AND ISC AND OpenSSL AND (MPL-1.1 OR GPL-2.0-only OR LGPL-2.0-only)",
+      "license_family": "weak-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "chromium",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "156.0.8078.73-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/chromium-headless/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:chromium-headless",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND IJG AND MIT AND GPL-2.0-or-later AND ISC AND OpenSSL AND (MPL-1.1 OR GPL-2.0-only OR LGPL-2.0-only)",
+      "license_family": "weak-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "chromium-headless",
       "optional": true,
       "pulled_by": [
         "image:chromium-core"
       ],
       "source": "images/chromium/Containerfile.core",
-      "version": "unknown"
+      "version": "156.0.8078.73-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/clippy/",
@@ -29726,8 +29769,9 @@
       "id": "pkg:fedora:clippy",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "clippy",
       "optional": false,
       "pulled_by": [
@@ -29742,8 +29786,9 @@
       "id": "pkg:fedora:cmake",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "cmake",
       "optional": false,
       "pulled_by": [
@@ -29757,26 +29802,28 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/coreutils/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:coreutils",
-      "license": "unknown",
+      "license": "GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "coreutils",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "9.10-5.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/curl/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:curl",
-      "license": "unknown",
+      "license": "curl",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "curl",
       "optional": false,
       "pulled_by": [
@@ -29784,7 +29831,7 @@
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "8.18.0-14.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/delve/",
@@ -29792,8 +29839,9 @@
       "id": "pkg:fedora:delve",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "delve",
       "optional": false,
       "pulled_by": [
@@ -29808,8 +29856,9 @@
       "id": "pkg:fedora:diffstat",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "diffstat",
       "optional": false,
       "pulled_by": [
@@ -29822,17 +29871,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/diffutils/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:diffutils",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "diffutils",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "3.12-5.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/eza/",
@@ -29840,8 +29890,9 @@
       "id": "pkg:fedora:eza",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "eza",
       "optional": false,
       "pulled_by": [
@@ -29856,8 +29907,9 @@
       "id": "pkg:fedora:fd-find",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "fd-find",
       "optional": false,
       "pulled_by": [
@@ -29872,8 +29924,9 @@
       "id": "pkg:fedora:file",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "file",
       "optional": false,
       "pulled_by": [
@@ -29886,17 +29939,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/findutils/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:findutils",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "findutils",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "4.10.0-7.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/fish/",
@@ -29904,8 +29958,9 @@
       "id": "pkg:fedora:fish",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "fish",
       "optional": false,
       "pulled_by": [
@@ -29920,8 +29975,9 @@
       "id": "pkg:fedora:fzf",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "fzf",
       "optional": false,
       "pulled_by": [
@@ -29934,17 +29990,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/gawk/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:gawk",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later AND GPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "gawk",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "5.3.2-3.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/gcc/",
@@ -29952,8 +30009,9 @@
       "id": "pkg:fedora:gcc",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "gcc",
       "optional": false,
       "pulled_by": [
@@ -29968,8 +30026,9 @@
       "id": "pkg:fedora:gcc-c++",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "gcc-c++",
       "optional": false,
       "pulled_by": [
@@ -29985,8 +30044,9 @@
       "id": "pkg:fedora:gdb",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "gdb",
       "optional": false,
       "pulled_by": [
@@ -30001,8 +30061,9 @@
       "id": "pkg:fedora:gettext",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "gettext",
       "optional": false,
       "pulled_by": [
@@ -30017,8 +30078,9 @@
       "id": "pkg:fedora:gh",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "gh",
       "optional": false,
       "pulled_by": [
@@ -30033,8 +30095,9 @@
       "id": "pkg:fedora:git",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "git",
       "optional": false,
       "pulled_by": [
@@ -30050,8 +30113,9 @@
       "id": "pkg:fedora:git-delta",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "git-delta",
       "optional": false,
       "pulled_by": [
@@ -30066,8 +30130,9 @@
       "id": "pkg:fedora:git-lfs",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "git-lfs",
       "optional": false,
       "pulled_by": [
@@ -30080,10 +30145,11 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/glibc-langpack-en/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:glibc-langpack-en",
-      "license": "unknown",
+      "license": "LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "glibc-langpack-en",
       "optional": false,
       "pulled_by": [
@@ -30091,7 +30157,7 @@
         "image:default-base"
       ],
       "source": "images/chromium/Containerfile.core",
-      "version": "unknown"
+      "version": "2.43-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/glslang/",
@@ -30099,8 +30165,9 @@
       "id": "pkg:fedora:glslang",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; no built image was asked, so no licence is recorded",
       "name": "glslang",
       "optional": true,
       "pulled_by": [
@@ -30115,8 +30182,9 @@
       "id": "pkg:fedora:glslc",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; no built image was asked, so no licence is recorded",
       "name": "glslc",
       "optional": true,
       "pulled_by": [
@@ -30131,8 +30199,9 @@
       "id": "pkg:fedora:golang",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "golang",
       "optional": false,
       "pulled_by": [
@@ -30145,33 +30214,35 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/google-noto-color-emoji-fonts/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:google-noto-color-emoji-fonts",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "OFL-1.1 AND Apache-2.0",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "google-noto-color-emoji-fonts",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "20260921-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/google-noto-sans-cjk-vf-fonts/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:google-noto-sans-cjk-vf-fonts",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "OFL-1.1",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "google-noto-sans-cjk-vf-fonts",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "2.004-11.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/gopls/",
@@ -30179,8 +30250,9 @@
       "id": "pkg:fedora:gopls",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "gopls",
       "optional": false,
       "pulled_by": [
@@ -30193,26 +30265,28 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/grep/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:grep",
-      "license": "unknown",
+      "license": "GPL-3.0-or-later AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND GPL-2.0-or-later AND LGPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "grep",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "3.12-3.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/gzip/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:gzip",
-      "license": "unknown",
+      "license": "GPL-3.0-or-later AND GFDL-1.3-only",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "gzip",
       "optional": false,
       "pulled_by": [
@@ -30220,7 +30294,7 @@
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "1.14-2.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/heaptrack/",
@@ -30228,8 +30302,9 @@
       "id": "pkg:fedora:heaptrack",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "heaptrack",
       "optional": false,
       "pulled_by": [
@@ -30244,8 +30319,9 @@
       "id": "pkg:fedora:htop",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "htop",
       "optional": false,
       "pulled_by": [
@@ -30260,8 +30336,9 @@
       "id": "pkg:fedora:httpie",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "httpie",
       "optional": false,
       "pulled_by": [
@@ -30276,8 +30353,9 @@
       "id": "pkg:fedora:inotify-tools",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "inotify-tools",
       "optional": false,
       "pulled_by": [
@@ -30292,8 +30370,9 @@
       "id": "pkg:fedora:install",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; no built image was asked, so no licence is recorded",
       "name": "install",
       "optional": true,
       "pulled_by": [
@@ -30308,8 +30387,9 @@
       "id": "pkg:fedora:iproute",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "iproute",
       "optional": false,
       "pulled_by": [
@@ -30324,8 +30404,9 @@
       "id": "pkg:fedora:iputils",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "iputils",
       "optional": false,
       "pulled_by": [
@@ -30340,8 +30421,9 @@
       "id": "pkg:fedora:java-25-openjdk-headless",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "java-25-openjdk-headless",
       "optional": false,
       "pulled_by": [
@@ -30356,8 +30438,9 @@
       "id": "pkg:fedora:jq",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "jq",
       "optional": false,
       "pulled_by": [
@@ -30372,8 +30455,9 @@
       "id": "pkg:fedora:just",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "just",
       "optional": false,
       "pulled_by": [
@@ -30386,26 +30470,28 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/libX11/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:libX11",
-      "license": "unknown",
+      "license": "MIT AND X11",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libX11",
       "optional": true,
       "pulled_by": [
         "image:imagegen"
       ],
       "source": "images/imagegen/Containerfile",
-      "version": "unknown"
+      "version": "1.8.13-3.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/libXext/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:libXext",
-      "license": "unknown",
+      "license": "MIT-open-group AND X11 AND HPND AND HPND-sell-variant AND SMLNJ AND MIT AND ISC AND HPND-doc AND HPND-doc-sell",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libXext",
       "optional": true,
       "pulled_by": [
@@ -30413,119 +30499,126 @@
         "image:imagegen"
       ],
       "source": "images/chromium/Containerfile.core",
-      "version": "unknown"
+      "version": "1.3.6-5.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/liberation-mono-fonts/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:liberation-mono-fonts",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "OFL-1.1-RFN",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "liberation-mono-fonts",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "2.1.5-15.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/liberation-sans-fonts/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:liberation-sans-fonts",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "OFL-1.1-RFN",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "liberation-sans-fonts",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "2.1.5-15.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/liberation-serif-fonts/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:liberation-serif-fonts",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "OFL-1.1-RFN",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "liberation-serif-fonts",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "2.1.5-15.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/libglvnd/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:libglvnd",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libglvnd",
       "optional": true,
       "pulled_by": [
         "image:chromium-core"
       ],
       "source": "images/chromium/Containerfile.core",
-      "version": "unknown"
+      "version": "1.7.0-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/libglvnd-egl/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:libglvnd-egl",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libglvnd-egl",
       "optional": true,
       "pulled_by": [
         "image:imagegen"
       ],
       "source": "images/imagegen/Containerfile",
-      "version": "unknown"
+      "version": "1.7.0-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/libglvnd-glx/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:libglvnd-glx",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libglvnd-glx",
       "optional": true,
       "pulled_by": [
         "image:imagegen"
       ],
       "source": "images/imagegen/Containerfile",
-      "version": "unknown"
+      "version": "1.7.0-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/libgomp/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:libgomp",
-      "license": "unknown",
+      "license": "GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "libgomp",
       "optional": true,
       "pulled_by": [
         "image:imagegen"
       ],
       "source": "images/imagegen/Containerfile",
-      "version": "unknown"
+      "version": "16.2.1-3.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/lldb/",
@@ -30533,8 +30626,9 @@
       "id": "pkg:fedora:lldb",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "lldb",
       "optional": false,
       "pulled_by": [
@@ -30549,8 +30643,9 @@
       "id": "pkg:fedora:ltrace",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "ltrace",
       "optional": false,
       "pulled_by": [
@@ -30565,8 +30660,9 @@
       "id": "pkg:fedora:lua",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "lua",
       "optional": false,
       "pulled_by": [
@@ -30581,8 +30677,9 @@
       "id": "pkg:fedora:lua-filesystem",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "lua-filesystem",
       "optional": false,
       "pulled_by": [
@@ -30597,8 +30694,9 @@
       "id": "pkg:fedora:lua-lpeg",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "lua-lpeg",
       "optional": false,
       "pulled_by": [
@@ -30613,8 +30711,9 @@
       "id": "pkg:fedora:make",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "make",
       "optional": false,
       "pulled_by": [
@@ -30629,8 +30728,9 @@
       "id": "pkg:fedora:maven",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "maven",
       "optional": false,
       "pulled_by": [
@@ -30645,8 +30745,9 @@
       "id": "pkg:fedora:mc",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "mc",
       "optional": false,
       "pulled_by": [
@@ -30659,26 +30760,28 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/mesa-dri-drivers/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:mesa-dri-drivers",
-      "license": "unknown",
+      "license": "MIT AND BSD-3-Clause AND SGI-B-2.0",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "mesa-dri-drivers",
       "optional": true,
       "pulled_by": [
         "image:chromium-core"
       ],
       "source": "images/chromium/Containerfile.core",
-      "version": "unknown"
+      "version": "26.2.5-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/mesa-vulkan-drivers/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:mesa-vulkan-drivers",
-      "license": "unknown",
+      "license": "MIT AND BSD-3-Clause AND SGI-B-2.0",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "mesa-vulkan-drivers",
       "optional": true,
       "pulled_by": [
@@ -30687,7 +30790,7 @@
         "image:inference"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "26.2.5-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/nano/",
@@ -30695,8 +30798,9 @@
       "id": "pkg:fedora:nano",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "nano",
       "optional": false,
       "pulled_by": [
@@ -30711,8 +30815,9 @@
       "id": "pkg:fedora:ncurses",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "ncurses",
       "optional": false,
       "pulled_by": [
@@ -30727,8 +30832,9 @@
       "id": "pkg:fedora:ncurses-term",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "ncurses-term",
       "optional": false,
       "pulled_by": [
@@ -30743,8 +30849,9 @@
       "id": "pkg:fedora:ninja-build",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; no built image was asked, so no licence is recorded",
       "name": "ninja-build",
       "optional": true,
       "pulled_by": [
@@ -30759,8 +30866,9 @@
       "id": "pkg:fedora:nmap-ncat",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "nmap-ncat",
       "optional": false,
       "pulled_by": [
@@ -30775,8 +30883,9 @@
       "id": "pkg:fedora:nodejs",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "nodejs",
       "optional": false,
       "pulled_by": [
@@ -30792,8 +30901,9 @@
       "id": "pkg:fedora:npm",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "npm",
       "optional": false,
       "pulled_by": [
@@ -30809,8 +30919,9 @@
       "id": "pkg:fedora:openssl",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "openssl",
       "optional": false,
       "pulled_by": [
@@ -30825,8 +30936,9 @@
       "id": "pkg:fedora:patch",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "patch",
       "optional": false,
       "pulled_by": [
@@ -30839,17 +30951,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/pciutils/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:pciutils",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-2.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "pciutils",
       "optional": true,
       "pulled_by": [
         "image:inference"
       ],
       "source": "images/inference/Containerfile",
-      "version": "unknown"
+      "version": "3.15.0-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/pipx/",
@@ -30857,8 +30970,9 @@
       "id": "pkg:fedora:pipx",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "pipx",
       "optional": false,
       "pulled_by": [
@@ -30873,8 +30987,9 @@
       "id": "pkg:fedora:pkgconfig",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "pkgconfig",
       "optional": false,
       "pulled_by": [
@@ -30889,8 +31004,9 @@
       "id": "pkg:fedora:pnpm",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "pnpm",
       "optional": false,
       "pulled_by": [
@@ -30905,8 +31021,9 @@
       "id": "pkg:fedora:poetry",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "poetry",
       "optional": false,
       "pulled_by": [
@@ -30921,8 +31038,9 @@
       "id": "pkg:fedora:procps-ng",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "procps-ng",
       "optional": false,
       "pulled_by": [
@@ -30935,33 +31053,35 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/pulseaudio/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:pulseaudio",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "LGPL-2.1-or-later",
+      "license_family": "weak-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "pulseaudio",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "17.0-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/pulseaudio-utils/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:pulseaudio-utils",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "LGPL-2.1-or-later",
+      "license_family": "weak-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "pulseaudio-utils",
       "optional": true,
       "pulled_by": [
         "image:chromium-framework"
       ],
       "source": "images/chromium/Containerfile.framework",
-      "version": "unknown"
+      "version": "17.0-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/pylint/",
@@ -30969,8 +31089,9 @@
       "id": "pkg:fedora:pylint",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "pylint",
       "optional": false,
       "pulled_by": [
@@ -30985,8 +31106,9 @@
       "id": "pkg:fedora:python3-lsp-server",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "python3-lsp-server",
       "optional": false,
       "pulled_by": [
@@ -31001,8 +31123,9 @@
       "id": "pkg:fedora:python3-mypy",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "python3-mypy",
       "optional": false,
       "pulled_by": [
@@ -31017,8 +31140,9 @@
       "id": "pkg:fedora:python3-pip",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "python3-pip",
       "optional": false,
       "pulled_by": [
@@ -31033,8 +31157,9 @@
       "id": "pkg:fedora:python3-pytest",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "python3-pytest",
       "optional": false,
       "pulled_by": [
@@ -31049,8 +31174,9 @@
       "id": "pkg:fedora:ripgrep",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "ripgrep",
       "optional": false,
       "pulled_by": [
@@ -31065,8 +31191,9 @@
       "id": "pkg:fedora:ruff",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "ruff",
       "optional": false,
       "pulled_by": [
@@ -31081,8 +31208,9 @@
       "id": "pkg:fedora:rust",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "rust",
       "optional": false,
       "pulled_by": [
@@ -31097,8 +31225,9 @@
       "id": "pkg:fedora:rust-analyzer",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "rust-analyzer",
       "optional": false,
       "pulled_by": [
@@ -31113,8 +31242,9 @@
       "id": "pkg:fedora:rust-std-static-wasm32-unknown-unknown",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "rust-std-static-wasm32-unknown-unknown",
       "optional": false,
       "pulled_by": [
@@ -31129,8 +31259,9 @@
       "id": "pkg:fedora:rustfmt",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "rustfmt",
       "optional": false,
       "pulled_by": [
@@ -31143,33 +31274,35 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/sed/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:sed",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "sed",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "4.9-7.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/shadow-utils/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:shadow-utils",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "BSD-3-Clause AND GPL-2.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "shadow-utils",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "4.19.0-7.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/shellcheck/",
@@ -31177,8 +31310,9 @@
       "id": "pkg:fedora:shellcheck",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "shellcheck",
       "optional": false,
       "pulled_by": [
@@ -31193,8 +31327,9 @@
       "id": "pkg:fedora:shfmt",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "shfmt",
       "optional": false,
       "pulled_by": [
@@ -31209,8 +31344,9 @@
       "id": "pkg:fedora:socat",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "socat",
       "optional": false,
       "pulled_by": [
@@ -31225,8 +31361,9 @@
       "id": "pkg:fedora:spirv-headers-devel",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; no built image was asked, so no licence is recorded",
       "name": "spirv-headers-devel",
       "optional": true,
       "pulled_by": [
@@ -31241,8 +31378,9 @@
       "id": "pkg:fedora:sqlite",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "sqlite",
       "optional": false,
       "pulled_by": [
@@ -31257,8 +31395,9 @@
       "id": "pkg:fedora:strace",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "strace",
       "optional": false,
       "pulled_by": [
@@ -31271,10 +31410,11 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/tar/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:tar",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "tar",
       "optional": false,
       "pulled_by": [
@@ -31282,7 +31422,7 @@
         "image:inference"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "1.35-9.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/tree/",
@@ -31290,8 +31430,9 @@
       "id": "pkg:fedora:tree",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "tree",
       "optional": false,
       "pulled_by": [
@@ -31306,8 +31447,9 @@
       "id": "pkg:fedora:unzip",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "unzip",
       "optional": false,
       "pulled_by": [
@@ -31322,8 +31464,9 @@
       "id": "pkg:fedora:uv",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "uv",
       "optional": false,
       "pulled_by": [
@@ -31338,8 +31481,9 @@
       "id": "pkg:fedora:valgrind",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "valgrind",
       "optional": false,
       "pulled_by": [
@@ -31352,17 +31496,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/vim-minimal/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:vim-minimal",
-      "license": "unknown",
+      "license": "Vim AND LGPL-2.1-or-later AND MIT AND GPL-1.0-only AND (GPL-2.0-only OR Vim) AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later AND OPUBL-1.0 AND Apache-2.0 WITH Swift-exception",
       "license_family": "unknown",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "vim-minimal",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "9.2.1202-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/vulkan-headers/",
@@ -31370,8 +31515,9 @@
       "id": "pkg:fedora:vulkan-headers",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; no built image was asked, so no licence is recorded",
       "name": "vulkan-headers",
       "optional": true,
       "pulled_by": [
@@ -31384,10 +31530,11 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/vulkan-loader/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:vulkan-loader",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "Apache-2.0",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "vulkan-loader",
       "optional": true,
       "pulled_by": [
@@ -31395,7 +31542,7 @@
         "image:inference"
       ],
       "source": "images/imagegen/Containerfile",
-      "version": "unknown"
+      "version": "1.4.341.0-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/vulkan-loader-devel/",
@@ -31403,8 +31550,9 @@
       "id": "pkg:fedora:vulkan-loader-devel",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by dnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by dnf; no built image was asked, so no licence is recorded",
       "name": "vulkan-loader-devel",
       "optional": true,
       "pulled_by": [
@@ -31417,17 +31565,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/vulkan-tools/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:vulkan-tools",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "Apache-2.0",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "vulkan-tools",
       "optional": true,
       "pulled_by": [
         "image:inference"
       ],
       "source": "images/inference/Containerfile",
-      "version": "unknown"
+      "version": "1.4.341.0-1.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/wget/",
@@ -31435,8 +31584,9 @@
       "id": "pkg:fedora:wget",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "wget",
       "optional": false,
       "pulled_by": [
@@ -31451,8 +31601,9 @@
       "id": "pkg:fedora:which",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "which",
       "optional": false,
       "pulled_by": [
@@ -31465,17 +31616,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/xz/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:xz",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "0BSD AND GPL-2.0-or-later AND LicenseRef-Fedora-Public-Domain",
+      "license_family": "strong-copyleft",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "xz",
       "optional": false,
       "pulled_by": [
         "image:default-base"
       ],
       "source": "images/default/Containerfile.base",
-      "version": "unknown"
+      "version": "5.8.2-2.fc44"
     },
     {
       "homepage": "https://packages.fedoraproject.org/pkgs/yamllint/",
@@ -31483,8 +31635,9 @@
       "id": "pkg:fedora:yamllint",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "yamllint",
       "optional": false,
       "pulled_by": [
@@ -31499,8 +31652,9 @@
       "id": "pkg:fedora:yarnpkg",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "yarnpkg",
       "optional": false,
       "pulled_by": [
@@ -31515,8 +31669,9 @@
       "id": "pkg:fedora:yq",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "yq",
       "optional": false,
       "pulled_by": [
@@ -31531,8 +31686,9 @@
       "id": "pkg:fedora:zoxide",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "zoxide",
       "optional": false,
       "pulled_by": [
@@ -31547,8 +31703,9 @@
       "id": "pkg:fedora:zsh",
       "license": "unknown",
       "license_family": "unknown",
+      "license_source": "none",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; no built image was asked, so no licence is recorded",
       "name": "zsh",
       "optional": false,
       "pulled_by": [
@@ -31561,17 +31718,18 @@
       "homepage": "https://packages.fedoraproject.org/pkgs/zstd/",
       "homepage_kind": "package-index",
       "id": "pkg:fedora:zstd",
-      "license": "unknown",
-      "license_family": "unknown",
+      "license": "BSD-3-Clause OR GPL-2.0-only",
+      "license_family": "permissive",
+      "license_source": "package-manager",
       "link": "container-image",
-      "link_note": "distro package installed into the image by microdnf; licence is declared by the package inside the image, not by a file in this tree",
+      "link_note": "distro package installed into the image by microdnf; licence as declared by the package manager inside the built image (docs/credits/package-licences.tsv)",
       "name": "zstd",
       "optional": true,
       "pulled_by": [
         "image:inference"
       ],
       "source": "images/inference/Containerfile",
-      "version": "unknown"
+      "version": "1.5.7-5.fc44"
     },
     {
       "homepage_kind": "none",
@@ -32034,11 +32192,11 @@
     "edges": 1941,
     "license_families": {
       "model": 3,
-      "permissive": 665,
+      "permissive": 679,
       "service": 15,
-      "strong-copyleft": 2,
-      "unknown": 189,
-      "weak-copyleft": 27
+      "strong-copyleft": 21,
+      "unknown": 149,
+      "weak-copyleft": 34
     },
     "nodes": 901
   }

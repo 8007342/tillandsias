@@ -68,7 +68,8 @@ integration jobs for normal releases. Those checks are local through
 
 Plan order 1958-jyfk. The credits ledger `docs/credits/stack.v1.json` is
 generated from the sources of truth (cargo metadata, the Containerfiles, the
-npm lockfiles, the model licence register, the studio registry) and only
+npm lockfiles, the model licence register, the studio registry, and the package
+manager inside each built image via `build-package-licence-register.lua`) and only
 WARNS when stale in `./build.sh --check`. Before `scripts/promote-stable.sh`:
 
 ```bash

@@ -16,6 +16,9 @@
 --   package.json          `"license": "<x>"`          x must be GPL-3.0-or-later
 --   any tracked text      an SPDX licence header   its identifier must start with GPL-3.0
 --   Containerfile*        LABEL org.opencontainers.image.licenses  present AND starts with GPL-3.0-or-later
+--                         (an image that is mostly third-party software carries a COMPOUND label naming
+--                         ours AND theirs, operator ruling 2026-11-01: vault "GPL-3.0-or-later AND BUSL-1.1",
+--                         CUDA "… AND LicenseRef-NVIDIA-CUDA-EULA", ComfyUI "… AND GPL-3.0-only")
 --   LICENSE*/COPYING*     outside the root: only under a VENDORED path
 -- A VENDORED path keeps its upstream licence and is credited in
 -- docs/credits/stack.v1.json instead; the list is below, each with its reason.

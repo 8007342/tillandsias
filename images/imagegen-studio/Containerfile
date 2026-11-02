@@ -16,7 +16,7 @@ FROM docker.io/library/python:3.12.16-slim-bookworm
 # the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
 # label is Tillandsias's own recipe; every base image and package it carries is
 # credited, with its upstream licence, in docs/credits/stack.v1.json.
-LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND GPL-3.0-only"
 
 ARG COMFYUI_REF=v0.40.0
 ARG COMFYUI_SHA=3541246a9c997f4b8c32f9f88f3c985d02021c79
