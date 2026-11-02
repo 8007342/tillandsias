@@ -536,21 +536,20 @@ so this one push unblocks the fleet. No `--no-verify` is ever needed —
 
 `release.yml` is `workflow_dispatch`-only. The skill explicitly triggers it with the new tag, never via `on: push: tags:` (the workflow is intentionally manual to keep release authorship traceable).
 
-**Seed the caches on main first (order 1942-mijg).** GitHub restores an
-Actions cache only from the run's own ref or the default branch, and a tag is
-neither for the NEXT tag: every cache a tag run saved was restorable by nobody,
-so each release cold-built ~499 Nix derivations (67 min on v56.11.1.1). The
-workflow therefore saves only when `github.ref` is `refs/heads/main`, and the
-only main run is this seed (`cache_seed=true`: builds what the release builds,
-saves the Nix store and both rust-caches, publishes nothing). Dispatch it on
-main, wait for it, THEN dispatch the tag, which restores what the seed saved.
-A seed failure does not block the release; it only means the tag cold-builds.
+**One dispatch, on the tag; no warm-up run (order 1950-b4f3).** The release
+is the operator's ONE cloud build per day. The 1942-mijg `cache_seed`
+dispatch on main was a second full build (run 41352565247: 66 min cold
+build, cancelled by the operator) spent to warm an Actions cache that the
+tag run would then restore; measured over five releases the cache steps
+restored nothing (GitHub scopes a cache to the saving ref) and each release
+only paid 49–87 s to save a 3.3 GB store nobody could read. The workflow no
+longer has cache steps or a `cache_seed` input, and
+litmus:release-is-one-cloud-build refuses a second dispatch here. The Linux
+job cold-builds (~67 min, 41 of them the aarch64-musl cross GCC) until the
+cache redesign filed under 1950-b4f3 lands; do not work around that with an
+extra run.
 
 ```bash
-gh workflow run release.yml --ref main -f cache_seed=true
-sleep 5
-seed_id="$(gh run list --workflow=release.yml --branch=main --event=workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
-gh run watch "${seed_id}" >/dev/null || echo "seed run ${seed_id} failed: the release will cold-build"
 gh workflow run release.yml --ref "${new_tag}"
 sleep 5
 gh run list --workflow=release.yml --branch="${new_tag}" --limit 1
