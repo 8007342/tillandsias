@@ -264,6 +264,42 @@ Provenance: every output directory carries `manifest.json` with model name,
 file sha256s, licence id, prompt, seed, BPM/key/bars, and the engine image
 tag, so a shipped asset can be traced to its licence row.
 
+### 7.1 Consumer requirements from kumbia-kombat (2026-11-02)
+
+Relayed by the coordinator from kumbia-kombat-macuahuitl-forge; folded into
+the `music.*` contract and the spec scenarios:
+
+- **Cumbia at 112–144 BPM in a 2/4 feel.** `music.compose` and
+  `music.variations` take `bpm` and `time_signature` as hard constraints,
+  not hints: the audio path passes them to ACE-Step's BPM/time-signature
+  metadata controls, the symbolic path writes them into the MIDI tempo and
+  time-signature meta events, and the result is refused (not rounded) when
+  the engine cannot honour the exact BPM.
+- **Charts are beat-judged: exact BPM and a downbeat-aligned bar grid.**
+  `manifest.json` carries `bpm` as the exact value requested, `beats_per_bar`,
+  `bar_grid: [t0, t1, ...]` (bar start times in seconds from file start,
+  downbeat at `t0 = 0.0`), `total_bars`, and `sample_rate`. Every stem and
+  segment file is cut on those bar starts: a file's length is an integer
+  number of bars at the exact BPM (silence-padded or seam-repainted, never
+  trimmed off-grid), so files of the same theme line up sample-accurately
+  when started together.
+- **Rooms are ~45–110 s of combat.** `music.compose` accepts `bars` or
+  `duration_s` and resolves them against the BPM to a bar-multiple length;
+  loopable segments (`loop_a`, `loop_aplus`) target 45–110 s and are
+  seamless at the loop point (seam repaint on audio; trivial on MIDI).
+- **Intensity ladder = crowd interest / combo layering.** `music.variations`
+  produces N layers whose `min_tier` maps to the game's combo/crowd tier;
+  the manifest states the mapping so the mixer needs no music knowledge.
+- **MIDI-first: note events per track.** `format: midi|both` emits a
+  multi-track Standard MIDI File (type 1) with one track per instrument,
+  named, plus `events.json`: `[{track, channel, program, note, velocity,
+  on_beat, off_beat, on_s, off_s}]` quantised to the bar grid, so charts can
+  be authored per limb from musical events without parsing MIDI.
+- **Distinct theme per level, seeded variations.** `music.compose` takes a
+  per-room `style` prompt and a `seed`; `music.variations` reuses the seed
+  family (`seed`, `seed+1`, …) and records every seed, so the garden theme
+  "Mojo" is reproducible and its variations are siblings, not strangers.
+
 ## 8. Runtime packaging for Flame (kumbia-kombat)
 
 Recommended: **pre-generated stem sets per intensity level + a small
@@ -271,15 +307,21 @@ runtime mixer**, not on-the-fly generation.
 
 ```
 assets/music/<theme>/manifest.json
-  { bpm, time_signature, bars_per_loop, key,
+  { theme: "Mojo", style: "<per-room prompt>", seed, bpm: 128, time_signature: "2/4",
+    beats_per_bar: 2, bar_grid: [0.0, 0.9375, 1.875, ...], total_bars, key,
+    bars_per_loop,
     layers: [ {name: "drums", file: "drums.ogg", min_tier: 0},
               {name: "bass",  file: "bass.ogg",  min_tier: 1},
               {name: "lead",  file: "lead.ogg",  min_tier: 2},
               {name: "hype",  file: "hype.ogg",  min_tier: 3} ],
     segments: { intro, loop_a, loop_aplus, fail, outro },   // horizontal
     stingers: { perfect_streak, combo_break },
-    midi: "score.mid" }                                     // symbolic twin
+    midi: "score.mid", events: "events.json" }              // symbolic twin
 ```
+
+Chart authoring reads `events.json` (per-track note events on the bar
+grid) and judges hits against `bar_grid` and `bpm`; the mixer reads
+`layers[].min_tier` against the combo/crowd tier.
 
 - Mixer: all layers start together, bar-locked; tier changes apply at the
   next bar line (gain ramp ≤ 1 beat). Segment switches queue for the next
