@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: preview-route-on-18443-closes-browser-and-in-forge-connections-while-the-readiness-probe-reports-serving
+    event:
+      type: progress
+      ts: "2026-11-02T00:45:00Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t003010z
+      host: calmecacpilli
+      summary: |
+        Root cause (code reading; no podman here): the SNI forwarder a browser.open window dials was started with the RAW project name. crates/tillandsias-headless/src/browser_open.rs forwarder_spec() set TILLANDSIAS_FWD_PROJECT=<project> straight from request.project_label (demon_attack), and crates/tillandsias-headless/src/browser_window_forwarder.js builds its admitted suffix as `.${TILLANDSIAS_FWD_PROJECT}.localhost` lowercased only, so every ClientHello with SNI www.demon-attack.localhost (the label 1763-nc9d gives the leaf, the router site, the resolver rule and the allowlist) fell off `name.endsWith(suffix)` and the forwarder called client.destroy(): net::ERR_CONNECTION_CLOSED, nothing ever reaching the router or Wrangler. The readiness probe (local_web_preview.rs probe_route) never touches the forwarder: it dials the router's own listener (127.0.0.1:<tls port> rootless, enclave IP:8443 rootful) with the correct label host, so it saw 200 and publish_local reported route_ready=true serving=true. 1763-nc9d routed every other caller through project_host_label and missed this one. Fix on work/1935-svxq: forwarder_spec passes forwarder_project(project) = local_web_preview::host_label(project); the forwarder's admission rule has one Rust copy, forwarder_admits_sni(fwd_project, sni), and probe_route is now held to it for the probe's SNI, so the probe refuses by name (router_not_ready: the window forwarder would refuse SNI ...) rather than report serving for a host a window cannot reach. New pure fns probe_host/probe_target name the probe's (host, SNI, port). Test preview_probe_uses_client_sni_for_underscore_project was RED on the old code (forwarder started with TILLANDSIAS_FWD_PROJECT=demon_attack refuses SNI www.demon-attack.localhost) and is GREEN after. Still needs a live podman check: a browser.open of https://www.demon-attack.localhost:18443/ for an underscored project, and the curl 000 from INSIDE the forge, which is a separate path (the forge container has no route to the host's loopback 18443; curl resolves *.localhost to 127.0.0.1 inside the forge), not fixed here.

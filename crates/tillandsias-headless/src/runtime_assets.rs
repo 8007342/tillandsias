@@ -280,6 +280,8 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
         "imagegen" => Ok("images/imagegen"),
         // 1874-zry8: the opt-in ComfyUI studio, built only when a project enables it.
         "imagegen-studio" => Ok("images/imagegen-studio"),
+        // 1956-ucix: the CorridorKey 2.0 proof of concept, built on first use.
+        "imagegen-corridorkey" => Ok("images/imagegen-corridorkey"),
         "vault" => Ok("images/vault"),
         name if studio_image_id(name).is_some() => Ok("images/studio"),
         other => Err(format!("Unknown image type: {other}")),
@@ -457,6 +459,10 @@ mod tests {
             (
                 "images/imagegen-studio/Containerfile",
                 "images/imagegen-studio",
+            ),
+            (
+                "images/imagegen-corridorkey/Containerfile",
+                "images/imagegen-corridorkey",
             ),
         ];
 

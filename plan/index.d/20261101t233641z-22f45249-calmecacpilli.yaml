@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: image-generate-accepts-control-image-and-lora-inputs-through-stable-diffusion-cpp-before-comfyui-lands
+    event:
+      type: note
+      ts: "2026-11-01T23:36:41Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t233641z
+      host: calmecacpilli
+      summary: |
+        PINS PROPOSED by kumbia-kombat-forge on 2026-11-01. They await operator licence approval and are NOT in the register.
+        (1) xinsir/controlnet-openpose-sdxl-1.0
+        - rev 23f966cd5cfdd3f7729c903e243d87152162d2b7, file diffusion_pytorch_model.safetensors
+        - sha256 b8524e557a7df60d081f5d4a0eb109967d107df217943bf88c2d99b9ebcc06c5, apache-2.0
+        - Probably unusable here: README line 92 of the pinned sd.cpp (master-1015-e41fbcf) says "Control Net support with SD 1.5" only.
+        (2) xinsir/controlnet-union-sdxl-1.0 promax
+        - rev 801a4a3fa3d4c936f4feea95b98607bc6726f80c, sha256 9fae2e50cb431bfcbe05822b59ec2228df545ef27f711dea8949e9f4ed9f7cdc, apache-2.0
+        - Studio-only: it needs a control-type selector.
+        (3) nerijs/pixel-art-xl LoRA
+        - rev 8bf4a4d9ea283e00a51fafda8e0539f8248ea037, sha256 4234637cb80c998f41e348e6a6cb6bc20d8d038b2b0f256b6129b3b5e353eef7, creativeml-openrail-m
+        - SDXL only.
+        (4) INTERIM ROUTE: lllyasviel/control_v11p_sd15_openpose
+        - rev 9ae9f970358db89e211b87c915f9535c6686d5ba, file diffusion_pytorch_model.fp16.safetensors
+        - sha256 b25b1125e870275550b2a7de289056cb3c236c01c293bd5ba883657b1c006e3e, 722598642 bytes
+        - Its card says plain "openrail". That value is NOT in PERMISSIVE_LICENCES, so both parse_manifest and register_admits refuse it until the operator rules on the licence. A ruling has to update the list too, not only the register.
+        GAP to close before any pin lands: parse_aux does not check that a ControlNet or LoRA matches the tier's base family (SD1.5 vs SDXL). A mismatched file would reach sd-cli and fail there. Add a base-family column, or check the tier, when pinning.
