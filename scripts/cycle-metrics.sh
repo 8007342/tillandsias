@@ -368,7 +368,7 @@ if [ "$_tl_reporting" = 1 ] && [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
     _tl_other=""
     case "$TIMING_LOG" in
         /tmp/*) _tl_other="$REPO_ROOT/.cache/metrics/$_tl_base" ;;
-        *)      _tl_other="/tmp/$_tl_base" ;;
+        *)      _tl_other="${TILLANDSIAS_METRICS_FALLBACK_DIR:-/tmp}/$_tl_base" ;;
     esac
     if [ -n "$_tl_other" ] && [ "$_tl_other" != "$TIMING_LOG" ] && [ -s "$_tl_other" ]; then
         # ORDER 1455-d7hc: `2>/dev/null` BEFORE `<`. Redirections apply left to

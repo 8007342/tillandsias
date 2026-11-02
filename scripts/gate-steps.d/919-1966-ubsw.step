@@ -1,0 +1,13 @@
+# Gate step 1966-ubsw — a record some OTHER host process writes into the
+# shared timing fallback never evicts the gate step running beside it (#831,
+# #840), while a step whose own children fall back is still refused through
+# the gate's PRIVATE fallback, and a record under this gate's run id in the
+# shared path still refuses. Every arm executes the real loop through
+# ./build.sh --gate-steps over a scratch root; the shared path is a scratch
+# file, never the host's /tmp.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a host writer in the shared timing fallback never evicts a gate step (1966-ubsw)"
+STEP_LUA="scripts/lua/test-gate-step-private-metrics-fallback.lua"
+STEP_ERROR="the gate's leak check again blames a step for a record written outside the gate, or stopped refusing a step whose children fall back (1966-ubsw) — see the FAIL lines above"
+STEP_OK="private metrics fallback fixture passed"
