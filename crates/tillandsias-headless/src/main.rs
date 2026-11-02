@@ -99,10 +99,6 @@ mod studio_tool;
 // `studio.key_footage`; opt-in per project, consent-gated, CUDA only.
 #[cfg(feature = "host-services")]
 mod studio_key;
-// @trace order:1956-ecpb — the licence consent gate. Until that order lands
-// this is a shim that admits nothing (see the module).
-#[cfg(feature = "host-services")]
-mod licence_consent;
 // @trace order:1956-26qh — the family contract v1 static checker behind
 // `studio.validate_family`; pure, gated with imagegen_tool.
 mod progress_sink;

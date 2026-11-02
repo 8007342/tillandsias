@@ -7,8 +7,8 @@
 
 ## 2. P1
 
-- [ ] 2.1 Order 1956-ecpb (implements 1954-dvz9): the `accept-licence` skill, the restricted register, acknowledgement records, generated obligations specs, the gate, and seeding the operator's standing approval (D6)
-- [ ] 2.2 Order 1956-ucix (implements 1954-xy5m): the CorridorKey 2.0 proof-of-concept studio job (D9)
+- [x] 2.1 Order 1956-ecpb (implements 1954-dvz9): the `accept-licence` skill, the restricted register, acknowledgement records, generated obligations specs, the gate, and seeding the operator's standing approval (D6)
+- [x] 2.2 Order 1956-ucix (implements 1954-xy5m): the CorridorKey 2.0 proof-of-concept studio job (D9)
 
 ## 3. P2
 
