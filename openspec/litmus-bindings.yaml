@@ -791,6 +791,7 @@ specs:
   - litmus:claim-wip-limit-shape
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
+  - litmus:gate-step-prefix-refusals-carry-affordance
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
