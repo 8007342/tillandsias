@@ -325,6 +325,23 @@ pub(crate) fn encode(f: &Finished, palette: &Palette) -> Result<Vec<u8>, String>
     Ok(out)
 }
 
+/// An RGBA image as PNG bytes with the same fixed settings and no ancillary
+/// chunks as [`encode`]. The D13 contact sheet writes through this.
+pub(crate) fn encode_rgba(img: &Rgba) -> Result<Vec<u8>, String> {
+    let mut out = Vec::new();
+    {
+        let mut enc = png::Encoder::new(Cursor::new(&mut out), img.width, img.height);
+        enc.set_compression(png::Compression::Balanced);
+        enc.set_filter(png::Filter::NoFilter);
+        enc.set_color(png::ColorType::Rgba);
+        enc.set_depth(png::BitDepth::Eight);
+        let mut w = enc.write_header().map_err(|e| format!("png header: {e}"))?;
+        w.write_image_data(&img.pixels)
+            .map_err(|e| format!("png data: {e}"))?;
+    }
+    Ok(out)
+}
+
 /// The sha256 of some bytes, lowercase hex.
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
