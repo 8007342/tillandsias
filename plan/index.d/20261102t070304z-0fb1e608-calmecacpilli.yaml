@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots
+    field: next_action
+    value: 'Per the operator ruling of 2026-11-02: default root ~/.tillandsias holds everything Tillandsias owns — container images (Tillandsias'' own podman store), models, caches, state and logs. One override for power users (a config file key or an env var, TILLANDSIAS_HOME). Tillandsias does NOT detect or choose drives. "rm -rf ~/.tillandsias" must be a complete reset. First launch migrates legacy roots into it. Pickup: macuahuitl (implementation compiles there). First step unchanged: write tillandsias_core::home with the resolver and the legacy-root table, make init_cache_dir and cache_root call it, and run the fresh arm to see what still lands outside the root.'
+    ts: "2026-11-02T07:03:04Z"
+    host: calmecacpilli
+    replaces_sha256: "d7e00c90047bb42b3291ddd04fb69e23f1c551549cf2ccda970bebd577577d47"

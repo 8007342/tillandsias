@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: family-contract-v1-json-schema-and-static-checker-studio-validate-family
+    event:
+      type: note
+      ts: "2026-11-02T03:16:00Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t031102z
+      host: calmecacpilli
+      summary: |
+        demon_attack-forge image.generate rounds 1+2 (calmecacpilli 2026-11-02; sibling rows 1957-5m8g..1957-2cjr) name three studio needs that apply at ANY tier, not only I2/I3: (1) img2img + inpaint + a layout/reserved-region mask, so a prompt can keep a region empty (the centre lane the game needs) — I1 ignores "keep the centre empty" in text alone; (2) a deterministic pixel-art finish stage after generation: grid snap by nearest-neighbour downscale to the sprite grid, palette quantise to the SUPPLIED palette (I1 drifts off it), transparent background — kumbia needs the same finish; (3) a contact sheet across tiers and seeds so the operator picks a keeper and its seed in one look. Each belongs in the pipeline this row designs or runs.

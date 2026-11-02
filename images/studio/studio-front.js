@@ -135,6 +135,73 @@ function save(cfg, requested, content) {
     return { status: 200, body: { path: g.rel, sha: sha || null } };
 }
 
+// Own-writer studios (Decap, Tina) write the checkout themselves, through
+// their own servers. Every write request the front proxies to such a studio is
+// bracketed: the checkout's changed paths are read before it and after its
+// response, and each path the request changed passes the same guard as a
+// save. An allowlisted path is committed (`studio(<id>): save|delete <path>`,
+// one `event:studio.save`); any other is put back as it was and evented
+// `event:studio.save_refused`. Paths the request did not change, such as the
+// agent's own work in progress, are never touched (1862-wrx5).
+function changedPaths(checkout) {
+    const out = git(checkout, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
+    const sigs = new Map();
+    const entries = out.split('\0');
+    for (let i = 0; i < entries.length; i++) {
+        const e = entries[i];
+        if (e.length < 4) continue;
+        const code = e.slice(0, 2);
+        const rel = e.slice(3);
+        if (code[0] === 'R' || code[0] === 'C') i++; // the source path follows
+        let st = 'gone';
+        try {
+            const s = fs.lstatSync(path.join(checkout, rel));
+            st = `${s.size}:${s.mtimeMs}`;
+        } catch (_) { /* deleted */ }
+        sigs.set(rel, `${code}:${st}`);
+    }
+    return sigs;
+}
+
+function tracked(checkout, rel) {
+    try {
+        git(checkout, ['ls-files', '--error-unmatch', '--', rel]);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+// Returns the paths it put back, so the front can tell the browser.
+function sweep(cfg, before) {
+    const refused = [];
+    const after = changedPaths(cfg.checkout);
+    const touched = [...after.keys()].filter((p) => after.get(p) !== before.get(p));
+    for (const p of [...before.keys()]) if (!after.has(p)) touched.push(p);
+    for (const rel of touched) {
+        const g = guard(cfg.checkout, rel, cfg.allowlist);
+        if (!g.ok) {
+            if (tracked(cfg.checkout, rel)) {
+                git(cfg.checkout, ['checkout', 'HEAD', '--', rel]);
+            } else {
+                fs.rmSync(path.join(cfg.checkout, rel), { force: true });
+            }
+            event('studio.save_refused', { studio: cfg.id, path: rel, reason: g.reason });
+            refused.push(rel);
+            continue;
+        }
+        git(cfg.checkout, ['add', '-A', '--', g.rel]);
+        const staged = git(cfg.checkout, ['diff', '--cached', '--name-only', '--', g.rel]).trim();
+        if (!staged) continue;
+        const verb = fs.existsSync(g.abs) ? 'save' : 'delete';
+        git(cfg.checkout, ['commit', '-q', '-m', `studio(${cfg.id}): ${verb} ${g.rel}`, '--', g.rel]);
+        event('studio.save', { studio: cfg.id, path: g.rel, sha: git(cfg.checkout, ['rev-parse', 'HEAD']).trim() });
+    }
+    return refused;
+}
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 function loadConfig(env) {
     const id = env.TILLANDSIAS_STUDIO || '';
     const registry = JSON.parse(fs.readFileSync(
@@ -144,6 +211,7 @@ function loadConfig(env) {
     return {
         id,
         allowlist: studio.write_allowlist,
+        ownWriter: studio.save_adapter === 'own-writer',
         checkout: env.STUDIO_CHECKOUT || `/home/forge/src/${env.TILLANDSIAS_PROJECT || ''}`,
     };
 }
@@ -185,7 +253,22 @@ function start(env) {
             res.end(JSON.stringify(out.body));
             return;
         }
+        const bracket = cfg.ownWriter && !READ_METHODS.has(req.method);
+        const before = bracket ? changedPaths(cfg.checkout) : null;
         const up = http.request({ host: upHost, port: upPort, method: req.method, path: req.url, headers: req.headers }, (ur) => {
+            if (bracket) {
+                // The studio has written by the time it answers; guard before
+                // the browser hears back, so a refused write is never reported
+                // saved: the studio's answer is replaced by the refusal.
+                let refused;
+                try { refused = sweep(cfg, before); } catch (e) { refused = ['-']; event('studio.save_refused', { studio: cfg.id, path: '-', reason: 'sweep-failed' }); }
+                if (refused.length) {
+                    ur.resume();
+                    res.writeHead(403, { 'content-type': 'application/json' });
+                    res.end(JSON.stringify({ refused: 'not-allowlisted', paths: refused }));
+                    return;
+                }
+            }
             res.writeHead(ur.statusCode, ur.headers);
             const sse = String(ur.headers['content-type'] || '').startsWith('text/event-stream');
             let timer = null;
@@ -216,6 +299,6 @@ function start(env) {
     return server;
 }
 
-module.exports = { guard, save, globToRegExp, loadConfig, start };
+module.exports = { guard, save, sweep, changedPaths, globToRegExp, loadConfig, start };
 
 if (require.main === module) start(process.env);

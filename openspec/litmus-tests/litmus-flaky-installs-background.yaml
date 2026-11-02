@@ -1,0 +1,40 @@
+# @trace spec:default-image
+# @trace order:1951-vv5m
+#
+# Operator direction 2026-11-01, relayed by macuahuitl: flaky installs get
+# their own family, run as background processes with longer timeouts, and
+# their first-use shims know the tool may still be installing. On macuahuitl
+# that day the forge-base build sat ~10 min in a bounded `pip3 install pyright
+# bandit` at 0% CPU while the tray froze. The fixture refuses a build-time pip
+# install in Containerfile.base and a direct prebuilt-tools call in any forge
+# entrypoint, then drives lib-flaky-installs.sh with a hanging installer (start
+# returns at once, status installing, shim says still installing, exit 75), a
+# timed-out one, a failing one, and a healthy one (the shim runs the real tool).
+# Red on the tree before 1951-vv5m (5 failed arms).
+name: litmus:flaky-installs-background
+spec: default-image
+phase: pre-build
+description: Flaky-optional installs run in the background with status files, and their first-use shims wait or say still installing
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, git; offline
+
+critical_path:
+  - step: "a hanging flaky-optional installer never holds the forge, and its shim says so"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-flaky-installs-background.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:flaky-installs-background:static + hang + budget + fail + control arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "fourteen arms: four static, four hang, two budget, two fail, two control"
+  log_fields:
+    spec: "default-image"
+    test: "flaky-installs-background"
+
+rollback:
+  on_failure: "read the FAIL lines; a build-time pip3 step belongs in lib-common.sh ensure_forge_dev_tools, and an entrypoint starts installs with start_flaky_installs"
+  command: "grep -n 'start_flaky_installs\\|pip3 install' images/default/entrypoint-*.sh images/default/Containerfile.base"

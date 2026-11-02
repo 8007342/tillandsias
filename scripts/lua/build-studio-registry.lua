@@ -2,7 +2,9 @@
 --
 -- build-studio-registry.lua — evaluate images/studio/registry.lua (pure data,
 -- empty environment) and write it as crates/tillandsias-headless/data/studios.json,
--- which the launcher embeds. The output is canonical (sorted keys, two-space
+-- which the launcher embeds, and its copy images/studio/studios.json, which
+-- the studio images ship for the front (1861-nmpp: a build context cannot
+-- reach crates/). The output is canonical (sorted keys, two-space
 -- indent, this file's own encoder), so a re-run is byte-identical:
 --   tillandsias-plan script run scripts/lua/build-studio-registry.lua             (write)
 --   tillandsias-plan script run scripts/lua/build-studio-registry.lua -- --check  (verify)
@@ -11,6 +13,7 @@
 
 local SRC = "images/studio/registry.lua"
 local OUT = "crates/tillandsias-headless/data/studios.json"
+local IMAGE_COPY = "images/studio/studios.json"
 local check = false
 for _, a in ipairs(arg or {}) do
     if a == "--check" then check = true end
@@ -87,11 +90,14 @@ end
 local body = enc(reg, 0) .. "\n"
 local n = #reg.studios
 if check then
-    if fs.read(OUT) == body then verdict.emit("ok:studio-registry:fresh:" .. n, 0) end
-    out.line("  why: " .. OUT .. " does not match " .. SRC)
+    if fs.read(OUT) == body and fs.read(IMAGE_COPY) == body then
+        verdict.emit("ok:studio-registry:fresh:" .. n, 0)
+    end
+    out.line("  why: " .. OUT .. " or " .. IMAGE_COPY .. " does not match " .. SRC)
     out.line("  remedy: tillandsias-plan script run scripts/lua/build-studio-registry.lua")
     verdict.emit("violation:studio-registry:stale", 1)
 end
 fs.mkdir("crates/tillandsias-headless/data")
 fs.write(OUT, body)
+fs.write(IMAGE_COPY, body)
 verdict.emit("ok:studio-registry:written:" .. n, 0)
