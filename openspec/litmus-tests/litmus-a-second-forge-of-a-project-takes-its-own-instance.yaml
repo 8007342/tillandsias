@@ -24,6 +24,12 @@ critical_path:
   - step: "the second launch of a project is instance 2 with its own workspace"
     command: "cargo test -p tillandsias-headless tests::a_second_launch_of_a_project_takes_the_next_instance -- --exact"
     timeout_ms: 300000
+  - step: "a push reaches every other forge of the project, never the pusher, as one MCP notification"
+    command: "cargo test -p tillandsias-headless --features tray lane_events::tests -- --test-threads=1"
+    timeout_ms: 300000
+  - step: "the pusher instance is read back from its forge container name"
+    command: "cargo test -p tillandsias-headless tests::a_forge_container_name_names_its_instance -- --exact"
+    timeout_ms: 300000
 
 observability:
   traces:

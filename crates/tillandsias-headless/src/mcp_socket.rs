@@ -687,6 +687,23 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         return;
     };
     let mut reader = BufReader::new(read_half);
+    // 1956-4pxj: the git mirror's push events reach this forge on this
+    // connection. One shared writer, so a pushed notification and a response
+    // line never interleave.
+    let Ok(shared_half) = writer.try_clone() else {
+        return;
+    };
+    let shared: crate::lane_events::SharedWriter =
+        std::sync::Arc::new(std::sync::Mutex::new(shared_half));
+    let mut push_events = Some(crate::lane_events::register(
+        &project_label,
+        &lane_instance,
+        shared.clone(),
+    ));
+    let write_line = |line: &str| -> bool {
+        let mut w = shared.lock().unwrap_or_else(|p| p.into_inner());
+        w.write_all(format!("{line}\n").as_bytes()).is_ok()
+    };
 
     // Order 779-3trn: ONE browser server and ONE runtime for the whole
     // connection.
@@ -792,7 +809,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                     ),
                 }
             });
-            if writeln!(writer, "{too_large}").is_err() {
+            if !write_line(&too_large.to_string()) {
                 return;
             }
             continue;
@@ -805,6 +822,9 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             // 1637-5765: a toolchain session takes over the connection and
             // streams frames until the command exits; nothing follows it.
             Ok(req) if req["method"] == "tillandsias/exec" => {
+                // The exec session owns the stream from here: no notification
+                // may land between its frames.
+                drop(push_events.take());
                 crate::toolchain_exec::serve_exec(
                     &project_label,
                     &identity.instance,
@@ -815,21 +835,16 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 );
                 return;
             }
-            Ok(req) => {
-                let mut sink = writer.try_clone().ok();
-                handle_mcp_jsonrpc_streaming(
-                    &project_label,
-                    &identity.instance,
-                    &req,
-                    &browser,
-                    &rt,
-                    &mut |line| {
-                        if let Some(w) = sink.as_mut() {
-                            let _ = writeln!(w, "{}", cap_response_line(&line));
-                        }
-                    },
-                )
-            }
+            Ok(req) => handle_mcp_jsonrpc_streaming(
+                &project_label,
+                &identity.instance,
+                &req,
+                &browser,
+                &rt,
+                &mut |line| {
+                    let _ = write_line(&cap_response_line(&line));
+                },
+            ),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -849,7 +864,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                     "MCP response exceeded the per-line cap; replaced with a typed error"
                 );
             }
-            if writeln!(writer, "{rendered}").is_err() {
+            if !write_line(&rendered) {
                 return;
             }
         }
@@ -1095,6 +1110,9 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
         instance.trim()
     };
     let lane_key = (project.to_owned(), instance_clean.to_owned());
+    // 1956-4pxj: whoever serves a lane of this project also hears its git
+    // mirror's push events (once per process), to pass on to the lane's forge.
+    crate::lane_events::listen_for_project(project, crate::forge_instance_at_address);
     // Keep this lock through creation. Inserting only after bind + chmod makes
     // a failed first attempt retryable, and serializes same-lane callers.
     let mut registry = lane_listener_registry().lock().expect("lane registry lock");

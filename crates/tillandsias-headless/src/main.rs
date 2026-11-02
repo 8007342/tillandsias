@@ -5945,6 +5945,24 @@ fn build_git_run_args(
         "--env".into(),
         "GIT_TRACE=1".into(),
     ];
+    // 1956-4pxj: the post-receive hook announces each accepted ref update to
+    // every host process serving a lane of this project, through the sockets
+    // in this directory. Read-only: the hook only sends to sockets the host
+    // bound; it never creates one.
+    #[cfg(feature = "host-services")]
+    {
+        let events = crate::lane_events::event_dir(project_name);
+        if std::fs::create_dir_all(&events).is_ok() {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=bind,source={},target={},readonly=true",
+                    events.display(),
+                    crate::lane_events::MIRROR_EVENT_DIR
+                ),
+            ]);
+        }
+    }
     // @trace spec:proxy-container, spec:git-mirror-service
     // Proxy env vars route post-receive hook's `git push` to GitHub through
     // the enclave proxy. Uses enclave_no_proxy() — the canonical full NO_PROXY
@@ -9499,6 +9517,60 @@ fn env_or(name: &str, fallback: &str) -> String {
         .ok()
         .filter(|v| !v.is_empty())
         .unwrap_or_else(|| fallback.to_string())
+}
+
+/// 1956-4pxj: the forge instance of `project` whose enclave address is
+/// `addr` (the pusher git-daemon saw), so its own push is not announced back
+/// to it. Called once per push event, never on a timer.
+#[cfg(feature = "host-services")]
+fn forge_instance_at_address(project: &str, addr: &str) -> Option<String> {
+    let listed = podman_command()
+        .args([
+            "ps",
+            "--filter",
+            &format!("name=^tillandsias-{project}-forge"),
+            "--format",
+            "{{.Names}}",
+        ])
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .ok()?;
+    for name in String::from_utf8_lossy(&listed.stdout).lines() {
+        let ips = podman_command()
+            .args([
+                "inspect",
+                name,
+                "--format",
+                "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+            ])
+            .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+            .ok()?;
+        if String::from_utf8_lossy(&ips.stdout)
+            .split_whitespace()
+            .any(|ip| ip == addr)
+        {
+            return Some(forge_instance_from_container_name(project, name));
+        }
+    }
+    None
+}
+
+/// The lane instance a forge container name carries: `default` for no
+/// suffix, else the sanitized instance before its 32-hex digest
+/// (`tillandsias-<project>-forge[-<mode>]-<instance>-<digest>`).
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+fn forge_instance_from_container_name(project: &str, name: &str) -> String {
+    let rest = name
+        .strip_prefix(&format!("tillandsias-{project}-forge"))
+        .unwrap_or("");
+    let parts: Vec<&str> = rest.split('-').filter(|p| !p.is_empty()).collect();
+    match parts.as_slice() {
+        [.., instance, digest]
+            if digest.len() == 32 && digest.chars().all(|c| c.is_ascii_hexdigit()) =>
+        {
+            (*instance).to_string()
+        }
+        _ => "default".to_string(),
+    }
 }
 
 /// Serve a forge's lane MCP socket before the forge (and its agent's MCP
@@ -20711,6 +20783,9 @@ mod tray;
 mod dead_run;
 #[cfg(feature = "host-services")]
 mod mcp_socket;
+// 1956-4pxj: push events from the git mirror to every forge of a project.
+#[cfg(feature = "host-services")]
+mod lane_events;
 
 // @trace order:1772-irs3 — read-only Cloudflare tools on the lane's MCP
 // socket: a GET-only allowlist over the Vault-stored sign-in, the account
@@ -26107,6 +26182,35 @@ mod tests {
             .expect("the freed default slot is reused");
         assert!(std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err());
         drop((second, again));
+    }
+
+    /// 1956-4pxj: the pusher's instance is read back from its container name,
+    /// for every naming shape the launch produces.
+    #[test]
+    fn a_forge_container_name_names_its_instance() {
+        let digest = "d4735e3a265e16eee03f59718b9b5d03";
+        for (name, want) in [
+            ("tillandsias-p-forge".to_string(), "default"),
+            ("tillandsias-p-forge-maintenance".to_string(), "default"),
+            (format!("tillandsias-p-forge-2-{digest}"), "2"),
+            (format!("tillandsias-p-forge-maintenance-2-{digest}"), "2"),
+            (format!("tillandsias-p-forge-claude-w3-{digest}"), "w3"),
+        ] {
+            assert_eq!(
+                forge_instance_from_container_name("p", &name),
+                want,
+                "{name}"
+            );
+        }
+        // The real suffix the launch produced on yoga 2026-11-02.
+        assert_eq!(
+            forge_container_name_for_mode_with_instance(
+                "p",
+                ForgeAgentMode::Maintenance,
+                Some("2")
+            ),
+            format!("tillandsias-p-forge-maintenance-2-{digest}")
+        );
     }
 
     struct TestEnvRestore(Vec<(&'static str, Option<std::ffi::OsString>)>);
