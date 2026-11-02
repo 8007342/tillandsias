@@ -1089,7 +1089,7 @@ specs:
   - litmus:local-web-preview
   - litmus:studio-grapesjs-saves-through-the-shared-endpoint
   - litmus:studio-decap-commits-a-hugo-entry-through-the-front
-  - litmus:web-studio-tina-saves-through-local-graphql
+  - litmus:studio-tina-commits-a-document-through-the-front
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape

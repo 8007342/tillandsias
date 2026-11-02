@@ -94,7 +94,7 @@
       "packet": "1863-dmke",
       "port": 4096,
       "save_adapter": "own-writer",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         "content/**",
         "tina/config.ts",

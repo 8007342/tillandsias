@@ -62,7 +62,7 @@ return {
       entry = { "/usr/local/bin/studio-tina" }, port = 4096,
       save_adapter = "own-writer",
       write_allowlist = { "content/**", "tina/config.ts", "tina/config.js", ".gitignore" },
-      status = "planned", packet = "1863-dmke",
+      status = "ready", packet = "1863-dmke",
     },
     {
       id = "puck", name = "Puck", license = "MIT",

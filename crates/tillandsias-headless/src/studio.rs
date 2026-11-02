@@ -460,10 +460,10 @@ mod tests {
 
     #[test]
     fn a_studio_lane_routes_under_studio_and_a_planned_lane_is_refused_by_name() {
-        // 1861-nmpp and 1862-wrx5 landed the GrapesJS and Decap lanes; Tina
-        // is still planned.
-        let err = WebLane::studio("tina").unwrap_err();
-        assert!(err.contains("1863-dmke"), "{err}");
+        // 1861-nmpp, 1862-wrx5 and 1863-dmke landed the GrapesJS, Decap and
+        // Tina lanes; Puck is still planned.
+        let err = WebLane::studio("puck").unwrap_err();
+        assert!(err.contains("1864-ay3x"), "{err}");
         assert!(
             WebLane::studio("silex")
                 .unwrap_err()
