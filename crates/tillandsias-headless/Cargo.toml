@@ -91,6 +91,9 @@ tokio-vsock = { workspace = true, optional = true }
 # binary is compiled without the `vault` cargo feature.
 wiremock = "0.6"
 tillandsias-vault-client = { path = "../tillandsias-vault-client" }
+# 1954-btht: the tray fixture drives the real dbusmenu interface over a
+# private peer-to-peer bus (no session bus, no desktop). Test-only feature.
+zbus = { version = "4.4.0", default-features = false, features = ["tokio", "p2p"] }
 
 [target.'cfg(unix)'.dependencies]
 # Used by the in-VM PTY handler (control-wire-pty-attach Tasks 4.x):
