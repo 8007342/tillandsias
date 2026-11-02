@@ -21,7 +21,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Windows Sandbox
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-core
 
 **Version baseline**: Windows 10 1903+ / Windows 11 (Pro/Enterprise/Education only — **NOT Home**).
 **Use when**: hosting an isolated, ephemeral Windows process tree (e.g., the Chromium framework) with kernel-level isolation from the host — no shared filesystem, registry, credentials, or network namespace. Tillandsias' Windows browser-isolation backend per `spec:browser-isolation-core`.

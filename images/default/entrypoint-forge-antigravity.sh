@@ -63,7 +63,7 @@ ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "antigravity starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 clone_project_from_mirror
 
 # ── SSH key auto-discovery ──────────────────────────────────

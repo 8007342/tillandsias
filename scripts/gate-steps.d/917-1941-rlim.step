@@ -1,0 +1,13 @@
+# Gate step 1941-rlim — a provider usage limit is reported as itself, ends the
+# lane with a distinct verdict (exit 75), records its deadline, and a launch
+# before the deadline refuses without calling the provider. Drives
+# images/default/lib-provider-limit.sh and the real harness-supervisor with
+# the RECORDED 2026-11-01 lines (Retry-After 78443, "Free usage limit
+# reached"); the night's EPROTO line is the negative control. No network.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a provider usage limit stops the lane and holds later launches (1941-rlim)"
+STEP_LUA="scripts/lua/test-provider-usage-limit.lua"
+STEP_ERROR="a provider usage limit is no longer reported as itself, or a launch before its deadline calls the provider again (1941-rlim) — see the FAIL lines above"
+STEP_OK="provider usage-limit fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:provider-usage-limit:static + record + default + control + refuse + supervise arms"

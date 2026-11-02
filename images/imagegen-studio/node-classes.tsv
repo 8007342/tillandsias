@@ -1,0 +1,202 @@
+# @trace order:1956-x7xp (spec: openspec/changes/studio-asset-pipeline, design D1 step 2)
+# THE STUDIO NODE-CLASS ALLOWLIST. `studio.run_workflow` refuses any workflow
+# whose `class_type` is not a row here (node_not_pinned), before anything is
+# queued. Read by crates/tillandsias-headless/src/studio_tool.rs; no interpreter.
+#
+# Columns (TAB-separated):
+#   package   `comfyui-core` (ships with the pinned ComfyUI, see
+#             images/imagegen-studio/Containerfile ARG COMFYUI_SHA), or the
+#             `name` of a [[node]] entry in custom-nodes.toml. A row whose
+#             package is NOT pinned in custom-nodes.toml admits nothing: the
+#             class is listed here ahead of its package so the pin (1956-bh6j)
+#             lands without a second edit, but it does not run until then.
+#   class     the ComfyUI class_type exactly as the API-format JSON spells it
+#
+#package	class
+
+# ---- ComfyUI core (nodes.py and comfy_extras, v0.40.0) -----------------------
+comfyui-core	KSampler
+comfyui-core	KSamplerAdvanced
+comfyui-core	CheckpointLoaderSimple
+comfyui-core	CheckpointLoader
+comfyui-core	ImageOnlyCheckpointLoader
+comfyui-core	unCLIPCheckpointLoader
+comfyui-core	CLIPTextEncode
+comfyui-core	CLIPTextEncodeSDXL
+comfyui-core	CLIPTextEncodeSDXLRefiner
+comfyui-core	CLIPTextEncodeFlux
+comfyui-core	CLIPSetLastLayer
+comfyui-core	CLIPLoader
+comfyui-core	DualCLIPLoader
+comfyui-core	TripleCLIPLoader
+comfyui-core	QuadrupleCLIPLoader
+comfyui-core	CLIPVisionLoader
+comfyui-core	CLIPVisionEncode
+comfyui-core	UNETLoader
+comfyui-core	VAELoader
+comfyui-core	VAEDecode
+comfyui-core	VAEDecodeTiled
+comfyui-core	VAEEncode
+comfyui-core	VAEEncodeTiled
+comfyui-core	VAEEncodeForInpaint
+comfyui-core	LoraLoader
+comfyui-core	LoraLoaderModelOnly
+comfyui-core	ControlNetLoader
+comfyui-core	DiffControlNetLoader
+comfyui-core	ControlNetApply
+comfyui-core	ControlNetApplyAdvanced
+comfyui-core	SetUnionControlNetType
+comfyui-core	ControlNetInpaintingAliMamaApply
+comfyui-core	StyleModelLoader
+comfyui-core	StyleModelApply
+comfyui-core	unCLIPConditioning
+comfyui-core	GLIGENLoader
+comfyui-core	GLIGENTextBoxApply
+comfyui-core	UpscaleModelLoader
+comfyui-core	ImageUpscaleWithModel
+comfyui-core	HypernetworkLoader
+comfyui-core	EmptyLatentImage
+comfyui-core	EmptySD3LatentImage
+comfyui-core	LatentUpscale
+comfyui-core	LatentUpscaleBy
+comfyui-core	LatentFromBatch
+comfyui-core	RepeatLatentBatch
+comfyui-core	LatentComposite
+comfyui-core	LatentCompositeMasked
+comfyui-core	LatentBlend
+comfyui-core	LatentRotate
+comfyui-core	LatentFlip
+comfyui-core	LatentCrop
+comfyui-core	LatentAdd
+comfyui-core	LatentSubtract
+comfyui-core	LatentMultiply
+comfyui-core	LatentInterpolate
+comfyui-core	LatentBatch
+comfyui-core	LatentBatchSeedBehavior
+comfyui-core	RebatchLatents
+comfyui-core	RebatchImages
+comfyui-core	SetLatentNoiseMask
+comfyui-core	InpaintModelConditioning
+comfyui-core	SaveImage
+comfyui-core	PreviewImage
+comfyui-core	SaveAnimatedPNG
+comfyui-core	SaveAnimatedWEBP
+comfyui-core	LoadImage
+comfyui-core	LoadImageMask
+comfyui-core	LoadImageOutput
+comfyui-core	ImageScale
+comfyui-core	ImageScaleBy
+comfyui-core	ImageScaleToTotalPixels
+comfyui-core	ImageInvert
+comfyui-core	ImageBatch
+comfyui-core	ImageFromBatch
+comfyui-core	ImagePadForOutpaint
+comfyui-core	ImageCrop
+comfyui-core	ImageCompositeMasked
+comfyui-core	ImageBlend
+comfyui-core	ImageBlur
+comfyui-core	ImageSharpen
+comfyui-core	ImageQuantize
+comfyui-core	ImageStitch
+comfyui-core	ImageFlip
+comfyui-core	ImageRotate
+comfyui-core	ImageAddNoise
+comfyui-core	ResizeAndPadImage
+comfyui-core	GetImageSize
+comfyui-core	EmptyImage
+comfyui-core	Canny
+comfyui-core	Morphology
+comfyui-core	SplitImageWithAlpha
+comfyui-core	JoinImageWithAlpha
+comfyui-core	MaskToImage
+comfyui-core	ImageToMask
+comfyui-core	ImageColorToMask
+comfyui-core	SolidMask
+comfyui-core	InvertMask
+comfyui-core	CropMask
+comfyui-core	MaskComposite
+comfyui-core	FeatherMask
+comfyui-core	GrowMask
+comfyui-core	ThresholdMask
+comfyui-core	ConditioningAverage
+comfyui-core	ConditioningCombine
+comfyui-core	ConditioningConcat
+comfyui-core	ConditioningSetArea
+comfyui-core	ConditioningSetAreaPercentage
+comfyui-core	ConditioningSetAreaStrength
+comfyui-core	ConditioningSetMask
+comfyui-core	ConditioningZeroOut
+comfyui-core	ConditioningSetTimestepRange
+comfyui-core	SamplerCustom
+comfyui-core	SamplerCustomAdvanced
+comfyui-core	KSamplerSelect
+comfyui-core	BasicScheduler
+comfyui-core	KarrasScheduler
+comfyui-core	ExponentialScheduler
+comfyui-core	PolyexponentialScheduler
+comfyui-core	SDTurboScheduler
+comfyui-core	BetaSamplingScheduler
+comfyui-core	RandomNoise
+comfyui-core	DisableNoise
+comfyui-core	BasicGuider
+comfyui-core	CFGGuider
+comfyui-core	DualCFGGuider
+comfyui-core	SplitSigmas
+comfyui-core	FlipSigmas
+comfyui-core	ModelSamplingDiscrete
+comfyui-core	ModelSamplingContinuousEDM
+comfyui-core	ModelSamplingSD3
+comfyui-core	ModelSamplingFlux
+comfyui-core	ModelSamplingAuraFlow
+comfyui-core	RescaleCFG
+comfyui-core	FreeU
+comfyui-core	FreeU_V2
+comfyui-core	PerturbedAttentionGuidance
+comfyui-core	SelfAttentionGuidance
+comfyui-core	DifferentialDiffusion
+comfyui-core	PatchModelAddDownscale
+comfyui-core	TomePatchModel
+comfyui-core	ModelMergeSimple
+comfyui-core	ModelMergeBlocks
+comfyui-core	CLIPMergeSimple
+comfyui-core	PrimitiveInt
+comfyui-core	PrimitiveFloat
+comfyui-core	PrimitiveString
+comfyui-core	PrimitiveStringMultiline
+comfyui-core	PrimitiveBoolean
+comfyui-core	StringConcatenate
+
+# ---- ComfyUI-GGUF (pinned in custom-nodes.toml, 1921-7aa5) -------------------
+ComfyUI-GGUF	UnetLoaderGGUF
+ComfyUI-GGUF	UnetLoaderGGUFAdvanced
+ComfyUI-GGUF	CLIPLoaderGGUF
+ComfyUI-GGUF	DualCLIPLoaderGGUF
+ComfyUI-GGUF	TripleCLIPLoaderGGUF
+ComfyUI-GGUF	QuadrupleCLIPLoaderGGUF
+
+# ---- 1956-bh6j: these packages are pinned in custom-nodes.toml (names match). ----
+ComfyUI_IPAdapter_plus	IPAdapterModelLoader
+ComfyUI_IPAdapter_plus	IPAdapterUnifiedLoader
+ComfyUI_IPAdapter_plus	IPAdapter
+ComfyUI_IPAdapter_plus	IPAdapterAdvanced
+ComfyUI_IPAdapter_plus	IPAdapterBatch
+ComfyUI_IPAdapter_plus	IPAdapterStyleComposition
+ComfyUI_IPAdapter_plus	IPAdapterTiled
+ComfyUI_IPAdapter_plus	IPAdapterEncoder
+ComfyUI_IPAdapter_plus	IPAdapterEmbeds
+ComfyUI_IPAdapter_plus	IPAdapterCombineEmbeds
+ComfyUI_IPAdapter_plus	IPAdapterNoise
+ComfyUI_IPAdapter_plus	PrepImageForClipVision
+ComfyUI-layerdiffuse	LayeredDiffusionApply
+ComfyUI-layerdiffuse	LayeredDiffusionDecode
+ComfyUI-layerdiffuse	LayeredDiffusionDecodeRGBA
+ComfyUI-layerdiffuse	LayeredDiffusionDecodeSplit
+ComfyUI-layerdiffuse	LayeredDiffusionDiffApply
+ComfyUI-layerdiffuse	LayeredDiffusionCondApply
+ComfyUI-layerdiffuse	LayeredDiffusionCondJointApply
+ComfyUI-layerdiffuse	LayeredDiffusionJointApply
+ComfyUI_BiRefNet_ll	LoadRembgByBiRefNetModel
+ComfyUI_BiRefNet_ll	RembgByBiRefNet
+ComfyUI_BiRefNet_ll	RembgByBiRefNetAdvanced
+ComfyUI_BiRefNet_ll	GetMaskByBiRefNet
+ComfyUI_BiRefNet_ll	BlurFusionForegroundEstimation

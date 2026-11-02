@@ -21,7 +21,7 @@ pull_recipe: see-section-pull-on-demand
 ---
 # Bash
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:wsl-runtime
 
 ## Provenance
 
@@ -139,7 +139,7 @@ Quote `"$(...)"` to preserve newlines and avoid word-splitting. Use `2>/dev/null
 
 ## Bash on Windows (Git Bash / MSYS2)
 
-@trace spec:cross-platform, spec:windows-wsl-runtime
+@trace spec:cross-platform, spec:wsl-runtime
 @cheatsheet runtime/wsl-on-windows.md, runtime/windows-native-dev-build.md
 
 Tillandsias' `build-local.sh` and `scripts/build-sidecar.sh` execute on the Windows host under **Git Bash**, which is a stripped MSYS2 environment. Git Bash is `bash` (5.x) plus a thin POSIX emulation layer (`msys-2.0.dll`) that auto-translates Unix paths into Win32 paths whenever a `.exe` is invoked. Almost every cross-platform footgun on Windows traces back to that translator.
