@@ -88,6 +88,13 @@ mod imagegen_studio;
 mod imagegen_tiers;
 #[cfg(feature = "host-services")]
 mod imagegen_tool;
+// 1956-x7xp: the shared GPU queue, provenance v1 and studio.run_workflow.
+#[cfg(feature = "host-services")]
+mod gpu_queue;
+#[cfg(feature = "host-services")]
+mod provenance;
+#[cfg(feature = "host-services")]
+mod studio_tool;
 mod progress_sink;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).

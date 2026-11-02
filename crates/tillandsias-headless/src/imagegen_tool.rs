@@ -29,6 +29,7 @@ use std::time::Instant;
 
 use serde_json::{Value, json};
 
+use crate::gpu_queue;
 use crate::imagegen_consent;
 use crate::imagegen_models::{self, FetchEvent};
 use crate::imagegen_tiers::{self, TierRow};
@@ -275,84 +276,6 @@ pub enum Progress {
     },
 }
 
-/// 1955-rjv3: one engine on the device at a time, per host. Calls wait in
-/// arrival order (a queue, never a refusal) and report their position.
-struct GpuQueue {
-    state: Mutex<(u64, u64)>, // (next ticket, now serving)
-    turn: std::sync::Condvar,
-}
-
-fn gpu_queue() -> &'static GpuQueue {
-    static Q: OnceLock<GpuQueue> = OnceLock::new();
-    Q.get_or_init(|| GpuQueue {
-        state: Mutex::new((0, 0)),
-        turn: std::sync::Condvar::new(),
-    })
-}
-
-/// Holds the device until dropped; dropping wakes the next ticket.
-struct GpuTurn;
-
-impl Drop for GpuTurn {
-    fn drop(&mut self) {
-        let q = gpu_queue();
-        let mut st = q.state.lock().unwrap_or_else(|e| e.into_inner());
-        st.1 += 1;
-        q.turn.notify_all();
-    }
-}
-
-fn wait_for_gpu(progress: &mut dyn FnMut(Progress)) -> GpuTurn {
-    let q = gpu_queue();
-    let mut st = q.state.lock().unwrap_or_else(|e| e.into_inner());
-    let ticket = st.0;
-    st.0 += 1;
-    let mut last = None;
-    while st.1 != ticket {
-        let ahead = (ticket - st.1) as usize;
-        if last != Some(ahead) {
-            last = Some(ahead);
-            progress(Progress::Queued { position: ahead });
-        }
-        st = q.turn.wait(st).unwrap_or_else(|e| e.into_inner());
-    }
-    GpuTurn
-}
-
-/// Who holds GPU memory now (nvidia-smi compute apps), when it can say.
-fn vram_holders() -> Option<String> {
-    let out = std::process::Command::new("nvidia-smi")
-        .args([
-            "--query-compute-apps=pid,process_name,used_memory",
-            "--format=csv,noheader",
-        ])
-        .output()
-        .ok()?;
-    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (out.status.success() && !text.is_empty()).then_some(text)
-}
-
-/// 1955-rjv3: turn an engine failure into one that says what happened.
-pub fn explain_engine_failure(err: &str, holders: Option<String>) -> String {
-    if err.contains("cannot make enough memory available") {
-        let who = holders.map_or_else(
-            || "another process (nvidia-smi could not say which; an inference container such as ollama is the usual one)".to_string(),
-            |h| format!("these processes (pid, name, memory): {}", h.replace('\n', "; ")),
-        );
-        return format!(
-            "gpu_memory_busy: the GPU does not have enough free memory for this model; it is held by {who}. \
-             Stop or unload it, or retry later. Engine said: {}",
-            err.lines().last().unwrap_or(err)
-        );
-    }
-    if err.contains("exited 139") || err.contains("signal 11") {
-        return format!(
-            "{err} (the engine crashed; the usual cause is too little free GPU memory)"
-        );
-    }
-    err.to_string()
-}
-
 /// What a generate produced.
 pub struct EngineOut {
     pub backend: String,
@@ -555,28 +478,54 @@ pub fn call(
     let names: Vec<String> = (0..job.count)
         .map(|i| format!("img-{stamp}-{}-{i}.png", job.seed))
         .collect();
-    let turn = wait_for_gpu(progress);
+    // D3 (1956-x7xp): one GPU queue per host, shared with the studio.
+    let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
     let t0 = Instant::now();
     let out = engine
         .generate(&job, &out_dir, &names, progress)
-        .map_err(|e| explain_engine_failure(&e, vram_holders()));
+        .map_err(|e| gpu_queue::explain_engine_failure(&e, gpu_queue::vram_holders()));
     drop(turn);
     let out = out?;
     let elapsed = t0.elapsed().as_secs_f64();
     let licence = job.tier.licence.clone();
+    // D5 (1956-x7xp): the same provenance schema the studio writes.
+    let mut models = imagegen_models::files_for_tier(&imagegen_models::manifest(), &job.tier.tier);
+    models.extend(job.aux.files());
+    let control_input = job.aux.control.as_ref().and_then(|(_, img)| {
+        Some(crate::provenance::Input {
+            name: "control_image".into(),
+            path: img.replacen("/out", FORGE_SCRATCH, 1),
+            sha256: control_image_sha256(&out_dir, img)?,
+        })
+    });
     let mut images = Vec::new();
-    for name in &names {
+    for (i, name) in names.iter().enumerate() {
         let host = out_dir.join(name);
         let bytes =
             std::fs::read(&host).map_err(|e| format!("engine_failed: no output {name}: {e}"))?;
         let (w, h, alpha) =
             png_facts(&bytes).ok_or_else(|| format!("engine_failed: {name} is not a PNG"))?;
+        let record = crate::provenance::Record {
+            engine: crate::provenance::Engine::SdCpp,
+            workflow: None,
+            models: models.clone(),
+            inputs: control_input.iter().cloned().collect(),
+            seed: job.seed + i as u64,
+            prompt: job.prompt.clone(),
+            negative_prompt: job.negative_prompt.clone(),
+            tier: Some(job.tier.tier.clone()),
+            placement: out.backend.clone(),
+            family: None,
+        };
+        let prov = record.write_beside(&host)?;
         images.push(json!({
             "path": forge_path(&host),
             "width": w,
             "height": h,
             "has_alpha": alpha,
             "thumbnail_path": thumbnail(&host).map(|t| forge_path(&t)),
+            "provenance_path": format!("{}.provenance.json", forge_path(&host)),
+            "provenance": prov,
         }));
     }
     let first = images[0].clone();
@@ -609,6 +558,7 @@ pub fn call(
         "ephemeral": true,
         "note": EPHEMERAL_NOTE,
         "bigger_tier_offer": bigger,
+        "provenance": first["provenance"],
         // 1955-rjv3: part of the model ran on the CPU; slower, and a sign the
         // GPU was short of memory. Reported, never passed off as a GPU run.
         "degraded": (out.backend == "mixed").then(|| json!({
@@ -1188,22 +1138,6 @@ mod tests {
         assert!(saw_queue, "a waiting call reports its queue position");
     }
 
-    /// The engine's VRAM refusal names who holds the device.
-    #[test]
-    fn a_vram_refusal_names_the_holders() {
-        let log = "model manager memory on Vulkan0: reported free 180.38 MB / total 24564.00 MB\n\
-                   cannot make enough memory available";
-        let e = explain_engine_failure(
-            &format!("engine_failed: sd-cli exited 1\n{log}"),
-            Some("1234, ollama, 23900 MiB".into()),
-        );
-        assert!(e.starts_with("gpu_memory_busy:"), "{e}");
-        assert!(e.contains("ollama"), "{e}");
-        let e = explain_engine_failure("engine_failed: sd-cli exited 139", None);
-        assert!(e.starts_with("engine_failed:"), "{e}");
-        assert!(e.contains("crashed"), "a segfault says so: {e}");
-    }
-
     /// 1874-p8w7 verifiable closure. Pre-fix: FAILS (bigger_tier_offer is
     /// always null and an I1 request runs without any consent).
     #[test]
@@ -1231,6 +1165,20 @@ mod tests {
         )
         .unwrap();
         assert_eq!(r["tier"], "I0");
+        // D5: image.generate speaks the same provenance schema as the studio.
+        assert_eq!(r["provenance"]["schema"], "tillandsias.provenance/v1");
+        assert_eq!(r["provenance"]["engine"]["name"], "sd.cpp");
+        assert_eq!(
+            r["provenance"]["engine"]["ref"],
+            crate::provenance::SDCPP_TAG
+        );
+        assert_eq!(r["provenance"]["models"][0]["file"], "sdxs09.safetensors");
+        assert_eq!(r["provenance"]["placement"], "cuda");
+        let side = scratch.path().join(lane_volume(p, i)).join(format!(
+            "{}.provenance.json",
+            r["path"].as_str().unwrap().rsplit('/').next().unwrap()
+        ));
+        assert!(side.is_file(), "{}", side.display());
         let offer = &r["bigger_tier_offer"];
         assert_eq!(offer["tier"], "I1", "the next tier only: {offer}");
         let token = offer["consent_token"]

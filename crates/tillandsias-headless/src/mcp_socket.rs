@@ -337,6 +337,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // 1874-kkrc: local image generation, after the pinned lifecycle
             // and toolchain tools.
             tools.push(crate::imagegen_tool::descriptor());
+            // 1956-x7xp: the headless studio workflow runner, beside it.
+            tools.push(crate::studio_tool::descriptor());
             tools.extend(browser_tool_descriptors(browser, rt));
             // 1772-irs3: the read-only Cloudflare tools, after the browser
             // family (both lists above are pinned).
@@ -452,6 +454,26 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     let empty = serde_json::json!({});
                     let arguments = req["params"].get("arguments").unwrap_or(&empty);
                     match crate::imagegen_tool::call(project_label, instance, arguments, &mut |p| {
+                        if let Some(line) =
+                            crate::imagegen_tool::progress_notification(&token, &mut seq, &p)
+                        {
+                            emit(line);
+                        }
+                    }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "studio.run_workflow" => {
+                    let token = req["params"]["_meta"]["progressToken"].clone();
+                    let mut seq = 0u64;
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    match crate::studio_tool::call(project_label, instance, arguments, &mut |p| {
                         if let Some(line) =
                             crate::imagegen_tool::progress_notification(&token, &mut seq, &p)
                         {
@@ -1697,6 +1719,12 @@ mod image_generate_fixtures {
             .find(|t| t["name"] == "image.generate")
             .expect("image.generate is listed");
         assert_eq!(desc["inputSchema"]["required"][0], "prompt");
+        // 1956-x7xp: the studio runner sits beside it, under the same gate.
+        let studio = tools
+            .iter()
+            .find(|t| t["name"] == "studio.run_workflow")
+            .expect("studio.run_workflow is listed");
+        assert_eq!(studio["inputSchema"]["required"][0], "workflow");
         let d = desc["description"].as_str().unwrap();
         assert!(d.contains("deleted when the forge shuts down"), "{d}");
 
