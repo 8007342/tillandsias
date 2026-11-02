@@ -332,6 +332,7 @@ specs:
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:provider-usage-limit
+  - litmus:image-build-network-is-explicit
   - litmus:flaky-installs-background
   coverage_ratio: 80
   last_verified: '2026-07-24'
@@ -559,6 +560,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
   - litmus:bare-metal-lane-command-is-runnable
@@ -1088,7 +1090,9 @@ specs:
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
-  - litmus:web-studio-grapesjs-stores-as-a-repo-diff
+  - litmus:studio-grapesjs-saves-through-the-shared-endpoint
+  - litmus:studio-decap-commits-a-hugo-entry-through-the-front
+  - litmus:web-studio-tina-saves-through-local-graphql
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape
@@ -1111,6 +1115,7 @@ specs:
   - litmus:binary-e2e-smoke
   - litmus:tray-parity-matrix-complete
   - litmus:tray-new-surface-parity-gate
+  - litmus:a-second-forge-of-a-project-takes-its-own-instance
   - litmus:tray-click-replies-while-a-launch-blocks
   coverage_ratio: 100
   last_verified: '2026-05-15'

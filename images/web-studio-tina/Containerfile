@@ -1,0 +1,36 @@
+# @trace order:1863-dmke
+# The TinaCMS studio lane in LOCAL mode: `tinacms dev` on one forge checkout
+# at /project, no Tina Cloud account, telemetry off, no network at run time.
+# Every package (1026) is pinned by package-lock.json integrity.
+#
+# Licences approved by the operator 2026-11-01 (relayed by macuahuitl-fedora):
+# tinacms 3.15.1 and @tinacms/cli 4.0.4 Apache-2.0, @tinacms/graphql and
+# @tinacms/datalayer Apache-2.0 as shipped, and the census in NOTICE (which
+# also carries the CC-BY-4.0 credit for caniuse-lite's data).
+FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90
+
+LABEL io.tillandsias.web-studio.engine="tina" \
+      io.tillandsias.web-studio.tinacms-version="3.15.1" \
+      io.tillandsias.web-studio.tinacms-cli-version="4.0.4" \
+      io.tillandsias.web-studio.licence="Apache-2.0" \
+      io.tillandsias.web-studio.dependency-licences="MIT,ISC,Apache-2.0,BSD-3-Clause,BSD-2-Clause,0BSD,Unlicense,Python-2.0,CC0-1.0,CC-BY-4.0,Zlib" \
+      io.tillandsias.web-studio.telemetry="off"
+
+WORKDIR /opt/studio
+COPY package.json package-lock.json NOTICE /opt/studio/
+RUN npm ci --ignore-scripts --omit=dev --no-audit --no-fund \
+    && test -f /opt/studio/node_modules/@tinacms/cli/bin/tinacms \
+    && npm cache clean --force
+COPY server.mjs /opt/studio/
+# Tina's config build resolves `tinacms` from the PROJECT upwards; /project's
+# parent is /, so /node_modules serves it without writing into the checkout.
+# Vite keeps its dependency cache inside @tinacms/app, so the studio user owns
+# that package.
+RUN ln -s /opt/studio/node_modules /node_modules \
+    && useradd -u 1001 -m -s /usr/sbin/nologin studio \
+    && chown -R studio:studio /opt/studio/node_modules/@tinacms/app \
+    && mkdir -p /project && chown studio:studio /project
+USER studio
+EXPOSE 8090
+ENV STUDIO_PROJECT=/project STUDIO_PORT=8090
+ENTRYPOINT ["node", "/opt/studio/server.mjs"]
