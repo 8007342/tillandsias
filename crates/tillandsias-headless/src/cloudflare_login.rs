@@ -17,8 +17,9 @@
 //!   operator's static relay page (`TILLANDSIAS_CLOUDFLARE_RELAY_URL`,
 //!   `assets/cloudflare-relay/index.html`); the code comes back by paste, or
 //!   by polling `TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL` when set. The default
-//!   relay is [`DEFAULT_RELAY_URL`], GATED OFF ([`RELAY_DEFAULT_ON`]) until
-//!   the operator confirms its registration (1757-n45b).
+//!   relay is [`DEFAULT_RELAY_URL`], ON ([`RELAY_DEFAULT_ON`]) since its
+//!   registration was confirmed (1757-n45b, 2026-10-17; flipped by
+//!   1954-cfqr). An EMPTY `TILLANDSIAS_CLOUDFLARE_RELAY_URL` turns it off.
 //! - **paste**: the operator pastes the line the relay page shows
 //!   (`code=…&state=…`) or the whole address-bar URL. This is an
 //!   AUTHORIZATION CODE — single-use and useless without the PKCE verifier
@@ -77,13 +78,24 @@ pub const RELAY_POLL_URL_ENV: &str = "TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL";
 /// so there is no default poll: the phone shows the paste line. A poll URL is
 /// used only when the operator sets [`RELAY_POLL_URL_ENV`] themselves.
 pub const DEFAULT_RELAY_URL: &str = "https://cloudflare.tillandsias.org/cloudflare/callback";
-/// GATED OFF until the operator confirms DEFAULT_RELAY_URL is registered as a
-/// redirect URI on the Cloudflare App. Before that, Cloudflare refuses the
-/// authorize request outright, so defaulting to the relay would break every
-/// login, not only QR. Flip it in the release after the confirmation, and
-/// invert `relay_default_is_gated_off_until_registration_is_confirmed` in
-/// the same commit.
-pub const RELAY_DEFAULT_ON: bool = false;
+/// ON since the coordinator confirmed DEFAULT_RELAY_URL is live and
+/// registered as a redirect URI on the Cloudflare App (ledger event
+/// 2026-10-17, 1757-n45b). It was gated off before that because an
+/// unregistered redirect makes Cloudflare refuse the authorize request, which
+/// would break every login, not only QR.
+///
+/// WHY ON MATTERS (1954-cfqr, operator 2026-11-01): the macOS tray runs this
+/// login inside the Linux VM guest, which has no desktop, so with no relay
+/// `default_via` fell through to `Paste` whose redirect is
+/// `http://127.0.0.1:<port>/…` WITH NO LISTENER. Safari on the host resolved
+/// that to the host's own loopback: a dead page the operator had to copy the
+/// address bar from. With the relay on, the guest shows a QR whose redirect
+/// is the https relay page, reachable from any phone or browser.
+///
+/// `relay_default_is_on_since_registration_was_confirmed` pins this; a
+/// retreat (an empty `TILLANDSIAS_CLOUDFLARE_RELAY_URL`) is per host, not a
+/// code change.
+pub const RELAY_DEFAULT_ON: bool = true;
 
 /// The relay and poll URLs from their env values (`None` = unset). A set but
 /// empty value turns the relay off even when the default is on. The poll has
@@ -1245,10 +1257,26 @@ fn show_authorize_url(via: Via, pending: &Pending, deps: &LoginDeps<'_>, out: &m
                 "Open this URL in any browser and approve the Tillandsias App:"
             );
             let _ = writeln!(out, "  {}", pending.authorize_url);
+            if redirect_is_dead_loopback(&pending.redirect_uri) {
+                // 1954-cfqr: nothing listens on this port (paste has no
+                // listener), so the browser WILL land on an unreachable
+                // 127.0.0.1 page after the approval. Say so up front, instead
+                // of letting the operator discover it on a dead Safari tab.
+                let _ = writeln!(
+                    out,
+                    "note:cloudflare-login:redirect-lands-on-a-dead-page (no relay is configured: after you approve, the browser will fail to load 127.0.0.1; copy its whole address-bar URL and paste it here)"
+                );
+            }
         }
         Via::Device => {}
     }
     let _ = out.flush();
+}
+
+/// A loopback redirect used by a receiver that binds NO listener (paste):
+/// the browser that follows it reaches nothing.
+fn redirect_is_dead_loopback(redirect_uri: &str) -> bool {
+    redirect_uri.starts_with("http://127.0.0.1:")
 }
 
 // ── the logout ─────────────────────────────────────────────────────────────
@@ -1563,22 +1591,115 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    // ── 1757-n45b: the relay default, gated off until registration ──────────
+    // ── 1757-n45b / 1954-cfqr: the relay default, on since registration ────
 
     #[test]
-    fn relay_default_is_gated_off_until_registration_is_confirmed() {
-        // FAILS if the default is baked on before the operator confirms the
-        // redirect URI: an unregistered redirect makes Cloudflare refuse the
-        // authorize request, so every login would break, not only QR.
-        // Invert this in the release that flips RELAY_DEFAULT_ON.
-        // black_box: a runtime arm (clippy refuses assertions on constants),
-        // so a flipped default is a named FAILED test, not a build break.
+    fn relay_default_is_on_since_registration_was_confirmed() {
+        // The inverse of 1757-n45b's gate arm: the coordinator confirmed
+        // DEFAULT_RELAY_URL live and registered on 2026-10-17, and while the
+        // default stayed off the macOS tray's login (a Linux guest, no
+        // desktop) could only offer a dead 127.0.0.1 redirect. FAILS on the
+        // pre-1954-cfqr code (RELAY_DEFAULT_ON = false).
+        // black_box: a runtime arm (clippy refuses assertions on constants).
         let on = std::hint::black_box(RELAY_DEFAULT_ON);
         assert!(
-            !on,
-            "RELAY_DEFAULT_ON is true before the operator confirmed {DEFAULT_RELAY_URL} is registered (1757-n45b)"
+            on,
+            "RELAY_DEFAULT_ON is false although {DEFAULT_RELAY_URL} is registered (1757-n45b, 2026-10-17)"
         );
-        assert_eq!(resolve_relay(None, None, RELAY_DEFAULT_ON), (None, None));
+        assert_eq!(
+            resolve_relay(None, None, RELAY_DEFAULT_ON),
+            (Some(DEFAULT_RELAY_URL.to_string()), None)
+        );
+        assert_eq!(default_via(false, RELAY_DEFAULT_ON), Via::Qr);
+    }
+
+    /// 1954-cfqr. The macOS tray's "Cloudflare Login" is `tillandsias-headless
+    /// --cloudflare-login` in the Linux VM guest: no desktop session, no env,
+    /// discovery without a device grant. This arm runs that exact production
+    /// default (`resolve_relay(None, None, RELAY_DEFAULT_ON)` as `run_cli`
+    /// does) and requires a QR whose redirect is the https relay page. On the
+    /// pre-fix code it FAILS: `default_via(false, false)` is `Paste`, the
+    /// redirect is `http://127.0.0.1:48631/…` with nothing listening (what
+    /// Safari on the host showed as a dead page), and no QR is printed.
+    #[test]
+    fn cloudflare_login_in_a_guest_without_a_desktop_shows_a_qr_whose_redirect_is_reachable() {
+        let store = MemStore::default();
+        let http = Scripted::with_discovery("");
+        let mut read = || -> Result<String, String> { panic!("no paste before the litmus stop") };
+        let mut d = deps(&http, &store, &no_open, &mut read);
+        let (relay, poll) = resolve_relay(None, None, RELAY_DEFAULT_ON);
+        d.relay_url = relay;
+        d.relay_poll_url = poll;
+        d.desktop_session = false;
+        d.stdin_is_terminal = true;
+        d.litmus_stop = true;
+        let mut out = Vec::new();
+        let r = login(None, &mut d, &mut out);
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(r, Ok(LoginOutcome::LitmusStopped), "{text}");
+        let url = text
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("Or open: "))
+            .unwrap_or_else(|| panic!("no QR fallback URL line (no QR was shown):\n{text}"));
+        let expected = format!(
+            "redirect_uri={}",
+            percent_encode_for_test(DEFAULT_RELAY_URL)
+        );
+        assert!(url.contains(&expected), "redirect is not the relay:\n{url}");
+        assert!(
+            !url.contains("127.0.0.1"),
+            "a phone cannot reach the guest's loopback:\n{url}"
+        );
+        assert!(
+            text.contains("Scan this QR code"),
+            "no QR for the phone:\n{text}"
+        );
+        assert_eq!(store.touches(), 0);
+    }
+
+    /// 1954-cfqr. When a host turns the relay off (empty env) in a guest, the
+    /// paste receiver's redirect is a loopback nobody listens on. The login
+    /// must SAY so before the operator finds out from a dead browser tab.
+    #[test]
+    fn cloudflare_login_paste_without_relay_warns_that_the_redirect_is_dead() {
+        let store = MemStore::default();
+        let http = Scripted::with_discovery("");
+        let mut read = || -> Result<String, String> { panic!("no paste before the litmus stop") };
+        let mut d = deps(&http, &store, &no_open, &mut read);
+        let (relay, poll) = resolve_relay(Some(""), None, RELAY_DEFAULT_ON);
+        assert_eq!((relay.clone(), poll.clone()), (None, None));
+        d.relay_url = relay;
+        d.relay_poll_url = poll;
+        d.stdin_is_terminal = true;
+        d.litmus_stop = true;
+        let mut out = Vec::new();
+        let r = login(None, &mut d, &mut out);
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(r, Ok(LoginOutcome::LitmusStopped), "{text}");
+        assert!(
+            text.contains("note:cloudflare-login:redirect-lands-on-a-dead-page"),
+            "{text}"
+        );
+        // CONTROL: with the relay the same paste receiver has a live redirect
+        // and says nothing of the kind.
+        let mut read = || -> Result<String, String> { panic!("no paste") };
+        let mut d = deps(&http, &store, &no_open, &mut read);
+        d.relay_url = Some(DEFAULT_RELAY_URL.into());
+        d.stdin_is_terminal = true;
+        d.litmus_stop = true;
+        let mut out = Vec::new();
+        assert_eq!(
+            login(Some(Via::Paste), &mut d, &mut out),
+            Ok(LoginOutcome::LitmusStopped)
+        );
+        let text = String::from_utf8(out).unwrap();
+        assert!(!text.contains("redirect-lands-on-a-dead-page"), "{text}");
+    }
+
+    /// The authorize URL's `redirect_uri` as `cloudflare_oauth::begin`
+    /// encodes it: only `:` and `/` differ from the raw relay URL.
+    fn percent_encode_for_test(url: &str) -> String {
+        url.replace(':', "%3A").replace('/', "%2F")
     }
 
     #[test]
