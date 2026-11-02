@@ -365,6 +365,7 @@ mod tests {
     }
 
     /// 1957-8hkf sibling: an installable offer says what it costs to fetch.
+    #[cfg(feature = "host-services")]
     #[test]
     fn an_installable_offer_states_download_gb_and_minutes() {
         crate::imagegen_consent::reset_for_test();
