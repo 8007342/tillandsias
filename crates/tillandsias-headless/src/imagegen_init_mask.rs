@@ -653,10 +653,11 @@ mod tests {
     #[test]
     #[ignore]
     fn imagegen_init_mask_live_verify() {
-        let dir = std::path::Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../target/d11-live"
-        ));
+        // Read at run time (1590-j20f: never compile-time env!).
+        let dir = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../target/d11-live");
         let rd = |n: &str| std::fs::read(dir.join(n)).unwrap_or_else(|e| panic!("{n}: {e}"));
         let init = decode_rgba(&rd("init.png"), "init").unwrap();
         let (_, _, mask) = decode_grey(&rd("mask.png"), "mask").unwrap();

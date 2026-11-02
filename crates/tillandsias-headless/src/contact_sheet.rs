@@ -579,13 +579,10 @@ mod tests {
     fn contact_sheet_write_sample_for_review() {
         let png =
             crate::pixel_finish::encode_rgba(&build(&cells(), 64, "I0+I1 v0").unwrap()).unwrap();
-        std::fs::write(
-            concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../target/contact-sheet-sample.png"
-            ),
-            png,
-        )
-        .unwrap();
+        // Read at run time (1590-j20f: never compile-time env!).
+        let manifest = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        );
+        std::fs::write(manifest.join("../../target/contact-sheet-sample.png"), png).unwrap();
     }
 }
