@@ -259,7 +259,9 @@ fi
 no_leak "novault" "$OUT" "$(code_of novault)"
 
 start_fake norelay
-run_bin norelay -- --cloudflare-login --via qr
+# 1954-cfqr: the relay is ON by default (RELAY_DEFAULT_ON), so "no relay"
+# is the documented per-host retreat, an EMPTY TILLANDSIAS_CLOUDFLARE_RELAY_URL.
+run_bin norelay TILLANDSIAS_CLOUDFLARE_RELAY_URL= -- --cloudflare-login --via qr
 if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:no-relay-configured$' <<<"$OUT" \
     && grep -q -- '--via loopback' <<<"$OUT" && grep -q -- '--via paste' <<<"$OUT"; then
     ok "NORELAY bin: --via qr without a relay refuses, naming --via loopback and --via paste"
