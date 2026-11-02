@@ -63,7 +63,7 @@ ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 # @trace spec:host-browser-mcp
 trace_lifecycle "entrypoint" "opencode web starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 # Shared project materialization routine. It uses a host-mounted project when
 # the launcher provides one, otherwise it clones from the git mirror.
 clone_project_from_mirror

@@ -21,6 +21,16 @@ WORKDIR /src
 RUN cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DSD_VULKAN=ON \
     && cmake --build build -j"$(nproc)" \
     && test -x build/bin/sd-server && test -x build/bin/sd-cli
+# 1959-xsy5 (design D11): image.generate passes these sd-cli flags, whose
+# names the design read from sd.cpp master. The ladder pins a TAG, so the
+# build checks the pinned tag's own help and fails on any flag it lacks.
+RUN help="$(build/bin/sd-cli -h 2>&1 || true)" \
+    && for f in --init-img --mask --strength --control-net --control-image --batch-count; do \
+         printf '%s\n' "$help" | grep -q -- "$f" \
+           || { echo "refused:imagegen-build:sd-cli-lacks-flag:$f (tag $SDCPP_TAG)"; \
+                echo "  why: image.generate passes $f (1959-xsy5 D11, 1954-gdi6); this sd.cpp tag does not offer it"; \
+                echo "  remedy: move SDCPP_TAG to a tag whose sd-cli -h lists $f, or drop the feature"; exit 1; }; \
+       done
 
 FROM registry.fedoraproject.org/fedora:44
 ARG SDCPP_TAG=master-1015-e41fbcf

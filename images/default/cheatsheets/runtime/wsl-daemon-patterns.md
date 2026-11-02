@@ -106,7 +106,9 @@ The daemon starts automatically when WSL boots.
 # AVOID: /tmp or /var/run (ephemeral, cleared on restart)
 # AVOID: /root/.something (root-owned, not accessible from Windows)
 # PREFER: /run/user/1000/<name> (per-user, persistent across boots)
-# PREFER: /mnt/c/Users/<USER>/.tillandsias/sockets/ (shared with Windows)
+# NOT in the tillandsias distro: /mnt/c/Users/<USER>/... — automount is off there
+#   (wsl.rs:739-749; measured yoga 2026-11-02: /mnt/c empty). Reach the socket
+#   from Windows via \\wsl$\tillandsias\run\user\1000\... (9P) instead.
 ```
 
 In a service unit:
@@ -172,7 +174,7 @@ This ensures the Windows app doesn't try to connect to the router until it's ful
 ## Common pitfalls
 
 - **Forgetting to enable systemd** — if `/etc/wsl.conf` is missing `[boot] systemd=true`, units won't auto-start. Verify with `wsl -d <distro> systemctl --version` (should show systemd version, not an error).
-- **Socket paths in /tmp** — `/tmp` is backed by TMPFS and is cleared on every WSL restart. Use `/run/user/1000/` for per-user sockets, or `/mnt/c/Users/<USER>/` to share with Windows.
+- **Socket paths in /tmp** — `/tmp` is backed by TMPFS and is cleared on every WSL restart. Use `/run/user/1000/` for per-user sockets (reachable from Windows as `\\wsl$\tillandsias\run\user\1000\...`); `/mnt/c/Users/<USER>/` is NOT available in the `tillandsias` distro (automount off, 2026-11-02).
 - **Not reloading daemon after unit edits** — after editing `.service` files, run `systemctl daemon-reload` before `systemctl start`. Missing this step loads the old unit definition.
 - **Missing `After=network-online.target`** — if your daemon needs network (e.g., to fetch credentials), add `After=network-online.target` and `Wants=network-online.target` to ensure the network is up before the service starts.
 - **Mixing absolute Windows paths with relative Linux paths** — use `/mnt/c/Users/...` for Windows paths inside WSL, never `C:\Users\...`. The backslashes don't escape in bash.

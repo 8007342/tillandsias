@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Fable agent, 2026-11-02) on the operator ruling relayed by
+# the coordinator 2026-11-01, stacked on 1950-b4f3 (#811).
+packets:
+- packet_id: release-dispatched-on-main-and-the-aarch64-cross-gcc-replaced-by-zig
+  order: 1953-jmvb
+  status: in_progress
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  size: M
+  implementer_tier: sonnet
+  capability_tags:
+  - ci
+  - release
+  - nix
+  estimated_hours: 6
+  title: Dispatch the release on main (the workflow tags from there) so its caches and Sigstore SAN are main's inside the one daily run, and build the aarch64-musl binaries with zig + cargo-zigbuild instead of a from-source cross GCC
+  context: 'Operator ruling 2026-11-01 (verbatim): "let''s drop the compiler build, and start the release from main, those two look like low hanging fruit, we could probably do those easily." Evidence from 1950-b4f3: the aarch64-unknown-linux-musl cross GCC from pkgsCross was built from source on every release, two stages 07:04->07:44 on v56.11.1.1 (41 of the Nix step''s 67 min, run 41283100284); a release dispatched on a tag can never restore a GitHub Actions cache (5/5 runs restored nothing). The only C in the tree is ring''s; the macOS lane already cross-builds the same musl guests with cargo-zigbuild. The pinned nixpkgs carries zig 0.16.0 and cargo-zigbuild 0.23.0, both substituted.'
+  exit_criteria:
+  - 'flake.nix builds every aarch64 derivation (plan, router sidecar, headless) with zig + cargo-zigbuild and references no pkgsCross aarch64 toolchain; nix build .#tillandsias-headless-aarch64-musl succeeds locally and the output is a statically linked aarch64 ELF whose embedded sidecar and decider are aarch64 (scripts/lua/check-embedded-elf-arch.lua).'
+  - 'release.yml is dispatched on main with a version input, refuses any other ref, creates or verifies the tag v<VERSION> at GITHUB_SHA, and saves and restores the Nix and cargo caches under refs/heads/main; RELEASE_VERIFY_COSIGN_IDENTITY_REGEXP pins release.yml@refs/heads/main.'
+  - 'skills/merge-to-main-and-release dispatches once, on main, and scripts/resolve-release-run.sh resolves the run by main + the tag''s SHA; litmus:release-is-one-cloud-build (amended) refuses a tag dispatch or a seed input and is red on b6af09947.'
+  - 'The first main-dispatched release (the next daily cut) shows, from the jobs API: the Nix step under 25 min on a cache hit, no gcc derivation in the Linux log, and cosign verify-blob passing every bundle with the refs/heads/main identity; cited by run id in the closure event.'
+  verifiable_closure: 'litmus:release-is-one-cloud-build (red on b6af09947, green after) and scripts/test-resolve-release-run.sh for the mechanics; a local nix build of the aarch64 headless for the toolchain; the first main-dispatched run''s jobs-API timings and cosign verdicts, cited by run id, for the cloud half.'
+  next_action: 'Land work/1953-jmvb (stacked on #811). On the next daily cut, dispatch with --ref main -f version=<v>, then record the Nix step duration, the absence of a gcc derivation, and the SAN verdicts in the closure event. If the cache hit is absent on the SECOND main run, the key or the purge settings are wrong, not the ref.'
+  provenance: operator ruling 2026-11-01 via coordinator; run 41283100284 log (gcc stages); nix eval of the pinned nixpkgs for zig and cargo-zigbuild; local nix build log under the 1953-jmvb PR.
+  events:
+  - type: filed
+    ts: '2026-11-02T00:30:00Z'
+    host: macuahuitl
+    summary: filed p1 from the operator ruling; both changes in flight on work/1953-jmvb stacked on work/1950-b4f3
+  - type: claimed
+    ts: '2026-11-02T00:30:00Z'
+    host: macuahuitl
+    summary: flake.nix zig toolchain, release.yml main dispatch + tag + caches + SAN pin, skill, resolver, amended litmus

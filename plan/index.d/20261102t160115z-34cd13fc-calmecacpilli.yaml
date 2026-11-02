@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: spec-windows-wsl-runtime-is-cited-71-times-in-32-files-and-has-never-existed-so-every-one-of-those-traces-points-at-nothing
+    field: next_action
+    value: Read openspec/specs/wsl-runtime/spec.md and confirm it covers what the traces claim (the WSL2 podman runtime, its mounts and the git mirror hook). If it does, retarget every `spec:windows-wsl-runtime` to `spec:wsl-runtime` in one sweep (source, scripts, cheatsheets and the images/default cheatsheet copies) and check that the ghost-trace hook passes. If a trace claims behaviour the spec lacks, add that requirement to wsl-runtime rather than writing a new spec.
+    ts: "2026-11-02T16:01:15Z"
+    host: calmecacpilli
