@@ -12,7 +12,9 @@ criteria, written red against today's code first.
 ## 2. Tool
 
 - [x] 2.1 `image.generate` on the host MCP socket, exact requested size, output in shared `/work/tmp/imagegen/` [1874-kkrc]
-- [ ] 2.2 Smallest-first, one-tier-up offer with curated sentences and a host-minted token [1874-p8w7]
+- [x] 2.2 Host-minted single-use consent token and the offer/`consent_required` shape [1874-p8w7]
+- [x] 2.3 One-time per-host DOWNLOAD gate: tierless runs the highest present tier, direct tier requests, standing host grant (ruling 2026-11-01, #825) [1957-5m8g]
+- [x] 2.4 Offer only installed-or-installable tiers; the ask states GB and minutes [1957-8hkf]
 
 ## 3. Substrates
 
