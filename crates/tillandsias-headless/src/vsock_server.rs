@@ -1211,6 +1211,9 @@ async fn serve_ready_stream(
                 // Cloudflare login only when the guest advertises it, so an
                 // older guest is never sent a variant it cannot decode.
                 "CloudflareLoginStatusRequest".into(),
+                // Order 1955-cfhf: this guest accepts the host-held loopback
+                // callback for a running --cloudflare-login.
+                "CloudflareCallbackForward".into(),
                 // Order 333: advertise guest metrics so a tray can feature-
                 // detect instead of probing a version table.
                 "MetricsSnapshotRequest".into(),
@@ -1681,6 +1684,25 @@ async fn serve_ready_stream(
                     },
                 };
                 if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
+                }
+            }
+            ControlMessage::CloudflareCallbackForward { line, .. } => {
+                // Order 1955-cfhf: the HOST's loopback listener took the
+                // browser callback; hand its line to the login process that
+                // is waiting on the guest socket. The line is a single-use
+                // code (never a token) and is never logged here. One frame
+                // per request: IssueAck either way, the login judges it.
+                let path = crate::cloudflare_login::host_callback_socket_path();
+                if let Err(e) = crate::cloudflare_login::forward_callback_line(&path, &line).await {
+                    warn!(error = %e, "cloudflare callback forward: no login is waiting on the guest socket");
+                }
+                let ack = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::IssueAck { seq_acked: env.seq },
+                };
+                if write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }

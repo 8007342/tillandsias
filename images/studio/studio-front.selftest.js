@@ -119,6 +119,44 @@ server.on('listening', async () => {
     check(4, pwa.status === 404, `pwa:${pwa.status}`);
     check(4, junk.status === 400, `junk:${junk.status}`);
     arms++;
+    await ownWriterArm();
     fs.rmSync(tmp, { recursive: true, force: true });
     process.stdout.write(`ok:studio-front:${arms}-arms\n`);
 });
+
+// 5 an own-writer studio (decap): a write request the front proxies is
+// bracketed. The allowlisted file it wrote is committed, the off-allowlist one
+// is removed and evented, and the agent's edit made before it is untouched.
+async function ownWriterArm() {
+    fs.writeFileSync(path.join(checkout, 'agent-notes.txt'), 'work in progress\n');
+    const upstream = http.createServer((req, res) => {
+        fs.mkdirSync(path.join(checkout, 'content', 'posts'), { recursive: true });
+        fs.writeFileSync(path.join(checkout, 'content', 'posts', 'hello.md'), '# hello\n');
+        fs.writeFileSync(path.join(checkout, 'secrets.env'), 'TOKEN=x\n');
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end('{}');
+    });
+    await new Promise((r) => upstream.listen(0, '127.0.0.1', r));
+    const ev = [];
+    process.stdout.write = (s) => { ev.push(String(s)); return true; };
+    const srv = front.start({
+        TILLANDSIAS_STUDIO: 'decap', STUDIO_REGISTRY: registry, STUDIO_CHECKOUT: checkout,
+        LISTEN_HOST: '127.0.0.1', LISTEN_PORT: '0', UPSTREAM: `127.0.0.1:${upstream.address().port}`,
+    });
+    await new Promise((r) => srv.on('listening', r));
+    const status = await new Promise((resolve) => {
+        const r = http.request({ host: '127.0.0.1', port: srv.address().port, method: 'POST', path: '/api/v1',
+            headers: { 'content-type': 'application/json' } }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode)); });
+        r.on('error', () => resolve(0));
+        r.end('{"action":"persistEntry"}');
+    });
+    restore();
+    srv.close(); upstream.close();
+    check(5, status === 403, `refused-write-reported:${status}`);
+    check(5, g(['log', '-1', '--format=%s']).trim() === 'studio(decap): save content/posts/hello.md', g(['log', '-1', '--format=%s']));
+    check(5, !fs.existsSync(path.join(checkout, 'secrets.env')), 'off-allowlist-write-kept');
+    check(5, ev.some((e) => e.startsWith('event:studio.save_refused ') && e.includes('path=secrets.env')), ev.join(''));
+    check(5, fs.readFileSync(path.join(checkout, 'agent-notes.txt'), 'utf8') === 'work in progress\n', 'agent-edit-touched');
+    check(5, g(['status', '--porcelain']).trim() === '?? agent-notes.txt', g(['status', '--porcelain']));
+    arms++;
+}

@@ -257,6 +257,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 "serverInfo": {
                     "name": "tillandsias-host-services",
                     "version": env!("CARGO_PKG_VERSION"),
+                    "buildId": build_identity(),
                 }
             }
         }),
@@ -858,6 +859,23 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         return;
     };
     let mut reader = BufReader::new(read_half);
+    // 1956-4pxj: the git mirror's push events reach this forge on this
+    // connection. One shared writer, so a pushed notification and a response
+    // line never interleave.
+    let Ok(shared_half) = writer.try_clone() else {
+        return;
+    };
+    let shared: crate::lane_events::SharedWriter =
+        std::sync::Arc::new(std::sync::Mutex::new(shared_half));
+    let mut push_events = Some(crate::lane_events::register(
+        &project_label,
+        &lane_instance,
+        shared.clone(),
+    ));
+    let write_line = |line: &str| -> bool {
+        let mut w = shared.lock().unwrap_or_else(|p| p.into_inner());
+        w.write_all(format!("{line}\n").as_bytes()).is_ok()
+    };
 
     // Order 779-3trn: ONE browser server and ONE runtime for the whole
     // connection.
@@ -963,7 +981,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                     ),
                 }
             });
-            if writeln!(writer, "{too_large}").is_err() {
+            if !write_line(&too_large.to_string()) {
                 return;
             }
             continue;
@@ -976,6 +994,9 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             // 1637-5765: a toolchain session takes over the connection and
             // streams frames until the command exits; nothing follows it.
             Ok(req) if req["method"] == "tillandsias/exec" => {
+                // The exec session owns the stream from here: no notification
+                // may land between its frames.
+                drop(push_events.take());
                 crate::toolchain_exec::serve_exec(
                     &project_label,
                     &identity.instance,
@@ -986,21 +1007,16 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 );
                 return;
             }
-            Ok(req) => {
-                let mut sink = writer.try_clone().ok();
-                handle_mcp_jsonrpc_streaming(
-                    &project_label,
-                    &identity.instance,
-                    &req,
-                    &browser,
-                    &rt,
-                    &mut |line| {
-                        if let Some(w) = sink.as_mut() {
-                            let _ = writeln!(w, "{}", cap_response_line(&line));
-                        }
-                    },
-                )
-            }
+            Ok(req) => handle_mcp_jsonrpc_streaming(
+                &project_label,
+                &identity.instance,
+                &req,
+                &browser,
+                &rt,
+                &mut |line| {
+                    let _ = write_line(&cap_response_line(&line));
+                },
+            ),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -1020,7 +1036,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                     "MCP response exceeded the per-line cap; replaced with a typed error"
                 );
             }
-            if writeln!(writer, "{rendered}").is_err() {
+            if !write_line(&rendered) {
                 return;
             }
         }
@@ -1139,6 +1155,87 @@ fn lane_instance(instance: &str) -> &str {
 /// Whether something accepts on lane `(project, instance)`'s socket.
 pub(crate) fn lane_accepting(project: &str, instance: &str) -> bool {
     UnixStream::connect(mcp_socket_path_for_lane(project, instance)).is_ok()
+}
+
+/// 1961-8ats: this binary's build identity, `<VERSION>+<sha256 of the running
+/// executable, 16 hex>`. Two builds at the same VERSION differ here, which is
+/// the case that matters: a branch build tested beside the installed tray.
+/// `+unknown` when the executable cannot be read, and an unknown never matches.
+pub(crate) fn build_identity() -> &'static str {
+    static ID: OnceLock<String> = OnceLock::new();
+    ID.get_or_init(|| {
+        use sha2::{Digest, Sha256};
+        let digest = env::current_exe()
+            .and_then(fs::read)
+            .map(|bytes| {
+                let hash = Sha256::digest(&bytes);
+                hash.iter()
+                    .take(8)
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            })
+            .unwrap_or_else(|_| "unknown".to_owned());
+        format!("{}+{digest}", crate::VERSION.trim())
+    })
+}
+
+/// 1961-8ats: what the process answering on `socket` says it is, read from
+/// its MCP `initialize` serverInfo. A tray older than 1961-8ats sends no
+/// `buildId`, so it reads as `<version>+unknown`. `Err` when it does not answer.
+pub(crate) fn lane_server_build(socket: &std::path::Path) -> Result<String, String> {
+    use std::io::{BufRead, BufReader, Write};
+    let mut stream =
+        UnixStream::connect(socket).map_err(|e| format!("connect {}: {e}", socket.display()))?;
+    let timeout = Some(std::time::Duration::from_secs(3));
+    let _ = stream.set_read_timeout(timeout);
+    let _ = stream.set_write_timeout(timeout);
+    let probe = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": { "protocolVersion": "2024-11-05", "capabilities": {},
+                    "clientInfo": { "name": "tillandsias-lane-probe", "version": crate::VERSION.trim() } }
+    });
+    writeln!(stream, "{probe}").map_err(|e| format!("write {}: {e}", socket.display()))?;
+    let mut line = String::new();
+    BufReader::new(&stream)
+        .read_line(&mut line)
+        .map_err(|e| format!("read {}: {e}", socket.display()))?;
+    let reply: serde_json::Value =
+        serde_json::from_str(line.trim()).map_err(|e| format!("initialize reply: {e}"))?;
+    let info = &reply["result"]["serverInfo"];
+    if let Some(id) = info["buildId"].as_str() {
+        return Ok(id.to_owned());
+    }
+    let version = info["version"]
+        .as_str()
+        .ok_or_else(|| format!("initialize reply carries no serverInfo: {}", line.trim()))?;
+    Ok(format!("{version}+unknown"))
+}
+
+/// 1961-8ats: the named refusal when a tray-marked lane is answered by a
+/// build other than this one; `None` when nothing answers or the builds match.
+/// The hand-off has no other handshake, so without this a branch build's lane
+/// silently runs the installed tray's code (yoga, 2026-11-02).
+pub(crate) fn lane_served_by_other_build(project: &str, instance: &str) -> Option<String> {
+    let socket = mcp_socket_path_for_lane(project, instance);
+    marked_lane(socket.parent()?)?;
+    if !lane_accepting(project, instance) {
+        return None;
+    }
+    let ours = build_identity();
+    let theirs = lane_server_build(&socket).unwrap_or_else(|e| format!("unanswered ({e})"));
+    build_mismatch_refusal(ours, &theirs)
+}
+
+fn build_mismatch_refusal(ours: &str, theirs: &str) -> Option<String> {
+    if ours == theirs && !ours.ends_with("+unknown") {
+        return None;
+    }
+    Some(format!(
+        "refused:lane-tray-version-mismatch:lane={ours} tray={theirs}\n  \
+         why: this lane is served by a running tray built from other code, so its tools would \
+         run that build, not this one (1961-8ats)\n  \
+         remedy: quit the running tray and launch again, or launch with TILLANDSIAS_NO_TRAY=1"
+    ))
 }
 
 /// ORDER 1911-3dqo. Serve lane `(project, instance)` again after the process
@@ -1266,6 +1363,9 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
         instance.trim()
     };
     let lane_key = (project.to_owned(), instance_clean.to_owned());
+    // 1956-4pxj: whoever serves a lane of this project also hears its git
+    // mirror's push events (once per process), to pass on to the lane's forge.
+    crate::lane_events::listen_for_project(project, crate::forge_instance_at_address);
     // Keep this lock through creation. Inserting only after bind + chmod makes
     // a failed first attempt retryable, and serializes same-lane callers.
     let mut registry = lane_listener_registry().lock().expect("lane registry lock");
@@ -1290,6 +1390,14 @@ pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result
                 // 1863-eckw: on a tray-marked lane that peer is the tray
                 // serving it, so the lane is served and this launch proceeds.
                 Ok(_) if socket_path.parent().and_then(marked_lane).is_some() => {
+                    // 1961-8ats: served, but only by this build.
+                    if let Some(refusal) = build_mismatch_refusal(
+                        build_identity(),
+                        &lane_server_build(&socket_path)
+                            .unwrap_or_else(|e| format!("unanswered ({e})")),
+                    ) {
+                        return Err(refusal);
+                    }
                     return Ok(());
                 }
                 Ok(_) => {
@@ -1778,11 +1886,110 @@ mod lane_adoption_tests {
         let path = mcp_socket_path_for_lane(&key.0, &key.1);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
-        let _tray = UnixListener::bind(&path).unwrap();
+        stub_tray(&path, Some(build_identity()));
         mark_lane_tray_owned(&key.0, &key.1).unwrap();
         let bound = start_mcp_socket_server_for_lane(&key.0, &key.1);
         cleanup(&key);
         assert_eq!(bound, Ok(()));
+    }
+
+    /// 1961-8ats: a stub tray on `path` answering every `initialize` with
+    /// `build` as its serverInfo buildId, or with none (a pre-1961 tray).
+    fn stub_tray(path: &std::path::Path, build: Option<&str>) {
+        use std::io::{BufRead, BufReader, Write};
+        let listener = UnixListener::bind(path).unwrap();
+        let build = build.map(str::to_owned);
+        std::thread::spawn(move || {
+            // One thread per connection, as the real tray serves them: a
+            // caller may hold one connection open while it probes on another.
+            for mut stream in listener.incoming().flatten() {
+                let build = build.clone();
+                std::thread::spawn(move || {
+                    let mut line = String::new();
+                    if BufReader::new(&stream).read_line(&mut line).unwrap_or(0) == 0 {
+                        return;
+                    }
+                    let mut info = serde_json::json!({ "name": "stub-tray", "version": "56.11.1" });
+                    if let Some(b) = &build {
+                        info["buildId"] = serde_json::json!(b);
+                    }
+                    let reply = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "result": { "serverInfo": info } });
+                    let _ = writeln!(stream, "{reply}");
+                });
+            }
+        });
+    }
+
+    fn lane_with_stub_tray(name: &str, build: Option<&str>) -> (LaneListenerKey, impl Drop) {
+        let (key, rt) = lane(name);
+        let path = mcp_socket_path_for_lane(&key.0, &key.1);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let _ = fs::remove_file(&path);
+        stub_tray(&path, build);
+        mark_lane_tray_owned(&key.0, &key.1).unwrap();
+        (key, rt)
+    }
+
+    /// 1961-8ats: a tray of another build never takes the lane. Both the
+    /// pre-launch check and the bind refuse, naming both builds.
+    #[test]
+    fn a_tray_of_another_build_is_refused_the_lane_naming_both() {
+        let (key, _rt) = lane_with_stub_tray("otherbuild", Some("56.11.1.1+00000000deadbeef"));
+        let early = lane_served_by_other_build(&key.0, &key.1);
+        let bound = start_mcp_socket_server_for_lane(&key.0, &key.1);
+        cleanup(&key);
+        let want = format!(
+            "refused:lane-tray-version-mismatch:lane={} tray=56.11.1.1+00000000deadbeef",
+            build_identity()
+        );
+        assert!(
+            early.as_deref().is_some_and(|r| r.starts_with(&want)),
+            "{early:?}"
+        );
+        assert!(
+            bound.as_ref().is_err_and(|r| r.starts_with(&want)),
+            "{bound:?}"
+        );
+    }
+
+    /// 1961-8ats: the yoga case. A tray older than the handshake sends no
+    /// buildId, and an unknown build is never this one.
+    #[test]
+    fn a_tray_without_a_build_id_is_refused_the_lane() {
+        let (key, _rt) = lane_with_stub_tray("nobuildid", None);
+        let early = lane_served_by_other_build(&key.0, &key.1);
+        cleanup(&key);
+        assert!(
+            early
+                .as_deref()
+                .is_some_and(|r| r.contains("tray=56.11.1+unknown")),
+            "{early:?}"
+        );
+    }
+
+    /// 1961-8ats: the same build still takes the lane, as before.
+    #[test]
+    fn a_tray_of_this_build_takes_the_lane() {
+        let (key, _rt) = lane_with_stub_tray("samebuild", Some(build_identity()));
+        let early = lane_served_by_other_build(&key.0, &key.1);
+        cleanup(&key);
+        assert_eq!(early, None);
+    }
+
+    /// 1961-8ats: the real initialize reply carries this build, so a test
+    /// can assert what answered it.
+    #[test]
+    fn initialize_names_the_serving_build() {
+        assert!(
+            !build_identity().ends_with("+unknown"),
+            "{}",
+            build_identity()
+        );
+        let browser = lane_browser_server("p", "default", None, true);
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let req = serde_json::json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize" });
+        let reply = handle_mcp_jsonrpc("p", "default", &req, &browser, &rt).unwrap();
+        assert_eq!(reply["result"]["serverInfo"]["buildId"], build_identity());
     }
 }
 
@@ -1850,6 +2057,9 @@ mod image_generate_fixtures {
             engine: std::sync::Arc::new(Stub),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I1".into(),
+            // Only I0's files are "here": the tierless call runs I0 whatever
+            // this host's real model cache holds (1957-5m8g).
+            present: Some(vec!["I0".into()]),
         }));
         let rt = tokio::runtime::Runtime::new().unwrap();
         let browser = lane_browser_server("kkrc-proj", "a", None, true);
@@ -1922,7 +2132,7 @@ mod image_generate_fixtures {
             (r["width"].as_u64(), r["height"].as_u64()),
             (Some(640), Some(384))
         );
-        assert_eq!(r["tier"], "I0", "smallest first");
+        assert_eq!(r["tier"], "I0", "the highest tier already here");
         assert_eq!(r["seed"], 7);
         assert_eq!(r["steps"], 3);
         assert_eq!(r["ephemeral"], true);
