@@ -1679,6 +1679,9 @@ mod image_generate_fixtures {
             engine: std::sync::Arc::new(Stub),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I1".into(),
+            // Only I0's files are "here": the tierless call runs I0 whatever
+            // this host's real model cache holds (1957-5m8g).
+            present: Some(vec!["I0".into()]),
         }));
         let rt = tokio::runtime::Runtime::new().unwrap();
         let browser = lane_browser_server("kkrc-proj", "a", None, true);
@@ -1738,7 +1741,7 @@ mod image_generate_fixtures {
             (r["width"].as_u64(), r["height"].as_u64()),
             (Some(640), Some(384))
         );
-        assert_eq!(r["tier"], "I0", "smallest first");
+        assert_eq!(r["tier"], "I0", "the highest tier already here");
         assert_eq!(r["seed"], 7);
         assert_eq!(r["steps"], 3);
         assert_eq!(r["ephemeral"], true);

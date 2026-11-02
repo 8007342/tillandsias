@@ -52,7 +52,7 @@ pub fn descriptor() -> Value {
             "Generate images locally on this computer (stable-diffusion.cpp; no hosted service, no cost). \
              Returns the saved PNG path under {FORGE_SCRATCH}/ and its metadata, never image bytes. \
              width/height/steps/seed/count are honoured exactly (sizes round to a multiple of 64, and the \
-             result says so). Starts on the smallest model. The first call may build the engine and \
+             result says so). Runs the biggest model already on this computer unless a tier is named. The first call may build the engine and \
              download the model; progress arrives as MCP progress notifications. {EPHEMERAL_NOTE}"
         ),
         "inputSchema": {
@@ -65,8 +65,9 @@ pub fn descriptor() -> Value {
                 "steps": { "type": "integer", "minimum": 1, "maximum": 50 },
                 "seed": { "type": "integer", "minimum": 0 },
                 "count": { "type": "integer", "minimum": 1, "maximum": MAX_COUNT, "default": 1 },
-                "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"], "description": "Omit to use the smallest model." },
-                "consent_token": { "type": "string", "description": "From a bigger_tier_offer, only after the user said yes to its ask." }
+                "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"], "description": "Omit to use the biggest model already on this computer (up to what it can run). Any smaller tier may be named." },
+                "consent_token": { "type": "string", "description": "From a download offer (consent_required or bigger_tier_offer), only after the user said yes to its ask. Needed once per tier per computer." },
+                "decline": { "type": "boolean", "description": "With the offer's consent_token, when the user said no to its ask: nothing is downloaded." }
             },
             "required": ["prompt"]
         }
@@ -254,6 +255,8 @@ pub struct Seam {
     pub engine: Arc<dyn Engine>,
     pub scratch_root: PathBuf,
     pub ceiling: String,
+    /// Tiers whose files count as downloaded; `None` checks the real cache.
+    pub present: Option<Vec<String>>,
 }
 
 fn seam() -> &'static Mutex<Option<Seam>> {
@@ -304,12 +307,32 @@ fn tier_index(ladder: &[TierRow], tier: &str) -> usize {
     ladder.iter().position(|t| t.tier == tier).unwrap_or(0)
 }
 
-/// Whether every pinned file of `tier` is already in the model cache, which
-/// picks the honest ask (no download vs a download first).
-fn tier_cached(tier: &TierRow) -> bool {
+/// The bytes still to fetch for `tier`; 0 when every pinned file is in the
+/// model cache. `present` is the fixture seam's override of the cache check.
+fn download_bytes(tier: &TierRow, present: Option<&[String]>) -> u64 {
     let files = imagegen_models::files_for_tier(&imagegen_models::manifest(), &tier.tier);
+    if let Some(p) = present {
+        return if p.contains(&tier.tier) {
+            0
+        } else {
+            files.iter().map(|m| m.bytes).sum()
+        };
+    }
     let dir = imagegen_models::models_dir().join(&tier.tier);
-    !files.is_empty() && files.iter().all(|m| dir.join(m.cache_name()).is_file())
+    files
+        .iter()
+        .filter(|m| !dir.join(m.cache_name()).is_file())
+        .map(|m| m.bytes)
+        .sum()
+}
+
+/// 1957-5m8g: a tier runs with no consent when its files are pinned and either
+/// already on this computer or their download was granted on this host.
+/// Every tier's first download asks, I0 included (operator 2026-11-01).
+fn available(tier: &TierRow, present: Option<&[String]>) -> bool {
+    let pinned =
+        !imagegen_models::files_for_tier(&imagegen_models::manifest(), &tier.tier).is_empty();
+    pinned && (download_bytes(tier, present) == 0 || imagegen_consent::download_granted(&tier.tier))
 }
 
 /// Serialises tests that install the process-wide seam.
@@ -324,36 +347,69 @@ pub fn call(
     progress: &mut dyn FnMut(Progress),
 ) -> Result<Value, String> {
     let ladder = imagegen_tiers::ladder();
-    let (engine, ceiling): (Arc<dyn Engine>, String) = match seam()
-        .lock()
-        .ok()
-        .and_then(|s| s.as_ref().map(|s| (s.engine.clone(), s.ceiling.clone())))
-    {
-        Some(pair) => pair,
-        None => {
-            let env = crate::accel_probe::accel_envelope(&crate::accel_probe::load_or_probe(
-                crate::effective_inference_tier(),
-            ));
-            (
-                Arc::new(PodmanSdCli::for_this_host()),
-                imagegen_tiers::ceiling(&ladder, &env).tier.clone(),
-            )
-        }
-    };
-    let job = parse_job(args, &ladder, &ceiling, false)?;
-    let mut job = job;
-    // 1874-p8w7: a tier above what this lane accepted runs only on a token.
+    let (engine, ceiling, present): (Arc<dyn Engine>, String, Option<Vec<String>>) =
+        match seam().lock().ok().and_then(|s| {
+            s.as_ref()
+                .map(|s| (s.engine.clone(), s.ceiling.clone(), s.present.clone()))
+        }) {
+            Some(triple) => triple,
+            None => {
+                let env = crate::accel_probe::accel_envelope(&crate::accel_probe::load_or_probe(
+                    crate::effective_inference_tier(),
+                ));
+                (
+                    Arc::new(PodmanSdCli::for_this_host()),
+                    imagegen_tiers::ceiling(&ladder, &env).tier.clone(),
+                    None,
+                )
+            }
+        };
+    let present = present.as_deref();
     let lane = imagegen_consent::lane_key(project, instance);
+    let ceil = tier_index(&ladder, &ceiling);
+    // 1957-5m8g (operator ruling 2026-11-01): the highest tier within the
+    // ceiling that is already here (or granted) is the default; I0 only when
+    // nothing above it is.
+    let top_available = (0..=ceil)
+        .rev()
+        .find(|&i| available(&ladder[i], present))
+        .unwrap_or(0);
+    let mut args = args.clone();
+    if args.get("tier").is_none() {
+        args["tier"] = json!(ladder[top_available].tier);
+    }
+    let args = &args;
+    let mut job = parse_job(args, &ladder, &ceiling, false)?;
     let request = imagegen_consent::request_hash(args);
     let idx = tier_index(&ladder, &job.tier.tier);
-    let accepted = imagegen_consent::accepted_index(&lane);
-    if idx > accepted {
+    // Any tier up to the ceiling may be asked for directly; only a download
+    // asks, once per host.
+    let mut granted_download = false;
+    if !available(&job.tier, present) {
+        let bytes = download_bytes(&job.tier, present);
+        if imagegen_models::files_for_tier(&imagegen_models::manifest(), &job.tier.tier).is_empty()
+        {
+            return Err(format!(
+                "tier_unavailable: no pinned model files for {}",
+                job.tier.tier
+            ));
+        }
         let token = args.get("consent_token").and_then(Value::as_str);
-        if let Err(refusal) = imagegen_consent::redeem(token, &lane, &job.tier, idx, &request) {
-            let next = &ladder[(accepted + 1).min(idx)];
-            let offer = imagegen_consent::offer(&lane, &request, next, tier_cached(next));
+        if args.get("decline").and_then(Value::as_bool) == Some(true) {
+            imagegen_consent::decline(token);
+            return Ok(json!({
+                "status": "declined",
+                "tier": job.tier.tier,
+                "ran": false,
+                "downloaded": false,
+                "note": "The user declined the download. Nothing was fetched; asking again later is fine.",
+            }));
+        }
+        if let Err(refusal) = imagegen_consent::redeem(token, &lane, &job.tier, &request) {
+            let offer = imagegen_consent::offer(&lane, &request, &job.tier, bytes);
             return Ok(imagegen_consent::consent_required(offer, refusal));
         }
+        granted_download = true;
     }
     let out_dir = lane_scratch_dir(project, instance)?;
     job.out_volume = Some(lane_volume(project, instance));
@@ -384,13 +440,21 @@ pub fn call(
         }));
     }
     let first = images[0].clone();
-    let ceil = tier_index(&ladder, &ceiling);
-    let bigger = if idx < ceil {
-        let next = &ladder[idx + 1];
-        imagegen_consent::offer(&lane, &request, next, tier_cached(next))
-    } else {
-        Value::Null
-    };
+    // The next installable tier above everything already here, as a download
+    // offer; null when nothing above needs fetching (1957-8hkf).
+    let above = (idx..=ceil)
+        .rev()
+        .find(|&i| available(&ladder[i], present))
+        .unwrap_or(idx);
+    let bigger =
+        match imagegen_tiers::next_offerable(&ladder, above, ceil, &imagegen_models::manifest()) {
+            Some(next) => {
+                imagegen_consent::offer(&lane, &request, next, download_bytes(next, present))
+            }
+            None => Value::Null,
+        };
+    let grant = (granted_download || imagegen_consent::download_granted(&job.tier.tier))
+        .then(|| imagegen_consent::grant_json(&job.tier.tier));
     Ok(json!({
         "path": first["path"],
         "width": first["width"],
@@ -413,6 +477,7 @@ pub fn call(
         "ephemeral": true,
         "note": EPHEMERAL_NOTE,
         "bigger_tier_offer": bigger,
+        "grant": grant,
     }))
 }
 
@@ -570,12 +635,17 @@ impl PodmanSdCli {
         ]);
         for (role, path) in files {
             let rel = path.strip_prefix(&self.models_dir).unwrap_or(path);
+            // The manifest's role column IS the sd-cli flag (docs/flux.md loads
+            // FLUX as four files: --diffusion-model, --vae, --clip_l, --t5xxl).
+            // A role the parser admits is one of these five; anything else is a
+            // manifest bug and is named, not silently passed as a checkpoint.
             let flag = match role.as_str() {
                 "model" => "--model",
+                "diffusion_model" => "--diffusion-model",
                 "vae" => "--vae",
                 "clip_l" => "--clip_l",
                 "t5xxl" => "--t5xxl",
-                _ => "--diffusion-model",
+                other => panic!("models.tsv role {other} has no sd-cli flag"),
             };
             a.extend([flag.into(), format!("/models/{}", rel.display())]);
         }
@@ -758,6 +828,49 @@ mod tests {
         assert!(a.contains(&"/out/img-1-2-%d.png".to_string()));
     }
 
+    /// 1959-flux: the I2 pins reach sd-cli the way docs/flux.md loads FLUX:
+    /// `--diffusion-model <transformer> --vae <ae> --clip_l <clip> --t5xxl <t5>`,
+    /// `--cfg-scale 1`, `--sampling-method euler`. Each flag is followed by its
+    /// own file; `--model` (a full checkpoint) is not passed at all.
+    #[test]
+    fn flux_pins_are_passed_as_the_four_separate_sd_cpp_flags() {
+        let e = PodmanSdCli {
+            image: "img".into(),
+            models_dir: PathBuf::from("/m"),
+        };
+        let job = parse_job(
+            &json!({"prompt":"a fox"}),
+            &imagegen_tiers::ladder(),
+            "I2",
+            false,
+        )
+        .unwrap();
+        let pins = imagegen_models::files_for_tier(&imagegen_models::manifest(), "I2");
+        assert!(!pins.is_empty(), "I2 has pinned files");
+        let files: Vec<(String, PathBuf)> = pins
+            .iter()
+            .map(|p| (p.role.clone(), PathBuf::from("/m/I2").join(p.cache_name())))
+            .collect();
+        let a = e.run_args(&job, &files, Path::new("/o"), &["img-0.png".into()], 1);
+        let after = |flag: &str| -> String {
+            let i = a
+                .iter()
+                .position(|s| s == flag)
+                .unwrap_or_else(|| panic!("{flag} missing from {a:?}"));
+            a[i + 1].clone()
+        };
+        assert!(after("--diffusion-model").contains("flux1-schnell"));
+        assert!(after("--vae").ends_with("/ae.safetensors"));
+        assert!(after("--clip_l").contains("clip_l"));
+        assert!(after("--t5xxl").contains("t5xxl"));
+        assert!(
+            !a.contains(&"--model".to_string()),
+            "no full checkpoint for FLUX"
+        );
+        assert_eq!(after("--cfg-scale"), "1");
+        assert_eq!(after("--sampling-method"), "euler");
+    }
+
     /// Counts engine runs, so a fixture can prove a refusal ran nothing.
     struct Counting(std::sync::atomic::AtomicUsize);
     impl Engine for Counting {
@@ -781,11 +894,7 @@ mod tests {
         }
     }
 
-    /// 1874-p8w7 verifiable closure. Pre-fix: FAILS (bigger_tier_offer is
-    /// always null and an I1 request runs without any consent).
-    #[test]
-    fn smallest_first_one_tier_up_on_a_single_use_token() {
-        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    fn seam_with(present: &[&str]) -> (Arc<Counting>, tempfile::TempDir) {
         imagegen_consent::reset_for_test();
         let scratch =
             tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
@@ -794,89 +903,125 @@ mod tests {
             engine: engine.clone(),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I3".into(),
+            present: Some(present.iter().map(|t| t.to_string()).collect()),
         }));
-        let runs = || engine.0.load(std::sync::atomic::Ordering::SeqCst);
-        let (p, i) = ("p8w7-proj", "a");
+        (engine, scratch)
+    }
+
+    fn small(prompt: &str, tier: Option<&str>) -> Value {
+        let mut a = json!({"prompt": prompt, "width": 64, "height": 64});
+        if let Some(t) = tier {
+            a["tier"] = json!(t);
+        }
+        a
+    }
+
+    /// 1957-5m8g operator ruling 2026-11-01: a tierless call runs at the
+    /// highest tier within the ceiling whose files are here. Pre-fix: FAILS
+    /// (runs I0).
+    #[test]
+    fn tierless_call_on_an_i3_host_with_i3_present_runs_i3() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (engine, _s) = seam_with(&["I0", "I1", "I2", "I3"]);
         let mut sink = |_: Progress| {};
-
-        // An I0 result on an I3-ceiling host offers I1 only, with a token.
-        let r = call(
-            p,
-            i,
-            &json!({"prompt":"a fox","width":64,"height":64}),
-            &mut sink,
-        )
-        .unwrap();
-        assert_eq!(r["tier"], "I0");
-        let offer = &r["bigger_tier_offer"];
-        assert_eq!(offer["tier"], "I1", "the next tier only: {offer}");
-        let token = offer["consent_token"]
-            .as_str()
-            .expect("a token")
-            .to_string();
-        let ask = offer["ask"].as_str().unwrap();
-        let lower = ask.to_ascii_lowercase();
-        assert!(
-            !ask.chars().any(|c| c.is_ascii_digit())
-                && !["gb", "mb", "byte", "second"]
-                    .iter()
-                    .any(|w| lower.contains(w)),
-            "the ask carries no size or time figure: {ask}"
-        );
-        assert_eq!(runs(), 1);
-
-        // I1 without the token: consent_required, the engine is not invoked.
-        let r = call(p, i, &json!({"prompt":"a fox","tier":"I1"}), &mut sink).unwrap();
-        assert_eq!(r["status"], "consent_required", "{r}");
-        assert_eq!(r["bigger_tier_offer"]["tier"], "I1");
-        assert_eq!(runs(), 1, "a refusal runs nothing");
-
-        // A jump of two is never offered: I2 asks for I1 first.
-        let r = call(p, i, &json!({"prompt":"a fox","tier":"I2"}), &mut sink).unwrap();
-        assert_eq!(r["bigger_tier_offer"]["tier"], "I1");
-
-        // With the token it runs, and the next offer is I2.
-        let args =
-            json!({"prompt":"a fox","tier":"I1","consent_token":token,"width":64,"height":64});
-        let r = call(p, i, &args, &mut sink).unwrap();
+        let r = call("dl-a", "a", &small("a demon", None), &mut sink).unwrap();
+        assert_eq!(r["tier"], "I3", "{r}");
+        assert!(r["bigger_tier_offer"].is_null(), "{r}");
+        assert_eq!(engine.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        // Smaller tiers stay available when asked for by name.
+        let r = call("dl-a", "a", &small("a demon", Some("I1")), &mut sink).unwrap();
         assert_eq!(r["tier"], "I1", "{r}");
-        assert_eq!(r["bigger_tier_offer"]["tier"], "I2");
-        assert_eq!(runs(), 2);
+        install_seam(None);
+    }
 
-        // The spent token is refused on reuse.
-        let ladder = imagegen_tiers::ladder();
-        assert_eq!(
-            imagegen_consent::redeem(
-                Some(&token),
-                &imagegen_consent::lane_key(p, i),
-                &ladder[1],
-                1,
-                &imagegen_consent::request_hash(&args),
-            ),
-            Err(imagegen_consent::Refusal::Unknown)
-        );
-        // A token is bound to its picture: an offer for one prompt does not
-        // buy a bigger model for another.
-        let r = call(
-            p,
-            i,
-            &json!({"prompt":"a fox","tier":"I2","width":64,"height":64}),
-            &mut sink,
-        )
-        .unwrap();
-        let t2 = r["bigger_tier_offer"]["consent_token"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let r = call(
-            p,
-            i,
-            &json!({"prompt":"a cat","tier":"I2","consent_token":t2}),
-            &mut sink,
-        )
-        .unwrap();
+    /// Pre-fix: FAILS (consent_required: I3 must be reached rung by rung).
+    #[test]
+    fn direct_i3_request_with_files_present_needs_no_token() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (engine, _s) = seam_with(&["I0", "I3"]);
+        let mut sink = |_: Progress| {};
+        let r = call("dl-b", "a", &small("a demon", Some("I3")), &mut sink).unwrap();
+        assert_eq!(r["tier"], "I3", "no token, no ladder walk: {r}");
+        assert_eq!(engine.0.load(std::sync::atomic::Ordering::SeqCst), 1);
+        install_seam(None);
+    }
+
+    /// Pre-fix: FAILS (the offer is for I1, not a download of I3, and the yes
+    /// does not hold for other pictures / sessions on this host).
+    #[test]
+    fn direct_i3_request_with_files_missing_asks_once_to_download_then_never_again() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (engine, _s) = seam_with(&["I0"]);
+        let runs = || engine.0.load(std::sync::atomic::Ordering::SeqCst);
+        let mut sink = |_: Progress| {};
+        let r = call("dl-c", "a", &small("a demon", Some("I3")), &mut sink).unwrap();
         assert_eq!(r["status"], "consent_required", "{r}");
-        assert_eq!(runs(), 2);
+        let offer = &r["bigger_tier_offer"];
+        assert_eq!(
+            offer["tier"], "I3",
+            "the download asked for is I3 itself: {r}"
+        );
+        let ask = offer["ask"].as_str().unwrap();
+        assert!(ask.contains(" GB") && ask.contains(" min"), "{ask}");
+        assert_eq!(runs(), 0);
+        let mut yes = small("a demon", Some("I3"));
+        yes["consent_token"] = offer["consent_token"].clone();
+        let r = call("dl-c", "a", &yes, &mut sink).unwrap();
+        assert_eq!(r["tier"], "I3", "{r}");
+        assert_eq!(runs(), 1);
+        // Never again on this host: another picture, another session, tierless.
+        for (inst, args) in [
+            ("a", small("a castle", Some("I3"))),
+            ("b", small("a boat", Some("I3"))),
+            ("c", small("a fox", None)),
+        ] {
+            let r = call("dl-c", inst, &args, &mut sink).unwrap();
+            assert_eq!(r["tier"], "I3", "{inst}: {r}");
+            assert!(r["bigger_tier_offer"].is_null(), "{inst}: {r}");
+        }
+        assert_eq!(runs(), 4);
+        install_seam(None);
+    }
+
+    /// 1957-5m8g operator decision 2026-11-01: I0 asks too. Pre-fix: FAILS
+    /// (I0 runs and fetches unasked).
+    #[test]
+    fn a_fresh_hosts_first_tierless_call_asks_before_any_fetch() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (engine, _s) = seam_with(&[]);
+        let mut sink = |_: Progress| {};
+        let r = call("dl-d", "a", &small("a demon", None), &mut sink).unwrap();
+        assert_eq!(r["status"], "consent_required", "{r}");
+        assert_eq!(r["bigger_tier_offer"]["tier"], "I0", "{r}");
+        let ask = r["bigger_tier_offer"]["ask"].as_str().unwrap();
+        assert!(ask.contains(" GB") && ask.contains(" min"), "{ask}");
+        assert!(ask.contains("a while") && ask.contains("metered"), "{ask}");
+        assert_eq!(
+            engine.0.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "nothing fetched or run"
+        );
+        install_seam(None);
+    }
+
+    /// Declining a download offer runs and fetches nothing and says so.
+    #[test]
+    fn declining_a_download_leaves_nothing_downloaded() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (engine, _s) = seam_with(&[]);
+        let mut sink = |_: Progress| {};
+        let r = call("dl-e", "a", &small("a demon", None), &mut sink).unwrap();
+        let mut no = small("a demon", Some("I0"));
+        no["consent_token"] = r["bigger_tier_offer"]["consent_token"].clone();
+        no["decline"] = json!(true);
+        let r = call("dl-e", "a", &no, &mut sink).unwrap();
+        assert_eq!(r["status"], "declined", "{r}");
+        assert_eq!(r["downloaded"], false);
+        assert_eq!(r["ran"], false);
+        assert_eq!(engine.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+        // Declining grants nothing: the next call still asks.
+        let r = call("dl-e", "a", &small("a demon", None), &mut sink).unwrap();
+        assert_eq!(r["status"], "consent_required", "{r}");
         install_seam(None);
     }
 }

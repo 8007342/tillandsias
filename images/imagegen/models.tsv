@@ -15,13 +15,19 @@
 #                            sdxs09 file measured on lenovinha and yoga 2026-10-27)
 #   ByteDance/SDXL-Lightning openrail++  gated=false
 #   madebyollin/sdxl-vae-fp16-fix  mit  gated=false
-# I2/I3 (FLUX.1-schnell) rows are NOT here: their upstream repo is gated and
-# 1921-qqfz repoints them at an ungated Apache-2.0 GGUF copy; it adds their
-# rows to this file. A tier with no row here cannot be fetched.
+#   second-state/FLUX.1-schnell-GGUF  apache-2.0  gated=false  (I2/I3, 1959-flux,
+#                            re-read 2026-11-02 at revision 8c45a2b with ?blobs=true:
+#                            its ae.safetensors lfs sha256 is byte-identical to the
+#                            GATED black-forest-labs/FLUX.1-schnell one, so no gated
+#                            file is needed; the one repo carries transformer, ae,
+#                            T5-XXL and CLIP-L, as tiers.tsv licence_source requires)
+# A tier with no row here cannot be fetched (tier_unavailable).
 #
 # Columns:
 #   tier      I0..I3, a row of tiers.tsv
-#   role      model | vae | clip_l | t5xxl  (the sd.cpp flag the file is passed as)
+#   role      model | diffusion_model | vae | clip_l | t5xxl  (the sd-cli flag the
+#             file is passed as: a full checkpoint is --model; FLUX is four files,
+#             --diffusion-model --vae --clip_l --t5xxl, per sd.cpp docs/flux.md)
 #   repo      Hugging Face repository
 #   revision  pinned commit sha
 #   file      path inside the repository (also the cached file name's basename)
@@ -31,3 +37,11 @@
 #tier	role	repo	revision	file	sha256	bytes	licence
 I0	model	akleine/sdxs-09	baed838f4d9dadf5ac369570d45ddc72c1cb1ad4	sdxs09.safetensors	2618f142ad9f3884785884216d41fdcc033fde529f30a180f50ea6a05de6a89c	1342124230	openrail++
 I1	model	ByteDance/SDXL-Lightning	c9a24f48e1c025556787b0c58dd67a091ece2e44	sdxl_lightning_4step.safetensors	e0d996ee0013e79d9d3561f50fcafb9a17e3ff07b780358e3b66d67932c4d490	6938040682	openrail++
+I2	diffusion_model	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	flux1-schnell-Q4_0.gguf	b338a7ab5c81600a54be46c4cf950edb3761a52ae163e419beafd250976fb566	6688845536	apache-2.0
+I2	vae	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	ae.safetensors	afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38	335304388	apache-2.0
+I2	clip_l	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	clip_l-Q8_0.gguf	59cbe002c3e75d2b89d38787e81d12fb4e512fd76176884c470737ad87a1d309	130769600	apache-2.0
+I2	t5xxl	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	t5xxl-Q4_K.gguf	8b465525114b89011303969a035ef7e335821f13a32c4f31212912fb6511e128	2752844256	apache-2.0
+I3	diffusion_model	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	flux1-schnell-Q8_0.gguf	7ccdc568ef7d33f37943302c80450a94a59370b48d62440fc2e5a3bf8520bf35	12634434816	apache-2.0
+I3	vae	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	ae.safetensors	afc8e28272cd15db3919bacdb6918ce9c1ed22e96cb12c4d5ed0fba823529e38	335304388	apache-2.0
+I3	clip_l	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	clip_l-Q8_0.gguf	59cbe002c3e75d2b89d38787e81d12fb4e512fd76176884c470737ad87a1d309	130769600	apache-2.0
+I3	t5xxl	second-state/FLUX.1-schnell-GGUF	8c45a2ba25e2d02bd34230989fb54983f39e44ec	t5xxl-Q8_0.gguf	fc07757bf7ad40eaf612acc7ed0c0a7ab71189979e0b8b4d14601017baca22de	5199794784	apache-2.0

@@ -72,6 +72,11 @@ pub fn register_admits(register: &str, row: &ModelFile) -> Result<(), String> {
 /// Only these formats are ever fetched: a pickle checkpoint executes code on load.
 const ALLOWED_SUFFIXES: &[&str] = &[".safetensors", ".gguf"];
 
+/// The role column: the sd-cli flag the file is passed as (imagegen_tool.rs
+/// `run_args`). `model` is a full checkpoint (I0, I1); FLUX (I2, I3) is four
+/// separate files per sd.cpp docs/flux.md.
+pub const ROLES: &[&str] = &["model", "diffusion_model", "vae", "clip_l", "t5xxl"];
+
 /// One pinned file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelFile {
@@ -138,6 +143,14 @@ pub fn parse_manifest(body: &str) -> Result<Vec<ModelFile>, String> {
             return Err(format!(
                 "models.tsv line {}: revision must be a pinned 40-hex commit",
                 n + 1
+            ));
+        }
+        if !ROLES.contains(&row.role.as_str()) {
+            return Err(format!(
+                "models.tsv line {}: role {} is not one of {}",
+                n + 1,
+                row.role,
+                ROLES.join("|")
             ));
         }
         if !ALLOWED_SUFFIXES.iter().any(|s| row.file.ends_with(s)) {
@@ -715,6 +728,49 @@ mod tests {
             + &"0".repeat(64)
             + "\t1\tcc-by-nc-4.0";
         assert!(parse_manifest(&nc).is_err());
+    }
+
+    /// 1959-flux: I2 and I3 (FLUX.1-schnell) are pinned too, each with the four
+    /// files sd.cpp's docs/flux.md loads separately: the transformer as
+    /// `--diffusion-model` (never `--model`, which expects a full checkpoint),
+    /// the `ae` VAE, CLIP-L and T5-XXL. Every file comes from one UNGATED
+    /// Apache-2.0 repo and is in the licence register.
+    #[test]
+    fn the_shipped_manifest_pins_i2_and_i3_flux_with_the_four_sd_cpp_roles() {
+        let m = manifest();
+        for (tier, quant) in [("I2", "Q4_0"), ("I3", "Q8_0")] {
+            let rows = files_for_tier(&m, tier);
+            let mut roles: Vec<&str> = rows.iter().map(|r| r.role.as_str()).collect();
+            roles.sort_unstable();
+            assert_eq!(
+                roles,
+                ["clip_l", "diffusion_model", "t5xxl", "vae"],
+                "{tier} roles"
+            );
+            let transformer = rows.iter().find(|r| r.role == "diffusion_model").unwrap();
+            assert!(
+                transformer.file.contains("schnell") && transformer.file.contains(quant),
+                "{tier} transformer {}",
+                transformer.file
+            );
+            assert!(
+                rows.iter().all(|r| r.licence == "apache-2.0"),
+                "{tier} licence"
+            );
+            for row in &rows {
+                register_admits(REGISTER_TSV, row).unwrap();
+            }
+        }
+        // The VAE is the same ae.safetensors on both rungs: fetched once per tier dir,
+        // but one pin.
+        let vae = |t: &str| {
+            files_for_tier(&m, t)
+                .into_iter()
+                .find(|r| r.role == "vae")
+                .unwrap()
+                .sha256
+        };
+        assert_eq!(vae("I2"), vae("I3"));
     }
 
     /// LIVE, opt-in: fetch tier `TILLANDSIAS_IMAGEGEN_LIVE_TIER` (default I0)
