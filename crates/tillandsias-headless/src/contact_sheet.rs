@@ -114,7 +114,31 @@ impl Canvas {
     }
     /// `img` scaled nearest-neighbour to fit a `side` square at (x, y),
     /// centred, over a checkerboard. Alpha blends in integer arithmetic.
-    fn cell(&mut self, x: u32, y: u32, side: u32, img: &Rgba) {
+    /// A 1 px rectangle around `region` (millionths of the generation
+    /// canvas), mapped onto the fitted image at `fit` = (x, y, w, h).
+    fn outline(
+        &mut self,
+        fit: (u32, u32, u32, u32),
+        region: &crate::imagegen_init_mask::Region,
+        c: [u8; 3],
+    ) {
+        let (fx, fy, fw, fh) = fit;
+        let m = |ppm: u32, n: u32| ((ppm as u64 * n as u64) / 1_000_000) as u32;
+        let [x0, y0, x1, y1] = region.rect_ppm;
+        let (l, t) = (fx + m(x0, fw), fy + m(y0, fh));
+        let (r, b) = (fx + m(x1, fw).max(1) - 1, fy + m(y1, fh).max(1) - 1);
+        for x in l..=r {
+            self.set(x, t, c);
+            self.set(x, b, c);
+        }
+        for y in t..=b {
+            self.set(l, y, c);
+            self.set(r, y, c);
+        }
+    }
+
+    /// Returns the fitted image's rectangle (x, y, w, h) on the sheet.
+    fn cell(&mut self, x: u32, y: u32, side: u32, img: &Rgba) -> (u32, u32, u32, u32) {
         for cy in 0..side {
             for cx in 0..side {
                 let chk = if ((cx / CHECK) + (cy / CHECK)).is_multiple_of(2) {
@@ -150,6 +174,7 @@ impl Canvas {
                 }
             }
         }
+        (ox, oy, dw, dh)
     }
 }
 
@@ -181,8 +206,22 @@ fn orders(cells: &[CellIn]) -> (Vec<String>, Vec<String>) {
     (rows, cols)
 }
 
-/// Draw the sheet. `footer` names the subject, its sha256, the version.
+/// Draw the sheet with no region outlines (tests). `footer` names the
+/// subject, its sha256, the version.
+#[cfg(test)]
 pub(crate) fn build(cells: &[CellIn], cell_px: u32, footer: &str) -> Result<Rgba, String> {
+    build_with(cells, cell_px, footer, None)
+}
+
+/// [`build`], plus (D13, 1959-xsy5) each reserved region of a family's
+/// layout outlined 1 px in its outline colour on every cell, mapped onto the
+/// fitted image, so a filled lane is visible at a glance.
+pub(crate) fn build_with(
+    cells: &[CellIn],
+    cell_px: u32,
+    footer: &str,
+    outline: Option<(&[crate::imagegen_init_mask::Region], [u8; 3])>,
+) -> Result<Rgba, String> {
     if cells.is_empty() {
         return Err("a contact sheet needs at least one cell".into());
     }
@@ -210,7 +249,12 @@ pub(crate) fn build(cells: &[CellIn], cell_px: u32, footer: &str) -> Result<Rgba
         let i = cols.iter().position(|x| *x == cell.col).expect("ordered") as u32;
         let j = rows.iter().position(|x| *x == cell.row).expect("ordered") as u32;
         let (x, y) = (GUTTER + PAD + i * pitch_x, HEADER + j * pitch_y);
-        c.cell(x, y, cell_px, &cell.image);
+        let fit = c.cell(x, y, cell_px, &cell.image);
+        if let Some((regions, colour)) = outline {
+            for r in regions {
+                c.outline(fit, r, colour);
+            }
+        }
         c.text(x, y + cell_px + 1, &cell.model, cell_px);
         c.text(
             x,
@@ -247,6 +291,7 @@ pub(crate) fn descriptor() -> serde_json::Value {
                     "required": ["path", "row", "col"] } },
                 "cell_px": { "type": "integer", "minimum": 16, "maximum": 1024, "default": 256 },
                 "title": { "type": "string", "description": "footer subject: the workflow or tier" },
+                "family": { "type": "string", "description": "Optional family spec (checkout-relative): its layout's reserved regions are outlined on every cell in its outline colour." },
                 "out": { "type": "string" }
             },
             "required": ["cells", "out"]
@@ -330,7 +375,31 @@ pub(crate) fn call(
         &sha256_hex(title.as_bytes())[..8],
         crate::VERSION.trim()
     );
-    let sheet = build(&cells, cell_px, &footer)?;
+    // D13: with a family, outline its layout's reserved regions in its
+    // outline colour (both optional in the family; absent means no outline).
+    let mut family_outline: Option<(Vec<crate::imagegen_init_mask::Region>, [u8; 3])> = None;
+    if let Some(fam) = args["family"].as_str() {
+        let text = crate::studio_tool::read_checkout_file(project, instance, fam)?;
+        let spec: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("{fam} is not JSON: {e}"))?;
+        if let Some(l) = spec.get("layout") {
+            let regions = crate::imagegen_init_mask::parse_layout(l)?;
+            let colour = spec["outline"]
+                .as_str()
+                .and_then(|h| h.strip_prefix('#'))
+                .filter(|h| h.len() == 6)
+                .and_then(|h| u32::from_str_radix(h, 16).ok())
+                .map(|n| [(n >> 16) as u8, (n >> 8) as u8, n as u8])
+                .unwrap_or([0xFF, 0x00, 0xFF]);
+            family_outline = Some((regions, colour));
+        }
+    }
+    let sheet = build_with(
+        &cells,
+        cell_px,
+        &footer,
+        family_outline.as_ref().map(|(r, c)| (r.as_slice(), *c)),
+    )?;
     let png = crate::pixel_finish::encode_rgba(&sheet)?;
     let out_host = scratch.join(scratch_relative(out)?);
     if let Some(dir) = out_host.parent() {
@@ -433,6 +502,56 @@ mod tests {
         assert_eq!(
             a, GOLDEN_SHEET,
             "the sheet differs from the committed golden"
+        );
+    }
+
+    /// D13 with a family layout: each reserved region is outlined on the
+    /// fitted image in the outline colour; outside it the image is untouched;
+    /// no outline means exactly the plain sheet (the golden still holds).
+    #[test]
+    fn contact_sheet_outlines_reserved_regions_in_the_outline_colour() {
+        let lane = crate::imagegen_init_mask::parse_layout(&serde_json::json!({
+            "reserved": [ { "id": "centre-lane", "rect": [0.5, 0.0, 0.75, 1.0], "fill": "transparent" } ],
+            "units": "fraction-of-generation-canvas" }))
+        .unwrap();
+        let one = || {
+            vec![CellIn {
+                row: "I0".into(),
+                col: "1".into(),
+                model: "m".into(),
+                sha256: "0".repeat(64),
+                image: solid(32, 32, [10, 200, 10, 255]),
+            }]
+        };
+        let colour = [0x1A, 0x10, 0x18];
+        let plain = build(&one(), 32, "x").unwrap();
+        assert_eq!(
+            build_with(&one(), 32, "x", None).unwrap(),
+            plain,
+            "no outline: same sheet"
+        );
+        let s = build_with(&one(), 32, "x", Some((&lane, colour))).unwrap();
+        let (x0, y0) = (GUTTER + PAD, HEADER);
+        let at = |dx: u32, dy: u32| {
+            let i = (((y0 + dy) * s.width + x0 + dx) * 4) as usize;
+            [s.pixels[i], s.pixels[i + 1], s.pixels[i + 2]]
+        };
+        assert_eq!(at(16, 10), colour, "the lane's left edge (0.50 of 32 px)");
+        assert_eq!(
+            at(23, 10),
+            colour,
+            "the lane's right edge (0.75 of 32 px, inclusive)"
+        );
+        assert_eq!(at(20, 0), colour, "the lane's top edge");
+        assert_eq!(
+            at(4, 10),
+            [10, 200, 10],
+            "outside the lane the image is untouched"
+        );
+        assert_eq!(
+            at(20, 10),
+            [10, 200, 10],
+            "inside, only the border is drawn"
         );
     }
 
