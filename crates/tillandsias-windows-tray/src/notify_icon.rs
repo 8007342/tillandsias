@@ -5815,6 +5815,7 @@ mod tests {
             deliver < subscribe,
             "the delivery must precede the Subscribe"
         );
+        // source-pin-ok: the Ready-transition collect inside run_vm_status_push_listener is placement, which only the source shows
         assert!(
             body.contains("collect_vault_handover_on_ready()"),
             "the push listener must collect the handover on the Ready transition"
