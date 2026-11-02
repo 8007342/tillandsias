@@ -1,0 +1,13 @@
+{
+  "name": "tillandsias-web-studio-puck-build",
+  "private": true,
+  "version": "0.0.0",
+  "description": "BUILD STAGE ONLY of the Puck studio image (1864-ay3x): esbuild bundles Puck + React 19 into public/editor.js; nothing here reaches the final image",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {
+    "@measured/puck": "0.20.2",
+    "esbuild": "0.28.2",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  }
+}

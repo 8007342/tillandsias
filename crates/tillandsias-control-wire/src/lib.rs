@@ -827,6 +827,20 @@ pub enum ControlMessage {
     ///
     /// @trace order:1719-83po, spec:tray-host-control-socket
     CloudflareLoginStored { seq: u64, ts_unix: u64 },
+    /// Host tray → in-VM headless (1955-cfhf): the ONE callback the HOST's
+    /// 127.0.0.1 loopback listener took for a running
+    /// `tillandsias-headless --cloudflare-login`, as the relay page's line
+    /// (`code=…&state=…` or `error=…&state=…`). The guest re-parses and
+    /// judges it (state first) and exchanges the code with the PKCE verifier
+    /// that never left it. This is a single-use AUTHORIZATION CODE, never a
+    /// token, and it is useless without that verifier. The guest answers
+    /// `IssueAck { seq_acked }`.
+    ///
+    /// New trailing variant (additive, no WIRE_VERSION bump). Sent only when
+    /// the guest advertises `CloudflareCallbackForward` in its caps.
+    ///
+    /// @trace order:1955-cfhf, spec:cloudflare-auth
+    CloudflareCallbackForward { seq: u64, line: String },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -1199,6 +1213,7 @@ impl ControlMessage {
             ControlMessage::CloudflareLoginStatusRequest { .. } => "CloudflareLoginStatusRequest",
             ControlMessage::CloudflareLoginStatusReply { .. } => "CloudflareLoginStatusReply",
             ControlMessage::CloudflareLoginStored { .. } => "CloudflareLoginStored",
+            ControlMessage::CloudflareCallbackForward { .. } => "CloudflareCallbackForward",
         }
     }
 }
@@ -2945,6 +2960,13 @@ mod tests {
                 },
                 "CloudflareLoginStored",
             ),
+            (
+                ControlMessage::CloudflareCallbackForward {
+                    seq: 1,
+                    line: "code=c&state=s".to_string(),
+                },
+                "CloudflareCallbackForward",
+            ),
         ]
     }
 
@@ -3225,6 +3247,8 @@ mod tests {
             ControlMessage::CloudflareLoginStatusRequest { .. } => 37,
             ControlMessage::CloudflareLoginStatusReply { .. } => 38,
             ControlMessage::CloudflareLoginStored { .. } => 39,
+            // 1955-cfhf: trailing addition.
+            ControlMessage::CloudflareCallbackForward { .. } => 40,
         }
     }
 
@@ -3259,7 +3283,7 @@ mod tests {
         /// The number of `ControlMessage` variants. An independent literal for
         /// the same reason the discriminants are: anything computed from the
         /// enum agrees with the enum by construction.
-        const DECLARED_VARIANTS: usize = 40;
+        const DECLARED_VARIANTS: usize = 41;
 
         let samples = one_sample_per_variant();
         assert_eq!(
