@@ -459,6 +459,7 @@ specs:
   - litmus:tillandsias-doctor-names-every-fault
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
+  - litmus:spec-index-ensure-refusals-carry-affordance
   - litmus:forge-entrypoints-source-agent-profile
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
