@@ -1,0 +1,85 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora), from a live operator forge (demon_attack on macuahuitl), 2026-11-01.
+packets:
+- packet_id: browser-open-https-only-remedy-names-the-raw-project-not-its-dns-host-label
+  order: 1935-mwxr
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [browser-open, local-web-preview, naming]
+  estimated_hours: 1
+  related: [1763-nc9d, 1651-5t7n, 1935-svxq]
+  owned_files:
+  - crates/tillandsias-browser-mcp/src/server.rs
+  title: "browser.open's https-only refusal tells a project named demon_attack to open https://www.demon_attack.localhost, which the allowlist then refuses as 'project suffix mismatch: expected demon-attack'"
+  context: |
+    LIVE (demon_attack-forge, relayed by the coordinator): http://www.demon-attack.localhost:8080/ was refused with "open https://www.demon_attack.localhost:<preview port> instead"; that URL was then refused with "project suffix mismatch: expected demon-attack, got demon_attack". server.rs formatted the remedy from the raw project_label; 1763-nc9d moved the allowlist to host_label::project_host_label but missed this string.
+  exit_criteria:
+  - the https-only remedy names the host label from host_label::project_host_label (demon_attack gives www.demon-attack.localhost)
+  verifiable_closure: |
+    cargo test -p tillandsias-browser-mcp --lib https_only_remedy_names_the_dns_host_label passes; with the one-line fix reverted it fails with "open https://www.demon_attack.localhost:<preview port> instead".
+  next_action: Land work/1935-mwxr.
+  provenance: coordinator relay of operator forge evidence, 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:08:35Z'
+    host: calmecacpilli
+    summary: filed p1 bug and claimed it; fix and red-then-green test on work/1935-mwxr
+- packet_id: preview-route-on-18443-closes-browser-and-in-forge-connections-while-the-readiness-probe-reports-serving
+  order: 1935-svxq
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [local-web-preview, router, tls, browser-open, podman]
+  estimated_hours: 4
+  related: [1763-nc9d, 1935-mwxr, 1651-5t7n]
+  title: "https://www.demon-attack.localhost:18443/ gets net::ERR_CONNECTION_CLOSED from browser.open and 000 from curl inside the forge, while publish_local reports route_ready=true serving=true host_trust=verified"
+  context: |
+    LIVE (demon_attack-forge, 3 sessions): browser.open (dev and non-dev, visible, before and after service_reload) fails with BROWSER_LAUNCH_FAILED net::ERR_CONNECTION_CLOSED. Wrangler logs only the readiness probe's GET / (200), never the browser's request. Hypothesis: the probe reaches the upstream by a different path, SNI or host than real clients, so it passes while the TLS front (SNI or route keyed on the raw name or the label) closes the client connection. Start by reading what the readiness probe actually connects to in crates/tillandsias-headless/src/local_web_preview.rs, and which name the router's TLS SNI map and cert are keyed on for a project whose label differs from its raw name.
+  exit_criteria:
+  - a project named with an underscore opens its own preview through browser.open and through curl inside its forge
+  - the readiness probe connects the way a client does (same host, SNI and port), so it cannot report serving while clients are refused
+  unscoreable: unpinnable-until-the-guard-exists — the deliverable includes a cargo test in tillandsias-headless (name it preview_probe_uses_client_sni_for_underscore_project) that fails on today's tree; write it in the same commit as the fix.
+  next_action: A Linux host with podman reproduces the failure with a project named a_b, and captures the router's SNI map and the probe's target.
+  provenance: coordinator relay of operator forge evidence, 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:08:35Z'
+    host: calmecacpilli
+    summary: filed p1 bug; needs podman and a live preview, so calmecacpilli can't take it
+- packet_id: comfyui-studio-forge-agent-surface-design-reference-conditioning-controlnet-lora-transparent-output-batch-metadata
+  order: 1935-k2ib
+  status: ready
+  kind: design
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [image-generation, studio, comfyui, mcp, licences, design]
+  estimated_hours: 6
+  related: [1874-4b88]
+  title: "DESIGN — the ComfyUI studio surface a forge agent's asset pipeline needs: reference-image conditioning, ControlNet, LoRA load and training, transparent output, batch and seed control, returned metadata"
+  context: |
+    Requested from a live operator forge's asset pipeline (demon_attack on macuahuitl), relayed by the coordinator. Wanted capabilities:
+      - reference-image conditioning (IP-Adapter, img2img)
+      - ControlNet (pose, lineart)
+      - LoRA load, and LoRA training
+      - transparent output through LayerDiffuse; rmbg-1.4 and rmbg-2.0 are never-shippable and must not be used
+      - batch generation with seed control
+      - returned metadata per image: model hash and the workflow JSON
+    Depends on lenovinha's drafts #791, #793, #794 and their --studio p0 row.
+  exit_criteria:
+  - a design (openspec change or plan/issues packet) names the MCP tool surface for each capability above, its inputs and outputs, and the metadata returned
+  - every model the design needs has a licence entry the operator approved before any download (check-model-licence-register), and rmbg-1.4/2.0 are recorded as never-shippable
+  - implementation rows are filed from the design, each with its own closure
+  unscoreable: design-packet — the deliverable is a design and the rows filed from it; no test can score a design, and each implementation row it files carries its own closure.
+  next_action: After lenovinha's --studio p0 lands, draft the design and list each model with its licence for operator approval. Download no model before that approval.
+  provenance: coordinator relay of operator forge request, 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:08:35Z'
+    host: calmecacpilli
+    summary: filed p2 design packet; blocked on lenovinha's studio p0
