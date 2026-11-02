@@ -94,7 +94,7 @@ ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 # Clone via the shared lib-common::clone_project_from_mirror — supports both
 # filesystem (Windows/WSL) and git daemon (Linux/podman) transports with
 # wipe-before-clone for re-attach idempotency.
