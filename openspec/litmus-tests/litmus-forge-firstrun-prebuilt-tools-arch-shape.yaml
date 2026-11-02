@@ -44,10 +44,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: timeout-guarded"
 
-  - step: "forge entrypoints trigger the first-run tool install (backgrounded)"
-    command: "grep -qF 'ensure_forge_prebuilt_tools' images/default/entrypoint-forge-codex.sh && grep -qF 'ensure_forge_prebuilt_tools' images/default/entrypoint-forge-claude.sh && echo 'ok: entrypoints wired'"
-    timeout_ms: 3000
-    expected_behavior: "ok: entrypoints wired"
+  # The "forge entrypoints trigger the first-run tool install" step moved to
+  # litmus:flaky-installs-background (1951-vv5m), which RUNS the background
+  # family against a hanging, failing and healthy installer instead of grepping
+  # the entrypoints for a function name.
 
   - step: "the cargo-tools install_archive block is GONE from Containerfile.base creation"
     command: "grep -qF 'install_archive cargo-chef' images/default/Containerfile.base && { echo 'FAIL: cargo chain still at build'; exit 1; } || echo 'ok: cargo chain removed from creation'"
