@@ -4926,10 +4926,14 @@ mod tests {
         ] {
             assert!(tools.contains(&studio), "{studio} (1860-auhm): {tools:?}");
         }
+        // 1957-emar: the GPU arbiter's two tools.
+        for gpu in ["gpu.status", "gpu.unload_model"] {
+            assert!(tools.contains(&gpu), "{gpu} (1957-emar): {tools:?}");
+        }
         assert_eq!(
             tools.len() - cloudflare,
-            26,
-            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + studio family + cloudflare family, nothing else"
+            28,
+            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + studio family + gpu tools + cloudflare family, nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -4999,8 +5003,8 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                26,
-                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc), thirteen browser tools + four studio tools (1860-auhm), got {tools:?}"
+                28,
+                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc), thirteen browser tools + four studio tools (1860-auhm), gpu.status + gpu.unload_model (1957-emar), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5489,7 +5493,8 @@ mod tests {
             assert!(tools.iter().any(|t| t["name"] == "image.generate"));
             // 1860-auhm: + the four studio co-edit tools.
             // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family.
-            assert_eq!(tools.len() - cloudflare, 26);
+            // 1957-emar: + gpu.status, gpu.unload_model.
+            assert_eq!(tools.len() - cloudflare, 28);
 
             drop(writer);
             drop(lines);
