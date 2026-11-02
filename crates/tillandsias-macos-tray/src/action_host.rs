@@ -495,6 +495,36 @@ where
     }
 }
 
+/// Order 1925-tdlv: collect a pending Vault handover over a short connection
+/// of its own, so the push reader's client is never shared. Best-effort and
+/// loud: the status stream must not be lost to a failed collect.
+async fn collect_vault_handover_on_ready(vz: &VzRuntime) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream =
+        match open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5)).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[tillandsias-tray] vault handover on Ready: connect: {e}");
+                return;
+            }
+        };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(e) = client.handshake().await {
+        eprintln!("[tillandsias-tray] vault handover on Ready: handshake: {e}");
+        return;
+    }
+    if let Err(e) = crate::installation_uuid::capture_vault_handover(&mut client).await {
+        eprintln!("[tillandsias-tray] vault handover on Ready: {e}");
+    }
+}
+
 async fn open_control_wire_stream(
     vz: &VzRuntime,
     port: u32,
@@ -1053,6 +1083,47 @@ async fn poll_cloudflare_login_once(
     }
 }
 
+/// Order 1955-cfhf: hand the host-held loopback callback line to the guest's
+/// waiting `--cloudflare-login` (`CloudflareCallbackForward`, acked with
+/// `IssueAck`). Sent only when the guest advertises the variant. The line is
+/// a single-use code, never a token; it is not logged here.
+async fn forward_cloudflare_callback(
+    vz: &VzRuntime,
+    cb: &tillandsias_host_shell::cloudflare_callback::Callback,
+) -> Result<(), String> {
+    use tillandsias_control_wire::ControlMessage;
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_host_shell::vsock_client::Client;
+    let stream = open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
+        .await
+        .map_err(|e| format!("control wire: {e}"))?;
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("handshake: {e}"))?;
+    if !client
+        .server_caps()
+        .iter()
+        .any(|c| c == "CloudflareCallbackForward")
+    {
+        return Err("the guest does not accept CloudflareCallbackForward (older headless)".into());
+    }
+    let seq = client.allocate_seq();
+    let envelope = tillandsias_host_shell::cloudflare_callback::forward_envelope(seq, cb);
+    match client.request(&envelope).await.map(|r| r.body) {
+        Ok(ControlMessage::IssueAck { .. }) => Ok(()),
+        Ok(other) => Err(format!("unexpected reply {}", other.kind())),
+        Err(e) => Err(format!("request: {e}")),
+    }
+}
+
 /// Order 1719-83po: write an observed Cloudflare login state; true when the
 /// menu must be rebuilt. Answers arrive only on events (Ready, the login
 /// session closing), each final, so a confirmed answer always replaces the
@@ -1559,8 +1630,50 @@ impl TrayActionHost {
         let status_menu_item = ivars.status_menu_item.clone();
         let self_handle = ivars.self_handle.clone();
         let vz_after = vz.clone();
+        // Order 1955-cfhf: for Cloudflare Login the HOST holds the loopback
+        // listener (the guest's 127.0.0.1 is unreachable from Safari) and
+        // tells the guest its port through the launch environment; the one
+        // callback is forwarded over the control wire. Bound BEFORE the
+        // guest launch so the redirect names a port that already listens.
+        let host_callback = if ask_cloudflare_after {
+            match tillandsias_host_shell::cloudflare_callback::HostCallbackListener::bind() {
+                Ok(l) => Some(l),
+                Err(e) => {
+                    eprintln!(
+                        "[tillandsias-tray] cloudflare-login: no host loopback listener ({e}); the guest falls back to the QR relay"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        let extra_env: Vec<(String, String)> = host_callback.iter().map(|l| l.env_pair()).collect();
+        if let Some(listener) = host_callback {
+            let vz_forward = vz.clone();
+            runtime.spawn(async move {
+                let deadline = std::time::Instant::now() + Duration::from_secs(300);
+                let served =
+                    tokio::task::spawn_blocking(move || listener.serve_one(deadline)).await;
+                match served {
+                    Ok(Ok(cb)) => {
+                        if let Err(e) = forward_cloudflare_callback(&vz_forward, &cb).await {
+                            eprintln!(
+                                "[tillandsias-tray] cloudflare-login: callback forward failed ({e})"
+                            );
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        eprintln!("[tillandsias-tray] cloudflare-login: host listener ended ({e})")
+                    }
+                    Err(e) => eprintln!(
+                        "[tillandsias-tray] cloudflare-login: host listener task failed ({e})"
+                    ),
+                }
+            });
+        }
         runtime.spawn(async move {
-            let result = match run_pty_attach(vz, intent, project).await {
+            let result = match run_pty_attach(vz, intent, project, extra_env).await {
                 Ok((slave_path, pump_join)) => {
                     if ask_cloudflare_after {
                         // Order 1719-83po: when the login session closes, ask
@@ -1632,6 +1745,7 @@ async fn run_pty_attach(
     vz: std::sync::Arc<VzRuntime>,
     intent: tillandsias_host_shell::pty::PtyIntent,
     project: Option<String>,
+    extra_env: Vec<(String, String)>,
 ) -> Result<(String, tokio::task::JoinHandle<()>), String> {
     use std::sync::Arc;
     use std::time::Duration;
@@ -1767,7 +1881,11 @@ async fn run_pty_attach(
     // A project name that cannot cross the guest launch path safely is REFUSED
     // here, before any PTY or socket exists — see `validate_project_name`.
     let opts = match launch_spec(&intent, project.as_deref(), seed.0, seed.1) {
-        Ok(o) => o,
+        Ok(mut o) => {
+            // 1955-cfhf: the guest child's environment is exactly `env`.
+            o.env.extend(extra_env);
+            o
+        }
         Err(refused) => {
             eprintln!("[tillandsias-tray] pty-attach: {refused}");
             let _ = std::fs::remove_file(&sock_path);
@@ -3483,6 +3601,18 @@ async fn run_push_listener(
                 set_vsock_forward_target(&mut client, port).await;
             }
 
+            // Order 1925-tdlv: deliver the Vault credentials on EVERY
+            // (re)connection, for the same reason as the inference target
+            // above: SC-07 suppresses the polls that used to deliver, so a
+            // delivery living only there never fires on a healthy tray, and
+            // Vault holds Ready forever. Best-effort: the subscription must
+            // not be lost to a failed delivery, and the failure is loud.
+            if let Err(e) =
+                crate::installation_uuid::deliver_credentials_on_connect(&mut client).await
+            {
+                eprintln!("[tillandsias-tray] vault credential delivery on connect: {e}");
+            }
+
             let sub = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: client.allocate_seq(),
@@ -3591,6 +3721,7 @@ async fn run_push_listener(
         }
 
         let mut progress_log = ProgressLog::default();
+        let mut was_ready = false;
         loop {
             match client.next_envelope().await {
                 Ok(env) => match env.body {
@@ -3607,6 +3738,16 @@ async fn run_push_listener(
                         ..
                     } => {
                         vm_ever_ready.store(true, Ordering::SeqCst);
+                        // Order 1925-tdlv: Ready means Vault is unsealed, and
+                        // a Vault the guest just initialised or healed holds a
+                        // handover the host must collect before the VM stops.
+                        // The polls that collected it are suppressed under
+                        // SC-07, so collect on the transition, once.
+                        let ready_now = matches!(phase, tillandsias_control_wire::VmPhase::Ready);
+                        if ready_now && !was_ready {
+                            collect_vault_handover_on_ready(&vz).await;
+                        }
+                        was_ready = ready_now;
                         let rebuild_needed = apply_vm_status(
                             phase,
                             podman_ready,
@@ -4719,6 +4860,39 @@ mod tests {
     /// list that had quietly regained a fourth, which is the shape this pin
     /// exists to catch — the tray would resubscribe to a topic whose arm no
     /// longer exists and silently drop every frame.
+    /// Order 1925-tdlv: the push subscription delivers the Vault credentials
+    /// on every (re)connect, BEFORE it subscribes, and collects the handover on
+    /// the transition to Ready. SC-07 suppresses the polls that used to do
+    /// both, so a delivery living only in a poll never fires on a healthy tray
+    /// (v56.11.1.1: Vault held Ready for good on every tray launch).
+    #[test]
+    fn the_push_subscription_delivers_and_collects_vault_credentials() {
+        // source-pin-ok: the property is placement inside run_push_listener, which only the source shows
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let source =
+            std::fs::read_to_string(std::path::Path::new(&manifest).join("src/action_host.rs"))
+                .expect("read action_host.rs");
+        let start = source
+            .find("async fn run_push_listener(")
+            .expect("run_push_listener exists");
+        let body = &source[start..];
+        let body = &body[..body.find("\n}\n").expect("function end")];
+        let deliver = body
+            .find("deliver_credentials_on_connect(&mut client)")
+            .expect("run_push_listener must deliver on (re)connect");
+        let subscribe = body
+            .find("ControlMessage::Subscribe {")
+            .expect("run_push_listener subscribes");
+        assert!(
+            deliver < subscribe,
+            "the delivery must precede the Subscribe"
+        );
+        assert!(
+            body.contains("collect_vault_handover_on_ready(&vz)"),
+            "run_push_listener must collect the handover on the Ready transition"
+        );
+    }
+
     #[test]
     fn push_subscribe_topics_has_no_local_projects() {
         assert_eq!(

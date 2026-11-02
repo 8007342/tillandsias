@@ -78,6 +78,7 @@ pub mod lua_predicate;
 pub mod lua_runtime;
 pub mod lua_std;
 pub mod methodology;
+pub mod sibling_claims;
 /// ORDER 1506-nvqt — the fleet message bus's pure checks (body budget, secret
 /// shapes, TTL bounds), shared by `msg send` and the mover. Lives in the
 /// `tillandsias-msg` crate since 1506-q7ab so the mover can link it.

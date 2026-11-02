@@ -91,6 +91,7 @@ apply_opencode_config_overlay() { :; }
 prepare_opencode_vault_auth() { :; }
 opencode_actual_auth_ok() { :; }
 ensure_forge_prebuilt_tools() { :; }
+start_flaky_installs() { :; }
 ensure_forge_harnesses() { :; }
 inject_startup_context() { :; }
 curl() { return 1; }

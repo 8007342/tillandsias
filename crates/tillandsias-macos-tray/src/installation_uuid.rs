@@ -273,6 +273,28 @@ pub async fn deliver_credentials_and_check_handover(
     deliver_once_per_boot_in(client, KEYCHAIN_SERVICE, &DELIVERY_MEMO).await
 }
 
+/// Order 1925-tdlv: deliver on a control-wire (RE)CONNECT, whatever the memo
+/// says. The tray delivered only from its status polls, and SC-07 suppresses
+/// those while the push subscription is healthy. On v56.11.1.1 the subscription
+/// connected 8 s into the boot, before any poll ran, so the share was never
+/// delivered and Vault held Ready for good ("the host has not delivered").
+/// A reconnect can also mean the guest restarted under a running tray, which
+/// loses an in-memory delivery, so the memo is forgotten first.
+pub async fn deliver_credentials_on_connect(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+) -> Result<(), String> {
+    deliver_on_connect_in(client, KEYCHAIN_SERVICE, &DELIVERY_MEMO).await
+}
+
+pub(crate) async fn deliver_on_connect_in(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+    service: &str,
+    memo: &DeliveryMemo,
+) -> Result<(), String> {
+    memo.forget();
+    deliver_once_per_boot_in(client, service, memo).await
+}
+
 /// Which VM boot the host last delivered credentials to.
 pub(crate) struct DeliveryMemo {
     boot: std::sync::atomic::AtomicU64,
@@ -1178,6 +1200,34 @@ pub(crate) mod tests {
                 .as_deref(),
             Some("healed-share"),
             "the share the session's Vault handed over must reach the Keychain"
+        );
+    }
+
+    /// Order 1925-tdlv: a (re)connect delivers even when this boot's memo says
+    /// the share was already delivered, because the guest may have restarted
+    /// and lost it. fake_guest panics unless DeliverCredentials comes first.
+    #[tokio::test]
+    async fn a_connect_delivers_even_after_this_boot_was_marked_delivered() {
+        let scratch = ScratchService::new();
+        let memo = DeliveryMemo::new();
+        memo.mark_delivered();
+        let (host, guest) = tokio::io::duplex(1 << 16);
+        let guest = tokio::spawn(fake_guest(
+            guest,
+            tillandsias_control_wire::DeliverCredentialsOutcome::Superseded,
+        ));
+        let mut client = tillandsias_host_shell::vsock_client::Client::from_stream(
+            Box::new(host),
+            tillandsias_control_wire::transport::Transport::Vsock { cid: 0, port: 0 },
+        );
+        assert_eq!(
+            deliver_on_connect_in(&mut client, &scratch.0, &memo).await,
+            Ok(())
+        );
+        drop(client);
+        assert!(
+            guest.await.unwrap(),
+            "the connect delivered, then asked for the handover"
         );
     }
 

@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue at the coordinator's order (macuahuitl, 2026-11-01),
+# found while fixing 1947-pnst.
+packets:
+- packet_id: a-sibling-branch-that-is-an-ancestor-of-head-holds-no-claim-head-has-not-already-folded
+  order: 1948-xbaf
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [plan, claims, branches]
+  estimated_hours: 2
+  title: check-claims-across-branches.sh reports no claim from a sibling branch that is an ancestor of HEAD, since HEAD has already folded everything that branch holds
+  context: 'lenovinha 2026-11-01: the script answered claimed-elsewhere:776-jcf3:windows-next and :osx-next, and a worker passed on a free row. origin/windows-next (b38f71052, 2026-09-25) is an ancestor of origin/linux-next; folded alone it shows 776-jcf3 in_progress, while trunk, which contains every fragment windows-next has, later set it back to ready. The script folds each sibling whole, so an old branch keeps reporting a claim that HEAD has already superseded. An ancestor of HEAD adds no fragment HEAD lacks and can hold nothing HEAD has not seen.'
+  exit_criteria:
+  - 'A fixture with HEAD descending from a sibling whose fold shows a row in_progress, and a later HEAD fragment setting it ready, asserts the script reports no claim from that sibling; a sibling with a claim fragment HEAD lacks is still reported. Pre-fix result: FAILS, the ancestor sibling is reported as claimed-elsewhere.'
+  verifiable_closure: 'Fixture transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the fix (1136-n8sh).'
+  next_action: 'Skip a sibling ref that is an ancestor of HEAD (git merge-base --is-ancestor) before folding it, and add the fixture.'
+  provenance: 1947-pnst investigation, lenovinha 2026-11-01; coordinator order.
+  events:
+  - type: filed
+    ts: '2026-11-01T18:41:48Z'
+    host: lenovinha
+    summary: filed p1 ready, ancestor sibling reported a superseded claim

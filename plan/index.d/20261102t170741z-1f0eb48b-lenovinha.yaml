@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-studio-sibling-gets-a-memory-budget-from-host-ram-and-is-killed-before-the-forge
+    event:
+      type: note
+      ts: "2026-11-02T17:07:41Z"
+      agent_id: linux-lenovinha-opus5-20261102t170738z
+      host: lenovinha
+      summary: |
+        Operator-approved live rerun, lenovinha 2026-11-02 16:39Z, regime: debug build of trunk 36e54a0bb (with 1953-stsk) merged with 1945-sthg and 1921-q7q3; tray started from that build; vault unsealed from the keyring share. tillandsias --debug --cloud octocat/Hello-World --studio comfyui: stage 1/4 images 269s, stage 2/4 studio container 1s, stage 3/4 router route 0s, stage 4/4 session and window 11s; the CLI exited and the tray stayed up; no tray companion spawned (the 1953-stsk fix holds). The ComfyUI litmus, checked live: no host port published and nothing on the host listening for the studio; unauthenticated route returns 401; the window opened after the authenticated probe returned 2xx (9 authenticated 502s while ComfyUI started, then a 2xx); /models bound read-only from cache_root/models/imagegen. q7q3 budget half: memory.high 6267338752, memory.max 7833911296, oom_score_adj 1000. Litmus comfyui-studio-is-a-sibling-behind-the-otp-route passes after regenerating studios.json, which a trunk merge leaves stale; each branch must regenerate it when it merges trunk.

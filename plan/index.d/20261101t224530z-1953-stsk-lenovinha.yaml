@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-01, from the operator-approved live studio run.
+packets:
+- packet_id: a-studio-launch-is-a-cli-lane-and-never-takes-the-launcher-singleton-that-sigterms-the-running-tray
+  order: 1953-stsk
+  status: in_progress
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, cli, singleton, studio]
+  estimated_hours: 2
+  title: A --studio launch counts as a CLI lane, so it never takes the launcher singleton that SIGTERMs the running tray; the pin test derives its lane list from the lane table
+  context: 'lenovinha 2026-11-01 22:43:45Z, operator-approved live run, debug build of 2krx+sthg+q7q3 merged with trunk: tillandsias --debug --cloud octocat/Hello-World --studio comfyui. --studio is missing from is_cli_mode (crates/tillandsias-headless/src/main.rs), so the launch acquired the launcher singleton, which SIGTERMs the older instance: the running tray logged Received shutdown signal and exited gracefully, unlinking its control socket. The CLI then found no tray (Presence::Absent) and spawned a companion, which took the singleton and SIGTERMed the CLI (rc=143 one second in). The companion was left as the sole tray and was killed by PID. This is the mechanism of the 2026-11-01 morning teardown blamed on 1944-trsp: the tray lock (#790) was correct, the tray was killed first. Fourth instance of the class after --antigravity (2026-07-12), --capabilities (2026-08-09) and --rejoin (1911-3dqo); cli_mode_counts_every_lane_flag pins a hand-kept list that never got studio.'
+  exit_criteria:
+  - 'The pin test derives its lane list from the positional-launch refusal table (every (flag_expr, "--lane") entry) and asserts each flag_expr is in is_cli_mode. Pre-fix result: FAILS on studio_id.is_some().'
+  - 'is_cli_mode counts studio_id.is_some(), and the pin test passes.'
+  verifiable_closure: 'Test transcript before and after. Pre-fix result: FAILS.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the test change lands with the fix (1136-n8sh).'
+  next_action: 'Add studio_id.is_some() to is_cli_mode; rewrite cli_mode_counts_every_lane_flag to read the lane table; then rerun the operator-approved live runs.'
+  provenance: live studio run on lenovinha 2026-11-01 (tray and CLI logs in the session scratchpad).
+  events:
+  - type: filed
+    ts: '2026-11-01T22:45:30Z'
+    host: lenovinha
+    summary: filed p0 in_progress, claimed by opus5; root cause of both studio teardowns

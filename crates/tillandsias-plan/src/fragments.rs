@@ -368,7 +368,11 @@ pub fn fragment_item_span(
             continue;
         }
         let indent = line.len() - trimmed.len();
-        if indent == 0 {
+        // A column-0 `- ` is an item of a sequence written at the key's own
+        // column (valid YAML); any other column-0 line is the next key.
+        let column_zero_item =
+            indent == 0 && trimmed.starts_with("- ") && item_indent.is_none_or(|w| w == 0);
+        if indent == 0 && !column_zero_item {
             section_end = i;
             break;
         }
@@ -4053,6 +4057,42 @@ packets:
             None,
             "an absent packet must locate nothing rather than a nearby block"
         );
+    }
+
+    /// YAML allows a block sequence at the parent key's own column
+    /// (`packets:` then `- packet_id:` at column 0), and three calmecacpilli
+    /// fragments (1935, 1956, 1957) are written that way. Pre-fix: FAILS — the
+    /// first column-0 item ended the section, so every row in such a fragment
+    /// was uncitable and `plan next` answered unsupported when one ranked top.
+    #[test]
+    fn fragment_item_span_reads_items_at_the_section_column() {
+        let raw = "\
+# fragment header comment
+packets:
+- packet_id: gamma
+  order: 102
+  status: ready
+- packet_id: delta
+  order: 103
+  status: ready
+events:
+- packet_id: gamma
+  event: {type: note}
+";
+        let block: Vec<&str> = raw.lines().collect();
+        let (s, e) = fragment_item_span(raw, "packets", "delta", &[]).expect("column-0 item");
+        let span = block[s - 1..e].join("\n");
+        assert!(span.starts_with("- packet_id: delta"), "{span}");
+        assert!(
+            span.contains("order: 103") && !span.contains("gamma"),
+            "{span}"
+        );
+        assert!(
+            !span.contains("event:"),
+            "the next top-level key ends the section: {span}"
+        );
+        let (s, e) = fragment_item_span(raw, "events", "gamma", &[]).expect("events item");
+        assert!(block[s - 1..e].join("\n").contains("type: note"));
     }
 
     #[test]
