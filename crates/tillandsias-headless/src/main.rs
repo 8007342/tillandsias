@@ -1018,6 +1018,9 @@ fn main() {
         || bash
         || antigravity
         || opencode_web
+        // 1953-stsk: --studio was missing, so a studio launch SIGTERMed the
+        // running tray (lenovinha 2026-11-01).
+        || studio_id.is_some()
         || observatorium
         || init
         || status_check
@@ -2683,18 +2686,15 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // only for a project with `[imagegen] studio = true`.
         "imagegen-studio" => "images/imagegen-studio",
         "vault" => "images/vault",
+        // 1861-nmpp: a studio lane image, built on first use on the forge.
+        name if runtime_assets::studio_image_id(name).is_some() => "images/studio",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
     };
 
     let context_dir = root.join(rel);
-    let containerfile = match image_name {
-        "forge-base" => context_dir.join("Containerfile.base"),
-        "chromium-core" => context_dir.join("Containerfile.core"),
-        "chromium-framework" => context_dir.join("Containerfile.framework"),
-        _ => context_dir.join("Containerfile"),
-    };
+    let containerfile = context_dir.join(runtime_assets::containerfile_name(image_name));
 
     if !containerfile.is_file() {
         return Err(format!(
@@ -2732,6 +2732,12 @@ fn image_build_inputs(
             .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
+    } else if runtime_assets::studio_image_id(image_name).is_some() {
+        let forge = identities
+            .get("forge")
+            .ok_or_else(|| format!("{image_name} identity requires forge identity"))?;
+        build_args.insert("FORGE_IMAGE".to_string(), forge.canonical_tag.clone());
+        dependency_digests.insert("forge".to_string(), forge.source_digest.clone());
     }
     Ok((build_args, dependency_digests))
 }
@@ -2970,6 +2976,8 @@ fn image_dependency(image_name: &str) -> Option<&'static str> {
     match image_name {
         "forge" => Some("forge-base"),
         "chromium-framework" => Some("chromium-core"),
+        // 1861-nmpp: a studio lane image is stacked on the forge.
+        name if runtime_assets::studio_image_id(name).is_some() => Some("forge"),
         _ => None,
     }
 }
@@ -25584,6 +25592,40 @@ mod tests {
                  singleton-kill the running headless service (2026-07-12 repro)"
             );
         }
+
+        // ORDER 1953-stsk: the hand-kept list above drifts. A lane added
+        // after it (--studio, 1860-auhm) was never put on it, so a studio
+        // launch SIGTERMed the running tray on lenovinha 2026-11-01 and the
+        // tray's companion then SIGTERMed the launch. Every lane in the
+        // positional-launch refusal table (`(flag_expr, "--lane")`) must be
+        // counted too, so a lane added there cannot be missed here.
+        let table = source
+            .split("let Some(flag) = [")
+            .nth(1)
+            .and_then(|tail| tail.split("]\n").next())
+            .expect("positional-launch lane table");
+        let mut lanes = 0;
+        // One entry per line: `(flag_expr, "--lane"),`.
+        for line in table.lines() {
+            let Some(entry) = line.trim().strip_prefix('(') else {
+                continue;
+            };
+            let Some((expr, _lane)) = entry.split_once(", \"--") else {
+                continue;
+            };
+            lanes += 1;
+            let expr = expr.trim();
+            assert!(
+                window.split(&['|', '\n', ' '][..]).any(|tok| tok == expr),
+                "lane `{expr}` from the positional-launch table is missing from is_cli_mode — \
+                 that lane would take the launcher singleton and SIGTERM the running tray \
+                 (1953-stsk)"
+            );
+        }
+        assert!(
+            lanes >= 8,
+            "parsed only {lanes} lanes from the table: {table}"
+        );
     }
 
     #[test]
@@ -35642,6 +35684,41 @@ esac
             dependency_digests.get("forge-base"),
             Some(&"sha256:forge-base".to_string())
         );
+    }
+
+    /// 1861-nmpp: a studio lane image is built from images/studio on top of
+    /// the forge, its own Containerfile per studio; an id outside the
+    /// registry is not an image.
+    #[test]
+    fn a_studio_image_builds_from_images_studio_on_the_forge() {
+        let forge = ImageBuildIdentity {
+            source_digest: "sha256:forge".to_string(),
+            canonical_tag: "localhost/tillandsias-forge:sha256-forge".to_string(),
+            version_alias: "localhost/tillandsias-forge:v1.0.0".to_string(),
+            latest_alias: "localhost/tillandsias-forge:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+        let identities = HashMap::from([("forge".to_string(), forge)]);
+        let (build_args, dependency_digests) =
+            image_build_inputs("studio-grapesjs", &identities).unwrap();
+        assert_eq!(
+            build_args.get("FORGE_IMAGE").map(String::as_str),
+            Some("localhost/tillandsias-forge:sha256-forge")
+        );
+        assert_eq!(
+            dependency_digests.get("forge").map(String::as_str),
+            Some("sha256:forge")
+        );
+        assert_eq!(image_dependency("studio-grapesjs"), Some("forge"));
+
+        let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets it"))
+            .join("../..");
+        let (containerfile, context) = image_specs(&root, "studio-grapesjs").unwrap();
+        assert!(context.ends_with("images/studio"), "{}", context.display());
+        assert!(containerfile.is_file(), "{}", containerfile.display());
+        assert!(containerfile.ends_with("images/studio/Containerfile.grapesjs"));
+        assert!(image_specs(&root, "studio-silex").is_err());
+        assert!(image_dependency("studio-silex").is_none());
     }
 
     #[test]

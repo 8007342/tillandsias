@@ -167,7 +167,7 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
-  - litmus:release-cache-is-saved-only-by-main
+  - litmus:release-is-one-cloud-build
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
@@ -331,6 +331,7 @@ specs:
   - litmus:npm-harness-install-idempotent-shape
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
+  - litmus:flaky-installs-background
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
@@ -1086,7 +1087,7 @@ specs:
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
-  - litmus:web-studio-grapesjs-stores-as-a-repo-diff
+  - litmus:studio-grapesjs-saves-through-the-shared-endpoint
   - litmus:web-studio-decap-saves-a-hugo-entry
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
@@ -1110,6 +1111,7 @@ specs:
   - litmus:binary-e2e-smoke
   - litmus:tray-parity-matrix-complete
   - litmus:tray-new-surface-parity-gate
+  - litmus:tray-click-replies-while-a-launch-blocks
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence

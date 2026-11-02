@@ -460,8 +460,9 @@ mod tests {
 
     #[test]
     fn a_studio_lane_routes_under_studio_and_a_planned_lane_is_refused_by_name() {
-        let err = WebLane::studio("grapesjs").unwrap_err();
-        assert!(err.contains("1861-nmpp"), "{err}");
+        // 1861-nmpp landed the GrapesJS lane; Decap is still planned.
+        let err = WebLane::studio("decap").unwrap_err();
+        assert!(err.contains("1862-wrx5"), "{err}");
         assert!(
             WebLane::studio("silex")
                 .unwrap_err()
@@ -474,6 +475,7 @@ mod tests {
             entrypoint: Some("/usr/local/bin/studio-grapesjs".into()),
             label: "GrapesJS studio".into(),
         };
+        assert_eq!(WebLane::studio("grapesjs").as_ref(), Ok(&lane));
         assert_eq!(lane.route_host("my-site"), "studio.my-site");
         assert_eq!(
             WebLane::opencode().route_host("my-site"),

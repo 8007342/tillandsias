@@ -44,7 +44,7 @@ return {
       entry = { "/usr/local/bin/studio-grapesjs" }, port = 4096,
       save_adapter = "endpoint",
       write_allowlist = { "*.html", "**/*.html", "*.css", "**/*.css", ".tillandsias/studio/grapesjs/**" },
-      status = "planned", packet = "1861-nmpp",
+      status = "ready", packet = "1861-nmpp",
     },
     {
       id = "decap", name = "Decap CMS", license = "MIT",
