@@ -1,8 +1,8 @@
 // @trace order:1864-ay3x
 // The Puck editor page, bundled at image build time with React 19 (esbuild,
-// build stage only). It loads the page data from the studio's write-back
-// endpoint and hands what onPublish gives it straight back to that endpoint,
-// which stores it under the lane allowlist. PAGE comes from ?page=<name>.
+// build stage only). It loads the page data from the studio server and hands
+// what onPublish gives it to the studio front's /__studio/save, which guards
+// the path against the lane allowlist and commits it. PAGE comes from ?page=<name>.
 import { createRoot } from "react-dom/client";
 import { Puck } from "@measured/puck";
 
@@ -28,9 +28,9 @@ async function publish(data) {
   const r = await fetch("/__studio/save", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ path, data }),
+    body: JSON.stringify({ path, content: `${JSON.stringify(data, null, 2)}\n` }),
   });
-  if (!r.ok) alert(`not saved: ${(await r.json()).error}`);
+  if (!r.ok) alert(`not saved: ${JSON.stringify(await r.json())}`);
 }
 
 fetch(`/__studio/load?path=${encodeURIComponent(path)}`)

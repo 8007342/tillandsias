@@ -1090,7 +1090,7 @@ specs:
   - litmus:studio-grapesjs-saves-through-the-shared-endpoint
   - litmus:studio-decap-commits-a-hugo-entry-through-the-front
   - litmus:studio-tina-commits-a-document-through-the-front
-  - litmus:web-studio-puck-stores-under-the-allowlist
+  - litmus:studio-puck-commits-page-data-through-the-front
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape
