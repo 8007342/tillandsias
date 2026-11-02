@@ -211,6 +211,7 @@ specs:
   - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
+  - litmus:promote-stable-enqueues-website-update
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
   - litmus:harness-affinity-selection-shape
@@ -333,6 +334,7 @@ specs:
   - litmus:npm-harness-install-idempotent-shape
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
+  - litmus:provider-usage-limit
   - litmus:image-build-network-is-explicit
   - litmus:flaky-installs-background
   coverage_ratio: 80
@@ -1093,7 +1095,8 @@ specs:
   - litmus:local-web-preview
   - litmus:studio-grapesjs-saves-through-the-shared-endpoint
   - litmus:studio-decap-commits-a-hugo-entry-through-the-front
-  - litmus:web-studio-tina-saves-through-local-graphql
+  - litmus:studio-tina-commits-a-document-through-the-front
+  - litmus:studio-puck-commits-page-data-through-the-front
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape
@@ -1260,6 +1263,7 @@ specs:
   litmus_tests:
   - litmus:host-browser-mcp-lane-socket-shape
   - litmus:lane-socket-survives-launcher-exit
+  - litmus:lane-tray-build-handshake
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: mcp-on-demand

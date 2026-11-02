@@ -1,0 +1,52 @@
+# @trace order:1864-ay3x, order:1860-auhm (spec: openspec/changes/web-studio-lanes)
+# The Puck studio lane, built on first use as studio-puck, never part of the
+# INIT set. TWO STAGES, by operator ruling 2026-11-02:
+#   builder  esbuild bundles Puck + React 19 + the editor entry into ONE
+#            browser file; this stage, with esbuild and node_modules, is
+#            DISCARDED.
+#   final    the forge image plus the studio front, the bundle, its CSS, the
+#            editor page and the studio server. No esbuild, no node_modules
+#            under /opt: React 19 exists only inside the bundle.
+#            scripts/test-studio-puck.sh checks this.
+#
+# Licences approved by the operator 2026-11-02 (relayed by macuahuitl-fedora):
+# @measured/puck 0.20.2 MIT and its tree with React 19 (MIT 19, BSD-3-Clause 1,
+# 0BSD 1), shipped inside the bundle; esbuild 0.28.2 MIT and its platform
+# binary @esbuild/linux-x64 MIT (linux-arm64 on an aarch64 builder, also MIT),
+# BUILD-TIME ONLY. For the stack ledger (scripts/lua/build-stack-ledger.lua,
+# #833) the source is puck/build/package-lock.json: Puck and React as the
+# bundle, esbuild as build-stage only. The ledger does not read it yet (follow-up).
+ARG FORGE_IMAGE=localhost/tillandsias-forge
+
+FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90 AS builder
+WORKDIR /build
+COPY puck/build/package.json puck/build/package-lock.json /build/
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY puck/build/editor.jsx puck/build/editor.html /build/
+RUN mkdir -p /build/public \
+    && node_modules/.bin/esbuild editor.jsx --bundle --minify --format=iife \
+        --jsx=automatic --define:process.env.NODE_ENV='"production"' \
+        --outfile=public/editor.js \
+    && cp node_modules/@measured/puck/dist/index.css public/editor.css \
+    && cp editor.html public/editor.html \
+    && test -s public/editor.js && test -s public/editor.css
+
+FROM ${FORGE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours. The label is Tillandsias's own recipe; every base image and
+# package it carries is credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+LABEL io.tillandsias.studio="puck" \
+      io.tillandsias.studio.puck-version="0.20.2" \
+      io.tillandsias.studio.react-version="19.2.0 (bundled)" \
+      io.tillandsias.studio.licence="MIT" \
+      io.tillandsias.studio.dependency-licences="MIT,BSD-3-Clause,0BSD" \
+      io.tillandsias.studio.build-only="esbuild@0.28.2 MIT"
+USER root
+COPY --from=builder /build/public /opt/studio/puck/public
+COPY studio-front.js /opt/studio/studio-front.js
+# Written by scripts/lua/build-studio-registry.lua beside data/studios.json.
+COPY studios.json /usr/local/share/tillandsias/studios.json
+COPY puck/server.mjs /opt/studio/puck/
+COPY --chmod=0755 puck/studio-puck /usr/local/bin/studio-puck
+USER 1000:1000

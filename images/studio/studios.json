@@ -94,7 +94,7 @@
       "packet": "1863-dmke",
       "port": 4096,
       "save_adapter": "own-writer",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         "content/**",
         "tina/config.ts",
@@ -116,7 +116,7 @@
       "packet": "1864-ay3x",
       "port": 4096,
       "save_adapter": "endpoint",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         ".tillandsias/studio/puck/**"
       ]

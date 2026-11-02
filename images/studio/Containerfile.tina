@@ -1,0 +1,43 @@
+# @trace order:1863-dmke, order:1860-auhm (spec: openspec/changes/web-studio-lanes)
+# The TinaCMS studio lane in LOCAL mode: the forge image plus the studio front
+# and `tinacms dev` (no Tina Cloud account, telemetry off, no network at run
+# time). Every package (1026) is pinned by package-lock.json integrity. Built
+# on first use as studio-tina, never part of the INIT set.
+#
+# Licences approved by the operator 2026-11-01 (relayed by macuahuitl-fedora):
+# tinacms 3.15.1 and @tinacms/cli 4.0.4 Apache-2.0, @tinacms/graphql and
+# @tinacms/datalayer Apache-2.0 as shipped, and the census in NOTICE (which
+# also carries the CC-BY-4.0 credit for caniuse-lite's data).
+ARG FORGE_IMAGE=localhost/tillandsias-forge
+FROM ${FORGE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours. The label is Tillandsias's own recipe; every base image and
+# package it carries is credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+LABEL io.tillandsias.studio="tina" \
+      io.tillandsias.studio.tinacms-version="3.15.1" \
+      io.tillandsias.studio.tinacms-cli-version="4.0.4" \
+      io.tillandsias.studio.licence="Apache-2.0" \
+      io.tillandsias.studio.dependency-licences="MIT,ISC,Apache-2.0,BSD-3-Clause,BSD-2-Clause,0BSD,Unlicense,Python-2.0,CC0-1.0,CC-BY-4.0,Zlib" \
+      io.tillandsias.studio.telemetry="off"
+
+USER root
+WORKDIR /opt/studio/tina
+COPY tina/package.json tina/package-lock.json tina/NOTICE /opt/studio/tina/
+RUN npm ci --ignore-scripts --omit=dev --no-audit --no-fund \
+    && test -f /opt/studio/tina/node_modules/@tinacms/cli/bin/tinacms \
+    && npm cache clean --force
+COPY studio-front.js /opt/studio/studio-front.js
+# Written by scripts/lua/build-studio-registry.lua beside data/studios.json.
+COPY studios.json /usr/local/share/tillandsias/studios.json
+COPY tina/server.mjs /opt/studio/tina/
+COPY --chmod=0755 tina/studio-tina /usr/local/bin/studio-tina
+# Tina's config build resolves `tinacms` from the PROJECT upwards; the
+# checkout sits under /home/forge/src, so /node_modules serves it without
+# writing into the checkout. Vite keeps its dependency cache inside
+# @tinacms/app, so the forge user owns that package.
+RUN ln -s /opt/studio/tina/node_modules /node_modules \
+    && chown -R 1000:1000 /opt/studio/tina/node_modules/@tinacms/app
+WORKDIR /
+USER 1000:1000

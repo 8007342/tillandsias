@@ -31,6 +31,10 @@
 #   ^would-demote:<mistaken>:latest-would-be:<intended>$   --dry-run
 #   ^verified:stable-tag:<sha>$                   step 3 landed on origin (1061-zd83)
 #   ^verified:deploy-ref:<sha>:tree=<tree>$       step 4 landed on origin (1798-khw6)
+#   ^website-update:enqueued:<tag>:ns=<ns>$       step 5 enqueued (1846-dykd)
+#   ^website-update:already-enqueued:<tag>$       step 5, this tag was enqueued before
+#   ^website-update:deferred:<tag>:<why>$         step 5 could not enqueue; promotion stands
+#                                                 (no line: no Website-Update trailer in range)
 #   ^refused:stable-tag-push-refused:<sha>$       release flipped, tag push failed (1768-2k56)
 #   ^refused:(no-evidence|no-release|bad-tag|missing-target|demote-verify-failed
 #            |promote-commit-unresolvable|stable-tag-not-moved|stable-tag-unverified
@@ -99,6 +103,45 @@ _advance_deploy_ref() { # $1=commit $2=tag
         case "$_out" in refused:deploy-ref-*) ;; *) echo "refused:deploy-ref-unverified:$1" ;; esac
         exit 1
     fi
+}
+
+# ORDER 1846-dykd. Step 5: after the stable tag and the deploy ref landed, a
+# release whose range previous-stable..release carries `Website-Update:`
+# trailers enqueues one website-update task (tag + reasons, nothing about
+# hosts or the fleet) on the site project's coordinator namespace, through the
+# 1826 client. Idempotent per tag: a marker under the state dir records an
+# enqueue that succeeded. NEVER blocks promotion: no client, no token or an
+# unreachable coordinator prints website-update:deferred:<tag>:<why>, and a
+# later re-run enqueues (the marker is recomputable from git).
+WEBSITE_NS="${TILLANDSIAS_WEBSITE_NS:-8007342/tillandsias.org}"
+_enqueue_website_update() { # $1=previous stable commit (may be empty) $2=commit $3=tag
+    local _reasons _plan _state _body _out _rc=0
+    _reasons="$(bash "$REPO_ROOT/scripts/release-website-marker.sh" "$1" "$2" 2>/dev/null)" || _reasons=""
+    [ -n "$_reasons" ] || return 0
+    _state="${XDG_STATE_HOME:-$HOME/.local/state}/tillandsias/website-update"
+    if [ -e "$_state/$3" ]; then
+        echo "website-update:already-enqueued:$3"
+        return 0
+    fi
+    _plan="${TILLANDSIAS_PLAN_BIN:-$(command -v tillandsias-plan || true)}"
+    if [ -z "$_plan" ] || [ ! -x "$_plan" ]; then
+        echo "website-update:deferred:$3:no-coordinator-client"
+        return 0
+    fi
+    # Each reason is ONE trailer line, so escaping \ " and tab makes it a JSON
+    # string; the tag already passed _valid_tag. (No jq: 1375-tsfu ratchet.)
+    local _arr
+    _arr="$(printf '%s\n' "$_reasons" \
+        | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/.*/"&"/' | paste -sd, -)"
+    _body="{\"kind\":\"website-update\",\"tag\":\"$3\",\"reasons\":[$_arr]}"
+    _out="$("$_plan" coord send "$_body" --ttl 604800 --ns "$WEBSITE_NS" 2>&1)" || _rc=$?
+    if [ "$_rc" -ne 0 ]; then
+        echo "website-update:deferred:$3:client-exit-$_rc"
+        printf '  client said: %s\n' "$(printf '%s' "$_out" | tail -1)" >&2
+        return 0
+    fi
+    mkdir -p "$_state" 2>/dev/null && printf '%s\n' "$WEBSITE_NS" >"$_state/$3" 2>/dev/null || true
+    echo "website-update:enqueued:$3:ns=$WEBSITE_NS"
 }
 
 if [ -z "$TAG" ] || ! _valid_tag "$TAG"; then
@@ -410,6 +453,9 @@ if [ -z "$COMMIT" ]; then
     echo "refused:promote-commit-unresolvable:${COMMIT_RAW:-empty}"
     exit 1
 fi
+# 1846-dykd: the previous stable commit, read BEFORE step 3 moves the tag, is
+# the start of the range step 5 reads Website-Update trailers from.
+PREV_STABLE="$(git -C "$REPO_ROOT" rev-parse --verify --quiet 'refs/tags/stable^{commit}' || true)"
 git -C "$REPO_ROOT" tag -f -a stable -m "Stable channel: promoted $TAG" "$COMMIT"
 # ORDER 1768-2k56. Under `set -e` a refused tag push used to end the script
 # HERE, silently, after `gh release edit` had already flipped the release: a
@@ -454,6 +500,10 @@ echo "verified:stable-tag:$COMMIT"
 
 # Step 4 (1798-khw6): the one event that deploys observatorium.tillandsias.org.
 _advance_deploy_ref "$COMMIT" "$TAG"
+
+# Step 5 (1846-dykd): a release whose range carries a Website-Update trailer
+# enqueues ONE website-update task on the site project's coordinator namespace.
+_enqueue_website_update "$PREV_STABLE" "$COMMIT" "$TAG"
 
 echo "Stable channel now serves $TAG (README /releases/latest URLs resolve to it)." >&2
 echo "NEXT: run a ONE-SHOT stable curl-install smoke to prove the promoted" >&2

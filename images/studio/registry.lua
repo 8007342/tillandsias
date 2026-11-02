@@ -62,7 +62,7 @@ return {
       entry = { "/usr/local/bin/studio-tina" }, port = 4096,
       save_adapter = "own-writer",
       write_allowlist = { "content/**", "tina/config.ts", "tina/config.js", ".gitignore" },
-      status = "planned", packet = "1863-dmke",
+      status = "ready", packet = "1863-dmke",
     },
     {
       id = "puck", name = "Puck", license = "MIT",
@@ -71,7 +71,7 @@ return {
       entry = { "/usr/local/bin/studio-puck" }, port = 4096,
       save_adapter = "endpoint",
       write_allowlist = { ".tillandsias/studio/puck/**" },
-      status = "planned", packet = "1864-ay3x",
+      status = "ready", packet = "1864-ay3x",
     },
     {
       id = "onlook", name = "Onlook", license = "Apache-2.0",
