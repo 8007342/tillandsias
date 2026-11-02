@@ -208,6 +208,7 @@ specs:
   - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
+  - litmus:promote-stable-enqueues-website-update
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
   - litmus:harness-affinity-selection-shape
