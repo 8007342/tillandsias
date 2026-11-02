@@ -4912,6 +4912,11 @@ mod tests {
             tools.contains(&"image.generate"),
             "image.generate is advertised (1874-kkrc): {tools:?}"
         );
+        // The studio tools, by name: 1956-x7xp run_workflow, 1956-26qh
+        // validate_family.
+        for t in ["studio.run_workflow", "studio.validate_family"] {
+            assert!(tools.contains(&t), "{t} is advertised: {tools:?}");
+        }
         // 1860-auhm: the four studio co-edit tools, by name.
         for studio in [
             "studio_options",
@@ -4923,7 +4928,7 @@ mod tests {
         }
         assert_eq!(
             tools.len() - cloudflare,
-            24,
+            26,
             "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + studio family + cloudflare family, nothing else"
         );
 
@@ -4994,7 +4999,7 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                24,
+                26,
                 "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc), thirteen browser tools + four studio tools (1860-auhm), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
@@ -5483,7 +5488,8 @@ mod tests {
             // 1874-kkrc: image.generate, by name.
             assert!(tools.iter().any(|t| t["name"] == "image.generate"));
             // 1860-auhm: + the four studio co-edit tools.
-            assert_eq!(tools.len() - cloudflare, 24);
+            // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family.
+            assert_eq!(tools.len() - cloudflare, 26);
 
             drop(writer);
             drop(lines);
