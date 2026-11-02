@@ -66,7 +66,8 @@ pub fn descriptor() -> Value {
                 "seed": { "type": "integer", "minimum": 0 },
                 "count": { "type": "integer", "minimum": 1, "maximum": MAX_COUNT, "default": 1 },
                 "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"], "description": "Omit to use the biggest model already on this computer (up to what it can run). Any smaller tier may be named." },
-                "consent_token": { "type": "string", "description": "From a download offer (consent_required or bigger_tier_offer), only after the user said yes to its ask. Needed once per tier per computer." }
+                "consent_token": { "type": "string", "description": "From a download offer (consent_required or bigger_tier_offer), only after the user said yes to its ask. Needed once per tier per computer." },
+                "decline": { "type": "boolean", "description": "With the offer's consent_token, when the user said no to its ask: nothing is downloaded." }
             },
             "required": ["prompt"]
         }
@@ -327,15 +328,8 @@ fn download_bytes(tier: &TierRow, present: Option<&[String]>) -> u64 {
 
 /// 1957-5m8g: a tier runs with no consent when its files are pinned and either
 /// already on this computer or their download was granted on this host.
-/// The ladder's floor (I0) always runs: it is fetched on first use unasked,
-/// as before, so a fresh host can make a first picture.
+/// Every tier's first download asks, I0 included (operator 2026-11-01).
 fn available(tier: &TierRow, present: Option<&[String]>) -> bool {
-    if imagegen_tiers::ladder()
-        .first()
-        .is_some_and(|f| f.tier == tier.tier)
-    {
-        return true;
-    }
     let pinned =
         !imagegen_models::files_for_tier(&imagegen_models::manifest(), &tier.tier).is_empty();
     pinned && (download_bytes(tier, present) == 0 || imagegen_consent::download_granted(&tier.tier))
@@ -401,6 +395,16 @@ pub fn call(
             ));
         }
         let token = args.get("consent_token").and_then(Value::as_str);
+        if args.get("decline").and_then(Value::as_bool) == Some(true) {
+            imagegen_consent::decline(token);
+            return Ok(json!({
+                "status": "declined",
+                "tier": job.tier.tier,
+                "ran": false,
+                "downloaded": false,
+                "note": "The user declined the download. Nothing was fetched; asking again later is fine.",
+            }));
+        }
         if let Err(refusal) = imagegen_consent::redeem(token, &lane, &job.tier, &request) {
             let offer = imagegen_consent::offer(&lane, &request, &job.tier, bytes);
             return Ok(imagegen_consent::consent_required(offer, refusal));
@@ -976,6 +980,48 @@ mod tests {
             assert!(r["bigger_tier_offer"].is_null(), "{inst}: {r}");
         }
         assert_eq!(runs(), 4);
+        install_seam(None);
+    }
+
+    /// 1957-5m8g operator decision 2026-11-01: I0 asks too. Pre-fix: FAILS
+    /// (I0 runs and fetches unasked).
+    #[test]
+    fn a_fresh_hosts_first_tierless_call_asks_before_any_fetch() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (engine, _s) = seam_with(&[]);
+        let mut sink = |_: Progress| {};
+        let r = call("dl-d", "a", &small("a demon", None), &mut sink).unwrap();
+        assert_eq!(r["status"], "consent_required", "{r}");
+        assert_eq!(r["bigger_tier_offer"]["tier"], "I0", "{r}");
+        let ask = r["bigger_tier_offer"]["ask"].as_str().unwrap();
+        assert!(ask.contains(" GB") && ask.contains(" min"), "{ask}");
+        assert!(ask.contains("a while") && ask.contains("metered"), "{ask}");
+        assert_eq!(
+            engine.0.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "nothing fetched or run"
+        );
+        install_seam(None);
+    }
+
+    /// Declining a download offer runs and fetches nothing and says so.
+    #[test]
+    fn declining_a_download_leaves_nothing_downloaded() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (engine, _s) = seam_with(&[]);
+        let mut sink = |_: Progress| {};
+        let r = call("dl-e", "a", &small("a demon", None), &mut sink).unwrap();
+        let mut no = small("a demon", Some("I0"));
+        no["consent_token"] = r["bigger_tier_offer"]["consent_token"].clone();
+        no["decline"] = json!(true);
+        let r = call("dl-e", "a", &no, &mut sink).unwrap();
+        assert_eq!(r["status"], "declined", "{r}");
+        assert_eq!(r["downloaded"], false);
+        assert_eq!(r["ran"], false);
+        assert_eq!(engine.0.load(std::sync::atomic::Ordering::SeqCst), 0);
+        // Declining grants nothing: the next call still asks.
+        let r = call("dl-e", "a", &small("a demon", None), &mut sink).unwrap();
+        assert_eq!(r["status"], "consent_required", "{r}");
         install_seam(None);
     }
 }

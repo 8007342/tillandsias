@@ -31,7 +31,7 @@ pub fn ask_download(bytes: u64) -> String {
     let gb = bytes as f64 / 1e9;
     let min = bytes.div_ceil(ASSUMED_DOWNLOAD_BYTES_PER_S * 60).max(1);
     format!(
-        "This model is not on this computer yet: it needs a one-time download of {gb:.1} GB (about {min} min) and that much disk. Download it?"
+        "This model is not on this computer yet: it needs a one-time download of {gb:.1} GB (about {min} min, it may take a while) and that much disk. On a slow or metered connection you may prefer to say no. Download it?"
     )
 }
 
@@ -128,11 +128,19 @@ pub fn offer(lane: &str, request: &str, tier: &TierRow, bytes: u64) -> Value {
         "how": format!(
             "Show `ask` to the user exactly as written. Only if they say yes, call image.generate again \
              with the same prompt, tier \"{}\" and this consent_token. The yes holds for this computer: \
-             that tier never asks again.",
+             that tier never asks again. If they say no, call again with this consent_token and \
+             decline: true; nothing is downloaded.",
             tier.tier
         ),
         "expires_in_s": TOKEN_TTL.as_secs(),
     })
+}
+
+/// The user said no: spend the token, grant nothing.
+pub fn decline(token: Option<&str>) {
+    if let (Some(t), Ok(mut s)) = (token, state().lock()) {
+        s.offers.remove(t);
+    }
 }
 
 /// Why a token was not honoured.
