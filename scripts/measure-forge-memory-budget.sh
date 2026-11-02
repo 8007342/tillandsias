@@ -31,10 +31,31 @@
 #     poll_swap_max_mib=<>:poll_anon_max_mib=<>:file_at_anon_max_mib=<>:oom=<n>:oom_kill=<n>:high=<n>:max=<n>:ulimit_u=<>:
 #     host_min_avail_mib=<>:verdict=<ok|build-failed|aborted:host-guard|...>
 # Regime line first: host, kernel, nproc, RAM, swap devices, swappiness.
+#
+# SPILL MODE (--spill W1,W2,..., MiB; §7.2), added 2026-11-01 by lenovinha:
+# under memory.max = --spill-mem MiB, write W MiB of RANDOM bytes in 64 MiB
+# files into /spill, then read them back in shuffled order, timing each phase.
+# /spill is a tmpfs (pages charged to the container, spilling to swap) and,
+# as the control, a podman volume on disk. Random bytes are zram's worst case
+# (incompressible); real build trees compress, so tmpfs+zram numbers are a
+# floor. One more control run writes 2M into a tmpfs with memory.swap.max=0
+# and must OOM at about M. memory.swap.max is written EXACTLY through
+# --cgroup-conf (see crates/tillandsias-core/src/forge_budget.rs on
+# --memory-swap). --spill-payload <dir> replaces the random bytes with REAL
+# files from <dir> (e.g. a target/debug/deps tree), cut into the same 64 MiB
+# chunks; the first 4 are copied in cyclically with dd, so the run shows a
+# real build's compressibility rather than zram's worst. The payload's
+# compressibility is reported on its own line as payload=<dir>:
+# payload_zstd1_ratio=<x>:zram_alg=<alg>. Output, one line per run:
+#   measure:forge-spill:backing=<tmpfs|volume>:mem_max_mib=<M>:swap_max_mib=<S>:
+#     w_mib=<W>:write_ms=<>:read_ms=<>:memory_peak_mib=<>:swap_peak_mib=<>:
+#     high=<n>:max=<n>:oom=<n>:oom_kill=<n>:host_min_avail_mib=<>:verdict=<>
 set -uo pipefail
+# Bash 5: ${var//,/ }, local in functions and EPOCHREALTIME in --spill.
+[ "${BASH_VERSINFO[0]:-0}" -ge 5 ] || { echo "could-not-run:needs-bash-5:have=${BASH_VERSION:-unknown}"; exit 3; }
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-jobs=4; mem=8g; swap=16g; guard=1200; image=""
+jobs=4; mem=8g; swap=16g; guard=1200; image=""; spill=""; spill_mem=2048; spill_swap=4096; spill_payload=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --jobs) jobs="$2"; shift 2 ;;
@@ -42,6 +63,10 @@ while [ $# -gt 0 ]; do
         --memory-swap) swap="$2"; shift 2 ;;
         --guard-mib) guard="$2"; shift 2 ;;
         --image) image="$2"; shift 2 ;;
+        --spill) spill="$2"; shift 2 ;;
+        --spill-mem) spill_mem="$2"; shift 2 ;;
+        --spill-swap) spill_swap="$2"; shift 2 ;;
+        --spill-payload) spill_payload="$2"; shift 2 ;;
         *) echo "could-not-run:unknown-argument:$1"; exit 3 ;;
     esac
 done
@@ -57,6 +82,107 @@ mib() { echo $(( ${1:-0} / 1048576 )); }
 avail_mib() { awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo; }
 
 echo "regime:host=$(hostname -s):kernel=$(uname -r):nproc=$(nproc):mem_total_mib=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo):swap=$(swapon --noheadings --show=NAME,TYPE,SIZE 2>/dev/null | tr -s ' ' ',' | paste -sd';'):swappiness=$(cat /proc/sys/vm/swappiness):image=$image:image_id=${image_id:0:12}"
+
+if [ -n "$spill" ]; then
+    # EPOCHREALTIME (bash 5), not GNU date +%s%N; the guard above refuses older bash.
+    now_ms() { local t="${EPOCHREALTIME/[.,]/}"; echo $(( t / 1000 )); }
+    sname=""; svol=""
+    spill_cleanup() {
+        [ -n "$sname" ] && podman rm -f "$sname" >/dev/null 2>&1
+        [ -n "$svol" ] && podman volume rm -f "$svol" >/dev/null 2>&1
+        sname=""; svol=""
+    }
+    trap spill_cleanup EXIT INT TERM
+    # spill_run <backing> <w_mib> <swap_max_mib>
+    spill_run() {
+        local backing="$1" w="$2" smax="$3" mount n wt rt rc verdict="" a minavail=999999
+        sname="forge-spill-$$-$backing-$w-$smax"
+        if [ "$backing" = tmpfs ]; then
+            mount="--mount=type=tmpfs,destination=/spill,tmpfs-size=$(( w * 2 ))m"
+        else
+            svol="forge-spill-vol-$$-$w"
+            podman volume create "$svol" >/dev/null || { echo "could-not-run:volume-create"; return 3; }
+            mount="--volume=$svol:/spill"
+        fi
+        local pmount=""
+        [ -n "$pdir" ] && pmount="--volume=$pdir:/payload:ro,z"
+        podman run -d --name "$sname" --memory="${spill_mem}m" --memory-swap=-1 \
+            --cgroup-conf=memory.swap.max=$(( smax * 1048576 )) "$mount" ${pmount:+"$pmount"} \
+            --entrypoint sleep "$image" infinity >/dev/null || { echo "could-not-run:podman-run"; return 3; }
+        local C; C="/sys/fs/cgroup$(podman inspect --format '{{.State.CgroupPath}}' "$sname" 2>/dev/null)"
+        [ -r "$C/memory.peak" ] || { echo "could-not-run:cgroup-unreadable:$C"; spill_cleanup; return 3; }
+        n=$(( w / 64 ))
+        # Host guard: a watcher kills the container if MemAvailable drops
+        # below --guard-mib, and leaves the minimum in a file.
+        ( m=999999; while podman container exists "$sname" 2>/dev/null; do
+              a=$(avail_mib); [ "$a" -lt "$m" ] && m=$a && echo "$m" > "$ROOT/target/forge-spill-$$.min"
+              if [ "$a" -lt "$guard" ]; then echo guard > "$ROOT/target/forge-spill-$$.guard"; podman kill "$sname" >/dev/null 2>&1; break; fi
+              sleep 1; done ) &
+        local wpid=$!
+        local t0; t0=$(now_ms)
+        if [ -n "$pdir" ]; then
+            # dd, not cp: on btrfs cp reflinks and writes no data (measured
+            # 2026-11-01: 4 GiB "written" to the volume in 168 ms). Cycle the
+            # first 4 chunks (256 MiB, stays cached): re-reading a large
+            # payload charges its page cache to this same cgroup, and with a
+            # low swappiness the kernel evicts it instead of swapping the
+            # tmpfs, so the run measures read thrash, not the spill (same
+            # date: 25 min, then SIGKILL, 312 MiB swapped).
+            podman exec "$sname" sh -c 'i=0; while [ $i -lt '"$n"' ]; do dd if=/payload/c000$((i % 4)) of=/spill/c$i bs=1M status=none || exit 1; i=$((i+1)); done; sync'
+        else
+            podman exec "$sname" sh -c 'i=0; while [ $i -lt '"$n"' ]; do dd if=/dev/urandom of=/spill/c$i bs=1M count=64 status=none || exit 1; i=$((i+1)); done; sync'
+        fi
+        rc=$?; wt=$(( $(now_ms) - t0 )); rt=-1
+        if [ "$rc" = 0 ]; then
+            t0=$(now_ms)
+            podman exec "$sname" sh -c 'for f in $(ls /spill | shuf); do cat /spill/$f > /dev/null || exit 1; done'
+            rc=$?; rt=$(( $(now_ms) - t0 ))
+        fi
+        local peak speak; peak=$(cat "$C/memory.peak" 2>/dev/null || echo 0); speak=$(cat "$C/memory.swap.peak" 2>/dev/null || echo 0)
+        sev() { awk -v k="$1" '$1 == k { print $2 }' "$C/memory.events" 2>/dev/null; }
+        local high mx oom oomk; high=$(sev high); mx=$(sev max); oom=$(sev oom); oomk=$(sev oom_kill)
+        spill_cleanup
+        wait "$wpid" 2>/dev/null
+        [ -r "$ROOT/target/forge-spill-$$.min" ] && minavail=$(cat "$ROOT/target/forge-spill-$$.min")
+        if [ -e "$ROOT/target/forge-spill-$$.guard" ]; then verdict="aborted:host-guard"
+        elif [ "$rc" = 0 ]; then verdict=ok
+        elif [ "${oomk:-0}" -gt 0 ]; then verdict="oom-killed:rc=$rc"
+        else verdict="failed:rc=$rc"; fi
+        rm -f "$ROOT/target/forge-spill-$$.min" "$ROOT/target/forge-spill-$$.guard"
+        echo "measure:forge-spill:payload=$( [ -n "$pdir" ] && echo real || echo random ):backing=$backing:mem_max_mib=$spill_mem:swap_max_mib=$smax:w_mib=$w:write_ms=$wt:read_ms=$rt:memory_peak_mib=$(mib "$peak"):swap_peak_mib=$(mib "$speak"):high=${high:-?}:max=${mx:-?}:oom=${oom:-?}:oom_kill=${oomk:-?}:host_min_avail_mib=$minavail:verdict=$verdict"
+        [ "$verdict" != "aborted:host-guard" ]
+    }
+    # A real payload: concatenate files from the tree until the largest W is
+    # covered, cut into 64 MiB chunks, bind-mounted read-only at /payload.
+    pdir=""
+    if [ -n "$spill_payload" ]; then
+        [ -d "$spill_payload" ] || { echo "could-not-run:no-payload-dir:$spill_payload"; exit 3; }
+        wmax=0; for w in ${spill//,/ }; do [ "$w" -gt "$wmax" ] && wmax=$w; done
+        [ $(( spill_mem * 2 )) -gt "$wmax" ] && wmax=$(( spill_mem * 2 ))
+        pdir="$(mktemp -d "$ROOT/target/forge-spill-payload.XXXXXX")" || { echo "could-not-run:no-payload-workdir"; exit 3; }
+        find "$spill_payload" -type f -size +0 -print0 | sort -z \
+            | xargs -0 cat 2>/dev/null | head -c $(( wmax * 1048576 )) \
+            | split -b 64M -d -a 4 - "$pdir/c"
+        # mktemp -d is 0700; the container's forge user must read the chunks.
+        chmod -R a+rX "$pdir"
+        have=$(du -sm "$pdir" | cut -f1)
+        [ "$have" -ge "$wmax" ] || { echo "could-not-run:payload-too-small:${have}<${wmax}mib"; rm -rf "$pdir"; exit 3; }
+        ratio="?"
+        if command -v zstd >/dev/null 2>&1; then
+            raw=$(wc -c < "$pdir/c0000"); packed=$(zstd -1 -c "$pdir/c0000" | wc -c)
+            ratio=$(awk -v r="$raw" -v p="$packed" 'BEGIN { printf "%.2f", r / p }')
+        fi
+        echo "payload=$spill_payload:payload_zstd1_ratio=$ratio:zram_alg=$(grep -o '\[[a-z0-9-]*\]' /sys/block/zram0/comp_algorithm 2>/dev/null | tr -d '[]')"
+        trap 'spill_cleanup; rm -rf "$pdir"' EXIT INT TERM
+    fi
+    for w in ${spill//,/ }; do
+        spill_run tmpfs "$w" "$spill_swap" || exit 1
+        spill_run volume "$w" "$spill_swap" || exit 1
+    done
+    # Control: no swap allowance; writing 2M into tmpfs must OOM near M.
+    spill_run tmpfs $(( spill_mem * 2 )) 0 || exit 1
+    exit 0
+fi
 
 WORK="$(mktemp -d "$ROOT/target/forge-memory.XXXXXX")" || { echo "could-not-run:no-workdir"; exit 3; }
 name="forge-mem-$$"
