@@ -16,6 +16,7 @@
 //!   pkexec), where `/proc/self` would name that process. That is the
 //!   installed path: the `(deleted)` suffix stripped when a file is there again
 //!   (an upgrade put the new build at the same path), else the path as reported.
+//!
 //! @trace order:1984-pexe
 
 use std::path::{Path, PathBuf};
@@ -51,6 +52,7 @@ fn installed_path(reported: &Path, exists: &dyn Fn(&Path) -> bool) -> PathBuf {
 
 /// Whether the running binary's file was replaced or removed (a restart
 /// picks up the installed build).
+#[cfg(test)]
 pub fn replaced_on_disk() -> bool {
     std::env::current_exe()
         .map(|p| p.to_string_lossy().ends_with(DELETED_SUFFIX))
