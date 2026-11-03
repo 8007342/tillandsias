@@ -1,0 +1,32 @@
+# @trace spec:git-mirror-service, order:1978-n8c6
+#
+# MEASURED on yoga 2026-11-03: the Vault Agent wrote its token ~0.1 s after
+# start, and start_vault_agent's `sleep 1` held every mirror start ~0.9 s
+# longer. Red with the sleep loop: arms 1 and 2 see 1000 ms.
+name: litmus:git-mirror-vault-sink-wait-is-an-event
+spec: git-mirror-service
+phase: pre-build
+description: The mirror's Vault Agent wait ends when the token sink is written or renamed into place; a dead agent and a silent one still fail loudly at once and at the hard timeout
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), podman, and the localhost/tillandsias-git image (its busybox has inotifyd); without the image the fixture SKIPS by name
+
+critical_path:
+  - step: "the real start_vault_agent, run in the git image with a stub agent: sink at 100 ms is seen within 400 ms; exit and silence are refused"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-vault-sink-wait-is-an-event.lua 2>&1"
+    timeout_ms: 180000
+    expected_behavior: "ok:git-mirror-vault-sink-wait-is-an-event:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "five arms: premise, FAST, RENAME, DEAD, TIMEOUT"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-vault-sink-wait-is-an-event"
+
+rollback:
+  on_failure: "read the FAIL lines; the wait is start_vault_agent in images/git/entrypoint.sh"
+  command: "grep -n 'inotifyd\\|read -r -t 1\\|timed out after' images/git/entrypoint.sh"

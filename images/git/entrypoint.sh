@@ -60,23 +60,54 @@ start_vault_agent() {
         return 1
     }
     rm -f "$VAULT_TOKEN_FILE"
+    # 1978-n8c6: wake on the sink being written, not on a one-second tick. The
+    # agent wrote its token ~0.1 s after start and the old `sleep 1` held every
+    # mirror start ~0.9 s longer (measured on yoga 2026-11-03). inotifyd starts
+    # BEFORE the agent, so the write cannot fall between a check and the wait.
+    # The 1 s read timeout is only the bound for noticing an agent that died;
+    # no new cadence. Without inotifyd, the read is a plain `sleep 1`.
+    _sink_events=""
+    _sink_watch_pid=""
+    if command -v inotifyd >/dev/null 2>&1; then
+        _sink_events="/tmp/.vault-sink-events.$$"
+        rm -f "$_sink_events"
+        if mkfifo "$_sink_events" 2>/dev/null; then
+            inotifyd - "$(dirname "$VAULT_TOKEN_FILE")":wy > "$_sink_events" 2>/dev/null &
+            _sink_watch_pid=$!
+            exec 8<>"$_sink_events"
+        else
+            _sink_events=""
+        fi
+    fi
     "$VAULT_AGENT_BOOTSTRAP" &
     VAULT_AGENT_PID=$!
 
-    waited=0
-    while [ "$waited" -lt "$VAULT_AGENT_START_TIMEOUT" ]; do
+    _deadline=$(( $(date +%s) + VAULT_AGENT_START_TIMEOUT ))
+    _rc=2
+    while [ "$(date +%s)" -lt "$_deadline" ]; do
         if [ -s "$VAULT_TOKEN_FILE" ]; then
             echo "[git-service] Vault Agent auto-auth ready (pid=$VAULT_AGENT_PID; renewable sink=$VAULT_TOKEN_FILE)"
-            return 0
+            _rc=0
+            break
         fi
         if ! kill -0 "$VAULT_AGENT_PID" 2>/dev/null; then
             wait "$VAULT_AGENT_PID" || true
             echo "[vault-agent] exited before writing a client-token sink" >&2
-            return 1
+            _rc=1
+            break
         fi
-        sleep 1
-        waited=$((waited + 1))
+        if [ -n "$_sink_events" ]; then
+            read -r -t 1 _sink_event <&8 || true
+        else
+            sleep 1
+        fi
     done
+    if [ -n "$_sink_watch_pid" ]; then
+        kill "$_sink_watch_pid" 2>/dev/null || true
+        exec 8<&-
+        rm -f "$_sink_events"
+    fi
+    [ "$_rc" -eq 2 ] || return "$_rc"
 
     echo "[vault-agent] timed out after ${VAULT_AGENT_START_TIMEOUT}s waiting for auto-auth" >&2
     kill -TERM "$VAULT_AGENT_PID" 2>/dev/null || true
@@ -805,8 +836,10 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     # publish that runs on a LOCAL-ONLY mirror, where the honest answer is
     # heads-unknown/no-tracking-data rather than silence.
     run_sync_state "$mirror"
-    # Order 1443-uit6: and the first discipline ref, for the same reason.
-    run_publish_discipline "$mirror"
+    # Order 1443-uit6: the first discipline ref is published AFTER READY
+    # (1978-n8c6): no forge reads the mirror's refs/tillandsias/discipline/* at
+    # start (install-hooks reads the clone's own git dir, which never fetches
+    # them), and it cost 0.3 s ahead of READY.
 done
 
 echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"
@@ -838,6 +871,12 @@ done
 if [ "$_mirrors_seeded" -eq 1 ] && [ "$_mirror_count" -gt 0 ]; then
     notify_ready "mirror seeded ($_mirror_count)"
 fi
+
+# 1978-n8c6: the first discipline ref, now that READY is out (see the sweep).
+for mirror in "$GIT_SERVICE_ROOT"/*; do
+    [ -d "$mirror" ] || continue
+    run_publish_discipline "$mirror"
+done
 
 # 1968-psy9: the queued startup retry-pushes, after READY, in the background so
 # the daemon (waited on below) keeps serving and READY was never held by them.
