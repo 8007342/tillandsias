@@ -518,6 +518,34 @@ pub fn png_facts(bytes: &[u8]) -> Option<(u32, u32, bool)> {
 }
 
 /// A ≤256 px thumbnail beside `png`; `None` when it cannot be made.
+/// 1971-3erz: the thumbnail's path now, the file a moment later. Decoding,
+/// resizing and re-encoding the PNG ran after `elapsed_s` and before the reply
+/// (measured: warm calls 2.9 s inside the tool, ~3.1 s at the client), so it
+/// moves off the agent's wait onto a background thread.
+fn thumbnail_later(png: &Path) -> PathBuf {
+    let out = png.with_extension("thumb.png");
+    let src = png.to_path_buf();
+    let h = std::thread::spawn(move || {
+        let _ = thumbnail(&src);
+    });
+    let mut pending = PENDING_THUMBNAILS.lock().unwrap_or_else(|e| e.into_inner());
+    pending.retain(|p| !p.is_finished());
+    pending.push(h);
+    out
+}
+
+static PENDING_THUMBNAILS: std::sync::Mutex<Vec<std::thread::JoinHandle<()>>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// Wait for every deferred thumbnail (tests read the file right after a call).
+#[cfg(test)]
+pub fn flush_thumbnails() {
+    let hs = std::mem::take(&mut *PENDING_THUMBNAILS.lock().unwrap_or_else(|e| e.into_inner()));
+    for h in hs {
+        let _ = h.join();
+    }
+}
+
 fn thumbnail(png: &Path) -> Option<PathBuf> {
     let img = image::open(png).ok()?;
     let thumb = img.thumbnail(256, 256);
@@ -675,6 +703,7 @@ pub fn call(
         job.aux.init = Some(s.engine.clone());
     }
     // D3 (1956-x7xp): one GPU queue per host, shared with the studio.
+    let q0 = Instant::now();
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
     // 1957-emar: with the device ours, make room: the weights plus 1 GiB of
     // activations, evicting a resident LLM when free VRAM is short.
@@ -684,7 +713,12 @@ pub fn call(
         .map(|m| m.bytes)
         .sum::<u64>()
         + (1 << 30);
+    let a0 = Instant::now();
+    let queue_ms = a0.duration_since(q0).as_millis() as u64;
     let evicted = gpu_queue::arbiter().admit(need);
+    // 1971-3erz: the queue wait and the admit run before the engine; both are
+    // on the agent's wait, so the result names them too.
+    let admit_ms = a0.elapsed().as_millis() as u64;
     let t0 = Instant::now();
     let out = engine
         .generate(&job, &out_dir, &names, progress)
@@ -761,7 +795,8 @@ pub fn call(
             "width": w,
             "height": h,
             "has_alpha": alpha,
-            "thumbnail_path": thumbnail(&host).map(|t| forge_path(&t)),
+            // 1971-3erz: written after the reply, off the agent's wait.
+            "thumbnail_path": forge_path(&thumbnail_later(&host)),
             "provenance_path": format!("{}.provenance.json", forge_path(&host)),
             "provenance": prov,
         }));
@@ -782,6 +817,9 @@ pub fn call(
         };
     let grant = (granted_download || imagegen_consent::download_granted(&job.tier.tier))
         .then(|| imagegen_consent::grant_json(&job.tier.tier));
+    let mut timings_json = out.timings.to_json(crate::imagegen_warm::ttl().as_secs());
+    timings_json["queue_ms"] = json!(queue_ms);
+    timings_json["admit_ms"] = json!(admit_ms);
     Ok(json!({
         "evicted_holders": evicted.iter().map(gpu_queue::Evicted::to_json).collect::<Vec<_>>(),
         "path": first["path"],
@@ -798,7 +836,7 @@ pub fn call(
         "steps": job.steps,
         "elapsed_s": (elapsed * 100.0).round() / 100.0,
         "first_use": out.first_use,
-        "timings": out.timings.to_json(crate::imagegen_warm::ttl().as_secs()),
+        "timings": timings_json,
         "size_rounded": job.rounded.map(|(a, g)| json!({
             "asked": [a.0, a.1], "got": [g.0, g.1],
             "why": "the engine draws on a 64 px grid"
@@ -1107,7 +1145,14 @@ impl Engine for PodmanSdCli {
         names: &[String],
         progress: &mut dyn FnMut(Progress),
     ) -> Result<EngineOut, String> {
-        let built = self.ensure_image(progress)?;
+        // 1971-3erz: a resident engine already runs this image; skip the check.
+        let built = if crate::imagegen_warm::eligible(job)
+            && crate::imagegen_warm::serving_image(&self.image)
+        {
+            false
+        } else {
+            self.ensure_image(progress)?
+        };
         let pins = imagegen_models::files_for_tier(&imagegen_models::manifest(), &job.tier.tier);
         if pins.is_empty() {
             return Err(format!(

@@ -27,9 +27,67 @@ const PORT: u16 = 1234;
 
 struct Warm {
     name: String,
+    /// The k8s-file log the server writes (read directly: no podman call).
+    log: PathBuf,
     key: String,
     backend: String,
     last_used: Instant,
+    /// One long-lived `podman exec -i <c> /bin/sh` the requests are written
+    /// to; a fresh `podman exec` cost ~110 ms per call (measured on yoga).
+    session: Option<Session>,
+}
+
+struct Session {
+    child: std::process::Child,
+    stdin: std::process::ChildStdin,
+    out: std::io::BufReader<std::process::ChildStdout>,
+}
+
+impl Drop for Session {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn open_session(name: &str) -> Option<Session> {
+    let mut child = crate::podman_command()
+        .args(["exec", "-i", name, "/bin/sh"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn_caller_owned_lifetime()
+        .ok()?;
+    let stdin = child.stdin.take()?;
+    let out = std::io::BufReader::new(child.stdout.take()?);
+    Some(Session { child, stdin, out })
+}
+
+/// The shell text for one request: the body in a quoted heredoc (a JSON
+/// document is one line and never the delimiter), then an end marker
+/// carrying curl's exit status. curl's own --max-time bounds every read.
+pub fn session_request(body: &str) -> String {
+    format!(
+        "curl -sS --max-time 900 -X POST http://127.0.0.1:{PORT}/sdapi/v1/txt2img -H 'Content-Type: application/json' --data-binary @- <<'__TILL_BODY__'\n{body}\n__TILL_BODY__\necho; echo \"__TILL_END__ $?\"\n"
+    )
+}
+
+/// Send one request on the session; `Some(reply)` when curl exited 0.
+fn session_call(s: &mut Session, body: &str) -> Option<String> {
+    use std::io::{BufRead, Write};
+    s.stdin.write_all(session_request(body).as_bytes()).ok()?;
+    s.stdin.flush().ok()?;
+    let mut reply = String::new();
+    loop {
+        let mut line = String::new();
+        if s.out.read_line(&mut line).ok()? == 0 {
+            return None;
+        }
+        if let Some(rc) = line.strip_prefix("__TILL_END__ ") {
+            return (rc.trim() == "0").then_some(reply);
+        }
+        reply.push_str(&line);
+    }
 }
 
 static WARM: Mutex<Option<Warm>> = Mutex::new(None);
@@ -60,6 +118,7 @@ pub fn release(why: &str) {
     if let Some(w) = taken {
         tracing::info!(spec = "local-image-generation", name = %w.name, why, "stopping the resident image engine");
         stop(&w.name);
+        let _ = std::fs::remove_file(&w.log);
     }
 }
 
@@ -144,6 +203,29 @@ fn log_lines(name: &str, tail: Option<u32>) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The last `max` bytes of `path`, as lines (a k8s-file log line carries a
+/// timestamp and stream prefix; the markers are matched by `contains`).
+fn file_tail(path: &Path, max: u64) -> Vec<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut f) = std::fs::File::open(path) else {
+        return Vec::new();
+    };
+    let len = f.metadata().map(|m| m.len()).unwrap_or(0);
+    let _ = f.seek(SeekFrom::Start(len.saturating_sub(max)));
+    let mut s = String::new();
+    let _ = f.read_to_string(&mut s);
+    s.lines().map(str::to_string).collect()
+}
+
+/// The resident engine runs `image` now (no podman call): the caller may skip
+/// its own image check.
+pub fn serving_image(image: &str) -> bool {
+    WARM.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .is_some_and(|w| w.key.starts_with(&format!("{image}|")))
+}
+
 /// The server's lines for the LAST request only: everything after the
 /// previous request's `generate_image completed` line.
 pub fn last_request_rows(lines: &[String]) -> Vec<(u64, String)> {
@@ -174,6 +256,7 @@ fn running(name: &str) -> bool {
 /// took to come back (the container start; the rest until it listens is load).
 struct Started {
     name: String,
+    log: PathBuf,
     backend: String,
     run_ms: u64,
 }
@@ -190,6 +273,10 @@ fn start(
     let name = format!("tillandsias-imagegen-warm-{}", std::process::id());
     let shader = tillandsias_core::cache_root::cache_root().join("imagegen-shader-cache");
     let _ = std::fs::create_dir_all(&shader);
+    // 1971-3erz: a file log, read by the tool directly after each call;
+    // `podman logs` cost ~65 ms on every warm call (measured on yoga).
+    let log = tillandsias_core::cache_root::cache_root().join(format!("{name}.log"));
+    let _ = std::fs::remove_file(&log);
     let mut a: Vec<String> = vec![
         "run".into(),
         "-d".into(),
@@ -198,6 +285,8 @@ fn start(
         name.clone(),
         "--label".into(),
         WARM_LABEL.into(),
+        "--log-driver=k8s-file".into(),
+        format!("--log-opt=path={}", log.display()),
     ];
     a.extend(engine.sandbox_args(model_bytes));
     a.extend([
@@ -238,12 +327,13 @@ fn start(
     loop {
         let lines = log_lines(&name, None);
         if lines.iter().any(|l| l.contains("listening on")) {
-            let log = lines.join("\n");
-            let backend = crate::imagegen_placement::placement_from_log(&log)
+            let text = lines.join("\n");
+            let backend = crate::imagegen_placement::placement_from_log(&text)
                 .backend_label()
                 .to_string();
             return Ok(Started {
                 name,
+                log,
                 backend,
                 run_ms,
             });
@@ -326,21 +416,30 @@ pub fn generate(
             started = Some((s.run_ms, s0.elapsed().as_millis() as u64));
             *guard = Some(Warm {
                 name: s.name,
+                log: s.log,
                 key: key.clone(),
                 backend: s.backend,
                 last_used: Instant::now(),
+                session: None,
             });
             spawn_reaper();
         }
-        let name = guard
-            .as_ref()
-            .expect("resident engine present")
-            .name
-            .clone();
+        let w = guard.as_mut().expect("resident engine present");
+        if w.session.is_none() {
+            w.session = open_session(&w.name);
+        }
+        if let Some(s) = w.session.as_mut() {
+            if let Some(reply) = session_call(s, &body) {
+                break reply;
+            }
+            // A broken session (EOF or a failed curl) falls back to one exec.
+            w.session = None;
+        }
+        let name = w.name.clone();
         let out = call(&name, &body)
             .map_err(|e| format!("engine_failed: resident engine call failed: {e}"))?;
         if out.status.success() {
-            break out;
+            break String::from_utf8_lossy(&out.stdout).into_owned();
         }
         let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
         if let Some(w) = guard.take() {
@@ -350,9 +449,9 @@ pub fn generate(
             return Err(format!("engine_failed: resident engine call failed: {err}"));
         }
     };
-    write_images(&String::from_utf8_lossy(&out.stdout), out_dir, names)?;
+    write_images(&out, out_dir, names)?;
     let w = guard.as_mut().expect("resident engine present");
-    let rows = last_request_rows(&log_lines(&w.name, Some(60)));
+    let rows = last_request_rows(&file_tail(&w.log, 64 * 1024));
     w.last_used = Instant::now();
     let backend = w.backend.clone();
     let total_ms = t0.elapsed().as_millis() as u64;
@@ -410,6 +509,23 @@ mod tests {
             (b["width"].as_u64(), b["height"].as_u64()),
             (Some(512), Some(512))
         );
+    }
+
+    /// The session text reads the body from stdin (`@-`) through a quoted
+    /// heredoc and ends with a marker carrying curl's status. Found live: a
+    /// build that posted a FILE (`--data-binary 1438`) got a JSON error back
+    /// and every warm call failed with "returned 0 image(s)".
+    #[test]
+    fn a_session_request_posts_the_body_from_stdin_and_ends_with_a_marker() {
+        let r = session_request(r#"{"prompt":"a plant"}"#);
+        assert!(
+            r.contains(
+                " --data-binary @- <<'__TILL_BODY__'\n{\"prompt\":\"a plant\"}\n__TILL_BODY__\n"
+            ),
+            "{r}"
+        );
+        assert!(r.ends_with("echo; echo \"__TILL_END__ $?\"\n"), "{r}");
+        assert!(r.contains("http://127.0.0.1:1234/sdapi/v1/txt2img"), "{r}");
     }
 
     #[test]

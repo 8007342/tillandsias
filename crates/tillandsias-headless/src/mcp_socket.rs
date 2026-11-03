@@ -2266,6 +2266,7 @@ mod image_generate_fixtures {
             .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
             .join(path.rsplit('/').next().unwrap());
         assert!(host.is_file(), "{}", host.display());
+        crate::imagegen_tool::flush_thumbnails();
         let thumb = r["thumbnail_path"].as_str().unwrap();
         let thumb_host = scratch
             .path()
