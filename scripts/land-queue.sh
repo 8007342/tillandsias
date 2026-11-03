@@ -79,6 +79,8 @@
 #
 # Usage:
 #   scripts/land-queue.sh [--limit N] [--dry-run] [--base <branch>]
+#   TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT=N  (default 500) rows asked of `gh pr list`;
+#       a capture that long is refused as possibly truncated (1959-tdn5)
 #
 # Exit: 0 the run completed (landed, evicted and re-queued counts on stdout)
 #       1 could not read the queue (gh missing, unauthenticated, bad JSON)
@@ -314,8 +316,17 @@ mkdir -p "$_RUNDIR" 2>/dev/null || _RUNDIR="$(mktemp -d "${TMPDIR:-/tmp}/land-qu
 # work" is the silent-empty false negative this fleet keeps finding. So an
 # empty capture with a non-zero status REFUSES, and only a well-formed empty
 # list means the queue is empty.
+#
+# ORDER 1959-tdn5: `gh pr list` WITHOUT --limit RETURNS ITS NEWEST 30. Measured
+# on macuahuitl 2026-11-02 with 30+ open PRs (drafts count): the oldest ready
+# PR, #679, was simply not in the capture, so the queue it drained was a
+# smaller queue than existed and the oldest work never landed. So every list
+# call names its limit, and a capture EXACTLY as long as the limit is refused
+# as possibly truncated rather than landed from — a bigger constant is cheap;
+# a silently partial queue is the bug this script exists to remove.
+GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 _qjson="$(mktemp)"
-"$GH" pr list --base "$TRUNK" --state open \
+"$GH" pr list --base "$TRUNK" --state open --limit "$GH_LIST_LIMIT" \
       --json number,headRefName,isDraft > "$_qjson" 2>/dev/null
 _qrc=$?
 if [ "$_qrc" -ne 0 ]; then
@@ -325,6 +336,12 @@ if [ "$_qrc" -ne 0 ]; then
 fi
 if ! "$PLAN" json get -e 'type == "array"' < "$_qjson" >/dev/null 2>&1; then
     say "fail:land-queue:queue-not-an-array — gh exited 0 with output that is not a PR list"
+    rm -f "$_qjson"
+    exit 1
+fi
+_qlen="$("$PLAN" json get -r 'length' < "$_qjson" 2>/dev/null)"
+if [ -n "$_qlen" ] && [ "$_qlen" -ge "$GH_LIST_LIMIT" ] 2>/dev/null; then
+    say "fail:land-queue:queue-may-be-truncated:$_qlen-of-limit-$GH_LIST_LIMIT — gh returned as many PRs as asked for, so the oldest may be missing; raise TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT or close PRs (1959-tdn5)"
     rm -f "$_qjson"
     exit 1
 fi

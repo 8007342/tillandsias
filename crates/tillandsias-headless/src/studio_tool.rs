@@ -802,6 +802,10 @@ pub fn call(
     let t0 = Instant::now();
     // D3: one GPU queue per host; the turn covers the prompts, then /free.
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
+    // 1957-emar: room for the workflow's weights plus 1 GiB, evicting a
+    // resident LLM when free VRAM is short.
+    let need: u64 = plan.models.iter().map(|m| m.bytes).sum::<u64>() + (1 << 30);
+    let evicted = gpu_queue::arbiter().admit(need);
     let mut produced: Vec<(u32, String, String)> = Vec::new();
     let mut placement = String::from("unknown");
     let mut failure = None;
@@ -879,6 +883,7 @@ pub fn call(
     }
     Ok(json!({
         "job": job,
+        "evicted_holders": evicted.iter().map(gpu_queue::Evicted::to_json).collect::<Vec<_>>(),
         "outputs": outputs,
         "provenance": outputs[0]["provenance"],
         "placement": placement,
@@ -1080,7 +1085,7 @@ impl HttpStudio {
         if !running {
             return Err(format!(
                 "studio_unavailable: {container} is not running; set `[imagegen] studio = true` in the \
-                 project's tillandsias.toml and relaunch the forge"
+                 project's .tillandsias/config.toml and relaunch the forge (starting it from this tool on demand is order 1969-cfyt)"
             ));
         }
         let mut cmd = tillandsias_podman::podman_cmd_sync();

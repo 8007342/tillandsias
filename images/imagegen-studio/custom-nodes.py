@@ -63,7 +63,13 @@ def install(manifest, custom_nodes):
         if pinned:
             run(sys.executable, "-m", "pip", "install", "--no-cache-dir", "--require-hashes",
                 "--no-deps", "-r", lock)
-    run(sys.executable, "-m", "pip", "check")
+    # 1970-pipc: pip check prints the conflict on stdout; a bare check=True
+    # dropped it from the build log, leaving only pip's notices.
+    chk = subprocess.run([sys.executable, "-m", "pip", "check"],
+                         capture_output=True, text=True)
+    if chk.returncode != 0:
+        sys.stderr.write(chk.stdout + chk.stderr)
+        sys.exit(f"violation:custom-nodes:pip-check-failed:{chk.returncode}")
     print("ok:custom-nodes:installed")
 
 

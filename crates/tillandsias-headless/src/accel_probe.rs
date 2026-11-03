@@ -3128,7 +3128,7 @@ const INFERENCE_CONTAINER_CANDIDATES: [&str; 2] =
 /// and it under-claimed, which is the direction this file already warns is the
 /// one that gets missed, because the wasted work it causes looks like
 /// diligence.
-fn resolve_inference_container() -> Option<String> {
+pub(crate) fn resolve_inference_container() -> Option<String> {
     let exists = |name: &str| -> bool {
         tillandsias_podman::podman_cmd_sync()
             .args(["container", "exists", name])
@@ -3174,7 +3174,7 @@ fn inference_container_override(raw: Option<&str>) -> Option<String> {
 /// wedge a one-shot launch forever absorbing SIGTERM, which `main.rs`'s
 /// readiness probe already learned. Any non-success exit reads as "could not
 /// ask" - `None`, not an empty answer.
-fn inference_container_exec(container: &str, args: &[&str]) -> Option<String> {
+pub(crate) fn inference_container_exec(container: &str, args: &[&str]) -> Option<String> {
     let mut cmd = tillandsias_podman::podman_cmd_sync();
     cmd.args(["exec", container]);
     cmd.args(args);

@@ -590,6 +590,15 @@ pub fn call(
     }
     // D3 (1956-x7xp): one GPU queue per host, shared with the studio.
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
+    // 1957-emar: with the device ours, make room: the weights plus 1 GiB of
+    // activations, evicting a resident LLM when free VRAM is short.
+    let need: u64 = imagegen_models::files_for_tier(&imagegen_models::manifest(), &job.tier.tier)
+        .iter()
+        .chain(job.aux.files().iter())
+        .map(|m| m.bytes)
+        .sum::<u64>()
+        + (1 << 30);
+    let evicted = gpu_queue::arbiter().admit(need);
     let t0 = Instant::now();
     let out = engine
         .generate(&job, &out_dir, &names, progress)
@@ -688,6 +697,7 @@ pub fn call(
     let grant = (granted_download || imagegen_consent::download_granted(&job.tier.tier))
         .then(|| imagegen_consent::grant_json(&job.tier.tier));
     Ok(json!({
+        "evicted_holders": evicted.iter().map(gpu_queue::Evicted::to_json).collect::<Vec<_>>(),
         "path": first["path"],
         "width": first["width"],
         "height": first["height"],
@@ -1376,7 +1386,9 @@ mod tests {
             engine: engine.clone(),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I0".into(),
-            present: None,
+            // 1967-seam: pinned, so the test never reads the host's real
+            // model cache (a host without I0 answered consent_required).
+            present: Some(vec!["I0".into()]),
         }));
         let handles: Vec<_> = (0..6)
             .map(|i| {

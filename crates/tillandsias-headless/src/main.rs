@@ -21016,6 +21016,9 @@ mod tray;
 mod dead_run;
 #[cfg(feature = "host-services")]
 mod mcp_socket;
+// 1969-7qm7: the grouped host tool index and the deprecated flat aliases.
+#[cfg(feature = "host-services")]
+mod host_tools;
 // 1956-4pxj: push events from the git mirror to every forge of a project.
 #[cfg(feature = "host-services")]
 mod lane_events;
