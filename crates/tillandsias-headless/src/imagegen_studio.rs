@@ -382,6 +382,33 @@ mod tests {
         assert!(e.starts_with("studio_start_failed:"), "{e}");
     }
 
+    /// ORDER 1981-kidm: the REAL studio launch argv (run_args + the OOM
+    /// slice + the image, exactly what `start` hands run_container_observed)
+    /// passes the podman launch policy. Pre-fix: FAILS, the policy matched
+    /// only the bare `--userns=keep-id` and refused studio.start on the live
+    /// tray; nothing put this argv through the policy before.
+    #[test]
+    fn the_real_studio_launch_argv_passes_the_launch_policy() {
+        let p = plan_explicit(Path::new("/c"));
+        for gpu in [false, true] {
+            let mut argv = vec!["run".to_string()];
+            argv.extend(run_args(
+                &p,
+                "proj",
+                "tillandsias-imagegen-proj-default",
+                gpu,
+                &StudioBudget::for_host(13_811, 9_000, 16),
+            ));
+            argv.extend(crate::oom_slice_args());
+            argv.push(crate::versioned_image_tag(STUDIO_IMAGE, "1.2.3"));
+            assert_eq!(
+                tillandsias_podman::policy::validate_launch_argv(&argv),
+                Ok(()),
+                "{argv:?}"
+            );
+        }
+    }
+
     /// ORDER 1969-cfyt: the studio runs as the forge's own user, so SaveImage
     /// can create /out/studio in the forge-owned volume. Pre-fix: FAILS, plain
     /// keep-id (the trial's EACCES; reproduced live on lenovinha with the
