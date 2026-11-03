@@ -9175,6 +9175,40 @@ async fn cleanup_stack_containers(
     client: &PodmanClient,
     project_name: &str,
 ) -> ForgeCleanupOutcome {
+    cleanup_stack_containers_keeping(client, project_name, false).await
+}
+
+/// 1968-psy9: a running, healthy container already on `image` (this build's
+/// versioned tag) is reused by a warm launch instead of removed and
+/// re-created. MEASURED on yoga 2026-11-02: every warm OpenCode launch removed
+/// and re-created the git mirror and the inference container (+3-5 s), and the
+/// fresh mirror then held READY for its whole startup sweep.
+async fn reusable_warm_container(client: &PodmanClient, name: &str, image: &str) -> bool {
+    match client.inspect_container(name).await {
+        Ok(info) if info.state == "running" && info.image == image => {}
+        _ => return false,
+    }
+    let health = client
+        .execute(
+            OperationKind::Health,
+            &[
+                "inspect".into(),
+                name.into(),
+                "--format".into(),
+                "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}".into(),
+            ],
+        )
+        .await;
+    matches!(health, Ok(out) if out.stdout.trim() == "healthy")
+}
+
+/// [`cleanup_stack_containers`], leaving the project's git mirror in place
+/// when `keep_mirror` (a warm launch reusing a healthy, current one, 1968-psy9).
+async fn cleanup_stack_containers_keeping(
+    client: &PodmanClient,
+    project_name: &str,
+    keep_mirror: bool,
+) -> ForgeCleanupOutcome {
     // Order 234 (R6): removals also race shutdown's own teardown — skip
     // during drain/stop (the shutdown path owns teardown then).
     if !runtime_phase::container_mutations_allowed() {
@@ -9219,9 +9253,11 @@ async fn cleanup_stack_containers(
             return ForgeCleanupOutcome::LeftInPlace;
         }
     }
-    let _ = client
-        .remove_container(&format!("tillandsias-git-{project_name}"))
-        .await;
+    if !keep_mirror {
+        let _ = client
+            .remove_container(&format!("tillandsias-git-{project_name}"))
+            .await;
+    }
     let _ = client
         .remove_container(&format!("tillandsias-browser-{project_name}"))
         .await;
@@ -16946,16 +16982,40 @@ fn run_opencode_mode(
                 "tillandsias-",
             );
 
-        cleanup_stack_containers(&client, project_name).await;
-        // Order 233 (R5): shared containers are removed only when no forge
-        // is running anywhere; a parallel project's live session keeps them.
-        cleanup_shared_stack_if_no_running_forge(
+        // 1968-psy9: a warm launch keeps a healthy mirror and inference that
+        // already run this build's image, rather than removing and re-creating
+        // them (and re-paying the mirror's whole startup sweep before READY).
+        let keep_mirror = reusable_warm_container(
             &client,
-            project_name,
-            Some(&launch_marker),
-            debug,
+            &format!("tillandsias-git-{project_name}"),
+            &versioned_image_tag("git", version),
         )
         .await;
+        let keep_inference = reusable_warm_container(
+            &client,
+            "tillandsias-inference",
+            &versioned_image_tag("inference", version),
+        )
+        .await;
+        if debug && (keep_mirror || keep_inference) {
+            eprintln!(
+                "[tillandsias] [OpenCode] warm launch: reusing mirror={keep_mirror} inference={keep_inference}"
+            );
+        }
+        cleanup_stack_containers_keeping(&client, project_name, keep_mirror).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        // inference is the only lane-scoped shared container, so a reusable
+        // one skips this teardown entirely.
+        if !keep_inference {
+            cleanup_shared_stack_if_no_running_forge(
+                &client,
+                project_name,
+                Some(&launch_marker),
+                debug,
+            )
+            .await;
+        }
 
         // Step 15: bring the router up BEFORE any project containers so the
         // enclave's `router` network alias is already resolvable when proxy /
@@ -17095,6 +17155,8 @@ fn run_opencode_mode(
         } else if try_start_vsock_forwarder(&client, debug).await {
             // Host-native lane took it. The forwarder claims the `inference`
             // alias, so the container below must NOT also run (830-xsk2).
+        } else if keep_inference {
+            // 1968-psy9: the healthy, current one checked above keeps serving.
         } else {
             client
                 .run_container_observed(
@@ -17115,13 +17177,18 @@ fn run_opencode_mode(
         // ensure_enclave_for_project. Without it the forge cloned a mirror
         // whose seed had not run yet and gave up after its ~40 s of clone
         // retries (macOS cold cloud launch, 2026-10-28).
-        gate_forge_launch(
-            &client,
-            &git_container_name,
-            project_name,
-            project_default_branch.as_deref(),
-            project_remote_url.is_some(),
-            debug,
+        // 1968-psy9: timed like ensure_enclave_for_project's gate (1915-brst), so
+        // this lane reports bringup: step=mirror-seed too.
+        bringup_timer::timed_async(
+            "mirror-seed",
+            gate_forge_launch(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                project_remote_url.is_some(),
+                debug,
+            ),
         )
         .await?;
         drop(mirror_bringup);
@@ -19700,20 +19767,30 @@ fn forge_ram_workspace_volume(project: &str) -> String {
 /// A host-mount lane never binds there (its listener start is best-effort), so
 /// it is not refused here either.
 fn refuse_lane_socket_owned_elsewhere(project: &str, host_mount: bool) -> Result<(), String> {
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default".into());
+    refuse_lane_socket_owned_for_instance(project, &instance, host_mount)
+}
+
+/// [`refuse_lane_socket_owned_elsewhere`] for an explicit instance, so a test
+/// passes it instead of mutating the process environment (1969-scp2).
+fn refuse_lane_socket_owned_for_instance(
+    project: &str,
+    instance: &str,
+    host_mount: bool,
+) -> Result<(), String> {
     #[cfg(feature = "host-services")]
     if !host_mount {
-        let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| "default".into());
-        if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, &instance) {
+        if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, instance) {
             return Err(lane_socket_owned_refusal(project, instance.trim(), &path));
         }
-        if let Some(refusal) = mcp_socket::lane_served_by_other_build(project, &instance) {
+        if let Some(refusal) = mcp_socket::lane_served_by_other_build(project, instance) {
             return Err(refusal);
         }
     }
-    let _ = (project, host_mount);
+    let _ = (project, instance, host_mount);
     Ok(())
 }
 
@@ -23598,12 +23675,20 @@ mod tests {
 
     fn podman_false_seam() -> PodmanFalseSeam {
         let lock = podman_seam_lock();
+        // 1969-scp2: and the env lock, seam-then-env: this is an env write like
+        // any other, and remote_projects repoints the var holding env_lock only.
+        let env = env_lock();
         let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", "/bin/false") };
-        PodmanFalseSeam { _lock: lock, prev }
+        PodmanFalseSeam {
+            _lock: lock,
+            _env: env,
+            prev,
+        }
     }
     struct PodmanFalseSeam {
         _lock: std::sync::MutexGuard<'static, ()>,
+        _env: std::sync::MutexGuard<'static, ()>,
         prev: Option<std::ffi::OsString>,
     }
     impl Drop for PodmanFalseSeam {
@@ -30972,7 +31057,7 @@ mod tests {
     #[test]
     fn delegated_result_format_propagates_to_both_prompted_builders_only() {
         let _pseam = podman_false_seam();
-        let _env = env_lock();
+        // env_lock is held by the seam (1969-scp2).
         let restore = TestEnvRestore::capture(&[
             "TILLANDSIAS_AGENT_RESULT_FORMAT",
             "TILLANDSIAS_AGENT_RESULT_FILE",
@@ -33480,7 +33565,7 @@ esac
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
         let _pseam = podman_false_seam();
-        let _guard = env_lock();
+        // env_lock is held by the seam (1969-scp2).
         // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
         // feature; exercise it in host-mount mode.
         let _hm = HostMountEnvGuard::enable();
@@ -36919,7 +37004,7 @@ esac
     #[test]
     fn opencode_lane_builder_labels_the_launching_tray_run() {
         let _seam = podman_false_seam();
-        let _env = env_lock();
+        // env_lock is held by the seam (1969-scp2).
         let prev = std::env::var_os(dead_run::RUN_ENV);
         let build = || {
             build_opencode_forge_args(
@@ -37760,38 +37845,37 @@ mod lane_socket_owner_tests {
     /// lane registry does not know, exactly what a tray in another process is.
     #[test]
     fn a_cli_lane_refuses_by_name_when_another_process_owns_its_socket() {
-        let _env = crate::test_support::env_lock();
+        // 1969-scp2: no process-wide env is written. The runtime root is a
+        // THREAD-LOCAL seam and the instance is passed, so a parallel test that
+        // reads or repoints XDG_RUNTIME_DIR cannot change this test's lane.
         // The kernel caps a socket path near 108 bytes, so the scratch runtime
-        // dir is short and under the real runtime dir, not the checkout.
-        let base = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        let scratch = base.join(format!("k5hm-{}", std::process::id()));
-        let saved = std::env::var_os("XDG_RUNTIME_DIR");
-        let saved_instance = std::env::var_os("TILLANDSIAS_FORGE_INSTANCE");
-        // SAFETY: env_lock serialises every env-mutating test.
-        unsafe {
-            std::env::set_var("XDG_RUNTIME_DIR", &scratch);
-            std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE");
-        }
+        // dir is short and under the system temp dir, not the checkout.
+        let scratch = std::env::temp_dir().join(format!("k5hm-{}", std::process::id()));
+        let _root = mcp_socket::test_runtime_root::set(&scratch);
         let project = "k5hm-held";
+        let refuse =
+            |host_mount| refuse_lane_socket_owned_for_instance(project, "default", host_mount);
         let socket = mcp_socket::mcp_socket_path_for_lane(project, "default");
+        assert!(
+            socket.starts_with(&scratch),
+            "the seam placed the lane: {socket:?}"
+        );
         std::fs::create_dir_all(socket.parent().unwrap()).unwrap();
 
         // Negative control: no owner, the launch proceeds as today.
-        let free = refuse_lane_socket_owned_elsewhere(project, false);
+        let free = refuse(false);
 
         let held = std::os::unix::net::UnixListener::bind(&socket).expect("hold the lane socket");
-        let refused = refuse_lane_socket_owned_elsewhere(project, false);
+        let refused = refuse(false);
         // A host-mount lane never binds the socket, so it is not refused.
-        let host_mount = refuse_lane_socket_owned_elsewhere(project, true);
+        let host_mount = refuse(true);
         // A lane THIS process serves (the tray's own launches) is not refused.
         let key = (project.to_string(), "default".to_string());
         mcp_socket::lane_listener_registry()
             .lock()
             .unwrap()
             .insert(key.clone());
-        let own = refuse_lane_socket_owned_elsewhere(project, false);
+        let own = refuse(false);
         mcp_socket::lane_listener_registry()
             .lock()
             .unwrap()
@@ -37799,18 +37883,7 @@ mod lane_socket_owner_tests {
         drop(held);
         // A departed owner (connection refused) is not refused either: the
         // listener reclaims that socket.
-        let stale = refuse_lane_socket_owned_elsewhere(project, false);
-
-        // SAFETY: as above.
-        unsafe {
-            match saved {
-                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
-                None => std::env::remove_var("XDG_RUNTIME_DIR"),
-            }
-            if let Some(v) = saved_instance {
-                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", v);
-            }
-        }
+        let stale = refuse(false);
         let _ = std::fs::remove_dir_all(&scratch);
 
         assert_eq!(free, Ok(()), "no owner: launch as today");
