@@ -183,6 +183,49 @@ pub fn parse_ps(body: &str) -> Option<Vec<Resident>> {
     Some(out)
 }
 
+/// Free VRAM below this, with an LLM resident, means the two do not both fit.
+pub const SHARED_HEADROOM: u64 = 1 << 30;
+
+/// 1972-phye: why a resident image engine should give way to the LLMs in an
+/// `/api/ps` body, or `None`. Only what is measured counts: a model ollama
+/// placed partly off the GPU (`size_vram < size`), or measured free VRAM under
+/// [`SHARED_HEADROOM`]. Unknown free VRAM with every model fully placed keeps
+/// the engine: releasing it on a guess costs the next image call ~3 s.
+pub fn llm_crowded(ps_body: &str, free: Option<u64>) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(ps_body).ok()?;
+    let bytes = |m: &serde_json::Value, k: &str| m.get(k).and_then(|b| b.as_u64()).unwrap_or(0);
+    // A model with no VRAM runs on the CPU by the engine's own choice (yoga's
+    // ollama drops the 840M iGPU): it holds nothing the image engine could free.
+    let on_gpu: Vec<&serde_json::Value> = v
+        .get("models")?
+        .as_array()?
+        .iter()
+        .filter(|m| bytes(m, "size_vram") > 0)
+        .collect();
+    let name = |m: &serde_json::Value| {
+        m.get("name")
+            .or_else(|| m.get("model"))
+            .and_then(|n| n.as_str())
+            .unwrap_or("?")
+            .to_string()
+    };
+    if let Some(m) = on_gpu
+        .iter()
+        .find(|m| bytes(m, "size_vram") < bytes(m, "size"))
+    {
+        return Some(format!("{} is only partly on the GPU", name(m)));
+    }
+    let first = on_gpu.first()?;
+    match free {
+        Some(f) if f < SHARED_HEADROOM => Some(format!(
+            "{} is resident and {:.2} GB VRAM is free",
+            name(first),
+            gb(f)
+        )),
+        _ => None,
+    }
+}
+
 const GB: f64 = 1_000_000_000.0;
 
 fn gb(bytes: u64) -> f64 {
@@ -290,9 +333,22 @@ impl Arbiter {
         }
     }
 
+    /// 1972-phye: release a resident image engine when an LLM is resident and
+    /// the two do not both fit. Event-driven only (a warm call, a gpu.status):
+    /// no background poll (operator ruling polling-cadence-needs-operator-approval).
+    /// Returns why it released, when it did.
+    pub fn yield_image_engine(&self, ps: Option<&str>) -> Option<String> {
+        crate::imagegen_warm::holder()?;
+        let why = llm_crowded(ps?, self.meter.free_bytes())?;
+        crate::imagegen_warm::release(&why);
+        Some(why)
+    }
+
     /// gpu.status: who holds the device and how much is free.
     pub fn status(&self) -> serde_json::Value {
-        let residents = self.llm.ps().as_deref().and_then(parse_ps);
+        let ps = self.llm.ps();
+        let released = self.yield_image_engine(ps.as_deref());
+        let residents = ps.as_deref().and_then(parse_ps);
         let mut holders: Vec<serde_json::Value> = residents
             .iter()
             .flatten()
@@ -300,6 +356,7 @@ impl Arbiter {
             .collect();
         holders.extend(crate::imagegen_warm::holder());
         serde_json::json!({
+            "released_image_engine": released,
             "holders": holders,
             "inference_engine_answered": residents.is_some(),
             "free_vram_gb": self.meter.free_bytes().map(gb),
@@ -439,7 +496,7 @@ pub fn tool_descriptors() -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({
             "name": "gpu.status",
-            "description": "Who holds this host's GPU memory and how much is free: holders [{name, kind: llm|image|studio, vram_gb}] and free_vram_gb (null when the host cannot measure it). image.generate and studio.run_workflow evict a resident LLM themselves when they need the room, and say so in evicted_holders.",
+            "description": "Who holds this host's GPU memory and how much is free: holders [{name, kind: llm|image|studio, vram_gb}] and free_vram_gb (null when the host cannot measure it). image.generate and studio.run_workflow evict a resident LLM themselves when they need the room, and say so in evicted_holders. A resident image engine is listed (kind image) and is released here, reported in released_image_engine, when a resident LLM is spilled off the GPU or free VRAM is under 1 GiB.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
         serde_json::json!({
@@ -857,9 +914,97 @@ mod tests {
         assert_eq!(ev[0].how, "evicted");
     }
 
+    /// 1972-phye: what counts as an LLM crowding the image engine.
+    #[test]
+    fn an_llm_crowds_the_image_engine_only_on_a_measured_shortfall() {
+        let ps = |size: u64, vram: u64| {
+            serde_json::json!({"models":[{"name":"qwen2.5:14b","size":size,"size_vram":vram}]})
+                .to_string()
+        };
+        let spilled = llm_crowded(&ps(9 * GIB, 6 * GIB), None).unwrap();
+        assert!(spilled.contains("partly on the GPU"), "{spilled}");
+        assert!(llm_crowded(&ps(9 * GIB, 9 * GIB), Some(GIB / 2)).is_some());
+        assert_eq!(
+            llm_crowded(&ps(9 * GIB, 9 * GIB), None),
+            None,
+            "unknown free is not a shortfall"
+        );
+        assert_eq!(llm_crowded(&ps(9 * GIB, 9 * GIB), Some(4 * GIB)), None);
+        assert_eq!(
+            llm_crowded("{\"models\":[]}", Some(0)),
+            None,
+            "no LLM, nothing to yield to"
+        );
+        assert_eq!(llm_crowded("not json", Some(0)), None);
+        // MEASURED on yoga 2026-11-03: ollama dropped the 840M iGPU, so
+        // qwen2.5:0.5b ran with size_vram 0 beside 0.21 GB free carve-out.
+        // It holds no VRAM: not a reason to release the image engine.
+        assert_eq!(
+            llm_crowded(&ps(578_331_605, 0), Some(GIB / 5)),
+            None,
+            "a CPU-only model crowds nothing"
+        );
+    }
+
+    /// 1972-phye criterion 1 (re-scoped, coordinator 2026-11-03): an LLM that
+    /// crowds the device makes gpu.status release the resident image engine,
+    /// with no background poll; one that fits leaves it listed. Red before
+    /// 1972-phye: nothing released it (the engine stayed until its TTL).
+    #[test]
+    fn a_crowding_llm_releases_the_resident_image_engine_on_gpu_status() {
+        use crate::imagegen_warm::test_seam;
+        let _l = test_seam::LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let arbiter = |ollama: &StubOllama| Arbiter {
+            llm: Arc::new(HttpOllama(ollama.addr.clone())),
+            meter: Arc::new(Device(ollama.resident.clone())),
+            policy: Policy::Evict,
+            settle: Duration::from_secs(2),
+        };
+
+        let fits = StubOllama::start("qwen2.5:3b", 3 * GIB);
+        test_seam::install_resident("tillandsias-imagegen-warm-fits");
+        let s = arbiter(&fits).status();
+        assert!(s["released_image_engine"].is_null(), "{s}");
+        assert!(
+            s["holders"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|h| h["kind"] == "image"),
+            "an engine that fits beside the LLM stays listed: {s}"
+        );
+
+        let big = StubOllama::start("qwen2.5:32b", 23 * GIB + GIB / 2);
+        let s = arbiter(&big).status();
+        assert!(
+            s["released_image_engine"]
+                .as_str()
+                .is_some_and(|w| w.contains("qwen2.5:32b")),
+            "{s}"
+        );
+        assert!(
+            !s["holders"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|h| h["kind"] == "image"),
+            "{s}"
+        );
+        assert!(crate::imagegen_warm::holder().is_none());
+        let stopped = test_seam::STOPPED.lock().unwrap().clone();
+        assert!(
+            stopped.contains(&"tillandsias-imagegen-warm-fits".to_string()),
+            "{stopped:?}"
+        );
+        assert_eq!(big.held(), 23 * GIB + GIB / 2, "the LLM is left alone");
+    }
+
     /// gpu.status names the holder; gpu.unload_model goes through the arbiter.
     #[test]
     fn gpu_status_names_holders_and_unload_goes_through_the_arbiter() {
+        let _l = crate::imagegen_warm::test_seam::LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let ollama = StubOllama::start("qwen2.5:14b", 22 * GIB);
         let a = Arbiter {
             llm: Arc::new(HttpOllama(ollama.addr.clone())),

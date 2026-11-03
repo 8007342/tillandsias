@@ -147,7 +147,38 @@ fn holder_json(w: &Warm, ttl: Duration) -> serde_json::Value {
     })
 }
 
+/// Test seam: a fake resident engine, and the names `stop` was asked to
+/// remove (a test never reaches podman). Tests touching WARM hold `LOCK`.
+#[cfg(test)]
+pub mod test_seam {
+    use super::*;
+    pub static LOCK: Mutex<()> = Mutex::new(());
+    pub static STOPPED: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+    pub fn install_resident(name: &str) {
+        *WARM.lock().unwrap_or_else(|e| e.into_inner()) = Some(Warm {
+            name: name.into(),
+            log: PathBuf::from("/nonexistent"),
+            key: String::new(),
+            backend: "vulkan".into(),
+            model: "sdxs-512.safetensors".into(),
+            model_bytes: 2_340_000_000,
+            last_used: Instant::now(),
+            session: None,
+        });
+    }
+}
+
 fn stop(name: &str) {
+    #[cfg(test)]
+    {
+        test_seam::STOPPED
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(name.to_string());
+        return;
+    }
+    #[allow(unreachable_code)]
     let _ = crate::podman_command()
         .args(["rm", "-f", "-t", "0", name])
         .stdin(std::process::Stdio::null())
