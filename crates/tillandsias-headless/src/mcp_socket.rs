@@ -28,7 +28,34 @@ use tracing::warn;
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub(crate) fn mcp_socket_base_dir() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = test_runtime_root::get() {
+        return mcp_socket_base_dir_from(Some(root));
+    }
     mcp_socket_base_dir_from(env::var("XDG_RUNTIME_DIR").ok())
+}
+
+/// 1969-scp2: a THREAD-LOCAL runtime root for tests, so a test can place lane
+/// sockets under a scratch dir without `std::env::set_var("XDG_RUNTIME_DIR")`,
+/// which every parallel test thread would see.
+#[cfg(test)]
+pub(crate) mod test_runtime_root {
+    use std::cell::RefCell;
+    thread_local! { static ROOT: RefCell<Option<String>> = const { RefCell::new(None) }; }
+    pub(crate) fn get() -> Option<String> {
+        ROOT.with(|r| r.borrow().clone())
+    }
+    /// Set for this thread until the guard drops.
+    pub(crate) fn set(root: &std::path::Path) -> Guard {
+        ROOT.with(|r| *r.borrow_mut() = Some(root.to_string_lossy().into_owned()));
+        Guard
+    }
+    pub(crate) struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            ROOT.with(|r| *r.borrow_mut() = None);
+        }
+    }
 }
 
 /// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test

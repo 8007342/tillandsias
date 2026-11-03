@@ -368,42 +368,39 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn reap_stops_before_removing_and_touches_only_the_dead_runs_label() {
-        use std::os::unix::fs::PermissionsExt;
-        let _seam = crate::runtime_assets::podman_seam_lock();
-        let dir = tempfile::tempdir().unwrap();
-        let log = dir.path().join("calls");
-        let fake = dir.path().join("podman");
-        std::fs::write(
-            &fake,
-            format!(
-                r#"#!/bin/sh
-printf '%s\n' "$*" >> '{log}'
-case "$1 $2" in
-  "ps -a") printf 'tillandsias-p-forge\trunning\ntillandsias-q-forge\texited\n' ;;
-  "volume ls") printf 'tillandsias-src-p\n' ;;
-esac
-exit 0
-"#,
-                log = log.display()
-            ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
-        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &fake) };
+        // 1969-scp2: a FakeBackend records each call and answers in order, so
+        // this test never repoints the process-wide TILLANDSIAS_PODMAN_BIN that
+        // every parallel test's podman call reads.
+        use tillandsias_podman::{CommandOutput, FakeBackend};
+        let ok = |stdout: &str| {
+            Ok(CommandOutput {
+                operation: OperationKind::Container,
+                argv: Vec::new(),
+                redacted_argv: Vec::new(),
+                status: Some(0),
+                stdout: stdout.to_string(),
+                stderr: String::new(),
+                duration: std::time::Duration::ZERO,
+            })
+        };
+        let fake = std::sync::Arc::new(FakeBackend::default());
+        // ps -a, stop p, rm -f p, rm -f q, volume ls, volume rm
+        fake.push(ok(
+            "tillandsias-p-forge\trunning\ntillandsias-q-forge\texited\n",
+        ));
+        fake.push(ok(""));
+        fake.push(ok(""));
+        fake.push(ok(""));
+        fake.push(ok("tillandsias-src-p\n"));
 
         let report = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap()
-            .block_on(reap_dead_run(&PodmanClient::new(), "dead-1"));
-
-        unsafe {
-            match prev {
-                Some(v) => std::env::set_var("TILLANDSIAS_PODMAN_BIN", v),
-                None => std::env::remove_var("TILLANDSIAS_PODMAN_BIN"),
-            }
-        }
+            .block_on(reap_dead_run(
+                &PodmanClient::with_backend(fake.clone()),
+                "dead-1",
+            ));
 
         assert_eq!(report.stopped, vec!["tillandsias-p-forge"]);
         assert_eq!(
@@ -412,7 +409,11 @@ exit 0
         );
         assert_eq!(report.volumes, vec!["tillandsias-src-p"]);
 
-        let calls = std::fs::read_to_string(&log).unwrap();
+        let calls: String = fake
+            .seen()
+            .iter()
+            .map(|(_, argv)| argv.join(" ") + "\n")
+            .collect();
         let at = |needle: &str| {
             calls
                 .lines()
@@ -432,7 +433,7 @@ exit 0
         );
         assert!(
             at("rm -f tillandsias-q-forge") < at("volume rm"),
-            "containers before volumes"
+            "containers before volumes:\n{calls}"
         );
         assert!(
             !calls.contains("stop -t 10 tillandsias-q-forge"),
