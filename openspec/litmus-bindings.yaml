@@ -19,6 +19,7 @@ specs:
   - litmus:envelope-suite-resolves-the-redirected-artifact
   - litmus:imagegen-image-is-first-use-and-placement-is-read-from-the-log
   - litmus:imagegen-result-carries-engine-timings
+  - litmus:a-crowding-llm-releases-the-image-engine
   - litmus:studio-custom-nodes-come-only-from-the-manifest
   coverage_ratio: 100
   last_verified: '2026-07-31'
