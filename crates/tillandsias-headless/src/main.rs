@@ -74,11 +74,13 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+// 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
 mod bringup_timer;
 mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
 #[cfg(feature = "host-services")]
 mod imagegen_consent;
@@ -3368,7 +3370,9 @@ struct SetsidImageEnsure;
 
 impl DetachedImageEnsure for SetsidImageEnsure {
     fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String> {
-        let exe = std::env::current_exe().map_err(|e| format!("resolve current_exe: {e}"))?;
+        // 1984-pexe: /proc/self/exe, so an upgrade under a running tray does
+        // not turn every helper spawn into ENOENT.
+        let exe = self_exe::for_spawn().map_err(|e| format!("resolve current_exe: {e}"))?;
         let log = fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -16226,7 +16230,7 @@ fn maybe_spawn_detached_tray_for_cli(
         tray_presence::Presence::Absent => {}
     }
 
-    let Ok(exe) = std::env::current_exe() else {
+    let Ok(exe) = self_exe::for_spawn() else {
         return;
     };
 
@@ -19549,7 +19553,8 @@ pub(crate) fn run_hold_window(args: &[String]) -> i32 {
 // 776-jcf3: the tray is the only caller left.
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn hold_window_prefix() -> Vec<String> {
-    let exe = std::env::current_exe()
+    // 1984-pexe: a terminal runs this, so the installed path, not /proc/self.
+    let exe = self_exe::for_other_process()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "tillandsias".to_string());
     vec![exe, "--hold-window".to_string(), "--".to_string()]
