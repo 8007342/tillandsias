@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-ollama-model-load-goes-through-the-gpu-arbiter-so-it-evicts-a-resident-image-engine-before-claiming-vram
+    order: 1972-phye
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [imagegen, gpu, inference]
+    estimated_hours: 4
+    title: An Ollama model load goes through the GPU arbiter, so it evicts a resident image engine before claiming VRAM
+    context: 'Split from 1971-3erz criterion 3 (coordinator macuahuitl-fedora, 2026-11-03). #883 keeps a resident sd-server warm for TTL seconds; it yields to studio jobs (they take the GPU queue) and exits at its TTL, but an inference request to Ollama loads its model without asking the 1957-emar arbiter, so the two can sit in VRAM together and the second loader can OOM or spill to the CPU. The arbiter today only evicts LLM residents FOR image jobs, never the other way round.'
+    exit_criteria:
+      - 'A host-side LLM load (the inference path the tray brokers) takes a GPU-queue turn and calls imagegen_warm::release before the model loads; a fixture with a resident-engine stub and a stub Ollama shows the release happens before the load request (red on today''s tree: no release).'
+      - 'gpu.status lists the resident image engine as a holder (name, model, VRAM when measurable), so an agent can see why VRAM is taken.'
+      - 'MEASURED on a GPU host: with the image engine warm, an LLM request leaves no tillandsias-imagegen-warm container running and the LLM placement is GPU, not mixed.'
+    verifiable_closure: 'The ordering fixture red on today''s tree, plus the live arm recorded as an event with its regime.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'Find where the tray brokers an inference request to Ollama; take the GPU turn there and release the warm engine first; add the holder to gpu.status.'
+    provenance: macuahuitl-fedora 2026-11-03 (coordinator), split from 1971-3erz criterion 3; filed by yoga.
+    depends_on: [image-generate-reports-its-engine-timings-and-a-second-call-within-minutes-reuses-a-warm-engine]
+    related: [1971-3erz, 1957-emar]
+    events:
+      - type: filed
+        ts: '2026-11-03T08:30:00Z'
+        host: yoga
+        summary: filed at the coordinator's request, split from 1971-3erz criterion 3
+
+events:
+  - packet_id: image-generate-reports-its-engine-timings-and-a-second-call-within-minutes-reuses-a-warm-engine
+    event:
+      type: measurement
+      ts: '2026-11-03T08:30:00Z'
+      host: yoga
+      summary: |-
+        MEASURED on yoga, criterion 2 on the CLIENT wall clock (coordinator ruling 2026-11-03), work/1971-3erz @ 53ed10426 built into the tray: 840M vulkan, I0 SDXS 512, 1 step, four sequential tools/call image.generate over the tillandsias-default lane socket, client polling at 10 ms. Cold 7685 ms (start 277, load 2781 on the earlier run). Warm: 3062 / 2884 / 2865 ms against sample + decode + 500 = 3100 / 3100 / 3090 ms, 3 of 3. Every warm result reports container_start_ms 0 and model_load_ms 0. Path cuts that got there, each measured: thumbnail after the reply; server lines from its own k8s-file log, not podman logs (~65 ms); image check skipped while the engine runs it (~32 ms); one long-lived podman exec -i shell instead of a fresh exec (~110 ms). Result also names queue_ms and admit_ms.
+  - packet_id: image-generate-reports-its-engine-timings-and-a-second-call-within-minutes-reuses-a-warm-engine
+    event:
+      type: note
+      ts: '2026-11-03T08:30:00Z'
+      host: yoga
+      summary: |-
+        CRITERION 3 SPLIT (coordinator ruling 2026-11-03): #883 closes on criteria 1 and 2 plus the parts of 3 it implements: TTL exit (TILLANDSIAS_IMAGEGEN_WARM_TTL_S, default 300), yield to studio jobs on the GPU queue, and removal of a previous tray's engine by label. The remainder, an Ollama load evicting the warm engine through the arbiter and the engine appearing in gpu.status, is 1972-phye.

@@ -3058,8 +3058,8 @@ ensure_forge_harnesses() {
         fi
     done
 
-    # Antigravity has no npm package; use its official installer on every
-    # launch.  require_antigravity is fail-soft here, while the primary
+    # Antigravity has no npm package; its official installer runs once into
+    # the tool cache (1968-2wpe).  require_antigravity is fail-soft here, while the primary
     # antigravity entrypoint still emits an actionable fatal message when no
     # cached binary exists.
     if declare -F require_antigravity >/dev/null 2>&1; then
@@ -3753,14 +3753,32 @@ require_codex() {
 # issues). Shared by the forge entrypoint AND the ephemeral login container
 # (`tillandsias --agy-login` failed exit-2 when the login container assumed
 # agy was pre-installed — operator repro 2026-07-15).
+#
+# 1968-2wpe: MEASURED on yoga 2026-11-02, the install went to /usr/local/bin,
+# which dies with the --rm container, so every launch downloaded agy again
+# (5.7 / 6.2 s). It now lands on the PERSISTENT tool-cache volume
+# ($HARNESS_CURL_ROOT/agy/bin), which is put first on PATH; a present binary
+# is not re-fetched, and `agy update` runs at most once per
+# TILLANDSIAS_AGY_REFRESH_SECS (default one day), stamped beside it.
 require_antigravity() {
-    local _target_dir="$HOME/.local/bin"
-    [ -w /usr/local/bin ] && _target_dir="/usr/local/bin"
+    local _target_dir="$HARNESS_CURL_ROOT/agy/bin"
+    local _stamp="$HARNESS_CURL_ROOT/agy/last-refresh.epoch"
+    local _refresh="${TILLANDSIAS_AGY_REFRESH_SECS:-86400}"
     mkdir -p "$_target_dir" 2>/dev/null || true
+    case ":$PATH:" in *":$_target_dir:"*) ;; *) export PATH="$_target_dir:$PATH" ;; esac
 
-    # If agy is already on PATH, ensure it is refreshed to latest on every launch (tillandsias style)
     if command -v agy >/dev/null 2>&1; then
+        local _now _last
+        _now="$(date +%s)"
+        _last="$(cat "$_stamp" 2>/dev/null || echo 0)"
+        case "$_last" in ''|*[!0-9]*) _last=0 ;; esac
+        if [ $(( _now - _last )) -lt "$_refresh" ]; then
+            trace_lifecycle "tools" "agy cached (refreshed $(( _now - _last ))s ago, next after ${_refresh}s)"
+            return 0
+        fi
+        trace_lifecycle "tools" "agy refresh (update)"
         agy update >/dev/null 2>&1 || true
+        printf '%s\n' "$_now" > "$_stamp" 2>/dev/null || true
         return 0
     fi
 
@@ -3773,6 +3791,7 @@ require_antigravity() {
         if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
             if bash "$_agy_installer" --dir "$_target_dir" 2>/dev/null; then
                 rm -f "$_agy_installer" 2>/dev/null || true
+                date +%s > "$_stamp" 2>/dev/null || true
                 command -v agy >/dev/null 2>&1 && return 0
                 [ -x "$_target_dir/agy" ] && return 0
             fi
