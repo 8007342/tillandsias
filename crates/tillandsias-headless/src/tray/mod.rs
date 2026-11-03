@@ -4885,16 +4885,32 @@ mod tests {
         // Order 779-3trn: the host-services trio still leads (unchanged
         // ordering for existing consumers), and the browser family is now
         // advertised alongside it — the wiring gap this packet closed.
+        // 1969-7qm7: the lifecycle tools lead under their canonical preview.*
+        // names, and the flat names follow as deprecated aliases, LAST.
         assert_eq!(
             &tools[..4],
             &[
-                "publish_local",
-                "service_status",
-                "service_stop",
-                "service_reload"
+                "preview.publish",
+                "preview.status",
+                "preview.stop",
+                "preview.reload"
             ],
-            "the host-services lifecycle tools must keep their identity and order"
+            "the preview lifecycle tools lead the list, in order"
         );
+        for (canonical, alias) in crate::host_tools::RENAMED {
+            let c = tools.iter().position(|t| t == canonical);
+            let a = tools.iter().position(|t| t == alias);
+            assert!(
+                c.is_some() && a.is_some() && c < a,
+                "{alias} is listed after its canonical {canonical}: {tools:?}"
+            );
+        }
+        assert_eq!(
+            tools.last().copied(),
+            Some("studio_publish_request"),
+            "the deprecated aliases close the list: {tools:?}"
+        );
+        assert!(tools.contains(&crate::host_tools::INDEX_TOOL), "{tools:?}");
         let browser_tools: Vec<&&str> =
             tools.iter().filter(|t| t.starts_with("browser.")).collect();
         assert_eq!(
@@ -4925,8 +4941,8 @@ mod tests {
             );
         }
         assert!(
-            tools.contains(&"toolchain_prepare"),
-            "the opt-in toolchain tool is advertised (1637-5765): {tools:?}"
+            tools.contains(&"toolchain.prepare") && tools.contains(&"toolchain_prepare"),
+            "the opt-in toolchain tool is advertised (1637-5765) under both names: {tools:?}"
         );
         // 1772-irs3: the read-only Cloudflare family (the probe + the table).
         let cloudflare = tools
@@ -4953,8 +4969,13 @@ mod tests {
             tools.contains(&"studio.finish_pixels") && tools.contains(&"studio.contact_sheet"),
             "studio.finish_pixels and studio.contact_sheet are advertised (1959-xsy5): {tools:?}"
         );
-        // 1860-auhm: the four studio co-edit tools, by name.
+        // 1860-auhm: the four web-studio co-edit tools, by name (webstudio.*
+        // since 1969-7qm7; the studio_* names are their deprecated aliases).
         for studio in [
+            "webstudio.options",
+            "webstudio.open",
+            "webstudio.changes",
+            "webstudio.publish_request",
             "studio_options",
             "studio_open",
             "studio_changes",
@@ -4964,8 +4985,8 @@ mod tests {
         }
         assert_eq!(
             tools.len() - cloudflare,
-            28,
-            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + studio family + cloudflare family, nothing else"
+            39,
+            "5 preview.* + toolchain.prepare + image.generate + 4 studio.* + 13 browser.* + 4 webstudio.* + tillandsias.index + 10 deprecated aliases (1969-7qm7), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5035,8 +5056,8 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                28,
-                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc), thirteen browser tools + four studio tools (1860-auhm), got {tools:?}"
+                39,
+                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 4 studio.*, 13 browser.*, 4 webstudio.*, tillandsias.index and the 10 deprecated flat aliases (1969-7qm7), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5526,7 +5547,11 @@ mod tests {
             // 1860-auhm: + the four studio co-edit tools.
             // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family;
             // 1959-xsy5: + studio.finish_pixels, studio.contact_sheet.
-            assert_eq!(tools.len() - cloudflare, 28);
+            assert_eq!(
+                tools.len() - cloudflare,
+                39,
+                "1969-7qm7: + webstudio.* canonical names, tillandsias.index and 10 deprecated aliases"
+            );
 
             drop(writer);
             drop(lines);
