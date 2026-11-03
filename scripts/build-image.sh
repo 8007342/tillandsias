@@ -518,7 +518,12 @@ BUILD_ARGS+=(--http-proxy=false)
 # 2026-11-02: with --ipv4-only set and host IPv6 dead, `podman run` fetched in
 # 1 s while a default build RUN step hung ~2 min per fetch; --network=private
 # took 1 s). private is valid rootless (pasta) and rootful (netavark).
-BUILD_ARGS+=(--network=private)
+# 1955-chrn: but never with --isolation chroot, which podman refuses for any
+# network other than host (scripts/lib/build-network.sh).
+. "$SCRIPT_DIR/lib/build-network.sh"
+while IFS= read -r _net_arg; do
+    [ -n "$_net_arg" ] && BUILD_ARGS+=("$_net_arg")
+done < <(build_network_args "$BUILD_ISOLATION")
 # Squash only the layers created by this Containerfile. Keep inherited bases
 # separate so forge shares forge-base and chromium-framework shares
 # chromium-core; --squash-all would duplicate those multi-gigabyte roots.
