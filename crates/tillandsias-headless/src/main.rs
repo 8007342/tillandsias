@@ -2831,11 +2831,95 @@ fn image_inspect_metadata(inspect_json: &str) -> Result<(Option<String>, Option<
     Ok((image_id, source_digest))
 }
 
+/// The repository part of `repo:tag` (`localhost/tillandsias-git:v1` gives
+/// `localhost/tillandsias-git`); a registry port's colon sits before the last `/`.
+fn image_repository(reference: &str) -> &str {
+    let slash = reference.rfind('/').map_or(0, |i| i + 1);
+    match reference[slash..].rfind(':') {
+        Some(i) => &reference[..slash + i],
+        None => reference,
+    }
+}
+
+/// 1920-lnch: the observation from ONE `podman images --format json
+/// --filter reference=<repo>` answer, in place of an exists plus three
+/// inspects. `None` when the answer is not a listing (the caller then asks
+/// the old way). Names match with or without the `localhost/` prefix.
+fn observation_from_listing(
+    listing: &str,
+    identity: &ImageBuildIdentity,
+    force: bool,
+) -> Option<(ImageBuildObservation, Option<String>)> {
+    let images: Vec<serde_json::Value> = serde_json::from_str(listing).ok()?;
+    let bare = |n: &str| n.strip_prefix("localhost/").unwrap_or(n).to_string();
+    let holder = |tag: &str| {
+        let want = bare(tag);
+        images.iter().find(|img| {
+            img.get("Names")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|ns| {
+                    ns.iter()
+                        .filter_map(|n| n.as_str())
+                        .any(|n| bare(n) == want)
+                })
+        })
+    };
+    let id_of = |img: &serde_json::Value| {
+        img.get("Id")
+            .or_else(|| img.get("ID"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    };
+    let canonical = holder(&identity.canonical_tag);
+    let canonical_image_id = canonical.and_then(id_of);
+    let canonical_source_digest = canonical
+        .and_then(|img| img.get("Labels"))
+        .and_then(|labels| labels.get(SOURCE_DIGEST_LABEL))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let alias_matches = |alias: &str| {
+        canonical_image_id.is_some() && holder(alias).and_then(id_of) == canonical_image_id
+    };
+    Some((
+        ImageBuildObservation {
+            canonical_tag_exists: canonical.is_some(),
+            canonical_source_digest,
+            version_alias_matches: alias_matches(&identity.version_alias),
+            latest_alias_matches: alias_matches(&identity.latest_alias),
+            force,
+        },
+        canonical_image_id,
+    ))
+}
+
 async fn observe_image_build(
     client: &PodmanClient,
     identity: &ImageBuildIdentity,
     force: bool,
 ) -> (ImageBuildObservation, Option<String>) {
+    // 1920-lnch: one listing answers all three tags when they share a
+    // repository (measured on yoga: 29 ms, against ~20 ms for each of the four
+    // calls it replaces). Windows images are WSL distros: the old path.
+    let repo = image_repository(&identity.canonical_tag);
+    if cfg!(not(target_os = "windows"))
+        && image_repository(&identity.version_alias) == repo
+        && image_repository(&identity.latest_alias) == repo
+        && let Ok(out) = client
+            .execute(
+                OperationKind::Inspect,
+                &[
+                    "images".into(),
+                    "--format".into(),
+                    "json".into(),
+                    "--filter".into(),
+                    format!("reference={repo}"),
+                ],
+            )
+            .await
+        && let Some(observed) = observation_from_listing(&out.stdout, identity, force)
+    {
+        return observed;
+    }
     let canonical_tag_exists = client.image_exists(&identity.canonical_tag).await;
     let (canonical_image_id, canonical_source_digest) = if canonical_tag_exists {
         client
@@ -35349,6 +35433,61 @@ esac
             latest_alias: "localhost/tillandsias-forge:latest".to_string(),
             labels: BTreeMap::new(),
         }
+    }
+
+    /// 1920-lnch: one `podman images --format json` listing gives the same
+    /// observation the exists + three inspects gave.
+    #[test]
+    fn one_image_listing_answers_the_canonical_tag_and_both_aliases() {
+        let identity = fixture_image_identity("sha256-abc");
+        let img = |id: &str, names: &[&str], digest: &str| {
+            serde_json::json!({ "Id": id, "Names": names,
+                "Labels": { SOURCE_DIGEST_LABEL: digest } })
+        };
+        let all = serde_json::json!([img(
+            "id1",
+            &[
+                "localhost/tillandsias-forge:latest",
+                "localhost/tillandsias-forge:v0.4.260810.1",
+                "localhost/tillandsias-forge:sha256-abc"
+            ],
+            "sha256:abc"
+        )])
+        .to_string();
+        let (o, id) = observation_from_listing(&all, &identity, false).unwrap();
+        assert!(o.canonical_tag_exists && o.version_alias_matches && o.latest_alias_matches);
+        assert_eq!(o.canonical_source_digest.as_deref(), Some("sha256:abc"));
+        assert_eq!(id.as_deref(), Some("id1"));
+
+        // latest still points at an older image: it must not match
+        let split = serde_json::json!([
+            img(
+                "id1",
+                &[
+                    "localhost/tillandsias-forge:sha256-abc",
+                    "localhost/tillandsias-forge:v0.4.260810.1"
+                ],
+                "sha256:abc"
+            ),
+            img("id0", &["tillandsias-forge:latest"], "sha256:old"),
+        ])
+        .to_string();
+        let (o, _) = observation_from_listing(&split, &identity, false).unwrap();
+        assert!(o.version_alias_matches && !o.latest_alias_matches, "{o:?}");
+
+        let (o, id) = observation_from_listing("[]", &identity, true).unwrap();
+        assert!(!o.canonical_tag_exists && !o.version_alias_matches && o.force && id.is_none());
+        assert!(observation_from_listing("Error: no such", &identity, false).is_none());
+    }
+
+    #[test]
+    fn image_repository_strips_only_the_tag() {
+        assert_eq!(
+            image_repository("localhost/tillandsias-git:v1"),
+            "localhost/tillandsias-git"
+        );
+        assert_eq!(image_repository("registry:5000/a/b:t"), "registry:5000/a/b");
+        assert_eq!(image_repository("registry:5000/a/b"), "registry:5000/a/b");
     }
 
     /// Order 702-griq, the load-bearing case: content moved, VERSION did not.
