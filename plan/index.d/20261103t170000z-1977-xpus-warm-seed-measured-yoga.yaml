@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-warm-launch-does-not-reseed-a-current-mirror
+    event:
+      type: measurement
+      ts: '2026-11-03T17:00:00Z'
+      host: yoga
+      summary: |-
+        MEASURED on yoga, warm `--cloud 8007342/tillandsias --opencode --prompt ping`, `bringup: step=mirror-seed`, 3 runs each, work/1977-xpus built into the tray (#892):
+        before 10911-11436 ms; set-url fix alone 10911-11418 ms (no change: the filed cause was real but not the cost); plus one for-each-ref count and a local exported-head fast-forward 5057-5290 ms; plus the sync-state for-each-ref join 1685-2091 ms.
+        Where the time was (mirror log, warm start): `git rev-parse` per ref to build UPDATE_RECORDS, unread since 1968-psy9 (1506 refs, ~5 s); a second upstream fetch for the fast-forward (700-730 ms vs 140-159 ms local); publish-sync-state's rev-parse + rev-list per head (3.5 s). A fetch with nothing new is ~0.7 s, not the 6.4 s the log gap first suggested.
+        Fixture test-git-mirror-warm-start-keeps-tracking-refs: arm 1 red on the old entrypoint (rev-parse rc=1 after the second start), green now.
+        Criterion 1 (at most 1000 ms) NOT yet met: what remains ahead of READY is the ~1 s Vault Agent ready wait, the one 0.7 s upstream fetch, and the 0.3 s discipline publish.
