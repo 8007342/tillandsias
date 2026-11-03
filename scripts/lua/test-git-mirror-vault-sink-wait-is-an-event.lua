@@ -26,7 +26,9 @@
 
 local NAME = "git-mirror-vault-sink-wait-is-an-event"
 local ENTRY = "images/git/entrypoint.sh"
-local IMAGE = env.get("TILLANDSIAS_GIT_IMAGE") or "localhost/tillandsias-git:latest"
+-- the image this tree's VERSION built (a mutable tag is refused by check-container-bases)
+local IMAGE = env.get("TILLANDSIAS_GIT_IMAGE")
+    or ("localhost/tillandsias-git:v" .. text.trim(fs.read("VERSION") or ""))
 local passed, failed = 0, {}
 local function arm(name, cond, got)
     if cond then

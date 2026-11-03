@@ -11,7 +11,7 @@ severity: medium
 size: instant
 
 preconditions:
-  - the plan binary (resolve_plan_binary), podman, and the localhost/tillandsias-git image (its busybox has inotifyd); without the image the fixture SKIPS by name
+  - the plan binary (resolve_plan_binary), podman, and the localhost/tillandsias-git:v<VERSION> image (its busybox has inotifyd); without the image the fixture SKIPS by name
 
 critical_path:
   - step: "the real start_vault_agent, run in the git image with a stub agent: sink at 100 ms is seen within 400 ms; exit and silence are refused"
