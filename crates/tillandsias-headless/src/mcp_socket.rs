@@ -2148,6 +2148,7 @@ mod image_generate_fixtures {
                     .map_err(|e| e.to_string())?;
             }
             Ok(EngineOut {
+                timings: Default::default(),
                 backend: "vulkan".into(),
                 first_use: false,
             })
