@@ -288,7 +288,25 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
     }
 }
 
+/// The embedded assets are compiled in, so their digest is a constant of the
+/// process: 1920-lnch computes it once (it was 3 hashes of ~20 MB per
+/// `--init`, ~10 ms each, measured on yoga 2026-11-03).
 pub(crate) fn embedded_manifest_digest() -> String {
+    static DIGEST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DIGEST
+        .get_or_init(|| {
+            let t = std::time::Instant::now();
+            let d = compute_embedded_manifest_digest();
+            tracing::debug!(
+                ms = t.elapsed().as_millis() as u64,
+                "embedded manifest digest computed"
+            );
+            d
+        })
+        .clone()
+}
+
+fn compute_embedded_manifest_digest() -> String {
     let mut hasher = Sha256::new();
     for asset in embedded_assets() {
         hasher.update(asset.path.as_bytes());
@@ -527,6 +545,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 1920-lnch: the cached digest is the computed one, and stays put.
+    #[test]
+    fn the_embedded_digest_is_computed_once_and_matches_a_fresh_hash() {
+        let first = embedded_manifest_digest();
+        assert_eq!(first, compute_embedded_manifest_digest());
+        assert_eq!(embedded_manifest_digest(), first);
+        assert_eq!(first.len(), 64);
     }
 
     #[test]

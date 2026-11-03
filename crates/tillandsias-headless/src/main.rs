@@ -3220,6 +3220,12 @@ fn inside_image_build_helper() -> bool {
     std::env::var(IMAGE_BUILD_HELPER_ENV).is_ok()
 }
 
+/// 1920-lnch: whether `ensure_image_exists` asks the downgrade guard. The parent
+/// asks before it detaches; the helper it spawns inherits that answer.
+fn downgrade_guard_applies(inside_helper: bool) -> bool {
+    !inside_helper
+}
+
 /// Order 270: the helper's append-only per-image build log under the init
 /// cache dir (falling back to /tmp when no cache dir can be resolved).
 fn image_build_helper_log_path(image_name: &str) -> PathBuf {
@@ -3478,7 +3484,13 @@ pub(crate) fn ensure_image_exists(
     // controlling tty, so a refusal raised in there would reach the operator as
     // a bare non-zero exit. Checked here, once, on the path every image build
     // reaches — the first refusal aborts the whole ensure chain.
-    if let Some(refusal) = downgrade_refusal() {
+    // 1920-lnch: once, in the parent. The detached helper (and its recursion
+    // into base images) is only ever spawned right after this check passed, by
+    // the same binary; re-asking cost one `podman images` per ensure (11 per
+    // warm launch, measured on yoga 2026-11-03).
+    if downgrade_guard_applies(inside_image_build_helper())
+        && let Some(refusal) = downgrade_refusal()
+    {
         return Err(refusal);
     }
     // Order 270: detach into a session-surviving helper BEFORE taking the
@@ -27963,6 +27975,14 @@ mod tests {
         assert!(!image_build_detach_decision(false, false, None));
         // operator opt-out
         assert!(!image_build_detach_decision(true, false, Some("0")));
+    }
+
+    /// 1920-lnch: the downgrade guard runs in the parent, never again in the
+    /// helper it spawns (that re-ask was one `podman images` per ensure).
+    #[test]
+    fn the_downgrade_guard_runs_in_the_parent_not_the_helper() {
+        assert!(downgrade_guard_applies(false));
+        assert!(!downgrade_guard_applies(true));
     }
 
     /// Order 270: the spawn seam — the detached route hands the helper the
