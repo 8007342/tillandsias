@@ -207,6 +207,15 @@ impl WebLane {
                 ids.join(", ")
             )
         })?;
+        // 1865-dn5h: a studio that needs a cloud account cannot run in the
+        // offline forge, so it is refused for THAT reason, not as unbuilt.
+        if s.needs_cloud_account {
+            return Err(format!(
+                "studio {} needs a cloud account and cannot run offline in the forge ({}); \
+                 choose another studio from the list",
+                s.name, s.packet
+            ));
+        }
         if s.status != "ready" {
             return Err(format!(
                 "studio {} is listed but its lane is not built yet: order {} lands its image",
@@ -439,6 +448,38 @@ mod tests {
             ["grapesjs", "decap", "tina", "puck", "onlook", "comfyui"]
         );
         assert!(registry().studios.iter().all(|s| !s.brief.is_empty()));
+    }
+
+    /// 1865-dn5h: measured 2026-11-02 (plan/issues/onlook-offline-viability-
+    /// 2026-11-02-yoga.md), Onlook needs a CodeSandbox account and cannot run
+    /// offline. While degraded it is never [Recommended], for ANY detected
+    /// framework (Next.js + Tailwind included), it is listed with its reason,
+    /// and a launch is refused for that reason, not as an unbuilt lane.
+    #[test]
+    fn onlook_is_never_recommended_and_says_why_it_cannot_launch() {
+        let onlook = find("onlook").expect("onlook is listed");
+        assert!(onlook.needs_cloud_account, "the measurement says degraded");
+        assert!(
+            onlook.brief.contains("CodeSandbox"),
+            "the brief says why: {}",
+            onlook.brief
+        );
+        let mut frameworks: Vec<Option<&str>> = registry()
+            .frameworks
+            .iter()
+            .map(|f| Some(f.id.as_str()))
+            .collect();
+        frameworks.push(None);
+        for fw in frameworks {
+            let opts = options(fw);
+            let o = opts.iter().find(|o| o.id == "onlook").expect("listed");
+            assert!(!o.recommended, "Onlook recommended for {fw:?}");
+            assert!(!o.label.contains("[Recommended]"), "{fw:?}: {}", o.label);
+            assert_eq!(o.note.as_deref(), Some("needs cloud account"), "{fw:?}");
+        }
+        let refused = WebLane::studio("onlook").expect_err("degraded studio is refused");
+        assert!(refused.contains("needs a cloud account"), "{refused}");
+        assert!(!refused.contains("not built yet"), "{refused}");
     }
 
     /// 1862-wrx5: a Hugo site (hugo.toml, or the older config.toml) is a

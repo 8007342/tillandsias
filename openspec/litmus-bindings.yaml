@@ -707,6 +707,7 @@ specs:
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
   - litmus:image-build-convergence-shape
+  - litmus:build-image-network-isolation
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: install-progress
