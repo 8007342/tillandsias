@@ -98,6 +98,16 @@ _metrics_is_checkout() {
 # evidence about where they were written.
 metrics_root_fields() {
     _mrf_path="${1:-}"
+    # 1966-ubsw: inside a gate the resolver's fallback is the gate's PRIVATE
+    # dir, not /tmp (metrics_default_log). A record there is still a fallback
+    # record and must carry root_unusable, so judge it as the /tmp shape.
+    _mrf_fb="${TILLANDSIAS_METRICS_FALLBACK_DIR:-}"
+    if [ -n "$_mrf_fb" ] && [ "$_mrf_fb" != /tmp ]; then
+        case "$_mrf_path" in
+            "$_mrf_fb"/*/*) ;;
+            "$_mrf_fb"/*) _mrf_path="/tmp/${_mrf_path#"$_mrf_fb"/}" ;;
+        esac
+    fi
     case "$_mrf_path" in
         */.cache/metrics/*)
             _mrf_root="${_mrf_path%/.cache/metrics/*}"
