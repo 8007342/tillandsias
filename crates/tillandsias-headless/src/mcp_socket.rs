@@ -906,6 +906,35 @@ pub(crate) fn validate_family_in_lane(
     }))
 }
 
+/// ORDER 1971-mcpu: run one request's dispatch so a panic in any tool
+/// becomes that call's `tool_panicked` error. Before this, a panic unwound the
+/// connection thread and the forge lost every host tool ("Connection closed").
+pub(crate) fn dispatch_guarded(
+    req: &serde_json::Value,
+    dispatch: impl FnOnce() -> Option<serde_json::Value>,
+) -> Option<serde_json::Value> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(dispatch)) {
+        Ok(resp) => resp,
+        Err(payload) => {
+            let what = payload
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "non-string panic payload".into());
+            let tool = req["params"]["name"].as_str().unwrap_or("");
+            warn!(spec = "mcp-tool-socket", tool, panic = %what, "tool panicked; answered with a typed error");
+            // A notification has no id and gets no reply, panic or not.
+            req.get("id")?;
+            Some(mcp_error(
+                req,
+                format!(
+                    "tool_panicked: {tool} failed inside the host ({what}); the connection stays open"
+                ),
+            ))
+        }
+    }
+}
+
 pub(crate) fn mcp_error(req: &serde_json::Value, message: String) -> serde_json::Value {
     serde_json::json!({
         "jsonrpc": "2.0",
@@ -1129,16 +1158,20 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 );
                 return;
             }
-            Ok(req) => handle_mcp_jsonrpc_streaming(
-                &project_label,
-                &identity.instance,
-                &req,
-                &browser,
-                &rt,
-                &mut |line| {
-                    let _ = write_line(&cap_response_line(&line));
-                },
-            ),
+            // 1971-mcpu: a panic inside one tool answers that call with a
+            // typed error; it never closes the lane's connection.
+            Ok(req) => dispatch_guarded(&req, || {
+                handle_mcp_jsonrpc_streaming(
+                    &project_label,
+                    &identity.instance,
+                    &req,
+                    &browser,
+                    &rt,
+                    &mut |line| {
+                        let _ = write_line(&cap_response_line(&line));
+                    },
+                )
+            }),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -2286,6 +2319,112 @@ mod image_generate_fixtures {
         assert_eq!(lines[0]["method"], "notifications/progress");
         assert_eq!(lines[0]["params"]["progressToken"], "t1");
         assert_eq!(lines[2]["params"]["progress"], 3.0);
+    }
+
+    /// ORDER 1971-mcpu: the Kumbia trial's first ControlNet call (I1,
+    /// openpose, a LoRA, 768x960, count 2) closed the whole lane connection.
+    /// Through the real dispatcher with a stub engine, it must answer.
+    #[test]
+    fn image_generate_with_control_net_and_lora_answers() {
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        install_seam(Some(Seam {
+            engine: std::sync::Arc::new(Stub),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I1".into(),
+            present: Some(vec!["I0".into(), "I1".into()]),
+        }));
+        let vol = scratch
+            .path()
+            .join(crate::imagegen_tool::lane_volume("mcpu-proj", "a"))
+            .join("kumbia");
+        std::fs::create_dir_all(&vol).unwrap();
+        image::RgbImage::new(768, 960)
+            .save(vol.join("smoke.pose.png"))
+            .unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("mcpu-proj", "a", None, true);
+        let req = serde_json::json!({
+            "jsonrpc":"2.0","id":3,"method":"tools/call",
+            "params":{"name":"image.generate","arguments":{
+                "prompt":"a fighter, pixel art","tier":"I1","control_net":"openpose",
+                "control_image":"/work/tmp/imagegen/kumbia/smoke.pose.png",
+                "loras":[{"name":"pixel-art-xl","weight":0.8}],
+                "width":768,"height":960,"seed":930000,"count":2}}
+        });
+        let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            handle_mcp_jsonrpc("mcpu-proj", "a", &req, &browser, &rt)
+        }));
+        install_seam(None);
+        let reply = got
+            .expect("image.generate with control_net panicked")
+            .unwrap();
+        assert_eq!(reply["id"], 3, "{reply}");
+        assert!(reply["error"].is_null(), "{reply}");
+    }
+
+    struct Panics;
+    impl Engine for Panics {
+        fn generate(
+            &self,
+            _: &Job,
+            _: &Path,
+            _: &[String],
+            _: &mut dyn FnMut(Progress),
+        ) -> Result<EngineOut, String> {
+            panic!("models.tsv role controlnet:openpose has no sd-cli flag");
+        }
+    }
+
+    /// ORDER 1971-mcpu: a tool that panics answers its own call with a typed
+    /// `tool_panicked` error, and the next call on the same path still works.
+    /// Pre-fix: the panic unwound the connection thread (dispatch_guarded
+    /// did not exist; the lane lost all 40 host tools).
+    #[test]
+    fn a_panicking_tool_answers_with_a_typed_error_and_the_next_call_works() {
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let seam = |engine: std::sync::Arc<dyn Engine>| Seam {
+            engine,
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I0".into(),
+            present: Some(vec!["I0".into()]),
+        };
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("guard-proj", "a", None, true);
+        let call = |id: u64| {
+            serde_json::json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+                "params":{"name":"image.generate","arguments":{"prompt":"x","seed":1}}})
+        };
+
+        install_seam(Some(seam(std::sync::Arc::new(Panics))));
+        let req = call(7);
+        let reply = dispatch_guarded(&req, || {
+            handle_mcp_jsonrpc("guard-proj", "a", &req, &browser, &rt)
+        })
+        .expect("a call with an id is answered");
+        assert_eq!(reply["id"], 7, "{reply}");
+        let msg = reply["error"]["message"].as_str().unwrap_or("");
+        assert!(
+            msg.starts_with("tool_panicked: image.generate") && msg.contains("controlnet:openpose"),
+            "{reply}"
+        );
+
+        install_seam(Some(seam(std::sync::Arc::new(Stub))));
+        let req = call(8);
+        let reply = dispatch_guarded(&req, || {
+            handle_mcp_jsonrpc("guard-proj", "a", &req, &browser, &rt)
+        })
+        .unwrap();
+        install_seam(None);
+        assert!(reply["error"].is_null(), "the next call works: {reply}");
+        assert_eq!(reply["id"], 8);
     }
 }
 
