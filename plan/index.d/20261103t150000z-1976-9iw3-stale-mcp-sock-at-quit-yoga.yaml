@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-tray-unlinks-its-default-lane-mcp-socket-on-graceful-shutdown
+    order: 1976-9iw3
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [headless, tray, mcp]
+    estimated_hours: 1
+    title: The tray unlinks its default-lane mcp.sock on graceful shutdown instead of leaving a stale socket file
+    context: 'MEASURED on yoga 2026-11-03 in the v56.11.3.1 Linux smoke (plan/issues/smoke-e2e-findings-v56.11.3.1-2026-11-03-linux-yoga.md): SIGTERM to `tillandsias --tray` printed "Received shutdown signal" and "Graceful shutdown completed" and exited in 6 s, but /run/user/1000/tillandsias/mcp/tillandsias-default/mcp.sock was still on disk with no tray running. The next --tray came up over it at once: the bind path treats a connection-refused socket as stale and unlinks it (crates/tillandsias-headless/src/mcp_socket.rs around line 1510). So it is cosmetic today, but a reader of the socket dir (ls, the fleet substrate checker, an agent) sees a socket that answers nothing.'
+    exit_criteria:
+      - 'A test drives the tray''s graceful-shutdown path (or the listener''s drop) and asserts the default-lane mcp.sock no longer exists afterwards; red on today''s tree (the file remains).'
+    verifiable_closure: 'The test, red before and green after, plus one live SIGTERM on a Linux host showing no mcp.sock left in the default-lane dir.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the test and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'Find who owns the default-lane listener at shutdown (main.rs, near the "Graceful shutdown completed" line at :22842) and unlink its path there, or in the listener''s Drop; leave the tray-owned marker semantics unchanged.'
+    provenance: macuahuitl-fedora 2026-11-03 (coordinator) asked yoga to file it from the v56.11.3.1 Linux smoke; filed by yoga.
+    related: [1975-behh]
+    events:
+      - type: filed
+        ts: '2026-11-03T15:00:00Z'
+        host: yoga
+        summary: filed from the v56.11.3.1 Linux smoke at the coordinator's request
