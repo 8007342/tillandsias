@@ -4389,6 +4389,39 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     false
 }
 
+/// 1979-bm3u: publish a freshly minted CA pair so that a failure part-way
+/// leaves the PREVIOUS pair whole. The two halves cannot move in one rename
+/// (the cert is on disk, the key behind a link into tmpfs), so: the old cert
+/// is kept aside, the new cert goes in, then `seal_key` publishes the key; if
+/// that fails, the old cert is put back. It used to seal the key first, so a
+/// failed cert rename left a new key under the old cert (yoga, 2026-11-03).
+fn publish_ca_pair(
+    tmp_crt: &Path,
+    crt: &Path,
+    seal_key: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let previous = crt.with_extension("crt.previous");
+    let had_previous = crt.is_file() && std::fs::rename(crt, &previous).is_ok();
+    if let Err(e) = std::fs::rename(tmp_crt, crt) {
+        if had_previous {
+            let _ = std::fs::rename(&previous, crt);
+        }
+        return Err(format!("Failed to atomically publish CA cert: {e}"));
+    }
+    if let Err(e) = seal_key() {
+        if had_previous {
+            let _ = std::fs::rename(&previous, crt);
+        } else {
+            let _ = std::fs::remove_file(crt);
+        }
+        return Err(format!("Failed to atomically publish CA key: {e}"));
+    }
+    if had_previous {
+        let _ = std::fs::remove_file(&previous);
+    }
+    Ok(())
+}
+
 /// 1979-bm3u: when the CA's key and certificate are both present but are not a
 /// pair, remove every file in the CA dir (a linked key's tmpfs target too, and
 /// the Vault leaf the old CA signed), so the caller mints from nothing. The
@@ -4568,6 +4601,50 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
         let (crt, key) = mint(tmp.path(), 61);
         assert!(!ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    // 1979-bm3u root cause: a mint that fails part-way never leaves a new key
+    // next to the old certificate. MEASURED on yoga after the 2026-11-03 reboot:
+    // a key dated 11:27 under the 09:01 certificate, squid dead. Each failure
+    // half leaves the PREVIOUS pair whole.
+    #[test]
+    fn a_ca_mint_that_fails_part_way_leaves_the_previous_pair_whole() {
+        let old = tempfile::tempdir().unwrap();
+        let new = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(old.path(), 365);
+        let (new_crt, new_key) = mint(new.path(), 365);
+        let old_crt_bytes = std::fs::read(&crt).unwrap();
+        let old_key_bytes = std::fs::read(&key).unwrap();
+        let seal = |from: PathBuf, to: PathBuf| {
+            move || std::fs::rename(&from, &to).map_err(|e| e.to_string())
+        };
+
+        // the cert cannot be published (its temp file is gone)
+        let gone = new.path().join("missing.crt");
+        assert!(publish_ca_pair(&gone, &crt, seal(new_key.clone(), key.clone())).is_err());
+        assert_eq!(
+            std::fs::read(&key).unwrap(),
+            old_key_bytes,
+            "the old key stays when the cert fails"
+        );
+        assert_eq!(std::fs::read(&crt).unwrap(), old_crt_bytes);
+        assert!(
+            ca_key_matches_cert(&crt, &key),
+            "the previous pair is still a pair"
+        );
+
+        // the key cannot be published
+        let missing_key = new.path().join("missing.key");
+        assert!(publish_ca_pair(&new_crt, &crt, seal(missing_key, key.clone())).is_err());
+        assert_eq!(
+            std::fs::read(&crt).unwrap(),
+            old_crt_bytes,
+            "the old cert stays when the key fails"
+        );
+        assert!(
+            ca_key_matches_cert(&crt, &key),
+            "the previous pair is still a pair"
+        );
     }
 
     // 1979-bm3u: a certificate and a key from two generations is reissued, not
@@ -4941,10 +5018,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
 
         let crt_bytes = std::fs::read(&tmp_crt)
             .map_err(|e| format!("Failed to read the minted CA cert: {e}"))?;
-        ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
-            .map_err(|e| format!("Failed to atomically publish CA key: {e}"))?;
-        std::fs::rename(&tmp_crt, &crt)
-            .map_err(|e| format!("Failed to atomically publish CA cert: {e}"))?;
+        publish_ca_pair(&tmp_crt, &crt, || {
+            ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
+        })?;
 
         info!(
             accountability = true,
