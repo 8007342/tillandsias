@@ -75,7 +75,9 @@ local function plant(holder, minutes_old)
     fs.mkdir(LOCK_REL)
     if holder then fs.write(LOCK_REL .. "/holder", holder .. "\n") end
     if minutes_old then
-        proc.run{ argv = { "touch", "-d", minutes_old .. " minutes ago", LOCK } }
+        -- touch -t is accepted by GNU and BSD; -d "N minutes ago" is GNU-only
+        -- (macbookair darwin regime run, 2026-11-03)
+        proc.run{ argv = { "touch", "-t", os.date("%Y%m%d%H%M.%S", os.time() - minutes_old * 60), LOCK } }
     end
 end
 local function took(life) return life:find("npm not available", 1, true) ~= nil end
