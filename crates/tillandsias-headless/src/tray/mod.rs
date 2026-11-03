@@ -4983,10 +4983,14 @@ mod tests {
         ] {
             assert!(tools.contains(&studio), "{studio} (1860-auhm): {tools:?}");
         }
+        // 1957-emar: the GPU arbiter's two tools.
+        for gpu in ["gpu.status", "gpu.unload_model"] {
+            assert!(tools.contains(&gpu), "{gpu} (1957-emar): {tools:?}");
+        }
         assert_eq!(
             tools.len() - cloudflare,
-            39,
-            "5 preview.* + toolchain.prepare + image.generate + 4 studio.* + 13 browser.* + 4 webstudio.* + tillandsias.index + 10 deprecated aliases (1969-7qm7), nothing else"
+            41,
+            "5 preview.* + toolchain.prepare + image.generate + 4 studio.* + 13 browser.* + 4 webstudio.* + tillandsias.index + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5056,8 +5060,8 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                39,
-                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 4 studio.*, 13 browser.*, 4 webstudio.*, tillandsias.index and the 10 deprecated flat aliases (1969-7qm7), got {tools:?}"
+                41,
+                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 4 studio.*, 13 browser.*, 4 webstudio.*, tillandsias.index, the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5549,8 +5553,8 @@ mod tests {
             // 1959-xsy5: + studio.finish_pixels, studio.contact_sheet.
             assert_eq!(
                 tools.len() - cloudflare,
-                39,
-                "1969-7qm7: + webstudio.* canonical names, tillandsias.index and 10 deprecated aliases"
+                41,
+                "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 1957-emar: + gpu.status, gpu.unload_model"
             );
 
             drop(writer);

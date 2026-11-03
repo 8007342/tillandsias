@@ -375,6 +375,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::studio_tool::descriptor());
             // 1956-26qh: the GPU-free family contract checker, beside it.
             tools.push(validate_family_descriptor());
+            // 1957-emar: the GPU arbiter's status and unload, beside them.
+            tools.extend(crate::gpu_queue::tool_descriptors());
             // 1959-xsy5 (D12): the GPU-free pixel finish, beside it.
             tools.push(crate::pixel_finish::descriptor());
             // 1959-xsy5 (D13): the review contact sheet, beside it.
@@ -545,6 +547,19 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             emit(line);
                         }
                     }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 1957-emar: GPU status and an unload routed through the arbiter.
+                "gpu.status" | "gpu.unload_model" => {
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    match crate::gpu_queue::call_tool(tool_name, arguments).expect("a gpu tool") {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
