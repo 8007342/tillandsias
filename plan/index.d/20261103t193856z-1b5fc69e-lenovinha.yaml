@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tray-offers-start-comfyui-for-a-running-project-without-relaunching-its-forge
+    field: status
+    value: completed
+    ts: "2026-11-03T19:38:56Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-tray-offers-start-comfyui-for-a-running-project-without-relaunching-its-forge
+    event:
+      type: completed
+      ts: "2026-11-03T19:38:56Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 7993f2e62
+  - packet_id: the-tray-offers-start-comfyui-for-a-running-project-without-relaunching-its-forge
+    event:
+      type: note
+      ts: "2026-11-03T19:38:56Z"
+      host: lenovinha
+      summary: |-
+        landed on linux-next at 7993f2e62
