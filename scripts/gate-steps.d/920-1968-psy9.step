@@ -1,0 +1,12 @@
+# Gate step 1968-psy9 — the git mirror sends READY right after its seed
+# fetch; the per-ref startup retry-push runs after it, in the background, and
+# is skipped with one line when there is no upstream credential. Measured on
+# yoga 2026-11-02: READY waited 49.3 s for 1489 refused pushes on every warm
+# launch. The arms execute the real functions cut out of
+# images/git/entrypoint.sh over a scratch mirror; no podman, no network.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the git mirror sends READY before its startup retry-push (1968-psy9)"
+STEP_LUA="scripts/lua/test-git-mirror-ready-before-retry-push.lua"
+STEP_ERROR="the git mirror again holds READY behind the startup retry-push, or pushes every ref without an upstream credential (1968-psy9) — see the FAIL lines above"
+STEP_OK="git mirror READY-before-retry-push fixture passed"
