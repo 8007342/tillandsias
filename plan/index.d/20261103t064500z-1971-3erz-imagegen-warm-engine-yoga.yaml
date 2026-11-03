@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: image-generate-reports-its-engine-timings-and-a-second-call-within-minutes-reuses-a-warm-engine
+    order: 1971-3erz
+    status: in_progress
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [imagegen, gpu, build-time, mcp]
+    estimated_hours: 6
+    title: image.generate reports its engine timings, and a second call within minutes reuses a warm engine
+    context: 'MEASURED on yoga 2026-11-03 (840M, vulkan, tray 56.11.1.2+dff57186c, I0 SDXS-512-0.9, 512x512, 1 step, count 1, four sequential tools/call over the tillandsias-default lane socket): 8327 / 7674 / 7465 / 7779 ms wall per call. sd.cpp run directly on the same host measured 1.28 s/image (2026-10-27), so about 6 s per call is outside sampling. The result carries no engine timing, so the split (engine container start, 1.3 GB model load, sampling) is inferred, not measured.'
+    exit_criteria:
+      - 'The image.generate result carries the engine''s own timings as fields: container_start_ms, model_load_ms, sample_ms (and total_ms). Today''s result has none of them, so a check for model_load_ms in the result FAILS.'
+      - 'A second image.generate call within N minutes of the first (N stated in the result, e.g. warm_ttl_s) reports container_start_ms = 0 and model_load_ms = 0 (warm engine reused), and its wall time on yoga I0 SDXS 512 is under 2.5 s, 3 runs. Today every call starts the engine and reloads the model, so this FAILS.'
+      - 'The warm engine releases the GPU to the 1957-emar arbiter like any holder: a queued job of another kind evicts it, and it exits after the TTL with nothing left running.'
+    verifiable_closure: 'A fixture over the result shape (timing fields present; second call reports zero start/load) red on today''s tree, plus the 3-run yoga wall-time measurement recorded as an event with the regime.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'yoga: measure first — add the three timings to the result and record a cold/warm split; then keep the engine resident behind the GPU arbiter for a TTL.'
+    provenance: macuahuitl-fedora 2026-11-03 (coordinator) from yoga's 1874 image.generate measurement; filed and claimed by yoga.
+    depends_on: []
+    related: [1874-kkrc, 1957-emar, 1955-rjv3]
+    events:
+      - type: filed
+        ts: '2026-11-03T06:45:00Z'
+        host: yoga
+        summary: filed at the coordinator's request and claimed by yoga; measure first, then build (cut freeze)
+
+events:
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    event:
+      type: measurement
+      ts: '2026-11-03T06:45:00Z'
+      host: yoga
+      summary: |-
+        MEASURED on yoga: regime 840M (gfx1152) vulkan, tray 56.11.1.2+dff57186c, tier I0 SDXS-512-0.9, 512x512, 1 step, count 1, four SEQUENTIAL tools/call image.generate over the tray's tillandsias-default lane socket (socat in the forge image), wall time per call from request sent to result received: 8327 / 7674 / 7465 / 7779 ms. Result metadata backend=vulkan steps=1. SD1.5 512 is no longer a tier (I0=SDXS, I1=SDXL-Lightning); I1 was not fetched (needs the operator's consent token; OpenRAIL++ licence). The ~6 s per call above direct sd.cpp (1.28 s/image, 2026-10-27) is filed as 1971-3erz.
