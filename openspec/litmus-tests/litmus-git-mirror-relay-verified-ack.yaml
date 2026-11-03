@@ -38,6 +38,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: post-receive bookkeeping only"
 
+  - step: "NEGATIVE CONTROL: a post-receive hook that relays (git push, or reads the GitHub credential) must FAIL the ban above"
+    command: "d=$(mktemp -d); for line in 'git push origin HEAD' 'vault-cli read -field=token secret/github/token'; do cp images/git/post-receive-hook.sh \"$d/hook\"; printf '%s\\n' \"$line\" >> \"$d/hook\"; if ! grep -Eq 'git push|secret/github|git-credential-tillandsias|relay-refs' \"$d/hook\"; then echo \"FAIL: ban misses: $line\"; rm -rf \"$d\"; exit 1; fi; done; rm -rf \"$d\"; echo 'ok: the ban catches both relay forms'"
+    timeout_ms: 5000
+    expected_behavior: "ok: the ban catches both relay forms"
+
 observability:
   traces:
     - "@trace spec:git-mirror-service"
