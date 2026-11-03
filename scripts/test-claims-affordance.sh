@@ -28,6 +28,13 @@
 #   PASS: claims-affordance <n>/<n>
 set -uo pipefail
 
+# 1948-xbaf skips a sibling that is an ancestor of HEAD. The stub arms below
+# need the sibling folds to happen whatever the live refs look like: when
+# windows-next and osx-next are both ancestors of HEAD (e.g. right after a
+# fleet merge), arms 3, 4 and 5 fold nothing and read ok, so the fixture is
+# green or red depending on ref topology. Pin the strict path here.
+export TILLANDSIAS_XBRANCH_ANCESTOR_SKIP=0
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CHECK="$ROOT/scripts/check-claims-across-branches.sh"
 pass=0; fail=0
