@@ -9175,6 +9175,40 @@ async fn cleanup_stack_containers(
     client: &PodmanClient,
     project_name: &str,
 ) -> ForgeCleanupOutcome {
+    cleanup_stack_containers_keeping(client, project_name, false).await
+}
+
+/// 1968-psy9: a running, healthy container already on `image` (this build's
+/// versioned tag) is reused by a warm launch instead of removed and
+/// re-created. MEASURED on yoga 2026-11-02: every warm OpenCode launch removed
+/// and re-created the git mirror and the inference container (+3-5 s), and the
+/// fresh mirror then held READY for its whole startup sweep.
+async fn reusable_warm_container(client: &PodmanClient, name: &str, image: &str) -> bool {
+    match client.inspect_container(name).await {
+        Ok(info) if info.state == "running" && info.image == image => {}
+        _ => return false,
+    }
+    let health = client
+        .execute(
+            OperationKind::Health,
+            &[
+                "inspect".into(),
+                name.into(),
+                "--format".into(),
+                "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}".into(),
+            ],
+        )
+        .await;
+    matches!(health, Ok(out) if out.stdout.trim() == "healthy")
+}
+
+/// [`cleanup_stack_containers`], leaving the project's git mirror in place
+/// when `keep_mirror` (a warm launch reusing a healthy, current one, 1968-psy9).
+async fn cleanup_stack_containers_keeping(
+    client: &PodmanClient,
+    project_name: &str,
+    keep_mirror: bool,
+) -> ForgeCleanupOutcome {
     // Order 234 (R6): removals also race shutdown's own teardown — skip
     // during drain/stop (the shutdown path owns teardown then).
     if !runtime_phase::container_mutations_allowed() {
@@ -9219,9 +9253,11 @@ async fn cleanup_stack_containers(
             return ForgeCleanupOutcome::LeftInPlace;
         }
     }
-    let _ = client
-        .remove_container(&format!("tillandsias-git-{project_name}"))
-        .await;
+    if !keep_mirror {
+        let _ = client
+            .remove_container(&format!("tillandsias-git-{project_name}"))
+            .await;
+    }
     let _ = client
         .remove_container(&format!("tillandsias-browser-{project_name}"))
         .await;
@@ -16946,16 +16982,40 @@ fn run_opencode_mode(
                 "tillandsias-",
             );
 
-        cleanup_stack_containers(&client, project_name).await;
-        // Order 233 (R5): shared containers are removed only when no forge
-        // is running anywhere; a parallel project's live session keeps them.
-        cleanup_shared_stack_if_no_running_forge(
+        // 1968-psy9: a warm launch keeps a healthy mirror and inference that
+        // already run this build's image, rather than removing and re-creating
+        // them (and re-paying the mirror's whole startup sweep before READY).
+        let keep_mirror = reusable_warm_container(
             &client,
-            project_name,
-            Some(&launch_marker),
-            debug,
+            &format!("tillandsias-git-{project_name}"),
+            &versioned_image_tag("git", version),
         )
         .await;
+        let keep_inference = reusable_warm_container(
+            &client,
+            "tillandsias-inference",
+            &versioned_image_tag("inference", version),
+        )
+        .await;
+        if debug && (keep_mirror || keep_inference) {
+            eprintln!(
+                "[tillandsias] [OpenCode] warm launch: reusing mirror={keep_mirror} inference={keep_inference}"
+            );
+        }
+        cleanup_stack_containers_keeping(&client, project_name, keep_mirror).await;
+        // Order 233 (R5): shared containers are removed only when no forge
+        // is running anywhere; a parallel project's live session keeps them.
+        // inference is the only lane-scoped shared container, so a reusable
+        // one skips this teardown entirely.
+        if !keep_inference {
+            cleanup_shared_stack_if_no_running_forge(
+                &client,
+                project_name,
+                Some(&launch_marker),
+                debug,
+            )
+            .await;
+        }
 
         // Step 15: bring the router up BEFORE any project containers so the
         // enclave's `router` network alias is already resolvable when proxy /
@@ -17095,6 +17155,8 @@ fn run_opencode_mode(
         } else if try_start_vsock_forwarder(&client, debug).await {
             // Host-native lane took it. The forwarder claims the `inference`
             // alias, so the container below must NOT also run (830-xsk2).
+        } else if keep_inference {
+            // 1968-psy9: the healthy, current one checked above keeps serving.
         } else {
             client
                 .run_container_observed(
@@ -17115,13 +17177,18 @@ fn run_opencode_mode(
         // ensure_enclave_for_project. Without it the forge cloned a mirror
         // whose seed had not run yet and gave up after its ~40 s of clone
         // retries (macOS cold cloud launch, 2026-10-28).
-        gate_forge_launch(
-            &client,
-            &git_container_name,
-            project_name,
-            project_default_branch.as_deref(),
-            project_remote_url.is_some(),
-            debug,
+        // 1968-psy9: timed like ensure_enclave_for_project's gate (1915-brst), so
+        // this lane reports bringup: step=mirror-seed too.
+        bringup_timer::timed_async(
+            "mirror-seed",
+            gate_forge_launch(
+                &client,
+                &git_container_name,
+                project_name,
+                project_default_branch.as_deref(),
+                project_remote_url.is_some(),
+                debug,
+            ),
         )
         .await?;
         drop(mirror_bringup);
