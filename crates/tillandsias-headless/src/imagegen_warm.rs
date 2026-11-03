@@ -31,6 +31,9 @@ struct Warm {
     log: PathBuf,
     key: String,
     backend: String,
+    /// The model files it holds (their names under /models) and their size.
+    model: String,
+    model_bytes: u64,
     last_used: Instant,
     /// One long-lived `podman exec -i <c> /bin/sh` the requests are written
     /// to; a fresh `podman exec` cost ~110 ms per call (measured on yoga).
@@ -120,6 +123,28 @@ pub fn release(why: &str) {
         stop(&w.name);
         let _ = std::fs::remove_file(&w.log);
     }
+}
+
+/// 1972-phye: the resident engine as a gpu.status holder. `vram_gb` is null:
+/// no meter here attributes VRAM to one process (amdgpu's counters are
+/// device-wide), so the model files' size is reported apart as an estimate.
+pub fn holder() -> Option<serde_json::Value> {
+    let guard = WARM.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().map(|w| holder_json(w, ttl()))
+}
+
+fn holder_json(w: &Warm, ttl: Duration) -> serde_json::Value {
+    let gb = |b: u64| (b as f64 / 1e9 * 100.0).round() / 100.0;
+    serde_json::json!({
+        "name": w.name,
+        "kind": "image",
+        "model": w.model,
+        "backend": w.backend,
+        "vram_gb": null,
+        "model_files_gb": gb(w.model_bytes),
+        "idle_s": w.last_used.elapsed().as_secs(),
+        "exits_after_idle_s": ttl.as_secs(),
+    })
 }
 
 fn stop(name: &str) {
@@ -419,6 +444,13 @@ pub fn generate(
                 log: s.log,
                 key: key.clone(),
                 backend: s.backend,
+                model: files
+                    .iter()
+                    .filter_map(|(_, p)| p.file_name())
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join(","),
+                model_bytes,
                 last_used: Instant::now(),
                 session: None,
             });
@@ -490,6 +522,31 @@ fn spawn_reaper() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1972-phye criterion 2: the resident engine is a named image holder.
+    #[test]
+    fn the_resident_engine_is_a_gpu_status_holder_naming_its_model() {
+        let w = Warm {
+            name: "tillandsias-imagegen-warm-7".into(),
+            log: PathBuf::from("/nonexistent"),
+            key: String::new(),
+            backend: "vulkan".into(),
+            model: "sdxs-512.safetensors".into(),
+            model_bytes: 2_340_000_000,
+            last_used: Instant::now(),
+            session: None,
+        };
+        let h = holder_json(&w, Duration::from_secs(300));
+        assert_eq!(h["name"], "tillandsias-imagegen-warm-7", "{h}");
+        assert_eq!(h["kind"], "image");
+        assert_eq!(h["model"], "sdxs-512.safetensors");
+        assert!(
+            h["vram_gb"].is_null(),
+            "unmeasured VRAM must not be invented: {h}"
+        );
+        assert_eq!(h["model_files_gb"], 2.34);
+        assert_eq!(h["exits_after_idle_s"], 300);
+    }
 
     #[test]
     fn the_request_carries_the_one_shot_runs_sampler_cfg_and_batch() {

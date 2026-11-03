@@ -293,11 +293,12 @@ impl Arbiter {
     /// gpu.status: who holds the device and how much is free.
     pub fn status(&self) -> serde_json::Value {
         let residents = self.llm.ps().as_deref().and_then(parse_ps);
-        let holders: Vec<serde_json::Value> = residents
+        let mut holders: Vec<serde_json::Value> = residents
             .iter()
             .flatten()
             .map(|r| serde_json::json!({ "name": r.name, "kind": "llm", "vram_gb": gb(r.vram_bytes) }))
             .collect();
+        holders.extend(crate::imagegen_warm::holder());
         serde_json::json!({
             "holders": holders,
             "inference_engine_answered": residents.is_some(),
