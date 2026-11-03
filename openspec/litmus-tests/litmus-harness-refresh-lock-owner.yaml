@@ -1,0 +1,36 @@
+# @trace spec:default-image
+# @trace order:1971-rikj, order:284
+#
+# MEASURED on yoga 2026-11-02: a forge stopped mid-refresh left
+# npm-update.lock on the persistent tool cache, and the next launches skipped
+# ensure_forge_harnesses with no lifecycle line until the lock aged past an
+# hour. The lock now records its holder and is reclaimed at once when the
+# holder is another container or a dead pid.
+# Red before 1971-rikj: all four behaviour arms see silence.
+name: litmus:harness-refresh-lock-owner
+spec: default-image
+phase: pre-build
+description: A harness-refresh lock left by a stopped forge is reclaimed at once; a live holder is respected with one skip line, never silently
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash; a scratch HOME under target/plan-scratch; no npm on PATH, no podman, no network
+
+critical_path:
+  - step: "foreign, dead-pid and holder-less locks are reclaimed and the refresh runs; a live holder is respected with a skip line"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-harness-refresh-lock-owner.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:harness-refresh-lock-owner:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "five arms: premise, FOREIGN, DEADPID, LEGACY, LIVE"
+  log_fields:
+    spec: "default-image"
+    test: "harness-refresh-lock-owner"
+
+rollback:
+  on_failure: "read the FAIL lines; the lock prologue is at the top of ensure_forge_harnesses in images/default/lib-common.sh"
+  command: "grep -n 'npm-update.lock\\|reclaimed npm-update lock\\|skipped: refresh in progress' images/default/lib-common.sh"

@@ -1,0 +1,8 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: launch-path-memoizes-digests-podman-lookups-and-probes
+    event:
+      type: claimed
+      ts: '2026-11-03T14:00:00Z'
+      host: yoga
+      summary: claimed by yoga on the coordinator's seconds-on-warm-forge preference (macuahuitl-fedora 2026-11-03); blocker 1916-embd is completed; work ref work/1920-lnch. Baseline counts first (digest computations in --debug --init, podman spawns per warm launch).
