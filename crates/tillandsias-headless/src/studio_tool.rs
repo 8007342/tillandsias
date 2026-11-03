@@ -116,6 +116,8 @@ pub fn descriptor() -> Value {
                 "count": { "type": "integer", "minimum": 1, "maximum": MAX_COUNT, "default": 1,
                            "description": "Batch size; items run consecutively with seed, seed+1, ..." },
                 "tier": { "type": "string", "enum": ["I0", "I1", "I2", "I3"] },
+                "verbose": { "type": "boolean", "default": false,
+                             "description": "Return each output's full provenance inline. By default it is only in the sidecar file at provenance_path." },
                 "family": { "type": "string", "description": "Optional family spec path in the checkout (studio.validate_family runs first)." },
                 "init_image": { "type": "string", "description": format!("1959-xsy5 (D11): bound to a LoadImage whose image is \"$init_image\"; under {FORGE_SCRATCH}/.") },
                 "mask": { "type": "string", "description": "Bound to a LoadImage whose image is \"$mask\" (white repainted, black kept)." },
@@ -587,6 +589,25 @@ fn set_text(inputs: &mut serde_json::Map<String, Value>, text: &str) {
 
 /// Batch item `i` of `job`: overrides applied to the titled nodes only, seed
 /// `plan.seed + i`, and every SaveImage prefixed `studio/<job>/<i>` (D2).
+/// 1973-prvc: the record shared by every output, said once. `verbose` keeps
+/// the full first record (the pre-1973 shape); otherwise only the fields an
+/// agent reads to know what ran: workflow, models, tier, placement.
+fn provenance_summary(first: &Value, verbose: bool) -> Value {
+    if verbose {
+        return first.clone();
+    }
+    json!({
+        "schema": first["schema"],
+        "workflow": first["workflow"]["path"],
+        "models": first["models"]
+            .as_array()
+            .map(|m| m.iter().map(|x| x["file"].clone()).collect::<Vec<_>>()),
+        "tier": first["tier"],
+        "placement": first["placement"],
+        "full": "each output's provenance_path (verbose: true returns it inline)",
+    })
+}
+
 pub fn prompt_for(plan: &Plan, job: &str, i: u32) -> Value {
     let mut p = plan.workflow.clone();
     // 1972-stfx: with more than one SaveImage, each writes under its own node
@@ -867,6 +888,8 @@ pub fn call(
         return Err("engine_failed: the workflow finished but produced no output image".into());
     }
 
+    let verbose = args.get("verbose").and_then(Value::as_bool) == Some(true);
+    let mut summary: Option<Value> = None;
     let mut outputs = Vec::new();
     for (i, sub, file) in &produced {
         let host = scratch.join(sub).join(file);
@@ -907,14 +930,18 @@ pub fn call(
             "has_alpha": alpha,
             "seed": plan.seed + u64::from(*i),
             "provenance_path": format!("{forge}.provenance.json"),
-            "provenance": prov,
         }));
+        // 1973-prvc: the full record lives in the sidecar; inline only on ask.
+        if verbose {
+            outputs.last_mut().expect("pushed")["provenance"] = prov.clone();
+        }
+        summary.get_or_insert(prov);
     }
     Ok(json!({
         "job": job,
         "evicted_holders": evicted.iter().map(gpu_queue::Evicted::to_json).collect::<Vec<_>>(),
         "outputs": outputs,
-        "provenance": outputs[0]["provenance"],
+        "provenance": provenance_summary(summary.as_ref().expect("an output"), verbose),
         "placement": placement,
         "degraded": (placement == "cpu" || placement == "mixed").then(|| json!({
             "backend": placement,
@@ -1432,6 +1459,53 @@ mod tests {
         assert_ne!(paths[0], paths[1], "each node has its own path: {paths:?}");
     }
 
+    /// 1973-prvc: a count=4 result stays small (the forge pays for every
+    /// token) and still names every output's path, seed and sidecar. The
+    /// MCP reply carries it twice (text + structuredContent), so the budget
+    /// here is half of ~2k tokens at ~4 bytes each. Pre-fix: FAILS, the full
+    /// record was inline per output and again at the top level.
+    #[test]
+    fn a_count_four_result_is_compact_and_keeps_every_path_seed_and_sidecar() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("prvc-proj", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let r = call(
+            "prvc-proj",
+            "a",
+            &json!({"workflow":"tool/art/workflows/ok.api.json","inputs":{"pose":pose},
+                    "overrides":{"seed":5,"prompt":"a gatekeeper, pixel art, full body"},
+                    "count":4,"tier":"I1"}),
+            &mut |_| {},
+        );
+        install_seam(None);
+        let r = r.unwrap_or_else(|e| panic!("{e}"));
+        let bytes = r.to_string().len();
+        assert!(bytes < 4000, "{bytes} bytes: {r}");
+        let outs = r["outputs"].as_array().unwrap();
+        assert_eq!(outs.len(), 4);
+        for (i, o) in outs.iter().enumerate() {
+            assert!(
+                o["path"].is_string() && o["provenance_path"].is_string(),
+                "{o}"
+            );
+            assert_eq!(o["seed"], 5 + i as u64);
+            assert!(
+                o["provenance"].is_null(),
+                "no inline record by default: {o}"
+            );
+            let side = fx.lane_dir.join(
+                o["provenance_path"]
+                    .as_str()
+                    .unwrap()
+                    .strip_prefix(&format!("{FORGE_SCRATCH}/"))
+                    .unwrap(),
+            );
+            assert!(side.is_file(), "{}", side.display());
+        }
+    }
+
     /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the
     /// pinned file is admitted and fetched before the run. Pre-fix: FAILS,
     /// `model` was not read, nothing was fetched, and ComfyUI refused it.
@@ -1537,7 +1611,7 @@ mod tests {
             "a",
             &json!({"workflow":"tool/art/workflows/ok.api.json","inputs":{"pose":pose},
                     "overrides":{"seed":930001,"prompt":"a gatekeeper","negative_prompt":"blurry"},
-                    "count":2,"tier":"I1"}),
+                    "count":2,"tier":"I1","verbose":true}),
             &mut |p| {
                 if let Progress::Queued { position } = p {
                     queued.push(position)
