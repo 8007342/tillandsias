@@ -34,6 +34,20 @@ comfyui-core	CLIPVisionLoader
 comfyui-core	CLIPVisionEncode
 comfyui-core	UNETLoader
 comfyui-core	VAELoader
+# 1982-kpin: Qwen-Image-Edit, FLUX.2 and Wan VACE workflow classes (core at v0.40.0).
+comfyui-core	TextEncodeQwenImageEdit
+comfyui-core	TextEncodeQwenImageEditPlus
+comfyui-core	CFGNorm
+comfyui-core	EmptyFlux2LatentImage
+comfyui-core	Flux2Scheduler
+comfyui-core	ReferenceLatent
+comfyui-core	WanVaceToVideo
+comfyui-core	TrimVideoLatent
+comfyui-core	CreateVideo
+comfyui-core	SaveVideo
+comfyui-core	LoadVideo
+comfyui-core	GetVideoComponents
+comfyui-core	EmptyHunyuanLatentVideo
 comfyui-core	VAEDecode
 comfyui-core	VAEDecodeTiled
 comfyui-core	VAEEncode
