@@ -297,10 +297,12 @@ pub(crate) fn embedded_manifest_digest() -> String {
         .get_or_init(|| {
             let t = std::time::Instant::now();
             let d = compute_embedded_manifest_digest();
-            tracing::debug!(
-                ms = t.elapsed().as_millis() as u64,
-                "embedded manifest digest computed"
-            );
+            if std::env::var_os("TILLANDSIAS_DEBUG").is_some() {
+                eprintln!(
+                    "[tillandsias] embedded manifest digest computed ({} ms)",
+                    t.elapsed().as_millis()
+                );
+            }
             d
         })
         .clone()
