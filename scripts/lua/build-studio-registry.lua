@@ -2,7 +2,9 @@
 --
 -- build-studio-registry.lua — evaluate images/studio/registry.lua (pure data,
 -- empty environment) and write it as crates/tillandsias-headless/data/studios.json,
--- which the launcher embeds. The output is canonical (sorted keys, two-space
+-- which the launcher embeds, and its copy images/studio/studios.json, which
+-- the studio images ship for the front (1861-nmpp: a build context cannot
+-- reach crates/). The output is canonical (sorted keys, two-space
 -- indent, this file's own encoder), so a re-run is byte-identical:
 --   tillandsias-plan script run scripts/lua/build-studio-registry.lua             (write)
 --   tillandsias-plan script run scripts/lua/build-studio-registry.lua -- --check  (verify)
@@ -11,6 +13,7 @@
 
 local SRC = "images/studio/registry.lua"
 local OUT = "crates/tillandsias-headless/data/studios.json"
+local IMAGE_COPY = "images/studio/studios.json"
 local check = false
 for _, a in ipairs(arg or {}) do
     if a == "--check" then check = true end
@@ -43,6 +46,22 @@ for i, s in ipairs(reg.studios or {}) do
     end
     if s.status ~= "planned" and s.status ~= "ready" then
         verdict.emit("refused:studio-registry:status:" .. s.id, 1)
+    end
+    -- 1921-2krx: a sibling runs its own image next to the forge and never
+    -- touches the checkout, so it names its image and allows no write.
+    local kind = s.kind or "forge"
+    if kind ~= "forge" and kind ~= "sibling" then
+        verdict.emit("refused:studio-registry:kind:" .. s.id, 1)
+    end
+    if kind == "sibling" then
+        if type(s.image) ~= "string" or not s.image:match("^[a-z][a-z0-9-]*$") then
+            verdict.emit("refused:studio-registry:sibling-without-image:" .. s.id, 1)
+        end
+        if not table.is_empty(s.write_allowlist) then
+            verdict.emit("refused:studio-registry:sibling-writes-the-checkout:" .. s.id, 1)
+        end
+    elseif s.image ~= nil then
+        verdict.emit("refused:studio-registry:image-on-a-forge-studio:" .. s.id, 1)
     end
 end
 if seen.silex then verdict.emit("refused:studio-registry:silex-is-not-offered", 1) end
@@ -87,11 +106,14 @@ end
 local body = enc(reg, 0) .. "\n"
 local n = #reg.studios
 if check then
-    if fs.read(OUT) == body then verdict.emit("ok:studio-registry:fresh:" .. n, 0) end
-    out.line("  why: " .. OUT .. " does not match " .. SRC)
+    if fs.read(OUT) == body and fs.read(IMAGE_COPY) == body then
+        verdict.emit("ok:studio-registry:fresh:" .. n, 0)
+    end
+    out.line("  why: " .. OUT .. " or " .. IMAGE_COPY .. " does not match " .. SRC)
     out.line("  remedy: tillandsias-plan script run scripts/lua/build-studio-registry.lua")
     verdict.emit("violation:studio-registry:stale", 1)
 end
 fs.mkdir("crates/tillandsias-headless/data")
 fs.write(OUT, body)
+fs.write(IMAGE_COPY, body)
 verdict.emit("ok:studio-registry:written:" .. n, 0)

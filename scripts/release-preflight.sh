@@ -266,6 +266,15 @@ if [[ -d .github/workflows ]]; then
     fi
     note "actions budget clean (release.yml only)"
 fi
+# Order 1966-47vt: the NUMBER behind the budget is cloud.usage. Advisory
+# here (the merge-to-main skill owns the >= 2,700/3,000 refusal); a binary
+# without the flag, or a read that fails, is "not read", never a zero.
+if command -v tillandsias >/dev/null 2>&1 \
+    && _usage="$(timeout 120 tillandsias --cloud-usage 2>/dev/null)"; then
+    note "cloud.usage read ($(printf '%s' "$_usage" | grep -c '"metric"') metrics); see tillandsias --cloud-usage"
+else
+    note "cloud.usage: not read on this host — read the cloud.usage MCP tool before merging"
+fi
 
 # ── Gate 5: the stable tag agrees with the release page (order 1061-zd83) ─────
 #

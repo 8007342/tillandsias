@@ -3040,8 +3040,8 @@ ensure_forge_harnesses() {
         fi
     done
 
-    # Antigravity has no npm package; use its official installer on every
-    # launch.  require_antigravity is fail-soft here, while the primary
+    # Antigravity has no npm package; its official installer runs once into
+    # the tool cache (1968-2wpe).  require_antigravity is fail-soft here, while the primary
     # antigravity entrypoint still emits an actionable fatal message when no
     # cached binary exists.
     if declare -F require_antigravity >/dev/null 2>&1; then
@@ -3735,14 +3735,32 @@ require_codex() {
 # issues). Shared by the forge entrypoint AND the ephemeral login container
 # (`tillandsias --agy-login` failed exit-2 when the login container assumed
 # agy was pre-installed — operator repro 2026-07-15).
+#
+# 1968-2wpe: MEASURED on yoga 2026-11-02, the install went to /usr/local/bin,
+# which dies with the --rm container, so every launch downloaded agy again
+# (5.7 / 6.2 s). It now lands on the PERSISTENT tool-cache volume
+# ($HARNESS_CURL_ROOT/agy/bin), which is put first on PATH; a present binary
+# is not re-fetched, and `agy update` runs at most once per
+# TILLANDSIAS_AGY_REFRESH_SECS (default one day), stamped beside it.
 require_antigravity() {
-    local _target_dir="$HOME/.local/bin"
-    [ -w /usr/local/bin ] && _target_dir="/usr/local/bin"
+    local _target_dir="$HARNESS_CURL_ROOT/agy/bin"
+    local _stamp="$HARNESS_CURL_ROOT/agy/last-refresh.epoch"
+    local _refresh="${TILLANDSIAS_AGY_REFRESH_SECS:-86400}"
     mkdir -p "$_target_dir" 2>/dev/null || true
+    case ":$PATH:" in *":$_target_dir:"*) ;; *) export PATH="$_target_dir:$PATH" ;; esac
 
-    # If agy is already on PATH, ensure it is refreshed to latest on every launch (tillandsias style)
     if command -v agy >/dev/null 2>&1; then
+        local _now _last
+        _now="$(date +%s)"
+        _last="$(cat "$_stamp" 2>/dev/null || echo 0)"
+        case "$_last" in ''|*[!0-9]*) _last=0 ;; esac
+        if [ $(( _now - _last )) -lt "$_refresh" ]; then
+            trace_lifecycle "tools" "agy cached (refreshed $(( _now - _last ))s ago, next after ${_refresh}s)"
+            return 0
+        fi
+        trace_lifecycle "tools" "agy refresh (update)"
         agy update >/dev/null 2>&1 || true
+        printf '%s\n' "$_now" > "$_stamp" 2>/dev/null || true
         return 0
     fi
 
@@ -3755,6 +3773,7 @@ require_antigravity() {
         if [ -n "$_agy_installer" ] && curl -fsSL --max-time 90 "$_agy_url" -o "$_agy_installer" 2>/dev/null; then
             if bash "$_agy_installer" --dir "$_target_dir" 2>/dev/null; then
                 rm -f "$_agy_installer" 2>/dev/null || true
+                date +%s > "$_stamp" 2>/dev/null || true
                 command -v agy >/dev/null 2>&1 && return 0
                 [ -x "$_target_dir/agy" ] && return 0
             fi
@@ -3807,6 +3826,75 @@ install_brew_shims() {
 if [ "${TILLANDSIAS_BREW_SHIMS:-1}" != "0" ]; then
     install_brew_shims || true
 fi
+
+# ── Flaky-optional installs, in the background (order 1951-vv5m) ──
+# Operator direction 2026-11-01: separate the flaky installs into their own
+# family, install them as background processes with longer timeouts, and make
+# their first-use shims aware they may still be installing. The audit that
+# classified each install: plan/issues/flaky-optional-installs-audit-2026-11-01-yoga.md.
+# lib-flaky-installs.sh holds the runner and the shim writer.
+
+# The Python and Node dev tools forge-base used to install at BUILD time, where
+# a stalled PyPI read held the whole image build (macuahuitl 2026-11-01).
+# Idempotent: a second start with every binary present does nothing.
+ensure_forge_dev_tools() {
+    export PYTHONUSERBASE="${PYTHONUSERBASE:-$PROJECT_CACHE/pip-user}"
+    local need=0 b
+    for b in pyright bandit; do [ -x "$PYTHONUSERBASE/bin/$b" ] || need=1; done
+    if [ "$need" -eq 1 ]; then
+        pip3 install --user --timeout 30 --retries 2 --no-cache-dir \
+            pyright==1.1.410 \
+            bandit==1.9.2 || return 1
+    fi
+    need=0
+    for b in tsc typescript-language-server prettier eslint markdownlint; do
+        [ -x "${NPM_CONFIG_PREFIX:-/usr/local}/bin/$b" ] || need=1
+    done
+    if [ "$need" -eq 1 ]; then
+        npm install -g --no-audit --no-fund \
+            typescript@6.0.3 \
+            typescript-language-server@5.3.0 \
+            prettier@3.8.3 \
+            eslint@10.4.1 \
+            markdownlint-cli@0.48.0 || return 1
+    fi
+    return 0
+}
+
+# start_flaky_installs — returns at once. Every member runs
+# detached under TILLANDSIAS_FLAKY_INSTALL_TIMEOUT_S with a status file; the
+# tools a member installs get a first-use shim LAST on PATH that waits or says
+# "still installing" instead of command-not-found.
+FLAKY_SHIM_DIR="$HOME/.local/share/tillandsias/flaky-shims"
+export TILLANDSIAS_FLAKY_LOG="${TILLANDSIAS_FLAKY_LOG:-/tmp/forge-lifecycle.log}"
+start_flaky_installs() {
+    local t
+    [ -r /usr/local/lib/tillandsias/lib-flaky-installs.sh ] || {
+        trace_lifecycle "tools" "lib-flaky-installs.sh missing; running the dev-tool installs in the background without status"
+        ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
+        return 0
+    }
+    # shellcheck source=/dev/null
+    . /usr/local/lib/tillandsias/lib-flaky-installs.sh
+    export PYTHONUSERBASE="${PYTHONUSERBASE:-$PROJECT_CACHE/pip-user}"
+    case ":$PATH:" in *":$PYTHONUSERBASE/bin:"*) ;; *) export PATH="$PYTHONUSERBASE/bin:$PATH" ;; esac
+    for t in pyright bandit tsc typescript-language-server prettier eslint markdownlint; do
+        command -v "$t" >/dev/null 2>&1 || flaky_install_shim "$t" dev-tools "$FLAKY_SHIM_DIR"
+    done
+    for t in cargo-nextest cargo-chef cargo-watch cargo-audit wasm-pack typos watchexec \
+        cargo-upgrade cargo-expand cargo-criterion cargo-wasi cargo-outdated trunk \
+        cargo-llvm-cov cargo-semver-checks actionlint vale wasmtime dart marksman; do
+        command -v "$t" >/dev/null 2>&1 || flaky_install_shim "$t" prebuilt-tools "$FLAKY_SHIM_DIR"
+    done
+    case ":$PATH:" in *":$FLAKY_SHIM_DIR:"*) ;; *) export PATH="$PATH:$FLAKY_SHIM_DIR" ;; esac
+    flaky_install_start dev-tools ensure_forge_dev_tools
+    flaky_install_start prebuilt-tools ensure_forge_prebuilt_tools
+    # The OpenSpec pin stays in the FOREGROUND for now: openspec_init_if_absent
+    # must run on the pinned CLI (1441-myz3, scripts/test-openspec-pin.sh case
+    # 10). Moving it here needs the init chained behind it; see the audit.
+    trace_lifecycle "tools" "flaky-optional installs started in the background (status: $(flaky_status_dir))"
+    return 0
+}
 
 # ── OpenCode config overlay ─────────────────────────────────
 # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp, spec:layered-tools-overlay

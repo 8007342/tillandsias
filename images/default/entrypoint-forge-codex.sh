@@ -105,13 +105,15 @@ populate_hot_paths
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft.
-ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
+# Flaky-optional installs run in the background with status files and
+# first-use shims (order 1951-vv5m).
+start_flaky_installs
 ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "codex starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 # Shared dual-transport clone — supports filesystem (Windows/WSL) and git
 # daemon (Linux/podman). See lib-common.sh::clone_project_from_mirror.
 clone_project_from_mirror

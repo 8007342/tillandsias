@@ -26,6 +26,12 @@ bad() { fail=$((fail+1)); echo "FAIL $1" >&2; [ -n "${2:-}" ] && echo "     $2" 
 W="$(mktemp -d "${TMPDIR:-/tmp}/xbranch-fx.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
 
+# 1948-xbaf: the stub arms below run against THIS checkout's origin/* refs,
+# whose ancestry to HEAD changes as the fleet pushes. They test the fold
+# verdict, not ancestry, so they run with the ancestor skip off (the stricter,
+# pre-1948 verdict). Arms 7 and 8 test ancestry in a scratch repo.
+export TILLANDSIAS_XBRANCH_ANCESTOR_SKIP=0
+
 # A stub that answers with whatever status the arm wants.
 mkstub() { # $1=dir $2=status
     mkdir -p "$1"
@@ -269,6 +275,58 @@ if [ "$rc" -eq 0 ] && [ "$_left" -eq 0 ] && [ "$_okv" -eq 1 ]; then
     ok "a normal run leaves no extract and still reads ok"
 else
     bad "a normal run changed" "rc=$rc left=$_left out=[$out]"
+fi
+
+# 7. ORDER 1948-xbaf — AN ANCESTOR SIBLING HOLDS NOTHING HEAD HAS NOT FOLDED.
+#    lenovinha 2026-11-01: origin/windows-next, an ancestor of trunk, folded
+#    776-jcf3 as in_progress after trunk had set it back to ready. A scratch
+#    repo gives real ancestry: origin/osx-next is HEAD's parent and its fold
+#    (the stub) says in_progress. RED ON PRE-FIX CODE, which reports
+#    claimed-elsewhere:SOME-PKT:osx-next.
+unset TILLANDSIAS_XBRANCH_ANCESTOR_SKIP
+R="$W/anc-repo"
+mkdir -p "$R/scripts" "$R/plan/index.d"
+cp "$CHECK" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
+printf 'packets: []\n' > "$R/plan/index.yaml"
+printf '# keep\n' > "$R/plan/index.d/README.md"
+_g() { git -C "$R" -c user.email=fx@example.invalid -c user.name=fx -c commit.gpgsign=false "$@"; }
+_g init -q -b main
+_g add -A && _g commit -q --no-verify -m "sibling's ledger"
+_anc="$(_g rev-parse HEAD)"
+printf 'packets: []\n# trunk moved on\n' > "$R/plan/index.yaml"
+_g add -A && _g commit -q --no-verify -m "trunk releases the row"
+_g update-ref refs/remotes/origin/osx-next "$_anc"
+out="$(cd "$R" && TILLANDSIAS_PLAN_BIN="$W/hold/tillandsias-plan" bash "$R/scripts/check-claims-across-branches.sh" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && grep -q '^ok:cross-branch-claims:' <<<"$out" \
+    && ! grep -q '^claimed-elsewhere:' <<<"$out"; then
+    ok "a sibling that is an ancestor of HEAD reports no claim (HEAD folded it already)"
+else
+    bad "an ancestor sibling must not report a claim HEAD has folded" "rc=$rc out=[$out]"
+fi
+# Batch mode always fetches: give it a bare origin with all three siblings,
+# every one of them an ancestor of (or equal to) HEAD.
+git init -q --bare "$W/anc-origin.git"
+_g remote add origin "$W/anc-origin.git"
+_g push -q origin "$(_g rev-parse HEAD):refs/heads/linux-next" "$_anc:refs/heads/windows-next" "$_anc:refs/heads/osx-next"
+out="$(cd "$R" && TILLANDSIAS_PLAN_BIN="$W/hold/tillandsias-plan" bash "$R/scripts/check-claims-across-branches.sh" --batch SOME-PKT 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 0 ] && ! grep -q '^claimed-elsewhere:' <<<"$out"; then
+    ok "batch mode skips an ancestor sibling too"
+else
+    bad "batch mode must skip an ancestor sibling" "rc=$rc out=[$out]"
+fi
+
+# 8. NEGATIVE CONTROL: a sibling with a commit HEAD lacks (not an ancestor) is
+#    still folded and its claim still reported, so arm 7 is not a blanket skip.
+_g checkout -q -b osx "$_anc"
+printf 'claim\n' > "$R/plan/index.d/claim.yaml"
+_g add -A && _g commit -q --no-verify -m "a claim HEAD lacks"
+_g update-ref refs/remotes/origin/osx-next "$(_g rev-parse HEAD)"
+_g checkout -q main
+out="$(cd "$R" && TILLANDSIAS_PLAN_BIN="$W/hold/tillandsias-plan" bash "$R/scripts/check-claims-across-branches.sh" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:osx-next' <<<"$out"; then
+    ok "a diverged sibling's claim is still reported"
+else
+    bad "a diverged sibling's claim must still be reported" "rc=$rc out=[$out]"
 fi
 
 echo "claims-across-branches: $pass passed, $fail failed"

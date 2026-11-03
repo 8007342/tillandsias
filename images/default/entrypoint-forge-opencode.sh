@@ -87,14 +87,14 @@ populate_hot_paths
 
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
-# so it never blocks the agent launch, and fail-soft.
-ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
+# so it never blocks the agent launch, and fail-soft. Started by
+# start_flaky_installs below (order 1951-vv5m).
 ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 # Clone via the shared lib-common::clone_project_from_mirror — supports both
 # filesystem (Windows/WSL) and git daemon (Linux/podman) transports with
 # wipe-before-clone for re-attach idempotency.
@@ -159,6 +159,9 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # The CLI is the project's pinned version when openspec/cli-version exists
 # (order 1441-myz3; see ensure_openspec_pinned).
 ensure_openspec_pinned "$PROJECT_DIR"
+# Flaky-optional installs (dev tools, prebuilt tools) run in
+# the background with status files and first-use shims (order 1951-vv5m).
+start_flaky_installs
 openspec_init_if_absent "$PROJECT_DIR" opencode
 
 # ── Startup context injection ───────────────────────────────
@@ -263,6 +266,16 @@ fi
 # exec on purpose: a human is watching that tty (a crash there is seen), and
 # keeping the TUI as PID 1 preserves its signal/job-control semantics.
 export TILLANDSIAS_CRASH_LAST_OUTPUT="/tmp/forge-lifecycle.log"
+# 1941-rlim: while a provider usage limit recorded by an earlier run has not
+# lifted, refuse BEFORE calling the provider (every call before the deadline
+# only burns more of a quota the whole fleet shares). Exit 75 = try later.
+# shellcheck source=/dev/null
+if [ -r /usr/local/lib/tillandsias/lib-provider-limit.sh ] \
+    && . /usr/local/lib/tillandsias/lib-provider-limit.sh \
+    && provider_limit_refuse opencode; then
+    trace_lifecycle "exec" "refused: opencode usage limit has not lifted (1941-rlim)"
+    exit 75
+fi
 if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
     trace_lifecycle "exec" "launching prompted opencode run (supervised, 767-nkkq)"
     # 1385-h6uz: `opencode run` prints a tool call only when it FINISHES, so a

@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at the coordinator's request (macuahuitl-fedora, 2026-11-02), from #848 (1247-amcu slice).
+packets:
+- packet_id: check-committable-branch-moves-to-lua-without-breaking-the-foreign-checkouts-and-standalone-copies-that-run-it
+  order: 1962-2upv
+  status: ready
+  kind: enhancement
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [shell-to-lua, guards, skills]
+  estimated_hours: 4
+  owned_files:
+    - scripts/check-committable-branch.sh
+  title: 'scripts/check-committable-branch.sh is the shell-to-lua item the carried-obligations guard offers, but it runs in foreign checkouts that may lack tillandsias-plan, its litmus copies it standalone into scratch repos, and both worker skills name it, so the port needs a design first'
+  context: 'check-carried-obligations offered this 107-line script as the due shell-to-lua item on work/1247-amcu-batch (#848, 2026-11-02). It cannot be a plain port: (1) it is the Committable Branch Guard (order 476) and its own header says it runs in any project checkout, where tillandsias-plan script run may not exist; (2) litmus:committable-branch-guard-shape copies the .sh into a fresh git init repo and runs it there, with no plan binary; (3) skills/advance-work-from-plan and skills/meta-orchestration (and their images/default copies) name scripts/check-committable-branch.sh, and check-host-tools.sh lists it; (4) test-cycle-preflight-cargo-resolution.sh runs it by path. Options to weigh: Lua through a runner every forge carries, or a thin shell shim that execs the Lua when tillandsias-plan is present and keeps the current behaviour when it is not (then the shim, not the logic, is what stays shell).'
+  exit_criteria:
+  - 'The guard logic lives in scripts/lua/ and runs on tillandsias-plan script run, with the same five stdout verdicts (ok:branch-<name>, blocked:committable-cycle-on-main, blocked:detached-head, blocked:not-a-git-repo, blocked:no-git-identity) and the same why/remedy stderr lines.'
+  - 'A checkout without tillandsias-plan still gets a verdict (whatever the design picks), asserted by a fixture that runs it with no plan binary on PATH.'
+  - 'litmus:committable-branch-guard-shape, both skills and check-host-tools.sh name what now runs; the shell-decider floor drops by one.'
+  verifiable_closure: 'A fixture runs the guard in five constructed repos (main, detached, non-repo, no identity, topic branch) through the new entry and asserts each verdict and its why/remedy, plus once with no tillandsias-plan on PATH. Pre-fix: the Lua entry does not exist.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Pick the design (runner or shim) for foreign checkouts, write the fixture first against the .sh, then port and point every caller at the new entry.'
+  provenance: macuahuitl-fedora 2026-11-02, from the carried-obligations offer on #848.
+  events:
+  - type: filed
+    ts: '2026-11-02T11:24:45Z'
+    host: yoga
+    summary: filed at the coordinator's request; #848 waives shell-to-lua citing this row
+- packet_id: litmus-claims-refusals-carry-affordance-is-red-on-yoga-five-of-eight-arms-three-to-five
+  order: 1962-mnwx
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [affordance, claims, testing]
+  estimated_hours: 2
+  owned_files:
+    - scripts/test-claims-affordance.sh
+  title: 'litmus:claims-refusals-carry-affordance is red on yoga (claims-affordance 5/8): arms 3, 4 and 5 get an ok or empty answer from check-claims-across-branches.sh where they expect a refusal with its affordance'
+  context: 'Measured on yoga 2026-11-02 on linux-next (d16283153), plan binary rebuilt from the same tree, command: bash scripts/test-claims-affordance.sh. Output: "FAIL: ARM 3: per-packet claimed-elsewhere without its affordance / rc=0 out=ok:cross-branch-claims:2 sibling branch(es) checked"; "FAIL: ARM 4: batch claimed-elsewhere without its affordance / rc=0 out=ok:cross-branch-claims:2 sibling branch(es) checked, 1 packet(s)|"; "FAIL: ARM 5: blocked:empty-fold without its affordance / rc=0 err="; "FAIL: claims-affordance 5/8 (1247-omqr)". Arms 1, 2, 7, 8 and 9 pass. In arms 3 and 4 the subject answers ok where the fixture built a claim on a sibling branch, so either the fixture''s sibling claim no longer reaches the fold or the subject stopped seeing it; arm 5 gets rc 0 and no stderr where it expects blocked:empty-fold. This is ONE host''s first sample (red here and green on a peer means suspect the fixture first); run it on a second host before deciding which side changed.'
+  exit_criteria:
+  - 'bash scripts/test-claims-affordance.sh prints PASS: claims-affordance 8/8 on yoga and on a second host.'
+  - 'Whichever side was wrong (fixture premise or subject) is named, with the commit that changed it.'
+  verifiable_closure: 'litmus:claims-refusals-carry-affordance passes on yoga and one other host. Pre-fix: 5/8 on yoga.'
+  next_action: 'Run the fixture on a second host; then check whether arm 3''s constructed sibling claim reaches the fold (print what check-claims-across-branches.sh read), and why arm 5''s empty fold exits 0.'
+  provenance: macuahuitl-fedora 2026-11-02, from yoga's run during #848.
+  events:
+  - type: filed
+    ts: '2026-11-02T11:24:45Z'
+    host: yoga
+    summary: filed at the coordinator's request with the arm output

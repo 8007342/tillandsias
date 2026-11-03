@@ -611,6 +611,85 @@ fi
 # Safety: build an explicit refspec list from this mirror's local refs.
 # Anything not in /srv/git/<project>/refs/ is NOT touched upstream. We never
 # pass `--mirror` or `--all` here because the mirror is sparse by design.
+# ORDER 1968-psy9. THE PER-REF STARTUP RETRY-PUSH RUNS AFTER READY, AND NOT AT
+# ALL WITHOUT AN UPSTREAM CREDENTIAL. MEASURED on yoga 2026-11-02: it walked
+# 1489 refs one push each, every one refused "HTTPS upstream credential is
+# unavailable", for 49.3 s, and READY waited for all of it, so every warm forge
+# launch waited too. The seed fetch and the exported-head fast-forward above
+# still run BEFORE READY (a forge must clone current heads); only this
+# mirror->GitHub recovery relay moves after it.
+#
+# The credential test is relay-refs.sh's own: an https remote needs
+# secret/github/token readable through the Vault Agent sink. Without it every
+# per-ref push would fail the same way, so the whole sweep is ONE line. The next
+# forge push relays through the live hook as before.
+_startup_upstream_credential() {
+    case "$1" in
+        https://*) ;;
+        *) return 0 ;;  # ssh / local remotes are not gated on the GitHub token
+    esac
+    command -v vault-cli >/dev/null 2>&1 || return 1
+    [ -r "${VAULT_TOKEN_FILE:-/run/secrets/vault-token}" ] || return 1
+    vault-cli read -field=token secret/github/token >/dev/null 2>&1
+}
+
+# startup_retry_push <mirror> <remote> <ref-count>
+startup_retry_push() {
+    mirror="$1"; REMOTE="$2"; REF_COUNT="$3"
+    if ! _startup_upstream_credential "$REMOTE"; then
+        retry_msg "[git-mirror] Startup retry-push SKIPPED: $mirror -> $REMOTE ($REF_COUNT ref(s)): no upstream credential, so every per-ref push would be refused. Run GitHub Login; the next forge push relays through the live hook."
+        return 0
+    fi
+    # Per-ref relay (order 441): the OLD sweep fed ALL refs to one
+    # `git push --atomic` call, so a single stranded (non-fast-forward) ref
+    # rejected the ENTIRE transaction and no fast-forwardable ref was flushed.
+    # We now relay each ref as its own atomic transaction: a fast-forwardable
+    # ref reaches upstream even when a sibling ref is stranded, and a stranded
+    # ref is logged BY NAME rather than silently failing the whole sweep. The
+    # LIVE single-push path (relay-refs.sh) keeps its own `git push --atomic`
+    # and the never-`--mirror`/`--all` invariant untouched.
+    #
+    # RELAY_REF is overridable (fixtures point it at a mock) so the per-ref
+    # loop can be exercised offline.
+    RELAY_REF="${RELAY_REF:-hooks/tillandsias-relay-refs}"
+    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refs=$REF_COUNT, per-ref)"
+    stranded=""
+    for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
+        NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
+        # This is a startup recovery relay, not a receive-pack creation. Using
+        # current==old lets the privileged helper verify the local ref exactly
+        # before it constructs an upstream refspec.
+        RECORD="${NEWSHA} ${NEWSHA} ${ref}"
+        if OUTPUT="$(printf '%s\n' "$RECORD" | (cd "$mirror" && "${RELAY_REF}") 2>&1)"; then
+            retry_msg "[git-mirror] Startup retry-push OK: $ref"
+        else
+            # ORDER 1350-ku7v. A STRANDED TAG IS EXPECTED, NOT A FAULT, and the
+            # line has to say so or three of them after every cut read as three
+            # failures. The pre-push refspec is heads-only
+            # (`+refs/heads/*:refs/remotes/origin/*` in relay-refs.sh), so an
+            # upstream tag move NEVER reaches this mirror; the sweep then offers
+            # its own older tag, upstream refuses to clobber, and the ref is
+            # stranded by design. Measured on lenovinha 2026-09-22:
+            # latest/stable/unstable survived a full container restart while
+            # upstream had moved. Tags are deliberately outside the sync state
+            # (coordinator's ruling) until a consumer needs them from the mirror.
+            case "$ref" in
+                refs/tags/*)
+                    retry_msg "[git-mirror] Startup retry-push STRANDED (expected, not a fault): $ref — the pre-push refspec is heads-only so upstream tag moves never reach this mirror; a cut leaves this stale by design (1350-ku7v) — $OUTPUT"
+                    ;;
+                *)
+                    retry_msg "[git-mirror] Startup retry-push STRANDED (logged by name): $ref — $OUTPUT"
+                    ;;
+            esac
+            stranded="${stranded:+$stranded }$ref"
+        fi
+    done
+    if [ -n "$stranded" ]; then
+        retry_msg "[git-mirror] Startup retry-push: $REF_COUNT ref(s) attempted; stranded=$stranded"
+    fi
+}
+
+PENDING_RETRY_PUSH=""
 for mirror in "$GIT_SERVICE_ROOT"/*; do
     [ -d "$mirror" ] || continue
     # Repair an unborn HEAD on ANY mirror before transport work — including
@@ -700,53 +779,9 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     # predates the unborn-HEAD fix); make sure HEAD names a cloneable one.
     ensure_mirror_head "$mirror" || true
 
-    # Per-ref relay (order 441): the OLD sweep fed ALL refs to one
-    # `git push --atomic` call, so a single stranded (non-fast-forward) ref
-    # rejected the ENTIRE transaction and no fast-forwardable ref was flushed.
-    # We now relay each ref as its own atomic transaction: a fast-forwardable
-    # ref reaches upstream even when a sibling ref is stranded, and a stranded
-    # ref is logged BY NAME rather than silently failing the whole sweep. The
-    # LIVE single-push path (relay-refs.sh) keeps its own `git push --atomic`
-    # and the never-`--mirror`/`--all` invariant untouched.
-    #
-    # RELAY_REF is overridable (fixtures point it at a mock) so the per-ref
-    # loop can be exercised offline.
-    RELAY_REF="${RELAY_REF:-hooks/tillandsias-relay-refs}"
-    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refs=$REF_COUNT, per-ref)"
-    stranded=""
-    for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
-        NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
-        # This is a startup recovery relay, not a receive-pack creation. Using
-        # current==old lets the privileged helper verify the local ref exactly
-        # before it constructs an upstream refspec.
-        RECORD="${NEWSHA} ${NEWSHA} ${ref}"
-        if OUTPUT="$(printf '%s\n' "$RECORD" | (cd "$mirror" && "${RELAY_REF}") 2>&1)"; then
-            retry_msg "[git-mirror] Startup retry-push OK: $ref"
-        else
-            # ORDER 1350-ku7v. A STRANDED TAG IS EXPECTED, NOT A FAULT, and the
-            # line has to say so or three of them after every cut read as three
-            # failures. The pre-push refspec is heads-only
-            # (`+refs/heads/*:refs/remotes/origin/*` in relay-refs.sh), so an
-            # upstream tag move NEVER reaches this mirror; the sweep then offers
-            # its own older tag, upstream refuses to clobber, and the ref is
-            # stranded by design. Measured on lenovinha 2026-09-22:
-            # latest/stable/unstable survived a full container restart while
-            # upstream had moved. Tags are deliberately outside the sync state
-            # (coordinator's ruling) until a consumer needs them from the mirror.
-            case "$ref" in
-                refs/tags/*)
-                    retry_msg "[git-mirror] Startup retry-push STRANDED (expected, not a fault): $ref — the pre-push refspec is heads-only so upstream tag moves never reach this mirror; a cut leaves this stale by design (1350-ku7v) — $OUTPUT"
-                    ;;
-                *)
-                    retry_msg "[git-mirror] Startup retry-push STRANDED (logged by name): $ref — $OUTPUT"
-                    ;;
-            esac
-            stranded="${stranded:+$stranded }$ref"
-        fi
-    done
-    if [ -n "$stranded" ]; then
-        retry_msg "[git-mirror] Startup retry-push: $REF_COUNT ref(s) attempted; stranded=$stranded"
-    fi
+    # 1968-psy9: queued, not run here: startup_retry_push runs after READY.
+    PENDING_RETRY_PUSH="${PENDING_RETRY_PUSH}${mirror}|${REMOTE}|${REF_COUNT}
+"
 done
 
 # @trace spec:git-mirror-service
@@ -797,6 +832,16 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
 done
 if [ "$_mirrors_seeded" -eq 1 ] && [ "$_mirror_count" -gt 0 ]; then
     notify_ready "mirror seeded ($_mirror_count)"
+fi
+
+# 1968-psy9: the queued startup retry-pushes, after READY, in the background so
+# the daemon (waited on below) keeps serving and READY was never held by them.
+if [ -n "$PENDING_RETRY_PUSH" ]; then
+    (
+        printf '%s' "$PENDING_RETRY_PUSH" | while IFS='|' read -r _m _r _n; do
+            [ -n "$_m" ] && startup_retry_push "$_m" "$_r" "$_n"
+        done
+    ) &
 fi
 
 # The git daemon, Vault Agent, and shutdown trap were all started ABOVE, before

@@ -1,0 +1,61 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli (claude) for macuahuitl, 2026-11-02 ~18:00Z, from the
+# operator's new-billing-month direction (verbatim below, 2026-11-02).
+#
+# Facts checked before filing (coordinator + docs, 2026-11-02):
+# - No MCP tool exposes billed minutes today. The read-only Cloudflare family lives in
+#   crates/tillandsias-headless/src/cloudflare_mcp.rs (cloudflare.scope_probe,
+#   accounts_list, zones_list, workers_scripts_list, workers_script_settings,
+#   workers_deployments_list, builds_triggers_list, builds_list, build_get, build_logs,
+#   pages_projects_list, pages_deployments_list; spec openspec/specs/mcp-tool-socket/spec.md
+#   req 5a1fe1ad, order 1772-irs3). cloud.usage belongs beside them.
+# - GitHub: the forge's `gh` token (gist, read:org, repo, workflow) cannot call
+#   /users/<u>/settings/billing/actions (classic `user` scope); the tool reads with the
+#   GitHub App token in Vault instead (operator: already granted). The enhanced
+#   billing endpoint is GET /users/{username}/settings/billing/usage?year=&month= (docs:
+#   docs.github.com/en/rest/billing/usage — "only available to users with access to the
+#   enhanced billing platform"; fine-grained PAT permission: user permission "Plan", read —
+#   docs.github.com/en/rest/authentication/permissions-required-for-fine-grained-personal-access-tokens).
+#   Both repos (8007342/tillandsias, 8007342/macron.dev) are PUBLIC, so standard
+#   GitHub-hosted runner minutes are not billed; what the current token CAN read is
+#   GET /repos/{owner}/{repo}/actions/cache/usage (active_caches_size_in_bytes vs the 10 GB
+#   per-repo cap; read access suffices, `repo` scope only for private repos) and run timing
+#   (GET /repos/{owner}/{repo}/actions/runs?created=>=YYYY-MM-01 then
+#   /actions/runs/{run_id}/timing → run_duration_ms, billable per OS).
+# - Cloudflare: the metered one. Workers Builds Free = 3,000 build minutes/month, 1 concurrent
+#   build (developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/, which names no
+#   usage API). Used minutes are derived from cloudflare.builds_list per trigger (status,
+#   created_on → completed_on, summed over the calendar month) under the already-held
+#   `workers-ci.read` scope / the Cloudflare app token in Vault (permission names, if a 403
+#   ever comes back: "Workers Builds Configuration: Read", "Account Settings: Read").
+# - methodology/distributed-work.yaml deploy_budget already states the 3,000-minute cap and the
+#   one-third rule for macron.dev; scripts/release-preflight.sh Gate 4 "GitHub Actions budget"
+#   only checks that release.yml is the sole workflow — nothing reads a number.
+packets:
+  - packet_id: cloud-usage-is-one-read-only-mcp-tool-that-returns-per-provider-used-minutes-against-the-free-tier-cap-for-github-and-cloudflare
+    order: 1966-47vt
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: "linux mutable host with the Cloudflare sign-in in Vault and the headless crate buildable — macuahuitl"
+    capability_tags: [mcp, headless, cloudflare, github, billing, release, methodology, openspec]
+    estimated_hours: 8
+    title: 'cloud.usage is ONE read-only MCP tool beside the cloudflare.* family that returns, per provider, used / free-tier cap / period / source / as_of for GitHub (Actions cache bytes vs 10 GB, run minutes this month, billing usage once the Plan:read scope exists) and Cloudflare (Workers Builds minutes vs 3,000/month), and the release skill, the cloud-builds rules and the socket spec cite it as the number the merge-to-main budget check reads'
+    context: 'Operator direction verbatim (2026-11-02): "It''s the beginning of a new billing month so let''s take a close look at cloud minutes as we go, tillandsias mcps should give you read access to github and cloudflare billed minutes vs free tier caps, use those and document them accordingly throughout skill affordances and specs". Checked 2026-11-02: no such tool exists. The read-only Cloudflare family (cloudflare.scope_probe … pages_deployments_list) is in crates/tillandsias-headless/src/cloudflare_mcp.rs under openspec/specs/mcp-tool-socket/spec.md req 5a1fe1ad, so cloud.usage lives beside it and obeys the same rules (fixed GET paths, account bound to the sign-in, no token text in any result). GitHub: the Vault token (secret/github/token: gist, read:org, repo, workflow) cannot call /users/{u}/settings/billing/actions (classic `user` scope) nor the enhanced-billing GET /users/{username}/settings/billing/usage (fine-grained user permission "Plan": read). Both repos are public, so hosted-runner minutes are free; the readable numbers today are GET /repos/{o}/{r}/actions/cache/usage (active_caches_size_in_bytes vs the 10 GB cap) and run minutes from /actions/runs + /actions/runs/{id}/timing. Cloudflare Workers Builds is the metered provider: Free gives 3,000 build minutes/month and ONE concurrent build (developers.cloudflare.com/workers/ci-cd/builds/limits-and-pricing/); Cloudflare exposes no usage endpoint, so used minutes are the month''s builds summed from cloudflare.builds_list (completed_on − created_on per build, per trigger, for tillandsias.org / cloudflare.tillandsias.org / macron.dev) under the held workers-ci.read scope. methodology/distributed-work.yaml deploy_budget already states the cap and the one-third macron.dev rule but nothing reads a number; scripts/release-preflight.sh Gate 4 only checks that release.yml is the sole workflow. Operator correction verbatim (2026-11-02): "The github app and cloudflare app which I''ve already granted permissions on the vault, should already have all the necessary read access that you need." So there is NO operator step: the tool reads through the Tillandsias GitHub App token and the Cloudflare app token already in Vault, host-side only, never printed, never passed into a forge; when an endpoint answers 403/404 the tool names exactly which permission is missing instead of guessing — the tool proves the grants.'
+    exit_criteria:
+    - 'RED TODAY: a forge MCP call `cloud.usage` (no arguments; optional provider: github|cloudflare, optional year/month) returns providers[] each with {provider, metric, used, cap, unit, period: {year, month}, source: <the exact API path(s) read>, as_of: <RFC3339>}; today the socket replies -32601 unknown tool.'
+    - 'cloudflare: metric workers_builds_minutes, used = sum over the calendar month of (completed_on − created_on) for every build cloudflare.builds_list returns across the account''s triggers, cap 3000, plus concurrent_cap 1; source names the builds list path; a missing workers-ci.read scope is refused `refused:cloudflare-mcp:scope-missing:workers-ci.read` with the remedy, never a zero.'
+    - 'github: metric actions_cache_bytes per repo (GET /repos/{owner}/{repo}/actions/cache/usage, cap 10 GiB), metric actions_run_minutes this month (GET /repos/{owner}/{repo}/actions/runs?created=>=<period start> and /actions/runs/{run_id}/timing; public repo so cap: null with note "hosted-runner minutes not billed"), and metric billing_usage from GET /users/{username}/settings/billing/usage?year=&month= (sum of quantity per product/sku), all read with the Tillandsias GitHub App installation token from Vault.'
+    - 'NO operator step (ruling above). The tool proves the grants: a 403 or 404 from any endpoint is reported per metric as `unavailable: permission-missing:<provider>:<exact permission>` — e.g. github `Plan: Read` (user permission for /users/{username}/settings/billing/usage), github `Actions: Read` (cache/usage, runs, timing), cloudflare `Workers Builds Configuration: Read` (builds list) or `Account Settings: Read` — naming the permission from the documented requirement for that path, never guessed and never zero; the other metrics still fill.'
+    - 'Tokens: the GitHub App token and the Cloudflare app token are read from Vault by the host-side socket process exactly as cloudflare_mcp.rs reads the Cloudflare sign-in; neither token appears in any tool result, log line, error or forge environment.'
+    - 'Documented, each file edited in this row: skills/merge-to-main-and-release/SKILL.md (step 0 pre-flight and step 3 gate: call cloud.usage, record used/cap for both providers in the step-8 cycle outcome, refuse the merge to main when Cloudflare used ≥ 2,700 of 3,000 unless the fix is urgent); skills/meta-orchestration/SKILL.md (release step cites the same affordance); methodology/distributed-work.yaml deploy_budget (new key `usage_tool: cloud.usage` and the ledger paragraph says the summing is done by the tool, not by hand); openspec/specs/mcp-tool-socket/spec.md (new Requirement under the cloudflare family: cloud.usage read-only, fixed GET paths, per-provider shape, scope-missing refusals); openspec/specs/ci-release/spec.md (the actions-budget gate reads cloud.usage); openspec/specs/gh-auth-script/spec.md (the GitHub App token in Vault is the one cloud.usage reads; the permissions it proves). No other knowledge file; CLAUDE.md untouched.'
+    verifiable_closure: 'cargo test -p tillandsias-headless cloud_usage -- cloud_usage_returns_per_provider_used_and_cap passes on macuahuitl: a stubbed Cloudflare builds list (three builds in the month, one outside it) and stubbed GitHub cache-usage and runs/timing endpoints yield providers[] with cloudflare used = the in-month sum, cap 3000, and github actions_cache_bytes with cap 10 GiB; a sibling test cloud_usage_names_the_missing_permission_on_403_not_zero asserts `unavailable: permission-missing:github:Plan: Read` when the stub answers 403 on the billing usage path; scripts/check-skill-affordances.sh (or grep) asserts skills/merge-to-main-and-release/SKILL.md and methodology/distributed-work.yaml name cloud.usage.'
+    next_action: 'On macuahuitl: add cloud_usage.rs beside cloudflare_mcp.rs in crates/tillandsias-headless/src, register "cloud.usage" in the socket tool table with the same account-binding and no-token-text rules; write the red test first with stub HTTP servers for api.cloudflare.com builds list and api.github.com cache/usage + runs + timing; implement the month window and the sums; map each path''s 403/404 to its documented permission name; then edit the six files listed in the exit criteria and run scripts/release-preflight.sh to confirm Gate 4 can call the tool.'
+    provenance: operator direction 2026-11-02 (new billing month, cloud minutes vs free-tier caps), coordinator facts 2026-11-02, filed by calmecacpilli.
+    events:
+    - type: filed
+      ts: '2026-11-02T18:00:00Z'
+      host: calmecacpilli
+      agent: forge-forge-tillandsias-claude-20261102t180000z
+      summary: filed p1 ready for macuahuitl; no MCP tool reads billed minutes today; Cloudflare Workers Builds (3,000 min/month free) is the metered provider, no operator step — the GitHub App and Cloudflare app tokens in Vault carry the reads and the tool names any missing permission; six files to document listed in the exit criteria.

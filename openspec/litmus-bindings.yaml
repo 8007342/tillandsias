@@ -13,6 +13,7 @@ specs:
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
   - litmus:accel-envelope-reaches-the-forge
+  - litmus:accel-envelope-carries-discrete-vram
   - litmus:imagegen-tier-ladder-from-the-envelope
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
@@ -166,7 +167,8 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
-  - litmus:release-cache-is-saved-only-by-main
+  - litmus:release-is-one-cloud-build
+  - litmus:gate-step-private-metrics-fallback
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
@@ -208,6 +210,7 @@ specs:
   - litmus:command-policy-evaluator-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
+  - litmus:promote-stable-enqueues-website-update
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
   - litmus:harness-affinity-selection-shape
@@ -308,6 +311,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-localization-staged-shape
+  - litmus:agy-install-cached
   - litmus:opencode-render-probe-shape
   - litmus:forge-project-trust-seeds-shape
   - litmus:forge-standalone-traceability
@@ -330,6 +334,9 @@ specs:
   - litmus:npm-harness-install-idempotent-shape
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
+  - litmus:provider-usage-limit
+  - litmus:image-build-network-is-explicit
+  - litmus:flaky-installs-background
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
@@ -556,6 +563,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
   - litmus:bare-metal-lane-command-is-runnable
@@ -563,6 +571,7 @@ specs:
   - litmus:git-mirror-fetch-reconcile
   - litmus:git-mirror-dns-identity
   - litmus:git-mirror-seed-failure-surfaced-shape
+  - litmus:git-mirror-ready-before-retry-push
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
   - litmus:mirror-relay-state
@@ -697,6 +706,7 @@ specs:
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
   - litmus:image-build-convergence-shape
+  - litmus:build-image-network-isolation
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: install-progress
@@ -1082,10 +1092,15 @@ specs:
   status: draft
   litmus_tests:
   - litmus:studio-saves-pass-one-guard-and-are-committed
+  - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
+  - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
   - litmus:local-web-preview
-  - litmus:web-studio-grapesjs-stores-as-a-repo-diff
+  - litmus:studio-grapesjs-saves-through-the-shared-endpoint
+  - litmus:studio-decap-commits-a-hugo-entry-through-the-front
+  - litmus:studio-tina-commits-a-document-through-the-front
+  - litmus:studio-puck-commits-page-data-through-the-front
   - litmus:cold-start-acceptance-shape
   - litmus:cold-start-acceptance-e2e
   - litmus:device-catalogue-shape
@@ -1108,6 +1123,8 @@ specs:
   - litmus:binary-e2e-smoke
   - litmus:tray-parity-matrix-complete
   - litmus:tray-new-surface-parity-gate
+  - litmus:a-second-forge-of-a-project-takes-its-own-instance
+  - litmus:tray-click-replies-while-a-launch-blocks
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
@@ -1250,6 +1267,7 @@ specs:
   litmus_tests:
   - litmus:host-browser-mcp-lane-socket-shape
   - litmus:lane-socket-survives-launcher-exit
+  - litmus:lane-tray-build-handshake
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: mcp-on-demand

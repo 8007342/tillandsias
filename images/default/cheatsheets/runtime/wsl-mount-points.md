@@ -20,7 +20,7 @@ committed_for_project: false
 
 # WSL2 mount points and 9p drvfs
 
-@trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service
+@trace spec:cross-platform, spec:wsl-runtime, spec:git-mirror-service
 @cheatsheet runtime/wsl-on-windows.md, runtime/wsl-daemon-patterns.md
 
 **Use when**: writing code that crosses the Windows↔Linux filesystem boundary in WSL2 — anything that translates `C:\Users\...` to `/mnt/c/...`, mounts host paths into a distro, or shares files across distros (mirrors, caches, sockets).
@@ -73,7 +73,7 @@ If `root = /`, drives appear as `/c/`, `/d/`, etc. (mirrors Cygwin/Git Bash conv
 | `/mnt/wsl/<distro>/` | Per-distro additions (used by some integrations) |
 | `/mnt/wslg/` | WSLg X11/Wayland integration mounts |
 
-Tillandsias does NOT currently use `/mnt/wsl/` — its cross-distro coordination goes through `/mnt/c/...` (host-fs path, visible from every distro).
+Tillandsias does NOT currently use `/mnt/wsl/`. CORRECTED 2026-11-02: it does not go through `/mnt/c/...` either — the `tillandsias` runtime distro is provisioned with `[automount] enabled=false` (`crates/tillandsias-vm-layer/src/wsl.rs:739-749`; measured on yoga 2026-11-02: `/mnt/c` exists empty, nothing mounted). The host→distro share is the explicit `/home/forge/src` mount (`runtime/wsl2-provisioning.md`). Everything below describes drvfs where it IS mounted (a stock distro, or `tillandsias-build`).
 
 ## How mounts differ from podman bind-mounts
 
@@ -86,7 +86,7 @@ Tillandsias does NOT currently use `/mnt/wsl/` — its cross-distro coordination
 | Permission semantics | Container user → host user via `--userns` | Always reports `root:root` unless `metadata` option is set; ownership baked at mount time |
 | Performance | Native FS speed | 9p is slower than native ext4 — fine for source code, slow for `node_modules` install |
 
-This means **podman's mount-by-mount isolation does not translate to WSL2** — every distro sees every drive automatically. Tillandsias relies on this for cross-distro file sharing (e.g. the bare git mirror at `/mnt/c/.../mirrors/<project>` is visible to forge, git, and proxy distros simultaneously).
+This means **podman's mount-by-mount isolation does not translate to WSL2** — every distro with automount on sees every drive automatically. Tillandsias does NOT rely on this (corrected 2026-11-02): the runtime distro has automount off and `/mnt/c` empty, so cross-distro sharing through `/mnt/c/.../mirrors/<project>` is unavailable there; see `runtime/wsl2-isolation-boundary.md`.
 
 ## Ownership / permissions on /mnt/c
 

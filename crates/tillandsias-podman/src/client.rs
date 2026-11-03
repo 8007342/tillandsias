@@ -792,6 +792,10 @@ impl PodmanClient {
         let mut args = vec![
             "build".into(),
             "--http-proxy=false".into(),
+            // 1955-hq7k: an explicit build network so RUN steps get the user's
+            // containers.conf pasta_options (a default build ignored
+            // --ipv4-only on a host with dead IPv6, macuahuitl 2026-11-02).
+            "--network=private".into(),
             "--squash".into(),
             "--label".into(),
             format!("{IMAGE_LAYER_POLICY_LABEL}={IMAGE_LAYER_POLICY}"),
@@ -1019,7 +1023,7 @@ impl PodmanClient {
     pub async fn run_container(&self, args: &[String]) -> Result<String, PodmanError> {
         debug!(?args, "Running container");
 
-        // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-tray-integration
+        // @trace spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-tray-integration
         // Windows: detached forge launches go through wsl.exe. We translate
         // the podman-shaped args (--name, -e, -p, --entrypoint, image, ...)
         // into WSL semantics: distro = image name (without :tag), env vars
@@ -1832,7 +1836,7 @@ pub fn stop_container_sync(name: &str, timeout_secs: u32) -> Result<(), PodmanEr
 /// Extract the host port from a podman `-p` publish spec.
 /// Accepts: "HOST:CONT", "HOST:CONT/proto", "IP:HOST:CONT", "IP:HOST:CONT/proto", or "RANGE:RANGE".
 /// For ranges like "3000-3019:3000-3019" returns the lower bound (3000).
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-tray-integration
+/// @trace spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-tray-integration
 #[cfg(target_os = "windows")]
 fn parse_host_port_from_publish(spec: &str) -> Option<u16> {
     let spec = spec.split('/').next().unwrap_or(spec); // strip /tcp /udp
@@ -1863,7 +1867,7 @@ fn parse_host_port_from_publish(spec: &str) -> Option<u16> {
 /// to /tmp/forge-detached.log inside the distro. The forge-lifecycle.log is
 /// the canonical observability surface for runtime-diagnostics-stream.
 ///
-/// @trace spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-tray-integration
+/// @trace spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-tray-integration
 #[cfg(target_os = "windows")]
 async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanError> {
     let mut name: Option<String> = None;
@@ -1872,7 +1876,7 @@ async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanErr
     let mut env_vars: Vec<String> = Vec::new();
     let mut command_args: Vec<String> = Vec::new();
     let mut consume_image_done = false;
-    // @trace spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-tray-integration
+    // @trace spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-tray-integration
     // Capture port-publish like "127.0.0.1:HOSTPORT:4096" — we drop the
     // -p flag itself (no podman) but extract HOSTPORT and inject it as
     // OC_EXPOSED_PORT so the forge entrypoint binds it directly. WSL2's
@@ -3116,6 +3120,12 @@ mod tests {
             let seen = backend.seen();
             assert_eq!(seen.len(), 3, "exists, inspect, then build");
             assert_eq!(seen[2].1.first().map(String::as_str), Some("build"));
+            assert!(
+                seen[2].1.iter().any(|arg| arg == "--network=private"),
+                "image builds must name their network so RUN steps get the user's \
+                 pasta_options (1955-hq7k): {:?}",
+                seen[2].1
+            );
         }
     }
 
