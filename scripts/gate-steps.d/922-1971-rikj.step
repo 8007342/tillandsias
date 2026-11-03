@@ -11,3 +11,4 @@ STEP_DESC="Checking a leaked harness-refresh lock is reclaimed at once (1971-rik
 STEP_LUA="scripts/lua/test-harness-refresh-lock-owner.lua"
 STEP_ERROR="a harness-refresh lock from a stopped forge again disables the refresh, or a skip is silent (1971-rikj) — see the FAIL lines above"
 STEP_OK="harness refresh lock-owner fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin macOS 27.0.1 ok:harness-refresh-lock-owner:5 arms (work/1971-rikj @ b98993eeb)"
