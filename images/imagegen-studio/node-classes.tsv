@@ -81,6 +81,8 @@ comfyui-core	SaveImage
 comfyui-core	PreviewImage
 comfyui-core	SaveAnimatedPNG
 comfyui-core	SaveAnimatedWEBP
+# 1983-svid: the WebM video output node (a Wan workflow saves through it).
+comfyui-core	SaveWEBM
 comfyui-core	LoadImage
 comfyui-core	LoadImageMask
 comfyui-core	LoadImageOutput
