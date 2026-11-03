@@ -1,0 +1,35 @@
+# @trace spec:git-mirror-service
+# @trace order:1968-psy9, order:441, order:1922-rann
+#
+# MEASURED on yoga 2026-11-02: the git mirror sent READY only after a per-ref
+# startup retry-push of all 1489 refs, every one refused for lack of an
+# upstream credential — 49.3 s of every warm forge launch. READY now follows
+# the seed fetch; the retry-push runs after it in the background, and not at
+# all without a credential. Red before 1968-psy9: arm 1 sees 40 relay calls.
+name: litmus:git-mirror-ready-before-retry-push
+spec: git-mirror-service
+phase: pre-build
+description: The git mirror sends READY before the startup retry-push, which runs in the background and is skipped without an upstream credential
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, git; a scratch mirror under target/plan-scratch; no podman, no network
+
+critical_path:
+  - step: "no credential skips the retry-push with one line; a credential relays per ref; READY precedes the background retry-push"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-mirror-ready-before-retry-push.lua 2>&1"
+    timeout_ms: 300000
+    expected_behavior: "ok:git-mirror-ready-before-retry-push:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "four arms: premise, NO CREDENTIAL, CREDENTIAL, ORDER"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-ready-before-retry-push"
+
+rollback:
+  on_failure: "read the FAIL lines; the functions are _startup_upstream_credential and startup_retry_push in images/git/entrypoint.sh, called after notify_ready"
+  command: "grep -n 'startup_retry_push\\|_startup_upstream_credential\\|notify_ready' images/git/entrypoint.sh"
