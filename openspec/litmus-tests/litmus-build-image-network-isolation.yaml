@@ -17,7 +17,7 @@ preconditions:
 
 critical_path:
   - step: "chroot builds carry no --network, oci builds carry --network=private, and build-image.sh sets no network outside the helper"
-    command: "bash scripts/test-build-image-network-isolation.sh 2>&1 | tail -1"
+    command: "bash scripts/test-build-image-network-isolation.sh"
     timeout_ms: 30000
     expected_behavior: "PASS: build-network-isolation 3/3"
 
