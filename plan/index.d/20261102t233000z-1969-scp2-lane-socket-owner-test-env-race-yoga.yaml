@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-lane-socket-owner-test-stops-mutating-the-process-wide-environment-so-it-cannot-race-parallel-tests
+    order: 1969-scp2
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tests, headless, flaky]
+    estimated_hours: 2
+    title: The lane-socket-owner test stops mutating the process-wide environment so it cannot race parallel tests
+    context: 'MEASURED on yoga 2026-11-02 (work/1957-emar @ b8a379fc6, `cargo test -p tillandsias-headless --features tray,listen-vsock`): 1351 passed, 1 failed — lane_socket_owner_tests::a_cli_lane_refuses_by_name_when_another_process_owns_its_socket panicked at main.rs:37787; the same test passed 3/3 run alone. It sets XDG_RUNTIME_DIR and TILLANDSIAS_FORGE_INSTANCE with std::env::set_var while the rest of the suite runs threads that read them, so its result depends on scheduling. The ref did not touch main.rs.'
+    exit_criteria:
+      - 'refuse_lane_socket_owned_elsewhere (or the socket-path resolver it uses) takes the runtime dir as a parameter or reads it through an injectable seam, so the test passes a scratch dir without std::env::set_var.'
+      - 'The test no longer calls std::env::set_var or remove_var.'
+      - 'The full headless suite with tray,listen-vsock passes 3 consecutive runs on yoga.'
+    verifiable_closure: 'grep shows no set_var/remove_var in lane_socket_owner_tests; three full-suite runs green, recorded as an event.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer rewrites the test without env mutation and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'yoga: thread the runtime dir into the socket-owner check, drop the env mutation from the test, run the suite 3x.'
+    provenance: macuahuitl-fedora 2026-11-02 (coordinator) from yoga's #847 suite run; filed and claimed by yoga.
+    depends_on: []
+    related: [1783-k5hm]
+    events:
+      - type: filed
+        ts: '2026-11-02T23:30:00Z'
+        host: yoga
+        summary: filed at the coordinator's request and claimed by yoga
