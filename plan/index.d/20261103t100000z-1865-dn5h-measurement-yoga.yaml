@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: onlook-offline-viability-then-lane-or-degraded-listing
+    event:
+      type: measurement
+      ts: '2026-11-03T10:00:00Z'
+      host: yoga
+      summary: |-
+        MEASURED (primary-source reading, coordinator ruling 2026-11-03 that the docs are the measurement; an egress=none build would only rediscover them). Onlook cannot run offline in a forge. github.com/onlook-dev/onlook (read at 423e2e9 on 2026-11-02, README re-read 2026-11-03): "When you create an app, we load the code into a web container. The container runs and serves the code"; the stack lists the CodeSandbox SDK as the dev sandbox, Supabase for auth/database/storage, OpenRouter for the LLM; docs/content/docs/developers/running-locally.mdx makes step 3a "Get Codesandbox API key" required. docs.onlook.com/developers/running-locally (read 2026-11-03): "Coming soon"; the current desktop app is Mac-only (Apple silicon) and the team is "preparing to open-source the new Onlook desktop app in the coming weeks". Licence Apache-2.0. Registry: degraded (needs_cloud_account = true, frameworks = {}), never [Recommended], launch refused naming the reason; full note plan/issues/onlook-offline-viability-2026-11-02-yoga.md; PR #840 at 29dcb25dc. RECHECK TRIGGER: revisit when Onlook ships a local runner or an open desktop app.
