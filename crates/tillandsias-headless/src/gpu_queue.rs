@@ -807,7 +807,9 @@ mod tests {
             }),
             scratch_root: scratch.path().to_path_buf(),
             ceiling: "I0".into(),
-            present: None,
+            // 1973-prvc: pinned (as 1967-seam), so the test never reads the host's
+            // real model cache; a host without I0 answered consent_required.
+            present: Some(vec!["I0".into()]),
         }));
         let r = crate::imagegen_tool::call(
             "emar-proj",
