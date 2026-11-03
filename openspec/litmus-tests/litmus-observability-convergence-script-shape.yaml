@@ -64,7 +64,7 @@ critical_path:
     # Spec § Evidence bundle is the raw-material input for
     # convergence analysis. The script's exit codes signal which
     # phase (tests/traces/dir-creation) failed.
-    command: "grep -qF 'Exit Codes' scripts/generate-evidence-bundle.sh && grep -F '#   0 = bundle created' scripts/generate-evidence-bundle.sh && grep -F '#   1 = cargo test' scripts/generate-evidence-bundle.sh && grep -F '#   2 = trace validation' scripts/generate-evidence-bundle.sh && grep -F '#   3 = output directory' scripts/generate-evidence-bundle.sh && echo 'ok: 4 exit codes'"
+    command: "grep -cF 'Exit Codes' scripts/generate-evidence-bundle.sh | grep -qF '1' && grep -F '#   0 = bundle created' scripts/generate-evidence-bundle.sh && grep -F '#   1 = cargo test' scripts/generate-evidence-bundle.sh && grep -F '#   2 = trace validation' scripts/generate-evidence-bundle.sh && grep -F '#   3 = output directory' scripts/generate-evidence-bundle.sh && echo 'ok: 4 exit codes'"
     timeout_ms: 3000
     expected_behavior: "ok: 4 exit codes"
 
