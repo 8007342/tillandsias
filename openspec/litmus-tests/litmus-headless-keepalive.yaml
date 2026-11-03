@@ -24,9 +24,9 @@ preconditions:
 
 critical_path:
   - step: "the control listener serves a second and third connection after the first closes"
-    command: "cargo test -p tillandsias-headless --bin tillandsias --features listen-vsock vsock_server::tests::serve_listener_keeps_serving_after_earlier_connections_close -- --exact 2>&1 | grep -E '^test result: ok\\. 1 passed'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --features --cargo-arg listen-vsock --cargo-arg --bin --cargo-arg tillandsias --filter vsock_server::tests::serve_listener_keeps_serving_after_earlier_connections_close --require-ok vsock_server::tests::serve_listener_keeps_serving_after_earlier_connections_close --name listener-keeps-serving"
     timeout_ms: 300000
-    expected_behavior: "test result: ok. 1 passed"
+    expected_behavior: "ok:listener-keeps-serving"
 
 observability:
   traces:

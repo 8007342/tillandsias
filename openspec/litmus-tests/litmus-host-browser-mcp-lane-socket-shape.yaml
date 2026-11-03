@@ -93,19 +93,19 @@ critical_path:
     expected_behavior: "Vsock) => Unsupported"
 
   - step: "BEHAVIOUR: the per-line cap refuses an oversized request and the stream resyncs"
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_oversized_request_line_is_refused_and_the_stream_resyncs -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --features --cargo-arg tray --cargo-arg --bin --cargo-arg tillandsias --filter tray::tests::mcp_oversized_request_line_is_refused_and_the_stream_resyncs --require-ok tray::tests::mcp_oversized_request_line_is_refused_and_the_stream_resyncs --name oversized-request-resyncs"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:oversized-request-resyncs"
 
   - step: "BEHAVIOUR: an oversized response is replaced by a typed error that keeps the id"
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_oversized_response_is_replaced_with_a_typed_error -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --features --cargo-arg tray --cargo-arg --bin --cargo-arg tillandsias --filter tray::tests::mcp_oversized_response_is_replaced_with_a_typed_error --require-ok tray::tests::mcp_oversized_response_is_replaced_with_a_typed_error --name oversized-response-typed"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:oversized-response-typed"
 
   - step: "BEHAVIOUR: the lane transport serializes — pipelined requests answer in order"
-    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_lane_transport_serializes_one_call_at_a_time -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --features --cargo-arg tray --cargo-arg --bin --cargo-arg tillandsias --filter tray::tests::mcp_lane_transport_serializes_one_call_at_a_time --require-ok tray::tests::mcp_lane_transport_serializes_one_call_at_a_time --name lane-transport-serializes"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:lane-transport-serializes"
 
   - step: "Req: no unbindable concurrency limit was left behind (779-dqsv)"
     # The semaphore could never fire under a sequential transport. If it
