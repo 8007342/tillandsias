@@ -89,7 +89,7 @@ pub(crate) const GROUPS: &[Group] = &[
     Group {
         prefix: "studio.*",
         does: "the headless ComfyUI studio pipeline: run a committed workflow, validate a family spec, finish pixels, lay out a contact sheet, key footage",
-        starts: "studio.run_workflow and studio.key_footage queue GPU work in the project's studio container (it must already be running: `[imagegen] studio = true` in .tillandsias/config.toml); validate_family, finish_pixels and contact_sheet start nothing and use no GPU",
+        starts: "studio.run_workflow and studio.key_footage queue GPU work in the project's studio container (it must be running: studio.start {} starts it on demand, studio.status says whether it runs); validate_family, finish_pixels and contact_sheet start nothing and use no GPU",
         use_when: "the project commits ComfyUI workflows or art family specs under art/",
     },
     Group {
@@ -235,7 +235,9 @@ mod tests {
         assert!(text.contains("sibling web container"));
         assert!(text.contains("host browser window"));
         assert!(text.contains("studio container"));
-        assert!(text.contains(".tillandsias/config.toml"));
+        // 1969-cfyt: the studio starts on demand, never by config + relaunch.
+        assert!(text.contains("studio.start {}"));
+        assert!(!text.contains(".tillandsias/config.toml"));
         for (new, old) in RENAMED {
             assert!(text.contains(&format!("{old} -> {new}")));
         }

@@ -1113,8 +1113,7 @@ impl HttpStudio {
             .is_some_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "true");
         if !running {
             return Err(format!(
-                "studio_unavailable: {container} is not running; set `[imagegen] studio = true` in the \
-                 project's .tillandsias/config.toml and relaunch the forge (starting it from this tool on demand is order 1969-cfyt)"
+                "studio_unavailable: {container} is not running; call studio.start {{}} first (no relaunch needed), then retry"
             ));
         }
         let mut cmd = tillandsias_podman::podman_cmd_sync();
