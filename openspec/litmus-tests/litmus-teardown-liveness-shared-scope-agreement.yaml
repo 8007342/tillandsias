@@ -27,12 +27,12 @@ preconditions:
 
 critical_path:
   - step: "scope agreement: teardown removal set and liveness steady state both derive from SHARED_STACK_SCOPES"
-    command: "cargo test -p tillandsias-headless tests::teardown_and_liveness_agree_on_shared_container_scope -- --exact 2>&1 | grep 'teardown_and_liveness_agree_on_shared_container_scope ... ok' && echo SHARED-SCOPE-AGREED"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter tests::teardown_and_liveness_agree_on_shared_container_scope --require-ok tests::teardown_and_liveness_agree_on_shared_container_scope --name teardown-liveness-agree && echo SHARED-SCOPE-AGREED"
     timeout_ms: 120000
     success_pattern: "SHARED-SCOPE-AGREED"
     failure_pattern: "FAILED|panicked"
   - step: "post-last-lane steady state converges in one step (no liveness re-create, leak side intact)"
-    command: "cargo test -p tillandsias-headless tests::post_last_lane_steady_state_needs_no_liveness_recreate -- --exact 2>&1 | grep 'post_last_lane_steady_state_needs_no_liveness_recreate ... ok' && echo STEADY-STATE-CONVERGED"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter tests::post_last_lane_steady_state_needs_no_liveness_recreate --require-ok tests::post_last_lane_steady_state_needs_no_liveness_recreate --name steady-state-converges && echo STEADY-STATE-CONVERGED"
     timeout_ms: 120000
     success_pattern: "STEADY-STATE-CONVERGED"
     failure_pattern: "FAILED|panicked"

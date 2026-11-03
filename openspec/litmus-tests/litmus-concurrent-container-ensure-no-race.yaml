@@ -21,7 +21,7 @@ preconditions:
 
 critical_path:
   - step: "in-process proof: contending threads on one resource never overlap critical sections"
-    command: "cargo test -p tillandsias-headless resource_lock::tests::same_resource_serializes_check_and_act -- --exact 2>&1 | grep 'same_resource_serializes_check_and_act ... ok' && echo LOCK-SERIALIZES-OK"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter resource_lock::tests::same_resource_serializes_check_and_act --require-ok resource_lock::tests::same_resource_serializes_check_and_act --name lock-serializes && echo LOCK-SERIALIZES-OK"
     timeout_ms: 120000
     success_pattern: "LOCK-SERIALIZES-OK"
     failure_pattern: "FAILED|panicked"
