@@ -14,7 +14,9 @@ use std::path::{Path, PathBuf};
 
 /// The image name `image_specs` and `runtime_assets` resolve.
 pub const STUDIO_IMAGE: &str = "imagegen-studio";
-/// ComfyUI's HTTP port inside the container.
+/// ComfyUI's HTTP port inside the container (read by the studio tools,
+/// which only host-services builds carry).
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub const STUDIO_PORT: u16 = 8188;
 
 /// What a studio launch needs, resolved only for an opted-in project.
@@ -170,6 +172,7 @@ fn host_has_cdi_gpu() -> bool {
         .any(|p| Path::new(p).is_file())
 }
 
+#[cfg(feature = "host-services")]
 /// Whether the studio container of `project` is running.
 pub fn is_running(project: &str) -> bool {
     let mut cmd = tillandsias_podman::podman_cmd_sync();
@@ -193,6 +196,7 @@ pub fn stop(project: &str) {
     let _ = cmd.output_bounded(std::time::Duration::from_secs(30));
 }
 
+#[cfg(feature = "host-services")]
 /// `studio.status {}`: what the forge agent needs to use the studio.
 pub fn status_json(project: &str, running: bool) -> serde_json::Value {
     serde_json::json!({
@@ -207,6 +211,7 @@ pub fn status_json(project: &str, running: bool) -> serde_json::Value {
     })
 }
 
+#[cfg(feature = "host-services")]
 /// ORDER 1969-cfyt: `studio.start {}`. Idempotent: a running studio is left as
 /// it is; otherwise `launch` runs exactly once. `running` and `launch` are the
 /// podman seams (production: [`is_running`] and [`start`]).
@@ -224,6 +229,7 @@ pub fn start_on_demand(
     Ok(v)
 }
 
+#[cfg(feature = "host-services")]
 /// The tool descriptors for `studio.start` and `studio.status`.
 pub fn tool_descriptors() -> Vec<serde_json::Value> {
     let empty = serde_json::json!({ "type": "object", "properties": {} });
@@ -353,6 +359,7 @@ mod tests {
     /// ORDER 1969-cfyt: studio.start starts exactly one studio, and a second
     /// call while it runs starts none. Pre-fix: FAILS, there is no studio.start.
     #[test]
+    #[cfg(feature = "host-services")]
     fn studio_start_launches_exactly_once_and_is_idempotent() {
         let up = std::cell::Cell::new(false);
         let launches = std::cell::Cell::new(0);
