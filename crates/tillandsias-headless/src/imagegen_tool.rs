@@ -1179,6 +1179,16 @@ impl Engine for PodmanSdCli {
         if crate::imagegen_warm::eligible(job) {
             let (timings, backend) =
                 crate::imagegen_warm::generate(self, job, &files, out_dir, names, model_bytes)?;
+            // 1972-phye: after the reply, one /api/ps look; a crowding LLM wins
+            // the device. Off the critical path: the check is two podman calls
+            // (~120-150 ms, measured on yoga), and releasing BEFORE this call
+            // would only make the same GPU job cold.
+            let _ = std::thread::Builder::new()
+                .name("imagegen-warm-yield".into())
+                .spawn(|| {
+                    let arb = crate::gpu_queue::arbiter();
+                    arb.yield_image_engine(arb.llm.ps().as_deref());
+                });
             return Ok(EngineOut {
                 backend,
                 first_use: built || fetched,

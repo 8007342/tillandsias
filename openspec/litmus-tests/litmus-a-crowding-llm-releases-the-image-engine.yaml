@@ -1,0 +1,35 @@
+# @trace spec:accel-capability-probe, order:1972-phye
+#
+# A resident image engine (1971-3erz) and an LLM could sit in VRAM together
+# with nothing giving way until the engine's TTL. Re-scoped by the coordinator
+# 2026-11-03: event-driven only (a warm call, a gpu.status), never a background
+# poll (operator ruling polling-cadence-needs-operator-approval). One /api/ps
+# look releases the engine when an LLM is resident and the two do not fit.
+# Red before 1972-phye: nothing released the engine and gpu.status did not list it.
+name: litmus:a-crowding-llm-releases-the-image-engine
+spec: accel-capability-probe
+phase: pre-build
+description: gpu.status lists the resident image engine and releases it when a resident LLM is spilled off the GPU or measured free VRAM is under 1 GiB; an LLM that fits leaves it listed
+severity: medium
+size: long
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "a crowding LLM releases the engine on gpu.status; one that fits leaves it listed; only a measured shortfall counts; the engine is a named image holder"
+    command: "cargo test -p tillandsias-headless --features host-services --bin tillandsias -- gpu_queue::tests::a_crowding_llm_releases_the_resident_image_engine_on_gpu_status gpu_queue::tests::an_llm_crowds_the_image_engine_only_on_a_measured_shortfall imagegen_warm::tests::the_resident_engine_is_a_gpu_status_holder_naming_its_model"
+    timeout_ms: 900000
+
+observability:
+  traces:
+    - "@trace spec:accel-capability-probe"
+  expected_log: "test result: ok. 3 passed"
+  log_fields:
+    spec: "accel-capability-probe"
+    test: "a-crowding-llm-releases-the-image-engine"
+
+rollback:
+  on_failure: "inspect llm_crowded and Arbiter::yield_image_engine in crates/tillandsias-headless/src/gpu_queue.rs"
+  command: "grep -n 'llm_crowded\\|yield_image_engine\\|SHARED_HEADROOM' crates/tillandsias-headless/src/gpu_queue.rs crates/tillandsias-headless/src/imagegen_warm.rs"
