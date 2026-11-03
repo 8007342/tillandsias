@@ -11,9 +11,13 @@
 -- harnesses were not refreshed until the lock aged past 60 minutes.
 --
 -- The arms EXECUTE the real ensure_forge_harnesses, cut out of
--- images/default/lib-common.sh by name, with no npm on PATH. The NEXT
--- CHECKPOINT after taking the lock is its "npm not available" line, so an
--- arm that took the lock is told apart from one that returned early.
+-- images/default/lib-common.sh by name, with a STUB npm first on PATH. The
+-- NEXT CHECKPOINT after taking the lock is the stub being called (it writes
+-- a marker and fails, so the real function takes its "using cached" path),
+-- so an arm that took the lock is told apart from one that returned early.
+-- The stub keeps it off the host: a gate host with a real npm and no egress
+-- printed "npm update failed" instead of "npm not available" (#880, queue
+-- run 20, 2026-11-03), and every reclaim arm read as no refresh.
 --   1 FOREIGN  a lock whose holder is another container: reclaimed, refresh
 --              runs (today: silent skip)
 --   2 DEADPID  a holder in this container whose pid is gone: reclaimed
@@ -56,10 +60,14 @@ local LOCK_REL = REL .. "/home/.cache/tillandsias-project/npm-update.lock"
 local LOCK = root .. "/" .. LOCK_REL
 fs.mkdir(REL .. "/home/.cache/tillandsias-project")
 fs.write(REL .. "/fn.sh", fn)
--- npm is absent from the system dirs on PATH (premise checked below)
+-- a stub npm: records that the refresh reached npm, then fails (no egress)
+fs.mkdir(REL .. "/bin")
+fs.write(REL .. "/bin/npm", "#!/bin/sh\necho \"$*\" >> \"" .. ABS .. "/npm-called\"\nexit 1\n")
+proc.run{ argv = { "chmod", "755", ABS .. "/bin/npm" } }
 
 local function launch(live)
     proc.run{ argv = { "rm", "-f", ABS .. "/lifecycle" } }
+    proc.run{ argv = { "rm", "-f", ABS .. "/npm-called" } }
     fs.write(REL .. "/run.sh", table.concat({
         'trace_lifecycle() { echo "$1 | $2" >> "' .. ABS .. '/lifecycle"; }',
         ". " .. ABS .. "/fn.sh",
@@ -67,7 +75,7 @@ local function launch(live)
         "( ensure_forge_harnesses )",
     }, "\n") .. "\n")
     local r = proc.run{ argv = { "/bin/bash", ABS .. "/run.sh" }, timeout_ms = 30000,
-        env = { PATH = "/usr/bin:/bin", HOME = ABS .. "/home", HOSTNAME = "this-forge" } }
+        env = { PATH = ABS .. "/bin:/usr/bin:/bin", HOME = ABS .. "/home", HOSTNAME = "this-forge" } }
     return r, readf(REL .. "/lifecycle")
 end
 local function plant(holder, minutes_old)
@@ -80,7 +88,7 @@ local function plant(holder, minutes_old)
         proc.run{ argv = { "touch", "-t", os.date("%Y%m%d%H%M.%S", os.time() - minutes_old * 60), LOCK } }
     end
 end
-local function took(life) return life:find("npm not available", 1, true) ~= nil end
+local function took() return fs.exists(REL .. "/npm-called") end
 
 arm("0 premise: ensure_forge_harnesses was cut and takes npm-update.lock",
     fn:find("^ensure_forge_harnesses%(%)") ~= nil and fn:find("npm-update.lock", 1, true) ~= nil, #fn)
