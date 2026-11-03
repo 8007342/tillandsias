@@ -48,5 +48,10 @@ a launch refusal that names the reason), and
   discussing it). It would also only reach the step that asks for the
   CodeSandbox key the guide calls mandatory. The source and the project's
   own guide settle the question without it.
-- **Re-measure** when Onlook ships the Docker dev-container path its guide
+- **Recheck trigger** (coordinator, 2026-11-03): revisit when Onlook ships a
+  local runner or an open desktop app. Today the desktop app is Mac-only and
+  not yet open-sourced (docs.onlook.com/developers/running-locally, read
+  2026-11-03: "Coming soon"; "preparing to open-source the new Onlook
+  desktop app in the coming weeks"). Also re-measure when Onlook ships the
+  Docker dev-container path its guide
   plans. Then the question becomes real: a local container in a forge.

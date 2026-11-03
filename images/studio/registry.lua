@@ -82,6 +82,9 @@ return {
       status = "ready", packet = "1864-ay3x",
     },
     {
+      -- 1865-dn5h DEGRADED (measured 2026-11-02, plan/issues/onlook-offline-viability-2026-11-02-yoga.md):
+      -- needs a CodeSandbox account, so listed with its reason and never recommended.
+      -- RECHECK: revisit when Onlook ships a local runner or an open desktop app.
       id = "onlook", name = "Onlook", license = "Apache-2.0",
       brief = "Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
       frameworks = {},
