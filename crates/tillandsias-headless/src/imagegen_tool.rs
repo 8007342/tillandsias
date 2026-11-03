@@ -895,7 +895,9 @@ impl PodmanSdCli {
             self.image.clone(),
         ]);
         for (role, path) in files {
-            if role == "controlnet" || role == "lora" {
+            // 1971-mcpu: a ControlNet's role is `controlnet:<name>`, never bare
+            // `controlnet`; both aux kinds get their own flags below.
+            if role.starts_with("controlnet:") || role == "controlnet" || role == "lora" {
                 continue;
             }
             let rel = path.strip_prefix(&self.models_dir).unwrap_or(path);
@@ -1182,13 +1184,21 @@ mod tests {
             image: "img".into(),
             models_dir: PathBuf::from("/m"),
         };
-        let a = e.run_args(
-            &job,
-            &[("model".into(), PathBuf::from("/m/I0/sdxs09.safetensors"))],
-            Path::new("/o"),
-            &["img-1-2-0.png".into()],
-            1,
+        // 1971-mcpu: generate passes run_args EVERY fetched file, the
+        // ControlNet (role `controlnet:openpose`) and LoRAs included, as
+        // ensure_files returns them. Passing only the base model hid a panic
+        // that closed the Kumbia lane's MCP connection.
+        let mut files = vec![(
+            "model".to_string(),
+            PathBuf::from("/m/I0/sdxs09.safetensors"),
+        )];
+        files.extend(
+            job.aux
+                .files()
+                .iter()
+                .map(|p| (p.role.clone(), PathBuf::from("/m/I0").join(p.cache_name()))),
         );
+        let a = e.run_args(&job, &files, Path::new("/o"), &["img-1-2-0.png".into()], 1);
         let after = |flag: &str| {
             a.iter()
                 .position(|s| s == flag)

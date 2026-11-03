@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-02, coordinator-assigned P0 (operator Kumbia trial).
+packets:
+- packet_id: a-controlnet-image-generate-runs-and-a-panicking-host-tool-never-closes-the-lanes-mcp-connection
+  order: 1971-mcpu
+  status: in_progress
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, mcp, socket, controlnet]
+  estimated_hours: 2
+  title: A ControlNet image.generate runs, and a panicking host tool never closes the lane's MCP connection
+  context: 'Kumbia trial on macuahuitl: the first image.generate with control_net openpose and a LoRA closed the lane connection and the forge lost all 40 host tools. Cause 1: PodmanSdCli::run_args skips aux files whose role is exactly controlnet, but the manifest role is controlnet:openpose, so it reached panic!("models.tsv role ... has no sd-cli flag"). The existing test passed run_args only the base model, unlike generate, which passes every fetched file. Cause 2: serve_mcp_connection runs one thread per connection with no catch_unwind around dispatch, so any tool panic unwound it and closed the connection.'
+  exit_criteria:
+  - 'run_args with the ControlNet and LoRA files in its file list, as generate passes them, builds --control-net and --lora-model-dir with no panic. Pre-fix result: FAILS, panicked at imagegen_tool.rs:912.'
+  - 'A tool that panics answers its call with a typed tool_panicked error and the next call works. Pre-fix result: FAILS, the panic unwinds the connection thread.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- imagegen_tool:: image_generate_fixtures'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures; no litmus drives a live ControlNet generate yet (1136-n8sh).'
+  next_action: 'Land the role match fix and dispatch_guarded.'
+  provenance: Kumbia trial failure relayed by macuahuitl-fedora 2026-11-02; reproduced hermetically on lenovinha.
+  events:
+  - type: filed
+    ts: '2026-11-03T06:32:26Z'
+    host: lenovinha
+    summary: filed p0 in_progress, claimed by opus5
