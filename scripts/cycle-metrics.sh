@@ -368,6 +368,9 @@ if [ "$_tl_reporting" = 1 ] && [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
     _tl_other=""
     case "$TIMING_LOG" in
         /tmp/*) _tl_other="$REPO_ROOT/.cache/metrics/$_tl_base" ;;
+        # 1966-ubsw: always /tmp — the split is the SHARED fallback; the gate's
+        # private fallback dir is checked by build.sh, and probing it here blinded
+        # this guard to a real /tmp split (1455-d7hc).
         *)      _tl_other="/tmp/$_tl_base" ;;
     esac
     if [ -n "$_tl_other" ] && [ "$_tl_other" != "$TIMING_LOG" ] && [ -s "$_tl_other" ]; then

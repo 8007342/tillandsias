@@ -21,14 +21,14 @@
 -- that is not the Actions cache; that is a redesign, filed under 1950-b4f3,
 -- not a flag. Until it lands, no cache step may sit in the release.
 --
--- RULES
---   1. release.yml declares no `cache_seed` input and uses none of
---      nix-community/cache-nix-action, swatinem/rust-cache, actions/cache*;
+-- RULES (as amended by 1953-jmvb; see the comment at the first loop)
+--   1. release.yml declares no `cache_seed` input, and no cache save is
+--      scoped to a ref other than refs/heads/main;
 --   2. every uncommented `gh workflow run release.yml` in the release skill
---      runs on the tag (`new_tag`), none on another ref or with a seed input.
+--      runs on main (`--ref main`), none on a tag or with a seed input.
 --
 -- GRAMMAR (exactly one line on stdout)
---   ok:release-one-cloud-build:tag-dispatches=<n> cache-steps=0      exit 0
+--   ok:release-one-cloud-build:main-dispatches=<n> cache-steps=<k>   exit 0
 --   refused:release-one-cloud-build:<rule>=<detail>[,...]            exit 1
 --   could-not-run:release-one-cloud-build:<reason>                   exit 3
 --
@@ -46,6 +46,13 @@ local CACHE_ACTIONS = {
     "^actions/cache",
 }
 
+-- ORDER 1953-jmvb (operator ruling 2026-11-01: "start the release from
+-- main"): the release is dispatched on refs/heads/main and the workflow tags
+-- from there, so a cache step IS restorable by the next release and is
+-- allowed again. What stays refused: a seed input (a second build) and, in
+-- the workflow, a cache save that is scoped to anything but main (a `save:`
+-- or `save-if:` that names another ref) — with the run on main a bare save
+-- is main-scoped, so only an explicit non-main condition is a defect.
 local bad, caches = {}, 0
 local line_no = 0
 for _, l in ipairs(text.lines(src)) do
@@ -57,33 +64,34 @@ for _, l in ipairs(text.lines(src)) do
         local action = l:match("uses:%s*(%S+)")
         if action then
             for _, pat in ipairs(CACHE_ACTIONS) do
-                if action:find(pat) then
-                    caches = caches + 1
-                    bad[#bad + 1] = "cache-step=" .. action:gsub("@.*", "") .. "@line" .. line_no
-                end
+                if action:find(pat) then caches = caches + 1 end
             end
+        end
+        local save = l:match("^%s+save[%-if]*:%s*(.-)%s*$")
+        if save and save:find("refs/") and not save:find("refs/heads/main") then
+            bad[#bad + 1] = "cache-save-not-main@line" .. line_no
         end
     end
 end
 
--- Every dispatch of release.yml the skill writes runs on the tag (`new_tag`);
--- a dispatch on any other ref (`--ref main`) or carrying a seed input is a
--- second cloud build. The failure-recovery note that tells the operator to
--- re-run the SAME tag dispatch by hand is a tag dispatch too, and allowed.
-local tag_dispatches, other = 0, 0
+-- Every dispatch of release.yml the skill writes runs on main (`--ref main`)
+-- and none carries a seed input; a dispatch on a tag or another ref is a run
+-- whose caches and SAN are not main's. The failure-recovery note that tells
+-- the operator to re-run the SAME main dispatch by hand is allowed.
+local main_dispatches = 0
 local sline = 0
 for _, l in ipairs(text.lines(ssrc)) do
     sline = sline + 1
     if not l:find("^%s*#") then
         if l:find("gh workflow run release%.yml") then
-            if l:find("new_tag") and not l:find("cache_seed") then tag_dispatches = tag_dispatches + 1
-            else other = other + 1; bad[#bad + 1] = "dispatch-not-on-tag@line" .. sline end
-        elseif l:find("cache_seed") and l:find("%-f%s+cache_seed") then
+            if l:find("%-%-ref main") and not l:find("cache_seed") then main_dispatches = main_dispatches + 1
+            else bad[#bad + 1] = "dispatch-not-on-main@line" .. sline end
+        elseif l:find("%-f%s+cache_seed") then
             bad[#bad + 1] = "seed-dispatch@line" .. sline
         end
     end
 end
-if tag_dispatches == 0 then bad[#bad + 1] = "no-tag-dispatch=" .. skill end
+if main_dispatches == 0 then bad[#bad + 1] = "no-main-dispatch=" .. skill end
 
 if #bad > 0 then verdict.emit("refused:release-one-cloud-build:" .. table.concat(bad, ","), 1) end
-verdict.emit(("ok:release-one-cloud-build:tag-dispatches=%d cache-steps=%d"):format(tag_dispatches, caches), 0)
+verdict.emit(("ok:release-one-cloud-build:main-dispatches=%d cache-steps=%d"):format(main_dispatches, caches), 0)

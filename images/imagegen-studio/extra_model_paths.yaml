@@ -20,3 +20,19 @@ tillandsias:
   clip: |
     I2
     I3
+  # 1957-pins and 1956-bh6j: aux folders, one per models.tsv tier column. The
+  # studio has no egress; a weight a node needs must be mapped here, which
+  # scripts/lua/test-studio-node-pins.lua checks against models.tsv.
+  controlnet: |
+    I1/controlnet-openpose
+    I1/controlnet-union
+  loras: |
+    I1/lora
+  ipadapter: |
+    I1/ipadapter
+  clip_vision: |
+    I1/clip_vision
+  layer_model: |
+    I1/layer_model
+  birefnet: |
+    I1/birefnet

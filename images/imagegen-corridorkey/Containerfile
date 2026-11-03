@@ -1,0 +1,89 @@
+# @trace order:1956-ucix, order:1954-xy5m (spec: openspec/changes/studio-asset-pipeline, design D9)
+# CorridorKey 2.0 PROOF OF CONCEPT: the engine behind `studio.key_footage`.
+# Never an INIT image. Built on the first key_footage call of a project that
+# set `[imagegen] corridorkey = true`; a project without it never builds or
+# runs this. No automatic wiring ships to other users until Corridor has seen
+# the demo (operator ruling on 1954-xy5m).
+#
+# What this image is:
+#   - upstream infer.py and its package at ONE verified commit (CORRIDORKEY_SHA),
+#     under the CORRIDOR KEY LICENCE v2.0 (a CC BY-NC-SA 4.0 variant; LICENSE
+#     and THIRD_PARTY_NOTICES.md stay in /opt/corridorkey);
+#   - CUDA torch from the cu128 wheels (upstream's tested pair); the driver is
+#     the host's, injected by CDI (nvidia.com/gpu=all). NVIDIA only: infer.py
+#     itself exits when torch.cuda.is_available() is false, and the tray
+#     refuses a non-CUDA host before the container exists (corridorkey_needs_cuda).
+#
+# What this image is NOT, ever:
+#   - a carrier of weights. The ~5 GB CorridorKey weights and the three
+#     foundation models (C-RADIOv4, MoGe-2, RVM) are fetched on the USER'S
+#     machine, after the licence consent of order 1956-ecpb, into the shared
+#     cache (weights.tsv beside this file pins every file), and mounted
+#     read-only at /models. Nothing is downloaded at build time but code and
+#     wheels; nothing at all at run time (--network=none).
+#
+# How infer.py finds the weights: upstream's RuntimePaths.from_package resolves
+# every weight and foundation model RELATIVE TO THE PACKAGE ROOT, hard-coded
+# (weights/corridorkey_v2.safetensors, weights/foundation_stats.safetensors,
+# vfms/cradio/C-RADIOv4-SO400M/, vfms/moge/model.pt, vfms/rvm/<npz>). No
+# environment variable selects them and only --weights is overridable, so the
+# shim is two symlinks: /opt/corridorkey/weights -> /models/corridorkey/weights
+# and /opt/corridorkey/vfms -> /models/corridorkey/vfms. infer.py also sets
+# HF_HUB_OFFLINE=1 and TRANSFORMERS_OFFLINE=1 itself, and foundations.py loads
+# the C-RADIO directory with local_files_only=True; the env below repeats the
+# offline switches so nothing reaches for the Hub even from a stray import.
+FROM docker.io/library/python:3.12.16-slim-bookworm
+
+ARG CORRIDORKEY_SHA=485f5e9ab759ead6138cc990776184b59d6ea971
+ARG TORCH_VERSION=2.9.1+cu128
+ARG TORCHVISION_VERSION=0.24.1+cu128
+LABEL io.tillandsias.imagegen-corridorkey.commit="${CORRIDORKEY_SHA}" \
+      io.tillandsias.imagegen-corridorkey.torch="${TORCH_VERSION}" \
+      io.tillandsias.imagegen-corridorkey.licence="corridor-key-licence-2.0" \
+      io.tillandsias.imagegen-corridorkey.status="proof-of-concept"
+
+# ffmpeg: infer.py's writer (require_ffmpeg) and OpenCV's decoder.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates ffmpeg libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# The commit is verified, not trusted from a branch or tag name. The .git
+# directory goes; the LICENSE and the third-party notices stay.
+RUN git clone --filter=blob:none https://github.com/nikopueringer/CorridorKey2.0 /opt/corridorkey \
+    && git -C /opt/corridorkey checkout --detach "$CORRIDORKEY_SHA" \
+    && test "$(git -C /opt/corridorkey rev-parse HEAD)" = "$CORRIDORKEY_SHA" \
+    && rm -rf /opt/corridorkey/.git \
+    && test -f /opt/corridorkey/LICENSE \
+    && test -f /opt/corridorkey/THIRD_PARTY_NOTICES.md \
+    && test -f /opt/corridorkey/infer.py
+
+# Upstream's tested torch pair from the cu128 index; the rest from its
+# requirements.txt (utils3d is pinned there to a commit by upstream).
+RUN pip install --no-cache-dir \
+        "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
+        --index-url https://download.pytorch.org/whl/cu128 \
+    && pip install --no-cache-dir -r /opt/corridorkey/requirements.txt \
+    && python -c "import torch, torchvision; print('torch', torch.__version__)"
+
+# The weights shim (see the header): the package-relative directories become
+# symlinks into the read-only cache mount. The upstream fetch script stays
+# in the tree but has no network to use and is never the entrypoint.
+RUN rm -rf /opt/corridorkey/weights /opt/corridorkey/vfms \
+    && ln -s /models/corridorkey/weights /opt/corridorkey/weights \
+    && ln -s /models/corridorkey/vfms /opt/corridorkey/vfms \
+    && useradd -u 1001 -m -s /usr/sbin/nologin corridorkey \
+    && mkdir -p /out /models /home/corridorkey/.cache /home/corridorkey/tmp \
+    && chown -R corridorkey:corridorkey /out /home/corridorkey \
+    && chmod -R a-w /opt/corridorkey
+
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HOME=/home/corridorkey/.cache/huggingface \
+    TMPDIR=/home/corridorkey/tmp \
+    PYTHONDONTWRITEBYTECODE=1
+
+USER corridorkey
+WORKDIR /opt/corridorkey
+# The tray appends: --input /out/<rel> --output_dir /out/studio/<job>
+#                   --outputs <alpha fg cutout...> [--low_vram]
+ENTRYPOINT ["python", "/opt/corridorkey/infer.py"]

@@ -77,6 +77,27 @@ pub enum WslPlatformVerdict {
     /// false AND VirtualizationFirmwareEnabled = false).
     VirtualizationDisabled,
 }
+/// The `/etc/wsl.conf` both provisioning paths write (1963-xgr5). systemd on,
+/// interop on but Windows PATH not appended, /mnt automount off. `default_user`
+/// adds a `[user]` section: `provision` sets `forge`; the recipe path passes
+/// `None` because its rootfs login must stay root.
+fn wsl_conf_text(default_user: Option<&str>) -> String {
+    let user = default_user
+        .map(|u| format!("[user]\ndefault = {u}\n"))
+        .unwrap_or_default();
+    format!(
+        "[boot]\nsystemd = true\n{user}[interop]\nenabled = true\nappendWindowsPath = false\n\
+         [automount]\nenabled = false\n"
+    )
+}
+
+/// Root-shell script that writes [`wsl_conf_text`] to `/etc/wsl.conf`.
+fn wsl_conf_write_script(default_user: Option<&str>) -> String {
+    format!(
+        "cat > /etc/wsl.conf << 'EOF'\n{}EOF",
+        wsl_conf_text(default_user)
+    )
+}
 
 /// The `tillandsias-headless.service` unit installed on the WSL path.
 ///
@@ -717,7 +738,7 @@ impl WslRuntime {
     }
 
     /// Post-import wiring for a RECIPE-materialized distro (w5 path): write
-    /// `/etc/wsl.conf` (systemd on, /mnt automount off, default user `forge`)
+    /// `/etc/wsl.conf` (systemd on, /mnt automount off, default user root)
     /// then `wsl --terminate` so the next start boots under systemd. Unlike
     /// [`VmRuntime::provision`], it does NOT drop a binary or install the
     /// systemd unit — the recipe rootfs already carries the unit and a
@@ -736,18 +757,7 @@ impl WslRuntime {
         // 2026-05-26), so defaulting to it would break `wsl -d tillandsias` login.
         // Default user stays root; "Open Shell" enters the forge *podman
         // container* via `podman exec`, not a forge Linux login.
-        self.wsl_root_sh_stdin(
-            "cat > /etc/wsl.conf << 'EOF'\n\
-             [boot]\n\
-             systemd = true\n\
-             [interop]\n\
-             enabled = true\n\
-             appendWindowsPath = false\n\
-             [automount]\n\
-             enabled = false\n\
-             EOF",
-        )
-        .await?;
+        self.wsl_root_sh_stdin(&wsl_conf_write_script(None)).await?;
         // Terminate so the next start picks up systemd + the new wsl.conf.
         let _ = wsl_cmd()
             .arg("--terminate")
@@ -861,20 +871,8 @@ impl VmRuntime for WslRuntime {
         self.ensure_forge_user_and_src().await?;
 
         // Step 2: write /etc/wsl.conf with systemd + automount=false.
-        self.wsl_root_sh_stdin(
-            "cat > /etc/wsl.conf << 'EOF'\n\
-             [boot]\n\
-             systemd = true\n\
-             [user]\n\
-             default = forge\n\
-             [interop]\n\
-             enabled = true\n\
-             appendWindowsPath = false\n\
-             [automount]\n\
-             enabled = false\n\
-             EOF",
-        )
-        .await?;
+        self.wsl_root_sh_stdin(&wsl_conf_write_script(Some("forge")))
+            .await?;
 
         // Step 3: copy the tillandsias binary into /usr/local/bin.
         //
@@ -1594,6 +1592,37 @@ mod tests {
             "expected the forge-user ensure + two wsl.conf writers + unit \
              installer on stdin delivery"
         );
+    }
+
+    /// 1963-xgr5: one writer owns the /etc/wsl.conf text. Two hand-copied
+    /// heredocs drifted apart once already (the measured guest disagreed with
+    /// both the cheatsheet and the spec); the only allowed difference between
+    /// the recipe and provision paths is the `[user]` section.
+    #[test]
+    fn wsl_conf_single_writer() {
+        let source = include_str!("wsl.rs");
+        let needle = format!("cat > /etc/{}", "wsl.conf");
+        assert_eq!(
+            source.matches(&needle).count(),
+            1,
+            "exactly one /etc/wsl.conf writer (wsl_conf_text) may exist"
+        );
+        let recipe = wsl_conf_text(None);
+        let provision = wsl_conf_text(Some("forge"));
+        for text in [&recipe, &provision] {
+            assert!(text.contains("[boot]\nsystemd = true\n"), "{text}");
+            assert!(
+                text.contains("[interop]\nenabled = true\nappendWindowsPath = false\n"),
+                "{text}"
+            );
+            assert!(text.contains("[automount]\nenabled = false\n"), "{text}");
+        }
+        assert!(!recipe.contains("[user]"), "{recipe}");
+        assert!(
+            provision.contains("[user]\ndefault = forge\n"),
+            "{provision}"
+        );
+        assert_eq!(provision.replace("[user]\ndefault = forge\n", ""), recipe);
     }
 
     /// CIM probe output parse: True/False lines, CRLF + NUL tolerant,

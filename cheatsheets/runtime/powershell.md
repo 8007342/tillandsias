@@ -15,7 +15,7 @@ pull_recipe: see-section-pull-on-demand
 
 # PowerShell — Windows scripting for forge & host builds
 
-@trace spec:cross-platform, spec:windows-wsl-runtime
+@trace spec:cross-platform, spec:wsl-runtime
 @cheatsheet runtime/windows-native-dev-build.md, runtime/wsl-on-windows.md
 
 **Version baseline**: PowerShell 7.4+ preferred; Windows PowerShell 5.1 ships with the OS and is the lowest common denominator.

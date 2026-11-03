@@ -141,6 +141,21 @@ requirement by design (it runs before any binary exists).
 - **THEN** `--check` prints one `warn:shell-ratchet:new-shell-fixture:` line naming the Lua fixture pattern and exits 0
 - **AND** the warn names the open native macOS / Windows managed-process rows as the reason the arm is advisory, not an unlanded `proc.spawn`
 
+### Requirement: The actions-budget gate reads cloud.usage
+<!-- req-id: 34961e27 -->
+
+Before a merge to main, the release flow MUST read `cloud.usage` (or
+`tillandsias --cloud-usage` on the host) and record used/cap per provider; a
+Cloudflare `workers_builds_minutes` used of 2,700 or more of 3,000 MUST refuse
+the merge unless the fix is urgent. `scripts/release-preflight.sh` Gate 4
+prints the reading when the host binary offers it (order 1966-47vt).
+
+@trace spec:ci-release, order:1966-47vt
+
+#### Scenario: Near the Cloudflare cap the merge waits
+- **WHEN** cloud.usage reports Cloudflare used ≥ 2,700 of 3,000
+- **THEN** the merge to main is refused unless the fix is urgent
+
 ## Litmus Chain
 
 Smallest actionable boundary:

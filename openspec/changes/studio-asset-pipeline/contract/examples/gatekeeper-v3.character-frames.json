@@ -1,0 +1,155 @@
+{
+  "contract": "1935-k2ib/v1",
+  "pipelineVersion": null,
+  "family": "gatekeeper-v3",
+  "version": 1,
+  "project": "kumbia-kombat",
+  "kind": "character-frames",
+  "frame": {
+    "units": "native-px",
+    "baselineY": null,
+    "pivot": { "x": null, "y": null, "normalized": false },
+    "scale": { "mode": "fixed-per-family", "referencePose": "groove.down_l", "resolved": null },
+    "camera": "floor-perspective",
+    "native": {
+      "perRoom": true,
+      "plaza": { "width": 96, "height": 128, "pixelScale": 4 },
+      "level4": { "width": 64, "height": 96, "pixelScale": 6 }
+    },
+    "margin": { "minClear": 0.03, "units": "fraction-of-generation-canvas", "failOnBorderTouch": true },
+    "generationCanvas": { "width": 768, "height": 960 }
+  },
+  "transparency": {
+    "byBackend": { "sdxl": "layerdiffuse", "default": "matte" },
+    "matte": "birefnet",
+    "alpha": "binary"
+  },
+  "outline": "#1A1018",
+  "symmetry": "none",
+  "adapters": { "enum": ["ip-adapter-sdxl", "qwen-image-edit", "img2img"] },
+  "references": [
+    {
+      "role": "identity",
+      "image": "assets/art/ensemble/gatekeeper-v2.png",
+      "crop": "TBD",
+      "adapter": "ip-adapter-sdxl",
+      "weight": 0.7
+    }
+  ],
+  "regions": {
+    "#FF0000": "skin",
+    "#00FF00": "hair",
+    "#0000FF": "cloth",
+    "#FFFF00": "hat",
+    "#00FFFF": "shoes",
+    "#FF00FF": "accessory"
+  },
+  "regionsRender": { "antialias": false, "filtering": "none" },
+  "reservedRamps": [
+    {
+      "id": "kumbia-outfit",
+      "appliesToRegions": ["cloth"],
+      "recolor": false,
+      "gates": [
+        {
+          "id": "plum",
+          "all": [
+            { "lhs": "r", "op": ">=", "rhs": 0.392157 },
+            { "lhs": "r", "op": ">=", "rhs": { "mul": [0.7, "b"] } },
+            { "lhs": "b", "op": ">=", "rhs": { "mul": [0.32, "r"] } },
+            { "lhs": "g", "op": "<=", "rhs": { "mul": [0.55, "b"] } },
+            { "lhs": { "sub": ["b", "g"] }, "op": ">=", "rhs": 0.047059 }
+          ]
+        }
+      ]
+    }
+  ],
+  "palette": { "locked": "tool/art/palettes/gatekeeper.json" },
+  "finish": { "alpha": { "source": "matte" }, "sample": "majority", "dither": "none" },
+  "style_prompt": "pixel art game sprite, full body, single character, warm festive party, crisp clusters, clean dark outline, flat shading, plain background",
+  "style_negative": "multiple characters, sprite sheet, grid, text, logo, blur, motion blur, cropped feet, cropped hat, shadow on floor",
+  "character_prompt": "cheerful mustached man in a cream panama hat with teal band, purple guayabera shirt with teal embroidery panels, cream trousers, teal shoes",
+  "clips": [
+    { "id": "groove", "drawings": 8, "view": "front", "loop": true, "durationBeats": 2.0, "events": [] },
+    {
+      "id": "left_hand",
+      "drawings": 4,
+      "view": "front",
+      "loop": false,
+      "durationBeats": 1.0,
+      "events": [{ "beat": 0.25, "type": "accent", "drawing": "peak" }]
+    }
+  ],
+  "poses": [
+    {
+      "id": "left_hand.peak",
+      "clip": "left_hand",
+      "order": 1,
+      "view": "front",
+      "control": {
+        "type": "openpose",
+        "image": "art_runs/inputs/gatekeeper-v3/left_hand.peak.pose.png",
+        "aux": [{ "type": "depth", "image": "art_runs/inputs/gatekeeper-v3/left_hand.peak.depth.png" }],
+        "strength": 0.85
+      },
+      "regionMask": "art_runs/inputs/gatekeeper-v3/left_hand.peak.regions.png",
+      "supportFoot": "both",
+      "accent": true
+    }
+  ],
+  "generation": {
+    "count_per_pose": 4,
+    "seed_base": 930000,
+    "seed_policy": "fixed per pose while tuning",
+    "backend": "comfyui-api",
+    "workflow": "tool/art/workflows/character-pose-sdxl.api.json",
+    "tiers": {
+      "I1": { "model": "SDXL-Lightning-4step", "steps": 4 },
+      "SDXL-base": { "model": "SDXL base 1.0", "steps": 25 }
+    }
+  },
+  "qa": {
+    "inherit": ["coverage", "single_object", "border_touch", "slot_fill"],
+    "add": [
+      { "id": "baseline_drift", "maxPx": 1, "scope": "consecutive drawings sharing a planted support foot" },
+      { "id": "head_size_variance", "maxPct": 4, "scope": "family" },
+      { "id": "region_gate_agreement", "rule": "non-cloth outside all gates; cloth inside one" },
+      {
+        "id": "identity_similarity",
+        "against": "references",
+        "threshold": "TBD",
+        "embedding": { "model": "facebook/dinov2-small", "licence": "apache-2.0" }
+      }
+    ],
+    "static": [
+      { "id": "palette_fails_all_gates", "rule": "the outline and every non-cloth palette entry fail all reservedRamps gates; checked before generation" },
+      { "id": "region_mask_colours_declared", "rule": "every colour in a regionMask PNG is a key of regions" }
+    ]
+  },
+  "targets": [
+    {
+      "type": "kumbiaManifest",
+      "room": "plaza",
+      "camera": "floor-perspective",
+      "atlas": "gatekeeper",
+      "out": "assets/art/ensemble/plaza/gatekeeper-v3.png",
+      "manifest": "assets/art/ensemble/plaza/manifest.json",
+      "frameId": "{clip}_{drawing}",
+      "fields": ["rect", "anchor", "pixelsPerUnit", "facing", "loop", "durationBeats", "events", "supportFoot", "status", "provenance"],
+      "packing": { "gutterPx": 2, "trim": true, "anchorRelativeTo": "trimmed-rect" },
+      "requireHumanAcceptance": true
+    },
+    {
+      "type": "kumbiaManifest",
+      "room": "level4",
+      "camera": "side-on",
+      "atlas": "gatekeeper",
+      "out": "assets/art/ensemble/level4/gatekeeper-v3.png",
+      "manifest": "assets/art/ensemble/level4/manifest.json",
+      "frameId": "{clip}_{drawing}",
+      "fields": ["rect", "anchor", "pixelsPerUnit", "facing", "loop", "durationBeats", "events", "supportFoot", "status", "provenance"],
+      "packing": { "gutterPx": 2, "trim": true, "anchorRelativeTo": "trimmed-rect" },
+      "requireHumanAcceptance": true
+    }
+  ]
+}

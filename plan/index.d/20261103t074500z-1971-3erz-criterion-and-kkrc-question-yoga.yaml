@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: image-generate-reports-its-engine-timings-and-a-second-call-within-minutes-reuses-a-warm-engine
+    event:
+      type: note
+      ts: '2026-11-03T07:45:00Z'
+      host: yoga
+      summary: |-
+        CRITERION 2 REVISED (coordinator macuahuitl-fedora, 2026-11-03, after the engine split showed ~3.2 s of compute on the 840M): the absolute "under 2.5 s" bound is replaced by a relative one. A warm second call within warm_ttl_s reports container_start_ms = 0 and model_load_ms = 0, and its wall time is <= (sample_ms + decode_ms from the same call) + 500 ms, in 3 of 3 runs. This ties the bound to the compute floor on any GPU. Today every call reports neither field, so it still FAILS.
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    event:
+      type: note
+      ts: '2026-11-03T07:45:00Z'
+      host: yoga
+      summary: |-
+        QUESTION (not chased): sd.cpp run directly on yoga measured 1.28 s/image for I0 SDXS 512 on 2026-10-27, but on 2026-11-03 the tool's own sd-cli argv spends 2.0 s sampling + 1.2 s TAESD decode (~3.2 s compute) for the same model. Candidates: a different step count, no TAESD in the earlier run, or a different sd.cpp build (today master-1015-e41fbcf). Recorded at the coordinator's request; see 1971-3erz for the split.

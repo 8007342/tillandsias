@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: image-generate-reports-its-engine-timings-and-a-second-call-within-minutes-reuses-a-warm-engine
+    event:
+      type: measurement
+      ts: '2026-11-03T08:00:00Z'
+      host: yoga
+      summary: |-
+        MEASURED on yoga before building (840M vulkan, imagegen v56.11.1.2, sd.cpp master-1015-e41fbcf, I0 SDXS 512, 1 step): a resident sd-server in the engine's own sandbox (--network=none, same mounts and device), reached with `podman exec <c> curl localhost:1234/sdapi/v1/txt2img`. Server ready 3.05 s after `podman run` (the setup a warm engine pays once). Four sequential calls, wall per call: 4392 / 3036 / 2892 / 2867 ms (cold one-shot sd-cli: ~7.1 s). Engine lines for calls 2-4: sampling 1.68 / 1.67 / 1.67 s, decode 1.20 / 1.05 / 0.99 s. Call 4 wall 2.87 s <= sample + decode + 0.5 s = 3.16 s, so the revised criterion 2 is reachable with sd-server. The first call after start still paid 4.4 s (first-graph build). sd-server ignores SIGTERM (podman fell back to SIGKILL after 10 s), so the warm engine's stop path must use a short --time or kill.

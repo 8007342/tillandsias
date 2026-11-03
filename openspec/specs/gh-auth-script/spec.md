@@ -192,6 +192,21 @@ GitHub App user-to-server access tokens expire after 8 hours. The system MUST pe
 - **THEN** it MUST refuse with a non-zero exit and record the audit event
 - **AND** when Vault holds no refresh token (or no token), the command MUST exit non-zero rather than report success
 
+### Requirement: cloud.usage reads with the stored GitHub App token
+<!-- req-id: a0af6b8b -->
+
+The GitHub App token at `secret/github/token` is the token `cloud.usage`
+(spec:mcp-tool-socket, order 1966-47vt) reads, host-side only, never passed
+into a forge. Its reads prove the grants: Actions: Read (cache usage, runs,
+run timing) and the user permission Plan: Read (billing usage); a refused
+path is named as `permission-missing:github:<permission>`.
+
+@trace spec:gh-auth-script, order:1966-47vt
+
+#### Scenario: The billing grant is proven by the tool
+- **WHEN** the token lacks Plan: Read
+- **THEN** cloud.usage names `permission-missing:github:Plan: Read` and no token text
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:

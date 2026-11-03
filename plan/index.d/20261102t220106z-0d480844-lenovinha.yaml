@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tray-offers-start-comfyui-for-a-running-project-without-relaunching-its-forge
+    event:
+      type: note
+      ts: "2026-11-02T22:01:06Z"
+      agent_id: linux-lenovinha-opus5-20261102t220106z
+      host: lenovinha
+      summary: |
+        RE-SCOPED by operator ruling (verbatim, 2026-11-02, relayed by macuahuitl-fedora): "The studio should never be auto started, it should be started by the agent running in the forge, just like other sibling containers, web containers, and browsers, as an on-demmand appliance."
+        The tray menu entry is DROPPED. New scope: (1) remove the launch-time auto-start ([imagegen] studio = true -> imagegen_studio::ensure_if_enabled on forge start); nothing starts a studio at launch. (2) The forge agent starts it on demand through the forge MCP tool socket, shaped like browser.open and the web lanes: studio.open {kind: comfyui} ensures the image, starts the sibling on the enclave, routes studio.<label> behind OTP, returns status and URL, and is idempotent when already up; studio.run_workflow ensures the studio is up before queuing. (3) It stops with the forge like other siblings.
+        Today (origin/linux-next, studio_tool.rs:1082): studio.run_workflow with no studio running refuses with studio_unavailable, telling the agent to set [imagegen] studio = true in tillandsias.toml and relaunch the forge (the file name is also wrong: the flag is read from .tillandsias/config.toml).
+        Red-first exit criteria: a forge launch with the config flag set starts NO studio (pre-fix FAILS: one starts); studio.open from the forge starts exactly one studio container (pre-fix FAILS: no such tool); studio.run_workflow with no studio up starts one and queues (pre-fix FAILS: studio_unavailable).

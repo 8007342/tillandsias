@@ -2569,8 +2569,11 @@ distributed_work:
       ledger: >
         macron.dev keeps a committed deploy ledger with Cloudflare's billed
         build minutes per deploy (branch builds too, while they still run).
-        The agent merging to main sums the month first and refuses past the
-        budget unless a fix is urgent.
+        The agent merging to main reads the month's used minutes from the
+        cloud.usage MCP tool (or `tillandsias --cloud-usage` on the host) —
+        the summing is done by the tool, not by hand — and refuses past the
+        budget unless a fix is urgent (order 1966-47vt).
+      usage_tool: cloud.usage
     consumers:
       - "macron.dev's own AGENTS.md / CLAUDE.md (the repo states the same ruling)"
       - "skills/smoke-curl-install-and-test-e2e (the macron.dev note step needs no extra approval)"

@@ -189,11 +189,6 @@ mod tests {
             ),
             (
                 &main,
-                "mirror-seed",
-                "timed_async( \"mirror-seed\", gate_forge_launch(",
-            ),
-            (
-                &main,
                 "model-preload",
                 "timed_async( \"model-preload\", ensure_inference_for_launch(client, certs_dir, version, debug),",
             ),
@@ -214,6 +209,13 @@ mod tests {
             missing.is_empty(),
             "bring-up steps not timed exactly once: {missing:?}"
         );
+        // 1968-psy9: mirror-seed has TWO call sites, one per launch path that
+        // gates on the mirror (ensure_enclave_for_project and the OpenCode
+        // lane); a launch runs one of them, so each launch still times it once.
+        let seed = main
+            .matches("timed_async( \"mirror-seed\", gate_forge_launch(")
+            .count();
+        assert_eq!(seed, 2, "mirror-seed timed at {seed} gate sites, want 2");
     }
 
     #[test]

@@ -23,6 +23,14 @@
 --                   studio is listed but refused at launch, naming the packet
 --   packet          the lane's order
 --   needs_cloud_account  true: listed, never recommended (Onlook until 1865)
+--   kind            "forge" (default): the studio runs IN the forge, from its own
+--                   image stacked on the forge base, behind the studio front, and
+--                   edits the checkout. "sibling" (1921-2krx): the studio runs in
+--                   its OWN container next to the forge, from `image`, never sees
+--                   the checkout (entry is the image's own; write_allowlist must
+--                   be empty), and is reached only through the router's OTP
+--                   route studio.<label> -> tillandsias-<project>-studio:<port>.
+--   image           sibling only: the image the sibling runs (built on first use)
 --
 -- Silex is deliberately absent (operator ruling 2026-10-25).
 
@@ -81,6 +89,18 @@ return {
       save_adapter = "own-writer",
       write_allowlist = { "app/**", "src/**", "components/**", "public/**" },
       status = "planned", packet = "1865-dn5h", needs_cloud_account = true,
+    },
+    {
+      -- 1874-zry8 builds the image; 1921-2krx opens it as a studio. Not
+      -- recommended for any site framework: it makes images, not pages.
+      id = "comfyui", name = "ComfyUI", license = "GPL-3.0-only",
+      brief = "Node-based image generation on the local models, outputs to the lane's scratch volume.",
+      frameworks = {},
+      kind = "sibling", image = "imagegen-studio",
+      entry = {}, port = 8188,
+      save_adapter = "own-writer",
+      write_allowlist = {},
+      status = "ready", packet = "1921-2krx",
     },
   },
 }

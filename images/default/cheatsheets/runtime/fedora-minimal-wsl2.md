@@ -24,10 +24,10 @@ pull_recipe: see-section-pull-on-demand
 
 # Fedora-minimal WSL2 distro — recipe for hosting podman
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core, spec:default-image, spec:podman-orchestration
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-core, spec:default-image, spec:podman-orchestration
 
 **Version baseline**: Fedora 43 (current GA at time of writing); podman 5.x; WSL2 on Windows 10 19044+ / Windows 11.
-**Use when**: building the single `tillandsias` WSL2 distro that hosts podman and runs every Tillandsias container (forge, proxy, git, router, inference, browser-chrome) inside it. The Windows arm of `spec:windows-wsl-runtime`.
+**Use when**: building the single `tillandsias` WSL2 distro that hosts podman and runs every Tillandsias container (forge, proxy, git, router, inference, browser-chrome) inside it. The Windows arm of `spec:wsl-runtime`.
 
 ## Provenance
 
@@ -58,7 +58,7 @@ This script supersedes the per-service `build-forge.sh`/`build-git.sh`/`build-pr
 
 ```bash
 #!/usr/bin/env bash
-# @trace spec:windows-wsl-runtime, spec:default-image, spec:cross-platform
+# @trace spec:wsl-runtime, spec:default-image, spec:cross-platform
 # @cheatsheet runtime/fedora-minimal-wsl2.md
 # Builds tillandsias-distro.tar from fedora-minimal:44 + podman stack.
 
@@ -130,7 +130,7 @@ See full content in `runtime/wsl2-isolation-boundary.md`. Closes drvfs, interop,
 Pin the OverlayFS backend to fuse-overlayfs explicitly. Per `containers-storage.conf(5)`: `mount_program` chooses the helper for OverlayFS. Without it, podman may default to vfs (slow + space-inefficient) or unconfigured overlay (kernel mounts only work as root).
 
 ```toml
-# @trace spec:windows-wsl-runtime, spec:default-image
+# @trace spec:wsl-runtime, spec:default-image
 # @cheatsheet runtime/fedora-minimal-wsl2.md
 # Pin overlay backend so podman doesn't fall back to vfs in rootless mode.
 # Per docs.podman.io/podman.1: "The Overlay file system (OverlayFS) is not
@@ -153,7 +153,7 @@ mountopt = "nodev,metacopy=on"
 ### `/etc/containers/containers.conf`
 
 ```toml
-# @trace spec:windows-wsl-runtime, spec:default-image
+# @trace spec:wsl-runtime, spec:default-image
 # @cheatsheet runtime/fedora-minimal-wsl2.md
 
 [engine]
@@ -199,7 +199,7 @@ Per `docs.podman.io/podman-run.1`: `--memory` "is not supported on cgroups V1 ro
 WSL2 supports cgroup v2 but requires opt-in via the host's `.wslconfig`:
 
 ```ini
-# @trace spec:windows-wsl-runtime, spec:cross-platform
+# @trace spec:wsl-runtime, spec:cross-platform
 # (this lives in %UserProfile%\.wslconfig — host-side, not in the distro)
 [wsl2]
 kernelCommandLine = cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1
@@ -296,7 +296,7 @@ This cheatsheet documents the Fedora-minimal WSL2 distro recipe that hosts podma
 ```bash
 #!/bin/bash
 # Build tillandsias-distro.tar for wsl --import on Windows
-# @trace spec:windows-wsl-runtime, spec:default-image
+# @trace spec:wsl-runtime, spec:default-image
 
 OUT_DIR="${1:-target/wsl}"
 mkdir -p "$OUT_DIR"
