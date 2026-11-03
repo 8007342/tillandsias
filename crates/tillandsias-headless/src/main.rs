@@ -2749,8 +2749,8 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1874-b9tg: local image generation. Not an INIT image: built on
         // first use through ensure_image_exists.
         "imagegen" => "images/imagegen",
-        // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
-        // only for a project with `[imagegen] studio = true`.
+        // 1874-zry8: the ComfyUI studio. Never an INIT image; built on first
+        // studio.start or --studio comfyui (1969-cfyt).
         "imagegen-studio" => "images/imagegen-studio",
         // 1956-ucix: the CorridorKey 2.0 proof of concept. Never an INIT
         // image; built on the first studio.key_footage of a project with
@@ -19554,15 +19554,8 @@ pub(crate) fn ensure_enclave_for_project(
         tokio::spawn(async move {
             report_inference_readiness(&inference_client, debug).await;
         });
-        // 1874-zry8: the ComfyUI studio sibling, only for a project that opted in.
-        crate::imagegen_studio::ensure_if_enabled(
-            &client,
-            project_name,
-            project_path,
-            version,
-            debug,
-        )
-        .await;
+        // 1969-cfyt: no studio at launch; the forge agent starts it on demand
+        // (studio.start), operator ruling 2026-11-02.
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -20289,6 +20282,10 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     }
     #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+    // 1969-cfyt: the studio goes with the forge, before the volume it mounts.
+    if instance == "default" {
+        imagegen_studio::stop(project);
+    }
     // 1874-kkrc: image.generate's scratch volume goes with the forge.
     #[cfg(feature = "host-services")]
     imagegen_tool::remove_lane_volume(project, instance);

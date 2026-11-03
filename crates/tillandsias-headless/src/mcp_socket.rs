@@ -373,6 +373,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::imagegen_tool::descriptor());
             // 1956-x7xp: the headless studio workflow runner, beside it.
             tools.push(crate::studio_tool::descriptor());
+            // 1969-cfyt: the studio appliance, started on demand.
+            tools.extend(crate::imagegen_studio::tool_descriptors());
             // 1956-26qh: the GPU-free family contract checker, beside it.
             tools.push(validate_family_descriptor());
             // 1957-emar: the GPU arbiter's status and unload, beside them.
@@ -575,6 +577,42 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             "error": { "code": -32000, "message": e }
                         }),
                     }
+                }
+                // 1969-cfyt: the forge agent starts the studio on demand.
+                "studio.start" => {
+                    let version = crate::VERSION.trim();
+                    match crate::imagegen_studio::start_on_demand(
+                        project_label,
+                        &|| crate::imagegen_studio::is_running(project_label),
+                        &mut || {
+                            let client = tillandsias_podman::PodmanClient::new();
+                            let plan = crate::imagegen_studio::plan_explicit(
+                                &tillandsias_core::cache_root::cache_root(),
+                            );
+                            rt.block_on(crate::imagegen_studio::start(
+                                &client,
+                                &plan,
+                                project_label,
+                                version,
+                                debug,
+                            ))
+                        },
+                    ) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "studio.status" => {
+                    let running = crate::imagegen_studio::is_running(project_label);
+                    serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(
+                            crate::imagegen_studio::status_json(project_label, running)
+                        )
+                    })
                 }
                 // 1957-emar: GPU status and an unload routed through the arbiter.
                 "gpu.status" | "gpu.unload_model" => {
