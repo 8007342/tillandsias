@@ -1,7 +1,9 @@
 //! 1874-zry8: the optional ComfyUI studio, a forge sibling.
 //!
-//! A project opts in with `[imagegen] studio = true`. Without it nothing here
-//! resolves, so no studio image is built and no container runs. With it, the
+//! 1969-cfyt (operator ruling 2026-11-02): the studio is an on-demand
+//! appliance. Nothing starts it at forge launch; the forge agent starts it
+//! with `studio.start` (or a human with `--studio comfyui`), and it stops with
+//! the forge. The old `[imagegen] studio = true` switch is read by nothing. The
 //! studio mounts the shared model cache (`cache_root()/models/imagegen`, the
 //! same files image.generate fetched through the licence register) read-only,
 //! reaches no network beyond the internal enclave (no proxy is configured, so
@@ -10,11 +12,11 @@
 
 use std::path::{Path, PathBuf};
 
-use tillandsias_core::config::ProjectConfig;
-
 /// The image name `image_specs` and `runtime_assets` resolve.
 pub const STUDIO_IMAGE: &str = "imagegen-studio";
-/// ComfyUI's HTTP port inside the container.
+/// ComfyUI's HTTP port inside the container (read by the studio tools,
+/// which only host-services builds carry).
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub const STUDIO_PORT: u16 = 8188;
 
 /// What a studio launch needs, resolved only for an opted-in project.
@@ -25,17 +27,8 @@ pub struct StudioPlan {
     pub models_dir: PathBuf,
 }
 
-/// `Some` only when the project enabled the studio.
-pub fn plan(config: &ProjectConfig, cache_root: &Path) -> Option<StudioPlan> {
-    config
-        .imagegen
-        .as_ref()
-        .filter(|c| c.studio)
-        .map(|_| StudioPlan {
-            image: STUDIO_IMAGE,
-            models_dir: crate::imagegen_models::models_dir_under(cache_root),
-        })
-}
+/// The image's `studio` user (images/imagegen-studio/Containerfile useradd).
+pub const STUDIO_UID: u32 = 1001;
 
 /// 1921-2krx: the plan for an EXPLICIT `--studio comfyui` launch. Asking for
 /// the studio by name is the opt-in, so the project config is not consulted.
@@ -72,7 +65,11 @@ pub fn run_args(
         "--cap-drop=ALL".to_string(),
         "--security-opt=no-new-privileges".to_string(),
         "--security-opt=label=disable".to_string(),
-        "--userns=keep-id".to_string(),
+        // 1969-cfyt: map the host user to the image's studio uid, so files the
+        // studio writes are the forge's own and the forge-owned volume root
+        // (0755) is writable. Plain keep-id ran studio as an unmapped uid:
+        // SaveImage got EACCES creating /out/studio (Kumbia trial).
+        format!("--userns=keep-id:uid={STUDIO_UID},gid={STUDIO_UID}"),
         "--oom-score-adj=1000".to_string(),
         "--label".to_string(),
         format!("tillandsias.studio.project={project}"),
@@ -175,27 +172,79 @@ fn host_has_cdi_gpu() -> bool {
         .any(|p| Path::new(p).is_file())
 }
 
-/// Start the studio beside the forge when, and only when, the project enabled
-/// it. Best effort: a studio that cannot start is reported and the forge
-/// launches anyway.
-pub async fn ensure_if_enabled(
-    client: &tillandsias_podman::PodmanClient,
-    project_name: &str,
-    project_path: Option<&Path>,
-    version: &str,
-    debug: bool,
-) {
-    let Some(path) = project_path else { return };
-    let config = tillandsias_core::config::load_project_config(path);
-    let Some(plan) = plan(&config, &tillandsias_core::cache_root::cache_root()) else {
-        return;
-    };
-    match start(client, &plan, project_name, version, debug).await {
-        Ok(()) => eprintln!(
-            "[tillandsias] imagegen studio up for {project_name} (http://studio:{STUDIO_PORT} inside the enclave)"
-        ),
-        Err(e) => eprintln!("[tillandsias] imagegen studio NOT started for {project_name}: {e}"),
+#[cfg(feature = "host-services")]
+/// Whether the studio container of `project` is running.
+pub fn is_running(project: &str) -> bool {
+    let mut cmd = tillandsias_podman::podman_cmd_sync();
+    cmd.args([
+        "inspect",
+        "--format",
+        "{{.State.Running}}",
+        &container_name(project),
+    ]);
+    cmd.output_bounded(std::time::Duration::from_secs(15))
+        .ok()
+        .filter(|o| o.status.success())
+        .is_some_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "true")
+}
+
+/// Forge teardown: the studio goes with the forge (its output volume is the
+/// default lane's, which cannot be removed while the studio mounts it).
+pub fn stop(project: &str) {
+    let mut cmd = tillandsias_podman::podman_cmd_sync();
+    cmd.args(["rm", "-f", "--time", "5", &container_name(project)]);
+    let _ = cmd.output_bounded(std::time::Duration::from_secs(30));
+}
+
+#[cfg(feature = "host-services")]
+/// `studio.status {}`: what the forge agent needs to use the studio.
+pub fn status_json(project: &str, running: bool) -> serde_json::Value {
+    serde_json::json!({
+        "running": running,
+        "container": container_name(project),
+        "url": running.then(|| format!("http://{}:{STUDIO_PORT}", container_name(project))),
+        "how": if running {
+            "studio.run_workflow queues on it; it stops with the forge."
+        } else {
+            "Not running. Call studio.start {} (nothing starts it at forge launch)."
+        },
+    })
+}
+
+#[cfg(feature = "host-services")]
+/// ORDER 1969-cfyt: `studio.start {}`. Idempotent: a running studio is left as
+/// it is; otherwise `launch` runs exactly once. `running` and `launch` are the
+/// podman seams (production: [`is_running`] and [`start`]).
+pub fn start_on_demand(
+    project: &str,
+    running: &dyn Fn() -> bool,
+    launch: &mut dyn FnMut() -> Result<(), String>,
+) -> Result<serde_json::Value, String> {
+    let already = running();
+    if !already {
+        launch().map_err(|e| format!("studio_start_failed: {e}"))?;
     }
+    let mut v = status_json(project, already || running());
+    v["started"] = serde_json::json!(!already);
+    Ok(v)
+}
+
+#[cfg(feature = "host-services")]
+/// The tool descriptors for `studio.start` and `studio.status`.
+pub fn tool_descriptors() -> Vec<serde_json::Value> {
+    let empty = serde_json::json!({ "type": "object", "properties": {} });
+    vec![
+        serde_json::json!({
+            "name": "studio.start",
+            "description": "Start this project's ComfyUI studio container on demand (an appliance beside the forge, on the enclave network, no host port). Idempotent; builds the image on first use. It stops with the forge. studio.run_workflow needs it running.",
+            "inputSchema": empty,
+        }),
+        serde_json::json!({
+            "name": "studio.status",
+            "description": "Whether this project's ComfyUI studio is running, and its enclave URL.",
+            "inputSchema": empty,
+        }),
+    ]
 }
 
 /// Build (on first use) and start the studio container for `project_name`.
@@ -236,7 +285,6 @@ pub async fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tillandsias_core::config::ImagegenConfig;
 
     /// 1874-zry8 exit criterion. Pre-fix: FAILS, imagegen-studio is not a
     /// known image and the config has no switch.
@@ -244,18 +292,7 @@ mod tests {
     fn the_studio_is_absent_by_default_and_resolves_with_the_shared_cache_when_enabled() {
         let cache =
             tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
-        // Default: no plan, so no build and no container.
-        assert_eq!(plan(&ProjectConfig::default(), cache.path()), None);
-        let off = ProjectConfig {
-            imagegen: Some(ImagegenConfig {
-                studio: false,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        assert_eq!(plan(&off, cache.path()), None);
-        let parsed: ProjectConfig = toml::from_str("[imagegen]\nstudio = true\n").unwrap();
-        let p = plan(&parsed, cache.path()).expect("enabled");
+        let p = plan_explicit(cache.path());
         assert_eq!(p.image, "imagegen-studio");
         assert_eq!(p.models_dir, cache.path().join("models").join("imagegen"));
         assert!(
@@ -303,7 +340,67 @@ mod tests {
                 .any(|s| s == "-p" || s.starts_with("--publish") || s.starts_with("-p=")),
             "{a:?}"
         );
-        assert_eq!(plan_explicit(cache.path()), p);
+    }
+
+    /// ORDER 1969-cfyt: nothing at forge launch starts a studio. Pre-fix:
+    /// FAILS, the forge launch path called ensure_if_enabled, which started
+    /// one for `[imagegen] studio = true`.
+    #[test]
+    fn a_forge_launch_starts_no_studio() {
+        let main = include_str!("main.rs");
+        let call = ["ensure_if_", "enabled("].concat();
+        assert!(
+            !main.contains(&call),
+            "the forge launch still starts a studio"
+        );
+        assert!(!include_str!("imagegen_studio.rs").contains(&["fn ", &call].concat()));
+    }
+
+    /// ORDER 1969-cfyt: studio.start starts exactly one studio, and a second
+    /// call while it runs starts none. Pre-fix: FAILS, there is no studio.start.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn studio_start_launches_exactly_once_and_is_idempotent() {
+        let up = std::cell::Cell::new(false);
+        let launches = std::cell::Cell::new(0);
+        let mut launch = || {
+            launches.set(launches.get() + 1);
+            up.set(true);
+            Ok(())
+        };
+        let r = start_on_demand("p", &|| up.get(), &mut launch).unwrap();
+        assert_eq!(
+            (r["started"].as_bool(), r["running"].as_bool()),
+            (Some(true), Some(true))
+        );
+        let r = start_on_demand("p", &|| up.get(), &mut launch).unwrap();
+        assert_eq!(r["started"], false);
+        assert_eq!(launches.get(), 1, "exactly one studio");
+        assert_eq!(r["url"], "http://tillandsias-p-studio:8188");
+        let mut fails = || Err("no image".to_string());
+        let e = start_on_demand("q", &|| false, &mut fails).unwrap_err();
+        assert!(e.starts_with("studio_start_failed:"), "{e}");
+    }
+
+    /// ORDER 1969-cfyt: the studio runs as the forge's own user, so SaveImage
+    /// can create /out/studio in the forge-owned volume. Pre-fix: FAILS, plain
+    /// keep-id (the trial's EACCES; reproduced live on lenovinha with the
+    /// production flags: keep-id -> Permission denied, keep-id:uid=1001 -> ok).
+    #[test]
+    fn the_studio_maps_the_host_user_to_its_own_uid() {
+        let p = plan_explicit(Path::new("/c"));
+        let a = run_args(
+            &p,
+            "proj",
+            "v",
+            false,
+            &StudioBudget::for_host(13_811, 9_000, 16),
+        );
+        assert!(
+            a.contains(&"--userns=keep-id:uid=1001,gid=1001".to_string()),
+            "{a:?}"
+        );
+        assert!(!a.contains(&"--userns=keep-id".to_string()), "{a:?}");
     }
 
     /// 1921-q7q3: the studio budget is computed from host RAM: high about
