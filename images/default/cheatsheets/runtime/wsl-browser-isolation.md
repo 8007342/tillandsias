@@ -26,7 +26,7 @@ pull_recipe: see-section-pull-on-demand
 
 # WSL browser isolation (Chromium)
 
-@trace spec:agent-cheatsheets, spec:cross-platform, spec:windows-wsl-runtime, spec:browser-isolation-core
+@trace spec:agent-cheatsheets, spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-core
 
 **Version baseline**: WSL2 on Windows 10 build 19044+ / Windows 11; systemd integration requires Win 10 19044+ or Win 11 22H2+.
 **Use when**: hosting a hardened Chromium browser as a sibling WSL distro alongside `tillandsias-forge`/`tillandsias-git`/`tillandsias-proxy`/etc. Goal: full filesystem + credential isolation from the host, all egress forced through `tillandsias-proxy:3128`. The Windows arm of `spec:browser-isolation-core`.
@@ -89,6 +89,8 @@ hostname = tillandsias-browser-chrome
 ```
 
 `[interop] enabled = false` is the load-bearing switch for credential isolation: it removes the binary that translates Linux→Windows IPC. Without it, even with `/mnt/c` gone, a determined process could still execute Windows binaries over the WSL interop pipe.
+
+**Scope note (2026-11-02):** the recipe above is for the SEPARATE browser distro. It is NOT what the `tillandsias` runtime distro runs: there the tray writes `[interop] enabled=true, appendWindowsPath=false` with `[automount] enabled=false` (`crates/tillandsias-vm-layer/src/wsl.rs:739-749`; measured on yoga 2026-11-02 — binfmt `WSLInterop` enabled, `/mnt/c` empty). In the runtime distro Windows binaries are runnable via interop but not on `$PATH`. See `runtime/wsl2-isolation-boundary.md`.
 
 ## Recipe — Chromium command-line flags
 
@@ -271,7 +273,7 @@ This cheatsheet documents hardened Chromium deployment in a WSL2 distro alongsid
 ```bash
 #!/bin/bash
 # Build WSL2 browser-chrome distro with Chromium hardening
-# @trace spec:browser-isolation-core, spec:windows-wsl-runtime
+# @trace spec:browser-isolation-core, spec:wsl-runtime
 
 # Build base distro from fedora-minimal:44 + Chromium + hardening tools
 podman create registry.fedoraproject.org/fedora-minimal:44 /bin/sh -c 'true' > "$BUILD_CONTAINER"

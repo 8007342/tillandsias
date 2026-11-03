@@ -31,6 +31,11 @@ pub const PERMISSIVE_LICENCES: &[&str] = &[
     "bsd-3-clause",
     "creativeml-openrail-m",
     "openrail++",
+    // Operator ruling 2026-11-01: "Yes, OpenRAIL aligns well with our
+    // principles." Its use-restriction attachment passes downstream; the
+    // 1954-dvz9 obligations spec carries it.
+    "openrail",
+    "openrail-m",
 ];
 
 /// Never shippable, whatever a row's licence column claims (design.md section 3).

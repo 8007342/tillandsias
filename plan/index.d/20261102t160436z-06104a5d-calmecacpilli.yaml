@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: spec-windows-wsl-runtime-is-cited-71-times-in-32-files-and-has-never-existed-so-every-one-of-those-traces-points-at-nothing
+    event:
+      type: note
+      ts: "2026-11-02T16:04:36Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t160435z
+      host: calmecacpilli
+      summary: |
+        Retargeted every live `spec:windows-wsl-runtime` trace to `spec:wsl-runtime` (order 1410-ugvw): 25 authored sites in 20 files (11 cheatsheets/runtime+languages, 2 .rs files in crates/tillandsias-podman, 6 forge entrypoints, images/git/post-receive-hook.sh), and the derived images/default/cheatsheets tree regenerated with scripts/stage-image-cheatsheets.sh --stage (diff -qr identical). plan/ fragments, plan/index.yaml, plan/archive and plan/loop_status.d were left untouched as history; openspec/changes/windows-wsl-runtime/ is an in-flight change (podman-free direction) and does not cite the ghost name. Per-site review found one claim wsl-runtime lacked: client.rs run_container_wsl_detached / parse_host_port_from_publish (the Windows tray translating the podman launch profile into wsl.exe --exec, dropping -p and injecting OC_EXPOSED_PORT) — added as wsl-runtime Requirement 10 (req-id 7c3e9a1d) with a WHEN/THEN scenario. Noted, not fixed: cheatsheets/runtime/wsl2-isolation-boundary.md prescribes automount=false/interop=false for the tillandsias distro, which contradicts wsl-runtime Requirement 1.3 (/mnt/c accessible) — a spec/cheatsheet conflict for a separate packet. .rs edits are trace comments only and were not compiled on this host; the land queue's compile gate covers them. Hook ghost_check over the staged set: 0 warnings; git grep for the ghost name outside plan/: empty.
