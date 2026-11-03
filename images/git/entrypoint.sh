@@ -240,8 +240,15 @@ if [ -n "$PROJECT" ]; then
         # the launcher should pass a clean URL).
         REDACTED_URL="$(echo "$TILLANDSIAS_PROJECT_REMOTE_URL" | sed -E 's#https://[^@/]+@#https://***@#')"
         echo "[git-service] setting $PROJECT_REPO origin to $REDACTED_URL"
-        git -C "$PROJECT_REPO" remote remove origin 2>/dev/null || true
-        git -C "$PROJECT_REPO" remote add origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
+        # 1977-xpus: set-url, never remove+add. `git remote remove` deletes the
+        # remote's tracking refs, so on this persistent volume every warm start
+        # re-listed every upstream branch as new and the forge waited 6.7-12 s
+        # for it (measured on yoga 2026-11-03).
+        if git -C "$PROJECT_REPO" remote get-url origin >/dev/null 2>&1; then
+            git -C "$PROJECT_REPO" remote set-url origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
+        else
+            git -C "$PROJECT_REPO" remote add origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
+        fi
         # @trace spec:git-mirror-service
         # Reconciliation fetches land in remote-tracking refs ONLY. The old
         # "+refs/*:refs/*" mapped upstream branches directly onto the mirror's
@@ -731,16 +738,11 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
         continue
     fi
 
-    # Build synthetic receive records so startup recovery uses the exact same
-    # Vault-backed, atomic relay helper as live pushes.
-    UPDATE_RECORDS=""
-    REF_COUNT=0
-    for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
-        NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
-        UPDATE_RECORDS="${UPDATE_RECORDS}${NEWSHA} ${NEWSHA} ${ref}
-"
-        REF_COUNT=$((REF_COUNT + 1))
-    done
+    # 1977-xpus: one for-each-ref, not a `git rev-parse` per ref. The loop that
+    # stood here built UPDATE_RECORDS, which nothing has read since 1968-psy9
+    # moved the retry-push after READY, and it spawned git once per ref (1506
+    # on the tillandsias mirror) ahead of READY on every start.
+    REF_COUNT="$(git -C "$mirror" for-each-ref --format='x' refs/heads refs/tags 2>/dev/null | wc -l | tr -d ' ')"
     if [ "$REF_COUNT" -eq 0 ]; then
         continue
     fi
@@ -771,7 +773,10 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     # together they keep the mirror coherent both ways. Never --mirror/--all:
     # only the explicit exported refs/heads/* set (same sparse-mirror invariant
     # as the seed and relay paths).
-    FF_OUTPUT="$(git -C "$mirror" fetch origin 'refs/heads/*:refs/heads/*' 2>&1)" || retry_msg "[git-mirror] Startup exported-head fast-forward (non-fatal; diverged heads relay UP below): $FF_OUTPUT"
+    # 1977-xpus: from the tracking refs the fetch above just refreshed, not a
+    # second round trip to upstream (measured on yoga: 140-159 ms against
+    # 700-730 ms). Same non-forced refspec, so the same heads are left alone.
+    FF_OUTPUT="$(git -C "$mirror" fetch . 'refs/remotes/origin/*:refs/heads/*' 2>&1)" || retry_msg "[git-mirror] Startup exported-head fast-forward (non-fatal; diverged heads relay UP below): $FF_OUTPUT"
     if [ -n "$FF_OUTPUT" ]; then
         retry_msg "[git-mirror] Startup exported-head fast-forward: $FF_OUTPUT"
     fi

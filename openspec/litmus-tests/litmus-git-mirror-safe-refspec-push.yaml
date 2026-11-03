@@ -26,7 +26,7 @@ critical_path:
     expected_behavior: "relay exact stdin and unconditional delete refusal present"
 
   - step: "startup retry uses explicit refs and never mirror/all"
-    command: "grep -Fq \"for-each-ref --format='%(refname)' refs/heads refs/tags\" images/git/entrypoint.sh && grep -Fq 'hooks/tillandsias-relay-refs' images/git/entrypoint.sh && grep -Fq 'UPDATE_RECORDS=' images/git/entrypoint.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'startup safe refspec contract present'"
+    command: "grep -Fq \"for-each-ref --format='%(refname)' refs/heads refs/tags\" images/git/entrypoint.sh && grep -Fq 'hooks/tillandsias-relay-refs' images/git/entrypoint.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'startup safe refspec contract present'"
     timeout_ms: 10000
     expected_behavior: "startup safe refspec contract present"
 
