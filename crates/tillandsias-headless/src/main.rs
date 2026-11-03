@@ -38287,6 +38287,12 @@ mod lane_socket_owner_tests {
             .unwrap()
             .remove(&key);
         drop(held);
+        // 1980-lsrc: a parallel test's fork can hold the listener fd until it
+        // execs, so the socket is "departed" only once it refuses.
+        assert!(
+            mcp_socket::wait_until_refused(&socket),
+            "the dropped listener never went away"
+        );
         // A departed owner (connection refused) is not refused either: the
         // listener reclaims that socket.
         let stale = refuse(false);
