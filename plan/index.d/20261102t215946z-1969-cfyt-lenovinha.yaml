@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-02, at the coordinator's request (operator question on ComfyUI relaunch).
+packets:
+- packet_id: the-tray-offers-start-comfyui-for-a-running-project-without-relaunching-its-forge
+  order: 1969-cfyt
+  status: open
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, tray, ux]
+  estimated_hours: 3
+  title: The tray offers Start ComfyUI for a running project without relaunching its forge
+  context: 'Two paths start the ComfyUI studio today. (a) The forge launch reads <project>/.tillandsias/config.toml [imagegen] studio = true via load_project_config, only inside imagegen_studio::ensure_if_enabled at forge start, so turning the flag on takes effect only on the next forge launch. (b) tillandsias --studio comfyui (run_sibling_studio_mode, 1921-2krx) needs no flag (plan_explicit), starts no forge, mirror or inference, and only adds the studio container, the router route studio.<label> and the OTP window; the live run on lenovinha 2026-11-02 left the running tray and containers untouched. The studio writes the per-project volume tillandsias-imagegen-<project>-default, the same name image.generate uses for instance default, and reads the shared model cache read-only. So a running project can get a studio with no relaunch; only the tray has no entry for it. Tray menu changes need operator UX approval.'
+  exit_criteria:
+  - 'With a forge of project P running, choosing Start ComfyUI in the tray brings up the studio window for P, and the forge container ID and start time are unchanged. Pre-fix result: FAILS, there is no such menu entry.'
+  verifiable_closure: 'Live tray run on a Linux host: podman inspect the forge before and after; the studio window opens after an authenticated 2xx.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs operator UX approval of the menu entry before a litmus can name it (1136-n8sh).'
+  next_action: 'Get operator UX approval for the menu entry, then call run_sibling_studio_mode from the tray action for the selected project.'
+  provenance: operator question relayed by macuahuitl-fedora 2026-11-02; facts read from origin/linux-next main.rs run_sibling_studio_mode and imagegen_studio.rs.
+  events:
+  - type: filed
+    ts: '2026-11-02T21:59:46Z'
+    host: lenovinha
+    summary: filed p2 open, unclaimed; awaits operator UX approval
