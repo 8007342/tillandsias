@@ -11,31 +11,38 @@ Two distinct web flows exist — pick by the user's intent:
    locally", "publish this") — do **NOT** run a server in the forge.
    A web service lives in a **sibling container** on the enclave, managed
    by the host. Delegate through the Tillandsias MCP tools (the
-   `host-browser` MCP server carries them):
+   `host-browser` MCP server carries them; its `initialize` reply and
+   `tillandsias.index {}` list every group, and the flat names below
+   stay callable for one release as deprecated aliases of the `preview.*`
+   names, order 1969-7qm7):
 
-   - `publish_local {"category": "WEB", "runtime": "auto"}` — the host
+   - `preview.publish {"category": "WEB", "runtime": "auto"}` (alias
+     `publish_local`) — STARTS a sibling web container; the host
      selects the managed static or local-Wrangler profile for this authenticated
      lane's live worktree and returns its actual local preview URL. `auto` is
      the default; `static` and `wrangler` are the only explicit choices.
      Re-publishing reconciles the same service.
-   - `publish_local {"category": "WEB", "runtime": "auto", "app_dir": "observatorium"}`
+   - `preview.publish {"category": "WEB", "runtime": "auto", "app_dir": "observatorium"}`
      — for an app that lives in a **subdirectory** with its own
      `wrangler.jsonc`/`wrangler.toml` (a monorepo): `app_dir` is that
      directory, relative to the project. Its config, its assets directory and
      the static fallback are all resolved inside it, and nothing outside it is
      mounted. It must be a real directory: absolute paths, `..`, hidden
      segments (`.git`) and symlinks are refused by name. Omit it for a
-     project whose config is at the root. `service_reload` republishes the
+     project whose config is at the root. `preview.reload` republishes the
      same `app_dir`.
-   - `service_status {}` — the published service's state, and after a
+   - `preview.status {}` (alias `service_status`) — the published service's state, and after a
      failed publish its `last_failure`: step, reason, time and `remedy`
      (`agent`: fix or build the project; `host-retry`: call again;
      `operator`: tell the user). A `source_not_found` reason names what
      the host looked for; when it says an assets directory does not exist
      yet, build the project first, then publish again.
-   - `service_reload {"category": "WEB"}` — restart/reload the existing
+   - `preview.reload {"category": "WEB"}` (alias `service_reload`) — restart/reload the existing
      preview runtime while retaining its authenticated lane and live source.
-   - `service_stop {"category": "WEB"}` — stop it and remove its route.
+   - `preview.stop {"category": "WEB"}` (alias `service_stop`) — stop it and remove its route.
+   - `preview.logs {"category": "WEB"}` (alias `service_logs`) — its last
+     output lines, state and exit code, when `preview.status` says it is
+     not serving.
 
    Safety model: the host attributes the project from **your session**
    (never from the request), so you can only ever publish the project you
