@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned (kumbia-kombat studio models).
+packets:
+- packet_id: the-studio-pins-sdxl-full-step-qwen-image-edit-flux-2-klein-and-wan-vace-weights-for-kumbia-kombat-once-the-operator-confirms-their-licences
+  order: 1982-kpin
+  status: blocked
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, models, licence]
+  estimated_hours: 2
+  title: The studio pins SDXL full-step, Qwen-Image-Edit, FLUX.2-klein and Wan VACE weights for kumbia-kombat once the operator confirms their licences
+  context: 'Requested for kumbia-kombat via macuahuitl-fedora 2026-11-03. 13 files, 102.2 GB at fp8: SDXL base 1.0 and Animagine XL 4.0 (openrail++), the fp16 SDXL VAE (MIT); Qwen-Image-Edit-2511, FLUX.2-klein-4B and Wan2.2-VACE-Fun-A14B (Apache-2.0) as the Comfy-Org split_files single-file repackages, because the named repos are diffusers layouts that ComfyUI loaders cannot load by name (same weights where both exist, by sha256). fp8 because the bf16 Qwen-Edit (40.9 GB) and Wan (34.7 GB per expert) do not fit a 24 GB GPU. All core classes exist at ComfyUI v0.40.0; no node pack. studio.run_workflow collects image outputs only, so a Wan SaveVideo result is not returned yet.'
+  exit_criteria:
+  - 'The operator confirms the licences first-hand; then the register block drops PENDING and the draft PR is undrafted.'
+  - 'check-model-licence-register, test-studio-node-pins and the imagegen/studio unit tests pass with the rows.'
+  verifiable_closure: 'scripts/lua/check-model-licence-register.lua; scripts/lua/test-studio-node-pins.lua'
+  unscoreable: 'unpinnable-until-the-guard-exists: data rows checked by the existing register and node-pin fixtures (1136-n8sh).'
+  next_action: 'BLOCKED on the operator''s first-hand licence confirmation (macuahuitl-fedora is asking). On a yes: confirm in the lenovinha session, edit the register comment, undraft.'
+  provenance: coordinator macuahuitl-fedora 2026-11-03 for the operator's kumbia forge.
+  events:
+  - type: filed
+    ts: '2026-11-03T21:23:14Z'
+    host: lenovinha
+    summary: filed p1 blocked on operator licence confirmation, staged by opus5
