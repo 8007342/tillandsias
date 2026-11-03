@@ -71,10 +71,19 @@ local function root(name, body)
     return ROOT .. "/" .. r
 end
 
+-- Each inner gate gets its OWN private fallback under the scratch root. build.sh
+-- keeps an inherited TILLANDSIAS_METRICS_FALLBACK_DIR, so without this the inner
+-- gate reused the OUTER gate's dir and the LEAK arm's child wrote its record into
+-- the real gate's fallback, which then refused this step for a leak.
+local gates = 0
 local function gate(r)
     proc.run({ argv = { "rm", "-f", SHARED } })
+    gates = gates + 1
+    local fb = ABS .. "/fallback-" .. tostring(gates)
+    fs.mkdir(REL .. "/fallback-" .. tostring(gates))
     local res = proc.run({ argv = { "./build.sh", "--gate-steps", r }, timeout_ms = 300000,
-        env = { TILLANDSIAS_GATE_SHARED_TIMING_PATH = SHARED, TILLANDSIAS_TIMING_RUN_ID = "gate-fixture-1966" } })
+        env = { TILLANDSIAS_GATE_SHARED_TIMING_PATH = SHARED, TILLANDSIAS_TIMING_RUN_ID = "gate-fixture-1966",
+                TILLANDSIAS_METRICS_FALLBACK_DIR = fb } })
     return res.code, (res.stdout or "") .. (res.stderr or "")
 end
 
