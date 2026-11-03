@@ -19700,20 +19700,30 @@ fn forge_ram_workspace_volume(project: &str) -> String {
 /// A host-mount lane never binds there (its listener start is best-effort), so
 /// it is not refused here either.
 fn refuse_lane_socket_owned_elsewhere(project: &str, host_mount: bool) -> Result<(), String> {
+    let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| "default".into());
+    refuse_lane_socket_owned_for_instance(project, &instance, host_mount)
+}
+
+/// [`refuse_lane_socket_owned_elsewhere`] for an explicit instance, so a test
+/// passes it instead of mutating the process environment (1969-scp2).
+fn refuse_lane_socket_owned_for_instance(
+    project: &str,
+    instance: &str,
+    host_mount: bool,
+) -> Result<(), String> {
     #[cfg(feature = "host-services")]
     if !host_mount {
-        let instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-            .unwrap_or_else(|| "default".into());
-        if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, &instance) {
+        if let Some(path) = mcp_socket::lane_socket_foreign_owner(project, instance) {
             return Err(lane_socket_owned_refusal(project, instance.trim(), &path));
         }
-        if let Some(refusal) = mcp_socket::lane_served_by_other_build(project, &instance) {
+        if let Some(refusal) = mcp_socket::lane_served_by_other_build(project, instance) {
             return Err(refusal);
         }
     }
-    let _ = (project, host_mount);
+    let _ = (project, instance, host_mount);
     Ok(())
 }
 
@@ -23598,12 +23608,20 @@ mod tests {
 
     fn podman_false_seam() -> PodmanFalseSeam {
         let lock = podman_seam_lock();
+        // 1969-scp2: and the env lock, seam-then-env: this is an env write like
+        // any other, and remote_projects repoints the var holding env_lock only.
+        let env = env_lock();
         let prev = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", "/bin/false") };
-        PodmanFalseSeam { _lock: lock, prev }
+        PodmanFalseSeam {
+            _lock: lock,
+            _env: env,
+            prev,
+        }
     }
     struct PodmanFalseSeam {
         _lock: std::sync::MutexGuard<'static, ()>,
+        _env: std::sync::MutexGuard<'static, ()>,
         prev: Option<std::ffi::OsString>,
     }
     impl Drop for PodmanFalseSeam {
@@ -30972,7 +30990,7 @@ mod tests {
     #[test]
     fn delegated_result_format_propagates_to_both_prompted_builders_only() {
         let _pseam = podman_false_seam();
-        let _env = env_lock();
+        // env_lock is held by the seam (1969-scp2).
         let restore = TestEnvRestore::capture(&[
             "TILLANDSIAS_AGENT_RESULT_FORMAT",
             "TILLANDSIAS_AGENT_RESULT_FILE",
@@ -33480,7 +33498,7 @@ esac
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
         let _pseam = podman_false_seam();
-        let _guard = env_lock();
+        // env_lock is held by the seam (1969-scp2).
         // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
         // feature; exercise it in host-mount mode.
         let _hm = HostMountEnvGuard::enable();
@@ -36919,7 +36937,7 @@ esac
     #[test]
     fn opencode_lane_builder_labels_the_launching_tray_run() {
         let _seam = podman_false_seam();
-        let _env = env_lock();
+        // env_lock is held by the seam (1969-scp2).
         let prev = std::env::var_os(dead_run::RUN_ENV);
         let build = || {
             build_opencode_forge_args(
@@ -37760,38 +37778,37 @@ mod lane_socket_owner_tests {
     /// lane registry does not know, exactly what a tray in another process is.
     #[test]
     fn a_cli_lane_refuses_by_name_when_another_process_owns_its_socket() {
-        let _env = crate::test_support::env_lock();
+        // 1969-scp2: no process-wide env is written. The runtime root is a
+        // THREAD-LOCAL seam and the instance is passed, so a parallel test that
+        // reads or repoints XDG_RUNTIME_DIR cannot change this test's lane.
         // The kernel caps a socket path near 108 bytes, so the scratch runtime
-        // dir is short and under the real runtime dir, not the checkout.
-        let base = std::env::var_os("XDG_RUNTIME_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(std::env::temp_dir);
-        let scratch = base.join(format!("k5hm-{}", std::process::id()));
-        let saved = std::env::var_os("XDG_RUNTIME_DIR");
-        let saved_instance = std::env::var_os("TILLANDSIAS_FORGE_INSTANCE");
-        // SAFETY: env_lock serialises every env-mutating test.
-        unsafe {
-            std::env::set_var("XDG_RUNTIME_DIR", &scratch);
-            std::env::remove_var("TILLANDSIAS_FORGE_INSTANCE");
-        }
+        // dir is short and under the system temp dir, not the checkout.
+        let scratch = std::env::temp_dir().join(format!("k5hm-{}", std::process::id()));
+        let _root = mcp_socket::test_runtime_root::set(&scratch);
         let project = "k5hm-held";
+        let refuse =
+            |host_mount| refuse_lane_socket_owned_for_instance(project, "default", host_mount);
         let socket = mcp_socket::mcp_socket_path_for_lane(project, "default");
+        assert!(
+            socket.starts_with(&scratch),
+            "the seam placed the lane: {socket:?}"
+        );
         std::fs::create_dir_all(socket.parent().unwrap()).unwrap();
 
         // Negative control: no owner, the launch proceeds as today.
-        let free = refuse_lane_socket_owned_elsewhere(project, false);
+        let free = refuse(false);
 
         let held = std::os::unix::net::UnixListener::bind(&socket).expect("hold the lane socket");
-        let refused = refuse_lane_socket_owned_elsewhere(project, false);
+        let refused = refuse(false);
         // A host-mount lane never binds the socket, so it is not refused.
-        let host_mount = refuse_lane_socket_owned_elsewhere(project, true);
+        let host_mount = refuse(true);
         // A lane THIS process serves (the tray's own launches) is not refused.
         let key = (project.to_string(), "default".to_string());
         mcp_socket::lane_listener_registry()
             .lock()
             .unwrap()
             .insert(key.clone());
-        let own = refuse_lane_socket_owned_elsewhere(project, false);
+        let own = refuse(false);
         mcp_socket::lane_listener_registry()
             .lock()
             .unwrap()
@@ -37799,18 +37816,7 @@ mod lane_socket_owner_tests {
         drop(held);
         // A departed owner (connection refused) is not refused either: the
         // listener reclaims that socket.
-        let stale = refuse_lane_socket_owned_elsewhere(project, false);
-
-        // SAFETY: as above.
-        unsafe {
-            match saved {
-                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
-                None => std::env::remove_var("XDG_RUNTIME_DIR"),
-            }
-            if let Some(v) = saved_instance {
-                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", v);
-            }
-        }
+        let stale = refuse(false);
         let _ = std::fs::remove_dir_all(&scratch);
 
         assert_eq!(free, Ok(()), "no owner: launch as today");
