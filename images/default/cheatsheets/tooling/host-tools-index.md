@@ -40,7 +40,8 @@ committed_for_project: false
 | `preview.publish` / `.status` / `.reload` / `.stop` / `.logs` | the local WEB preview at `www.<project>.localhost` | `preview.publish` STARTS a sibling web container (static or local Wrangler); the rest act on it |
 | `toolchain.prepare` | a shared toolchain image (flutter) | STARTS a one-time image build; the `flutter` command calls it |
 | `image.generate` | local image generation (stable-diffusion.cpp) | starts the engine on the host GPU queue on first use; model downloads need the user's consent token |
-| `studio.run_workflow`, `studio.key_footage` | headless ComfyUI work | queue GPU work in the project's studio container, which must be running (`[imagegen] studio = true` in `.tillandsias/config.toml`, relaunch) |
+| `studio.start`, `studio.status` | the ComfyUI studio appliance | start it on demand (idempotent; nothing starts it at forge launch; it stops with the forge) and read whether it runs |
+| `studio.run_workflow`, `studio.key_footage` | headless ComfyUI work | queue GPU work in the project's studio container, which must be running (call `studio.start {}` first; no relaunch) |
 | `studio.validate_family`, `studio.finish_pixels`, `studio.contact_sheet` | family checks, pixel finish, review grid | nothing; no GPU |
 | `browser.open` (+12 `browser.*`) | browser windows ON THE HOST for project-local URLs | `browser.open` STARTS a window; `dev: true` adds CDP, eval and tails |
 | `cloudflare.scope_probe` (+11 reads) | the operator's Cloudflare account, GET only | nothing; probe first |

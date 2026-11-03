@@ -2749,8 +2749,8 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // 1874-b9tg: local image generation. Not an INIT image: built on
         // first use through ensure_image_exists.
         "imagegen" => "images/imagegen",
-        // 1874-zry8: the opt-in ComfyUI studio. Never an INIT image; built
-        // only for a project with `[imagegen] studio = true`.
+        // 1874-zry8: the ComfyUI studio. Never an INIT image; built on first
+        // studio.start or --studio comfyui (1969-cfyt).
         "imagegen-studio" => "images/imagegen-studio",
         // 1956-ucix: the CorridorKey 2.0 proof of concept. Never an INIT
         // image; built on the first studio.key_footage of a project with
@@ -2834,11 +2834,95 @@ fn image_inspect_metadata(inspect_json: &str) -> Result<(Option<String>, Option<
     Ok((image_id, source_digest))
 }
 
+/// The repository part of `repo:tag` (`localhost/tillandsias-git:v1` gives
+/// `localhost/tillandsias-git`); a registry port's colon sits before the last `/`.
+fn image_repository(reference: &str) -> &str {
+    let slash = reference.rfind('/').map_or(0, |i| i + 1);
+    match reference[slash..].rfind(':') {
+        Some(i) => &reference[..slash + i],
+        None => reference,
+    }
+}
+
+/// 1920-lnch: the observation from ONE `podman images --format json
+/// --filter reference=<repo>` answer, in place of an exists plus three
+/// inspects. `None` when the answer is not a listing (the caller then asks
+/// the old way). Names match with or without the `localhost/` prefix.
+fn observation_from_listing(
+    listing: &str,
+    identity: &ImageBuildIdentity,
+    force: bool,
+) -> Option<(ImageBuildObservation, Option<String>)> {
+    let images: Vec<serde_json::Value> = serde_json::from_str(listing).ok()?;
+    let bare = |n: &str| n.strip_prefix("localhost/").unwrap_or(n).to_string();
+    let holder = |tag: &str| {
+        let want = bare(tag);
+        images.iter().find(|img| {
+            img.get("Names")
+                .and_then(serde_json::Value::as_array)
+                .is_some_and(|ns| {
+                    ns.iter()
+                        .filter_map(|n| n.as_str())
+                        .any(|n| bare(n) == want)
+                })
+        })
+    };
+    let id_of = |img: &serde_json::Value| {
+        img.get("Id")
+            .or_else(|| img.get("ID"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+    };
+    let canonical = holder(&identity.canonical_tag);
+    let canonical_image_id = canonical.and_then(id_of);
+    let canonical_source_digest = canonical
+        .and_then(|img| img.get("Labels"))
+        .and_then(|labels| labels.get(SOURCE_DIGEST_LABEL))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let alias_matches = |alias: &str| {
+        canonical_image_id.is_some() && holder(alias).and_then(id_of) == canonical_image_id
+    };
+    Some((
+        ImageBuildObservation {
+            canonical_tag_exists: canonical.is_some(),
+            canonical_source_digest,
+            version_alias_matches: alias_matches(&identity.version_alias),
+            latest_alias_matches: alias_matches(&identity.latest_alias),
+            force,
+        },
+        canonical_image_id,
+    ))
+}
+
 async fn observe_image_build(
     client: &PodmanClient,
     identity: &ImageBuildIdentity,
     force: bool,
 ) -> (ImageBuildObservation, Option<String>) {
+    // 1920-lnch: one listing answers all three tags when they share a
+    // repository (measured on yoga: 29 ms, against ~20 ms for each of the four
+    // calls it replaces). Windows images are WSL distros: the old path.
+    let repo = image_repository(&identity.canonical_tag);
+    if cfg!(not(target_os = "windows"))
+        && image_repository(&identity.version_alias) == repo
+        && image_repository(&identity.latest_alias) == repo
+        && let Ok(out) = client
+            .execute(
+                OperationKind::Inspect,
+                &[
+                    "images".into(),
+                    "--format".into(),
+                    "json".into(),
+                    "--filter".into(),
+                    format!("reference={repo}"),
+                ],
+            )
+            .await
+        && let Some(observed) = observation_from_listing(&out.stdout, identity, force)
+    {
+        return observed;
+    }
     let canonical_tag_exists = client.image_exists(&identity.canonical_tag).await;
     let (canonical_image_id, canonical_source_digest) = if canonical_tag_exists {
         client
@@ -3223,6 +3307,12 @@ fn inside_image_build_helper() -> bool {
     std::env::var(IMAGE_BUILD_HELPER_ENV).is_ok()
 }
 
+/// 1920-lnch: whether `ensure_image_exists` asks the downgrade guard. The parent
+/// asks before it detaches; the helper it spawns inherits that answer.
+fn downgrade_guard_applies(inside_helper: bool) -> bool {
+    !inside_helper
+}
+
 /// Order 270: the helper's append-only per-image build log under the init
 /// cache dir (falling back to /tmp when no cache dir can be resolved).
 fn image_build_helper_log_path(image_name: &str) -> PathBuf {
@@ -3481,7 +3571,13 @@ pub(crate) fn ensure_image_exists(
     // controlling tty, so a refusal raised in there would reach the operator as
     // a bare non-zero exit. Checked here, once, on the path every image build
     // reaches — the first refusal aborts the whole ensure chain.
-    if let Some(refusal) = downgrade_refusal() {
+    // 1920-lnch: once, in the parent. The detached helper (and its recursion
+    // into base images) is only ever spawned right after this check passed, by
+    // the same binary; re-asking cost one `podman images` per ensure (11 per
+    // warm launch, measured on yoga 2026-11-03).
+    if downgrade_guard_applies(inside_image_build_helper())
+        && let Some(refusal) = downgrade_refusal()
+    {
         return Err(refusal);
     }
     // Order 270: detach into a session-surviving helper BEFORE taking the
@@ -4184,7 +4280,87 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     if !crt.is_file() || !key.is_file() {
         return true;
     }
-    !cert_valid_for(crt, CERT_MIN_REMAINING_SECS)
+    if !cert_valid_for(crt, CERT_MIN_REMAINING_SECS) {
+        return true;
+    }
+    // 1979-bm3u: a key from another generation than the cert is not a CA. The
+    // refresh mints both halves together.
+    if !ca_key_matches_cert(crt, key) {
+        warn!(
+            spec = "secret-rotation",
+            location = %crt.display(),
+            "CA key does not match its certificate; reissuing both"
+        );
+        return true;
+    }
+    false
+}
+
+/// 1979-bm3u: when the CA's key and certificate are both present but are not a
+/// pair, remove every file in the CA dir (a linked key's tmpfs target too, and
+/// the Vault leaf the old CA signed), so the caller mints from nothing. The
+/// generation lock dir is kept. Returns whether it wiped. A missing or expiring
+/// CA is the ordinary re-mint and is left to the caller.
+fn wipe_broken_ca_state(certs_dir: &Path, crt: &Path, key: &Path) -> bool {
+    if !crt.is_file() || !key.is_file() || ca_key_matches_cert(crt, key) {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(certs_dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.file_name().is_some_and(|n| n == ".ca-generation.lock") {
+            continue;
+        }
+        if let Ok(meta) = std::fs::symlink_metadata(&path) {
+            if meta.file_type().is_symlink()
+                && let Ok(target) = std::fs::read_link(&path)
+            {
+                let _ = std::fs::remove_file(path.parent().unwrap_or(certs_dir).join(target));
+            }
+            if meta.is_dir() {
+                let _ = std::fs::remove_dir_all(&path);
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+    warn!(
+        spec = "secret-rotation",
+        location = %certs_dir.display(),
+        "CA key and certificate were not a pair; wiped the CA state to recreate it from scratch"
+    );
+    eprintln!(
+        "[tillandsias] CA key and certificate were not a pair; wiped the CA state and recreating it from scratch"
+    );
+    true
+}
+
+/// 1979-bm3u: whether `key` is the private half of `crt`. MEASURED on yoga
+/// 2026-11-03: a tmpfs key rewritten under a 10-30 certificate left squid with
+/// "No valid signing certificate", and nothing here noticed: every launch died
+/// at the proxy READY gate. An unreadable key or cert answers false (reissue),
+/// the way an unreadable cert already fails cert_valid_for.
+fn ca_key_matches_cert(crt: &Path, key: &Path) -> bool {
+    let public = |mut c: Command| {
+        c.stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .ok()
+            .filter(|o| o.status.success() && !o.stdout.is_empty())
+            .map(|o| o.stdout)
+    };
+    let mut of_cert = Command::new("openssl");
+    of_cert.args(["x509", "-noout", "-pubkey", "-in"]).arg(crt);
+    let mut of_key = Command::new("openssl");
+    of_key
+        .arg("pkey")
+        .args(ca_key_store::key_in_args())
+        .args(["-pubout", "-in"])
+        .arg(key)
+        .envs(ca_key_store::pass_env());
+    matches!((public(of_cert), public(of_key)), (Some(a), Some(b)) if a == b)
 }
 
 /// ORDER 1762-bano: the enclave certificates that stay valid for less than
@@ -4299,6 +4475,76 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
         let (crt, key) = mint(tmp.path(), 61);
         assert!(!ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    // 1979-bm3u: a certificate and a key from two generations is reissued, not
+    // kept. Red before 1979-bm3u: the pair passed (both files, a year left).
+    #[test]
+    fn a_ca_key_from_another_generation_is_reissued() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let (crt_a, key_a) = mint(a.path(), 365);
+        let (_crt_b, key_b) = mint(b.path(), 365);
+        assert!(ca_key_matches_cert(&crt_a, &key_a), "its own key matches");
+        assert!(
+            !ca_bundle_needs_refresh(&crt_a, &key_a),
+            "a matched pair is kept"
+        );
+        assert!(!ca_key_matches_cert(&crt_a, &key_b));
+        assert!(
+            ca_bundle_needs_refresh(&crt_a, &key_b),
+            "a mismatched pair is reissued"
+        );
+        std::fs::write(&key_b, "not a key").unwrap();
+        assert!(
+            ca_bundle_needs_refresh(&crt_a, &key_b),
+            "an unreadable key is reissued"
+        );
+    }
+
+    // 1979-bm3u: a broken pair wipes the whole CA dir (cert, key, the key's
+    // linked tmpfs target, the Vault leaf, the serial) and keeps the lock dir;
+    // a matched pair and a merely expiring one are left to the ordinary path.
+    #[cfg(unix)]
+    #[test]
+    fn a_broken_ca_pair_wipes_the_ca_state_for_a_fresh_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let ram = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(dir.path(), 365);
+        assert!(
+            !wipe_broken_ca_state(dir.path(), &crt, &key),
+            "a pair is kept"
+        );
+        assert!(crt.is_file() && key.is_file());
+
+        let (_c, foreign) = mint(other.path(), 365);
+        std::fs::copy(&foreign, &key).unwrap();
+        std::fs::write(dir.path().join("vault.crt"), "leaf signed by the old CA").unwrap();
+        std::fs::write(ram.path().join("vault.key"), "k").unwrap();
+        std::os::unix::fs::symlink(ram.path().join("vault.key"), dir.path().join("vault.key"))
+            .unwrap();
+        std::fs::write(dir.path().join("intermediate.srl"), "01").unwrap();
+        std::fs::create_dir(dir.path().join(".ca-generation.lock")).unwrap();
+
+        assert!(
+            wipe_broken_ca_state(dir.path(), &crt, &key),
+            "a broken pair wipes"
+        );
+        let left: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(left, vec![".ca-generation.lock".to_string()], "{left:?}");
+        assert!(
+            !ram.path().join("vault.key").exists(),
+            "the linked key's target goes too"
+        );
+        assert!(
+            ca_bundle_needs_refresh(&crt, &key),
+            "the caller then mints from nothing"
+        );
     }
 
     // 1762-bano, the arm that must ship before 2026-10-29: every host holds a
@@ -4506,6 +4752,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         if !ca_bundle_needs_refresh(&crt, &key) {
             return Ok(certs_dir);
         }
+        // 1979-bm3u (operator, 2026-11-03: "wipe them all and recreate all from
+        // scratch"): a broken pair is not repaired in place. Everything here is
+        // removed and minted again from nothing, as on a first start.
+        wipe_broken_ca_state(&certs_dir, &crt, &key);
 
         // @trace spec:secret-rotation
         info!(
@@ -19304,15 +19554,8 @@ pub(crate) fn ensure_enclave_for_project(
         tokio::spawn(async move {
             report_inference_readiness(&inference_client, debug).await;
         });
-        // 1874-zry8: the ComfyUI studio sibling, only for a project that opted in.
-        crate::imagegen_studio::ensure_if_enabled(
-            &client,
-            project_name,
-            project_path,
-            version,
-            debug,
-        )
-        .await;
+        // 1969-cfyt: no studio at launch; the forge agent starts it on demand
+        // (studio.start), operator ruling 2026-11-02.
 
         // Order 452 slice 2: the clone-only forge clones from the mirror the
         // instant it boots — block until the mirror actually serves a
@@ -20039,6 +20282,10 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     }
     #[cfg(feature = "host-services")]
     local_web_preview::cleanup_departed_lane(project, instance, debug)?;
+    // 1969-cfyt: the studio goes with the forge, before the volume it mounts.
+    if instance == "default" {
+        imagegen_studio::stop(project);
+    }
     // 1874-kkrc: image.generate's scratch volume goes with the forge.
     #[cfg(feature = "host-services")]
     imagegen_tool::remove_lane_volume(project, instance);
@@ -27968,6 +28215,14 @@ mod tests {
         assert!(!image_build_detach_decision(true, false, Some("0")));
     }
 
+    /// 1920-lnch: the downgrade guard runs in the parent, never again in the
+    /// helper it spawns (that re-ask was one `podman images` per ensure).
+    #[test]
+    fn the_downgrade_guard_runs_in_the_parent_not_the_helper() {
+        assert!(downgrade_guard_applies(false));
+        assert!(!downgrade_guard_applies(true));
+    }
+
     /// Order 270: the spawn seam — the detached route hands the helper the
     /// exact ensure coordinates and treats helper exit 0 as success, non-zero
     /// as a failure carrying the log tail. No process is spawned.
@@ -35332,6 +35587,61 @@ esac
             latest_alias: "localhost/tillandsias-forge:latest".to_string(),
             labels: BTreeMap::new(),
         }
+    }
+
+    /// 1920-lnch: one `podman images --format json` listing gives the same
+    /// observation the exists + three inspects gave.
+    #[test]
+    fn one_image_listing_answers_the_canonical_tag_and_both_aliases() {
+        let identity = fixture_image_identity("sha256-abc");
+        let img = |id: &str, names: &[&str], digest: &str| {
+            serde_json::json!({ "Id": id, "Names": names,
+                "Labels": { SOURCE_DIGEST_LABEL: digest } })
+        };
+        let all = serde_json::json!([img(
+            "id1",
+            &[
+                "localhost/tillandsias-forge:latest",
+                "localhost/tillandsias-forge:v0.4.260810.1",
+                "localhost/tillandsias-forge:sha256-abc"
+            ],
+            "sha256:abc"
+        )])
+        .to_string();
+        let (o, id) = observation_from_listing(&all, &identity, false).unwrap();
+        assert!(o.canonical_tag_exists && o.version_alias_matches && o.latest_alias_matches);
+        assert_eq!(o.canonical_source_digest.as_deref(), Some("sha256:abc"));
+        assert_eq!(id.as_deref(), Some("id1"));
+
+        // latest still points at an older image: it must not match
+        let split = serde_json::json!([
+            img(
+                "id1",
+                &[
+                    "localhost/tillandsias-forge:sha256-abc",
+                    "localhost/tillandsias-forge:v0.4.260810.1"
+                ],
+                "sha256:abc"
+            ),
+            img("id0", &["tillandsias-forge:latest"], "sha256:old"),
+        ])
+        .to_string();
+        let (o, _) = observation_from_listing(&split, &identity, false).unwrap();
+        assert!(o.version_alias_matches && !o.latest_alias_matches, "{o:?}");
+
+        let (o, id) = observation_from_listing("[]", &identity, true).unwrap();
+        assert!(!o.canonical_tag_exists && !o.version_alias_matches && o.force && id.is_none());
+        assert!(observation_from_listing("Error: no such", &identity, false).is_none());
+    }
+
+    #[test]
+    fn image_repository_strips_only_the_tag() {
+        assert_eq!(
+            image_repository("localhost/tillandsias-git:v1"),
+            "localhost/tillandsias-git"
+        );
+        assert_eq!(image_repository("registry:5000/a/b:t"), "registry:5000/a/b");
+        assert_eq!(image_repository("registry:5000/a/b"), "registry:5000/a/b");
     }
 
     /// Order 702-griq, the load-bearing case: content moved, VERSION did not.
