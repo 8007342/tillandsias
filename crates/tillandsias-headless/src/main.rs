@@ -4280,7 +4280,87 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     if !crt.is_file() || !key.is_file() {
         return true;
     }
-    !cert_valid_for(crt, CERT_MIN_REMAINING_SECS)
+    if !cert_valid_for(crt, CERT_MIN_REMAINING_SECS) {
+        return true;
+    }
+    // 1979-bm3u: a key from another generation than the cert is not a CA. The
+    // refresh mints both halves together.
+    if !ca_key_matches_cert(crt, key) {
+        warn!(
+            spec = "secret-rotation",
+            location = %crt.display(),
+            "CA key does not match its certificate; reissuing both"
+        );
+        return true;
+    }
+    false
+}
+
+/// 1979-bm3u: when the CA's key and certificate are both present but are not a
+/// pair, remove every file in the CA dir (a linked key's tmpfs target too, and
+/// the Vault leaf the old CA signed), so the caller mints from nothing. The
+/// generation lock dir is kept. Returns whether it wiped. A missing or expiring
+/// CA is the ordinary re-mint and is left to the caller.
+fn wipe_broken_ca_state(certs_dir: &Path, crt: &Path, key: &Path) -> bool {
+    if !crt.is_file() || !key.is_file() || ca_key_matches_cert(crt, key) {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(certs_dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.file_name().is_some_and(|n| n == ".ca-generation.lock") {
+            continue;
+        }
+        if let Ok(meta) = std::fs::symlink_metadata(&path) {
+            if meta.file_type().is_symlink()
+                && let Ok(target) = std::fs::read_link(&path)
+            {
+                let _ = std::fs::remove_file(path.parent().unwrap_or(certs_dir).join(target));
+            }
+            if meta.is_dir() {
+                let _ = std::fs::remove_dir_all(&path);
+            } else {
+                let _ = std::fs::remove_file(&path);
+            }
+        }
+    }
+    warn!(
+        spec = "secret-rotation",
+        location = %certs_dir.display(),
+        "CA key and certificate were not a pair; wiped the CA state to recreate it from scratch"
+    );
+    eprintln!(
+        "[tillandsias] CA key and certificate were not a pair; wiped the CA state and recreating it from scratch"
+    );
+    true
+}
+
+/// 1979-bm3u: whether `key` is the private half of `crt`. MEASURED on yoga
+/// 2026-11-03: a tmpfs key rewritten under a 10-30 certificate left squid with
+/// "No valid signing certificate", and nothing here noticed: every launch died
+/// at the proxy READY gate. An unreadable key or cert answers false (reissue),
+/// the way an unreadable cert already fails cert_valid_for.
+fn ca_key_matches_cert(crt: &Path, key: &Path) -> bool {
+    let public = |mut c: Command| {
+        c.stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .ok()
+            .filter(|o| o.status.success() && !o.stdout.is_empty())
+            .map(|o| o.stdout)
+    };
+    let mut of_cert = Command::new("openssl");
+    of_cert.args(["x509", "-noout", "-pubkey", "-in"]).arg(crt);
+    let mut of_key = Command::new("openssl");
+    of_key
+        .arg("pkey")
+        .args(ca_key_store::key_in_args())
+        .args(["-pubout", "-in"])
+        .arg(key)
+        .envs(ca_key_store::pass_env());
+    matches!((public(of_cert), public(of_key)), (Some(a), Some(b)) if a == b)
 }
 
 /// ORDER 1762-bano: the enclave certificates that stay valid for less than
@@ -4395,6 +4475,76 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
         let (crt, key) = mint(tmp.path(), 61);
         assert!(!ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    // 1979-bm3u: a certificate and a key from two generations is reissued, not
+    // kept. Red before 1979-bm3u: the pair passed (both files, a year left).
+    #[test]
+    fn a_ca_key_from_another_generation_is_reissued() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let (crt_a, key_a) = mint(a.path(), 365);
+        let (_crt_b, key_b) = mint(b.path(), 365);
+        assert!(ca_key_matches_cert(&crt_a, &key_a), "its own key matches");
+        assert!(
+            !ca_bundle_needs_refresh(&crt_a, &key_a),
+            "a matched pair is kept"
+        );
+        assert!(!ca_key_matches_cert(&crt_a, &key_b));
+        assert!(
+            ca_bundle_needs_refresh(&crt_a, &key_b),
+            "a mismatched pair is reissued"
+        );
+        std::fs::write(&key_b, "not a key").unwrap();
+        assert!(
+            ca_bundle_needs_refresh(&crt_a, &key_b),
+            "an unreadable key is reissued"
+        );
+    }
+
+    // 1979-bm3u: a broken pair wipes the whole CA dir (cert, key, the key's
+    // linked tmpfs target, the Vault leaf, the serial) and keeps the lock dir;
+    // a matched pair and a merely expiring one are left to the ordinary path.
+    #[cfg(unix)]
+    #[test]
+    fn a_broken_ca_pair_wipes_the_ca_state_for_a_fresh_start() {
+        let dir = tempfile::tempdir().unwrap();
+        let other = tempfile::tempdir().unwrap();
+        let ram = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(dir.path(), 365);
+        assert!(
+            !wipe_broken_ca_state(dir.path(), &crt, &key),
+            "a pair is kept"
+        );
+        assert!(crt.is_file() && key.is_file());
+
+        let (_c, foreign) = mint(other.path(), 365);
+        std::fs::copy(&foreign, &key).unwrap();
+        std::fs::write(dir.path().join("vault.crt"), "leaf signed by the old CA").unwrap();
+        std::fs::write(ram.path().join("vault.key"), "k").unwrap();
+        std::os::unix::fs::symlink(ram.path().join("vault.key"), dir.path().join("vault.key"))
+            .unwrap();
+        std::fs::write(dir.path().join("intermediate.srl"), "01").unwrap();
+        std::fs::create_dir(dir.path().join(".ca-generation.lock")).unwrap();
+
+        assert!(
+            wipe_broken_ca_state(dir.path(), &crt, &key),
+            "a broken pair wipes"
+        );
+        let left: Vec<String> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(left, vec![".ca-generation.lock".to_string()], "{left:?}");
+        assert!(
+            !ram.path().join("vault.key").exists(),
+            "the linked key's target goes too"
+        );
+        assert!(
+            ca_bundle_needs_refresh(&crt, &key),
+            "the caller then mints from nothing"
+        );
     }
 
     // 1762-bano, the arm that must ship before 2026-10-29: every host holds a
@@ -4602,6 +4752,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         if !ca_bundle_needs_refresh(&crt, &key) {
             return Ok(certs_dir);
         }
+        // 1979-bm3u (operator, 2026-11-03: "wipe them all and recreate all from
+        // scratch"): a broken pair is not repaired in place. Everything here is
+        // removed and minted again from nothing, as on a first start.
+        wipe_broken_ca_state(&certs_dir, &crt, &key);
 
         // @trace spec:secret-rotation
         info!(
