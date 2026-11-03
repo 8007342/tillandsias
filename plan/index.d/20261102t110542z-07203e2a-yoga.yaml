@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-host-gpu-is-one-arbiter-owned-resource-the-per-host-gpu-queue-also-covers-the-inference-engine-ollama
+    field: status
+    value: implemented
+    ts: "2026-11-02T11:05:42Z"
+    host: yoga
+
+events:
+  - packet_id: the-host-gpu-is-one-arbiter-owned-resource-the-per-host-gpu-queue-also-covers-the-inference-engine-ollama
+    event:
+      type: progress
+      ts: "2026-11-02T11:05:42Z"
+      host: yoga
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: work/1957-emar: cargo test -p tillandsias-headless gpu_queue -- an_image_job_evicts_a_resident_llm_and_runs + sd_cpp_oom_surfaces_as_a_typed_error_not_a_segfault pass on yoga against a stub ollama on a real socket; red-first: admit disabled -> 2 red, typed OOM removed -> 1 red. Live A5000 arm (qwen2.5:14b at 22 GB) is macuahuitl's.
+  - packet_id: the-host-gpu-is-one-arbiter-owned-resource-the-per-host-gpu-queue-also-covers-the-inference-engine-ollama
+    event:
+      type: note
+      ts: "2026-11-02T11:05:42Z"
+      host: yoga
+      summary: |-
+        hermetic part done on yoga at the coordinator's request; the live arm stays with macuahuitl
