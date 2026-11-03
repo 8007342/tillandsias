@@ -34,7 +34,7 @@ critical_path:
     expected_behavior: "ok: relay ack shape"
 
   - step: "post-receive is bookkeeping and cannot claim acknowledgement"
-    command: "grep -Fq 'Post-receive cannot' images/git/post-receive-hook.sh && ! grep -Eq 'git push|vault-cli' images/git/post-receive-hook.sh && echo 'ok: post-receive bookkeeping only'"
+    command: "grep -Fq 'Post-receive cannot' images/git/post-receive-hook.sh && ! grep -Eq 'git push|secret/github|git-credential-tillandsias|relay-refs' images/git/post-receive-hook.sh && echo 'ok: post-receive bookkeeping only'"
     timeout_ms: 5000
     expected_behavior: "ok: post-receive bookkeeping only"
 
