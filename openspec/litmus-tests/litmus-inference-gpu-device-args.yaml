@@ -66,7 +66,7 @@ critical_path:
     expected_behavior: "ok: effective tier emitted last"
 
   - step: "behavioural: the tier/CDI gate and the flag-before-image invariant hold under cargo test"
-    command: "cargo test -p tillandsias-headless --bins inference_run_args 2>&1 | grep -E 'test result: ok' >/dev/null && echo 'ok: inference run-arg seams green'"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --bins --filter inference_run_args --min-ok 'tests::inference_run_args_' 5 --name inference-run-args && echo 'ok: inference run-arg seams green'"
     timeout_ms: 300000
     expected_behavior: "ok: inference run-arg seams green"
 

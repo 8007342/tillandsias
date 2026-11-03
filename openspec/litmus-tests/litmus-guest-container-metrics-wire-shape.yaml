@@ -35,9 +35,9 @@ preconditions:
 
 critical_path:
   - step: "WIRE: additive variants + wire structs roundtrip, WIRE_VERSION unchanged"
-    command: "cargo test -q -p tillandsias-control-wire metrics_snapshot -- --nocapture 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-control-wire --filter metrics_snapshot --min-ok 'tests::metrics_snapshot_' 4 --name control-wire-metrics-snapshot"
     timeout_ms: 300000
-    success_pattern: "test result: ok."
+    success_pattern: "ok:control-wire-metrics-snapshot"
 
   - step: "Req: no WIRE_VERSION bump rode along with the additive variants (baseline 4 since 890-y72v)"
     # The PROPERTY is unchanged: this packet's metrics variants are ADDITIVE and
@@ -74,29 +74,29 @@ critical_path:
     assert_output_contains: "ok: WIRE_VERSION still 4 (additive-only since the 890-y72v field addition)"
 
   - step: "ROUTING: vsock-only request, response-only reply, pinned in both matrices"
-    command: "cargo test -q -p tillandsias-headless --bin tillandsias control_dispatch::tests::vsock_routing_matrix -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --bin --cargo-arg tillandsias --filter control_dispatch::tests::vsock_routing_matrix --require-ok control_dispatch::tests::vsock_routing_matrix --name vsock-routing-matrix"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:vsock-routing-matrix"
 
   - step: "ROUTING: the unix side refuses the guest-only request"
-    command: "cargo test -q -p tillandsias-headless --bin tillandsias control_dispatch::tests::unix_socket_routing_matrix -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --bin --cargo-arg tillandsias --filter control_dispatch::tests::unix_socket_routing_matrix --require-ok control_dispatch::tests::unix_socket_routing_matrix --name unix-socket-routing-matrix"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:unix-socket-routing-matrix"
 
   - step: "NO FABRICATION: a failed sample keeps its error and reports NO counters"
-    command: "cargo test -q -p tillandsias-headless --features listen-vsock --bin tillandsias vsock_server::tests::metrics_wire_conversion_preserves_errors_and_none_counters -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --features --cargo-arg listen-vsock --cargo-arg --bin --cargo-arg tillandsias --filter vsock_server::tests::metrics_wire_conversion_preserves_errors_and_none_counters --require-ok vsock_server::tests::metrics_wire_conversion_preserves_errors_and_none_counters --name metrics-wire-no-fabrication"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:metrics-wire-no-fabrication"
 
   - step: "LIVE: a MetricsSnapshotRequest over a duplex connection gets a correlated reply"
-    command: "cargo test -q -p tillandsias-headless --features listen-vsock --bin tillandsias vsock_server::tests::metrics_snapshot_request_gets_a_correlated_reply -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --features --cargo-arg listen-vsock --cargo-arg --bin --cargo-arg tillandsias --filter vsock_server::tests::metrics_snapshot_request_gets_a_correlated_reply --require-ok vsock_server::tests::metrics_snapshot_request_gets_a_correlated_reply --name metrics-snapshot-correlated"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:metrics-snapshot-correlated"
 
   - step: "SAMPLERS: cgroup + mountinfo/diskstats parsing, incl. tmpfs unavailable"
-    command: "cargo test -q -p tillandsias-metrics 2>&1 | tail -4"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-metrics --name metrics-samplers-green"
     timeout_ms: 300000
-    success_pattern: "test result: ok."
+    success_pattern: "ok:metrics-samplers-green"
 
 observability:
   traces:

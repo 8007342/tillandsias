@@ -12,8 +12,9 @@ preconditions:
 
 critical_path:
   - step: "engine unit + integration tests pass on the live ledger"
-    command: "cargo test -q -p tillandsias-plan 2>&1 | tail -5"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-plan --name plan-engine-tests-green"
     timeout_ms: 180000
+    expected_behavior: "ok:plan-engine-tests-green"
 
   - step: "check gate passes on the real plan/index.yaml (invariant core sound)"
     command: "cargo run -q -p tillandsias-plan -- check"
