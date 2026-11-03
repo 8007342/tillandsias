@@ -2181,6 +2181,7 @@ mod image_generate_fixtures {
                     .map_err(|e| e.to_string())?;
             }
             Ok(EngineOut {
+                timings: Default::default(),
                 backend: "vulkan".into(),
                 first_use: false,
             })
@@ -2298,6 +2299,7 @@ mod image_generate_fixtures {
             .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
             .join(path.rsplit('/').next().unwrap());
         assert!(host.is_file(), "{}", host.display());
+        crate::imagegen_tool::flush_thumbnails();
         let thumb = r["thumbnail_path"].as_str().unwrap();
         let thumb_host = scratch
             .path()

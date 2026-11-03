@@ -1,0 +1,34 @@
+# @trace spec:accel-capability-probe, order:1971-3erz
+#
+# MEASURED on yoga 2026-11-03 (840M vulkan, I0 SDXS 512): a cold call is
+# ~0.3 s container start, ~2.8 s load, ~1.9 s sampling, ~1.2 s decode; the
+# result carried none of it, so the ~6 s above direct sampling was inferred.
+# The result now names the split, and a warm call reports zero start and load.
+# Red before 1971-3erz: the result has no timings key.
+name: litmus:imagegen-result-carries-engine-timings
+spec: accel-capability-probe
+phase: pre-build
+description: image.generate's result carries the engine's own split (container start, model load, sampling, decode, total, warm TTL), parsed from sd.cpp's lines; a warm call reports zero start and load
+severity: medium
+size: long
+
+preconditions:
+  - workspace contains crates/tillandsias-headless
+  - cargo is available in PATH
+
+critical_path:
+  - step: "the cold split is parsed from sd-cli's stamped lines; a warm call's split is the last request's server lines; the result carries every timing field"
+    command: "cargo test -p tillandsias-headless --features host-services --bin tillandsias -- imagegen_tool::tests::a_cold_runs_timings_come_from_the_engines_own_lines imagegen_tool::tests::the_result_carries_the_engines_timings_and_the_warm_ttl imagegen_warm::tests::only_the_last_requests_server_lines_are_its_timings imagegen_warm::tests::server_images_are_written_under_their_names_and_a_short_answer_is_named imagegen_warm::tests::the_request_carries_the_one_shot_runs_sampler_cfg_and_batch"
+    timeout_ms: 900000
+
+observability:
+  traces:
+    - "@trace spec:accel-capability-probe"
+  expected_log: "test result: ok. 5 passed"
+  log_fields:
+    spec: "accel-capability-probe"
+    test: "imagegen-result-carries-engine-timings"
+
+rollback:
+  on_failure: "inspect EngineTimings in crates/tillandsias-headless/src/imagegen_tool.rs and generate in imagegen_warm.rs"
+  command: "grep -n 'EngineTimings\\|from_cold\\|from_warm\\|last_request_rows' crates/tillandsias-headless/src/imagegen_tool.rs crates/tillandsias-headless/src/imagegen_warm.rs"

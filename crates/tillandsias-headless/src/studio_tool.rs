@@ -828,6 +828,9 @@ pub fn call(
     let t0 = Instant::now();
     // D3: one GPU queue per host; the turn covers the prompts, then /free.
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
+    // 1971-3erz: a studio job takes the device; the resident image engine yields.
+    #[cfg(feature = "host-services")]
+    crate::imagegen_warm::release("a studio job takes the GPU");
     // 1957-emar: room for the workflow's weights plus 1 GiB, evicting a
     // resident LLM when free VRAM is short.
     let need: u64 = plan.models.iter().map(|m| m.bytes).sum::<u64>() + (1 << 30);
@@ -1894,6 +1897,7 @@ mod tests {
                 }
                 self.0.leave();
                 Ok(crate::imagegen_tool::EngineOut {
+                    timings: Default::default(),
                     backend: "cuda".into(),
                     first_use: false,
                 })

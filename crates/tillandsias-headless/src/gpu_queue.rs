@@ -718,6 +718,7 @@ mod tests {
                     .map_err(|e| e.to_string())?;
             }
             Ok(crate::imagegen_tool::EngineOut {
+                timings: Default::default(),
                 backend: "vulkan".into(),
                 first_use: false,
             })
