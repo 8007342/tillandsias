@@ -17,6 +17,9 @@
 
 set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# 1966-ubsw: the gate exports a PRIVATE fallback dir; this fixture pins the
+# DEFAULT (/tmp) fallback and the real /tmp split, so it runs without it.
+unset TILLANDSIAS_METRICS_FALLBACK_DIR
 
 # ORDER 1209-hkcq — THIS FIXTURE MUST NOT WRITE THE HOST'S OWN METRICS.
 #

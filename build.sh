@@ -1286,6 +1286,20 @@ _gate_run_id_begin() {
     export TILLANDSIAS_TIMING_RUN_ID
 }
 
+# ORDER 1966-ubsw: this gate's PRIVATE metrics fallback. Its children that
+# fall back (no checkout) write here, not the host's shared /tmp file, so a
+# host process writing /tmp (the operator's tray, an agent's out-of-tree call)
+# can no longer land in the file the step loop checks for leaks and evict
+# whichever step is running (#831 2026-11-01, #840 2026-11-02). Only this
+# gate's descendants know the path, so a record in it is this gate's. A gate
+# that inherits one (a fixture driving a nested gate) keeps it.
+_gate_fallback_begin() {
+    [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && return 0
+    TILLANDSIAS_METRICS_FALLBACK_DIR="$SCRIPT_DIR/target/gate-fallback/${TILLANDSIAS_TIMING_RUN_ID:-gate-$(_now_ms)-$$}"
+    mkdir -p "$TILLANDSIAS_METRICS_FALLBACK_DIR" 2>/dev/null || true
+    export TILLANDSIAS_METRICS_FALLBACK_DIR
+}
+
 # ---------------------------------------------------------------------------
 # Flag parsing
 # ---------------------------------------------------------------------------
@@ -2721,6 +2735,7 @@ _gs_verdict_token() {
 # both; both are literals (1063-nraf).
 _run_gate_steps() {  # $1 = root
     local _gs_root="$1" _gs_plan=""
+    _gate_fallback_begin
     _gs_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gs_plan=""
     case "$_gs_plan" in ./*) _gs_plan="$SCRIPT_DIR/${_gs_plan#./}" ;; esac
     for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
@@ -2796,6 +2811,13 @@ _run_gate_steps() {  # $1 = root
         if [ -f "$_metrics_shared" ]; then
             _metrics_shared_before="$(wc -l < "$_metrics_shared" 2>/dev/null || echo 0)"
         fi
+        # ORDER 1966-ubsw: the file that decides. Only this gate's tree falls
+        # back into it (_gate_fallback_begin), so ANY new record is this step's.
+        _metrics_private="${TILLANDSIAS_METRICS_FALLBACK_DIR:-}/tillandsias-timing.jsonl"
+        _metrics_private_before=0
+        if [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ]; then
+            _metrics_private_before="$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)"
+        fi
 
         # The output streams as before AND is kept, so a refusal can be named
         # by the one classifier the preflight door also reads (1384-bqhy).
@@ -2825,14 +2847,37 @@ _run_gate_steps() {  # $1 = root
         # wrote (two land-queue evictions, 2026-10-29). Only new records
         # stamped with THIS gate's run id are this step's; another gate's are
         # ignored, and id-less ones are reported, not refused.
+        #
+        # ORDER 1966-ubsw: on the SHARED path an id-less record no longer
+        # refuses. This gate's own fallback writes go to its private file
+        # (checked below), so an id-less record here was written by something
+        # outside the gate (#831, #840: two different steps, one id-less line
+        # each, no gate beside them). It is reported, with the line, and only
+        # a record carrying THIS gate's run id still refuses here.
         _metrics_ours=0
+        _metrics_leak=""
         if [ -f "$_metrics_shared" ]; then
             _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
             case "$_metrics_attr" in
+                ours=0\ *verdict=refuse*)
+                    _warn "the shared timing log gained id-less record(s) during ${_step_path##*/} ($_metrics_attr); this gate's own fallback is private (1966-ubsw), so they were written outside it and this step is not refused. The line(s):"
+                    tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+                    _metrics_attr="${_metrics_attr%verdict=refuse*}verdict=warn" ;;
                 *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
             esac
+            [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ] && _metrics_leak="$_metrics_shared"
+        fi
+        if [ -z "$_metrics_leak" ] && [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ] \
+           && [ "$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)" -gt "${_metrics_private_before:-0}" ]; then
+            _metrics_leak="$_metrics_private"
+            _metrics_attr="private-fallback:+$(( $(wc -l < "$_metrics_private") - ${_metrics_private_before:-0} )) verdict=refuse"
+            _metrics_shared_before="$_metrics_private_before"
+        fi
+        if [ -n "$_metrics_leak" ]; then
             if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
-                _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_shared — $_metrics_attr (1204-3s2s; id-less records refuse unless another gate is live, 1916-tsel)"
+                _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
+                _error "  The leaked line(s), kept so the next one is diagnosable:"
+                tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
                 _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
                 _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
                 _error "  refuse to publish any number, every arm driving it reads zero, and"
