@@ -258,17 +258,23 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     "name": "tillandsias-host-services",
                     "version": env!("CARGO_PKG_VERSION"),
                     "buildId": build_identity(),
-                }
+                },
+                // 1969-7qm7: the grouped index is what the agent sees FIRST.
+                "instructions": crate::host_tools::instructions(),
             }
         }),
         // Order 779-3trn: the host-services trio PLUS the browser family.
         // The browser descriptors come from the composed server itself, so
         // what is advertised is exactly what `tools/call` will dispatch.
+        // 1969-7qm7: canonical names are namespaced by what the tool does
+        // (preview.*, toolchain.*, image.*, studio.*, browser.*, cloudflare.*,
+        // webstudio.*), each description says what it starts, and the flat
+        // names are listed LAST as deprecated aliases for one release.
         "tools/list" => {
             let mut tools = vec![
                 serde_json::json!({
-                    "name": "publish_local",
-                    "description": "Publish this authenticated lane's WEB preview on the local reverse proxy. The managed auto profile selects static or local Wrangler; re-publishing reconciles the same live-source service. For an app that lives in a subdirectory with its own wrangler config (a monorepo), pass app_dir: that directory, relative to the project; everything is then served from inside it.",
+                    "name": "preview.publish",
+                    "description": "Publish this lane's project as a local WEB preview at www.<project>.localhost. STARTS a sibling web container on the enclave (the managed auto profile selects a static server or local Wrangler; never a deploy). Re-publishing reconciles the same live-source service. For an app in a subdirectory with its own wrangler config (a monorepo), pass app_dir: that directory, relative to the project. Not for a framework dev server: run that inside the forge.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -280,13 +286,13 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     }
                 }),
                 serde_json::json!({
-                    "name": "service_status",
-                    "description": "Report the state of this project's published local service.",
+                    "name": "preview.status",
+                    "description": "Report the state of this project's local WEB preview (the sibling web container preview.publish started), with its URL and, after a failed publish, last_failure with its remedy. Starts nothing.",
                     "inputSchema": { "type": "object", "properties": {} }
                 }),
                 serde_json::json!({
-                    "name": "service_stop",
-                    "description": "Stop this project's published local service and remove its route.",
+                    "name": "preview.stop",
+                    "description": "Stop this project's local WEB preview container and remove its route. Starts nothing.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -296,8 +302,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     }
                 }),
                 serde_json::json!({
-                    "name": "service_reload",
-                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser. A preview that died is recreated from its recorded profile.",
+                    "name": "preview.reload",
+                    "description": "Reload this lane's existing local WEB preview runtime (restarts the sibling web container from its recorded profile; a preview that died is recreated). Does not open or refresh a browser: use browser.open for that.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -308,8 +314,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 }),
                 // 1723-2fiq: after the pinned lifecycle four.
                 serde_json::json!({
-                    "name": "service_logs",
-                    "description": "Read the last lines of this lane's WEB preview output (its server's stdout and stderr), with its state and exit code. Use it when service_status says the preview is not serving.",
+                    "name": "preview.logs",
+                    "description": "Read the last lines of this lane's local WEB preview output (its server's stdout and stderr), with its state and exit code. Use it when preview.status says the preview is not serving. Starts nothing.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -323,8 +329,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 // (whose order is pinned). Prepare never blocks: the
                 // forge's `flutter` shim polls it and shows the progress.
                 serde_json::json!({
-                    "name": "toolchain_prepare",
-                    "description": "Prepare an opt-in toolchain for this lane (one time: builds the shared image). Never blocks: returns state ready, preparing (with retry_after_s, and while it builds the step and elapsed seconds) or failed. Preparing is not an error: call again after retry_after_s. force: true rebuilds an image whose last build failed now. The forge's `flutter` command calls this for you.",
+                    "name": "toolchain.prepare",
+                    "description": "Prepare an opt-in toolchain for this lane. STARTS a one-time build of the shared toolchain image (flutter) beside the forge. Never blocks: returns state ready, preparing (with retry_after_s, and while it builds the step and elapsed seconds) or failed. Preparing is not an error: call again after retry_after_s. force: true rebuilds an image whose last build failed now. The forge's `flutter` command calls this for you.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -359,13 +365,32 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // family (both lists above are pinned).
             #[cfg(feature = "vault")]
             tools.extend(crate::cloudflare_mcp::tool_descriptors());
-            // 1860-auhm: the studio co-edit tools, last (every list above is pinned).
+            // 1860-auhm: the web-studio co-edit tools (webstudio.*, 1969-7qm7).
             tools.extend(crate::studio::tool_descriptors());
+            // 1969-7qm7: the index tool, then the deprecated flat aliases last.
+            tools.push(crate::host_tools::index_descriptor());
+            let tools = crate::host_tools::with_deprecated_aliases(tools);
             serde_json::json!({ "result": { "tools": tools } })
         }
         "tools/call" => {
-            let tool_name = req["params"]["name"].as_str().unwrap_or("");
+            // 1969-7qm7: a deprecated flat alias runs exactly as its canonical
+            // name; the dispatcher below only ever sees canonical names.
+            let tool_name =
+                crate::host_tools::canonical(req["params"]["name"].as_str().unwrap_or(""));
             let args = req["params"]["arguments"].as_object();
+
+            if tool_name == crate::host_tools::INDEX_TOOL {
+                let mut resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": tillandsias_browser_mcp::framing::tool_result_content(
+                        crate::host_tools::index_result()
+                    )
+                });
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
 
             // Order 779-3trn: the browser family is served by the composed
             // BrowserMcpServer, whose project label came from the accepting
@@ -429,7 +454,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             }
 
             match tool_name {
-                "publish_local" => {
+                "preview.publish" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -437,7 +462,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for local publish"),
+                            format!("Category {category} is not supported for preview.publish"),
                         ));
                     }
                     let runtime = match preview_runtime(args) {
@@ -584,12 +609,12 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "toolchain_prepare" => serde_json::json!({
+                "toolchain.prepare" => serde_json::json!({
                     "result": tillandsias_browser_mcp::framing::tool_result_content(
                         crate::toolchain_exec::prepare(&req["params"]["arguments"], debug)
                     )
                 }),
-                "service_status" => {
+                "preview.status" => {
                     match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
@@ -599,7 +624,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "service_stop" => {
+                "preview.stop" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -607,7 +632,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for service_stop"),
+                            format!("Category {category} is not supported for preview.stop"),
                         ));
                     }
                     match rt.block_on(crate::local_web_preview::stop(
@@ -623,7 +648,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "service_reload" => {
+                "preview.reload" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -631,7 +656,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for service_reload"),
+                            format!("Category {category} is not supported for preview.reload"),
                         ));
                     }
                     match rt.block_on(crate::local_web_preview::reload(
@@ -647,7 +672,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "service_logs" => {
+                "preview.logs" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -655,7 +680,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for service_logs"),
+                            format!("Category {category} is not supported for preview.logs"),
                         ));
                     }
                     let lines = args
@@ -2270,5 +2295,188 @@ fn live_image_generate_through_the_lane_socket() {
         eprintln!("host file: {}", host.display());
         assert!(host.is_file());
         break;
+    }
+}
+
+/// Order 1969-7qm7: the grouped host tool surface. A deprecated flat name
+/// behaves exactly as its namespaced canonical name, every description says
+/// what the tool starts, and the `initialize` reply carries the grouped index.
+#[cfg(test)]
+mod host_tool_discovery_fixtures {
+    use super::*;
+
+    fn list(
+        browser: &tillandsias_browser_mcp::BrowserMcpServer,
+        rt: &tokio::runtime::Runtime,
+    ) -> Vec<serde_json::Value> {
+        handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}),
+            browser,
+            rt,
+        )
+        .unwrap()["result"]["tools"]
+            .as_array()
+            .cloned()
+            .unwrap()
+    }
+
+    #[test]
+    fn initialize_carries_the_grouped_index_as_instructions() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        let init = handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+            &browser,
+            &rt,
+        )
+        .unwrap();
+        let text = init["result"]["instructions"]
+            .as_str()
+            .expect("instructions");
+        assert_eq!(text, crate::host_tools::instructions());
+        for prefix in [
+            "preview.*",
+            "image.*",
+            "studio.*",
+            "browser.*",
+            "webstudio.*",
+        ] {
+            assert!(text.contains(prefix), "{prefix}");
+        }
+    }
+
+    #[test]
+    fn every_renamed_tool_is_listed_under_both_names_with_one_schema() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        let tools = list(&browser, &rt);
+        for (canonical, alias) in crate::host_tools::RENAMED {
+            let c = tools
+                .iter()
+                .find(|t| t["name"] == *canonical)
+                .unwrap_or_else(|| panic!("{canonical} listed"));
+            let a = tools
+                .iter()
+                .find(|t| t["name"] == *alias)
+                .unwrap_or_else(|| panic!("{alias} listed"));
+            assert_eq!(
+                c["inputSchema"], a["inputSchema"],
+                "{alias} keeps {canonical}'s schema"
+            );
+            let d = a["description"].as_str().unwrap();
+            assert!(
+                d.starts_with(&format!("Deprecated alias of {canonical}")),
+                "{d}"
+            );
+            assert!(
+                !c["description"].as_str().unwrap().contains("Deprecated"),
+                "{canonical}"
+            );
+        }
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        let mut seen = std::collections::BTreeSet::new();
+        for n in &names {
+            assert!(seen.insert(*n), "{n} listed twice: {names:?}");
+        }
+    }
+
+    #[test]
+    fn descriptions_name_what_each_host_tool_starts() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        let tools = list(&browser, &rt);
+        let desc = |name: &str| -> String {
+            tools
+                .iter()
+                .find(|t| t["name"] == name)
+                .unwrap_or_else(|| panic!("{name}"))["description"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        assert!(desc("preview.publish").contains("STARTS a sibling web container"));
+        assert!(
+            desc("toolchain.prepare")
+                .contains("STARTS a one-time build of the shared toolchain image")
+        );
+        assert!(desc("image.generate").contains("locally on this computer"));
+        assert!(desc("studio.run_workflow").contains("studio container"));
+        assert!(desc("webstudio.open").contains("starts nothing from the lane"));
+        assert!(desc("webstudio.options").contains("Not the ComfyUI image studio"));
+        for n in [
+            "preview.status",
+            "preview.stop",
+            "preview.logs",
+            "webstudio.changes",
+            "webstudio.publish_request",
+            crate::host_tools::INDEX_TOOL,
+        ] {
+            assert!(
+                desc(n).to_lowercase().contains("starts nothing"),
+                "{n}: {}",
+                desc(n)
+            );
+        }
+    }
+
+    #[test]
+    fn a_deprecated_alias_dispatches_exactly_as_its_canonical_name() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        // preview.stop and preview.reload refuse a non-WEB category BEFORE any
+        // host side effect, so the refusal text is the behaviour to compare.
+        for (canonical, alias) in [
+            ("preview.stop", "service_stop"),
+            ("preview.reload", "service_reload"),
+            ("preview.logs", "service_logs"),
+            ("preview.publish", "publish_local"),
+        ] {
+            let call = |name: &str| {
+                handle_mcp_jsonrpc(
+                    "p",
+                    "default",
+                    &serde_json::json!({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":name,"arguments":{"category":"API"}}}),
+                    &browser,
+                    &rt,
+                )
+                .unwrap()
+            };
+            let (c, a) = (call(canonical), call(alias));
+            assert_eq!(c, a, "{alias} and {canonical} answer identically");
+            assert_eq!(c["id"], 9);
+            assert!(
+                c["error"]["message"].as_str().unwrap().contains(canonical),
+                "{c}"
+            );
+        }
+        // The index tool answers under its own name, and an unknown name is
+        // still unknown (the alias table rewrites only its own rows).
+        let idx = handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":crate::host_tools::INDEX_TOOL,"arguments":{}}}),
+            &browser,
+            &rt,
+        )
+        .unwrap();
+        let text = idx["result"]["content"][0]["text"].as_str().unwrap();
+        let payload: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(
+            payload["deprecated_aliases"].as_array().unwrap().len(),
+            crate::host_tools::RENAMED.len()
+        );
+        let unknown = handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"publish.local","arguments":{}}}),
+            &browser,
+            &rt,
+        )
+        .unwrap();
+        assert_eq!(unknown["error"]["code"], -32601);
     }
 }

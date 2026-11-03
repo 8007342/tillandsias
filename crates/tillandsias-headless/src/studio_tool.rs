@@ -1085,7 +1085,7 @@ impl HttpStudio {
         if !running {
             return Err(format!(
                 "studio_unavailable: {container} is not running; set `[imagegen] studio = true` in the \
-                 project's tillandsias.toml and relaunch the forge"
+                 project's .tillandsias/config.toml and relaunch the forge (starting it from this tool on demand is order 1969-cfyt)"
             ));
         }
         let mut cmd = tillandsias_podman::podman_cmd_sync();

@@ -6,4 +6,5 @@
 diffusers==0.42.1 --hash=sha256:9154faa704ce00e0b77f568e0d64786064368528aab5fc14eeea92f87d788014
 importlib_metadata==10.1.0 --hash=sha256:cf45ce66a929c64e994185a809c04840d0501db17e663810d993d0f4829265c7
 zipp==4.1.2 --hash=sha256:b30cb6cd253122169c47de245ca24a86bac2a5d3802ba15bf7ba6414eb9e144d
-opencv-python==4.12.0.88 --hash=sha256:092c16da4c5a163a818f120c22c5e4a2f96e0db4f24e659c701f1fe629a690f9
+# 1970-pipc: 4.13.0.92, not 4.12.0.88 — 4.12 requires numpy<2.3 and ComfyUI brings numpy 2.5.4, so pip check failed the build.
+opencv-python==4.13.0.92 --hash=sha256:402033cddf9d294693094de5ef532339f14ce821da3ad7df7c9f6e8316da32cf --hash=sha256:620d602b8f7d8b8dab5f4b99c6eb353e78d3fb8b0f53db1bd258bb1aa001c1d5
