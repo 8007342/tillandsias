@@ -5,21 +5,38 @@ tillandsias:
   checkpoints: |
     I0
     I1
+    I1/sdxl-full
   diffusion_models: |
     I2
     I3
+    I1/qwen-image-edit
+    I1/flux2-klein
+    I1/wan-vace
   unet: |
     I2
     I3
+    I1/qwen-image-edit
+    I1/flux2-klein
+    I1/wan-vace
   vae: |
     I2
     I3
+    I1/sdxl-vae
+    I1/qwen-image-vae
+    I1/flux2-klein-vae
+    I1/wan-vae
   text_encoders: |
     I2
     I3
+    I1/qwen-image-te
+    I1/flux2-klein-te
+    I1/wan-te
   clip: |
     I2
     I3
+    I1/qwen-image-te
+    I1/flux2-klein-te
+    I1/wan-te
   # 1957-pins and 1956-bh6j: aux folders, one per models.tsv tier column. The
   # studio has no egress; a weight a node needs must be mapped here, which
   # scripts/lua/test-studio-node-pins.lua checks against models.tsv.
