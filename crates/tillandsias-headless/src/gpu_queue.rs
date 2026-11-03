@@ -17,18 +17,24 @@ struct GpuQueue {
 
 fn gpu_queue() -> &'static GpuQueue {
     static Q: OnceLock<GpuQueue> = OnceLock::new();
-    Q.get_or_init(|| GpuQueue {
-        state: Mutex::new((0, 0)),
-        turn: Condvar::new(),
-    })
+    Q.get_or_init(GpuQueue::new)
+}
+
+impl GpuQueue {
+    fn new() -> Self {
+        GpuQueue {
+            state: Mutex::new((0, 0)),
+            turn: Condvar::new(),
+        }
+    }
 }
 
 /// Holds the device until dropped; dropping wakes the next ticket.
-pub struct GpuTurn(());
+pub struct GpuTurn(&'static GpuQueue);
 
 impl Drop for GpuTurn {
     fn drop(&mut self) {
-        let q = gpu_queue();
+        let q = self.0;
         let mut st = q.state.lock().unwrap_or_else(|e| e.into_inner());
         st.1 += 1;
         q.turn.notify_all();
@@ -39,7 +45,11 @@ impl Drop for GpuTurn {
 /// jobs ahead each time it changes (only while waiting; a free device says
 /// nothing).
 pub fn wait_for_gpu(queued: &mut dyn FnMut(usize)) -> GpuTurn {
-    let q = gpu_queue();
+    wait_on(gpu_queue(), queued)
+}
+
+/// [`wait_for_gpu`] on an explicit queue, so a test can own one (1969-scp2).
+fn wait_on(q: &'static GpuQueue, queued: &mut dyn FnMut(usize)) -> GpuTurn {
     let mut st = q.state.lock().unwrap_or_else(|e| e.into_inner());
     let ticket = st.0;
     st.0 += 1;
@@ -52,7 +62,7 @@ pub fn wait_for_gpu(queued: &mut dyn FnMut(usize)) -> GpuTurn {
         }
         st = q.turn.wait(st).unwrap_or_else(|e| e.into_inner());
     }
-    GpuTurn(())
+    GpuTurn(q)
 }
 
 /// Who holds GPU memory now (nvidia-smi compute apps), when it can say.
@@ -899,11 +909,15 @@ mod tests {
     }
     #[test]
     fn tickets_are_served_in_order_and_a_waiter_learns_its_position() {
-        let first = wait_for_gpu(&mut |_| {});
+        // 1969-scp2: a private queue. On the process-wide one an image or
+        // studio test running in parallel holds a ticket, so the waiter is
+        // told 2 (or more), not 1, and the assert fails.
+        let q: &'static GpuQueue = Box::leak(Box::new(GpuQueue::new()));
+        let first = wait_on(q, &mut |_| {});
         let seen = std::sync::Arc::new(Mutex::new(Vec::new()));
         let s2 = seen.clone();
         let h = std::thread::spawn(move || {
-            let _t = wait_for_gpu(&mut |p| s2.lock().unwrap().push(p));
+            let _t = wait_on(q, &mut |p| s2.lock().unwrap().push(p));
         });
         std::thread::sleep(std::time::Duration::from_millis(30));
         assert_eq!(seen.lock().unwrap().as_slice(), &[1]);
