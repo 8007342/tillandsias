@@ -3126,7 +3126,11 @@ pub fn metrics_default_log(basename: &str, repo_root: Option<&Path>) -> PathBuf 
             return dir.join(basename);
         }
     }
-    PathBuf::from("/tmp").join(basename)
+    // ORDER 1966-ubsw: a gate's private fallback, as the shell rule honours it.
+    match std::env::var_os("TILLANDSIAS_METRICS_FALLBACK_DIR") {
+        Some(d) if !d.is_empty() => PathBuf::from(d).join(basename),
+        _ => PathBuf::from("/tmp").join(basename),
+    }
 }
 
 /// Find the checkout THIS BINARY came from — not the one the caller happens to

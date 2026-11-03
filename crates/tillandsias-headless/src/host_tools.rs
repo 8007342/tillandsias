@@ -105,6 +105,12 @@ pub(crate) const GROUPS: &[Group] = &[
         use_when: "the user asks what is deployed, built or configured on their Cloudflare account",
     },
     Group {
+        prefix: "cloud.*",
+        does: "read-only usage of the operator's cloud accounts: GitHub Actions and Cloudflare Workers Builds minutes used against their free-tier caps (1966-47vt)",
+        starts: "nothing; cloud.usage reads with the host's stored GitHub App and Cloudflare tokens and names any permission a provider refuses",
+        use_when: "before a release, a merge to main or a deploy, or when the user asks how much of the month's free build minutes are left",
+    },
+    Group {
         prefix: "webstudio.*",
         does: "co-edit this project in a visual web studio (GrapesJS, Decap, Tina, Puck, Onlook) that the operator opens",
         starts: "nothing from the lane today: webstudio.open names the operator command that opens the studio window; webstudio.changes reads the saves it committed",

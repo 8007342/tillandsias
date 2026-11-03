@@ -34,6 +34,11 @@
 set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# 1966-ubsw: a gate exports a PRIVATE fallback dir. This fixture pins the
+# DEFAULT (/tmp) fallback: arm 3's negative control must split into /tmp, and
+# with the private dir set its runner wrote into the gate's own fallback log,
+# which build.sh then counted as a leak from this step.
+unset TILLANDSIAS_METRICS_FALLBACK_DIR
 cd "$ROOT" || exit 3
 
 SHARED=/tmp/tillandsias-timing.jsonl

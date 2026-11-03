@@ -168,6 +168,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:release-is-one-cloud-build
+  - litmus:gate-step-private-metrics-fallback
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
