@@ -10,3 +10,4 @@ STEP_DESC="Checking the git mirror sends READY before its startup retry-push (19
 STEP_LUA="scripts/lua/test-git-mirror-ready-before-retry-push.lua"
 STEP_ERROR="the git mirror again holds READY behind the startup retry-push, or pushes every ref without an upstream credential (1968-psy9) — see the FAIL lines above"
 STEP_OK="git mirror READY-before-retry-push fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin macOS 27.0.1 ok:git-mirror-ready-before-retry-push:4 arms (work/1968-psy9 @ 4de9fba2c)"
