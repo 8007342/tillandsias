@@ -19,7 +19,8 @@
 //!   `--output-directory /out`, so a bound input `/work/tmp/imagegen/in/X` is
 //!   handed to `LoadImage` as `"in/X [output]"` (ComfyUI's annotated-path
 //!   form that reads from the output directory; no copy, no second mount) and
-//!   every `SaveImage` prefix is forced to `studio/<job>/<index>`, so outputs
+//!   every `SaveImage` prefix is forced to `studio/<job>/<index>` (plus `/<node>`
+//!   when there are several, 1972-stfx), so outputs
 //!   land at /work/tmp/imagegen/studio/<job>/ as D2 names them.
 //! - D3: one GPU queue per host (gpu_queue.rs). The turn is held only while
 //!   the prompts execute; then `POST /free {unload_models, free_memory}`.
@@ -78,6 +79,12 @@ pub const MODEL_INPUTS: &[&str] = &[
     "model_name",
     "upscale_model_name",
 ];
+
+/// 1972-stfx: loader inputs whose name is too generic to read on every node
+/// (`model` is a link on most nodes), keyed by class. BiRefNet_ll's loader
+/// names its weights in `model`, so they were never checked or fetched and
+/// ComfyUI refused "model.safetensors not in []".
+pub const CLASS_MODEL_INPUTS: &[(&str, &str)] = &[("LoadRembgByBiRefNetModel", "model")];
 
 /// Inputs that carry a `$name` placeholder bound from `inputs`.
 const BINDABLE_INPUTS: &[&str] = &["image", "mask"];
@@ -416,8 +423,15 @@ pub fn validate(
     let mut models: Vec<ModelFile> = Vec::new();
     for (id, node) in nodes {
         let inputs = node["inputs"].as_object().expect("checked above");
-        for key in MODEL_INPUTS {
-            if let Some(named) = inputs.get(*key).and_then(Value::as_str) {
+        let class = node["class_type"].as_str().unwrap_or("");
+        let keys = MODEL_INPUTS.iter().copied().chain(
+            CLASS_MODEL_INPUTS
+                .iter()
+                .filter(|(c, _)| *c == class)
+                .map(|(_, k)| *k),
+        );
+        for key in keys {
+            if let Some(named) = inputs.get(key).and_then(Value::as_str) {
                 let row = pinned_model(manifest, named).ok_or_else(|| {
                     format!(
                         "model_refused: node {id} {key}={named:?} is not a row of images/imagegen/models.tsv; \
@@ -575,7 +589,15 @@ fn set_text(inputs: &mut serde_json::Map<String, Value>, text: &str) {
 /// `plan.seed + i`, and every SaveImage prefixed `studio/<job>/<i>` (D2).
 pub fn prompt_for(plan: &Plan, job: &str, i: u32) -> Value {
     let mut p = plan.workflow.clone();
-    for node in p.as_object_mut().expect("object").values_mut() {
+    // 1972-stfx: with more than one SaveImage, each writes under its own node
+    // id, so no two nodes share a prefix and every node's images come back.
+    let saves = p
+        .as_object()
+        .expect("object")
+        .values()
+        .filter(|n| n["class_type"] == "SaveImage")
+        .count();
+    for (id, node) in p.as_object_mut().expect("object").iter_mut() {
         let title = title_of(node).map(str::to_string);
         let class = node["class_type"].as_str().unwrap_or("").to_string();
         let inputs = node["inputs"].as_object_mut().expect("object");
@@ -603,7 +625,11 @@ pub fn prompt_for(plan: &Plan, job: &str, i: u32) -> Value {
         if class == "SaveImage" {
             inputs.insert(
                 "filename_prefix".into(),
-                json!(format!("studio/{job}/{i:04}")),
+                json!(if saves > 1 {
+                    format!("studio/{job}/{i:04}/{id}")
+                } else {
+                    format!("studio/{job}/{i:04}")
+                }),
             );
         }
     }
@@ -1284,6 +1310,14 @@ mod tests {
             workflow(I1_CKPT, Some("WidgetFromTheInternet")),
         )
         .unwrap();
+        let mut two = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        two["11"] =
+            json!({"class_type":"SaveImage","inputs":{"filename_prefix":"b","images":["8",0]}});
+        std::fs::write(wf.join("two_saves.api.json"), two.to_string()).unwrap();
+        let mut rembg = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        rembg["12"] = json!({"class_type":"LoadRembgByBiRefNetModel",
+                             "inputs":{"model":"model.safetensors","device":"AUTO"}});
+        std::fs::write(wf.join("rembg.api.json"), rembg.to_string()).unwrap();
         std::fs::write(
             wf.join("unregistered.api.json"),
             workflow("mystery_merge_v9.safetensors", None),
@@ -1326,19 +1360,25 @@ mod tests {
             self.runs.fetch_add(1, SeqCst);
             self.prompts.lock().unwrap().push(prompt.clone());
             progress(Progress::Step { done: 1, total: 1 });
-            let prefix = prompt["9"]["inputs"]["filename_prefix"]
-                .as_str()
-                .unwrap()
-                .to_string();
-            let (sub, stem) = prefix.rsplit_once('/').unwrap();
-            let dir = out_dir.join(sub);
-            std::fs::create_dir_all(&dir).unwrap();
-            let name = format!("{stem}_00001_.png");
-            image::RgbaImage::new(64, 64)
-                .save(dir.join(&name))
-                .map_err(|e| e.to_string())?;
+            // Every SaveImage node saves, as ComfyUI does; one prefix shared
+            // by two nodes writes the same file twice here (1972-stfx).
+            let mut images = Vec::new();
+            for node in prompt.as_object().unwrap().values() {
+                if node["class_type"] != "SaveImage" {
+                    continue;
+                }
+                let prefix = node["inputs"]["filename_prefix"].as_str().unwrap();
+                let (sub, stem) = prefix.rsplit_once('/').unwrap();
+                let dir = out_dir.join(sub);
+                std::fs::create_dir_all(&dir).unwrap();
+                let name = format!("{stem}_00001_.png");
+                image::RgbaImage::new(64, 64)
+                    .save(dir.join(&name))
+                    .map_err(|e| e.to_string())?;
+                images.push((sub.to_string(), name));
+            }
             Ok(RunOut {
-                images: vec![(sub.to_string(), name)],
+                images,
                 placement: "cuda".into(),
             })
         }
@@ -1354,6 +1394,64 @@ mod tests {
             scratch_root: fx.scratch_root.clone(),
             project_root: fx.project.path().to_path_buf(),
         }));
+    }
+
+    /// 1972-stfx: a workflow with two SaveImage nodes returns both nodes'
+    /// images, each at its own path. Pre-fix: FAILS, both nodes shared
+    /// studio/<job>/<i> and the second overwrote the first.
+    #[test]
+    fn every_save_image_node_returns_its_own_output() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("stfx-two", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let r = call(
+            "stfx-two",
+            "a",
+            &json!({"workflow":"tool/art/workflows/two_saves.api.json","inputs":{"pose":pose}}),
+            &mut |_| {},
+        );
+        install_seam(None);
+        let r = r.expect("runs");
+        let paths: Vec<&str> = r["outputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["path"].as_str().unwrap())
+            .collect();
+        assert_eq!(paths.len(), 2, "{r}");
+        assert_ne!(paths[0], paths[1], "each node has its own path: {paths:?}");
+    }
+
+    /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the
+    /// pinned file is admitted and fetched before the run. Pre-fix: FAILS,
+    /// `model` was not read, nothing was fetched, and ComfyUI refused it.
+    #[test]
+    fn the_birefnet_loader_model_is_checked_and_fetched() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("stfx-rembg", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let r = call(
+            "stfx-rembg",
+            "a",
+            &json!({"workflow":"tool/art/workflows/rembg.api.json","inputs":{"pose":pose}}),
+            &mut |_| {},
+        );
+        install_seam(None);
+        r.expect("runs");
+        assert!(
+            engine
+                .fetched
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|f| f == "model.safetensors"),
+            "{:?}",
+            engine.fetched.lock().unwrap()
+        );
     }
 
     /// 1956-x7xp verifiable closure (design D1 steps 2-4, D5). Pre-fix: FAILS,
