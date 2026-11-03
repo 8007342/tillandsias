@@ -182,6 +182,8 @@ mod resource_lock;
 // @trace order:1776-brk3 — the on-demand image build breaker: a failed build
 // is remembered by (image, inputs digest) and later ensures refuse fast.
 mod image_ensure_marker;
+// 1975-istp: a per-image success stamp, so a warm launch skips the ensure helper.
+mod image_success_stamp;
 mod podman_health;
 // The crate-wide env_lock() every env-mutating test serializes on (1437-5czv).
 #[cfg(test)]
@@ -3592,12 +3594,41 @@ pub(crate) fn ensure_image_exists(
     // proved it: five 'Unrecognized option' helper deaths). The decision and
     // spawn seam are unit-tested directly; integration tests that spawn the
     // real binary still exercise the live helper.
-    if image_build_detach_decision(
+    // 1975-istp: a current stamp is asked BEFORE the detach, so a warm launch
+    // spends no helper and no source hashing on an image that is already built.
+    let stamp = image_success_stamp_key(image_name, image_tag);
+    let stamp_dir = image_success_stamp_dir();
+    let current = match (&stamp, &stamp_dir) {
+        (Some(k), Some(d)) => image_success_stamp::is_current(d, k, &podman_image_id),
+        _ => false,
+    };
+    let detach = image_build_detach_decision(
         cfg!(all(unix, not(test))),
         inside_image_build_helper(),
         detach_override.as_deref(),
-    ) {
-        return run_image_ensure_detached(root, image_name, image_tag, debug, &SetsidImageEnsure);
+    );
+    match image_success_stamp::route(current, detach) {
+        image_success_stamp::Route::Current => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] image {image_name} current by its success stamp ({image_tag})"
+                );
+            }
+            return Ok(());
+        }
+        image_success_stamp::Route::Detach => {
+            let r =
+                run_image_ensure_detached(root, image_name, image_tag, debug, &SetsidImageEnsure);
+            stamp_after_ensure(
+                &r,
+                stamp.as_ref(),
+                stamp_dir.as_deref(),
+                image_name,
+                image_tag,
+            );
+            return r;
+        }
+        image_success_stamp::Route::InProcess => {}
     }
     let _image_lock = resource_lock::acquire(
         &format!("image-{image_name}"),
@@ -3818,7 +3849,69 @@ pub(crate) fn ensure_image_exists(
             })?;
     }
 
+    // 1975-istp: the in-process success, stamped by the parent only.
+    if !inside_image_build_helper() {
+        stamp_after_ensure(
+            &Ok(()),
+            stamp.as_ref(),
+            stamp_dir.as_deref(),
+            image_name,
+            image_tag,
+        );
+    }
     Ok(())
+}
+
+/// 1975-istp: the stamp key, or `None` when a stamp must not be trusted: a
+/// developer checkout (TILLANDSIAS_ROOT, sources can change under one
+/// binary) or a forced retry of this image.
+fn image_success_stamp_key(image_name: &str, image_tag: &str) -> Option<image_success_stamp::Key> {
+    if std::env::var_os("TILLANDSIAS_ROOT").is_some() || image_ensure_forced(image_name) {
+        return None;
+    }
+    Some(image_success_stamp::Key {
+        image: image_name.to_string(),
+        tag: image_tag.to_string(),
+        assets: runtime_assets::embedded_manifest_digest(),
+    })
+}
+
+fn image_success_stamp_dir() -> Option<PathBuf> {
+    // Never the host's real cache under the unit-test harness.
+    if cfg!(test) {
+        return None;
+    }
+    init_cache_dir()
+        .ok()
+        .map(|d| d.join(image_success_stamp::STAMP_DIR))
+}
+
+/// The image id podman holds under `tag`, or `None` when there is none.
+fn podman_image_id(tag: &str) -> Option<String> {
+    let mut cmd = tillandsias_podman::podman_cmd_sync();
+    cmd.args(["image", "inspect", "--format", "{{.Id}}", tag]);
+    cmd.output_bounded(std::time::Duration::from_secs(15))
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// 1975-istp: record a success (or drop the stamp after a failure).
+fn stamp_after_ensure(
+    result: &Result<(), String>,
+    stamp: Option<&image_success_stamp::Key>,
+    dir: Option<&Path>,
+    image_name: &str,
+    image_tag: &str,
+) {
+    let (Some(k), Some(d)) = (stamp, dir) else {
+        return;
+    };
+    match (result, podman_image_id(image_tag)) {
+        (Ok(()), Some(id)) => image_success_stamp::record(d, k, &id),
+        _ => image_success_stamp::clear(d, image_name),
+    }
 }
 
 /// 1785-655p: whether a fresh image needs its `--userns=keep-id` mapping
