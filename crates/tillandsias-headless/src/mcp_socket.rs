@@ -58,6 +58,65 @@ pub(crate) mod test_runtime_root {
     }
 }
 
+#[cfg(all(test, unix))]
+mod refused_wait_tests {
+    use super::*;
+
+    /// ORDER 1980-lsrc, deterministic: a forked child that has not exec'd yet
+    /// holds the listener, so right after the drop the socket still ACCEPTS
+    /// (the flake: the old fixtures asserted a refusal here). Waiting sees it
+    /// refuse once the child is gone.
+    #[test]
+    fn a_listener_held_by_a_forked_child_is_waited_out() {
+        let dir = tempfile::Builder::new()
+            .prefix("lsrc")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let path = dir.path().join("s.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        // SAFETY: the child only sleeps and _exits; it runs no Rust code
+        // that could touch a lock another thread held at fork time.
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0, "fork");
+        if pid == 0 {
+            unsafe {
+                libc::usleep(300_000);
+                libc::_exit(0);
+            }
+        }
+        drop(listener);
+        let immediate = UnixStream::connect(&path).is_ok();
+        let waited = wait_until_refused(&path);
+        let mut status = 0;
+        unsafe { libc::waitpid(pid, &mut status, 0) };
+        assert!(
+            immediate,
+            "the race: a dropped listener a fork holds still accepts"
+        );
+        assert!(waited, "and it refuses once the fork is gone");
+    }
+}
+
+/// ORDER 1980-lsrc: wait (up to ~3 s) until `path` refuses connections.
+///
+/// A test that drops its listener and expects the next connect to be refused
+/// races every parallel test that spawns a process: between fork and exec the
+/// child holds a copy of each fd, the listener included (CLOEXEC closes it
+/// only at exec), so for that window the "departed" socket still accepts.
+/// That made `a_cli_lane_refuses_by_name_when_another_process_owns_its_socket`
+/// and the lane-adoption fixture flake on lenovinha after 1969-scp2.
+#[cfg(test)]
+pub(crate) fn wait_until_refused(path: &std::path::Path) -> bool {
+    for _ in 0..300 {
+        match UnixStream::connect(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => return true,
+            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
 /// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test
 /// can pass one without touching the process environment. An empty value
 /// counts as unset (order 1748-fbqe, see [`crate::nonempty_runtime_dir`]).
@@ -1976,8 +2035,9 @@ mod lane_adoption_tests {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
         drop(UnixListener::bind(&path).unwrap());
+        // 1980-lsrc: a parallel test's fork may hold the listener until exec.
         assert!(
-            matches!(UnixStream::connect(&path), Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused),
+            wait_until_refused(&path),
             "the fixture must reproduce the refusing socket"
         );
         path
