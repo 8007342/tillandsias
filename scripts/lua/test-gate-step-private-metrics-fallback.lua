@@ -79,8 +79,10 @@ local gates = 0
 local function gate(r)
     proc.run({ argv = { "rm", "-f", SHARED } })
     gates = gates + 1
-    local fb = ABS .. "/fallback-" .. tostring(gates)
-    fs.mkdir(REL .. "/fallback-" .. tostring(gates))
+    -- Named like build.sh's own (target/gate-fallback/gate-<id>): arm 2 asserts the
+    -- refusal names a gate-fallback/ path.
+    local fb = ABS .. "/gate-fallback/gate-fixture-" .. tostring(gates)
+    fs.mkdir(REL .. "/gate-fallback/gate-fixture-" .. tostring(gates))
     local res = proc.run({ argv = { "./build.sh", "--gate-steps", r }, timeout_ms = 300000,
         env = { TILLANDSIAS_GATE_SHARED_TIMING_PATH = SHARED, TILLANDSIAS_TIMING_RUN_ID = "gate-fixture-1966",
                 TILLANDSIAS_METRICS_FALLBACK_DIR = fb } })
