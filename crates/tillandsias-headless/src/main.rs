@@ -88,6 +88,9 @@ mod imagegen_studio;
 mod imagegen_tiers;
 #[cfg(feature = "host-services")]
 mod imagegen_tool;
+// 1971-3erz: the resident image engine (sd-server) behind image.generate.
+#[cfg(feature = "host-services")]
+mod imagegen_warm;
 // 1956-x7xp: the shared GPU queue, provenance v1 and studio.run_workflow.
 #[cfg(feature = "host-services")]
 mod gpu_queue;

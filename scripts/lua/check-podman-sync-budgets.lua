@@ -15,8 +15,13 @@ local raw_allowed = env.get("PODMAN_SYNC_ESCAPE_HATCHES")
 --      (events, not polling) and which ends when the process exits.
 --   4. main.rs run_rejoin (1911-3dqo): `podman attach` to a running forge,
 --      an interactive session that ends when its operator detaches or exits.
--- A fifth needs the same justification here, in the same commit.
-if raw_allowed == nil or raw_allowed == "" then raw_allowed = "4" end
+--   5. imagegen_warm.rs open_session (1971-3erz): one `podman exec -i <c> /bin/sh`
+--      into the resident image engine, whose lifetime is that engine's: it is
+--      killed when the engine is released (TTL, a studio job, other model files)
+--      and ends with the container; each request on it is bounded by curl's
+--      own --max-time. A fresh exec per call cost ~110 ms (measured on yoga).
+-- A sixth needs the same justification here, in the same commit.
+if raw_allowed == nil or raw_allowed == "" then raw_allowed = "5" end
 if not text.is_match(raw_allowed, "^-?[0-9]+$") then
     verdict.emit("blocked:podman-sync-bounded:invalid-escape-hatches:" .. raw_allowed, 2)
 end
