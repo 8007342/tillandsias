@@ -209,3 +209,30 @@ and send the request; the forge SHALL only name a tool and its ids.
 - **WHEN** Cloudflare's answer, a 401, a transport error or a malformed body
   carries the token's text
 - **THEN** the tool's result or error shows `<redacted>` in its place
+
+### Requirement: cloud.usage reports used vs free-tier cap per provider, read-only
+<!-- req-id: e8246f2b -->
+
+The socket SHALL also carry `cloud.usage` beside the `cloudflare.*` family
+(order 1966-47vt), under the same rules: the serving process reads the
+Vault-stored Cloudflare sign-in and the Tillandsias GitHub App token itself,
+sends only fixed GET paths, and no token appears in a result, log line or
+error. `tillandsias --cloud-usage` prints the same result on the host.
+
+- Arguments SHALL be only `provider` (github|cloudflare), `year`, `month`.
+- Each metric SHALL carry provider, metric, used, cap, unit, period, source
+  (the API paths read) and as_of: Cloudflare `workers_builds_minutes` (builds
+  summed over the calendar month, cap 3000, concurrent_cap 1); GitHub
+  `actions_cache_bytes` per repo (cap 10 GiB), `actions_run_minutes` per repo
+  (public repos: cap null), `billing_usage`.
+- A 403 or 404 SHALL be reported on that metric as
+  `unavailable: permission-missing:<provider>:<permission>` naming the
+  documented permission for the path, never a zero; the other metrics fill.
+
+@trace spec:mcp-tool-socket, order:1966-47vt
+
+#### Scenario: A missing grant is named, not zeroed
+
+- **WHEN** GitHub answers 403 on the billing usage path
+- **THEN** `billing_usage` is `unavailable: permission-missing:github:Plan: Read` with used null
+- **AND** the cache and run metrics still report numbers
