@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: socket-fixtures-wait-out-a-listener-a-parallel-fork-still-holds-before-asserting-it-refuses
+    field: status
+    value: completed
+    ts: "2026-11-04T20:49:59Z"
+    host: lenovinha
+
+events:
+  - packet_id: socket-fixtures-wait-out-a-listener-a-parallel-fork-still-holds-before-asserting-it-refuses
+    event:
+      type: completed
+      ts: "2026-11-04T20:49:59Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: d036e0d86
+  - packet_id: socket-fixtures-wait-out-a-listener-a-parallel-fork-still-holds-before-asserting-it-refuses
+    event:
+      type: note
+      ts: "2026-11-04T20:49:59Z"
+      host: lenovinha
+      summary: |-
+        landed on linux-next at d036e0d86
