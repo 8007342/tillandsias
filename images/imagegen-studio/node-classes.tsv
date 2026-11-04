@@ -40,6 +40,7 @@ comfyui-core	TextEncodeQwenImageEditPlus
 comfyui-core	CFGNorm
 comfyui-core	EmptyFlux2LatentImage
 comfyui-core	Flux2Scheduler
+comfyui-core	FluxKontextMultiReferenceLatentMethod
 comfyui-core	ReferenceLatent
 comfyui-core	WanVaceToVideo
 comfyui-core	TrimVideoLatent
