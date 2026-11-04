@@ -18,6 +18,8 @@ specs:
   - litmus:capabilities-envelope-names-its-source
   - litmus:envelope-suite-resolves-the-redirected-artifact
   - litmus:imagegen-image-is-first-use-and-placement-is-read-from-the-log
+  - litmus:imagegen-result-carries-engine-timings
+  - litmus:a-crowding-llm-releases-the-image-engine
   - litmus:studio-custom-nodes-come-only-from-the-manifest
   coverage_ratio: 100
   last_verified: '2026-07-31'
@@ -311,6 +313,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-localization-staged-shape
+  - litmus:harness-refresh-lock-owner
   - litmus:agy-install-cached
   - litmus:opencode-render-probe-shape
   - litmus:forge-project-trust-seeds-shape
@@ -572,6 +575,7 @@ specs:
   - litmus:git-mirror-dns-identity
   - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:git-mirror-ready-before-retry-push
+  - litmus:git-mirror-warm-start-keeps-tracking-refs
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
   - litmus:mirror-relay-state

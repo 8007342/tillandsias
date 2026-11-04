@@ -23,12 +23,12 @@ preconditions:
 
 critical_path:
   - step: "in-process proof: shared holders coexist; exclusive and shared mutually exclude"
-    command: "cargo test -p tillandsias-headless resource_lock::tests::exclusive_and_shared_mutually_exclude -- --exact 2>&1 | grep 'exclusive_and_shared_mutually_exclude ... ok' && echo RW-LOCK-SEMANTICS-OK"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter resource_lock::tests::exclusive_and_shared_mutually_exclude --require-ok resource_lock::tests::exclusive_and_shared_mutually_exclude --name rw-lock-semantics && echo RW-LOCK-SEMANTICS-OK"
     timeout_ms: 120000
     success_pattern: "RW-LOCK-SEMANTICS-OK"
     failure_pattern: "FAILED|panicked"
   - step: "bounded lease proof: token mint is shared-locked but idle lease retains no guard"
-    command: "cargo test -p tillandsias-headless vault_bootstrap::tests::approle_secret_lease_does_not_hold_vault_lock_while_lane_is_idle -- --exact 2>&1 | grep 'approle_secret_lease_does_not_hold_vault_lock_while_lane_is_idle ... ok' && grep -q 'attempt == 3' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -q 'resource_lock::acquire(\"vault\"' crates/tillandsias-headless/src/vault_bootstrap.rs && echo VAULT-RECREATE-MUTEX-WIRED"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter vault_bootstrap::tests::approle_secret_lease_does_not_hold_vault_lock_while_lane_is_idle --require-ok vault_bootstrap::tests::approle_secret_lease_does_not_hold_vault_lock_while_lane_is_idle --name approle-lease-unlocked && grep -q 'attempt == 3' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -q 'resource_lock::acquire(\"vault\"' crates/tillandsias-headless/src/vault_bootstrap.rs && echo VAULT-RECREATE-MUTEX-WIRED"
     timeout_ms: 120000
     success_pattern: "VAULT-RECREATE-MUTEX-WIRED"
     failure_pattern: "No such file"

@@ -11,7 +11,12 @@ case "$MODE" in
     awk '/^fn run_observatorium_mode/{in_fn=1} in_fn&&/ensure_router_running/{er=NR; in_fn=2} in_fn==2&&/run_container_observed/{rc=NR; exit} /^fn /&&in_fn&&!/run_observatorium_mode/{exit} END{if(er&&rc&&er<rc)print "ok: observatorium ensure_router_running@"er" before run_container_observed@"rc; else{print "FAIL: observatorium router-ordering wrong (er="er" rc="rc")"; exit 1}}' crates/tillandsias-headless/src/main.rs
     ;;
   check-ensure_enclave_for_project-ordering)
-    awk '/fn ensure_enclave_for_project/{in_fn=1} in_fn&&/ensure_router_running/{er=NR; in_fn=2} in_fn==2&&/run_container_observed/{rc=NR; exit} /^fn /&&in_fn&&!/ensure_enclave_for_project/{exit} END{if(er&&rc&&er<rc)print "ok: ensure_enclave_for_project router@"er" before container@"rc; else{print "FAIL: ensure_enclave_for_project router-ordering wrong (er="er" rc="rc")"; exit 1}}' crates/tillandsias-headless/src/main.rs
+    # The first container this function causes is in the mirror helper it calls.
+    # Walking on past the function's end found it only until 1978-zd9g put a
+    # private fn in between, so assert each link: nothing launches inside the
+    # function before the router, the router precedes the helper, and the helper
+    # really launches a container.
+    awk '/^pub\(crate\) fn ensure_enclave_for_project\(/{f=1} f&&/ensure_router_running\(/&&!er{er=NR} f&&/run_container_observed/&&!er{early=NR} f&&/ensure_shared_git_and_inference_for_launch\(/&&!gi{gi=NR} f&&/^}$/{f=0} /^async fn ensure_shared_git_and_inference_for_launch\(/{h=1} h&&/run_container_observed/&&!rc{rc=NR} h&&/^}$/{h=0} END{if(er&&gi&&rc&&!early&&er<gi)print "ok: ensure_enclave_for_project router@"er" before container@"rc; else{print "FAIL: ensure_enclave_for_project router-ordering wrong (er="er" gi="gi" rc="rc" early="early")"; exit 1}}' crates/tillandsias-headless/src/main.rs
     ;;
   check-ensure_enclave_network-present)
     for fn in run_opencode_mode run_observatorium_mode ensure_enclave_for_project; do

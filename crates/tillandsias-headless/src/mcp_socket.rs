@@ -58,6 +58,65 @@ pub(crate) mod test_runtime_root {
     }
 }
 
+#[cfg(all(test, unix))]
+mod refused_wait_tests {
+    use super::*;
+
+    /// ORDER 1980-lsrc, deterministic: a forked child that has not exec'd yet
+    /// holds the listener, so right after the drop the socket still ACCEPTS
+    /// (the flake: the old fixtures asserted a refusal here). Waiting sees it
+    /// refuse once the child is gone.
+    #[test]
+    fn a_listener_held_by_a_forked_child_is_waited_out() {
+        let dir = tempfile::Builder::new()
+            .prefix("lsrc")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let path = dir.path().join("s.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        // SAFETY: the child only sleeps and _exits; it runs no Rust code
+        // that could touch a lock another thread held at fork time.
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0, "fork");
+        if pid == 0 {
+            unsafe {
+                libc::usleep(300_000);
+                libc::_exit(0);
+            }
+        }
+        drop(listener);
+        let immediate = UnixStream::connect(&path).is_ok();
+        let waited = wait_until_refused(&path);
+        let mut status = 0;
+        unsafe { libc::waitpid(pid, &mut status, 0) };
+        assert!(
+            immediate,
+            "the race: a dropped listener a fork holds still accepts"
+        );
+        assert!(waited, "and it refuses once the fork is gone");
+    }
+}
+
+/// ORDER 1980-lsrc: wait (up to ~3 s) until `path` refuses connections.
+///
+/// A test that drops its listener and expects the next connect to be refused
+/// races every parallel test that spawns a process: between fork and exec the
+/// child holds a copy of each fd, the listener included (CLOEXEC closes it
+/// only at exec), so for that window the "departed" socket still accepts.
+/// That made `a_cli_lane_refuses_by_name_when_another_process_owns_its_socket`
+/// and the lane-adoption fixture flake on lenovinha after 1969-scp2.
+#[cfg(test)]
+pub(crate) fn wait_until_refused(path: &std::path::Path) -> bool {
+    for _ in 0..300 {
+        match UnixStream::connect(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => return true,
+            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
 /// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test
 /// can pass one without touching the process environment. An empty value
 /// counts as unset (order 1748-fbqe, see [`crate::nonempty_runtime_dir`]).
@@ -373,6 +432,10 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::imagegen_tool::descriptor());
             // 1956-x7xp: the headless studio workflow runner, beside it.
             tools.push(crate::studio_tool::descriptor());
+            // 1986-snpx: the read-only model listing beside it.
+            tools.push(crate::studio_tool::models_descriptor());
+            // 1969-cfyt: the studio appliance, started on demand.
+            tools.extend(crate::imagegen_studio::tool_descriptors());
             // 1956-26qh: the GPU-free family contract checker, beside it.
             tools.push(validate_family_descriptor());
             // 1957-emar: the GPU arbiter's status and unload, beside them.
@@ -575,6 +638,64 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             "error": { "code": -32000, "message": e }
                         }),
                     }
+                }
+                // 1969-cfyt: the forge agent starts the studio on demand.
+                "studio.start" => {
+                    let version = crate::VERSION.trim();
+                    match crate::imagegen_studio::start_on_demand(
+                        project_label,
+                        &|| crate::imagegen_studio::is_running(project_label),
+                        &mut || {
+                            let client = tillandsias_podman::PodmanClient::new();
+                            let plan = crate::imagegen_studio::plan_explicit(
+                                &tillandsias_core::cache_root::cache_root(),
+                            );
+                            rt.block_on(crate::imagegen_studio::start(
+                                &client,
+                                &plan,
+                                project_label,
+                                version,
+                                debug,
+                            ))
+                        },
+                    )
+                    .and_then(|mut result| {
+                        // 1985-stdu: already running: connect this forge
+                        // and refresh the window route.
+                        if result["started"] == false {
+                            crate::imagegen_studio::reattach(project_label, debug)?;
+                        }
+                        result["window_url"] =
+                            serde_json::json!(crate::imagegen_studio::window_url(project_label));
+                        Ok(result)
+                    }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "studio.models" => {
+                    let engine = crate::studio_tool::HttpStudio::for_this_host(project_label).ok();
+                    let listing = crate::studio_tool::models_listing(
+                        &crate::imagegen_models::models_dir(),
+                        engine
+                            .as_ref()
+                            .map(|e| e as &dyn crate::studio_tool::StudioEngine),
+                    );
+                    serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(listing)
+                    })
+                }
+                "studio.status" => {
+                    let running = crate::imagegen_studio::is_running(project_label);
+                    serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(
+                            crate::imagegen_studio::status_json(project_label, running)
+                        )
+                    })
                 }
                 // 1957-emar: GPU status and an unload routed through the arbiter.
                 "gpu.status" | "gpu.unload_model" => {
@@ -1320,7 +1441,9 @@ pub(crate) fn build_identity() -> &'static str {
     static ID: OnceLock<String> = OnceLock::new();
     ID.get_or_init(|| {
         use sha2::{Digest, Sha256};
-        let digest = env::current_exe()
+        // 1984-pexe: /proc/self/exe reads the RUNNING build even after an
+        // upgrade replaced its file (current_exe then names "… (deleted)").
+        let digest = crate::self_exe::for_spawn()
             .and_then(fs::read)
             .map(|bytes| {
                 let hash = Sha256::digest(&bytes);
@@ -1938,8 +2061,9 @@ mod lane_adoption_tests {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
         drop(UnixListener::bind(&path).unwrap());
+        // 1980-lsrc: a parallel test's fork may hold the listener until exec.
         assert!(
-            matches!(UnixStream::connect(&path), Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused),
+            wait_until_refused(&path),
             "the fixture must reproduce the refusing socket"
         );
         path
@@ -2181,6 +2305,7 @@ mod image_generate_fixtures {
                     .map_err(|e| e.to_string())?;
             }
             Ok(EngineOut {
+                timings: Default::default(),
                 backend: "vulkan".into(),
                 first_use: false,
             })
@@ -2298,6 +2423,7 @@ mod image_generate_fixtures {
             .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
             .join(path.rsplit('/').next().unwrap());
         assert!(host.is_file(), "{}", host.display());
+        crate::imagegen_tool::flush_thumbnails();
         let thumb = r["thumbnail_path"].as_str().unwrap();
         let thumb_host = scratch
             .path()

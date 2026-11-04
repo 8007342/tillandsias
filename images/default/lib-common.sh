@@ -2944,18 +2944,36 @@ harness_record_last_good() {
 ensure_forge_harnesses() {
     # Avoid a concurrent npm join race — only the first process runs npm.
     local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
+    # 1971-rikj: the lock records its holder ("<hostname> <pid>"). It lives on
+    # the PERSISTENT volume while every forge is a new container, so a forge
+    # stopped mid-refresh (no EXIT trap) left it behind and the next launches
+    # skipped the refresh SILENTLY for an hour (measured on yoga 2026-11-02).
+    # A holder in another container, or a dead pid here, cannot be refreshing:
+    # reclaim at once. A lock with no holder file (pre-1971 leak, or a writer
+    # that died between mkdir and the write) is reclaimed after a minute.
+    local self_host="${HOSTNAME:-$(cat /etc/hostname 2>/dev/null)}"
     if ! mkdir "$npm_lock" 2>/dev/null; then
-        # Self-heal locks leaked by the pre-fix trap bug (they live on the
-        # PERSISTENT volume, so one leak used to disable updates forever):
-        # a real concurrent updater finishes in minutes — reclaim after 1h.
-        if [ -d "$npm_lock" ] && [ -n "$(find "$npm_lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
-            trace_lifecycle "harness" "reclaiming stale npm-update lock (leaked pre-fix)"
+        local holder="" h_host="" h_pid="" stale=""
+        holder="$(cat "$npm_lock/holder" 2>/dev/null)" || holder=""
+        h_host="${holder%% *}"
+        h_pid="${holder##* }"
+        if [ -z "$holder" ]; then
+            [ -n "$(find "$npm_lock" -maxdepth 0 -mmin +1 2>/dev/null)" ] && stale="no holder recorded"
+        elif [ "$h_host" != "$self_host" ]; then
+            stale="holder was container $h_host"
+        elif ! kill -0 "$h_pid" 2>/dev/null; then
+            stale="holder pid $h_pid is gone"
+        fi
+        if [ -n "$stale" ]; then
+            trace_lifecycle "harness" "reclaimed npm-update lock ($stale)"
             rm -rf "$npm_lock"
             mkdir "$npm_lock" 2>/dev/null || return 0
         else
+            trace_lifecycle "harness" "skipped: refresh in progress (${holder:-holder not yet recorded})"
             return 0
         fi
     fi
+    printf '%s %s\n' "$self_host" "${BASHPID:-$$}" > "$npm_lock/holder" 2>/dev/null || true
     # Ensure we clean up the lock on exit (even forked). The path MUST be
     # expanded NOW (double quotes): a single-quoted "$npm_lock" is expanded
     # when the EXIT trap fires, after this function's `local` is out of

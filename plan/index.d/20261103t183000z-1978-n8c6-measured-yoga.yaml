@@ -1,0 +1,11 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: the-git-mirror-waits-for-the-vault-agent-sink-without-a-one-second-poll
+    event:
+      type: measurement
+      ts: '2026-11-03T18:30:00Z'
+      host: yoga
+      summary: |-
+        MEASURED on yoga (linux-immutable, 840M host, rootless podman; work/1978-n8c6 @ a4317c08e built into the tray; same command and regime as #892): warm `--cloud 8007342/tillandsias --opencode --prompt ping`, `bringup: step=mirror-seed`, 3 runs after one warmup: 687 / 750 / 1196 ms, against 1685-2091 ms on #892. Two of three are in the coordinator's ~0.7-0.8 s estimate; the 1196 ms run is the one upstream fetch's variance (0.66-0.73 s idle, measured inside the mirror).
+        Fixture test-git-mirror-vault-sink-wait-is-an-event, in the git image's own shell (busybox inotifyd) with a stub agent: FAST and RENAME red at 1000 ms with the sleep loop, green within 400 ms now; DEAD and TIMEOUT (2 s hard timeout, agent stopped) green on both.
+        Discipline publish moved after READY on the source reading recorded in this row's context; test-mirror-discipline passes in the builder toolbox (the host has no ruby). Draft PR #893, stacked on #892.

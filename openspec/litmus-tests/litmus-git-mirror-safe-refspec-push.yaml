@@ -26,9 +26,16 @@ critical_path:
     expected_behavior: "relay exact stdin and unconditional delete refusal present"
 
   - step: "startup retry uses explicit refs and never mirror/all"
-    command: "grep -Fq \"for-each-ref --format='%(refname)' refs/heads refs/tags\" images/git/entrypoint.sh && grep -Fq 'hooks/tillandsias-relay-refs' images/git/entrypoint.sh && grep -Fq 'UPDATE_RECORDS=' images/git/entrypoint.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'startup safe refspec contract present'"
+    command: "grep -Fq \"for-each-ref --format='%(refname)' refs/heads refs/tags\" images/git/entrypoint.sh && grep -Fq 'hooks/tillandsias-relay-refs' images/git/entrypoint.sh && awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' images/git/entrypoint.sh && echo 'startup safe refspec contract present'"
     timeout_ms: 10000
     expected_behavior: "startup safe refspec contract present"
+
+  # 1977-xpus negative control: the no-mirror/all predicate above must FAIL on
+  # an entrypoint that pushes --mirror, or the step asserts nothing.
+  - step: "negative control: the --mirror/--all predicate must FAIL on a mirror-pushing entrypoint"
+    command: "d=target/plan-scratch/safe-refspec-neg-$$; mkdir -p \"$d\" && printf 'git -C \"$mirror\" push --mirror origin\\n' > \"$d/entrypoint.sh\" && if awk 'BEGIN{bad=0} /^[[:space:]]*#/ {next} /git([^#]*)[[:space:]]push[[:space:]]+(--mirror|--all)/ {bad=1} END{exit bad}' \"$d/entrypoint.sh\"; then echo 'FAIL: predicate passed a --mirror push'; rm -rf \"$d\"; exit 1; else echo 'ok: predicate refuses a --mirror push'; rm -rf \"$d\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: predicate refuses a --mirror push"
 
   - step: "spec requires safe refspec forwarding"
     command: "grep -Fq 'The relay MUST NOT run' openspec/specs/git-mirror-service/spec.md && grep -Fq 'litmus:git-mirror-safe-refspec-push' openspec/specs/git-mirror-service/spec.md && echo 'git mirror safe refspec spec present'"

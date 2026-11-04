@@ -55,4 +55,5 @@ rollback:
     crates/tillandsias-headless/src/main.rs (all_launch_paths_route_through_dependency_model).
     A failure means a launch path has been added that bypasses the container dependency
     graph, or the typestate/recording-satisfier gate has been broken.
-  command: "cargo test -p tillandsias-headless container_deps::tests -- --nocapture 2>&1 | tail -30"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter container_deps::tests --min-ok 'container_deps::tests::' 30 --require-ok container_deps::tests::launch_skipping_prerequisite_fails --require-ok container_deps::tests::all_launch_targets_have_prerequisites --name container-deps-green"
+  expected_behavior: "ok:container-deps-green"

@@ -127,7 +127,40 @@ pub fn validate_launch_argv(argv: &[String]) -> Result<(), LaunchArgvError> {
     Ok(())
 }
 
+/// ORDER 1981-kidm: whether a `--userns` value is the keep-id control:
+/// `keep-id`, or `keep-id:` with only numeric `uid`, `gid` and `size` options
+/// (podman's mapping of the host user to a chosen container uid). Anything
+/// else (host, auto, an unknown option, an empty or non-numeric value) is not.
+fn is_keep_id(value: &str) -> bool {
+    if value == "keep-id" {
+        return true;
+    }
+    let Some(opts) = value.strip_prefix("keep-id:") else {
+        return false;
+    };
+    !opts.is_empty()
+        && opts.split(',').all(|kv| {
+            kv.split_once('=').is_some_and(|(k, v)| {
+                matches!(k, "uid" | "gid" | "size")
+                    && !v.is_empty()
+                    && v.bytes().all(|b| b.is_ascii_digit())
+            })
+        })
+}
+
 fn contains_flag(argv: &[String], canonical: &str) -> bool {
+    if canonical == "--userns=keep-id" {
+        let mut i = 0;
+        while i < argv.len() {
+            if flag_value(&argv[i], argv.get(i + 1).map(String::as_str), "--userns")
+                .is_some_and(is_keep_id)
+            {
+                return true;
+            }
+            i += 1;
+        }
+        return false;
+    }
     if argv.iter().any(|arg| arg == canonical) {
         return true;
     }
@@ -273,7 +306,7 @@ fn weakening_hardening_flag(argv: &[String]) -> Option<String> {
 
         if arg == "--privileged"
             || arg.starts_with("--privileged=")
-            || flag_value(arg, next, "--userns").is_some_and(|value| value != "keep-id")
+            || flag_value(arg, next, "--userns").is_some_and(|value| !is_keep_id(value))
             || flag_value(arg, next, "--cap-add").is_some_and(|value| value == "ALL")
             || flag_value(arg, next, "--security-opt").is_some_and(is_weakening_security_opt)
         {
@@ -307,6 +340,60 @@ fn is_weakening_security_opt(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn with_userns(userns: &[&str]) -> Vec<String> {
+        let mut v: Vec<String> = vec!["run".into()];
+        v.extend(userns.iter().map(|s| s.to_string()));
+        v.extend(
+            [
+                "--cap-drop=ALL",
+                "--security-opt=no-new-privileges",
+                "--security-opt=label=disable",
+                "img",
+            ]
+            .iter()
+            .map(|s| s.to_string()),
+        );
+        v
+    }
+
+    /// ORDER 1981-kidm: keep-id with a uid/gid/size mapping IS the keep-id
+    /// control (the studio maps the host user to its image uid, 1969-cfyt).
+    /// Pre-fix: FAILS, only the exact `--userns=keep-id` satisfied it, so
+    /// studio.start was refused on the live tray.
+    #[test]
+    fn keep_id_with_a_uid_gid_mapping_satisfies_the_keep_id_control() {
+        for ok in [
+            vec!["--userns=keep-id"],
+            vec!["--userns=keep-id:uid=1001,gid=1001"],
+            vec!["--userns", "keep-id:uid=1001,gid=1001"],
+            vec!["--userns=keep-id:uid=1001"],
+            vec!["--userns=keep-id:size=65536"],
+        ] {
+            assert_eq!(validate_launch_argv(&with_userns(&ok)), Ok(()), "{ok:?}");
+        }
+    }
+
+    /// Every other user namespace still fails closed.
+    #[test]
+    fn a_userns_that_is_not_keep_id_is_still_refused() {
+        for bad in [
+            vec![],
+            vec!["--userns=host"],
+            vec!["--userns=auto"],
+            vec!["--userns=keep-id:"],
+            vec!["--userns=keep-id:uid=x"],
+            vec!["--userns=keep-id:uid=1001,foo=1"],
+            vec!["--userns=keep-id:uid="],
+            vec!["--userns=keep-idx"],
+            vec!["--userns=keep-id", "--userns=host"],
+        ] {
+            assert!(
+                validate_launch_argv(&with_userns(&bad)).is_err(),
+                "{bad:?} must be refused"
+            );
+        }
+    }
 
     fn hardened_run() -> Vec<String> {
         vec![

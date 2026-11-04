@@ -34,6 +34,20 @@ comfyui-core	CLIPVisionLoader
 comfyui-core	CLIPVisionEncode
 comfyui-core	UNETLoader
 comfyui-core	VAELoader
+# 1982-kpin: Qwen-Image-Edit, FLUX.2 and Wan VACE workflow classes (core at v0.40.0).
+comfyui-core	TextEncodeQwenImageEdit
+comfyui-core	TextEncodeQwenImageEditPlus
+comfyui-core	CFGNorm
+comfyui-core	EmptyFlux2LatentImage
+comfyui-core	Flux2Scheduler
+comfyui-core	ReferenceLatent
+comfyui-core	WanVaceToVideo
+comfyui-core	TrimVideoLatent
+comfyui-core	CreateVideo
+comfyui-core	SaveVideo
+comfyui-core	LoadVideo
+comfyui-core	GetVideoComponents
+comfyui-core	EmptyHunyuanLatentVideo
 comfyui-core	VAEDecode
 comfyui-core	VAEDecodeTiled
 comfyui-core	VAEEncode
@@ -81,6 +95,8 @@ comfyui-core	SaveImage
 comfyui-core	PreviewImage
 comfyui-core	SaveAnimatedPNG
 comfyui-core	SaveAnimatedWEBP
+# 1983-svid: the WebM video output node (a Wan workflow saves through it).
+comfyui-core	SaveWEBM
 comfyui-core	LoadImage
 comfyui-core	LoadImageMask
 comfyui-core	LoadImageOutput
@@ -187,14 +203,13 @@ ComfyUI_IPAdapter_plus	IPAdapterEmbeds
 ComfyUI_IPAdapter_plus	IPAdapterCombineEmbeds
 ComfyUI_IPAdapter_plus	IPAdapterNoise
 ComfyUI_IPAdapter_plus	PrepImageForClipVision
+# 1986-snpx: only Apply and Decode. DecodeRGBA (and DecodeSplit, its
+# subclass) call JoinImageWithAlpha.join_image_with_alpha, absent at ComfyUI
+# v0.40.0 (AttributeError on the kumbia forge); use Decode + core
+# JoinImageWithAlpha with the alpha inverted. Joint/Cond/Diff Apply load
+# weights that are not pinned (the studio has no egress).
 ComfyUI-layerdiffuse	LayeredDiffusionApply
 ComfyUI-layerdiffuse	LayeredDiffusionDecode
-ComfyUI-layerdiffuse	LayeredDiffusionDecodeRGBA
-ComfyUI-layerdiffuse	LayeredDiffusionDecodeSplit
-ComfyUI-layerdiffuse	LayeredDiffusionDiffApply
-ComfyUI-layerdiffuse	LayeredDiffusionCondApply
-ComfyUI-layerdiffuse	LayeredDiffusionCondJointApply
-ComfyUI-layerdiffuse	LayeredDiffusionJointApply
 ComfyUI_BiRefNet_ll	LoadRembgByBiRefNetModel
 ComfyUI_BiRefNet_ll	RembgByBiRefNet
 ComfyUI_BiRefNet_ll	RembgByBiRefNetAdvanced

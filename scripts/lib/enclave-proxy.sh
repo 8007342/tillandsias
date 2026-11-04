@@ -50,7 +50,7 @@
 # must be named even though the subnet is listed.
 
 # Keep in step with ENCLAVE_NO_PROXY_BASE (main.rs) — the gate enforces it.
-ENCLAVE_NO_PROXY_BASE="localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache"
+ENCLAVE_NO_PROXY_BASE="localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache,studio"
 # Mirrors DEFAULT_ENCLAVE_SUBNET and its TILLANDSIAS_ENCLAVE_SUBNET override.
 ENCLAVE_SUBNET_DEFAULT="10.0.42.0/24"
 ENCLAVE_NO_PROXY="${ENCLAVE_NO_PROXY_BASE},${TILLANDSIAS_ENCLAVE_SUBNET:-$ENCLAVE_SUBNET_DEFAULT}"
