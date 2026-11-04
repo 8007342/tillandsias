@@ -199,8 +199,14 @@ pub fn parse_manifest(body: &str) -> Result<Vec<ModelFile>, String> {
 /// The shipped manifest.
 /// 1986-snpx: the sha256 (first 12) of the models.tsv compiled into THIS
 /// binary, so a stale tray reads as a stale table, not a licence refusal.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub fn manifest_digest() -> String {
-    crate::provenance::sha256_hex(MODELS_TSV.as_bytes())[..12].to_string()
+    use sha2::{Digest, Sha256};
+    Sha256::digest(MODELS_TSV.as_bytes())
+        .iter()
+        .take(6)
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 pub fn manifest() -> Vec<ModelFile> {
