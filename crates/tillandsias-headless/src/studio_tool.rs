@@ -487,6 +487,9 @@ fn model_folders(category: &str) -> Vec<String> {
 fn input_categories(class: &str, key: &str) -> &'static [&'static str] {
     match (class, key) {
         ("LoadRembgByBiRefNetModel", "model") => &["birefnet"],
+        // Before the generic clip_name arm: this loader's clip_name reads
+        // clip_vision, not the text encoders.
+        ("CLIPVisionLoader", "clip_name") => &["clip_vision"],
         (_, "ckpt_name") => &["checkpoints"],
         (_, "unet_name") => &["diffusion_models", "unet"],
         (_, "vae_name") => &["vae"],
@@ -944,6 +947,7 @@ const LISTED_LOADERS: &[(&str, &str)] = &[
     ("UNETLoader", "unet_name"),
     ("VAELoader", "vae_name"),
     ("CLIPLoader", "clip_name"),
+    ("CLIPVisionLoader", "clip_name"),
     ("LoraLoader", "lora_name"),
     ("ControlNetLoader", "control_net_name"),
     ("LoadRembgByBiRefNetModel", "model"),
@@ -1929,14 +1933,22 @@ mod tests {
         )
         .expect("birefnet resolves");
         assert_eq!(birefnet.tier, "I1/birefnet");
+        // CLIPVisionLoader's clip_name reads clip_vision; every other loader's
+        // clip_name reads text encoders, where no model.safetensors is pinned.
         let clip_vision = pinned_model_in(
             &manifest,
             "model.safetensors",
             Some(input_categories("CLIPVisionLoader", "clip_name")),
         )
+        .expect("CLIPVisionLoader resolves");
+        assert_eq!(clip_vision.tier, "I1/clip_vision");
+        let text_encoder = pinned_model_in(
+            &manifest,
+            "model.safetensors",
+            Some(input_categories("CLIPLoader", "clip_name")),
+        )
         .map(|m| m.tier.clone());
-        // clip_name reads text encoders, where no model.safetensors is pinned.
-        assert_eq!(clip_vision, None);
+        assert_eq!(text_encoder, None);
         let vision = pinned_model_in(
             &manifest,
             "model.safetensors",
