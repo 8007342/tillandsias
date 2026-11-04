@@ -264,6 +264,43 @@ fn progress_event(
     }
 }
 
+/// 1918-vzsr: whether Virtualization.framework would save and restore this
+/// VM, asked twice: as configured, and without the virtio-entropy device
+/// (the hypothesis: Tart drops that device for VMs it can suspend).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SaveRestoreVerdict {
+    pub as_configured: Result<(), String>,
+    pub without_entropy: Result<(), String>,
+}
+
+impl SaveRestoreVerdict {
+    /// The one `--diagnose` line.
+    pub fn line(&self) -> String {
+        let word = |r: &Result<(), String>| match r {
+            Ok(()) => "supported".to_string(),
+            Err(e) => format!("unsupported ({e})"),
+        };
+        format!(
+            "save-restore: {}; without virtio-entropy: {}",
+            word(&self.as_configured),
+            word(&self.without_entropy)
+        )
+    }
+}
+
+/// 1918-vzsr: a saved VM image holds guest memory, and with it an unsealed
+/// Vault's keys. A save is refused while Vault runs; the caller stops or
+/// seals Vault first.
+pub fn save_permitted(vault_running: bool) -> Result<(), &'static str> {
+    if vault_running {
+        Err(
+            "refused:vm-save:vault-running: a saved image would hold the unsealed Vault's keys; stop Vault first",
+        )
+    } else {
+        Ok(())
+    }
+}
+
 impl VzRuntime {
     /// Construct a runtime handle. Does NOT touch the host yet.
     pub fn new(guest_cid: u32, image_root: PathBuf) -> Self {
@@ -276,6 +313,55 @@ impl VzRuntime {
             host_listener: std::sync::Mutex::new(None),
             serial_to_log: std::sync::atomic::AtomicBool::new(false),
             shutdown_token: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// 1918-vzsr: ask Virtualization.framework whether this VM's device set
+    /// supports save and restore. It builds a configuration of the same
+    /// device kinds as `start()` (root, identity, CIDATA if present, two
+    /// virtio-fs shares, NVRAM) WITHOUT creating anything: no swap image, no
+    /// identity disk, temporary shares, and a temporary NVRAM when none
+    /// exists. Nothing boots.
+    #[cfg(target_os = "macos")]
+    pub fn save_restore_verdict(&self) -> SaveRestoreVerdict {
+        let tmp = match tempfile::tempdir() {
+            Ok(t) => t,
+            Err(e) => {
+                let err = format!("probe could not make a scratch dir: {e}");
+                return SaveRestoreVerdict {
+                    as_configured: Err(err.clone()),
+                    without_entropy: Err(err),
+                };
+            }
+        };
+        let existing = |name: &str| {
+            let p = self.image_root.join(name);
+            p.exists().then_some(p)
+        };
+        let share = |sub: &str, tag: &str, read_only: bool| {
+            let dir = tmp.path().join(sub);
+            let _ = std::fs::create_dir_all(&dir);
+            boot::VzShare {
+                host_dir: dir,
+                tag: tag.to_string(),
+                read_only,
+            }
+        };
+        let spec = |entropy: bool| boot::VzBootConfig {
+            root_disk: existing("rootfs.img"),
+            cidata_iso: existing("cidata.iso"),
+            identity_disk: existing(boot::IDENTITY_IMAGE_FILE),
+            shares: vec![
+                share("rw", "probe-rw", false),
+                share("ro", "probe-ro", true),
+            ],
+            nvram: Some(existing("nvram.bin").unwrap_or_else(|| tmp.path().join("nvram.bin"))),
+            entropy,
+            ..boot::VzBootConfig::defaults()
+        };
+        SaveRestoreVerdict {
+            as_configured: boot::save_restore_support(&spec(true)),
+            without_entropy: boot::save_restore_support(&spec(false)),
         }
     }
 
@@ -2465,6 +2551,10 @@ pub mod boot {
         /// builder dups `STDERR_FILENO` so guest serial flows to host
         /// stderr for early-boot diagnostics.
         pub serial_writer_fd: Option<c_int>,
+        /// Attach the virtio-entropy device (1918-vzsr). Always `true` for a
+        /// boot. The save-restore probe also tries `false`, because Tart drops
+        /// this device for VMs it can suspend.
+        pub entropy: bool,
     }
 
     impl VzBootConfig {
@@ -2482,6 +2572,7 @@ pub mod boot {
                 shares: Vec::new(),
                 nvram: None,
                 serial_writer_fd: None,
+                entropy: true,
             }
         }
     }
@@ -2692,6 +2783,18 @@ pub mod boot {
         }
     }
 
+    /// 1918-vzsr: does Virtualization.framework accept save and restore for
+    /// this configuration? `validateSaveRestoreSupportWithError` (macOS 14+)
+    /// is the only oracle. The configuration must first be valid at all; an
+    /// invalid one is reported as such, never as "unsupported".
+    pub fn save_restore_support(spec: &VzBootConfig) -> Result<(), String> {
+        let cfg = build_vm_configuration(spec)?;
+        unsafe { cfg.validateWithError() }
+            .map_err(|e| format!("configuration invalid: {}", e.localizedDescription()))?;
+        unsafe { cfg.validateSaveRestoreSupportWithError() }
+            .map_err(|e| e.localizedDescription().to_string())
+    }
+
     /// Build a fully-wired `VZVirtualMachineConfiguration` from the spec:
     /// EFI boot, optional virtio-blk root disk, virtio-net NAT,
     /// virtio-console serial → host stderr (or `serial_writer_fd`),
@@ -2809,11 +2912,13 @@ pub mod boot {
             cfg.setSerialPorts(&arr_s);
 
             // virtio-entropy + virtio-balloon.
-            let entropy = VZVirtioEntropyDeviceConfiguration::new();
-            let arr_e: Retained<NSArray<objc2_virtualization::VZEntropyDeviceConfiguration>> =
-                NSArray::from_id_slice(&[Retained::cast(entropy)]);
-            let _: &VZEntropyDeviceConfiguration = &arr_e[0];
-            cfg.setEntropyDevices(&arr_e);
+            if spec.entropy {
+                let entropy = VZVirtioEntropyDeviceConfiguration::new();
+                let arr_e: Retained<NSArray<objc2_virtualization::VZEntropyDeviceConfiguration>> =
+                    NSArray::from_id_slice(&[Retained::cast(entropy)]);
+                let _: &VZEntropyDeviceConfiguration = &arr_e[0];
+                cfg.setEntropyDevices(&arr_e);
+            }
 
             let balloon = VZVirtioTraditionalMemoryBalloonDeviceConfiguration::new();
             let arr_b: Retained<NSArray<VZMemoryBalloonDeviceConfiguration>> =
@@ -3400,6 +3505,7 @@ impl VmRuntime for VzRuntime {
             shares,
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
+            entropy: true,
         };
 
         let cfg = boot::build_vm_configuration(&spec)?;
@@ -5902,6 +6008,49 @@ mod tests {
         vz.wipe_identity().unwrap();
         assert!(!image.exists() && !record.exists());
         vz.wipe_identity().unwrap();
+    }
+
+    /// 1918-vzsr: a save is refused while Vault runs, and allowed once it is
+    /// stopped. A saved image holds guest memory, and with it Vault's keys.
+    #[test]
+    fn a_vm_save_is_refused_while_vault_runs() {
+        let refused = save_permitted(true).unwrap_err();
+        assert!(
+            refused.starts_with("refused:vm-save:vault-running"),
+            "{refused}"
+        );
+        assert_eq!(save_permitted(false), Ok(()));
+    }
+
+    /// 1918-vzsr: the --diagnose line names both answers, with the reason when
+    /// a configuration is unsupported.
+    #[test]
+    fn the_save_restore_line_names_both_answers() {
+        let v = SaveRestoreVerdict {
+            as_configured: Err("Entropy device is not supported".into()),
+            without_entropy: Ok(()),
+        };
+        assert_eq!(
+            v.line(),
+            "save-restore: unsupported (Entropy device is not supported); without virtio-entropy: supported"
+        );
+    }
+
+    /// 1918-vzsr, live on the host: the probe answers for the real device
+    /// set without booting or creating anything. macOS only.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_save_restore_probe_answers_without_side_effects() {
+        let root = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(3, root.path().to_path_buf());
+        let v = rt.save_restore_verdict();
+        let line = v.line();
+        assert!(line.starts_with("save-restore: "), "{line}");
+        assert!(
+            std::fs::read_dir(root.path()).unwrap().next().is_none(),
+            "the probe created files in the image root"
+        );
+        eprintln!("{line}");
     }
 
     #[test]

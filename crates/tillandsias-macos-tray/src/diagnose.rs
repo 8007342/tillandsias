@@ -1084,6 +1084,10 @@ pub struct DiagnoseReport {
     pub initrd_present: bool,
     pub initrd_bytes: Option<u64>,
     pub release_tag: &'static str,
+    /// 1918-vzsr: Virtualization.framework's save-restore verdict for this
+    /// VM's device set, as configured and without virtio-entropy. A static
+    /// probe: nothing boots and nothing is created.
+    pub save_restore: String,
     pub manifest_pin_aarch64_qcow2: Option<String>,
     pub provisioned: bool,
     /// 701-kgvk. Which guest binary this bundle carries, versus the one actually
@@ -1202,6 +1206,9 @@ fn collect_report() -> DiagnoseReport {
         initrd_present,
         initrd_bytes,
         release_tag: crate::action_host::FEDORA_BASELINE,
+        save_restore: tillandsias_vm_layer::vz::VzRuntime::new(3, root.clone())
+            .save_restore_verdict()
+            .line(),
         manifest_pin_aarch64_qcow2,
         provisioned,
         guest_binary_bundle_sha256: provenance.bundle_sha256,
@@ -1264,6 +1271,7 @@ fn print_human(r: &DiagnoseReport) {
     print_artifact("  vmlinuz", r.kernel_present, r.kernel_bytes);
     print_artifact("  initramfs.img", r.initrd_present, r.initrd_bytes);
     println!("Release:    {}", r.release_tag);
+    println!("{}", r.save_restore);
     println!("Manifest:   bundled at build (compile-time include_str!)");
     match &r.manifest_pin_aarch64_qcow2 {
         Some(sha) => println!("  aarch64.qcow2 SHA-256 pin: {sha}\u{2026}"),
@@ -3626,6 +3634,7 @@ mod tests {
             initrd_present: false,
             initrd_bytes: None,
             release_tag: "fedora-44",
+            save_restore: "save-restore: supported; without virtio-entropy: supported".into(),
             manifest_pin_aarch64_qcow2: Some("55c60a3b80d3".to_string()),
             provisioned: true,
             // 701-kgvk: the healthy shape — bundle and staged agree.
