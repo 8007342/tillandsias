@@ -689,6 +689,38 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         "result": tillandsias_browser_mcp::framing::tool_result_content(listing)
                     })
                 }
+                // 1987-smnt: a fresh container reads the tray's current folder map.
+                "studio.restart" => {
+                    crate::imagegen_studio::stop(project_label);
+                    let version = crate::VERSION.trim();
+                    let client = tillandsias_podman::PodmanClient::new();
+                    let plan = crate::imagegen_studio::plan_explicit(
+                        &tillandsias_core::cache_root::cache_root(),
+                    );
+                    match rt
+                        .block_on(crate::imagegen_studio::start(
+                            &client,
+                            &plan,
+                            project_label,
+                            version,
+                            debug,
+                        ))
+                        .map(|()| {
+                            let mut v = crate::imagegen_studio::status_json(
+                                project_label,
+                                crate::imagegen_studio::is_running(project_label),
+                            );
+                            v["restarted"] = serde_json::json!(true);
+                            v
+                        }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": format!("studio_restart_failed: {e}") }
+                        }),
+                    }
+                }
                 "studio.status" => {
                     let running = crate::imagegen_studio::is_running(project_label);
                     serde_json::json!({
