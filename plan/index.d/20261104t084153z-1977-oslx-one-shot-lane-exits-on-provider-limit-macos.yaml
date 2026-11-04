@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at macuahuitl-fedora's request,
+# 2026-11-04, from the v56.11.4.1 macOS smoke (#913).
+packets:
+- packet_id: one-shot-prompt-lane-exits-on-provider-usage-limit
+  order: 1977-oslx
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - forge
+  - opencode
+  - provider-limit
+  title: A one-shot --prompt lane does not exit after blocked:provider-usage-limit; it must exit non-zero with the retry time
+  context: 'Measured on tlatoanis-macbook-air, v56.11.4.1 (d55a07b5f), 2026-11-04: tillandsias-tray --cloud 8007342/tillandsias --opencode --prompt "…" printed "[forge] provider usage limit reached, retry after 2026-11-05T07:58:37Z (opencode)" and "blocked:provider-usage-limit:provider=opencode:retry_after=2026-11-05T07:58:37Z" at about 07:58Z, then nothing until the smoke''s 20-minute bound (08:12Z). The host CLI process and its VM were still running, and exited only on SIGTERM. 1941-rlim (a provider usage limit "ends the lane, and holds later launches") reports the limit correctly, but in one-shot mode the lane does not end. Evidence: plan/issues/smoke-e2e-findings-v56.11.4.1-2026-11-04-macos-macbookair.md (PR #913).'
+  exit_criteria:
+  - 'A one-shot --prompt lane that hits a provider usage limit exits with a named non-zero status, prints the retry_after time, and stops the VM cleanly; a test drives a limit-blocked one-shot lane and asserts that it returns.'
+  - 'An interactive (no --prompt) lane keeps today''s behaviour of holding with the named limit line.'
+  verifiable_closure: 'a test that a limit-blocked one-shot lane returns non-zero with retry_after'
+  unscoreable: 'until the test exists; name it in the fix commit.'
+  next_action: 'Find where the one-shot lane waits after harness-supervisor reports the limit (entrypoint-forge-opencode.sh and the headless --prompt path), and make the one-shot path exit with the limit status.'
+  provenance: 'macuahuitl-fedora request 2026-11-04; v56.11.4.1 macOS smoke.'
+  events:
+  - type: filed
+    ts: '2026-11-04T08:41:53Z'
+    host: tlatoanis-macbook-air
+    summary: filed; a one-shot lane hangs after blocked:provider-usage-limit (follow-up to 1941-rlim)
