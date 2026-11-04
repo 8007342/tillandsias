@@ -658,6 +658,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                                 debug,
                             ))
                         },
+                        &|| crate::imagegen_studio::probe_listening(project_label),
                     )
                     .and_then(|mut result| {
                         // 1985-stdu: already running: connect this forge
@@ -705,7 +706,16 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             version,
                             debug,
                         ))
-                        .map(|()| {
+                        .and_then(|()| {
+                            // 1990-stry: answer once ComfyUI listens again.
+                            crate::imagegen_studio::wait_until_listening(
+                                project_label,
+                                &|| crate::imagegen_studio::probe_listening(project_label),
+                                crate::imagegen_studio::LISTEN_BUDGET,
+                                crate::imagegen_studio::LISTEN_POLL,
+                            )
+                        })
+                        .map(|_| {
                             let mut v = crate::imagegen_studio::status_json(
                                 project_label,
                                 crate::imagegen_studio::is_running(project_label),
