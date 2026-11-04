@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned (kumbia forge studio reports).
+packets:
+- packet_id: studio-model-names-resolve-by-the-inputs-folder-config-selected-weights-are-fetched-and-the-forge-reaches-its-studio-without-the-proxy
+  order: 1986-snpx
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, comfyui, models, provenance, proxy]
+  estimated_hours: 4
+  title: Studio model names resolve by the input's folder, config-selected weights are fetched, and the forge reaches its studio without the proxy
+  context: 'Kumbia forge reports 2026-11-03. (1) curl to tillandsias-<project>-studio went to squid and reset, exit 56: no_proxy lists the enclave by CIDR, and curl matches the hostname, not the address. (2) The I1 checkpoints root is scanned recursively, so ComfyUI lists sdxl-full/x, which the validator did not accept. (3) CONFIRMED: pinned_model took the FIRST row with a basename, so BiRefNet model.safetensors resolved to I1/clip_vision (manifest line 46) and the BiRefNet weights were never fetched. (4) LayerDiffuse picks weights by config value (Apply config, Decode sd_version): never validated, fetched or recorded, so layer_model was empty. (5) LayeredDiffusionDecodeRGBA (and DecodeSplit, its subclass) calls JoinImageWithAlpha.join_image_with_alpha, absent at ComfyUI v0.40.0.'
+  exit_criteria:
+  - 'BiRefNet model.safetensors resolves to I1/birefnet, the clip_vision input to I1/clip_vision. Pre-fix result: FAILS, both resolved to I1/clip_vision.'
+  - 'ComfyUI listed form sdxl-full/<file> is accepted as a checkpoint; a lora under the I1 root is not a checkpoint.'
+  - 'A LayeredDiffusionApply + Decode workflow fetches layer_xl_transparent_conv and vae_transparent_decoder and records them in provenance; an unpinned config is refused. Pre-fix result: FAILS, only the checkpoint was fetched.'
+  - 'The studio answers as the name studio on its project network, and no_proxy lists it.'
+  - 'LATER, same row (part 2): a pre-check before queueing for pinned-but-absent files; model_refused names the tray table build; a read-only studio.models listing; cheatsheet: BiRefNet alpha is soft (interior 254), so threshold it, and only ~/.cache/tillandsias-project survives a forge restart.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- studio_tool:: imagegen_studio'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures with a stub engine (1136-n8sh).'
+  related: [1985-stdu, 1972-stfx, 1982-kpin]
+  next_action: 'Land part 1 (this branch, stacked on 1985-stdu); then part 2.'
+  provenance: kumbia forge reports relayed by macuahuitl-fedora 2026-11-03.
+  events:
+  - type: filed
+    ts: '2026-11-04T01:47:43Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

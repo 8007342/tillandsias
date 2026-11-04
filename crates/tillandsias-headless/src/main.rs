@@ -74,11 +74,13 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+// 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
 mod bringup_timer;
 mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
 #[cfg(feature = "host-services")]
 mod imagegen_consent;
@@ -2306,8 +2308,11 @@ const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // appended by enclave_no_proxy() does not rescue it: curl matches no_proxy
 // against the HOSTNAME as written, not against the address it resolves to, so a
 // CIDR entry never covers `https://nix-cache:5000`.
+// Order 1986-snpx: `studio` IS listed for the same reason as nix-cache. The
+// project's studio answers as `studio` on its own network (1985-stdu); a
+// forge's curl to it went to squid and came back exit 56 (kumbia forge).
 const ENCLAVE_NO_PROXY_BASE: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache";
+    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache,studio";
 /// ORDER 998-qrwu. The path is declared ONCE in images/default/ca-path.txt and
 /// read through tillandsias-core, which both this crate and tillandsias-macos-tray
 /// depend on. It was a literal in 38 places; 975-rsgm has to move it off /tmp,
@@ -3368,7 +3373,9 @@ struct SetsidImageEnsure;
 
 impl DetachedImageEnsure for SetsidImageEnsure {
     fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String> {
-        let exe = std::env::current_exe().map_err(|e| format!("resolve current_exe: {e}"))?;
+        // 1984-pexe: /proc/self/exe, so an upgrade under a running tray does
+        // not turn every helper spawn into ENOENT.
+        let exe = self_exe::for_spawn().map_err(|e| format!("resolve current_exe: {e}"))?;
         let log = fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -8522,6 +8529,21 @@ struct RouterRoute {
     /// @trace spec:local-web-preview
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     preview_tls: bool,
+    /// 1985-stdu: serve only callers whose address is in this CIDR (the
+    /// project's studio network); everyone else gets 403 on every listener.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    allow_cidr: Option<String>,
+}
+
+/// 1985-stdu: the Caddy lines that refuse a caller outside `cidr` (the TCP
+/// peer, never a forwarded header).
+fn caddy_source_guard(cidr: Option<&str>) -> String {
+    match cidr {
+        Some(c) => format!(
+            "    @outside not remote_ip {c}\n    respond @outside \"refused: this route serves only its own project's network\" 403\n"
+        ),
+        None => String::new(),
+    }
 }
 
 impl RouterRoute {
@@ -8533,6 +8555,7 @@ impl RouterRoute {
             root_redirect: None,
             public: false,
             preview_tls: false,
+            allow_cidr: None,
         }
     }
 
@@ -8671,8 +8694,9 @@ fn generate_dynamic_caddyfile(routes_to_render: &[RouterRoute]) -> String {
         // with NO forward_auth gate — the user's own localhost dev server.
         // @trace spec:enclave-service-catalog
         if route.public {
+            let guard = caddy_source_guard(route.allow_cidr.as_deref());
             routes.push_str(&format!(
-                "http://{subdomain}.localhost:8080 {{\n    \
+                "http://{subdomain}.localhost:8080 {{\n{guard}    \
 reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
             ));
@@ -8683,7 +8707,7 @@ reverse_proxy {upstream_host}:{port}\n\
                     .split_once('.')
                     .map_or(project_label, |(_, project)| project);
                 routes.push_str(&format!(
-                    "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
+                    "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n{guard}    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
                 ));
             }
             continue;
@@ -16226,7 +16250,7 @@ fn maybe_spawn_detached_tray_for_cli(
         tray_presence::Presence::Absent => {}
     }
 
-    let Ok(exe) = std::env::current_exe() else {
+    let Ok(exe) = self_exe::for_spawn() else {
         return;
     };
 
@@ -19549,7 +19573,8 @@ pub(crate) fn run_hold_window(args: &[String]) -> i32 {
 // 776-jcf3: the tray is the only caller left.
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn hold_window_prefix() -> Vec<String> {
-    let exe = std::env::current_exe()
+    // 1984-pexe: a terminal runs this, so the installed path, not /proc/self.
+    let exe = self_exe::for_other_process()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "tillandsias".to_string());
     vec![exe, "--hold-window".to_string(), "--".to_string()]
@@ -26364,6 +26389,40 @@ mod tests {
             !caddy.contains("forward_auth"),
             "public catalog route must not be behind the session gate:\n{caddy}"
         );
+    }
+
+    /// ORDER 1985-stdu: a route limited to a project's studio network refuses
+    /// every other caller on BOTH listeners (the host-published :8080 too),
+    /// before it proxies. Pre-fix: FAILS, a public route proxied anyone.
+    #[test]
+    fn a_network_limited_route_refuses_callers_outside_its_subnet_on_both_listeners() {
+        let mut route =
+            RouterRoute::public_service("comfyui.kumbia", "tillandsias-kumbia-studio", 8188);
+        route.preview_tls = true;
+        route.allow_cidr = Some("10.89.7.0/24".into());
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        for site in [
+            "http://comfyui.kumbia.localhost:8080 {",
+            "https://comfyui.kumbia.localhost:8443 {",
+        ] {
+            let at = caddy
+                .find(site)
+                .unwrap_or_else(|| panic!("{site} missing:\n{caddy}"));
+            let block = &caddy[at..at + caddy[at..].find("\n}").unwrap()];
+            let guard = block
+                .find("@outside not remote_ip 10.89.7.0/24")
+                .unwrap_or_else(|| panic!("no guard in {block}"));
+            let refuse = block.find("respond @outside").expect("a refusal");
+            let proxy = block.find("reverse_proxy").expect("a proxy");
+            assert!(
+                guard < refuse && refuse < proxy,
+                "the guard comes first: {block}"
+            );
+            assert!(block.contains("403"), "{block}");
+        }
+        // Without a CIDR nothing changes.
+        let open = RouterRoute::public_service("www.kumbia", "tillandsias-kumbia-web", 8080);
+        assert!(!generate_dynamic_caddyfile(&[open]).contains("remote_ip"));
     }
 
     #[test]

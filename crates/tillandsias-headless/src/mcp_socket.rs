@@ -432,6 +432,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::imagegen_tool::descriptor());
             // 1956-x7xp: the headless studio workflow runner, beside it.
             tools.push(crate::studio_tool::descriptor());
+            // 1986-snpx: the read-only model listing beside it.
+            tools.push(crate::studio_tool::models_descriptor());
             // 1969-cfyt: the studio appliance, started on demand.
             tools.extend(crate::imagegen_studio::tool_descriptors());
             // 1956-26qh: the GPU-free family contract checker, beside it.
@@ -656,7 +658,17 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                                 debug,
                             ))
                         },
-                    ) {
+                    )
+                    .and_then(|mut result| {
+                        // 1985-stdu: already running: connect this forge
+                        // and refresh the window route.
+                        if result["started"] == false {
+                            crate::imagegen_studio::reattach(project_label, debug)?;
+                        }
+                        result["window_url"] =
+                            serde_json::json!(crate::imagegen_studio::window_url(project_label));
+                        Ok(result)
+                    }) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
@@ -664,6 +676,18 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             "error": { "code": -32000, "message": e }
                         }),
                     }
+                }
+                "studio.models" => {
+                    let engine = crate::studio_tool::HttpStudio::for_this_host(project_label).ok();
+                    let listing = crate::studio_tool::models_listing(
+                        &crate::imagegen_models::models_dir(),
+                        engine
+                            .as_ref()
+                            .map(|e| e as &dyn crate::studio_tool::StudioEngine),
+                    );
+                    serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(listing)
+                    })
                 }
                 "studio.status" => {
                     let running = crate::imagegen_studio::is_running(project_label);
@@ -1417,7 +1441,9 @@ pub(crate) fn build_identity() -> &'static str {
     static ID: OnceLock<String> = OnceLock::new();
     ID.get_or_init(|| {
         use sha2::{Digest, Sha256};
-        let digest = env::current_exe()
+        // 1984-pexe: /proc/self/exe reads the RUNNING build even after an
+        // upgrade replaced its file (current_exe then names "… (deleted)").
+        let digest = crate::self_exe::for_spawn()
             .and_then(fs::read)
             .map(|bytes| {
                 let hash = Sha256::digest(&bytes);

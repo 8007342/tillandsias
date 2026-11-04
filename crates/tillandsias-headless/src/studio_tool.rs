@@ -59,6 +59,20 @@ pub const CUSTOM_NODES_TOML: &str =
 const MAX_COUNT: u32 = 16;
 
 /// Loader inputs whose value names a model file (D1 step 3).
+/// 1983-svid: the output nodes the studio forces under `studio/<job>/<i>` and
+/// returns. A video node (Wan) saves through the same history as images.
+pub const SAVE_CLASSES: &[&str] = &[
+    "SaveImage",
+    "SaveVideo",
+    "SaveWEBM",
+    "SaveAnimatedWEBP",
+    "SaveAnimatedPNG",
+];
+
+fn is_save_class(class: &str) -> bool {
+    SAVE_CLASSES.contains(&class)
+}
+
 pub const MODEL_INPUTS: &[&str] = &[
     "ckpt_name",
     "unet_name",
@@ -85,6 +99,74 @@ pub const MODEL_INPUTS: &[&str] = &[
 /// names its weights in `model`, so they were never checked or fetched and
 /// ComfyUI refused "model.safetensors not in []".
 pub const CLASS_MODEL_INPUTS: &[(&str, &str)] = &[("LoadRembgByBiRefNetModel", "model")];
+
+/// 1986-snpx: nodes that pick their weights by a CONFIG value, not a file
+/// name: (class, input, value, folder, pinned file). LayerDiffuse at the
+/// pinned commit: Apply's `config` names the injection weights, Decode's
+/// `sd_version` the transparent VAE decoder. Before this, these weights were
+/// never validated, fetched or recorded in provenance (kumbia forge: layer_model
+/// was empty). A config value of these classes not listed here is refused.
+pub const CONFIG_MODELS: &[(&str, &str, &str, &str, &str)] = &[
+    (
+        "LayeredDiffusionApply",
+        "config",
+        "SDXL, Attention Injection",
+        "I1/layer_model",
+        "layer_xl_transparent_attn.safetensors",
+    ),
+    (
+        "LayeredDiffusionApply",
+        "config",
+        "SDXL, Conv Injection",
+        "I1/layer_model",
+        "layer_xl_transparent_conv.safetensors",
+    ),
+    (
+        "LayeredDiffusionDecode",
+        "sd_version",
+        "SDXL",
+        "I1/layer_model",
+        "vae_transparent_decoder.safetensors",
+    ),
+];
+
+/// The pinned rows a config-selected node uses, or a refusal naming the
+/// accepted values. `None` when the class picks no weights by config.
+fn config_models<'a>(
+    manifest: &'a [ModelFile],
+    class: &str,
+    inputs: &serde_json::Map<String, Value>,
+) -> Option<Result<Vec<&'a ModelFile>, String>> {
+    let rows: Vec<_> = CONFIG_MODELS.iter().filter(|r| r.0 == class).collect();
+    if rows.is_empty() {
+        return None;
+    }
+    let input = rows[0].1;
+    let value = inputs.get(input).and_then(Value::as_str).unwrap_or("");
+    let hit: Vec<_> = rows.iter().filter(|r| r.2 == value).collect();
+    if hit.is_empty() {
+        let accepted: Vec<&str> = rows.iter().map(|r| r.2).collect();
+        return Some(Err(format!(
+            "model_refused: {class} {input}={value:?} selects weights that are not pinned; accepted: {}",
+            accepted.join(" | ")
+        )));
+    }
+    Some(
+        hit.iter()
+            .map(|r| {
+                manifest
+                    .iter()
+                    .find(|m| m.tier == r.3 && m.cache_name() == r.4)
+                    .ok_or_else(|| {
+                        format!(
+                            "model_refused: {class} needs {}/{} but models.tsv does not pin it",
+                            r.3, r.4
+                        )
+                    })
+            })
+            .collect(),
+    )
+}
 
 /// Inputs that carry a `$name` placeholder bound from `inputs`.
 const BINDABLE_INPUTS: &[&str] = &["image", "mask"];
@@ -352,18 +434,110 @@ pub struct Plan {
     pub count: u32,
     pub tier: Option<String>,
     pub family: Option<(String, String)>,
+    /// 1986-snpx: every loader input resolved to a pinned file:
+    /// (node, class, input, the name as written, the row).
+    pub loader_inputs: Vec<(String, String, String, String, ModelFile)>,
+}
+
+/// 1986-snpx: what a refusal says about the table it read: the build of
+/// this tray and the digest of the models.tsv compiled into it.
+fn table_note() -> String {
+    format!(
+        "(this tray: build {}, models.tsv {}; a pin newer than this tray needs a tray rebuild)",
+        crate::mcp_socket::build_identity(),
+        imagegen_models::manifest_digest()
+    )
 }
 
 fn title_of(node: &Value) -> Option<&str> {
     node.get("_meta")?.get("title")?.as_str()
 }
 
-/// A model filename as a loader input names it: the cache name, or
-/// `<tier>/<cache name>` (extra_model_paths.yaml lists one dir per tier).
-fn pinned_model<'a>(manifest: &'a [ModelFile], named: &str) -> Option<&'a ModelFile> {
+/// 1986-snpx: the studio's ComfyUI folder map (extra_model_paths.yaml):
+/// category -> the tier folders under /models it scans.
+const EXTRA_MODEL_PATHS: &str =
+    include_str!("../../../images/imagegen-studio/extra_model_paths.yaml");
+
+/// `category: |` followed by indented folder lines, per category.
+fn model_folders(category: &str) -> Vec<String> {
+    let head = format!("  {category}: |");
+    let mut out = Vec::new();
+    let mut inside = false;
+    for line in EXTRA_MODEL_PATHS.lines() {
+        if line.trim_end() == head {
+            inside = true;
+            continue;
+        }
+        if inside {
+            match line.strip_prefix("    ") {
+                Some(v) if !v.trim().is_empty() && !v.trim_start().starts_with('#') => {
+                    out.push(v.trim().to_string())
+                }
+                _ => break,
+            }
+        }
+    }
+    out
+}
+
+/// 1986-snpx: the ComfyUI folder categories a loader input reads from. A
+/// name is resolved only among the rows in those folders, so two pinned
+/// files with one basename (I1/clip_vision and I1/birefnet model.safetensors)
+/// never resolve to each other.
+fn input_categories(class: &str, key: &str) -> &'static [&'static str] {
+    match (class, key) {
+        ("LoadRembgByBiRefNetModel", "model") => &["birefnet"],
+        (_, "ckpt_name") => &["checkpoints"],
+        (_, "unet_name") => &["diffusion_models", "unet"],
+        (_, "vae_name") => &["vae"],
+        (_, "lora_name") => &["loras"],
+        (_, "control_net_name") => &["controlnet"],
+        (_, "ipadapter_file") => &["ipadapter"],
+        (_, "clip_name" | "clip_name1" | "clip_name2" | "clip_name3" | "clip_name4") => {
+            &["text_encoders", "clip"]
+        }
+        (_, "clip_vision" | "clip_vision_name" | "image_encoder") => &["clip_vision"],
+        _ => &[],
+    }
+}
+
+/// Every name ComfyUI may list `m` under for these folders: a file under a
+/// scanned folder F is listed by its path relative to F (ComfyUI walks F
+/// recursively), so I1/sdxl-full/x under the `I1` root is `sdxl-full/x`.
+/// The bare basename and `<tier>/<file>` are accepted too.
+fn listed_names(m: &ModelFile, folders: &[String]) -> Vec<String> {
+    let mut names = vec![
+        m.cache_name().to_string(),
+        format!("{}/{}", m.tier, m.cache_name()),
+    ];
+    for f in folders {
+        if let Some(rest) = m.tier.strip_prefix(&format!("{f}/")) {
+            names.push(format!("{rest}/{}", m.cache_name()));
+        }
+    }
+    names
+}
+
+/// `pinned_model`, limited to the rows in `categories`' folders when given.
+fn pinned_model_in<'a>(
+    manifest: &'a [ModelFile],
+    named: &str,
+    categories: Option<&[&str]>,
+) -> Option<&'a ModelFile> {
+    let folders: Vec<String> = categories
+        .unwrap_or(&[])
+        .iter()
+        .flat_map(|c| model_folders(c))
+        .collect();
+    // A row is in scope only when its OWN folder is one of the category's:
+    // the `I1` checkpoints root also walks into I1/lora, but a lora is not a
+    // checkpoint (I1/sdxl-full is listed under checkpoints in its own right).
+    let in_scope =
+        |m: &ModelFile| categories.is_none_or(|c| c.is_empty()) || folders.contains(&m.tier);
     manifest
         .iter()
-        .find(|m| named == m.cache_name() || named == format!("{}/{}", m.tier, m.cache_name()))
+        .filter(|m| in_scope(m))
+        .find(|m| listed_names(m, &folders).iter().any(|n| n == named))
 }
 
 /// A forge path under `FORGE_SCRATCH/` → its path relative to the volume.
@@ -418,11 +592,15 @@ pub fn validate(
     for (_, class) in &classes {
         allow.admits(class)?;
     }
-    if !classes.iter().any(|(_, c)| c == "SaveImage") {
-        return Err("invalid_workflow: no SaveImage node, so the run would produce nothing".into());
+    if !classes.iter().any(|(_, c)| is_save_class(c)) {
+        return Err(format!(
+            "invalid_workflow: no output node ({}), so the run would produce nothing",
+            SAVE_CLASSES.join(", ")
+        ));
     }
     // 3. Every model file is a pinned, admitted row.
     let mut models: Vec<ModelFile> = Vec::new();
+    let mut loader_inputs: Vec<(String, String, String, String, ModelFile)> = Vec::new();
     for (id, node) in nodes {
         let inputs = node["inputs"].as_object().expect("checked above");
         let class = node["class_type"].as_str().unwrap_or("");
@@ -432,16 +610,50 @@ pub fn validate(
                 .filter(|(c, _)| *c == class)
                 .map(|(_, k)| *k),
         );
+        // 1986-snpx: weights a node picks by a config value.
+        if let Some(rows) = config_models(manifest, class, inputs) {
+            for row in rows.map_err(|e| format!("{e} (node {id})"))? {
+                imagegen_models::register_admits(register, row)?;
+                // A config value names no file a loader lists: disk check only.
+                loader_inputs.push((
+                    id.clone(),
+                    String::new(),
+                    "config".into(),
+                    row.cache_name().to_string(),
+                    row.clone(),
+                ));
+                if !models.contains(row) {
+                    models.push(row.clone());
+                }
+            }
+        }
         for key in keys {
             if let Some(named) = inputs.get(key).and_then(Value::as_str) {
-                let row = pinned_model(manifest, named).ok_or_else(|| {
+                let cats = input_categories(class, key);
+                let row = pinned_model_in(manifest, named, Some(cats)).ok_or_else(|| {
+                    let folders: Vec<String> = cats.iter().flat_map(|c| model_folders(c)).collect();
+                    let accepted: Vec<String> = manifest
+                        .iter()
+                        .filter(|m| folders.contains(&m.tier))
+                        .flat_map(|m| listed_names(m, &folders).into_iter().take(1))
+                        .collect();
                     format!(
-                        "model_refused: node {id} {key}={named:?} is not a row of images/imagegen/models.tsv; \
-                         a model runs only when it is pinned there and images/models/licence-register.tsv \
-                         admits it (the operator approves each licence)"
+                        "model_refused: node {id} {key}={named:?} is not a pinned file in its folders ({}); \
+                         accepted here: {}. A model runs only when images/imagegen/models.tsv pins it and \
+                         images/models/licence-register.tsv admits it (the operator approves each licence) {}",
+                        cats.join("/"),
+                        if accepted.is_empty() { "none".to_string() } else { accepted.join(", ") },
+                        table_note()
                     )
                 })?;
                 imagegen_models::register_admits(register, row)?;
+                loader_inputs.push((
+                    id.clone(),
+                    class.to_string(),
+                    key.to_string(),
+                    named.to_string(),
+                    row.clone(),
+                ));
                 if !models.contains(row) {
                     models.push(row.clone());
                 }
@@ -572,6 +784,7 @@ pub fn validate(
         count: req.count,
         tier: req.tier.clone(),
         family: None,
+        loader_inputs,
     })
 }
 
@@ -589,6 +802,33 @@ fn set_text(inputs: &mut serde_json::Map<String, Value>, text: &str) {
 
 /// Batch item `i` of `job`: overrides applied to the titled nodes only, seed
 /// `plan.seed + i`, and every SaveImage prefixed `studio/<job>/<i>` (D2).
+/// 1983-svid: what one output file is.
+enum OutputKind {
+    Image { w: u32, h: u32, alpha: bool },
+    Video,
+}
+
+/// A PNG is an image (its IHDR read); mp4, webm, an animated webp or gif is
+/// a video. Anything else is named, never silently accepted or dropped.
+fn output_kind(file: &str, bytes: &[u8]) -> Result<OutputKind, String> {
+    let ext = file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => crate::imagegen_tool::png_facts(bytes)
+            .map(|(w, h, alpha)| OutputKind::Image { w, h, alpha })
+            .ok_or_else(|| format!("engine_failed: {file} is not a PNG")),
+        "mp4" | "webm" | "webp" | "gif" | "mov" | "mkv" => {
+            if bytes.is_empty() {
+                Err(format!("engine_failed: {file} is empty"))
+            } else {
+                Ok(OutputKind::Video)
+            }
+        }
+        other => Err(format!(
+            "engine_failed: {file} is an unexpected output type ({other}); the studio returns png images and mp4/webm/webp/gif videos"
+        )),
+    }
+}
+
 /// 1973-prvc: the record shared by every output, said once. `verbose` keeps
 /// the full first record (the pre-1973 shape); otherwise only the fields an
 /// agent reads to know what ran: workflow, models, tier, placement.
@@ -616,7 +856,7 @@ pub fn prompt_for(plan: &Plan, job: &str, i: u32) -> Value {
         .as_object()
         .expect("object")
         .values()
-        .filter(|n| n["class_type"] == "SaveImage")
+        .filter(|n| n["class_type"].as_str().is_some_and(is_save_class))
         .count();
     for (id, node) in p.as_object_mut().expect("object").iter_mut() {
         let title = title_of(node).map(str::to_string);
@@ -643,7 +883,7 @@ pub fn prompt_for(plan: &Plan, job: &str, i: u32) -> Value {
             }
             _ => {}
         }
-        if class == "SaveImage" {
+        if is_save_class(&class) {
             inputs.insert(
                 "filename_prefix".into(),
                 json!(if saves > 1 {
@@ -683,6 +923,114 @@ pub trait StudioEngine: Send + Sync {
     ) -> Result<RunOut, String>;
     /// D3: unload the models so the next job, of either engine, starts empty.
     fn free(&self) -> Result<(), String>;
+
+    /// 1986-snpx: the names ComfyUI's loader `class` offers for `input`
+    /// (`/object_info/<class>`). `None`: this engine cannot say (a fixture),
+    /// so the check is skipped, never failed.
+    fn loader_options(&self, _class: &str, _input: &str) -> Option<Result<Vec<String>, String>> {
+        None
+    }
+
+    /// 1986-snpx: where this engine's pinned files live (`None` for a
+    /// fixture, which skips the on-disk check).
+    fn models_dir(&self) -> Option<PathBuf> {
+        None
+    }
+}
+
+/// 1986-snpx: the loaders `studio.models` asks ComfyUI about.
+const LISTED_LOADERS: &[(&str, &str)] = &[
+    ("CheckpointLoaderSimple", "ckpt_name"),
+    ("UNETLoader", "unet_name"),
+    ("VAELoader", "vae_name"),
+    ("CLIPLoader", "clip_name"),
+    ("LoraLoader", "lora_name"),
+    ("ControlNetLoader", "control_net_name"),
+    ("LoadRembgByBiRefNetModel", "model"),
+];
+
+/// `studio.models {}`, read-only: every pinned studio-reachable row and
+/// whether it is on disk, this tray's table (build and models.tsv digest, to
+/// compare with the checkout's images/imagegen/models.tsv), and, when the
+/// studio runs, what each of ComfyUI's loaders lists.
+pub fn models_listing(models_dir: &Path, engine: Option<&dyn StudioEngine>) -> Value {
+    let rows: Vec<Value> = imagegen_models::manifest()
+        .iter()
+        .filter(|m| m.tier.starts_with("I1") || m.role.starts_with("studio:"))
+        .map(|m| {
+            json!({
+                "folder": m.tier,
+                "file": m.cache_name(),
+                "role": m.role,
+                "licence": m.licence,
+                "on_disk": models_dir.join(&m.tier).join(m.cache_name()).is_file(),
+            })
+        })
+        .collect();
+    let comfyui = engine.map(|e| {
+        let mut m = serde_json::Map::new();
+        for (class, input) in LISTED_LOADERS {
+            let v = match e.loader_options(class, input) {
+                Some(Ok(list)) => json!(list),
+                Some(Err(err)) => json!({ "error": err }),
+                None => Value::Null,
+            };
+            m.insert(format!("{class}.{input}"), v);
+        }
+        Value::Object(m)
+    });
+    json!({
+        "tray_build": crate::mcp_socket::build_identity(),
+        "models_tsv": imagegen_models::manifest_digest(),
+        "compare": "sha256 (first 12) of the checkout's images/imagegen/models.tsv against models_tsv: a difference means this tray predates the pins (rebuild it)",
+        "rows": rows,
+        "comfyui": comfyui.unwrap_or(Value::Null),
+    })
+}
+
+/// The `studio.models` descriptor.
+pub fn models_descriptor() -> Value {
+    json!({
+        "name": "studio.models",
+        "description": "Read-only: the studio-reachable pinned model files (folder, file, licence, on disk), this tray's model table (build and models.tsv digest), and, when the studio runs, what each ComfyUI loader lists. Use it when a workflow is refused or a loader says 'not in []'.",
+        "inputSchema": { "type": "object", "properties": {} },
+    })
+}
+
+/// 1986-snpx: before anything queues, every resolved file is on disk and
+/// ComfyUI's loader lists it. Before this a pinned-but-unfetched file reached
+/// ComfyUI and failed there as "<file> not in []" (kumbia forge).
+pub fn precheck_models(engine: &dyn StudioEngine, plan: &Plan) -> Result<(), String> {
+    let models_dir = engine.models_dir();
+    for (node, class, input, named, row) in &plan.loader_inputs {
+        let on_disk = models_dir
+            .as_ref()
+            .map(|d| d.join(&row.tier).join(row.cache_name()));
+        if let Some(on_disk) = on_disk.filter(|p| !p.is_file()) {
+            return Err(format!(
+                "model_missing: node {node} {input}={named:?} is pinned ({}/{}) but not on disk at {} after the fetch",
+                row.tier,
+                row.cache_name(),
+                on_disk.display()
+            ));
+        }
+        if class.is_empty() {
+            continue;
+        }
+        if let Some(listed) = engine.loader_options(class, input) {
+            let listed = listed?;
+            if !listed.iter().any(|l| l == named) {
+                let shown: Vec<&str> = listed.iter().take(8).map(String::as_str).collect();
+                return Err(format!(
+                    "model_not_visible: node {node} {class}.{input}={named:?} is on disk, but the studio's loader lists [{}]{}; \
+                     restart the studio (its folder map is read at start) or write the name as listed",
+                    shown.join(", "),
+                    if listed.len() > 8 { ", ..." } else { "" }
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Fixture seam: a stub engine, a scratch root and a project checkout.
@@ -844,6 +1192,8 @@ pub fn call(
     }
     // Admitted files the cache lacks are fetched now, before the GPU turn.
     engine.ensure_models(&plan.models, progress)?;
+    // 1986-snpx: fail before queueing, never inside ComfyUI.
+    precheck_models(engine.as_ref(), &plan)?;
 
     let job = job_id();
     let t0 = Instant::now();
@@ -885,7 +1235,10 @@ pub fn call(
     }
     let elapsed = t0.elapsed().as_secs_f64();
     if produced.is_empty() {
-        return Err("engine_failed: the workflow finished but produced no output image".into());
+        return Err(
+            "engine_failed: the workflow finished but produced no output file (image or video)"
+                .into(),
+        );
     }
 
     let verbose = args.get("verbose").and_then(Value::as_bool) == Some(true);
@@ -895,8 +1248,9 @@ pub fn call(
         let host = scratch.join(sub).join(file);
         let bytes = std::fs::read(&host)
             .map_err(|e| format!("engine_failed: no output {sub}/{file}: {e}"))?;
-        let (w, h, alpha) = crate::imagegen_tool::png_facts(&bytes)
-            .ok_or_else(|| format!("engine_failed: {file} is not a PNG"))?;
+        // 1983-svid: a video output (Wan SaveVideo/SaveWEBM, an animated WEBP)
+        // is returned like an image, never dropped and never a "not a PNG" failure.
+        let kind = output_kind(file, &bytes)?;
         let record = provenance::Record {
             engine: provenance::Engine::ComfyUi {
                 nodes: allow.pinned(),
@@ -923,14 +1277,24 @@ pub fn call(
         };
         let prov = record.write_beside(&host)?;
         let forge = format!("{FORGE_SCRATCH}/{sub}/{file}");
-        outputs.push(json!({
+        let mut out = json!({
             "path": forge,
-            "width": w,
-            "height": h,
-            "has_alpha": alpha,
             "seed": plan.seed + u64::from(*i),
             "provenance_path": format!("{forge}.provenance.json"),
-        }));
+        });
+        match kind {
+            OutputKind::Image { w, h, alpha } => {
+                out["kind"] = json!("image");
+                out["width"] = json!(w);
+                out["height"] = json!(h);
+                out["has_alpha"] = json!(alpha);
+            }
+            OutputKind::Video => {
+                out["kind"] = json!("video");
+                out["bytes"] = json!(bytes.len());
+            }
+        }
+        outputs.push(out);
         // 1973-prvc: the full record lives in the sidecar; inline only on ask.
         if verbose {
             outputs.last_mut().expect("pushed")["provenance"] = prov.clone();
@@ -1214,6 +1578,27 @@ impl StudioEngine for HttpStudio {
         .map(|_| ())
     }
 
+    fn models_dir(&self) -> Option<PathBuf> {
+        Some(self.models_dir.clone())
+    }
+
+    /// `/object_info/<class>`: the option list of `input` (required or
+    /// optional), ComfyUI's own view of what the loader can load.
+    fn loader_options(&self, class: &str, input: &str) -> Option<Result<Vec<String>, String>> {
+        let info = match self.json("GET", &format!("/object_info/{class}"), None) {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e)),
+        };
+        let spec = &info[class]["input"];
+        let list = spec["required"][input][0]
+            .as_array()
+            .or_else(|| spec["optional"][input][0].as_array())?;
+        Some(Ok(list
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect()))
+    }
+
     fn run(
         &self,
         prompt: &Value,
@@ -1348,6 +1733,21 @@ mod tests {
         two["11"] =
             json!({"class_type":"SaveImage","inputs":{"filename_prefix":"b","images":["8",0]}});
         std::fs::write(wf.join("two_saves.api.json"), two.to_string()).unwrap();
+        // 1986-snpx: LayerDiffuse picks its weights by config value.
+        let mut layer = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        layer["14"] = json!({"class_type":"LayeredDiffusionApply","inputs":{"model":["1",0],"config":"SDXL, Conv Injection","weight":1.0}});
+        layer["15"] = json!({"class_type":"LayeredDiffusionDecode","inputs":{"samples":["5",0],"images":["8",0],"sd_version":"SDXL","sub_batch_size":16}});
+        std::fs::write(wf.join("layer.api.json"), layer.to_string()).unwrap();
+        let mut layer_bad = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        layer_bad["14"] = json!({"class_type":"LayeredDiffusionApply","inputs":{"model":["1",0],"config":"SD15, Attention Injection","weight":1.0}});
+        std::fs::write(wf.join("layer_bad.api.json"), layer_bad.to_string()).unwrap();
+        // 1983-svid: a video-only workflow, and one with an image and a video.
+        let mut video = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        video["9"] = json!({"class_type":"SaveWEBM","inputs":{"filename_prefix":"v","images":["8",0],"codec":"vp9","fps":16.0,"crf":32.0}});
+        std::fs::write(wf.join("video_only.api.json"), video.to_string()).unwrap();
+        let mut mixed = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        mixed["13"] = json!({"class_type":"SaveWEBM","inputs":{"filename_prefix":"v","images":["8",0],"codec":"vp9","fps":16.0,"crf":32.0}});
+        std::fs::write(wf.join("mixed.api.json"), mixed.to_string()).unwrap();
         let mut rembg = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
         rembg["12"] = json!({"class_type":"LoadRembgByBiRefNetModel",
                              "inputs":{"model":"model.safetensors","device":"AUTO"}});
@@ -1398,17 +1798,27 @@ mod tests {
             // by two nodes writes the same file twice here (1972-stfx).
             let mut images = Vec::new();
             for node in prompt.as_object().unwrap().values() {
-                if node["class_type"] != "SaveImage" {
+                let class = node["class_type"].as_str().unwrap_or("");
+                if !is_save_class(class) {
                     continue;
                 }
                 let prefix = node["inputs"]["filename_prefix"].as_str().unwrap();
                 let (sub, stem) = prefix.rsplit_once('/').unwrap();
                 let dir = out_dir.join(sub);
                 std::fs::create_dir_all(&dir).unwrap();
-                let name = format!("{stem}_00001_.png");
-                image::RgbaImage::new(64, 64)
-                    .save(dir.join(&name))
-                    .map_err(|e| e.to_string())?;
+                // 1983-svid: a video node writes a .webm, as ComfyUI does.
+                let name = if class == "SaveImage" {
+                    let n = format!("{stem}_00001_.png");
+                    image::RgbaImage::new(64, 64)
+                        .save(dir.join(&n))
+                        .map_err(|e| e.to_string())?;
+                    n
+                } else {
+                    let n = format!("{stem}_00001_.webm");
+                    std::fs::write(dir.join(&n), b"\x1aE\xdf\xa3 webm bytes")
+                        .map_err(|e| e.to_string())?;
+                    n
+                };
                 images.push((sub.to_string(), name));
             }
             Ok(RunOut {
@@ -1503,6 +1913,292 @@ mod tests {
             );
             assert!(side.is_file(), "{}", side.display());
         }
+    }
+
+    /// ORDER 1986-snpx: a name resolves only among the rows in its input's
+    /// folders. Pre-fix: FAILS, BiRefNet's model.safetensors resolved to the
+    /// FIRST row with that basename (I1/clip_vision, line 46), so the BiRefNet
+    /// weights were never fetched (kumbia forge, "not in []").
+    #[test]
+    fn a_shared_basename_resolves_to_the_row_in_the_inputs_folder() {
+        let manifest = imagegen_models::manifest();
+        let birefnet = pinned_model_in(
+            &manifest,
+            "model.safetensors",
+            Some(input_categories("LoadRembgByBiRefNetModel", "model")),
+        )
+        .expect("birefnet resolves");
+        assert_eq!(birefnet.tier, "I1/birefnet");
+        let clip_vision = pinned_model_in(
+            &manifest,
+            "model.safetensors",
+            Some(input_categories("CLIPVisionLoader", "clip_name")),
+        )
+        .map(|m| m.tier.clone());
+        // clip_name reads text encoders, where no model.safetensors is pinned.
+        assert_eq!(clip_vision, None);
+        let vision = pinned_model_in(
+            &manifest,
+            "model.safetensors",
+            Some(input_categories("IPAdapterUnifiedLoader", "clip_vision")),
+        )
+        .expect("clip_vision resolves");
+        assert_eq!(vision.tier, "I1/clip_vision");
+    }
+
+    /// ORDER 1986-snpx: ComfyUI lists a file under a scanned root by its path
+    /// relative to that root (the `I1` checkpoints root walks into
+    /// sdxl-full/), so that listed form is accepted.
+    #[test]
+    fn comfyuis_listed_subfolder_form_is_accepted() {
+        let manifest = imagegen_models::manifest();
+        let cats = Some(input_categories("CheckpointLoaderSimple", "ckpt_name"));
+        if let Some(row) = manifest.iter().find(|m| m.tier == "I1/sdxl-full") {
+            let listed = format!("sdxl-full/{}", row.cache_name());
+            assert_eq!(
+                pinned_model_in(&manifest, &listed, cats).map(|m| m.tier.as_str()),
+                Some("I1/sdxl-full")
+            );
+        }
+        // The base I1 checkpoint keeps its bare name.
+        assert!(pinned_model_in(&manifest, "sdxl_lightning_4step.safetensors", cats).is_some());
+        // A lora is not a checkpoint, even though the I1 root walks into I1/lora.
+        assert!(pinned_model_in(&manifest, "lora/pixel-art-xl.safetensors", cats).is_none());
+    }
+
+    /// ORDER 1986-snpx: a LayerDiffuse workflow fetches the weights its config
+    /// values select and records them in provenance; an unpinned config is
+    /// refused. Pre-fix: FAILS, config-selected weights were never seen.
+    #[test]
+    fn config_selected_layerdiffuse_weights_are_fetched_and_recorded() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("snpx-layer", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let run = |wf: &str| {
+            call(
+                "snpx-layer",
+                "a",
+                &json!({"workflow":format!("tool/art/workflows/{wf}"),"inputs":{"pose":pose},"verbose":true}),
+                &mut |_| {},
+            )
+        };
+        let ok = run("layer.api.json");
+        let bad = run("layer_bad.api.json");
+        install_seam(None);
+        let ok = ok.unwrap_or_else(|e| panic!("{e}"));
+        let fetched = engine.fetched.lock().unwrap().clone();
+        for f in [
+            "layer_xl_transparent_conv.safetensors",
+            "vae_transparent_decoder.safetensors",
+        ] {
+            assert!(fetched.iter().any(|x| x == f), "{f} fetched: {fetched:?}");
+        }
+        let models = ok["outputs"][0]["provenance"]["models"].to_string();
+        assert!(
+            models.contains("layer_xl_transparent_conv")
+                && models.contains("vae_transparent_decoder"),
+            "{models}"
+        );
+        let e = bad.unwrap_err();
+        assert!(
+            e.starts_with("model_refused:") && e.contains("SDXL, Conv Injection"),
+            "{e}"
+        );
+    }
+
+    /// 1983-svid: a video output is returned like an image (kind video, its
+    /// path and sidecar), and a run whose only output is a video succeeds
+    /// WITH it. Pre-fix: FAILS, a workflow with no SaveImage was refused
+    /// (invalid_workflow), and a video file failed the run as "not a PNG".
+    #[test]
+    fn a_video_output_is_returned_and_a_video_only_run_is_not_empty() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("svid-proj", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let run = |wf: &str| {
+            call(
+                "svid-proj",
+                "a",
+                &json!({"workflow":format!("tool/art/workflows/{wf}"),"inputs":{"pose":pose}}),
+                &mut |_| {},
+            )
+        };
+        let only = run("video_only.api.json");
+        let mixed = run("mixed.api.json");
+        install_seam(None);
+
+        let only = only.unwrap_or_else(|e| panic!("video-only: {e}"));
+        let outs = only["outputs"].as_array().unwrap();
+        assert_eq!(outs.len(), 1, "{only}");
+        assert_eq!(outs[0]["kind"], "video");
+        let p = outs[0]["path"].as_str().unwrap();
+        assert!(p.ends_with(".webm") && p.contains("/studio/"), "{p}");
+        assert!(outs[0]["bytes"].as_u64().unwrap() > 0);
+        assert!(outs[0]["provenance_path"].is_string());
+
+        let mixed = mixed.unwrap_or_else(|e| panic!("mixed: {e}"));
+        let kinds: Vec<&str> = mixed["outputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["kind"].as_str().unwrap())
+            .collect();
+        assert!(
+            kinds.contains(&"image") && kinds.contains(&"video"),
+            "{kinds:?}"
+        );
+    }
+
+    /// An unexpected output type is named, never accepted or dropped.
+    #[test]
+    fn an_unexpected_output_type_fails_by_name() {
+        assert!(matches!(output_kind("a.png", b"not a png"), Err(e) if e.contains("not a PNG")));
+        assert!(matches!(output_kind("a.webm", b""), Err(e) if e.contains("empty")));
+        assert!(
+            matches!(output_kind("a.exr", b"x"), Err(e) if e.contains("unexpected output type (exr)"))
+        );
+        assert!(matches!(output_kind("a.mp4", b"x"), Ok(OutputKind::Video)));
+    }
+
+    /// An engine that reports a models dir and a fixed loader list.
+    struct Picky {
+        inner: Stub,
+        dir: PathBuf,
+        listed: Vec<String>,
+    }
+    impl StudioEngine for Picky {
+        fn ensure_models(
+            &self,
+            f: &[ModelFile],
+            p: &mut dyn FnMut(Progress),
+        ) -> Result<(), String> {
+            self.inner.ensure_models(f, p)
+        }
+        fn run(
+            &self,
+            prompt: &Value,
+            out: &Path,
+            p: &mut dyn FnMut(Progress),
+        ) -> Result<RunOut, String> {
+            self.inner.run(prompt, out, p)
+        }
+        fn free(&self) -> Result<(), String> {
+            self.inner.free()
+        }
+        fn models_dir(&self) -> Option<PathBuf> {
+            Some(self.dir.clone())
+        }
+        fn loader_options(&self, _c: &str, _i: &str) -> Option<Result<Vec<String>, String>> {
+            Some(Ok(self.listed.clone()))
+        }
+    }
+
+    /// ORDER 1986-snpx (kumbia): a pinned file that is not on disk, or that the
+    /// studio's loader does not list, fails BEFORE anything queues, by name.
+    /// Pre-fix: FAILS, the workflow reached ComfyUI ("<file> not in []").
+    #[test]
+    fn a_pinned_file_absent_or_unlisted_fails_before_queueing() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("snp2-pre", "a");
+        let models = tempfile::tempdir_in(fx.scratch_root.parent().unwrap()).unwrap();
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let args = json!({"workflow":"tool/art/workflows/ok.api.json","inputs":{"pose":pose}});
+        let row = imagegen_models::manifest()
+            .into_iter()
+            .find(|m| m.cache_name() == I1_CKPT)
+            .unwrap();
+        let go = |listed: Vec<String>| {
+            let engine = Arc::new(Picky {
+                inner: Stub::default(),
+                dir: models.path().to_path_buf(),
+                listed,
+            });
+            install(&fx, engine.clone());
+            let r = call("snp2-pre", "a", &args, &mut |_| {});
+            (r, engine.inner.runs.load(SeqCst))
+        };
+        // Not on disk: refused, nothing ran.
+        let (r, runs) = go(vec![I1_CKPT.to_string()]);
+        let e = r.unwrap_err();
+        assert!(
+            e.starts_with("model_missing:") && e.contains(I1_CKPT),
+            "{e}"
+        );
+        assert_eq!(runs, 0);
+        // On disk, but the loader does not list it: refused, nothing ran.
+        std::fs::create_dir_all(models.path().join(&row.tier)).unwrap();
+        std::fs::write(models.path().join(&row.tier).join(row.cache_name()), b"w").unwrap();
+        let (r, runs) = go(vec!["something_else.safetensors".into()]);
+        let e = r.unwrap_err();
+        assert!(
+            e.starts_with("model_not_visible:") && e.contains("something_else"),
+            "{e}"
+        );
+        assert_eq!(runs, 0);
+        // Both: it runs.
+        let (r, runs) = go(vec![I1_CKPT.to_string()]);
+        install_seam(None);
+        r.unwrap_or_else(|e| panic!("{e}"));
+        assert!(runs > 0);
+    }
+
+    /// ORDER 1986-snpx: studio.models lists pinned rows with their on-disk
+    /// state, this tray's table, and what the studio's loaders list.
+    #[test]
+    fn studio_models_lists_pins_disk_state_and_loader_views() {
+        let dir = tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let row = imagegen_models::manifest()
+            .into_iter()
+            .find(|m| m.cache_name() == I1_CKPT)
+            .unwrap();
+        std::fs::create_dir_all(dir.path().join(&row.tier)).unwrap();
+        std::fs::write(dir.path().join(&row.tier).join(row.cache_name()), b"w").unwrap();
+        let engine = Picky {
+            inner: Stub::default(),
+            dir: dir.path().to_path_buf(),
+            listed: vec![I1_CKPT.into()],
+        };
+        let v = models_listing(dir.path(), Some(&engine));
+        assert_eq!(v["models_tsv"], imagegen_models::manifest_digest());
+        let rows = v["rows"].as_array().unwrap();
+        let ckpt = rows
+            .iter()
+            .find(|r| r["file"] == I1_CKPT)
+            .expect("the I1 checkpoint is listed");
+        assert_eq!(ckpt["on_disk"], true);
+        assert!(
+            rows.iter().any(|r| r["on_disk"] == false),
+            "absent files say so"
+        );
+        assert_eq!(v["comfyui"]["CheckpointLoaderSimple.ckpt_name"][0], I1_CKPT);
+        // Without a running studio there is no loader view.
+        assert!(models_listing(dir.path(), None)["comfyui"].is_null());
+    }
+
+    /// ORDER 1986-snpx: a refusal names this tray's build and table digest, so
+    /// a stale tray does not read as a licence refusal.
+    #[test]
+    fn a_model_refusal_names_the_trays_table() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("snp2-note", "a");
+        install(&fx, Arc::new(Stub::default()));
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let e = call(
+            "snp2-note",
+            "a",
+            &json!({"workflow":"tool/art/workflows/unregistered.api.json","inputs":{"pose":pose}}),
+            &mut |_| {},
+        )
+        .unwrap_err();
+        install_seam(None);
+        assert!(
+            e.contains(&imagegen_models::manifest_digest()) && e.contains("tray rebuild"),
+            "{e}"
+        );
     }
 
     /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the

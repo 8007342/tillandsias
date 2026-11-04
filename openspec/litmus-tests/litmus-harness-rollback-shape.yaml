@@ -30,9 +30,14 @@ critical_path:
     expected_behavior: "ok: rollback-wired"
 
   - step: "npm-update lock trap expands at set time and stale locks self-heal"
-    command: "grep -Fq 'trap \"rm -rf '\\''$npm_lock'\\''\" EXIT' images/default/lib-common.sh && grep -Fq 'mmin +60' images/default/lib-common.sh && echo 'ok: lock-leak-pinned'"
+    command: "grep -Fq 'trap \"rm -rf '\\''$npm_lock'\\''\" EXIT' images/default/lib-common.sh && grep -Fq 'find \"$npm_lock\" -maxdepth 0 -mmin +1' images/default/lib-common.sh && grep -Fq '\"$h_host\" != \"$self_host\"' images/default/lib-common.sh && grep -Fq 'kill -0 \"$h_pid\"' images/default/lib-common.sh && echo 'ok: lock-leak-pinned'"
     timeout_ms: 3000
     expected_behavior: "ok: lock-leak-pinned"
+
+  - step: "NEGATIVE CONTROL: a lib-common without the lock owner check must FAIL the pin above"
+    command: "d=$(mktemp -d); sed 's/kill -0 \"$h_pid\"/true/' images/default/lib-common.sh > \"$d/lib\"; if grep -Fq 'kill -0 \"$h_pid\"' \"$d/lib\"; then echo 'FAIL: the pin still matches with the owner check removed'; rm -rf \"$d\"; exit 1; fi; rm -rf \"$d\"; echo 'ok: the pin sees the owner check go'"
+    timeout_ms: 3000
+    expected_behavior: "ok: the pin sees the owner check go"
 
 observability:
   traces:
