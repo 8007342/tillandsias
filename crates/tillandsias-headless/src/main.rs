@@ -8522,6 +8522,21 @@ struct RouterRoute {
     /// @trace spec:local-web-preview
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     preview_tls: bool,
+    /// 1985-stdu: serve only callers whose address is in this CIDR (the
+    /// project's studio network); everyone else gets 403 on every listener.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    allow_cidr: Option<String>,
+}
+
+/// 1985-stdu: the Caddy lines that refuse a caller outside `cidr` (the TCP
+/// peer, never a forwarded header).
+fn caddy_source_guard(cidr: Option<&str>) -> String {
+    match cidr {
+        Some(c) => format!(
+            "    @outside not remote_ip {c}\n    respond @outside \"refused: this route serves only its own project's network\" 403\n"
+        ),
+        None => String::new(),
+    }
 }
 
 impl RouterRoute {
@@ -8533,6 +8548,7 @@ impl RouterRoute {
             root_redirect: None,
             public: false,
             preview_tls: false,
+            allow_cidr: None,
         }
     }
 
@@ -8671,8 +8687,9 @@ fn generate_dynamic_caddyfile(routes_to_render: &[RouterRoute]) -> String {
         // with NO forward_auth gate — the user's own localhost dev server.
         // @trace spec:enclave-service-catalog
         if route.public {
+            let guard = caddy_source_guard(route.allow_cidr.as_deref());
             routes.push_str(&format!(
-                "http://{subdomain}.localhost:8080 {{\n    \
+                "http://{subdomain}.localhost:8080 {{\n{guard}    \
 reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
             ));
@@ -8683,7 +8700,7 @@ reverse_proxy {upstream_host}:{port}\n\
                     .split_once('.')
                     .map_or(project_label, |(_, project)| project);
                 routes.push_str(&format!(
-                    "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
+                    "https://{subdomain}.localhost:8443 {{\n    tls /etc/tillandsias/preview/{preview_project}.crt /etc/tillandsias/preview/{preview_project}.key\n{guard}    header X-Tillandsias-Preview {upstream_host}\n    reverse_proxy {upstream_host}:{port}\n}}\n\n"
                 ));
             }
             continue;
@@ -26325,6 +26342,40 @@ mod tests {
             !caddy.contains("forward_auth"),
             "public catalog route must not be behind the session gate:\n{caddy}"
         );
+    }
+
+    /// ORDER 1985-stdu: a route limited to a project's studio network refuses
+    /// every other caller on BOTH listeners (the host-published :8080 too),
+    /// before it proxies. Pre-fix: FAILS, a public route proxied anyone.
+    #[test]
+    fn a_network_limited_route_refuses_callers_outside_its_subnet_on_both_listeners() {
+        let mut route =
+            RouterRoute::public_service("comfyui.kumbia", "tillandsias-kumbia-studio", 8188);
+        route.preview_tls = true;
+        route.allow_cidr = Some("10.89.7.0/24".into());
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        for site in [
+            "http://comfyui.kumbia.localhost:8080 {",
+            "https://comfyui.kumbia.localhost:8443 {",
+        ] {
+            let at = caddy
+                .find(site)
+                .unwrap_or_else(|| panic!("{site} missing:\n{caddy}"));
+            let block = &caddy[at..at + caddy[at..].find("\n}").unwrap()];
+            let guard = block
+                .find("@outside not remote_ip 10.89.7.0/24")
+                .unwrap_or_else(|| panic!("no guard in {block}"));
+            let refuse = block.find("respond @outside").expect("a refusal");
+            let proxy = block.find("reverse_proxy").expect("a proxy");
+            assert!(
+                guard < refuse && refuse < proxy,
+                "the guard comes first: {block}"
+            );
+            assert!(block.contains("403"), "{block}");
+        }
+        // Without a CIDR nothing changes.
+        let open = RouterRoute::public_service("www.kumbia", "tillandsias-kumbia-web", 8080);
+        assert!(!generate_dynamic_caddyfile(&[open]).contains("remote_ip"));
     }
 
     #[test]

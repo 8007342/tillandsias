@@ -1307,7 +1307,8 @@ fn certificate_args(
 /// toolchains' dev servers (order 1637-5765). Exact names, never a
 /// `*.<project>.localhost` wildcard, so the leaf vouches only for hosts the
 /// router actually serves for this project.
-pub(crate) const DEV_SERVICES: &[&str] = &["flutter"];
+// 1985-stdu: `comfyui` is the project's studio window (network-limited).
+pub(crate) const DEV_SERVICES: &[&str] = &["flutter", "comfyui"];
 
 /// Every host the router serves over TLS for `project`: `www` and each dev
 /// service. The ONE list: the leaf's subjectAltName and the WebKit window's
@@ -1540,6 +1541,35 @@ pub(crate) fn add_dev_route(
     )?;
     let mut route = crate::RouterRoute::public_service(subdomain(service, project), upstream, port);
     route.preview_tls = true;
+    let mut routes = read_routes(debug)?;
+    routes.retain(|r| r.subdomain != route.subdomain);
+    routes.push(route);
+    crate::write_router_routes(&routes, debug)?;
+    strict_reload()?;
+    dev_url(service, project)
+}
+
+/// ORDER 1985-stdu: route `<service>.<project>` over the preview TLS listener
+/// to `upstream:port`, served ONLY to callers in `cidr` (the project's studio
+/// network). Every other caller, on either listener, gets 403. Returns the URL
+/// a browser opens.
+pub(crate) fn add_network_limited_route(
+    service: &str,
+    project: &str,
+    upstream: &str,
+    port: u16,
+    cidr: &str,
+    debug: bool,
+) -> Result<String, String> {
+    ensure_router(project, debug)?;
+    let _lock = crate::resource_lock::acquire(
+        "preview-router",
+        command_budget(Duration::from_secs(5))?,
+        debug,
+    )?;
+    let mut route = crate::RouterRoute::public_service(subdomain(service, project), upstream, port);
+    route.preview_tls = true;
+    route.allow_cidr = Some(cidr.to_string());
     let mut routes = read_routes(debug)?;
     routes.retain(|r| r.subdomain != route.subdomain);
     routes.push(route);
@@ -3988,7 +4018,7 @@ mod tests {
         );
         assert_eq!(
             preview_san("macron.dev"),
-            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost"
+            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost,DNS:comfyui.macron.dev.localhost"
         );
         assert!(
             !preview_san("proj").contains('*'),
@@ -4016,12 +4046,15 @@ mod tests {
             != [
                 "www.devxsd-gamejam.localhost",
                 "flutter.devxsd-gamejam.localhost",
+                "comfyui.devxsd-gamejam.localhost",
             ]
         {
             misses.push(format!("preview_hosts: {hosts:?}"));
         }
         let san = preview_san(project);
-        if san != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost" {
+        if san
+            != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost,DNS:comfyui.devxsd-gamejam.localhost"
+        {
             misses.push(format!("leaf SAN: {san}"));
         }
         let rules = crate::browser_open::host_resolver_rules(project);
