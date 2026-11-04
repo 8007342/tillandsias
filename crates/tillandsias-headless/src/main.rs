@@ -782,6 +782,9 @@ fn main() {
     // `--reset-install` on exactly this ground: it would have named the one
     // thing the flag is forbidden to touch.
     let reset_state = user_args.iter().any(|a| a == "--reset-state");
+    // 1988-trkp: the explicit "stop every forge and service" (a plain tray
+    // Quit keeps forges running for the next tray).
+    let stop_all = user_args.iter().any(|a| a == "--stop-all");
 
     // @trace spec:enclave-service-catalog
     // `--publish-local <project>` — order 364 e2e closure: bring up the
@@ -974,6 +977,7 @@ fn main() {
         // reading it, which is the only check that could have caught this.
         "--reset-guest",
         "--reset-state",
+        "--stop-all",
         "--headless",
         "--force-downgrade",
         "--tray",
@@ -1370,6 +1374,14 @@ fn main() {
     // convention, exit 1 on any Err. macneo asked for exact numeric propagation
     // and then withdrew the request for this reason — one imperfect convention
     // beats two correct-looking ones.
+    if stop_all {
+        if let Err(e) = run_stop_all() {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     if reset_state {
         if let Err(e) = run_reset_state(debug) {
             eprintln!("Error: {}", e);
@@ -1990,6 +2002,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cache-clear [--debug]");
     println!("       tillandsias --reset-guest [--debug]");
     println!("       tillandsias --reset-state [--debug]");
+    println!("       tillandsias --stop-all");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
     println!("       tillandsias --claude <project> [--debug|--diagnostics]");
@@ -2027,6 +2040,11 @@ fn print_usage(version: &str) {
         "  --reset-guest  EPHEMERAL RESET: wipe the guest substrate (vault + enclave \
          containers/volumes/secrets; keeps the model cache) and re-initialize. \
          Destructive by design; you'll re-authenticate once"
+    );
+    println!(
+        "  --stop-all     Stop every forge and enclave service, and the tray. A plain tray \
+         Quit or restart leaves forges running and the next tray takes their tools over \
+         (order 1988-trkp)."
     );
     println!(
         "  --reset-state  SOFT LOCAL RESET: removes derived state (Tillandsias \
@@ -23158,6 +23176,93 @@ fn load_config(_path: &str) -> Result<(), String> {
 /// 4. Cleanup ephemeral resources (sockets, mounts, logs).
 ///
 /// @trace spec:graceful-shutdown, spec:app-lifecycle
+/// ORDER 1988-trkp (operator, first-hand 2026-11-04): what a tray exit stops.
+/// A plain Quit, a SIGTERM or an upgrade restart KEEPS forges and the enclave
+/// running and hands every served lane to the next tray; only an explicit
+/// `tillandsias --stop-all` (its marker) stops everything.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ShutdownPlan {
+    pub stop_containers: bool,
+    pub revoke_container_tokens: bool,
+    pub mark_lanes_for_adoption: bool,
+}
+
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn shutdown_plan(stop_all_requested: bool) -> ShutdownPlan {
+    ShutdownPlan {
+        stop_containers: stop_all_requested,
+        revoke_container_tokens: stop_all_requested,
+        mark_lanes_for_adoption: !stop_all_requested,
+    }
+}
+
+/// The marker `--stop-all` leaves for the tray it signals.
+pub(crate) fn stop_all_marker() -> PathBuf {
+    control_socket_host_dir().join("stop-all-requested")
+}
+
+/// Read and clear the stop-all marker (one request, one exit).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn take_stop_all_request() -> bool {
+    let m = stop_all_marker();
+    let present = m.is_file();
+    if present {
+        let _ = fs::remove_file(&m);
+    }
+    present
+}
+
+/// SIGTERM the tray (the exit path every Quit takes). Off unix the tray is
+/// not a separate signalable process here, so this refuses.
+#[cfg(unix)]
+fn signal_tray_to_exit(pid: u32) -> bool {
+    // SAFETY: a plain kill(2) of the tray's own pid read from its lock.
+    unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
+}
+
+#[cfg(not(unix))]
+fn signal_tray_to_exit(_pid: u32) -> bool {
+    false
+}
+
+/// `tillandsias --stop-all`: stop every forge and service. A running tray is
+/// asked (marker + SIGTERM) and awaited; with none, this process tears down.
+pub(crate) fn run_stop_all() -> Result<(), String> {
+    let dir = control_socket_host_dir();
+    match crate::tray_presence::owner_elsewhere(&dir) {
+        Some(Some(pid)) => {
+            fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            fs::write(stop_all_marker(), b"stop-all\n")
+                .map_err(|e| format!("{}: {e}", stop_all_marker().display()))?;
+            if !signal_tray_to_exit(pid) {
+                let _ = fs::remove_file(stop_all_marker());
+                return Err(format!("could not signal the tray (pid {pid})"));
+            }
+            eprintln!("[tillandsias] asked the tray (pid {pid}) to stop everything; waiting...");
+            // The tray's full stop is bounded at 45 s (containers) + 10 s
+            // (tokens); wait a little longer than that, then say so.
+            let deadline = std::time::Instant::now() + Duration::from_secs(90);
+            while crate::tray_presence::owner_elsewhere(&dir).is_some()
+                && std::time::Instant::now() < deadline
+            {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            if crate::tray_presence::owner_elsewhere(&dir).is_some() {
+                return Err(format!("the tray (pid {pid}) is still running after 90 s"));
+            }
+            eprintln!("[tillandsias] stopped: every forge and service is down");
+            Ok(())
+        }
+        _ => {
+            let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+            rt.block_on(graceful_shutdown_async())?;
+            eprintln!("[tillandsias] stopped: every forge and service is down");
+            Ok(())
+        }
+    }
+}
+
 pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     debug!("starting graceful shutdown sequence");
     let owner_elsewhere = crate::tray_presence::owner_elsewhere(&control_socket_host_dir());
@@ -38408,6 +38513,48 @@ mod mirror_seed_failure_tests {
             entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
             "images/git/entrypoint.sh no longer prints {GIT_MIRROR_SEED_FAILURE_MARKER:?}; the launcher would never surface a seed failure"
         );
+    }
+}
+
+/// ORDER 1988-trkp (operator, first-hand 2026-11-04): a tray exit keeps
+/// forges unless `--stop-all` asked. Pre-fix: FAILS, every exit stopped all
+/// containers and revoked the forges' tokens (no shutdown_plan existed).
+#[cfg(all(test, unix, feature = "host-services"))]
+mod tray_keeps_forges_tests {
+    use super::*;
+
+    #[test]
+    fn a_plain_exit_keeps_forges_and_only_stop_all_stops_them() {
+        let keep = shutdown_plan(false);
+        assert!(!keep.stop_containers && !keep.revoke_container_tokens);
+        assert!(keep.mark_lanes_for_adoption);
+        let all = shutdown_plan(true);
+        assert!(all.stop_containers && all.revoke_container_tokens);
+        assert!(!all.mark_lanes_for_adoption);
+    }
+
+    /// The lanes this process serves are marked, so the next tray's adoption
+    /// tick binds them and the forge's tools reconnect.
+    #[test]
+    fn a_keep_exit_marks_every_served_lane_for_the_next_tray() {
+        let scratch = std::env::temp_dir().join(format!("trkp-{}", std::process::id()));
+        let _root = mcp_socket::test_runtime_root::set(&scratch);
+        let key = ("trkp-proj".to_string(), "default".to_string());
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .insert(key.clone());
+        let marked = mcp_socket::mark_served_lanes_for_adoption();
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .remove(&key);
+        let marker = mcp_socket::mcp_socket_host_dir_for_lane("trkp-proj", "default")
+            .join(mcp_socket::LANE_TRAY_MARKER);
+        let exists = marker.is_file();
+        let _ = std::fs::remove_dir_all(&scratch);
+        assert!(marked.contains(&key), "{marked:?}");
+        assert!(exists, "the next tray adopts it by this marker");
     }
 }
 
