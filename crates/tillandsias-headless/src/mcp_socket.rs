@@ -656,7 +656,17 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                                 debug,
                             ))
                         },
-                    ) {
+                    )
+                    .and_then(|mut result| {
+                        // 1985-stdu: already running: connect this forge
+                        // and refresh the window route.
+                        if result["started"] == false {
+                            crate::imagegen_studio::reattach(project_label, debug)?;
+                        }
+                        result["window_url"] =
+                            serde_json::json!(crate::imagegen_studio::window_url(project_label));
+                        Ok(result)
+                    }) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
