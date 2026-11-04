@@ -2308,8 +2308,11 @@ const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // appended by enclave_no_proxy() does not rescue it: curl matches no_proxy
 // against the HOSTNAME as written, not against the address it resolves to, so a
 // CIDR entry never covers `https://nix-cache:5000`.
+// Order 1986-snpx: `studio` IS listed for the same reason as nix-cache. The
+// project's studio answers as `studio` on its own network (1985-stdu); a
+// forge's curl to it went to squid and came back exit 56 (kumbia forge).
 const ENCLAVE_NO_PROXY_BASE: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache";
+    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache,studio";
 /// ORDER 998-qrwu. The path is declared ONCE in images/default/ca-path.txt and
 /// read through tillandsias-core, which both this crate and tillandsias-macos-tray
 /// depend on. It was a literal in 38 places; 975-rsgm has to move it off /tmp,

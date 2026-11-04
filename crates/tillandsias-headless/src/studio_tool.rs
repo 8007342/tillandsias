@@ -100,6 +100,74 @@ pub const MODEL_INPUTS: &[&str] = &[
 /// ComfyUI refused "model.safetensors not in []".
 pub const CLASS_MODEL_INPUTS: &[(&str, &str)] = &[("LoadRembgByBiRefNetModel", "model")];
 
+/// 1986-snpx: nodes that pick their weights by a CONFIG value, not a file
+/// name: (class, input, value, folder, pinned file). LayerDiffuse at the
+/// pinned commit: Apply's `config` names the injection weights, Decode's
+/// `sd_version` the transparent VAE decoder. Before this, these weights were
+/// never validated, fetched or recorded in provenance (kumbia forge: layer_model
+/// was empty). A config value of these classes not listed here is refused.
+pub const CONFIG_MODELS: &[(&str, &str, &str, &str, &str)] = &[
+    (
+        "LayeredDiffusionApply",
+        "config",
+        "SDXL, Attention Injection",
+        "I1/layer_model",
+        "layer_xl_transparent_attn.safetensors",
+    ),
+    (
+        "LayeredDiffusionApply",
+        "config",
+        "SDXL, Conv Injection",
+        "I1/layer_model",
+        "layer_xl_transparent_conv.safetensors",
+    ),
+    (
+        "LayeredDiffusionDecode",
+        "sd_version",
+        "SDXL",
+        "I1/layer_model",
+        "vae_transparent_decoder.safetensors",
+    ),
+];
+
+/// The pinned rows a config-selected node uses, or a refusal naming the
+/// accepted values. `None` when the class picks no weights by config.
+fn config_models<'a>(
+    manifest: &'a [ModelFile],
+    class: &str,
+    inputs: &serde_json::Map<String, Value>,
+) -> Option<Result<Vec<&'a ModelFile>, String>> {
+    let rows: Vec<_> = CONFIG_MODELS.iter().filter(|r| r.0 == class).collect();
+    if rows.is_empty() {
+        return None;
+    }
+    let input = rows[0].1;
+    let value = inputs.get(input).and_then(Value::as_str).unwrap_or("");
+    let hit: Vec<_> = rows.iter().filter(|r| r.2 == value).collect();
+    if hit.is_empty() {
+        let accepted: Vec<&str> = rows.iter().map(|r| r.2).collect();
+        return Some(Err(format!(
+            "model_refused: {class} {input}={value:?} selects weights that are not pinned; accepted: {}",
+            accepted.join(" | ")
+        )));
+    }
+    Some(
+        hit.iter()
+            .map(|r| {
+                manifest
+                    .iter()
+                    .find(|m| m.tier == r.3 && m.cache_name() == r.4)
+                    .ok_or_else(|| {
+                        format!(
+                            "model_refused: {class} needs {}/{} but models.tsv does not pin it",
+                            r.3, r.4
+                        )
+                    })
+            })
+            .collect(),
+    )
+}
+
 /// Inputs that carry a `$name` placeholder bound from `inputs`.
 const BINDABLE_INPUTS: &[&str] = &["image", "mask"];
 
@@ -372,12 +440,91 @@ fn title_of(node: &Value) -> Option<&str> {
     node.get("_meta")?.get("title")?.as_str()
 }
 
-/// A model filename as a loader input names it: the cache name, or
-/// `<tier>/<cache name>` (extra_model_paths.yaml lists one dir per tier).
-fn pinned_model<'a>(manifest: &'a [ModelFile], named: &str) -> Option<&'a ModelFile> {
+/// 1986-snpx: the studio's ComfyUI folder map (extra_model_paths.yaml):
+/// category -> the tier folders under /models it scans.
+const EXTRA_MODEL_PATHS: &str =
+    include_str!("../../../images/imagegen-studio/extra_model_paths.yaml");
+
+/// `category: |` followed by indented folder lines, per category.
+fn model_folders(category: &str) -> Vec<String> {
+    let head = format!("  {category}: |");
+    let mut out = Vec::new();
+    let mut inside = false;
+    for line in EXTRA_MODEL_PATHS.lines() {
+        if line.trim_end() == head {
+            inside = true;
+            continue;
+        }
+        if inside {
+            match line.strip_prefix("    ") {
+                Some(v) if !v.trim().is_empty() && !v.trim_start().starts_with('#') => {
+                    out.push(v.trim().to_string())
+                }
+                _ => break,
+            }
+        }
+    }
+    out
+}
+
+/// 1986-snpx: the ComfyUI folder categories a loader input reads from. A
+/// name is resolved only among the rows in those folders, so two pinned
+/// files with one basename (I1/clip_vision and I1/birefnet model.safetensors)
+/// never resolve to each other.
+fn input_categories(class: &str, key: &str) -> &'static [&'static str] {
+    match (class, key) {
+        ("LoadRembgByBiRefNetModel", "model") => &["birefnet"],
+        (_, "ckpt_name") => &["checkpoints"],
+        (_, "unet_name") => &["diffusion_models", "unet"],
+        (_, "vae_name") => &["vae"],
+        (_, "lora_name") => &["loras"],
+        (_, "control_net_name") => &["controlnet"],
+        (_, "ipadapter_file") => &["ipadapter"],
+        (_, "clip_name" | "clip_name1" | "clip_name2" | "clip_name3" | "clip_name4") => {
+            &["text_encoders", "clip"]
+        }
+        (_, "clip_vision" | "clip_vision_name" | "image_encoder") => &["clip_vision"],
+        _ => &[],
+    }
+}
+
+/// Every name ComfyUI may list `m` under for these folders: a file under a
+/// scanned folder F is listed by its path relative to F (ComfyUI walks F
+/// recursively), so I1/sdxl-full/x under the `I1` root is `sdxl-full/x`.
+/// The bare basename and `<tier>/<file>` are accepted too.
+fn listed_names(m: &ModelFile, folders: &[String]) -> Vec<String> {
+    let mut names = vec![
+        m.cache_name().to_string(),
+        format!("{}/{}", m.tier, m.cache_name()),
+    ];
+    for f in folders {
+        if let Some(rest) = m.tier.strip_prefix(&format!("{f}/")) {
+            names.push(format!("{rest}/{}", m.cache_name()));
+        }
+    }
+    names
+}
+
+/// `pinned_model`, limited to the rows in `categories`' folders when given.
+fn pinned_model_in<'a>(
+    manifest: &'a [ModelFile],
+    named: &str,
+    categories: Option<&[&str]>,
+) -> Option<&'a ModelFile> {
+    let folders: Vec<String> = categories
+        .unwrap_or(&[])
+        .iter()
+        .flat_map(|c| model_folders(c))
+        .collect();
+    // A row is in scope only when its OWN folder is one of the category's:
+    // the `I1` checkpoints root also walks into I1/lora, but a lora is not a
+    // checkpoint (I1/sdxl-full is listed under checkpoints in its own right).
+    let in_scope =
+        |m: &ModelFile| categories.is_none_or(|c| c.is_empty()) || folders.contains(&m.tier);
     manifest
         .iter()
-        .find(|m| named == m.cache_name() || named == format!("{}/{}", m.tier, m.cache_name()))
+        .filter(|m| in_scope(m))
+        .find(|m| listed_names(m, &folders).iter().any(|n| n == named))
 }
 
 /// A forge path under `FORGE_SCRATCH/` → its path relative to the volume.
@@ -449,13 +596,31 @@ pub fn validate(
                 .filter(|(c, _)| *c == class)
                 .map(|(_, k)| *k),
         );
+        // 1986-snpx: weights a node picks by a config value.
+        if let Some(rows) = config_models(manifest, class, inputs) {
+            for row in rows.map_err(|e| format!("{e} (node {id})"))? {
+                imagegen_models::register_admits(register, row)?;
+                if !models.contains(row) {
+                    models.push(row.clone());
+                }
+            }
+        }
         for key in keys {
             if let Some(named) = inputs.get(key).and_then(Value::as_str) {
-                let row = pinned_model(manifest, named).ok_or_else(|| {
+                let cats = input_categories(class, key);
+                let row = pinned_model_in(manifest, named, Some(cats)).ok_or_else(|| {
+                    let folders: Vec<String> = cats.iter().flat_map(|c| model_folders(c)).collect();
+                    let accepted: Vec<String> = manifest
+                        .iter()
+                        .filter(|m| folders.contains(&m.tier))
+                        .flat_map(|m| listed_names(m, &folders).into_iter().take(1))
+                        .collect();
                     format!(
-                        "model_refused: node {id} {key}={named:?} is not a row of images/imagegen/models.tsv; \
-                         a model runs only when it is pinned there and images/models/licence-register.tsv \
-                         admits it (the operator approves each licence)"
+                        "model_refused: node {id} {key}={named:?} is not a pinned file in its folders ({}); \
+                         accepted here: {}. A model runs only when images/imagegen/models.tsv pins it and \
+                         images/models/licence-register.tsv admits it (the operator approves each licence)",
+                        cats.join("/"),
+                        if accepted.is_empty() { "none".to_string() } else { accepted.join(", ") }
                     )
                 })?;
                 imagegen_models::register_admits(register, row)?;
@@ -1406,6 +1571,14 @@ mod tests {
         two["11"] =
             json!({"class_type":"SaveImage","inputs":{"filename_prefix":"b","images":["8",0]}});
         std::fs::write(wf.join("two_saves.api.json"), two.to_string()).unwrap();
+        // 1986-snpx: LayerDiffuse picks its weights by config value.
+        let mut layer = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        layer["14"] = json!({"class_type":"LayeredDiffusionApply","inputs":{"model":["1",0],"config":"SDXL, Conv Injection","weight":1.0}});
+        layer["15"] = json!({"class_type":"LayeredDiffusionDecode","inputs":{"samples":["5",0],"images":["8",0],"sd_version":"SDXL","sub_batch_size":16}});
+        std::fs::write(wf.join("layer.api.json"), layer.to_string()).unwrap();
+        let mut layer_bad = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        layer_bad["14"] = json!({"class_type":"LayeredDiffusionApply","inputs":{"model":["1",0],"config":"SD15, Attention Injection","weight":1.0}});
+        std::fs::write(wf.join("layer_bad.api.json"), layer_bad.to_string()).unwrap();
         // 1983-svid: a video-only workflow, and one with an image and a video.
         let mut video = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
         video["9"] = json!({"class_type":"SaveWEBM","inputs":{"filename_prefix":"v","images":["8",0],"codec":"vp9","fps":16.0,"crf":32.0}});
@@ -1578,6 +1751,99 @@ mod tests {
             );
             assert!(side.is_file(), "{}", side.display());
         }
+    }
+
+    /// ORDER 1986-snpx: a name resolves only among the rows in its input's
+    /// folders. Pre-fix: FAILS, BiRefNet's model.safetensors resolved to the
+    /// FIRST row with that basename (I1/clip_vision, line 46), so the BiRefNet
+    /// weights were never fetched (kumbia forge, "not in []").
+    #[test]
+    fn a_shared_basename_resolves_to_the_row_in_the_inputs_folder() {
+        let manifest = imagegen_models::manifest();
+        let birefnet = pinned_model_in(
+            &manifest,
+            "model.safetensors",
+            Some(input_categories("LoadRembgByBiRefNetModel", "model")),
+        )
+        .expect("birefnet resolves");
+        assert_eq!(birefnet.tier, "I1/birefnet");
+        let clip_vision = pinned_model_in(
+            &manifest,
+            "model.safetensors",
+            Some(input_categories("CLIPVisionLoader", "clip_name")),
+        )
+        .map(|m| m.tier.clone());
+        // clip_name reads text encoders, where no model.safetensors is pinned.
+        assert_eq!(clip_vision, None);
+        let vision = pinned_model_in(
+            &manifest,
+            "model.safetensors",
+            Some(input_categories("IPAdapterUnifiedLoader", "clip_vision")),
+        )
+        .expect("clip_vision resolves");
+        assert_eq!(vision.tier, "I1/clip_vision");
+    }
+
+    /// ORDER 1986-snpx: ComfyUI lists a file under a scanned root by its path
+    /// relative to that root (the `I1` checkpoints root walks into
+    /// sdxl-full/), so that listed form is accepted.
+    #[test]
+    fn comfyuis_listed_subfolder_form_is_accepted() {
+        let manifest = imagegen_models::manifest();
+        let cats = Some(input_categories("CheckpointLoaderSimple", "ckpt_name"));
+        if let Some(row) = manifest.iter().find(|m| m.tier == "I1/sdxl-full") {
+            let listed = format!("sdxl-full/{}", row.cache_name());
+            assert_eq!(
+                pinned_model_in(&manifest, &listed, cats).map(|m| m.tier.as_str()),
+                Some("I1/sdxl-full")
+            );
+        }
+        // The base I1 checkpoint keeps its bare name.
+        assert!(pinned_model_in(&manifest, "sdxl_lightning_4step.safetensors", cats).is_some());
+        // A lora is not a checkpoint, even though the I1 root walks into I1/lora.
+        assert!(pinned_model_in(&manifest, "lora/pixel-art-xl.safetensors", cats).is_none());
+    }
+
+    /// ORDER 1986-snpx: a LayerDiffuse workflow fetches the weights its config
+    /// values select and records them in provenance; an unpinned config is
+    /// refused. Pre-fix: FAILS, config-selected weights were never seen.
+    #[test]
+    fn config_selected_layerdiffuse_weights_are_fetched_and_recorded() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("snpx-layer", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let run = |wf: &str| {
+            call(
+                "snpx-layer",
+                "a",
+                &json!({"workflow":format!("tool/art/workflows/{wf}"),"inputs":{"pose":pose},"verbose":true}),
+                &mut |_| {},
+            )
+        };
+        let ok = run("layer.api.json");
+        let bad = run("layer_bad.api.json");
+        install_seam(None);
+        let ok = ok.unwrap_or_else(|e| panic!("{e}"));
+        let fetched = engine.fetched.lock().unwrap().clone();
+        for f in [
+            "layer_xl_transparent_conv.safetensors",
+            "vae_transparent_decoder.safetensors",
+        ] {
+            assert!(fetched.iter().any(|x| x == f), "{f} fetched: {fetched:?}");
+        }
+        let models = ok["outputs"][0]["provenance"]["models"].to_string();
+        assert!(
+            models.contains("layer_xl_transparent_conv")
+                && models.contains("vae_transparent_decoder"),
+            "{models}"
+        );
+        let e = bad.unwrap_err();
+        assert!(
+            e.starts_with("model_refused:") && e.contains("SDXL, Conv Injection"),
+            "{e}"
+        );
     }
 
     /// 1983-svid: a video output is returned like an image (kind video, its
