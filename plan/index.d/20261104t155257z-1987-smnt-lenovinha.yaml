@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-04, coordinator-assigned (dev turnaround; operator-approved per macuahuitl-fedora, within the approved studio design).
+packets:
+- packet_id: the-studio-mounts-the-trays-model-folder-map-and-studio-restart-applies-a-change-without-an-image-rebuild
+  order: 1987-smnt
+  status: in_progress
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, comfyui, dev-turnaround]
+  estimated_hours: 2
+  title: The studio mounts the tray's model-folder map, and studio.restart applies a change without an image rebuild
+  context: 'extra_model_paths.yaml was baked into the imagegen-studio image, so every folder-map change (a new pin folder) needed a multi-minute studio image rebuild. The tray now writes its compiled-in map to the host model cache at every start and bind-mounts it read-only over the baked copy; studio.restart recreates the container (not podman restart: a file bind keeps the old inode after an atomic rename), so the fresh mount is read.'
+  exit_criteria:
+  - 'The studio run argv mounts the tray map read-only at /opt/comfyui/extra_model_paths.yaml, written from the compiled-in table. Pre-fix result: FAILS, no such mount.'
+  - 'Editing the map plus a recreate changes /object_info without an image rebuild. Measured live 2026-11-04 with the built studio image on CPU: map A listed alpha_model.safetensors; map B after the recreate listed beta_model.safetensors.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- imagegen_studio; the live two-map probe.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the end-to-end needs a live ComfyUI container (1136-n8sh).'
+  related: [1985-stdu, 1986-snpx]
+  next_action: 'Land (stacked on 1986-snpx part 2).'
+  provenance: coordinator macuahuitl-fedora 2026-11-03.
+  events:
+  - type: filed
+    ts: '2026-11-04T15:52:57Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

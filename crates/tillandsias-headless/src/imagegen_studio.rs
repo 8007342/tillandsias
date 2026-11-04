@@ -110,6 +110,36 @@ pub fn project_forges(project: &str, running: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// 1987-smnt: the studio's model-folder map, from THIS tray (not baked into
+/// the image): a changed map needs a tray rebuild and studio.restart, never a
+/// studio image rebuild.
+pub const MODEL_PATHS_YAML: &str =
+    include_str!("../../../images/imagegen-studio/extra_model_paths.yaml");
+
+/// Where ComfyUI reads its folder map (the baked copy it replaces).
+pub const MODEL_PATHS_IN_CONTAINER: &str = "/opt/comfyui/extra_model_paths.yaml";
+
+/// The host file the studio mounts: under the model cache's parent, written
+/// at every start from [`MODEL_PATHS_YAML`].
+pub fn model_paths_file(models_dir: &Path) -> PathBuf {
+    models_dir
+        .parent()
+        .unwrap_or(models_dir)
+        .join("imagegen-studio")
+        .join("extra_model_paths.yaml")
+}
+
+/// Write the folder map the studio will mount (atomic rename).
+pub fn write_model_paths(models_dir: &Path) -> Result<PathBuf, String> {
+    let path = model_paths_file(models_dir);
+    let dir = path.parent().expect("a parent");
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let tmp = path.with_extension("yaml.tmp");
+    std::fs::write(&tmp, MODEL_PATHS_YAML).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
 pub fn container_name(project: &str) -> String {
     format!("tillandsias-{project}-studio")
 }
@@ -149,6 +179,12 @@ pub fn run_args(
         format!("tillandsias.studio.project={project}"),
         "-v".to_string(),
         format!("{}:/models:ro", plan.models_dir.display()),
+        // 1987-smnt: the folder map comes from the tray, read-only.
+        "-v".to_string(),
+        format!(
+            "{}:{MODEL_PATHS_IN_CONTAINER}:ro",
+            model_paths_file(&plan.models_dir).display()
+        ),
         "-v".to_string(),
         format!("{out_volume}:/out"),
     ];
@@ -372,6 +408,11 @@ pub fn tool_descriptors() -> Vec<serde_json::Value> {
             "inputSchema": empty,
         }),
         serde_json::json!({
+            "name": "studio.restart",
+            "description": "Restart this project's ComfyUI studio: a fresh container that reads the tray's current model-folder map (and any change since start), same network and window route. Use it after a pin or folder-map change; no image rebuild.",
+            "inputSchema": empty.clone(),
+        }),
+        serde_json::json!({
             "name": "studio.status",
             "description": "Whether this project's ComfyUI studio is running, and its enclave URL.",
             "inputSchema": empty,
@@ -401,6 +442,8 @@ pub async fn start(
     );
     // 1985-stdu: the project's own network exists before the studio joins it.
     let cidr = ensure_network(project_name)?;
+    // 1987-smnt: the tray's folder map, written fresh before every start.
+    write_model_paths(&plan.models_dir)?;
     let mut args = run_args(plan, project_name, &out_volume, host_has_cdi_gpu(), &budget);
     // 1913-ebv8: in the forge's slice, ranked before it.
     args.extend(crate::oom_slice_args());
@@ -485,6 +528,33 @@ mod tests {
             !a.iter()
                 .any(|s| s == "-p" || s.starts_with("--publish") || s.starts_with("-p=")),
             "{a:?}"
+        );
+    }
+
+    /// ORDER 1987-smnt: the studio reads the tray's folder map through a
+    /// read-only mount over the baked copy, written fresh at start. Pre-fix:
+    /// FAILS, the map was baked into the image (a change needed a rebuild).
+    #[test]
+    fn the_studio_mounts_the_trays_folder_map() {
+        let cache =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let p = plan_explicit(cache.path());
+        let a = run_args(
+            &p,
+            "proj",
+            "v",
+            false,
+            &StudioBudget::for_host(13_811, 9_000, 16),
+        );
+        let host = model_paths_file(&p.models_dir);
+        let mount = format!("{}:{MODEL_PATHS_IN_CONTAINER}:ro", host.display());
+        assert!(a.contains(&mount), "{a:?}");
+        let written = write_model_paths(&p.models_dir).unwrap();
+        assert_eq!(written, host);
+        assert_eq!(std::fs::read_to_string(&host).unwrap(), MODEL_PATHS_YAML);
+        assert!(
+            host.starts_with(cache.path()),
+            "under the cache, never the image"
         );
     }
 
