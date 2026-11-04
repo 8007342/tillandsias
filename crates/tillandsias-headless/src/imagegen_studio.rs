@@ -390,14 +390,86 @@ pub fn start_on_demand(
     project: &str,
     running: &dyn Fn() -> bool,
     launch: &mut dyn FnMut() -> Result<(), String>,
+    listening: &dyn Fn() -> Probe,
 ) -> Result<serde_json::Value, String> {
     let already = running();
     if !already {
         launch().map_err(|e| format!("studio_start_failed: {e}"))?;
     }
-    let mut v = status_json(project, already || running());
+    // 1990-stry: answer only once ComfyUI answers (a container can be up
+    // with its server still loading nodes and models).
+    let waited = wait_until_listening(project, listening, LISTEN_BUDGET, LISTEN_POLL)?;
+    let mut v = status_json(project, true);
     v["started"] = serde_json::json!(!already);
+    v["listening_after_ms"] = serde_json::json!(waited.as_millis() as u64);
     Ok(v)
+}
+
+/// 1990-stry: what one readiness probe saw.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Probe {
+    /// ComfyUI answered `/system_stats`.
+    Listening,
+    /// The container runs; ComfyUI does not answer yet.
+    Starting,
+    /// The container is not running (it exited or was removed).
+    Exited,
+}
+
+/// How long studio.start waits for ComfyUI (a cold start loads every pinned
+/// custom node), and how often it asks.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub const LISTEN_BUDGET: std::time::Duration = std::time::Duration::from_secs(300);
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub const LISTEN_POLL: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// 1990-stry: poll `probe` until ComfyUI listens. An exited container fails
+/// at once; a budget overrun fails by name. Returns how long it took.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub fn wait_until_listening(
+    project: &str,
+    probe: &dyn Fn() -> Probe,
+    budget: std::time::Duration,
+    poll: std::time::Duration,
+) -> Result<std::time::Duration, String> {
+    let t0 = std::time::Instant::now();
+    loop {
+        match probe() {
+            Probe::Listening => return Ok(t0.elapsed()),
+            Probe::Exited => {
+                return Err(format!(
+                    "studio_exited: {} stopped before ComfyUI listened; see podman logs {}",
+                    container_name(project),
+                    container_name(project)
+                ));
+            }
+            Probe::Starting if t0.elapsed() >= budget => {
+                return Err(format!(
+                    "studio_not_listening: ComfyUI in {} did not answer on :{STUDIO_PORT} within {} s; \
+                     the container still runs (podman logs {})",
+                    container_name(project),
+                    budget.as_secs(),
+                    container_name(project)
+                ));
+            }
+            Probe::Starting => std::thread::sleep(poll),
+        }
+    }
+}
+
+/// The production probe: the container's state, then ComfyUI's own
+/// `/system_stats` from inside it (the studio publishes no host port).
+#[cfg(feature = "host-services")]
+pub fn probe_listening(project: &str) -> Probe {
+    if !is_running(project) {
+        return Probe::Exited;
+    }
+    let script = "import urllib.request,sys\ntry:\n urllib.request.urlopen('http://127.0.0.1:8188/system_stats',timeout=3)\nexcept Exception:\n sys.exit(1)";
+    match podman_out(&["exec", &container_name(project), "python3", "-c", script]) {
+        Ok(_) => Probe::Listening,
+        Err(_) => Probe::Starting,
+    }
 }
 
 #[cfg(feature = "host-services")]
@@ -619,17 +691,17 @@ mod tests {
             up.set(true);
             Ok(())
         };
-        let r = start_on_demand("p", &|| up.get(), &mut launch).unwrap();
+        let r = start_on_demand("p", &|| up.get(), &mut launch, &|| Probe::Listening).unwrap();
         assert_eq!(
             (r["started"].as_bool(), r["running"].as_bool()),
             (Some(true), Some(true))
         );
-        let r = start_on_demand("p", &|| up.get(), &mut launch).unwrap();
+        let r = start_on_demand("p", &|| up.get(), &mut launch, &|| Probe::Listening).unwrap();
         assert_eq!(r["started"], false);
         assert_eq!(launches.get(), 1, "exactly one studio");
         assert_eq!(r["url"], "http://studio:8188");
         let mut fails = || Err("no image".to_string());
-        let e = start_on_demand("q", &|| false, &mut fails).unwrap_err();
+        let e = start_on_demand("q", &|| false, &mut fails, &|| Probe::Listening).unwrap_err();
         assert!(e.starts_with("studio_start_failed:"), "{e}");
     }
 
@@ -658,6 +730,61 @@ mod tests {
                 "{argv:?}"
             );
         }
+    }
+
+    /// ORDER 1990-stry: studio.start answers only once ComfyUI listens; a
+    /// container that exits fails at once, and a budget overrun fails by
+    /// name. Pre-fix: FAILS, start_on_demand returned as soon as the
+    /// container was created.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn studio_start_answers_only_once_comfyui_listens() {
+        let calls = std::cell::Cell::new(0);
+        let probe = || {
+            calls.set(calls.get() + 1);
+            if calls.get() < 4 {
+                Probe::Starting
+            } else {
+                Probe::Listening
+            }
+        };
+        let poll = std::time::Duration::from_millis(1);
+        let waited =
+            wait_until_listening("p", &probe, std::time::Duration::from_secs(5), poll).unwrap();
+        assert_eq!(calls.get(), 4, "it kept asking until ComfyUI answered");
+        assert!(waited < std::time::Duration::from_secs(5));
+        let e = wait_until_listening(
+            "p",
+            &|| Probe::Exited,
+            std::time::Duration::from_secs(5),
+            poll,
+        )
+        .unwrap_err();
+        assert!(e.starts_with("studio_exited:"), "{e}");
+        let e = wait_until_listening(
+            "p",
+            &|| Probe::Starting,
+            std::time::Duration::from_millis(20),
+            poll,
+        )
+        .unwrap_err();
+        assert!(
+            e.starts_with("studio_not_listening:") && e.contains(":8188"),
+            "{e}"
+        );
+        // start_on_demand waits too, and reports how long.
+        let mut launch = || Ok(());
+        let n = std::cell::Cell::new(0);
+        let r = start_on_demand("p", &|| false, &mut launch, &|| {
+            n.set(n.get() + 1);
+            if n.get() < 2 {
+                Probe::Starting
+            } else {
+                Probe::Listening
+            }
+        })
+        .unwrap();
+        assert!(r["listening_after_ms"].is_u64() && n.get() == 2, "{r}");
     }
 
     /// ORDER 1969-cfyt: the studio runs as the forge's own user, so SaveImage
