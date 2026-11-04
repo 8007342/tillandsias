@@ -109,6 +109,7 @@ objc2-virtualization = { version = "=0.2.2", features = [
   "VZSharedDirectory",
   "VZSingleDirectoryShare",
   "VZGenericPlatformConfiguration",
+  "VZGenericMachineIdentifier",
   "VZPlatformConfiguration",
   "VZError",
   "block2",

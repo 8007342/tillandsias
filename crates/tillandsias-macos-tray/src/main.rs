@@ -375,6 +375,11 @@ fn main() {
     // prints the falsifiable verdict line `transport-conformance: PASS n=<N>`
     // (or `FAIL <fixture>: <reason>`), then stops the VM. Main-thread rule as
     // for --exec-guest.
+    // 1918-vzsr criterion 3: time one VZ save and restore-to-podman-info.
+    if args.iter().any(|a| a == "--measure-save-restore") {
+        require_no_live_tray("--measure-save-restore");
+        std::process::exit(diagnose::measure_save_restore_main());
+    }
     if args.iter().any(|a| a == "--transport-conformance") {
         require_no_live_tray("--transport-conformance");
         std::process::exit(diagnose::transport_conformance_main());

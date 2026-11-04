@@ -67,6 +67,13 @@ pub struct VzRuntime {
     /// handed to the guest through cidata. `stop()` honours the guest's
     /// clean-off line only when it carries this token.
     shutdown_token: std::sync::Mutex<Option<String>>,
+    /// 1918-vzsr: when set, the next `start()` restores this saved machine
+    /// state instead of cold-booting. Taken (cleared) by that start.
+    restore_from: std::sync::Mutex<Option<PathBuf>>,
+    /// 1918-vzsr: the identity this runtime's last boot pinned, reused by a
+    /// restore so the configuration matches the saved one.
+    #[cfg(target_os = "macos")]
+    identity: std::sync::Mutex<Option<boot::MachineIdentity>>,
 }
 
 #[cfg(target_os = "macos")]
@@ -133,6 +140,74 @@ mod vm_handle {
                 .map_err(|e| e.to_string());
             let _ = tx.send(result);
         }
+
+        /// 1918-vzsr: run one completion-handler state operation (pause,
+        /// save, restore, resume) and report its result on `tx`. A method on
+        /// the handle for the same Send reason as `start_and_report`.
+        pub(crate) fn state_op_and_report(
+            self,
+            op: StateOp,
+            tx: std::sync::mpsc::Sender<Result<(), String>>,
+        ) {
+            let handler = block2::RcBlock::new(move |err: *mut NSError| {
+                let result = if err.is_null() {
+                    Ok(())
+                } else {
+                    Err(unsafe { (*err).localizedDescription() }.to_string())
+                };
+                let _ = tx.send(result);
+            });
+            let url = |p: &std::path::Path| {
+                let s = objc2_foundation::NSString::from_str(p.to_string_lossy().as_ref());
+                unsafe { objc2_foundation::NSURL::fileURLWithPath(&s) }
+            };
+            match op {
+                StateOp::Pause => unsafe { self.0.pauseWithCompletionHandler(&handler) },
+                StateOp::Resume => unsafe { self.0.resumeWithCompletionHandler(&handler) },
+                StateOp::Save(p) => unsafe {
+                    self.0
+                        .saveMachineStateToURL_completionHandler(&url(&p), &handler)
+                },
+                StateOp::Restore(p) => unsafe {
+                    self.0
+                        .restoreMachineStateFromURL_completionHandler(&url(&p), &handler)
+                },
+            }
+        }
+    }
+
+    impl VmHandle {
+        /// 1918-vzsr: dispatch `op` on the main queue and pump until it
+        /// reports or `limit` passes.
+        pub(crate) fn run_state_op(
+            self,
+            op: StateOp,
+            limit: std::time::Duration,
+        ) -> Result<(), String> {
+            let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+            super::boot::dispatch_to_main_queue(move || self.state_op_and_report(op, tx));
+            let deadline = std::time::Instant::now() + limit;
+            loop {
+                if let Ok(result) = rx.try_recv() {
+                    return result;
+                }
+                if std::time::Instant::now() >= deadline {
+                    return Err(format!(
+                        "vm state operation timed out after {}s",
+                        limit.as_secs()
+                    ));
+                }
+                super::boot::pump_cf_loop_for(std::time::Duration::from_millis(250));
+            }
+        }
+    }
+
+    /// 1918-vzsr: the machine-state operations `state_op_and_report` runs.
+    pub(crate) enum StateOp {
+        Pause,
+        Resume,
+        Save(std::path::PathBuf),
+        Restore(std::path::PathBuf),
     }
 
     // SAFETY: see module docstring.
@@ -313,6 +388,51 @@ impl VzRuntime {
             host_listener: std::sync::Mutex::new(None),
             serial_to_log: std::sync::atomic::AtomicBool::new(false),
             shutdown_token: std::sync::Mutex::new(None),
+            restore_from: std::sync::Mutex::new(None),
+            #[cfg(target_os = "macos")]
+            identity: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// 1918-vzsr: pause the running VM and write its machine state to
+    /// `path`. Refused while the Vault runs ([`save_permitted`]). The VM
+    /// stays paused; [`Self::release_saved`] lets it go without a stop.
+    #[cfg(target_os = "macos")]
+    pub fn save_state_to(&self, path: &Path, vault_running: bool) -> Result<(), String> {
+        save_permitted(vault_running).map_err(str::to_string)?;
+        let vm = {
+            let slot = self
+                .vm
+                .lock()
+                .map_err(|e| format!("vm lock poisoned: {e}"))?;
+            slot.as_ref()
+                .map(|h| h.0.clone())
+                .ok_or_else(|| "save_state_to: VM not running".to_string())?
+        };
+        vm_handle::VmHandle(vm.clone())
+            .run_state_op(vm_handle::StateOp::Pause, Duration::from_secs(30))?;
+        vm_handle::VmHandle(vm).run_state_op(
+            vm_handle::StateOp::Save(path.to_path_buf()),
+            Duration::from_secs(600),
+        )
+    }
+
+    /// 1918-vzsr: drop a saved (paused) VM without `stop()`, which would
+    /// delete the swap image the saved guest has swapped on.
+    #[cfg(target_os = "macos")]
+    pub fn release_saved(&self) {
+        if let Ok(mut l) = self.host_listener.lock() {
+            l.take();
+        }
+        if let Ok(mut slot) = self.vm.lock() {
+            slot.take();
+        }
+    }
+
+    /// 1918-vzsr: make the next `start()` restore `path` instead of booting.
+    pub fn restore_next_start_from(&self, path: PathBuf) {
+        if let Ok(mut r) = self.restore_from.lock() {
+            *r = Some(path);
         }
     }
 
@@ -357,6 +477,7 @@ impl VzRuntime {
             ],
             nvram: Some(existing("nvram.bin").unwrap_or_else(|| tmp.path().join("nvram.bin"))),
             entropy,
+            identity: None,
             ..boot::VzBootConfig::defaults()
         };
         SaveRestoreVerdict {
@@ -2555,6 +2676,32 @@ pub mod boot {
         /// boot. The save-restore probe also tries `false`, because Tart drops
         /// this device for VMs it can suspend.
         pub entropy: bool,
+        /// 1918-vzsr: the machine identifier and MAC address to pin. `None`
+        /// lets VZ pick fresh ones; a restore must reuse the saved VM's.
+        pub identity: Option<MachineIdentity>,
+    }
+
+    /// 1918-vzsr: what a restored VM must share with the one that was saved.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct MachineIdentity {
+        /// `VZGenericMachineIdentifier.dataRepresentation`.
+        pub machine_id: Vec<u8>,
+        /// `VZMACAddress.string`, e.g. `0a:1b:2c:3d:4e:5f`.
+        pub mac: String,
+    }
+
+    impl MachineIdentity {
+        /// A fresh identity, as VZ would choose for an unpinned config.
+        pub fn fresh() -> Self {
+            unsafe {
+                let id = objc2_virtualization::VZGenericMachineIdentifier::new();
+                let mac = objc2_virtualization::VZMACAddress::randomLocallyAdministeredAddress();
+                Self {
+                    machine_id: id.dataRepresentation().bytes().to_vec(),
+                    mac: mac.string().to_string(),
+                }
+            }
+        }
     }
 
     impl VzBootConfig {
@@ -2573,6 +2720,7 @@ pub mod boot {
                 nvram: None,
                 serial_writer_fd: None,
                 entropy: true,
+                identity: None,
             }
         }
     }
@@ -2814,6 +2962,16 @@ pub mod boot {
 
             // Generic platform — no Mac-host-specific requirements.
             let platform = VZGenericPlatformConfiguration::new();
+            if let Some(identity) = &spec.identity {
+                let data = objc2_foundation::NSData::with_bytes(&identity.machine_id);
+                let id =
+                    objc2_virtualization::VZGenericMachineIdentifier::initWithDataRepresentation(
+                        objc2_virtualization::VZGenericMachineIdentifier::alloc(),
+                        &data,
+                    )
+                    .ok_or("machine identifier: invalid data representation")?;
+                platform.setMachineIdentifier(&id);
+            }
             let plat_super: &VZPlatformConfiguration = &platform;
             cfg.setPlatform(plat_super);
 
@@ -2875,6 +3033,14 @@ pub mod boot {
             let nat_super: &objc2_virtualization::VZNetworkDeviceAttachment = &nat;
             let nic = VZVirtioNetworkDeviceConfiguration::new();
             nic.setAttachment(Some(nat_super));
+            if let Some(identity) = &spec.identity {
+                let mac = objc2_virtualization::VZMACAddress::initWithString(
+                    objc2_virtualization::VZMACAddress::alloc(),
+                    &NSString::from_str(&identity.mac),
+                )
+                .ok_or("MAC address: invalid string")?;
+                nic.setMACAddress(&mac);
+            }
             let nic_super: Retained<VZNetworkDeviceConfiguration> = Retained::into_super(nic);
             let arr_n: Retained<NSArray<VZNetworkDeviceConfiguration>> =
                 NSArray::from_id_slice(&[nic_super]);
@@ -3238,12 +3404,45 @@ impl VmRuntime for VzRuntime {
         // Order 1481-2bth: grow the disk before it is attached.
         // A failure here is reported, never fatal: the VM boots at its
         // current size.
-        if let Err(e) = grow_guest_disk_if_needed(&rootfs) {
+        // 1918-vzsr: a restore resumes a guest that already knows its disk
+        // size, swap device and shutdown token, so none of them may change.
+        let restoring = self
+            .restore_from
+            .lock()
+            .map_err(|e| format!("restore lock poisoned: {e}"))?
+            .take();
+        if restoring.is_none()
+            && let Err(e) = grow_guest_disk_if_needed(&rootfs)
+        {
             eprintln!("[tillandsias-vz] guest disk growth skipped: {e}");
         }
 
+        // 1918-vzsr: pin the identity so a later restore can match it.
+        let identity = {
+            let mut slot = self
+                .identity
+                .lock()
+                .map_err(|e| format!("identity lock poisoned: {e}"))?;
+            match (&restoring, slot.as_ref()) {
+                (Some(_), Some(kept)) => kept.clone(),
+                _ => {
+                    let fresh = boot::MachineIdentity::fresh();
+                    *slot = Some(fresh.clone());
+                    fresh
+                }
+            }
+        };
+
         let cidata_iso_path = self.image_root.join("cidata.iso");
-        let shutdown_token = mint_shutdown_token()?;
+        let kept_token = if restoring.is_some() {
+            self.shutdown_token.lock().ok().and_then(|t| t.clone())
+        } else {
+            None
+        };
+        let shutdown_token = match kept_token {
+            Some(t) => t,
+            None => mint_shutdown_token()?,
+        };
         self.generate_cidata_iso(&cidata_iso_path, &shutdown_token)?;
         *self
             .shutdown_token
@@ -3451,30 +3650,35 @@ impl VmRuntime for VzRuntime {
         // made or no tier fits.
         let swap_image = self.image_root.join(boot::SWAP_IMAGE_FILE);
         let free = boot::free_bytes_at(&self.image_root);
-        let swap_disk = match free.and_then(boot::swap_image_bytes_for_free) {
-            None => {
-                boot::remove_swap_image(&swap_image);
-                eprintln!(
-                    "[tillandsias-vz] WARNING: no swap tier fits beside {} (free bytes: {}; each \
+        let swap_disk = if restoring.is_some() && swap_image.exists() {
+            // 1918-vzsr: the restored guest has this image swapped on.
+            Some(swap_image)
+        } else {
+            match free.and_then(boot::swap_image_bytes_for_free) {
+                None => {
+                    boot::remove_swap_image(&swap_image);
+                    eprintln!(
+                        "[tillandsias-vz] WARNING: no swap tier fits beside {} (free bytes: {}; each \
                      tier must leave 20 GiB free). Booting WITHOUT guest disk swap — zram only \
                      (order 1377-hcnv).",
-                    self.image_root.display(),
-                    free.map_or_else(|| "unreadable".to_string(), |b| b.to_string())
-                );
-                None
-            }
-            Some(bytes) => match boot::fresh_sparse_swap_image(&swap_image, bytes) {
-                Ok(()) => Some(swap_image),
-                Err(err) => {
-                    eprintln!(
-                        "[tillandsias-vz] WARNING: could not create the swap image {} ({err}). \
-                         Booting WITHOUT guest disk swap — a forge that spills past guest RAM \
-                         will OOM (order 1377-hcnv).",
-                        swap_image.display()
+                        self.image_root.display(),
+                        free.map_or_else(|| "unreadable".to_string(), |b| b.to_string())
                     );
                     None
                 }
-            },
+                Some(bytes) => match boot::fresh_sparse_swap_image(&swap_image, bytes) {
+                    Ok(()) => Some(swap_image),
+                    Err(err) => {
+                        eprintln!(
+                            "[tillandsias-vz] WARNING: could not create the swap image {} ({err}). \
+                         Booting WITHOUT guest disk swap — a forge that spills past guest RAM \
+                         will OOM (order 1377-hcnv).",
+                            swap_image.display()
+                        );
+                        None
+                    }
+                },
+            }
         };
 
         // 1642-cc54: the identity disk is created once and KEPT, so the Vault
@@ -3506,6 +3710,7 @@ impl VmRuntime for VzRuntime {
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd,
             entropy: true,
+            identity: Some(identity),
         };
 
         let cfg = boot::build_vm_configuration(&spec)?;
@@ -3524,18 +3729,26 @@ impl VmRuntime for VzRuntime {
         // on `tokio::task::spawn_blocking` if invoked from an async runtime.
         let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let vm_for_start = vm_handle::VmHandle(vm.clone());
-        boot::dispatch_to_main_queue(move || vm_for_start.start_and_report(tx));
+        if let Some(saved) = restoring {
+            // 1918-vzsr: restore the saved state, then resume it.
+            vm_handle::VmHandle(vm.clone())
+                .run_state_op(vm_handle::StateOp::Restore(saved), Duration::from_secs(300))?;
+            vm_handle::VmHandle(vm.clone())
+                .run_state_op(vm_handle::StateOp::Resume, Duration::from_secs(30))?;
+        } else {
+            boot::dispatch_to_main_queue(move || vm_for_start.start_and_report(tx));
 
-        let deadline = Instant::now() + Duration::from_secs(30);
-        loop {
-            if let Ok(result) = rx.try_recv() {
-                result.map_err(|e| explain_start_failure(&e, spec.nvram.as_deref()))?;
-                break;
+            let deadline = Instant::now() + Duration::from_secs(30);
+            loop {
+                if let Ok(result) = rx.try_recv() {
+                    result.map_err(|e| explain_start_failure(&e, spec.nvram.as_deref()))?;
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    return Err("VzRuntime::start: VM start timed out after 30s".into());
+                }
+                boot::pump_cf_loop_for(Duration::from_millis(250));
             }
-            if Instant::now() >= deadline {
-                return Err("VzRuntime::start: VM start timed out after 30s".into());
-            }
-            boot::pump_cf_loop_for(Duration::from_millis(250));
         }
 
         // ── Host-side vsock listener (order 830-xsk2) ────────────────────
