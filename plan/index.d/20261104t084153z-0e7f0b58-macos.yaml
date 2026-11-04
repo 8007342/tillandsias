@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-release-is-published-only-after-every-platform-asset-is-attached
+    event:
+      type: recurrence
+      ts: "2026-11-04T08:41:53Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        Recurrence on v56.11.4.1, 2026-11-04 (measured on tlatoanis-macbook-air): the release was published at 07:27:15Z, but the macOS asset was built at 07:47:05Z, so the prerelease had no macOS asset for about 20 minutes. The same pattern was on v56.11.3.1 on 2026-11-03 (release created 13:13:33Z, assets uploaded 13:40:06Z). Signature and checksum verified on the late asset, so this is ordering, not tampering. Evidence: #913, #889.
