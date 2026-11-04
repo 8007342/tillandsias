@@ -89,6 +89,7 @@ pub fn ensure_network(project: &str) -> Result<String, String> {
 
 /// Connect `container` to the project's studio network; already connected
 /// is fine.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub fn connect(project: &str, container: &str) -> Result<(), String> {
     match podman_out(&["network", "connect", &network_name(project), container]) {
         Ok(_) => Ok(()),
@@ -99,6 +100,7 @@ pub fn connect(project: &str, container: &str) -> Result<(), String> {
 
 /// The running containers that are this project's forges (every agent
 /// mode and instance is named `tillandsias-<project>-forge…`).
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub fn project_forges(project: &str, running: &[String]) -> Vec<String> {
     let prefix = format!("tillandsias-{project}-forge");
     running
@@ -296,6 +298,7 @@ pub fn window_url(project: &str) -> Option<String> {
 
 /// 1985-stdu: the studio window's route service (`comfyui.<project>`); the
 /// `--studio` lane's OTP route holds `studio.<project>`.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub const WINDOW_SERVICE: &str = "comfyui";
 
 /// 1985-stdu: after the container is up, put the router and this project's
