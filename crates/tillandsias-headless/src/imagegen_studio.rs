@@ -135,7 +135,10 @@ pub fn write_model_paths(models_dir: &Path) -> Result<PathBuf, String> {
     let dir = path.parent().expect("a parent");
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let tmp = path.with_extension("yaml.tmp");
-    std::fs::write(&tmp, MODEL_PATHS_YAML).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    // 1991-dovl: a dev overlay map replaces the compiled one.
+    let text = crate::dev_overlay::read(crate::dev_overlay::MODEL_PATHS)
+        .unwrap_or_else(|| MODEL_PATHS_YAML.to_string());
+    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
     std::fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(path)
 }

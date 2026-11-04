@@ -379,7 +379,13 @@ impl Allowlist {
     }
 
     pub fn shipped() -> Allowlist {
-        Self::parse(NODE_CLASSES_TSV, CUSTOM_NODES_TOML)
+        // 1991-dovl: a dev build appends overlay rows (read per call); a
+        // class from an unpinned package still admits nothing.
+        let rows = crate::dev_overlay::append(
+            NODE_CLASSES_TSV,
+            crate::dev_overlay::read(crate::dev_overlay::NODE_CLASSES),
+        );
+        Self::parse(&rows, CUSTOM_NODES_TOML)
     }
 
     pub fn admits(&self, class: &str) -> Result<(), String> {
@@ -463,7 +469,10 @@ fn model_folders(category: &str) -> Vec<String> {
     let head = format!("  {category}: |");
     let mut out = Vec::new();
     let mut inside = false;
-    for line in EXTRA_MODEL_PATHS.lines() {
+    // 1991-dovl: a dev overlay map replaces the compiled one.
+    let paths = crate::dev_overlay::read(crate::dev_overlay::MODEL_PATHS)
+        .unwrap_or_else(|| EXTRA_MODEL_PATHS.to_string());
+    for line in paths.lines() {
         if line.trim_end() == head {
             inside = true;
             continue;
@@ -2210,6 +2219,69 @@ mod tests {
         assert!(
             e.contains(&imagegen_models::manifest_digest()) && e.contains("tray rebuild"),
             "{e}"
+        );
+    }
+
+    /// ORDER 1991-dovl: a node class added through the dev overlay is admitted
+    /// on the NEXT call, no restart. Pre-fix: FAILS, the allowlist was only
+    /// the compiled table.
+    #[test]
+    fn a_dev_overlay_node_class_takes_effect_on_the_next_call() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("dovl-node", "a");
+        install(&fx, Arc::new(Stub::default()));
+        let overlay = tempfile::tempdir_in(fx.scratch_root.parent().unwrap()).unwrap();
+        crate::dev_overlay::set_test_dir(Some(overlay.path().to_path_buf()));
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let wf = fx
+            .project
+            .path()
+            .join("tool/art/workflows/overlay.api.json");
+        let mut w = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        w["16"] = json!({"class_type":"MyNewCoreNode","inputs":{}});
+        std::fs::write(&wf, w.to_string()).unwrap();
+        let args = json!({"workflow":"tool/art/workflows/overlay.api.json","inputs":{"pose":pose}});
+        let before = call("dovl-node", "a", &args, &mut |_| {});
+        std::fs::write(
+            overlay.path().join(crate::dev_overlay::NODE_CLASSES),
+            "comfyui-core\tMyNewCoreNode\n",
+        )
+        .unwrap();
+        let after = call("dovl-node", "a", &args, &mut |_| {});
+        crate::dev_overlay::set_test_dir(None);
+        install_seam(None);
+        assert!(before.unwrap_err().starts_with("node_not_pinned:"));
+        after.unwrap_or_else(|e| panic!("the overlay class was not admitted: {e}"));
+    }
+
+    /// ORDER 1991-dovl: an overlay can never admit a licence by itself: a
+    /// model pinned only through the overlay is still refused, because the
+    /// compiled-in licence register does not admit it.
+    #[test]
+    fn a_dev_overlay_model_pin_cannot_admit_its_own_licence() {
+        let overlay =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        crate::dev_overlay::set_test_dir(Some(overlay.path().to_path_buf()));
+        let sha = "c".repeat(64);
+        std::fs::write(
+            overlay.path().join(crate::dev_overlay::MODELS),
+            format!("I1/sdxl-full\tstudio:checkpoint\tacme/overlay-only\t{}\toverlay_only.safetensors\t{sha}\t10\tapache-2.0\n", "a".repeat(40)),
+        )
+        .unwrap();
+        let manifest = imagegen_models::manifest();
+        let row = manifest
+            .iter()
+            .find(|m| m.cache_name() == "overlay_only.safetensors")
+            .cloned();
+        let admitted = row
+            .as_ref()
+            .map(|r| imagegen_models::register_admits(imagegen_models::register_tsv(), r));
+        crate::dev_overlay::set_test_dir(None);
+        let row = row.expect("the overlay pin is read");
+        assert_eq!(row.tier, "I1/sdxl-full");
+        assert!(
+            admitted.unwrap().is_err(),
+            "the register, not the overlay, admits a licence"
         );
     }
 
