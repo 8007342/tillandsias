@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-04, from a kumbia-kombat forge report.
+packets:
+- packet_id: a-long-studio-job-does-not-block-other-mcp-calls-on-the-same-connection
+  order: 1990-mcpq
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [mcp, studio, browser]
+  estimated_hours: 3
+  title: A long studio job does not block other MCP calls on the same connection
+  context: 'serve_mcp_connection reads one request and dispatches it inline before reading the next. Kumbia on tray 56.11.4.2: browser.open, browser.list_windows and studio.validate_family all passed 120 s while a QwenImage workflow ran in ComfyUI, so the operator waited for a window with no explanation. Serial dispatch is a code read and the likely cause; it was not traced per connection. Row 1990-stwt may share this cause, since calls sent together wait for each other.'
+  exit_criteria:
+  - 'While studio.run_workflow runs on a connection, browser.list_windows on that connection answers within 5 s. Pre-fix result: FAILS, it waits for the job.'
+  - 'Responses carry the right ids when they finish out of order, and the per-session call semaphore still bounds concurrency.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- mcp_socket::'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixture with a slow stub tool, plus one live run.'
+  next_action: 'Confirm the serial path with the slow-tool fixture, then dispatch calls off the read loop.'
+  provenance: coordinator macuahuitl-fedora 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-04T20:55:00Z'
+    host: macuahuitl
+    summary: filed p1 ready
