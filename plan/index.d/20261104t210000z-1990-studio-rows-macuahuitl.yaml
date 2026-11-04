@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-04, from kumbia-kombat forge reports.
+packets:
+- packet_id: a-local-vision-model-for-forge-image-review-is-provisioned-not-hand-pulled
+  order: 1990-vmpn
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [inference, vision, imagegen]
+  estimated_hours: 2
+  title: A local vision model for forge image review is provisioned, not hand-pulled
+  context: 'On 2026-11-04 the coordinator hand-pulled qwen2.5vl:7b into tillandsias-inference for kumbia-kombat sprite review (operator approved more models for that project first-hand). Ollama reports capabilities completion and vision, Apache licence text. No manifest names it, so a reset of the inference store loses it. Kumbia measured about 1 s per 768x960 frame warm and 12 of 14 agreement on one beard question; that sample is small and covers one question only.'
+  exit_criteria:
+  - 'After the inference store is wiped and re-provisioned on a host at the GPU tier, api/show for the vision model lists capability vision. Pre-fix result: FAILS, the model is absent.'
+  - 'The model is admitted by a licence record, and hosts below its tier do not fetch it.'
+  verifiable_closure: 'Wipe the inference store on a capable host, re-provision, POST an image to /api/chat from a forge and read a non-empty answer.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs a wipe and re-provision on real GPU hardware.'
+  next_action: 'Find where the inference model list lives and add the row with a tier gate.'
+  provenance: coordinator macuahuitl-fedora 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-04T21:00:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: studio-start-returns-only-once-comfyui-is-listening
+  order: 1990-stry
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, comfyui]
+  estimated_hours: 1
+  title: studio.start returns only once ComfyUI is listening
+  context: 'Kumbia on tray 56.11.4.1: studio.start returned running:true, and an immediate studio.models gave studio_unavailable ConnectionRefusedError [Errno 111] on every loader. A readiness poll a little later got HTTP 200.'
+  exit_criteria:
+  - 'A studio.models call made immediately after studio.start returns lists loaders and never studio_unavailable. Pre-fix result: FAILS with ConnectionRefusedError.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- studio_tool::'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixture with a stub engine, plus one live start.'
+  next_action: 'Wait for the ComfyUI port inside studio.start before answering, with a named timeout failure.'
+  provenance: coordinator macuahuitl-fedora 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-04T21:00:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: studio-run-workflow-wall-time-outside-elapsed-s-is-measured-and-explained
+  order: 1990-stwt
+  status: ready
+  kind: investigation
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, performance]
+  estimated_hours: 2
+  title: studio.run_workflow wall time outside elapsed_s is measured and explained
+  context: 'Kumbia on tray 56.11.4.1: two runs reported elapsed_s 4.6 and 3.19 while each call passed the 120 s MCP limit. In studio_tool.rs t0 starts after validate, ensure_models and precheck_models. ensure_models re-hashing large files is a guess, unproven. A local run that long breaks the quick-turnaround goal.'
+  exit_criteria:
+  - 'One run reports the time of each stage before and after t0, and the largest stage is named from that measurement.'
+  - 'A second identical run takes under 10 s more than its elapsed_s, or a row names why it cannot. Pre-fix result: FAILS, over 100 s more.'
+  verifiable_closure: 'Run one workflow twice from a forge and compare wall time with elapsed_s.'
+  unscoreable: 'unpinnable-until-the-guard-exists: a wall-clock measurement on real hardware.'
+  next_action: 'Time the stages on macuahuitl before changing anything.'
+  provenance: coordinator macuahuitl-fedora 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-04T21:00:00Z'
+    host: macuahuitl
+    summary: filed p2 ready

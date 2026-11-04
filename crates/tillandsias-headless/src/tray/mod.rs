@@ -4268,15 +4268,31 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // exit anyway.
         //
         // @trace spec:graceful-shutdown, spec:app-lifecycle
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(45),
-            crate::graceful_shutdown_async(),
-        )
-        .await
-        {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
-            Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+        // 1988-trkp: a plain exit keeps forges and hands their lanes on;
+        // only `tillandsias --stop-all` stops everything.
+        let plan = crate::shutdown_plan(crate::take_stop_all_request());
+        if plan.mark_lanes_for_adoption {
+            let lanes = crate::mcp_socket::mark_served_lanes_for_adoption();
+            info!(
+                lanes = lanes.len(),
+                "1988-trkp: tray exiting, forges left running; the next tray adopts their lanes (tillandsias --stop-all stops everything)"
+            );
+            eprintln!(
+                "[tillandsias] tray exiting; {} lane(s) and their forges keep running. `tillandsias --stop-all` stops everything.",
+                lanes.len()
+            );
+        }
+        if plan.stop_containers {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(45),
+                crate::graceful_shutdown_async(),
+            )
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
+                Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+            }
         }
         // Order 1859-v5iv: a clean exit leaves no run for the next start to reap.
         if let Some(run) = crate::dead_run::run_label_value() {
@@ -4286,8 +4302,9 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // @trace spec:tillandsias-vault — revoke per-container AppRole
         // tokens before exit so vault audit reflects clean shutdown.
         // Time-bounded for the same reason as graceful shutdown.
+        // 1988-trkp: kept forges keep using their tokens.
         #[cfg(feature = "vault")]
-        {
+        if plan.revoke_container_tokens {
             match tokio::time::timeout(
                 std::time::Duration::from_secs(10),
                 crate::vault_bootstrap::revoke_pending_container_tokens(false),

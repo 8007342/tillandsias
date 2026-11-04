@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tray-quit-or-restart-keeps-forges-running-and-the-next-tray-adopts-their-lanes-and-stop-all-is-the-explicit-full-stop
+    field: status
+    value: completed
+    ts: "2026-11-04T20:09:52Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-tray-quit-or-restart-keeps-forges-running-and-the-next-tray-adopts-their-lanes-and-stop-all-is-the-explicit-full-stop
+    event:
+      type: completed
+      ts: "2026-11-04T20:09:52Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 58dc06821
+  - packet_id: a-tray-quit-or-restart-keeps-forges-running-and-the-next-tray-adopts-their-lanes-and-stop-all-is-the-explicit-full-stop
+    event:
+      type: note
+      ts: "2026-11-04T20:09:52Z"
+      host: lenovinha
+      summary: |-
+        landed at 58dc06821; live quit-relaunch proof on trunk 3dcb3f4c2
