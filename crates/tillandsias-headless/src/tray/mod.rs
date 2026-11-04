@@ -2192,7 +2192,8 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                     .unwrap_or_else(|| cloud.name.clone())
             };
 
-            let current_exe = match std::env::current_exe() {
+            // 1984-pexe: a terminal runs this argv: the installed path.
+            let current_exe = match crate::self_exe::for_other_process() {
                 Ok(exe) => exe,
                 Err(err) => {
                     eprintln!("error: failed to resolve Tillandsias executable: {err}");

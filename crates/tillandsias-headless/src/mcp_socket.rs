@@ -1441,7 +1441,9 @@ pub(crate) fn build_identity() -> &'static str {
     static ID: OnceLock<String> = OnceLock::new();
     ID.get_or_init(|| {
         use sha2::{Digest, Sha256};
-        let digest = env::current_exe()
+        // 1984-pexe: /proc/self/exe reads the RUNNING build even after an
+        // upgrade replaced its file (current_exe then names "… (deleted)").
+        let digest = crate::self_exe::for_spawn()
             .and_then(fs::read)
             .map(|bytes| {
                 let hash = Sha256::digest(&bytes);
