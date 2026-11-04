@@ -1,26 +1,29 @@
 ## ADDED Requirements
 
-### Requirement: an instruction is a per-project work item with a TTL, a lease and a settle
+### Requirement: an instruction is a per-project work item with a bounded TTL
 
-The fleet SHALL carry `instruction` items keyed by project namespace. Each
-SHALL have a server-assigned `id`, a server-stamped `author` (the Access
-identity), a `to` address (`role:<name>` or `any`), a TTL between 60 s and
-604 800 s (default 86 400 s), and a body of at most 4 KiB. `take` SHALL lease
-one open instruction to the caller for a bounded time. `settle` SHALL remove
-it. An expired lease SHALL return the instruction to open. At TTL the
-instruction SHALL be removed whatever its state. Instructions SHALL NOT use the
-`ack` or `receipt` vocabulary of `fleet-messaging`.
+The fleet SHALL carry `instruction` items keyed by project namespace. Each SHALL
+have a server-assigned `id`, a server-stamped `author` (the Access identity), a
+`to` address (`role:<name>` or `any`), a TTL between 60 s and 604 800 s
+(default 86 400 s), and a body of at most 4 KiB.
+
+#### Scenario: a TTL outside the bounds
+
+- **WHEN** a client puts an instruction with `ttl_s` below 60 or above 604 800
+- **THEN** it is refused with the bounds named, and nothing is stored
+
+### Requirement: an instruction is delivered at least once through a lease and a settle
+
+`take` SHALL lease one open instruction to the caller for a bounded time, and
+`settle` SHALL remove it. An expired lease SHALL return the instruction to
+open. At TTL the instruction SHALL be removed whatever its state. Instructions
+SHALL NOT use the `ack` or `receipt` vocabulary of `fleet-messaging`.
 
 #### Scenario: a forge dies holding a lease
 
 - **WHEN** a forge `take`s an instruction and is killed before it `settle`s
 - **THEN** after the lease runs out, the instruction is open again, and the
   next reader can take it
-
-#### Scenario: a TTL outside the bounds
-
-- **WHEN** a client puts an instruction with `ttl_s` below 60 or above 604 800
-- **THEN** it is refused with the bounds named, and nothing is stored
 
 ### Requirement: a resume slot survives a forge restart
 
@@ -50,21 +53,27 @@ A forge SHALL be able to reload at most once per 10 minutes.
   resume write
 - **THEN** the tool returns a named refusal, and the forge keeps running
 
-### Requirement: agent.spawn is brokered by the host within limits the operator set
+### Requirement: agent.spawn is executed by the host broker, never by the forge
 
 `agent.spawn {harness, model, project, seed_prompt | queue_ref}` SHALL be
-executed by the host, never by the forge. Without operator consent it SHALL
-only:
-- use a harness the host already holds a sign-in for;
-- use a model on that harness's configured allowlist;
-- target the parent's project or its declared sibling group;
-- run at depth 1 (a spawned child cannot spawn);
-- stay within the per-host concurrency and lifetime limits;
-- use the host's existing git identity and push only to work refs.
+executed by a host-side broker that enforces every spawn limit. A request
+outside the limits SHALL be refused with the limit named, unless it carries a
+valid single-use consent token issued out of band by an operator action.
 
-Any request outside these limits SHALL be refused with the limit named, unless
-it carries a valid single-use consent token issued out of band by an operator
-action.
+#### Scenario: a forge tries to start a forge directly
+
+- **WHEN** a forge attempts to launch another forge without going through
+  `agent.spawn`
+- **THEN** it has no means to: the forge holds no podman or VM access, and only
+  the host broker can start a forge
+
+### Requirement: agent.spawn without consent stays within operator-set limits
+
+Without consent the broker SHALL only use a harness the host already holds a
+sign-in for and a model on that harness's allowlist, target the parent's
+project or its declared sibling group, run at depth 1, stay within the per-host
+concurrency and lifetime limits, and use the host's existing git identity,
+pushing only to work refs.
 
 #### Scenario: a child tries to spawn
 
