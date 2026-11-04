@@ -123,6 +123,7 @@ mod macos_main {
             nvram: args.nvram.clone(),
             serial_writer_fd: None,
             entropy: true,
+            identity: None,
         };
         let cfg = match build_vm_configuration(&spec) {
             Ok(c) => c,
