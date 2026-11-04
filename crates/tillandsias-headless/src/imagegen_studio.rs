@@ -133,7 +133,9 @@ pub fn run_args(
         "--hostname".to_string(),
         "studio".to_string(),
         // 1985-stdu: its own project's network, never the shared enclave.
-        format!("--network={}", network_name(project)),
+        // 1986-snpx: `studio` on the project's network, one name per project
+        // network, so the forge reaches it by a name no_proxy can list.
+        format!("--network={}:alias=studio", network_name(project)),
         "--cap-drop=ALL".to_string(),
         "--security-opt=no-new-privileges".to_string(),
         "--security-opt=label=disable".to_string(),
@@ -330,7 +332,7 @@ pub fn status_json(project: &str, running: bool) -> serde_json::Value {
     serde_json::json!({
         "running": running,
         "container": container_name(project),
-        "url": running.then(|| format!("http://{}:{STUDIO_PORT}", container_name(project))),
+        "url": running.then(|| format!("http://studio:{STUDIO_PORT}")),
         // 1985-stdu: the shared window: browser.open {url: window_url, dev: true}.
         "window_url": running.then(|| window_url(project)).flatten(),
         "how": if running {
@@ -453,7 +455,7 @@ mod tests {
         assert!(a.contains(&mount), "{a:?}");
         // 1985-stdu: its own project network, never the shared enclave.
         assert!(
-            a.contains(&"--network=tillandsias-studio-proj".to_string()),
+            a.contains(&"--network=tillandsias-studio-proj:alias=studio".to_string()),
             "{a:?}"
         );
         assert!(
@@ -552,7 +554,7 @@ mod tests {
         let r = start_on_demand("p", &|| up.get(), &mut launch).unwrap();
         assert_eq!(r["started"], false);
         assert_eq!(launches.get(), 1, "exactly one studio");
-        assert_eq!(r["url"], "http://tillandsias-p-studio:8188");
+        assert_eq!(r["url"], "http://studio:8188");
         let mut fails = || Err("no image".to_string());
         let e = start_on_demand("q", &|| false, &mut fails).unwrap_err();
         assert!(e.starts_with("studio_start_failed:"), "{e}");
