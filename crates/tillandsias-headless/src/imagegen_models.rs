@@ -210,6 +210,15 @@ pub fn manifest_digest() -> String {
 }
 
 pub fn manifest() -> Vec<ModelFile> {
+    // 1991-dovl: a dev build appends overlay pins (read per call). They still
+    // run only when the compiled-in licence register admits them. An overlay
+    // that does not parse is ignored, loudly, never half-applied.
+    if let Some(extra) = crate::dev_overlay::read(crate::dev_overlay::MODELS) {
+        match parse_manifest(&crate::dev_overlay::append(MODELS_TSV, Some(extra))) {
+            Ok(rows) => return rows,
+            Err(e) => eprintln!("[tillandsias] dev overlay models.tsv ignored: {e}"),
+        }
+    }
     parse_manifest(MODELS_TSV).expect("images/imagegen/models.tsv parses (fixture-checked)")
 }
 
