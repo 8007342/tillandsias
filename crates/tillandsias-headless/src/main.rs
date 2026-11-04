@@ -17986,15 +17986,65 @@ fn opencode_web_http_status(url: &str, cookie_header: Option<String>) -> Result<
     })
 }
 
+/// ORDER 1989-owrd: how long an OpenCode Web wait keeps going while the forge
+/// still runs. A cold forge (the opencode binary's first run from the
+/// project cache) answered ~41 s after start on lenovinha 2026-11-04, past the
+/// old fixed 30 s, which failed a healthy launch.
+const OPENCODE_WEB_BUDGET: Duration = Duration::from_secs(300);
+/// How often the waits re-read the forge container's state.
+const OPENCODE_WEB_FORGE_CHECK: Duration = Duration::from_secs(3);
+
+/// 1989-owrd: one decision of an OpenCode Web wait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WebWait {
+    KeepWaiting,
+    /// The forge container is no longer running: fail now, not at the budget.
+    ForgeGone,
+    /// The budget passed while the forge still ran.
+    OutOfTime,
+}
+
+/// The pure rule: wait while the forge runs and the budget lasts.
+fn web_wait_step(elapsed: Duration, budget: Duration, forge_running: bool) -> WebWait {
+    if !forge_running {
+        WebWait::ForgeGone
+    } else if elapsed >= budget {
+        WebWait::OutOfTime
+    } else {
+        WebWait::KeepWaiting
+    }
+}
+
+/// Whether the forge container runs (re-read every OPENCODE_WEB_FORGE_CHECK).
+fn forge_still_running(forge_container: &str) -> bool {
+    let mut cmd = tillandsias_podman::podman_cmd_sync();
+    cmd.args(["inspect", "--format", "{{.State.Running}}", forge_container]);
+    cmd.output_bounded(Duration::from_secs(10))
+        .ok()
+        .filter(|o| o.status.success())
+        .is_some_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "true")
+}
+
 fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
     let mut last_outcome = String::from("no HTTP probe attempted");
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(2);
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
     let mut attempt = 1;
+    let forge_container = forge_container_name(project_name);
+    let mut forge_running = true;
+    let mut checked = std::time::Instant::now();
 
-    while start.elapsed() < timeout {
+    // 1989-owrd: wait while the forge runs (cold start), fail fast if it stops.
+    let verdict = loop {
+        if checked.elapsed() >= OPENCODE_WEB_FORGE_CHECK {
+            forge_running = forge_still_running(&forge_container);
+            checked = std::time::Instant::now();
+        }
+        match web_wait_step(start.elapsed(), OPENCODE_WEB_BUDGET, forge_running) {
+            WebWait::KeepWaiting => {}
+            other => break other,
+        }
         match opencode_web_http_status(url, None) {
             Ok(401) => return Ok(()),
             Ok(502) => {
@@ -18025,12 +18075,18 @@ fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Re
         std::thread::sleep(backoff);
         backoff = (backoff * 2).min(max_backoff);
         attempt += 1;
-    }
+    };
 
-    let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
+    let why = match verdict {
+        WebWait::ForgeGone => format!("the forge container {forge_container} stopped"),
+        _ => format!(
+            "{} s passed while the forge still ran",
+            OPENCODE_WEB_BUDGET.as_secs()
+        ),
+    };
     Err(format!(
-        "OpenCode Web auth gate did not become ready in 30s.\n\
+        "OpenCode Web auth gate did not become ready ({why}).\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -18060,10 +18116,21 @@ fn wait_for_authenticated_opencode_web(
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(2);
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
     let mut attempt = 1;
+    let forge_container = forge_container_name(project_name);
+    let mut forge_running = true;
+    let mut checked = std::time::Instant::now();
 
-    while start.elapsed() < timeout {
+    // 1989-owrd: wait while the forge runs (cold start), fail fast if it stops.
+    let verdict = loop {
+        if checked.elapsed() >= OPENCODE_WEB_FORGE_CHECK {
+            forge_running = forge_still_running(&forge_container);
+            checked = std::time::Instant::now();
+        }
+        match web_wait_step(start.elapsed(), OPENCODE_WEB_BUDGET, forge_running) {
+            WebWait::KeepWaiting => {}
+            other => break other,
+        }
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
             Ok(401) => {
@@ -18104,12 +18171,18 @@ fn wait_for_authenticated_opencode_web(
         std::thread::sleep(backoff);
         backoff = (backoff * 2).min(max_backoff);
         attempt += 1;
-    }
+    };
 
-    let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
+    let why = match verdict {
+        WebWait::ForgeGone => format!("the forge container {forge_container} stopped"),
+        _ => format!(
+            "{} s passed while the forge still ran",
+            OPENCODE_WEB_BUDGET.as_secs()
+        ),
+    };
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session in 30s.\n\
+        "OpenCode Web app did not become reachable with a registered session ({why}).\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -18117,6 +18190,48 @@ fn wait_for_authenticated_opencode_web(
          full transcript, then verify the enclave network + router are\n\
          healthy via `tillandsias --status`."
     ))
+}
+
+/// ORDER 1989-owrd: an OpenCode Web wait keeps going while the forge still
+/// runs (a cold forge answered ~41 s after start), fails at once when the
+/// forge is gone, and only then at the budget. Pre-fix: FAILS, both waits
+/// stopped at a fixed 30 s whatever the forge was doing.
+#[cfg(test)]
+#[test]
+fn an_opencode_web_wait_outlasts_a_cold_forge_and_fails_fast_when_it_stops() {
+    let cold = Duration::from_secs(41);
+    assert!(
+        OPENCODE_WEB_BUDGET > cold + Duration::from_secs(30),
+        "room for a cold start"
+    );
+    assert_eq!(
+        web_wait_step(Duration::from_secs(45), OPENCODE_WEB_BUDGET, true),
+        WebWait::KeepWaiting
+    );
+    assert_eq!(
+        web_wait_step(Duration::from_secs(2), OPENCODE_WEB_BUDGET, false),
+        WebWait::ForgeGone
+    );
+    assert_eq!(
+        web_wait_step(OPENCODE_WEB_BUDGET, OPENCODE_WEB_BUDGET, true),
+        WebWait::OutOfTime
+    );
+    let src = include_str!("main.rs");
+    let gate = src.split("fn wait_for_opencode_web_route(").nth(1).unwrap();
+    let gate = &gate[..gate.find("\n}\n").unwrap()];
+    assert!(
+        !gate.contains("Duration::from_secs(30)"),
+        "no fixed 30 s left in the route wait"
+    );
+    let app = src
+        .split("fn wait_for_authenticated_opencode_web(")
+        .nth(1)
+        .unwrap();
+    let app = &app[..app.find("\n}\n").unwrap()];
+    assert!(
+        !app.contains("Duration::from_secs(30)"),
+        "no fixed 30 s left in the app wait"
+    );
 }
 
 #[cfg(test)]
