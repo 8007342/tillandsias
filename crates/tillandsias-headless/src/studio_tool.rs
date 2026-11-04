@@ -59,6 +59,20 @@ pub const CUSTOM_NODES_TOML: &str =
 const MAX_COUNT: u32 = 16;
 
 /// Loader inputs whose value names a model file (D1 step 3).
+/// 1983-svid: the output nodes the studio forces under `studio/<job>/<i>` and
+/// returns. A video node (Wan) saves through the same history as images.
+pub const SAVE_CLASSES: &[&str] = &[
+    "SaveImage",
+    "SaveVideo",
+    "SaveWEBM",
+    "SaveAnimatedWEBP",
+    "SaveAnimatedPNG",
+];
+
+fn is_save_class(class: &str) -> bool {
+    SAVE_CLASSES.contains(&class)
+}
+
 pub const MODEL_INPUTS: &[&str] = &[
     "ckpt_name",
     "unet_name",
@@ -565,8 +579,11 @@ pub fn validate(
     for (_, class) in &classes {
         allow.admits(class)?;
     }
-    if !classes.iter().any(|(_, c)| c == "SaveImage") {
-        return Err("invalid_workflow: no SaveImage node, so the run would produce nothing".into());
+    if !classes.iter().any(|(_, c)| is_save_class(c)) {
+        return Err(format!(
+            "invalid_workflow: no output node ({}), so the run would produce nothing",
+            SAVE_CLASSES.join(", ")
+        ));
     }
     // 3. Every model file is a pinned, admitted row.
     let mut models: Vec<ModelFile> = Vec::new();
@@ -754,6 +771,33 @@ fn set_text(inputs: &mut serde_json::Map<String, Value>, text: &str) {
 
 /// Batch item `i` of `job`: overrides applied to the titled nodes only, seed
 /// `plan.seed + i`, and every SaveImage prefixed `studio/<job>/<i>` (D2).
+/// 1983-svid: what one output file is.
+enum OutputKind {
+    Image { w: u32, h: u32, alpha: bool },
+    Video,
+}
+
+/// A PNG is an image (its IHDR read); mp4, webm, an animated webp or gif is
+/// a video. Anything else is named, never silently accepted or dropped.
+fn output_kind(file: &str, bytes: &[u8]) -> Result<OutputKind, String> {
+    let ext = file.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    match ext.as_str() {
+        "png" => crate::imagegen_tool::png_facts(bytes)
+            .map(|(w, h, alpha)| OutputKind::Image { w, h, alpha })
+            .ok_or_else(|| format!("engine_failed: {file} is not a PNG")),
+        "mp4" | "webm" | "webp" | "gif" | "mov" | "mkv" => {
+            if bytes.is_empty() {
+                Err(format!("engine_failed: {file} is empty"))
+            } else {
+                Ok(OutputKind::Video)
+            }
+        }
+        other => Err(format!(
+            "engine_failed: {file} is an unexpected output type ({other}); the studio returns png images and mp4/webm/webp/gif videos"
+        )),
+    }
+}
+
 /// 1973-prvc: the record shared by every output, said once. `verbose` keeps
 /// the full first record (the pre-1973 shape); otherwise only the fields an
 /// agent reads to know what ran: workflow, models, tier, placement.
@@ -781,7 +825,7 @@ pub fn prompt_for(plan: &Plan, job: &str, i: u32) -> Value {
         .as_object()
         .expect("object")
         .values()
-        .filter(|n| n["class_type"] == "SaveImage")
+        .filter(|n| n["class_type"].as_str().is_some_and(is_save_class))
         .count();
     for (id, node) in p.as_object_mut().expect("object").iter_mut() {
         let title = title_of(node).map(str::to_string);
@@ -808,7 +852,7 @@ pub fn prompt_for(plan: &Plan, job: &str, i: u32) -> Value {
             }
             _ => {}
         }
-        if class == "SaveImage" {
+        if is_save_class(&class) {
             inputs.insert(
                 "filename_prefix".into(),
                 json!(if saves > 1 {
@@ -1050,7 +1094,10 @@ pub fn call(
     }
     let elapsed = t0.elapsed().as_secs_f64();
     if produced.is_empty() {
-        return Err("engine_failed: the workflow finished but produced no output image".into());
+        return Err(
+            "engine_failed: the workflow finished but produced no output file (image or video)"
+                .into(),
+        );
     }
 
     let verbose = args.get("verbose").and_then(Value::as_bool) == Some(true);
@@ -1060,8 +1107,9 @@ pub fn call(
         let host = scratch.join(sub).join(file);
         let bytes = std::fs::read(&host)
             .map_err(|e| format!("engine_failed: no output {sub}/{file}: {e}"))?;
-        let (w, h, alpha) = crate::imagegen_tool::png_facts(&bytes)
-            .ok_or_else(|| format!("engine_failed: {file} is not a PNG"))?;
+        // 1983-svid: a video output (Wan SaveVideo/SaveWEBM, an animated WEBP)
+        // is returned like an image, never dropped and never a "not a PNG" failure.
+        let kind = output_kind(file, &bytes)?;
         let record = provenance::Record {
             engine: provenance::Engine::ComfyUi {
                 nodes: allow.pinned(),
@@ -1088,14 +1136,24 @@ pub fn call(
         };
         let prov = record.write_beside(&host)?;
         let forge = format!("{FORGE_SCRATCH}/{sub}/{file}");
-        outputs.push(json!({
+        let mut out = json!({
             "path": forge,
-            "width": w,
-            "height": h,
-            "has_alpha": alpha,
             "seed": plan.seed + u64::from(*i),
             "provenance_path": format!("{forge}.provenance.json"),
-        }));
+        });
+        match kind {
+            OutputKind::Image { w, h, alpha } => {
+                out["kind"] = json!("image");
+                out["width"] = json!(w);
+                out["height"] = json!(h);
+                out["has_alpha"] = json!(alpha);
+            }
+            OutputKind::Video => {
+                out["kind"] = json!("video");
+                out["bytes"] = json!(bytes.len());
+            }
+        }
+        outputs.push(out);
         // 1973-prvc: the full record lives in the sidecar; inline only on ask.
         if verbose {
             outputs.last_mut().expect("pushed")["provenance"] = prov.clone();
@@ -1521,6 +1579,13 @@ mod tests {
         let mut layer_bad = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
         layer_bad["14"] = json!({"class_type":"LayeredDiffusionApply","inputs":{"model":["1",0],"config":"SD15, Attention Injection","weight":1.0}});
         std::fs::write(wf.join("layer_bad.api.json"), layer_bad.to_string()).unwrap();
+        // 1983-svid: a video-only workflow, and one with an image and a video.
+        let mut video = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        video["9"] = json!({"class_type":"SaveWEBM","inputs":{"filename_prefix":"v","images":["8",0],"codec":"vp9","fps":16.0,"crf":32.0}});
+        std::fs::write(wf.join("video_only.api.json"), video.to_string()).unwrap();
+        let mut mixed = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
+        mixed["13"] = json!({"class_type":"SaveWEBM","inputs":{"filename_prefix":"v","images":["8",0],"codec":"vp9","fps":16.0,"crf":32.0}});
+        std::fs::write(wf.join("mixed.api.json"), mixed.to_string()).unwrap();
         let mut rembg = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
         rembg["12"] = json!({"class_type":"LoadRembgByBiRefNetModel",
                              "inputs":{"model":"model.safetensors","device":"AUTO"}});
@@ -1571,17 +1636,27 @@ mod tests {
             // by two nodes writes the same file twice here (1972-stfx).
             let mut images = Vec::new();
             for node in prompt.as_object().unwrap().values() {
-                if node["class_type"] != "SaveImage" {
+                let class = node["class_type"].as_str().unwrap_or("");
+                if !is_save_class(class) {
                     continue;
                 }
                 let prefix = node["inputs"]["filename_prefix"].as_str().unwrap();
                 let (sub, stem) = prefix.rsplit_once('/').unwrap();
                 let dir = out_dir.join(sub);
                 std::fs::create_dir_all(&dir).unwrap();
-                let name = format!("{stem}_00001_.png");
-                image::RgbaImage::new(64, 64)
-                    .save(dir.join(&name))
-                    .map_err(|e| e.to_string())?;
+                // 1983-svid: a video node writes a .webm, as ComfyUI does.
+                let name = if class == "SaveImage" {
+                    let n = format!("{stem}_00001_.png");
+                    image::RgbaImage::new(64, 64)
+                        .save(dir.join(&n))
+                        .map_err(|e| e.to_string())?;
+                    n
+                } else {
+                    let n = format!("{stem}_00001_.webm");
+                    std::fs::write(dir.join(&n), b"\x1aE\xdf\xa3 webm bytes")
+                        .map_err(|e| e.to_string())?;
+                    n
+                };
                 images.push((sub.to_string(), name));
             }
             Ok(RunOut {
@@ -1769,6 +1844,62 @@ mod tests {
             e.starts_with("model_refused:") && e.contains("SDXL, Conv Injection"),
             "{e}"
         );
+    }
+
+    /// 1983-svid: a video output is returned like an image (kind video, its
+    /// path and sidecar), and a run whose only output is a video succeeds
+    /// WITH it. Pre-fix: FAILS, a workflow with no SaveImage was refused
+    /// (invalid_workflow), and a video file failed the run as "not a PNG".
+    #[test]
+    fn a_video_output_is_returned_and_a_video_only_run_is_not_empty() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("svid-proj", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let run = |wf: &str| {
+            call(
+                "svid-proj",
+                "a",
+                &json!({"workflow":format!("tool/art/workflows/{wf}"),"inputs":{"pose":pose}}),
+                &mut |_| {},
+            )
+        };
+        let only = run("video_only.api.json");
+        let mixed = run("mixed.api.json");
+        install_seam(None);
+
+        let only = only.unwrap_or_else(|e| panic!("video-only: {e}"));
+        let outs = only["outputs"].as_array().unwrap();
+        assert_eq!(outs.len(), 1, "{only}");
+        assert_eq!(outs[0]["kind"], "video");
+        let p = outs[0]["path"].as_str().unwrap();
+        assert!(p.ends_with(".webm") && p.contains("/studio/"), "{p}");
+        assert!(outs[0]["bytes"].as_u64().unwrap() > 0);
+        assert!(outs[0]["provenance_path"].is_string());
+
+        let mixed = mixed.unwrap_or_else(|e| panic!("mixed: {e}"));
+        let kinds: Vec<&str> = mixed["outputs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["kind"].as_str().unwrap())
+            .collect();
+        assert!(
+            kinds.contains(&"image") && kinds.contains(&"video"),
+            "{kinds:?}"
+        );
+    }
+
+    /// An unexpected output type is named, never accepted or dropped.
+    #[test]
+    fn an_unexpected_output_type_fails_by_name() {
+        assert!(matches!(output_kind("a.png", b"not a png"), Err(e) if e.contains("not a PNG")));
+        assert!(matches!(output_kind("a.webm", b""), Err(e) if e.contains("empty")));
+        assert!(
+            matches!(output_kind("a.exr", b"x"), Err(e) if e.contains("unexpected output type (exr)"))
+        );
+        assert!(matches!(output_kind("a.mp4", b"x"), Ok(OutputKind::Video)));
     }
 
     /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the

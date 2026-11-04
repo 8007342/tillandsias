@@ -19685,6 +19685,16 @@ pub(crate) fn ensure_enclave_for_project(
         ),
     }
 
+    // 1978-zd9g: a GitHub remote with no token in Vault refuses here, before
+    // any git container starts, instead of seeding a mirror that cannot fetch.
+    #[cfg(feature = "vault")]
+    cloud_launch_token_gate(project_remote_url.as_deref(), || {
+        use crate::vault_bootstrap::GitHubTokenStore;
+        crate::vault_bootstrap::VaultGitHubTokenStore { debug }
+            .read_bundle()
+            .map(|b| b.is_some())
+    })?;
+
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     let mirror_identity = rt.block_on(async {
@@ -19781,6 +19791,35 @@ pub(crate) fn ensure_enclave_for_project(
     crate::vault_bootstrap::spawn_cloudflare_token_rotation_scheduler(debug);
 
     Ok((certs_dir, mirror_identity))
+}
+
+/// 1978-zd9g. The one refusal a cloud launch gives when GitHub is signed out.
+const CLOUD_LAUNCH_SIGN_IN_REMEDY: &str = "refused:forge-launch:github-sign-in-required: \
+     no GitHub token in Vault (secret/github/token is absent), so the git mirror \
+     cannot fetch this project. The forge was not started. Remedy: sign in to \
+     GitHub from the tray (GitHub Login), then launch again.";
+
+/// 1978-zd9g. Whether a launch may bring its mirror up. A GitHub remote with
+/// no token is refused once, here; before this the mirror was started anyway
+/// and every vault-cli read answered 404 (13 times in 3 minutes on yolanda,
+/// 2026-11-03) until the launch hung with no message. A remote that is not
+/// GitHub, or no remote, needs no token. An unreachable Vault is not the
+/// signed-out case and is left to the Vault gate that already names it.
+#[cfg_attr(not(feature = "vault"), allow(dead_code))]
+fn cloud_launch_token_gate(
+    remote_url: Option<&str>,
+    token_present: impl FnOnce() -> Result<bool, String>,
+) -> Result<(), String> {
+    let Some(url) = remote_url else {
+        return Ok(());
+    };
+    if !url.contains("github.com") {
+        return Ok(());
+    }
+    match token_present() {
+        Ok(false) => Err(CLOUD_LAUNCH_SIGN_IN_REMEDY.to_string()),
+        Ok(true) | Err(_) => Ok(()),
+    }
 }
 
 /// 1956-4pxj: one launch at a time decides whether a project's git mirror is
@@ -35208,6 +35247,60 @@ esac
         assert!(
             msg.ends_with("tillandsias --cloud <owner>/<repo> --claude"),
             "{msg}"
+        );
+    }
+
+    /// 1978-zd9g: a GitHub remote with no token refuses with the tray sign-in
+    /// remedy; the token's presence, another forge, or no remote passes.
+    #[test]
+    fn cloud_launch_without_a_github_token_refuses_with_the_sign_in_remedy() {
+        let gh = Some("https://github.com/8007342/smoke-e2e.git");
+        let err = cloud_launch_token_gate(gh, || Ok(false)).unwrap_err();
+        assert!(
+            err.starts_with("refused:forge-launch:github-sign-in-required:"),
+            "{err}"
+        );
+        assert!(err.contains("sign in to GitHub from the tray"), "{err}");
+        assert!(err.contains("The forge was not started"), "{err}");
+        assert!(cloud_launch_token_gate(gh, || Ok(true)).is_ok());
+        assert!(cloud_launch_token_gate(gh, || Err("vault-unreachable".into())).is_ok());
+        let mut asked = false;
+        assert!(
+            cloud_launch_token_gate(None, || {
+                asked = true;
+                Ok(false)
+            })
+            .is_ok()
+        );
+        assert!(!asked, "no remote must not read Vault");
+        assert!(cloud_launch_token_gate(Some("https://gitlab.com/a/b.git"), || Ok(false)).is_ok());
+    }
+
+    /// 1978-zd9g: the gate runs before the mirror is brought up, so a signed-out
+    /// launch starts no git container and exits on the refusal, not a wait.
+    #[test]
+    fn cloud_launch_token_gate_precedes_the_mirror_bring_up() {
+        let dir = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        );
+        let source = std::fs::read_to_string(dir.join("src/main.rs")).expect("read main.rs");
+        let window = source_window(&source, "pub(crate) fn ensure_enclave_for_project(");
+        let gate = window
+            .find("cloud_launch_token_gate(project_remote_url.as_deref()")
+            .expect("ensure_enclave_for_project must gate on the GitHub token");
+        let lock = window
+            .find("acquire_mirror_bringup_lock(project_name, debug)")
+            .expect("ensure_enclave_for_project brings the mirror up");
+        let mirror = window
+            .find("ensure_shared_git_and_inference_for_launch(")
+            .expect("ensure_enclave_for_project starts the mirror");
+        assert!(
+            gate < lock && gate < mirror,
+            "the token gate must precede the mirror"
+        );
+        assert!(
+            window[gate..lock].contains("})?;"),
+            "the refusal must propagate"
         );
     }
 
