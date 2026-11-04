@@ -1075,6 +1075,16 @@ pub fn start_mcp_socket_server() -> Result<(), String> {
 fn spawn_lane_adoption() {
     static STARTED: std::sync::Once = std::sync::Once::new();
     STARTED.call_once(|| {
+        // 1991-dovl: say which dev overlay files are active, so they get
+        // made durable (committed) and deleted. A release build has none.
+        let overlay = crate::dev_overlay::active_entries();
+        if !overlay.is_empty() {
+            eprintln!(
+                "[tillandsias] WARNING: dev overlay active ({}): {}. Commit these into the tree and delete the overlay.",
+                crate::dev_overlay::dir().map(|d| d.display().to_string()).unwrap_or_default(),
+                overlay.join(", ")
+            );
+        }
         crate::mcp_socket::adopt_marked_lanes();
         let _ = std::thread::Builder::new()
             .name("lane-adoption".into())
