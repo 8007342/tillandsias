@@ -1409,7 +1409,7 @@ pub(crate) const LANE_TRAY_MARKER: &str = "tray-owned";
 pub(crate) const LANE_ADOPT_TICK: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Hand lane `(project, instance)` to the tray (see [`LANE_TRAY_MARKER`]).
-#[cfg_attr(any(test, not(feature = "host-services")), allow(dead_code))]
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), String> {
     let dir = mcp_socket_host_dir_for_lane(project, instance);
     fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {e}", dir.display()))?;
@@ -1418,6 +1418,29 @@ pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), 
         .map_err(|e| format!("failed to write {}: {e}", marker.display()))?;
     let _ = fs::set_permissions(&marker, fs::Permissions::from_mode(0o600));
     Ok(())
+}
+
+/// ORDER 1988-trkp: before a keep-forges exit, hand every lane this process
+/// serves to the next tray (the marker its adoption tick binds). Returns the
+/// lanes marked.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn mark_served_lanes_for_adoption() -> Vec<LaneListenerKey> {
+    let lanes: Vec<LaneListenerKey> = lane_listener_registry()
+        .lock()
+        .expect("lane registry lock")
+        .iter()
+        .cloned()
+        .collect();
+    lanes
+        .into_iter()
+        .filter(|(p, i)| match mark_lane_tray_owned(p, i) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(project = %p, instance = %i, error = %e, "1988-trkp: could not mark lane for adoption");
+                false
+            }
+        })
+        .collect()
 }
 
 fn lane_instance(instance: &str) -> &str {
