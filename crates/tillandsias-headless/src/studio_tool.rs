@@ -434,6 +434,19 @@ pub struct Plan {
     pub count: u32,
     pub tier: Option<String>,
     pub family: Option<(String, String)>,
+    /// 1986-snpx: every loader input resolved to a pinned file:
+    /// (node, class, input, the name as written, the row).
+    pub loader_inputs: Vec<(String, String, String, String, ModelFile)>,
+}
+
+/// 1986-snpx: what a refusal says about the table it read: the build of
+/// this tray and the digest of the models.tsv compiled into it.
+fn table_note() -> String {
+    format!(
+        "(this tray: build {}, models.tsv {}; a pin newer than this tray needs a tray rebuild)",
+        crate::mcp_socket::build_identity(),
+        imagegen_models::manifest_digest()
+    )
 }
 
 fn title_of(node: &Value) -> Option<&str> {
@@ -587,6 +600,7 @@ pub fn validate(
     }
     // 3. Every model file is a pinned, admitted row.
     let mut models: Vec<ModelFile> = Vec::new();
+    let mut loader_inputs: Vec<(String, String, String, String, ModelFile)> = Vec::new();
     for (id, node) in nodes {
         let inputs = node["inputs"].as_object().expect("checked above");
         let class = node["class_type"].as_str().unwrap_or("");
@@ -600,6 +614,14 @@ pub fn validate(
         if let Some(rows) = config_models(manifest, class, inputs) {
             for row in rows.map_err(|e| format!("{e} (node {id})"))? {
                 imagegen_models::register_admits(register, row)?;
+                // A config value names no file a loader lists: disk check only.
+                loader_inputs.push((
+                    id.clone(),
+                    String::new(),
+                    "config".into(),
+                    row.cache_name().to_string(),
+                    row.clone(),
+                ));
                 if !models.contains(row) {
                     models.push(row.clone());
                 }
@@ -618,12 +640,20 @@ pub fn validate(
                     format!(
                         "model_refused: node {id} {key}={named:?} is not a pinned file in its folders ({}); \
                          accepted here: {}. A model runs only when images/imagegen/models.tsv pins it and \
-                         images/models/licence-register.tsv admits it (the operator approves each licence)",
+                         images/models/licence-register.tsv admits it (the operator approves each licence) {}",
                         cats.join("/"),
-                        if accepted.is_empty() { "none".to_string() } else { accepted.join(", ") }
+                        if accepted.is_empty() { "none".to_string() } else { accepted.join(", ") },
+                        table_note()
                     )
                 })?;
                 imagegen_models::register_admits(register, row)?;
+                loader_inputs.push((
+                    id.clone(),
+                    class.to_string(),
+                    key.to_string(),
+                    named.to_string(),
+                    row.clone(),
+                ));
                 if !models.contains(row) {
                     models.push(row.clone());
                 }
@@ -754,6 +784,7 @@ pub fn validate(
         count: req.count,
         tier: req.tier.clone(),
         family: None,
+        loader_inputs,
     })
 }
 
@@ -892,6 +923,114 @@ pub trait StudioEngine: Send + Sync {
     ) -> Result<RunOut, String>;
     /// D3: unload the models so the next job, of either engine, starts empty.
     fn free(&self) -> Result<(), String>;
+
+    /// 1986-snpx: the names ComfyUI's loader `class` offers for `input`
+    /// (`/object_info/<class>`). `None`: this engine cannot say (a fixture),
+    /// so the check is skipped, never failed.
+    fn loader_options(&self, _class: &str, _input: &str) -> Option<Result<Vec<String>, String>> {
+        None
+    }
+
+    /// 1986-snpx: where this engine's pinned files live (`None` for a
+    /// fixture, which skips the on-disk check).
+    fn models_dir(&self) -> Option<PathBuf> {
+        None
+    }
+}
+
+/// 1986-snpx: the loaders `studio.models` asks ComfyUI about.
+const LISTED_LOADERS: &[(&str, &str)] = &[
+    ("CheckpointLoaderSimple", "ckpt_name"),
+    ("UNETLoader", "unet_name"),
+    ("VAELoader", "vae_name"),
+    ("CLIPLoader", "clip_name"),
+    ("LoraLoader", "lora_name"),
+    ("ControlNetLoader", "control_net_name"),
+    ("LoadRembgByBiRefNetModel", "model"),
+];
+
+/// `studio.models {}`, read-only: every pinned studio-reachable row and
+/// whether it is on disk, this tray's table (build and models.tsv digest, to
+/// compare with the checkout's images/imagegen/models.tsv), and, when the
+/// studio runs, what each of ComfyUI's loaders lists.
+pub fn models_listing(models_dir: &Path, engine: Option<&dyn StudioEngine>) -> Value {
+    let rows: Vec<Value> = imagegen_models::manifest()
+        .iter()
+        .filter(|m| m.tier.starts_with("I1") || m.role.starts_with("studio:"))
+        .map(|m| {
+            json!({
+                "folder": m.tier,
+                "file": m.cache_name(),
+                "role": m.role,
+                "licence": m.licence,
+                "on_disk": models_dir.join(&m.tier).join(m.cache_name()).is_file(),
+            })
+        })
+        .collect();
+    let comfyui = engine.map(|e| {
+        let mut m = serde_json::Map::new();
+        for (class, input) in LISTED_LOADERS {
+            let v = match e.loader_options(class, input) {
+                Some(Ok(list)) => json!(list),
+                Some(Err(err)) => json!({ "error": err }),
+                None => Value::Null,
+            };
+            m.insert(format!("{class}.{input}"), v);
+        }
+        Value::Object(m)
+    });
+    json!({
+        "tray_build": crate::mcp_socket::build_identity(),
+        "models_tsv": imagegen_models::manifest_digest(),
+        "compare": "sha256 (first 12) of the checkout's images/imagegen/models.tsv against models_tsv: a difference means this tray predates the pins (rebuild it)",
+        "rows": rows,
+        "comfyui": comfyui.unwrap_or(Value::Null),
+    })
+}
+
+/// The `studio.models` descriptor.
+pub fn models_descriptor() -> Value {
+    json!({
+        "name": "studio.models",
+        "description": "Read-only: the studio-reachable pinned model files (folder, file, licence, on disk), this tray's model table (build and models.tsv digest), and, when the studio runs, what each ComfyUI loader lists. Use it when a workflow is refused or a loader says 'not in []'.",
+        "inputSchema": { "type": "object", "properties": {} },
+    })
+}
+
+/// 1986-snpx: before anything queues, every resolved file is on disk and
+/// ComfyUI's loader lists it. Before this a pinned-but-unfetched file reached
+/// ComfyUI and failed there as "<file> not in []" (kumbia forge).
+pub fn precheck_models(engine: &dyn StudioEngine, plan: &Plan) -> Result<(), String> {
+    let models_dir = engine.models_dir();
+    for (node, class, input, named, row) in &plan.loader_inputs {
+        let on_disk = models_dir
+            .as_ref()
+            .map(|d| d.join(&row.tier).join(row.cache_name()));
+        if let Some(on_disk) = on_disk.filter(|p| !p.is_file()) {
+            return Err(format!(
+                "model_missing: node {node} {input}={named:?} is pinned ({}/{}) but not on disk at {} after the fetch",
+                row.tier,
+                row.cache_name(),
+                on_disk.display()
+            ));
+        }
+        if class.is_empty() {
+            continue;
+        }
+        if let Some(listed) = engine.loader_options(class, input) {
+            let listed = listed?;
+            if !listed.iter().any(|l| l == named) {
+                let shown: Vec<&str> = listed.iter().take(8).map(String::as_str).collect();
+                return Err(format!(
+                    "model_not_visible: node {node} {class}.{input}={named:?} is on disk, but the studio's loader lists [{}]{}; \
+                     restart the studio (its folder map is read at start) or write the name as listed",
+                    shown.join(", "),
+                    if listed.len() > 8 { ", ..." } else { "" }
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Fixture seam: a stub engine, a scratch root and a project checkout.
@@ -1053,6 +1192,8 @@ pub fn call(
     }
     // Admitted files the cache lacks are fetched now, before the GPU turn.
     engine.ensure_models(&plan.models, progress)?;
+    // 1986-snpx: fail before queueing, never inside ComfyUI.
+    precheck_models(engine.as_ref(), &plan)?;
 
     let job = job_id();
     let t0 = Instant::now();
@@ -1435,6 +1576,27 @@ impl StudioEngine for HttpStudio {
             &mut |e| progress(Progress::Fetch(e)),
         )
         .map(|_| ())
+    }
+
+    fn models_dir(&self) -> Option<PathBuf> {
+        Some(self.models_dir.clone())
+    }
+
+    /// `/object_info/<class>`: the option list of `input` (required or
+    /// optional), ComfyUI's own view of what the loader can load.
+    fn loader_options(&self, class: &str, input: &str) -> Option<Result<Vec<String>, String>> {
+        let info = match self.json("GET", &format!("/object_info/{class}"), None) {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e)),
+        };
+        let spec = &info[class]["input"];
+        let list = spec["required"][input][0]
+            .as_array()
+            .or_else(|| spec["optional"][input][0].as_array())?;
+        Some(Ok(list
+            .iter()
+            .filter_map(|v| v.as_str().map(str::to_string))
+            .collect()))
     }
 
     fn run(
@@ -1900,6 +2062,143 @@ mod tests {
             matches!(output_kind("a.exr", b"x"), Err(e) if e.contains("unexpected output type (exr)"))
         );
         assert!(matches!(output_kind("a.mp4", b"x"), Ok(OutputKind::Video)));
+    }
+
+    /// An engine that reports a models dir and a fixed loader list.
+    struct Picky {
+        inner: Stub,
+        dir: PathBuf,
+        listed: Vec<String>,
+    }
+    impl StudioEngine for Picky {
+        fn ensure_models(
+            &self,
+            f: &[ModelFile],
+            p: &mut dyn FnMut(Progress),
+        ) -> Result<(), String> {
+            self.inner.ensure_models(f, p)
+        }
+        fn run(
+            &self,
+            prompt: &Value,
+            out: &Path,
+            p: &mut dyn FnMut(Progress),
+        ) -> Result<RunOut, String> {
+            self.inner.run(prompt, out, p)
+        }
+        fn free(&self) -> Result<(), String> {
+            self.inner.free()
+        }
+        fn models_dir(&self) -> Option<PathBuf> {
+            Some(self.dir.clone())
+        }
+        fn loader_options(&self, _c: &str, _i: &str) -> Option<Result<Vec<String>, String>> {
+            Some(Ok(self.listed.clone()))
+        }
+    }
+
+    /// ORDER 1986-snpx (kumbia): a pinned file that is not on disk, or that the
+    /// studio's loader does not list, fails BEFORE anything queues, by name.
+    /// Pre-fix: FAILS, the workflow reached ComfyUI ("<file> not in []").
+    #[test]
+    fn a_pinned_file_absent_or_unlisted_fails_before_queueing() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("snp2-pre", "a");
+        let models = tempfile::tempdir_in(fx.scratch_root.parent().unwrap()).unwrap();
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let args = json!({"workflow":"tool/art/workflows/ok.api.json","inputs":{"pose":pose}});
+        let row = imagegen_models::manifest()
+            .into_iter()
+            .find(|m| m.cache_name() == I1_CKPT)
+            .unwrap();
+        let go = |listed: Vec<String>| {
+            let engine = Arc::new(Picky {
+                inner: Stub::default(),
+                dir: models.path().to_path_buf(),
+                listed,
+            });
+            install(&fx, engine.clone());
+            let r = call("snp2-pre", "a", &args, &mut |_| {});
+            (r, engine.inner.runs.load(SeqCst))
+        };
+        // Not on disk: refused, nothing ran.
+        let (r, runs) = go(vec![I1_CKPT.to_string()]);
+        let e = r.unwrap_err();
+        assert!(
+            e.starts_with("model_missing:") && e.contains(I1_CKPT),
+            "{e}"
+        );
+        assert_eq!(runs, 0);
+        // On disk, but the loader does not list it: refused, nothing ran.
+        std::fs::create_dir_all(models.path().join(&row.tier)).unwrap();
+        std::fs::write(models.path().join(&row.tier).join(row.cache_name()), b"w").unwrap();
+        let (r, runs) = go(vec!["something_else.safetensors".into()]);
+        let e = r.unwrap_err();
+        assert!(
+            e.starts_with("model_not_visible:") && e.contains("something_else"),
+            "{e}"
+        );
+        assert_eq!(runs, 0);
+        // Both: it runs.
+        let (r, runs) = go(vec![I1_CKPT.to_string()]);
+        install_seam(None);
+        r.unwrap_or_else(|e| panic!("{e}"));
+        assert!(runs > 0);
+    }
+
+    /// ORDER 1986-snpx: studio.models lists pinned rows with their on-disk
+    /// state, this tray's table, and what the studio's loaders list.
+    #[test]
+    fn studio_models_lists_pins_disk_state_and_loader_views() {
+        let dir = tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let row = imagegen_models::manifest()
+            .into_iter()
+            .find(|m| m.cache_name() == I1_CKPT)
+            .unwrap();
+        std::fs::create_dir_all(dir.path().join(&row.tier)).unwrap();
+        std::fs::write(dir.path().join(&row.tier).join(row.cache_name()), b"w").unwrap();
+        let engine = Picky {
+            inner: Stub::default(),
+            dir: dir.path().to_path_buf(),
+            listed: vec![I1_CKPT.into()],
+        };
+        let v = models_listing(dir.path(), Some(&engine));
+        assert_eq!(v["models_tsv"], imagegen_models::manifest_digest());
+        let rows = v["rows"].as_array().unwrap();
+        let ckpt = rows
+            .iter()
+            .find(|r| r["file"] == I1_CKPT)
+            .expect("the I1 checkpoint is listed");
+        assert_eq!(ckpt["on_disk"], true);
+        assert!(
+            rows.iter().any(|r| r["on_disk"] == false),
+            "absent files say so"
+        );
+        assert_eq!(v["comfyui"]["CheckpointLoaderSimple.ckpt_name"][0], I1_CKPT);
+        // Without a running studio there is no loader view.
+        assert!(models_listing(dir.path(), None)["comfyui"].is_null());
+    }
+
+    /// ORDER 1986-snpx: a refusal names this tray's build and table digest, so
+    /// a stale tray does not read as a licence refusal.
+    #[test]
+    fn a_model_refusal_names_the_trays_table() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("snp2-note", "a");
+        install(&fx, Arc::new(Stub::default()));
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let e = call(
+            "snp2-note",
+            "a",
+            &json!({"workflow":"tool/art/workflows/unregistered.api.json","inputs":{"pose":pose}}),
+            &mut |_| {},
+        )
+        .unwrap_err();
+        install_seam(None);
+        assert!(
+            e.contains(&imagegen_models::manifest_digest()) && e.contains("tray rebuild"),
+            "{e}"
+        );
     }
 
     /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the

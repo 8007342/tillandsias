@@ -4991,8 +4991,8 @@ mod tests {
         assert_eq!(
             tools.len() - cloudflare,
             // 1966-47vt: + cloud.usage when the store is built in.
-            if cfg!(feature = "vault") { 44 } else { 43 },
-            "5 preview.* + toolchain.prepare + image.generate + 6 studio.* (1969-cfyt: + studio.start, studio.status) + 13 browser.* + 4 webstudio.* + tillandsias.index + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
+            if cfg!(feature = "vault") { 45 } else { 44 },
+            "5 preview.* + toolchain.prepare + image.generate + 7 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models) + 13 browser.* + 4 webstudio.* + tillandsias.index + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5063,8 +5063,8 @@ mod tests {
             assert_eq!(
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
-                if cfg!(feature = "vault") { 44 } else { 43 },
-                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 6 studio.* (1969-cfyt: + studio.start, studio.status), 13 browser.*, 4 webstudio.*, tillandsias.index, the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
+                if cfg!(feature = "vault") { 45 } else { 44 },
+                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 7 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models), 13 browser.*, 4 webstudio.*, tillandsias.index, the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5558,7 +5558,7 @@ mod tests {
             assert_eq!(
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
-                if cfg!(feature = "vault") { 44 } else { 43 },
+                if cfg!(feature = "vault") { 45 } else { 44 },
                 "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
             );
 
