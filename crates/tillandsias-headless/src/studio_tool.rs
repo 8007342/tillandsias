@@ -1172,12 +1172,59 @@ fn job_id() -> String {
 }
 
 /// The tool call. `progress` receives each event as it happens.
+/// ORDER 1990-stwt: where one run_workflow call's wall time goes, stage by
+/// stage, so time outside `elapsed_s` (which starts at the GPU wait) is
+/// measured, not guessed.
+struct Stages {
+    start: Instant,
+    last: Instant,
+    marks: Vec<(String, u64)>,
+}
+
+impl Stages {
+    fn new() -> Self {
+        let now = Instant::now();
+        Stages {
+            start: now,
+            last: now,
+            marks: Vec::new(),
+        }
+    }
+    /// Close the stage that just ended.
+    fn mark(&mut self, name: impl Into<String>) {
+        let now = Instant::now();
+        self.marks.push((
+            name.into(),
+            now.duration_since(self.last).as_millis() as u64,
+        ));
+        self.last = now;
+    }
+    fn json(&self) -> Value {
+        let mut m = serde_json::Map::new();
+        for (k, v) in &self.marks {
+            m.insert(k.clone(), json!(v));
+        }
+        Value::Object(m)
+    }
+    fn total_ms(&self) -> u64 {
+        self.start.elapsed().as_millis() as u64
+    }
+    fn line(&self) -> String {
+        self.marks
+            .iter()
+            .map(|(k, v)| format!("{k}={v}ms"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 pub fn call(
     project: &str,
     instance: &str,
     args: &Value,
     progress: &mut dyn FnMut(Progress),
 ) -> Result<Value, String> {
+    let mut stages = Stages::new();
     let req = parse_request(args)?;
     let engine: Arc<dyn StudioEngine> = match seam()
         .lock()
@@ -1187,6 +1234,7 @@ pub fn call(
         Some(e) => e,
         None => Arc::new(HttpStudio::for_this_host(project)?),
     };
+    stages.mark("connect");
     let scratch = scratch_dir(project, instance)?;
     let workflow_json = read_checkout_file(project, instance, &req.workflow)?;
     let allow = Allowlist::shipped();
@@ -1203,15 +1251,19 @@ pub fn call(
         let spec = read_checkout_file(project, instance, fam)?;
         plan.family = Some((fam.clone(), provenance::sha256_hex(spec.as_bytes())));
     }
+    stages.mark("read_validate");
     // Admitted files the cache lacks are fetched now, before the GPU turn.
     engine.ensure_models(&plan.models, progress)?;
+    stages.mark("fetch");
     // 1986-snpx: fail before queueing, never inside ComfyUI.
     precheck_models(engine.as_ref(), &plan)?;
+    stages.mark("precheck");
 
     let job = job_id();
     let t0 = Instant::now();
     // D3: one GPU queue per host; the turn covers the prompts, then /free.
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
+    stages.mark("gpu_wait");
     // 1971-3erz: a studio job takes the device; the resident image engine yields.
     #[cfg(feature = "host-services")]
     crate::imagegen_warm::release("a studio job takes the GPU");
@@ -1219,12 +1271,15 @@ pub fn call(
     // resident LLM when free VRAM is short.
     let need: u64 = plan.models.iter().map(|m| m.bytes).sum::<u64>() + (1 << 30);
     let evicted = gpu_queue::arbiter().admit(need);
+    stages.mark("vram_admit");
     let mut produced: Vec<(u32, String, String)> = Vec::new();
     let mut placement = String::from("unknown");
     let mut failure = None;
     for i in 0..plan.count {
         let prompt = prompt_for(&plan, &job, i);
-        match engine.run(&prompt, &scratch, progress) {
+        let ran = engine.run(&prompt, &scratch, progress);
+        stages.mark(format!("run_{i}"));
+        match ran {
             Ok(out) => {
                 placement = out.placement;
                 produced.extend(out.images.into_iter().map(|(s, f)| (i, s, f)));
@@ -1239,6 +1294,7 @@ pub fn call(
         }
     }
     let freed = engine.free();
+    stages.mark("free");
     drop(turn);
     if let Some(e) = failure {
         return Err(e);
@@ -1314,6 +1370,13 @@ pub fn call(
         }
         summary.get_or_insert(prov);
     }
+    stages.mark("outputs");
+    // 1990-stwt: one line per job, so the stage split is in the tray log.
+    eprintln!(
+        "[tillandsias] studio job {job} stages: {} total={}ms",
+        stages.line(),
+        stages.total_ms()
+    );
     Ok(json!({
         "job": job,
         "evicted_holders": evicted.iter().map(gpu_queue::Evicted::to_json).collect::<Vec<_>>(),
@@ -1329,6 +1392,9 @@ pub fn call(
         "count": plan.count,
         "tier": plan.tier,
         "elapsed_s": (elapsed * 100.0).round() / 100.0,
+        // 1990-stwt: the whole call, and each stage's share of it.
+        "total_ms": stages.total_ms(),
+        "stages_ms": stages.json(),
         "ephemeral": true,
         "note": EPHEMERAL_NOTE,
     }))
@@ -1618,6 +1684,8 @@ impl StudioEngine for HttpStudio {
         _out_dir: &Path,
         progress: &mut dyn FnMut(Progress),
     ) -> Result<RunOut, String> {
+        // 1990-stwt: the transport's share of a prompt (queue call, polls).
+        let t_queue = Instant::now();
         let queued = self.json(
             "POST",
             "/prompt",
@@ -1628,9 +1696,15 @@ impl StudioEngine for HttpStudio {
             .ok_or_else(|| format!("engine_failed: studio rejected the workflow: {queued}"))?
             .to_string();
         let total = prompt.as_object().map_or(1, |o| o.len() as u32).max(1);
+        let queue_ms = t_queue.elapsed().as_millis();
         let started = Instant::now();
+        let mut polls: u32 = 0;
+        let mut poll_ms: u128 = 0;
         loop {
+            let t_poll = Instant::now();
             let hist = self.json("GET", &format!("/history/{id}"), None)?;
+            polls += 1;
+            poll_ms += t_poll.elapsed().as_millis();
             if let Some(entry) = hist.get(&id) {
                 let status = &entry["status"];
                 if status["status_str"] == "error" {
@@ -1668,6 +1742,12 @@ impl StudioEngine for HttpStudio {
                 }
                 progress(Progress::Step { done: total, total });
                 let placement = self.placement();
+                eprintln!(
+                    "[tillandsias] studio prompt {id}: queue={queue_ms}ms wait={}ms polls={polls} poll_requests={poll_ms}ms (avg {}ms) poll_interval={}ms",
+                    started.elapsed().as_millis(),
+                    poll_ms / u128::from(polls.max(1)),
+                    self.poll.as_millis()
+                );
                 return Ok(RunOut { images, placement });
             }
             // Not finished: a coarse meter from the elapsed time against the
@@ -2283,6 +2363,47 @@ mod tests {
             admitted.unwrap().is_err(),
             "the register, not the overlay, admits a licence"
         );
+    }
+
+    /// ORDER 1990-stwt: a run_workflow result splits its wall time by stage
+    /// (elapsed_s starts only at the GPU wait), one run_<i> per batch item,
+    /// and the stages add up to no more than the total. Pre-fix: FAILS, the
+    /// result carried elapsed_s only.
+    #[test]
+    fn a_run_workflow_result_splits_its_wall_time_by_stage() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("stwt-proj", "a");
+        install(&fx, Arc::new(Stub::default()));
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let r = call(
+            "stwt-proj",
+            "a",
+            &json!({"workflow":"tool/art/workflows/ok.api.json","inputs":{"pose":pose},"count":2}),
+            &mut |_| {},
+        );
+        install_seam(None);
+        let r = r.unwrap_or_else(|e| panic!("{e}"));
+        let stages = r["stages_ms"].as_object().expect("stages_ms");
+        for k in [
+            "connect",
+            "read_validate",
+            "fetch",
+            "precheck",
+            "gpu_wait",
+            "vram_admit",
+            "run_0",
+            "run_1",
+            "free",
+            "outputs",
+        ] {
+            assert!(
+                stages.get(k).is_some_and(Value::is_u64),
+                "{k} missing: {stages:?}"
+            );
+        }
+        let sum: u64 = stages.values().filter_map(Value::as_u64).sum();
+        let total = r["total_ms"].as_u64().unwrap();
+        assert!(sum <= total, "stages {sum} ms within total {total} ms");
     }
 
     /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the
