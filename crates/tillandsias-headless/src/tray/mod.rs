@@ -5241,12 +5241,12 @@ mod tests {
         );
     }
 
-    /// Order 779-dqsv: pin what the lane transport ACTUALLY enforces, now
-    /// that the unreachable 16-call semaphore is gone. The loop reads one
-    /// line, handles it to completion, and only then reads the next — so a
-    /// second request cannot begin before the first response is written.
-    /// This is the guarantee a future concurrent transport would have to
-    /// deliberately break (and would then owe a real, bindable limit).
+    /// Order 779-dqsv, as amended by 1990-mcpq: requests OTHER than tools/call
+    /// (here tools/list) are still handled one at a time, in order. A
+    /// tools/call now runs on its own thread so a long one cannot hold back
+    /// the next; the bindable limit that concurrency owes is
+    /// mcp_socket::MAX_CONCURRENT_CALLS per connection (CallGate, tested in
+    /// call_gate_tests).
     #[test]
     fn mcp_lane_transport_serializes_one_call_at_a_time() {
         use std::io::{BufRead, BufReader, Write};
@@ -5517,6 +5517,83 @@ mod tests {
             );
             let _ = server.join();
         });
+    }
+
+    /// ORDER 1990-mcpq: a long tool call must not block another call on the
+    /// SAME connection (kumbia: browser.open waited >120 s behind a QwenImage
+    /// workflow). A 3 s image.generate is sent, then tools/list; the list must
+    /// answer at once, before the slow call. Pre-fix: FAILS, dispatch is serial.
+    #[test]
+    fn a_slow_tool_call_does_not_block_a_fast_one_on_the_same_connection() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        struct Slow;
+        impl crate::imagegen_tool::Engine for Slow {
+            fn generate(
+                &self,
+                job: &crate::imagegen_tool::Job,
+                out_dir: &std::path::Path,
+                names: &[String],
+                _p: &mut dyn FnMut(crate::imagegen_tool::Progress),
+            ) -> Result<crate::imagegen_tool::EngineOut, String> {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                for n in names {
+                    image::RgbImage::new(job.width, job.height)
+                        .save(out_dir.join(n))
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(crate::imagegen_tool::EngineOut {
+                    backend: "vulkan".into(),
+                    first_use: false,
+                    timings: Default::default(),
+                })
+            }
+        }
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        crate::imagegen_tool::install_seam(Some(crate::imagegen_tool::Seam {
+            engine: std::sync::Arc::new(Slow),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I0".into(),
+            present: Some(vec!["I0".into()]),
+        }));
+        let order = with_known_demo_project(|| {
+            let (server_side, client_side) = UnixStream::pair().expect("pair");
+            let identity = LaneIdentity::new("demo", "default");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+            let mut w = client_side.try_clone().unwrap();
+            let mut lines = BufReader::new(client_side).lines();
+            writeln!(w, r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"image.generate","arguments":{{"prompt":"x","seed":1}}}}}}"#).unwrap();
+            writeln!(
+                w,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{{}}}}"#
+            )
+            .unwrap();
+            let t0 = std::time::Instant::now();
+            let mut order = Vec::new();
+            while order.len() < 2 {
+                let v: serde_json::Value =
+                    serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+                if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
+                    order.push((id, t0.elapsed()));
+                }
+            }
+            drop(w);
+            drop(lines);
+            let _ = server.join();
+            order
+        });
+        crate::imagegen_tool::install_seam(None);
+        assert_eq!(order[0].0, 2, "tools/list answers first: {order:?}");
+        assert!(
+            order[0].1 < std::time::Duration::from_secs(1),
+            "and at once: {order:?}"
+        );
     }
 
     /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
