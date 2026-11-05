@@ -4950,8 +4950,33 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// ORDER 2000-camv: a fake-podman run (a litmus fixture) never reaches the
+/// operator's real CA. Two --ci-full fixtures ran the real binary with the
+/// real HOME through ensure_ca_bundle, which can wipe and re-mint the host CA
+/// under a running Vault; on a gate host that shares HOME with the tray (a
+/// toolbox) that is the operator's CA. Refused before anything is read,
+/// materialized or written.
+#[cfg(unix)]
+fn refuse_fake_podman_in_real_home(
+    certs_dir: &Path,
+    fake_podman: bool,
+    passwd_home: Option<&Path>,
+) -> Result<(), String> {
+    match passwd_home {
+        Some(home) if fake_podman && home.as_os_str().len() > 1 && certs_dir.starts_with(home) => {
+            Err(format!(
+                "refused:ca-bundle:fake-podman-in-real-home:{}\n  \
+                 why: a LITMUS_PODMAN_MODE run reached the operator's real CA directory, where a \
+                 mint replaces the CA under a running Vault (2000-camv)\n  \
+                 remedy: run the fixture with HOME and XDG_RUNTIME_DIR on a scratch directory",
+                certs_dir.display()
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// The passwd home of this user, which HOME cannot fake.
-#[cfg(test)]
 #[cfg(unix)]
 fn passwd_home() -> Option<PathBuf> {
     // SAFETY: getpwuid returns a pointer into static storage or null; it is
@@ -5018,6 +5043,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     }
     #[cfg(test)]
     refuse_real_home_in_test(&certs_dir)?;
+    #[cfg(unix)]
+    refuse_fake_podman_in_real_home(
+        &certs_dir,
+        std::env::var_os("LITMUS_PODMAN_MODE").is_some_and(|v| !v.is_empty()),
+        passwd_home().as_deref(),
+    )?;
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     // Order 472 slice 3: the generation before any refresh, so a mint or a
@@ -35398,6 +35429,35 @@ esac
             }
         }
         found
+    }
+
+    /// ORDER 2000-camv: a fake-podman (litmus) run is refused before it can
+    /// touch a CA dir under the passwd home; a scratch HOME, or a real run,
+    /// passes. Pre-fix: FAILS, the fixture minted in the operator's CA.
+    #[test]
+    #[cfg(unix)]
+    fn a_fake_podman_run_cannot_reach_the_real_ca() {
+        let home = Path::new("/home/op");
+        let real = home.join(".local/state/tillandsias/ca");
+        let err = refuse_fake_podman_in_real_home(&real, true, Some(home)).unwrap_err();
+        assert!(
+            err.starts_with("refused:ca-bundle:fake-podman-in-real-home:"),
+            "{err}"
+        );
+        assert!(err.contains("why:") && err.contains("remedy:"), "{err}");
+        let scratch = Path::new("/tmp/litmus-home/.local/state/tillandsias/ca");
+        assert_eq!(
+            refuse_fake_podman_in_real_home(scratch, true, Some(home)),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_fake_podman_in_real_home(&real, false, Some(home)),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_fake_podman_in_real_home(&real, true, Some(Path::new("/"))),
+            Ok(())
+        );
     }
 
     /// ORDER 2000-camv: a re-mint keeps the replaced CA for host Vault
