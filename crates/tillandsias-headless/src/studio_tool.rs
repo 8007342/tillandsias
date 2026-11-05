@@ -605,20 +605,53 @@ fn pinned_model_in<'a>(
     named: &str,
     categories: Option<&[&str]>,
 ) -> Option<&'a ModelFile> {
+    pinned_model_matches(manifest, named, categories)
+        .into_iter()
+        .next()
+}
+
+/// 1994-bcol: every in-scope row `named` resolves to. More than one distinct
+/// file (different sha256) is a basename collision: `model.safetensors` and
+/// `diffusion_pytorch_model.safetensors` recur across repos, and taking the
+/// first silently picked a weight nobody asked for.
+fn pinned_model_matches<'a>(
+    manifest: &'a [ModelFile],
+    named: &str,
+    categories: Option<&[&str]>,
+) -> Vec<&'a ModelFile> {
     let folders: Vec<String> = categories
         .unwrap_or(&[])
         .iter()
         .flat_map(|c| model_folders(c))
         .collect();
-    // A row is in scope only when its OWN folder is one of the category's:
-    // the `I1` checkpoints root also walks into I1/lora, but a lora is not a
-    // checkpoint (I1/sdxl-full is listed under checkpoints in its own right).
     let in_scope =
         |m: &ModelFile| categories.is_none_or(|c| c.is_empty()) || folders.contains(&m.tier);
     manifest
         .iter()
         .filter(|m| in_scope(m))
-        .find(|m| listed_names(m, &folders).iter().any(|n| n == named))
+        .filter(|m| listed_names(m, &folders).iter().any(|n| n == named))
+        .collect()
+}
+
+/// 1994-bcol: refuse a name that matches distinct pinned files, naming the
+/// spellings that tell them apart. Identical files (one sha256 pinned under
+/// two tiers, e.g. FLUX's ae.safetensors in I2 and I3) are not a collision.
+fn refuse_ambiguous(hits: &[&ModelFile], node: &str, key: &str, named: &str) -> Result<(), String> {
+    let mut shas: Vec<&str> = hits.iter().map(|m| m.sha256.as_str()).collect();
+    shas.sort_unstable();
+    shas.dedup();
+    if shas.len() <= 1 {
+        return Ok(());
+    }
+    let spellings: Vec<String> = hits
+        .iter()
+        .map(|m| format!("{}/{} ({})", m.tier, m.cache_name(), m.repo))
+        .collect();
+    Err(format!(
+        "model_ambiguous: node {node} {key}={named:?} matches {} different pinned files; write the folder form instead: {}",
+        shas.len(),
+        spellings.join(", ")
+    ))
 }
 
 /// A forge path under `FORGE_SCRATCH/` → its path relative to the volume.
@@ -716,6 +749,12 @@ pub fn validate(
         for key in keys {
             if let Some(named) = inputs.get(key).and_then(Value::as_str) {
                 let cats = input_categories(class, key);
+                refuse_ambiguous(
+                    &pinned_model_matches(manifest, named, Some(cats)),
+                    id,
+                    key,
+                    named,
+                )?;
                 let row = pinned_model_in(manifest, named, Some(cats)).ok_or_else(|| {
                     let folders: Vec<String> = cats.iter().flat_map(|c| model_folders(c)).collect();
                     let accepted: Vec<String> = manifest
@@ -2080,6 +2119,87 @@ mod tests {
             );
             assert!(side.is_file(), "{}", side.display());
         }
+    }
+
+    /// ORDER 1994-bcol: a name that matches two DIFFERENT pinned files in the
+    /// input's folders is refused, naming the folder forms that tell them
+    /// apart; identical files (one sha256 under two tiers) are not a
+    /// collision. Pre-fix: FAILS, the first row was taken silently.
+    #[test]
+    fn a_basename_matching_two_different_files_is_refused_by_name() {
+        let rev = "a".repeat(40);
+        let (sha1, sha2) = ("1".repeat(64), "2".repeat(64));
+        let tsv = format!(
+            "I1\tmodel\tacme/one\t{rev}\tmodel.safetensors\t{sha1}\t10\tapache-2.0\n\
+             I1/sdxl-full\tstudio:checkpoint\tacme/two\t{rev}\tmodel.safetensors\t{sha2}\t10\tapache-2.0\n"
+        );
+        let manifest = imagegen_models::parse_manifest(&tsv).unwrap();
+        let cats = Some(input_categories("CheckpointLoaderSimple", "ckpt_name"));
+        let hits = pinned_model_matches(&manifest, "model.safetensors", cats);
+        assert_eq!(hits.len(), 2, "both checkpoint folders list it");
+        let e = refuse_ambiguous(&hits, "4", "ckpt_name", "model.safetensors").unwrap_err();
+        assert!(e.starts_with("model_ambiguous:"), "{e}");
+        assert!(
+            e.contains("I1/model.safetensors") && e.contains("I1/sdxl-full/model.safetensors"),
+            "{e}"
+        );
+        // The folder forms resolve to exactly one each.
+        for (spelling, repo) in [
+            ("I1/model.safetensors", "acme/one"),
+            ("sdxl-full/model.safetensors", "acme/two"),
+        ] {
+            let one = pinned_model_matches(&manifest, spelling, cats);
+            assert_eq!(
+                one.iter().map(|m| m.repo.as_str()).collect::<Vec<_>>(),
+                vec![repo],
+                "{spelling}"
+            );
+        }
+        // The same file pinned under two tiers is not a collision.
+        let same = format!(
+            "I2\tvae\tacme/flux\t{rev}\tae.safetensors\t{sha1}\t10\tapache-2.0\n\
+             I3\tvae\tacme/flux\t{rev}\tae.safetensors\t{sha1}\t10\tapache-2.0\n"
+        );
+        let m2 = imagegen_models::parse_manifest(&same).unwrap();
+        let vae = Some(input_categories("VAELoader", "vae_name"));
+        let h2 = pinned_model_matches(&m2, "ae.safetensors", vae);
+        assert_eq!(h2.len(), 2);
+        assert!(refuse_ambiguous(&h2, "5", "vae_name", "ae.safetensors").is_ok());
+    }
+
+    /// ORDER 1994-bcol: the SHIPPED pin table has no bare basename that two
+    /// different files share within one ComfyUI folder category, so a
+    /// collision is refused when it is pinned, not at a forge's first run.
+    #[test]
+    fn the_shipped_pin_table_has_no_basename_collision_in_any_category() {
+        let manifest = imagegen_models::manifest();
+        let cats: &[&[&str]] = &[
+            &["checkpoints"],
+            &["diffusion_models", "unet"],
+            &["vae"],
+            &["loras"],
+            &["controlnet"],
+            &["ipadapter"],
+            &["text_encoders", "clip"],
+            &["clip_vision"],
+            &["birefnet"],
+            &["layer_model"],
+        ];
+        let mut found = Vec::new();
+        for c in cats {
+            for m in &manifest {
+                let hits = pinned_model_matches(&manifest, m.cache_name(), Some(c));
+                if refuse_ambiguous(&hits, "-", "-", m.cache_name()).is_err() {
+                    found.push(format!("{c:?}: {}", m.cache_name()));
+                }
+            }
+        }
+        found.sort();
+        found.dedup();
+        assert!(
+            found.is_empty(),
+            "basename collisions in the pin table: {found:?}"
+        );
     }
 
     /// ORDER 1986-snpx: a name resolves only among the rows in its input's
