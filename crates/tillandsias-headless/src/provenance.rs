@@ -2,6 +2,13 @@
 //! design D5). `image.generate` (engine sd.cpp) and `studio.run_workflow`
 //! (engine comfyui) write the same schema, `<output>.provenance.json`
 //! beside each file, and return the same object in the result.
+//!
+//! 1996-pvpr (Kumbia catalogue): the record also names the `tool` that wrote
+//! it, the `output_sha256` of the file it describes, when it was written
+//! (`at`), and its `parents`: the sha256 of each input's own sidecar
+//! (`<input>.provenance.json`, or `.finish.json` for a finished file), so a
+//! multi-stage chain (generate -> finish -> pack) resolves sidecar to sidecar
+//! across tools. Additive: the schema name stays v1.
 //! @trace order:1956-x7xp (spec: openspec/changes/studio-asset-pipeline, not yet archived)
 #![cfg_attr(not(test), allow(dead_code))]
 
@@ -65,6 +72,10 @@ pub struct Input {
 /// Everything a record carries besides the output itself.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Record {
+    /// 1996-pvpr: the tool that wrote the output (`studio.run_workflow`, ...).
+    pub tool: &'static str,
+    /// 1996-pvpr: sha256 of each input's own sidecar ([`parent_of`]).
+    pub parents: Vec<String>,
     pub engine: Engine,
     /// `(path, sha256)` of the workflow; `None` for sd.cpp.
     pub workflow: Option<(String, String)>,
@@ -89,6 +100,8 @@ impl Record {
     pub fn to_json(&self) -> Value {
         json!({
             "schema": SCHEMA,
+            "tool": self.tool,
+            "parents": self.parents,
             "pipelineVersion": crate::VERSION.trim(),
             "engine": self.engine.to_json(),
             "workflow": self.workflow.as_ref().map(|(p, s)| json!({ "path": p, "sha256": s })),
@@ -116,12 +129,39 @@ impl Record {
     /// return the record. The sidecar's name keeps the output's extension:
     /// `0000.png` → `0000.png.provenance.json`.
     pub fn write_beside(&self, output: &Path) -> Result<Value, String> {
-        let v = self.to_json();
+        let mut v = self.to_json();
+        // 1996-pvpr: what this record describes, and when.
+        v["output_sha256"] = json!(sha256_file(output).ok());
+        v["at"] = json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true));
         let side = sidecar_path(output);
         std::fs::write(&side, serde_json::to_vec_pretty(&v).unwrap_or_default())
             .map_err(|e| format!("engine_failed: {}: {e}", side.display()))?;
         Ok(v)
     }
+}
+
+/// 1996-pvpr: the parent link for an input file: the sha256 of its own
+/// sidecar, `<input>.provenance.json` (generate, run_workflow) or
+/// `<input stem>.finish.json` (finish_pixels). `None` for a hand-made input.
+pub fn parent_of(input: &Path) -> Option<String> {
+    let finish = input.with_extension("finish.json");
+    [sidecar_path(input), finish]
+        .iter()
+        .find(|p| p.is_file())
+        .and_then(|p| sha256_file(p).ok())
+}
+
+/// 1996-pvpr: the parents of a set of input files, in order, deduplicated.
+pub fn parents_of<'a>(inputs: impl IntoIterator<Item = &'a Path>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for p in inputs {
+        if let Some(sha) = parent_of(p)
+            && !out.contains(&sha)
+        {
+            out.push(sha);
+        }
+    }
+    out
 }
 
 /// `<output>.provenance.json`.
@@ -198,6 +238,8 @@ mod tests {
             family: None,
             consent: None,
             cli: None,
+            tool: "image.generate",
+            parents: vec![],
         };
         let v = rec.write_beside(&out).unwrap();
         assert_eq!(v["schema"], SCHEMA);

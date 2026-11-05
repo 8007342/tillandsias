@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-05, follow-up to 1999-grot, coordinator-assigned.
+packets:
+- packet_id: a-ca-mint-in-any-process-cannot-break-a-running-vault
+  order: 2000-camv
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [vault, credentials, tls]
+  estimated_hours: 4
+  title: A CA mint in any process cannot break a running Vault
+  context: 'Carries the rest of 1999-grot. That row stopped Vault readers from minting, but ensure_ca_bundle still wipes and re-mints from lane enclave setup and other callers, which leaves a running Vault serving a leaf the new CA did not sign (macuahuitl 2026-11-04 21:42:57: every tray read failed TLS until Vault restarted). A host already in that state stays failing until Vault is restarted.'
+  exit_criteria:
+  - 'Every check-and-mint of the host CA takes one host-wide lock shared by the tray and every lane process; a two-process test shows the second process sees the first one''s complete pair, never half of it.'
+  - 'A mint while tillandsias-vault runs reissues Vault''s leaf and restarts Vault in the same locked step, so a tray read verifies afterwards. Pre-fix result: FAILS, the served leaf no longer verifies.'
+  - 'A tray that finds the served leaf unverifiable against its CA (vault-unavailable:network-tls) recovers without an operator restart, or tells the operator the one remedy.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- ca_'
+  unscoreable: 'unpinnable-until-the-guard-exists: live Vault and two processes.'
+  next_action: 'Find every ensure_ca_bundle caller and put the check-and-mint under one resource_lock.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05, follow-up to 1999-grot.
+  events:
+  - type: filed
+    ts: '2026-11-05T06:08:58Z'
+    host: lenovinha
+    summary: filed p0 ready
