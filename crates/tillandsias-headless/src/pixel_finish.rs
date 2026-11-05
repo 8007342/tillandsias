@@ -550,6 +550,9 @@ pub(crate) fn call(
         "schema": "tillandsias.finish/v1",
         "output": out, "output_sha256": sha,
         "input": input, "input_sha256": sha256_hex(&input_bytes),
+        // 1996-pvpr: the source's own sidecar, so the chain resolves across tools.
+        "tool": "studio.finish_pixels",
+        "parents": crate::provenance::parents_of([input_host.as_path()]),
         "matte": arg("matte"), "matte_sha256": matte_sha,
         "family": family, "family_sha256": sha256_hex(spec_text.as_bytes()),
         "palette": ff.palette_path, "palette_sha256": sha256_hex(palette_text.as_bytes()),
