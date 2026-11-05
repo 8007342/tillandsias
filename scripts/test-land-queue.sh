@@ -104,6 +104,7 @@ run_queue() {
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
         TILLANDSIAS_LAND_QUEUE_LOGDIR="${LOGDIR_OVERRIDE:-$TMP/logs-$$}" \
         TILLANDSIAS_TRUNK_BRANCH=linux-next \
@@ -532,6 +533,7 @@ fi
 out9="$(timeout 120 env \
     TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
     TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
+    TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="" \
     TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
     TILLANDSIAS_TRUNK_BRANCH=linux-next \
     bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" </dev/null 2>&1)"
@@ -1232,6 +1234,48 @@ case "$out21b" in
     *) bad "ARM 21b: a capture equal to the list limit was not refused (rc=$rc21b)
 $out21b" ;;
 esac
+
+# ──────────────────────────────────────────────────────────── ARM 22
+# ORDER 1992-lqpb: A STALE PLAN BINARY IS THIS HOST'S STATE, NOT THE
+# CANDIDATE'S. When the refresh cannot make it current, the run stops
+# (could-not-run) and evicts NOBODY; before, the gate's plan-lane fixture failed
+# on the stale binary and the innocent candidate was evicted.
+scaffold arm22
+candidate arm22 1022-aaaa a22.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":22,"headRefName":"work/1022-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out22="$(PLAN_REFRESH_CMD='echo stale-plan-binary >&2; exit 1' run_queue)"; rc22=$?
+if grep -q '^could-not-run:land-queue:stale-plan-binary' <<<"$out22" \
+    && ! grep -q '^evict:' <<<"$out22" && ! grep -q '^land:' <<<"$out22" \
+    && [ "$rc22" -eq 3 ] && [ ! -s "$GATE_LOG" ] && [ ! -s "$GH_COMMENTS" ]; then
+    ok "ARM 22: a plan binary that cannot be refreshed stops the run (rc=3) with no eviction, no gate and no PR comment"
+else
+    bad "ARM 22: wanted could-not-run, rc=3, no eviction, no gate, no comment; got rc=$rc22 gates=$(grep -c . "$GATE_LOG") comments=$(grep -c . "$GH_COMMENTS")
+$out22"
+fi
+# ...and a refresh that succeeds lets the candidate land as before.
+scaffold arm22b
+candidate arm22b 1023-bbbb b22.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":23,"headRefName":"work/1023-bbbb","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+exit 0
+GATE
+out22b="$(PLAN_REFRESH_CMD='true' run_queue)"
+if grep -q '^land:23 ' <<<"$out22b"; then
+    ok "ARM 22b: a refresh that succeeds lets the candidate land"
+else
+    bad "ARM 22b: wanted land:23 after a successful refresh
+$out22b"
+fi
 
 printf '\n'
 if [ "$fail" -eq 0 ]; then
