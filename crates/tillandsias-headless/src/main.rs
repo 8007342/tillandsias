@@ -35506,14 +35506,19 @@ esac
     #[cfg(unix)]
     fn a_fake_podman_run_cannot_reach_the_real_ca() {
         let home = Path::new("/home/op");
-        let real = home.join(".local/state/tillandsias/ca");
+        let real =
+            Path::new(&tillandsias_core::ca_path::state_root_expanded("/home/op")).join("ca");
         let err = refuse_fake_podman_in_real_home(&real, true, Some(home)).unwrap_err();
         assert!(
             err.starts_with("refused:ca-bundle:fake-podman-in-real-home:"),
             "{err}"
         );
         assert!(err.contains("why:") && err.contains("remedy:"), "{err}");
-        let scratch = Path::new("/tmp/litmus-home/.local/state/tillandsias/ca");
+        let scratch_ca = Path::new(&tillandsias_core::ca_path::state_root_expanded(
+            "/tmp/litmus-home",
+        ))
+        .join("ca");
+        let scratch = scratch_ca.as_path();
         assert_eq!(
             refuse_fake_podman_in_real_home(scratch, true, Some(home)),
             Ok(())

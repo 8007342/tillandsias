@@ -34,7 +34,10 @@ fn cloud_usage_leaves_the_ca_directory_byte_identical() {
     let scratch = tempfile::tempdir().unwrap();
     let home = scratch.path().join("home");
     let run = scratch.path().join("run");
-    let ca = home.join(".local/state/tillandsias/ca");
+    let ca = Path::new(&tillandsias_core::ca_path::state_root_expanded(
+        home.to_str().unwrap(),
+    ))
+    .join("ca");
     std::fs::create_dir_all(&ca).unwrap();
     std::fs::create_dir_all(&run).unwrap();
     std::fs::set_permissions(&run, std::fs::Permissions::from_mode(0o700)).unwrap();
