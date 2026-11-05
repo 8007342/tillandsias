@@ -63,8 +63,7 @@ use tillandsias_core::image_builder::{
 use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
     ContainerSpec, MountMode, NonForceRemoval, OperationKind, PodmanClient, current_runtime_lane,
-    detect_gpu_devices, podman_cmd_sync, require_desktop_user_session,
-    require_headless_service_account,
+    podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
 };
 use tracing::{debug, error, info, warn};
 
@@ -18587,12 +18586,9 @@ fn build_project_browser_spec_on(
             .env("PULSE_SERVER", server);
     }
 
-    for device_flag in detect_gpu_devices() {
-        if let Some(device) = device_flag.strip_prefix("--device=") {
-            spec = spec.device(device);
-        } else {
-            spec = spec.option(device_flag);
-        }
+    // 2001-bwgl: only a GPU this window has a driver for.
+    for device in accel_probe::browser_gpu_devices() {
+        spec = spec.device(device);
     }
 
     Ok(spec)
