@@ -1360,6 +1360,9 @@ pub fn call(
         // is returned like an image, never dropped and never a "not a PNG" failure.
         let kind = output_kind(file, &bytes)?;
         let record = provenance::Record {
+            tool: "studio.run_workflow",
+            // 1996-pvpr: each bound input's own sidecar, when an earlier stage made it.
+            parents: provenance::parents_of(plan.inputs.iter().map(|b| b.host_path.as_path())),
             engine: provenance::Engine::ComfyUi {
                 nodes: allow.pinned(),
             },
@@ -2524,6 +2527,65 @@ mod tests {
         let sum: u64 = stages.values().filter_map(Value::as_u64).sum();
         let total = r["total_ms"].as_u64().unwrap();
         assert!(sum <= total, "stages {sum} ms within total {total} ms");
+    }
+
+    /// ORDER 1996-pvpr: an output's record links to the sidecar of the input
+    /// an earlier stage made (parents = that sidecar's sha256), and names the
+    /// tool, the output's sha256 and when. Pre-fix: FAILS, no tool, parents,
+    /// output_sha256 or at.
+    #[test]
+    fn an_output_record_links_to_the_sidecar_of_the_input_an_earlier_stage_made() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("pvpr-proj", "a");
+        // The pose came from an earlier stage: it has its own sidecar.
+        let pose_host = fx.lane_dir.join("in/gk/left_hand.png");
+        let upstream = crate::provenance::sidecar_path(&pose_host);
+        std::fs::write(
+            &upstream,
+            br#"{"schema":"tillandsias.provenance/v1","tool":"image.generate"}"#,
+        )
+        .unwrap();
+        let parent = crate::provenance::sha256_file(&upstream).unwrap();
+        install(&fx, Arc::new(Stub::default()));
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let r = call(
+            "pvpr-proj",
+            "a",
+            &json!({"workflow":"tool/art/workflows/ok.api.json","inputs":{"pose":pose},"verbose":true}),
+            &mut |_| {},
+        );
+        install_seam(None);
+        let r = r.unwrap_or_else(|e| panic!("{e}"));
+        let rec = &r["outputs"][0]["provenance"];
+        assert_eq!(rec["schema"], "tillandsias.provenance/v1");
+        assert_eq!(rec["tool"], "studio.run_workflow");
+        assert_eq!(rec["parents"], json!([parent]), "{rec}");
+        let out_host = fx.lane_dir.join(
+            r["outputs"][0]["path"]
+                .as_str()
+                .unwrap()
+                .strip_prefix(&format!("{FORGE_SCRATCH}/"))
+                .unwrap(),
+        );
+        assert_eq!(
+            rec["output_sha256"],
+            json!(crate::provenance::sha256_file(&out_host).unwrap())
+        );
+        assert!(
+            rec["at"].as_str().is_some_and(|t| t.ends_with('Z')),
+            "{rec}"
+        );
+        // A finished file's sidecar (`<stem>.finish.json`) links the same way.
+        let dir = tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let png = dir.path().join("frame.png");
+        std::fs::write(&png, b"p").unwrap();
+        assert_eq!(
+            crate::provenance::parent_of(&png),
+            None,
+            "a hand-made input has no parent"
+        );
+        std::fs::write(dir.path().join("frame.finish.json"), b"{}").unwrap();
+        assert!(crate::provenance::parent_of(&png).is_some());
     }
 
     /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the

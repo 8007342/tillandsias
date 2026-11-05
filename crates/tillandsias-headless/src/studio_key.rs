@@ -449,6 +449,8 @@ pub fn provenance_record(
     cli: &[String],
 ) -> provenance::Record {
     provenance::Record {
+        tool: "studio.key_footage",
+        parents: Vec::new(),
         engine: provenance::Engine::CorridorKey {
             upstream: UPSTREAM,
             commit: COMMIT,
