@@ -1009,6 +1009,12 @@ fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient,
 /// healthy. Called automatically from `run_init`; the previous `--with-vault`
 /// opt-in is now a no-op.
 pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
+    // 2000-camv: a read-only process (`--cloud-usage`) never starts Vault.
+    if crate::read_only_process() {
+        return Err(
+            "refused:vault:read-only-process: a read-only command does not start Vault".into(),
+        );
+    }
     // Order 234 (R6): refuse before waiting on the lock during drain/stop.
     if !crate::runtime_phase::container_mutations_allowed() {
         return Err(crate::runtime_phase::refusal("ensure tillandsias-vault"));
@@ -2308,8 +2314,22 @@ fn vault_up_or_start(
     running: impl FnOnce() -> bool,
     start: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
+    vault_up_or_start_unless(crate::read_only_process(), running, start)
+}
+
+/// 2000-camv: a read-only process (`--cloud-usage`) never starts Vault: a
+/// start from a hook's environment re-minted the host CA under the running
+/// Vault. It reports the stopped Vault instead.
+pub(crate) fn vault_up_or_start_unless(
+    read_only: bool,
+    running: impl FnOnce() -> bool,
+    start: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
     if running() {
         return Ok(());
+    }
+    if read_only {
+        return Err("vault-unavailable:not-running".into());
     }
     eprintln!(
         "note:cloudflare-store:vault-not-running:starting-the-vault-enclave-only (no other image is built or started)"

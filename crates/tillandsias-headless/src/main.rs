@@ -423,6 +423,8 @@ fn main() {
     if user_args.iter().any(|a| a == "--cloud-usage") {
         #[cfg(all(feature = "host-services", feature = "vault"))]
         {
+            // 2000-camv: a read. It never starts Vault and never mints the CA.
+            set_read_only_process();
             let debug = user_args.iter().any(|a| a == "--debug");
             match cloud_usage::call_live(None, debug) {
                 Ok(v) => {
@@ -4950,6 +4952,36 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// ORDER 2000-camv: a READ-ONLY process (`--cloud-usage`, run from the
+/// pre-push hook's release preflight) never starts Vault and never mints the
+/// CA. Caught on macuahuitl 2026-11-04 23:43:56: the CA was re-minted within
+/// 0.2 s of `tillandsias --cloud-usage` starting under the pre-push hook. Its
+/// Cloudflare store read starts Vault when podman says it is stopped
+/// (vault_up_or_start), and that start reaches ensure_ca_bundle; in a hook's
+/// environment both answers can be wrong, and a mint there replaced the CA
+/// under the running Vault.
+static READ_ONLY_PROCESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub(crate) fn set_read_only_process() {
+    READ_ONLY_PROCESS.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+pub(crate) fn read_only_process() -> bool {
+    READ_ONLY_PROCESS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn refuse_mint_in_read_only_process(read_only: bool) -> Result<(), String> {
+    if read_only {
+        Err("refused:ca-bundle:read-only-process\n  \
+             why: a read-only command (--cloud-usage) must not mint the host CA; a mint \
+             replaces it under a running Vault (2000-camv)\n  \
+             remedy: start Tillandsias (the tray), which owns the CA and Vault"
+            .into())
+    } else {
+        Ok(())
+    }
+}
+
 /// ORDER 2000-camv: a fake-podman run (a litmus fixture) never reaches the
 /// operator's real CA. Two --ci-full fixtures ran the real binary with the
 /// real HOME through ensure_ca_bundle, which can wipe and re-mint the host CA
@@ -5064,6 +5096,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
+        refuse_mint_in_read_only_process(read_only_process())?;
         let lock_dir = certs_dir.join(".ca-generation.lock");
         let mut acquired_lock = false;
         for _ in 0..50 {
@@ -35429,6 +35462,41 @@ esac
             }
         }
         found
+    }
+
+    /// ORDER 2000-camv: a read-only process refuses to mint and to start
+    /// Vault; an ordinary process does both as before. Pre-fix: FAILS, the
+    /// pre-push hook's --cloud-usage re-minted the operator's CA.
+    #[test]
+    fn a_read_only_process_neither_mints_nor_starts_vault() {
+        let err = refuse_mint_in_read_only_process(true).unwrap_err();
+        assert!(
+            err.starts_with("refused:ca-bundle:read-only-process"),
+            "{err}"
+        );
+        assert!(err.contains("why:") && err.contains("remedy:"));
+        assert_eq!(refuse_mint_in_read_only_process(false), Ok(()));
+        let mut started = false;
+        let r = crate::vault_bootstrap::vault_up_or_start_unless(
+            true,
+            || false,
+            || {
+                started = true;
+                Ok(())
+            },
+        );
+        assert_eq!(r, Err("vault-unavailable:not-running".to_string()));
+        assert!(!started, "a read-only process never starts Vault");
+        let r = crate::vault_bootstrap::vault_up_or_start_unless(
+            false,
+            || false,
+            || {
+                started = true;
+                Ok(())
+            },
+        );
+        assert_eq!(r, Ok(()));
+        assert!(started);
     }
 
     /// ORDER 2000-camv: a fake-podman (litmus) run is refused before it can
