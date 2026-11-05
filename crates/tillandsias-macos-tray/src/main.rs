@@ -22,6 +22,8 @@ mod app_delegate;
 #[cfg(target_os = "macos")]
 mod approval_signer;
 #[cfg(target_os = "macos")]
+mod bringup_timer;
+#[cfg(target_os = "macos")]
 mod diagnose;
 #[cfg(target_os = "macos")]
 mod guest_binary;

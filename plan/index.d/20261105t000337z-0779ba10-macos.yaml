@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-tray-emits-a-bringup-step-timer-line-for-vz-boot
+    event:
+      type: progress
+      ts: "2026-11-05T00:03:37Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        1915-vzbt claimed and implemented on work/1915-vzbt (macos-m5-apple-tlatoanis-macbook-air): crates/tillandsias-macos-tray/src/bringup_timer.rs reports one `bringup: step=vz-boot ms=<n>` line from the VZ start call to the first Ready-with-podman status apply_vm_status applies (exit 1 on a start failure), plus the {ts, host, step, phase, duration_ms, exit} row under TILLANDSIAS_TIMING_LOG. Tests: line/row shape, once-per-start, and a call-site pin that fails with the wiring removed (sabotage: "start stamp" 0 matches). A live number comes from the first published release carrying it.
