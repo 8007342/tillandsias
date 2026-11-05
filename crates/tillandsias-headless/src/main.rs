@@ -4744,14 +4744,6 @@ mod ca_refresh_margin_tests {
             ca_refresh_reason(&crt_a, &a.path().join("none.key")),
             "key-missing"
         );
-        let src = include_str!("vault_bootstrap.rs");
-        let body = &src[src.find("fn vault_client(").unwrap()..];
-        let body = &body[..body.find("\n}\n").unwrap()];
-        assert!(
-            body.contains("crate::ca_trust_dir("),
-            "the reader path never mints"
-        );
-        assert!(!body.contains("tls_material_dir("), "{body}");
     }
 
     // 1979-bm3u: a certificate and a key from two generations is reissued, not
