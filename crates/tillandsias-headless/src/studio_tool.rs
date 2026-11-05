@@ -820,8 +820,18 @@ pub fn validate(
                         .and_then(Value::as_u64)
                 });
             }
-            Some("$prompt") => prompt_nodes += 1,
-            Some("$negative_prompt") => negative_nodes += 1,
+            Some("$prompt") => {
+                prompt_nodes += 1;
+                if req.overrides.prompt.is_some() {
+                    require_text_input(id, node, "prompt")?;
+                }
+            }
+            Some("$negative_prompt") => {
+                negative_nodes += 1;
+                if req.overrides.negative_prompt.is_some() {
+                    require_text_input(id, node, "negative_prompt")?;
+                }
+            }
             _ => {}
         }
         let obj = node["inputs"].as_object_mut().expect("object");
@@ -913,9 +923,25 @@ pub fn validate(
     })
 }
 
+/// 2001-stpr: an override this node cannot take is refused before anything
+/// queues. It used to be dropped silently while provenance recorded it as run.
+fn require_text_input(id: &str, node: &Value, knob: &str) -> Result<(), String> {
+    const TEXT_INPUTS: [&str; 4] = ["text", "prompt", "text_g", "text_l"];
+    if TEXT_INPUTS.iter().any(|k| node["inputs"].get(*k).is_some()) {
+        return Ok(());
+    }
+    Err(format!(
+        "invalid_arguments: overrides.{knob} given, but node {id} ({}) has no text, prompt, text_g or text_l input",
+        node["class_type"].as_str().unwrap_or("unknown")
+    ))
+}
+
 fn set_text(inputs: &mut serde_json::Map<String, Value>, text: &str) {
     if inputs.contains_key("text") {
         inputs.insert("text".into(), json!(text));
+    } else if inputs.contains_key("prompt") {
+        // 2001-stpr: TextEncodeQwenImageEditPlus names its input `prompt`.
+        inputs.insert("prompt".into(), json!(text));
     } else {
         for k in ["text_g", "text_l"] {
             if inputs.contains_key(k) {
@@ -2709,6 +2735,23 @@ mod tests {
             malformed
                 .unwrap_err()
                 .contains("must be $node:<node id>.<input name>")
+        );
+    }
+
+    /// 2001-stpr: a `prompt`-named encoder input takes the override; a titled
+    /// node with no text input refuses. Pre-fix: the baked text ran.
+    #[test]
+    fn a_prompt_override_reaches_a_prompt_input_or_is_refused() {
+        let mut inputs = json!({"prompt": "baked"}).as_object().unwrap().clone();
+        set_text(&mut inputs, "override");
+        assert_eq!(inputs["prompt"], "override");
+        let qwen = json!({"class_type":"TextEncodeQwenImageEditPlus","inputs":{"prompt":"baked"}});
+        require_text_input("10", &qwen, "prompt").expect("accepted");
+        let none = json!({"class_type":"SomeEncoder","inputs":{"clip":["1",1]}});
+        let e = require_text_input("10", &none, "prompt").unwrap_err();
+        assert!(
+            e.starts_with("invalid_arguments:") && e.contains("SomeEncoder"),
+            "{e}"
         );
     }
 

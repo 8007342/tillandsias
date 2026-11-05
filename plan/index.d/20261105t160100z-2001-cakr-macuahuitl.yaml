@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from the operator's question about CA restarts.
+packets:
+- packet_id: a-failed-ca-key-refill-reports-unavailable-and-never-mints
+  order: 2001-cakr
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [credentials, ca]
+  estimated_hours: 3
+  title: A failed CA key refill reports unavailable instead of minting, and a missing Vault certificate is not called expiring
+  context: 'Operator asked why a CA restart prompt appears when certificates last a year. The key path links into tmpfs and is refilled from the keyring; ensure_ca_bundle treats an unusable pair as broken and wipes and mints, so a locked or unreachable keyring may re-mint a healthy CA (hypothesis, not observed). expiring_enclave_certs counts a missing or unreadable certificate as expiring, so CERT_EXPIRY_MESSAGE can appear with months left. Related 2000-camv, which only marks --cloud-usage read-only.'
+  exit_criteria:
+  - 'With a valid certificate and an unreachable keyring, ensure_ca_bundle leaves the CA directory byte-identical and returns a named CA-unavailable refusal.'
+  - 'Only a first start or real expiry mints; a key that is truly lost has its own named remedy.'
+  - 'A missing or unreadable Vault certificate produces its own message or self-repair, not the expiry message.'
+  verifiable_closure: 'Fixture with a scratch HOME and a failing key store; fails on the pre-fix code.'
+  unscoreable: 'none.'
+  next_action: 'Confirm whether the keyring path is reachable at the three 2026-11-04 mints from macuahuitl logs, then write the fixture.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05, operator question.
+  events:
+  - type: filed
+    ts: '2026-11-05T16:01:00Z'
+    host: macuahuitl
+    summary: filed p1 ready

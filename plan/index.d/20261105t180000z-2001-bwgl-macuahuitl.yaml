@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from kumbia-forge's WebGL question.
+packets:
+- packet_id: a-visible-browser-window-has-working-webgl
+  order: 2001-bwgl
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [browser, gpu]
+  estimated_hours: 3
+  title: A visible browser window on an NVIDIA host has working WebGL, or is not handed a GPU it cannot use
+  context: 'kumbia-kombat, Chromium 156 on macuahuitl: a visible window reports no WebGL1, WebGL2 or WebGPU, so Flutter CanvasKit draws in software at about 7-9 fps; headless windows have WebGL through SwiftShader. chrome://gpu says "GPU access is disabled due to frequent crashes", with ANGLE on Mesa llvmpipe. The visible window gets /dev/nvidia0, nvidiactl, nvidia-uvm, nvidia-uvm-tools and renderD128 (nvidia driver) from detect_gpu_devices; the image has only Mesa and no NVIDIA userspace. So the devices cannot be used, and a browser holds raw GPU nodes for nothing. Why the GPU process crashes is not yet captured.'
+  exit_criteria:
+  - 'In a visible window on macuahuitl, a page gets a WebGL2 context, and chrome://gpu reports the WebGL status and renderer in the closure note.'
+  - 'The window holds no device nodes it has no driver for.'
+  - 'Measured frame rate of the kumbia-kombat preview, before and after, is in the closure note.'
+  verifiable_closure: 'Live probe in a visible window on an NVIDIA host, plus a browser_window_spec test for the device list.'
+  unscoreable: 'hardware-bound: the WebGL probe needs a real GPU host and compositor.'
+  next_action: 'Try first: no GPU devices for a window on a host whose image lacks that driver, so Chromium takes the SwiftShader path as headless does, and measure fps. If too slow, weigh CDI NVIDIA libraries against the larger browser attack surface; that trade needs the operator.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T18:00:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
