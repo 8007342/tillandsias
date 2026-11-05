@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-05, from kumbia-kombat's plan/forge-generic-services.md (work/1835-lvls), coordinator-assigned.
+packets:
+- packet_id: a-studio-model-name-that-matches-two-different-pinned-files-is-refused-and-the-pin-table-carries-no-such-collision
+  order: 1994-bcol
+  status: in_progress
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, models, pins]
+  estimated_hours: 1
+  title: A studio model name that matches two different pinned files is refused, and the pin table carries no such collision
+  context: 'Kumbia catalogue: "model.safetensors and diffusion_pytorch_model.safetensors recur, so name collisions are a hazard. Worth a clear refusal." After 1986-snpx resolution is folder-scoped, but two rows in folders one input scans (the I1 checkpoints root and I1/sdxl-full) could still share a basename, and the first was taken silently.'
+  exit_criteria:
+  - 'A name matching two different pinned files (different sha256) in its input folders is refused model_ambiguous, naming the folder forms; each folder form resolves to one file. Pre-fix result: FAILS, the first row was taken.'
+  - 'The same file pinned under two tiers (one sha256) is not a collision.'
+  - 'The shipped pin table has no such collision in any folder category.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- studio_tool::'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures (1136-n8sh).'
+  related: [1986-snpx]
+  next_action: 'Land.'
+  provenance: kumbia-kombat plan/forge-generic-services.md, coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T02:09:01Z'
+    host: lenovinha
+    summary: filed p2 in_progress, claimed by opus5
