@@ -190,7 +190,9 @@ pub fn descriptor() -> Value {
                 "workflow": { "type": "string", "description": "Path in the project checkout of an API-format ComfyUI workflow JSON." },
                 "inputs": { "type": "object", "additionalProperties": { "type": "string" },
                             "description": format!("name -> file path under {FORGE_SCRATCH}/, bound to LoadImage nodes whose image is \"$name\".") },
-                "overrides": { "type": "object", "properties": {
+                "overrides": { "type": "object",
+                    "description": "seed, prompt and negative_prompt reach the nodes titled $seed, $prompt and $negative_prompt. Any node input is reachable as \"$node:<node id>.<input>\": <string|number|boolean> (1995-nodo), e.g. {\"$node:5.denoise\": 0.6}; set before validation, so a model input set this way is pin- and licence-checked, and a link input is refused.",
+                    "properties": {
                     "seed": { "type": "integer", "minimum": 0 },
                     "prompt": { "type": "string" },
                     "negative_prompt": { "type": "string" }
@@ -218,6 +220,71 @@ pub struct Overrides {
     pub seed: Option<u64>,
     pub prompt: Option<String>,
     pub negative_prompt: Option<String>,
+    /// 1995-nodo: `$node:<id>.<input>` -> a scalar, set on that node's input
+    /// before validation, so any node is reachable without a `$title` (a
+    /// KSampler can take both a seed and a denoise) and a model input set this
+    /// way is pin- and licence-checked like any other.
+    pub nodes: Vec<(String, String, Value)>,
+}
+
+/// 1995-nodo: parse the `$node:<id>.<input>` keys of `overrides`.
+fn parse_node_overrides(ov: &Value) -> Result<Vec<(String, String, Value)>, String> {
+    let mut out = Vec::new();
+    for (k, v) in ov.as_object().into_iter().flatten() {
+        let Some(rest) = k.strip_prefix("$node:") else {
+            continue;
+        };
+        let (id, input) = rest
+            .split_once('.')
+            .filter(|(i, n)| !i.is_empty() && !n.is_empty())
+            .ok_or_else(|| {
+                format!("invalid_arguments: {k} must be $node:<node id>.<input name>")
+            })?;
+        if !(v.is_string() || v.is_number() || v.is_boolean()) {
+            return Err(format!(
+                "invalid_arguments: {k} takes a string, number or boolean, not {v}"
+            ));
+        }
+        out.push((id.to_string(), input.to_string(), v.clone()));
+    }
+    Ok(out)
+}
+
+/// 1995-nodo: set each node override on the workflow. Refused: a node that
+/// does not exist, an input it does not have, or an input that is a link to
+/// another node (overriding a wire would rewire the graph).
+fn apply_node_overrides(
+    wf: &mut Value,
+    nodes: &[(String, String, Value)],
+    workflow: &str,
+) -> Result<(), String> {
+    for (id, input, value) in nodes {
+        let node = wf.get_mut(id.as_str()).ok_or_else(|| {
+            format!("invalid_arguments: $node:{id}.{input}: {workflow} has no node {id}")
+        })?;
+        let inputs = node
+            .get_mut("inputs")
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| format!("invalid_workflow: node {id} has no inputs object"))?;
+        match inputs.get(input.as_str()) {
+            None => {
+                let have: Vec<&str> = inputs.keys().map(String::as_str).collect();
+                return Err(format!(
+                    "invalid_arguments: $node:{id}.{input}: node {id} has no input {input} (it has: {})",
+                    have.join(", ")
+                ));
+            }
+            Some(Value::Array(_)) => {
+                return Err(format!(
+                    "invalid_arguments: $node:{id}.{input} is a link to another node; an override sets a value, never a wire"
+                ));
+            }
+            Some(_) => {
+                inputs.insert(input.clone(), value.clone());
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -275,6 +342,7 @@ pub fn parse_request(args: &Value) -> Result<Request, String> {
     if !ov.is_object() {
         return Err("invalid_arguments: overrides must be an object".into());
     }
+    let node_overrides = parse_node_overrides(&ov)?;
     let count = args.get("count").and_then(Value::as_u64).unwrap_or(1);
     if count == 0 || count > u64::from(MAX_COUNT) {
         return Err(format!("invalid_arguments: count must be 1..={MAX_COUNT}"));
@@ -319,6 +387,7 @@ pub fn parse_request(args: &Value) -> Result<Request, String> {
                 .get("negative_prompt")
                 .and_then(Value::as_str)
                 .map(str::to_string),
+            nodes: node_overrides,
         },
         count: count as u32,
         tier: args.get("tier").and_then(Value::as_str).map(str::to_string),
@@ -610,6 +679,11 @@ pub fn validate(
     // 1. It parses, and it is the API format: a map of node id -> {class_type, inputs}.
     let mut wf: Value = serde_json::from_str(workflow_json)
         .map_err(|e| format!("invalid_workflow: {} does not parse: {e}", req.workflow))?;
+    // 1995-nodo: node overrides land BEFORE every check below, so a model
+    // input set by $node:<id>.<input> is pin- and licence-checked like any.
+    if wf.is_object() {
+        apply_node_overrides(&mut wf, &req.overrides.nodes, &req.workflow)?;
+    }
     let nodes = wf
         .as_object()
         .ok_or_else(|| format!("invalid_workflow: {} is not an object", req.workflow))?;
@@ -2586,6 +2660,56 @@ mod tests {
         );
         std::fs::write(dir.path().join("frame.finish.json"), b"{}").unwrap();
         assert!(crate::provenance::parent_of(&png).is_some());
+    }
+
+    /// ORDER 1995-nodo: `$node:<id>.<input>` reaches any node input beside the
+    /// titles (node 5 is both $seed-titled and given steps), and is applied
+    /// BEFORE validation: a model input set this way is pin-checked, and a
+    /// link input, a missing node or a malformed key is refused. Pre-fix:
+    /// FAILS, overrides reached only $seed/$prompt/$negative_prompt titles.
+    #[test]
+    fn node_id_overrides_reach_any_input_and_are_validated() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("nodo-proj", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let pose = format!("{FORGE_SCRATCH}/in/gk/left_hand.png");
+        let run = |ov: Value| {
+            call(
+                "nodo-proj",
+                "a",
+                &json!({"workflow":"tool/art/workflows/ok.api.json","inputs":{"pose":pose},"overrides":ov}),
+                &mut |_| {},
+            )
+        };
+        let ok = run(json!({"seed": 7, "$node:5.steps": 9}));
+        let unpinned = run(json!({"$node:1.ckpt_name": "mystery_merge_v9.safetensors"}));
+        let link = run(json!({"$node:5.model": "x"}));
+        let missing = run(json!({"$node:99.steps": 1}));
+        let malformed = run(json!({"$node:5": 1}));
+        let prompts = engine.prompts.lock().unwrap().clone();
+        install_seam(None);
+        ok.unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            prompts[0]["5"]["inputs"]["steps"], 9,
+            "the override reached node 5"
+        );
+        assert_eq!(
+            prompts[0]["5"]["inputs"]["seed"], 7,
+            "and its $seed title still applies"
+        );
+        let e = unpinned.unwrap_err();
+        assert!(
+            e.starts_with("model_refused:") && e.contains("mystery_merge_v9"),
+            "{e}"
+        );
+        assert!(link.unwrap_err().contains("is a link to another node"));
+        assert!(missing.unwrap_err().contains("has no node 99"));
+        assert!(
+            malformed
+                .unwrap_err()
+                .contains("must be $node:<node id>.<input name>")
+        );
     }
 
     /// 1972-stfx: BiRefNet_ll's loader names its weights in `model`; the
