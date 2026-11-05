@@ -837,7 +837,7 @@ fn promote_proven_container_lanes(doc: &mut CapabilityDocument) {
 pub fn probe_identity() -> String {
     format!(
         "{}+{}",
-        env!("CARGO_PKG_VERSION"),
+        crate::VERSION.trim(), // 1993-cver: the release version, from VERSION
         env!("TILLANDSIAS_PROBE_REVISION")
     )
 }

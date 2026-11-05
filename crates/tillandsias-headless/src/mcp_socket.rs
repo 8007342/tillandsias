@@ -374,7 +374,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 "capabilities": { "tools": {} },
                 "serverInfo": {
                     "name": "tillandsias-host-services",
-                    "version": env!("CARGO_PKG_VERSION"),
+                    // 1993-cver: the release version, from VERSION.
+                    "version": crate::VERSION.trim(),
                     "buildId": build_identity(),
                 },
                 // 1969-7qm7: the grouped index is what the agent sees FIRST.
