@@ -2144,11 +2144,17 @@ async fn run_start(
     // while `on_phase` consumers were live on the same runtime. `VzRuntime` is
     // `Send + 'static` (compile-asserted below), so the contract is honourable
     // rather than merely documented.
+    // 1915-vzbt: the vz-boot span starts here and ends at the first
+    // Ready-with-podman status (apply_vm_status) or a start failure.
+    crate::bringup_timer::vz_boot_started();
     {
         let vz = Arc::clone(&vz);
         let handle = tokio::runtime::Handle::current();
-        tokio::task::spawn_blocking(move || handle.block_on(vz.start()))
-            .await
+        let started = tokio::task::spawn_blocking(move || handle.block_on(vz.start())).await;
+        if !matches!(started, Ok(Ok(()))) {
+            crate::bringup_timer::vz_boot_finished(1);
+        }
+        started
             .map_err(|e| {
                 crate::provision_error::failure_text(
                     crate::provision_error::Stage::VmStart,
@@ -3453,6 +3459,9 @@ fn apply_vm_status(
             guard.podman_ready = podman_ready;
             guard.login_runtime_ready = new_login_runtime_ready;
             rebuild_needed = true;
+            if new_login_runtime_ready {
+                crate::bringup_timer::vz_boot_finished(0);
+            }
         }
         // The status row is re-rendered from MenuState on every rebuild
         // (render() reads state.status_text). Without this write the state
