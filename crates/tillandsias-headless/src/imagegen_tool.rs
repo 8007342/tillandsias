@@ -771,7 +771,18 @@ pub fn call(
             std::fs::read(&host).map_err(|e| format!("engine_failed: no output {name}: {e}"))?;
         let (w, h, alpha) =
             png_facts(&bytes).ok_or_else(|| format!("engine_failed: {name} is not a PNG"))?;
+        // 1996-pvpr: a control or init image made by an earlier stage links back.
+        let input_hosts: Vec<std::path::PathBuf> = job
+            .aux
+            .control
+            .iter()
+            .map(|(_, img)| img.as_str())
+            .chain(job.aux.init.iter().map(|(init, _, _)| init.as_str()))
+            .filter_map(|p| p.strip_prefix("/out/").map(|r| out_dir.join(r)))
+            .collect();
         let record = crate::provenance::Record {
+            tool: "image.generate",
+            parents: crate::provenance::parents_of(input_hosts.iter().map(|p| p.as_path())),
             engine: crate::provenance::Engine::SdCpp,
             workflow: None,
             models: models.clone(),
