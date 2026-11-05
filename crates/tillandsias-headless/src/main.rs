@@ -4417,12 +4417,16 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     }
     // 1979-bm3u: a key from another generation than the cert is not a CA. The
     // refresh mints both halves together.
-    let Some(matches) = ca_key_check(crt, key) else {
-        eprintln!(
-            "[tillandsias] warn:ca-key-check-unverifiable: openssl could not run, so the CA \
-             pair is kept as it is (nothing is wiped on an unknown; 1999-grot)"
-        );
-        return false;
+    let matches = match ca_key_check_detail(crt, key) {
+        Ok(m) => m,
+        Err(why) => {
+            eprintln!(
+                "[tillandsias] warn:ca-key-check-unverifiable:{why}: the CA key or \
+                 certificate could not be read, so the pair is kept as it is (only a \
+                 proven mismatch is reissued; 1999-grot, 2001-cakr)"
+            );
+            return false;
+        }
     };
     if !matches {
         warn!(
@@ -4519,28 +4523,62 @@ fn ca_key_matches_cert(crt: &Path, key: &Path) -> bool {
     ca_key_check(crt, key) == Some(true)
 }
 
-/// 1999-grot: the key check, with "could not run the check" kept apart from
-/// "checked and wrong". `None` means openssl could not be SPAWNED for one
-/// side (a resource limit, a PATH without openssl): nothing about the pair is
-/// known, so nothing may be wiped on its account. A key that openssl runs on
-/// and rejects is still `Some(false)` (1979-bm3u's unreadable-key reissue).
+/// 1999-grot, 2001-cakr: the key check. `Some(false)` is a POSITIVE proof of a
+/// mismatch: openssl read BOTH public keys and they differ. Anything short of
+/// that is `None` (unknown) and names the side that could not be read: openssl
+/// not spawnable, a nonzero exit, or empty output. Before 2001-cakr a nonzero
+/// `openssl pkey` exit (a transient failure, or a key passphrase from another
+/// generation) answered "mismatch" and wiped the CA under a running Vault.
+/// Credentials lost beats credentials broken, but a CA lost to a flaky probe
+/// is neither: an unknown keeps the pair.
 fn ca_key_check(crt: &Path, key: &Path) -> Option<bool> {
-    let public = |mut c: Command| -> Option<Option<Vec<u8>>> {
-        let o = c.stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
-        Some(Some(o.stdout).filter(|out| o.status.success() && !out.is_empty()))
+    ca_key_check_detail(crt, key).ok()
+}
+
+/// The check with the reason an unknown is unknown, for the warn line.
+fn ca_key_check_detail(crt: &Path, key: &Path) -> Result<bool, String> {
+    let public = |side: &str, mut c: Command| -> Result<Vec<u8>, String> {
+        let o = c
+            .stdin(Stdio::null())
+            .stderr(Stdio::null())
+            .output()
+            .map_err(|e| format!("{side}:spawn-failed:{e}"))?;
+        if !o.status.success() {
+            return Err(format!("{side}:exit-{}", o.status.code().unwrap_or(-1)));
+        }
+        if o.stdout.is_empty() {
+            return Err(format!("{side}:empty-output"));
+        }
+        Ok(o.stdout)
     };
     let mut of_cert = Command::new("openssl");
     of_cert.args(["x509", "-noout", "-pubkey", "-in"]).arg(crt);
-    let mut of_key = Command::new("openssl");
+    let mut of_key = Command::new(ca_key_openssl_bin());
     of_key
         .arg("pkey")
         .args(ca_key_store::key_in_args())
         .args(["-pubout", "-in"])
         .arg(key)
         .envs(ca_key_store::pass_env());
-    let a = public(of_cert)?;
-    let b = public(of_key)?;
-    Some(matches!((a, b), (Some(a), Some(b)) if a == b))
+    let a = public("cert", of_cert)?;
+    let b = public("key", of_key)?;
+    Ok(a == b)
+}
+
+/// The openssl the key half of the check runs. A test seam only: under
+/// `cfg(test)` a thread may plant a stub to model a transient failure.
+fn ca_key_openssl_bin() -> std::ffi::OsString {
+    #[cfg(test)]
+    if let Some(p) = CA_KEY_OPENSSL_STUB.with(|s| s.borrow().clone()) {
+        return p.into_os_string();
+    }
+    "openssl".into()
+}
+
+#[cfg(test)]
+thread_local! {
+    static CA_KEY_OPENSSL_STUB: std::cell::RefCell<Option<PathBuf>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 /// 1999-grot: the trust a Vault CLIENT needs is the CA certificate alone.
@@ -4763,10 +4801,57 @@ mod ca_refresh_margin_tests {
             ca_bundle_needs_refresh(&crt_a, &key_b),
             "a mismatched pair is reissued"
         );
+        // 2001-cakr flips 1979-bm3u here: an unreadable key is an UNKNOWN,
+        // not a mismatch, and is kept (only a proven mismatch is reissued).
         std::fs::write(&key_b, "not a key").unwrap();
+        assert_eq!(ca_key_check(&crt_a, &key_b), None);
         assert!(
-            ca_bundle_needs_refresh(&crt_a, &key_b),
-            "an unreadable key is reissued"
+            !ca_bundle_needs_refresh(&crt_a, &key_b),
+            "an unreadable key is kept, not reissued"
+        );
+    }
+
+    // 2001-cakr: a transient `openssl pkey` failure is an unknown, never a
+    // mismatch. With a stub that exits 1 for the key read, a MATCHED pair is
+    // neither refreshed nor wiped, and the CA dir is byte-identical. Red before
+    // 2001-cakr: a nonzero exit answered Some(false) and the pair was wiped.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_key_read_leaves_the_ca_dir_byte_identical() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(dir.path(), 365);
+        std::fs::write(dir.path().join("vault.crt"), "leaf").unwrap();
+        let stub = bin.path().join("openssl");
+        std::fs::write(&stub, "#!/bin/sh\necho 'unable to load key' >&2\nexit 1\n").unwrap();
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let snap = |d: &Path| -> Vec<(String, Vec<u8>)> {
+            let mut v: Vec<_> = std::fs::read_dir(d)
+                .unwrap()
+                .flatten()
+                .map(|e| {
+                    let n = e.file_name().to_string_lossy().into_owned();
+                    (n, std::fs::read(e.path()).unwrap_or_default())
+                })
+                .collect();
+            v.sort();
+            v
+        };
+        let before = snap(dir.path());
+        CA_KEY_OPENSSL_STUB.with(|s| *s.borrow_mut() = Some(stub.clone()));
+        let detail = ca_key_check_detail(&crt, &key);
+        let refresh = ca_bundle_needs_refresh(&crt, &key);
+        let wiped = wipe_broken_ca_state(dir.path(), &crt, &key);
+        CA_KEY_OPENSSL_STUB.with(|s| *s.borrow_mut() = None);
+        assert_eq!(detail, Err("key:exit-1".to_string()));
+        assert!(!refresh, "an unreadable key is not a reason to re-mint");
+        assert!(!wiped, "an unreadable key is not a reason to wipe");
+        assert_eq!(snap(dir.path()), before, "the CA dir changed");
+        assert_eq!(
+            ca_key_check(&crt, &key),
+            Some(true),
+            "the real pair still matches"
         );
     }
 
