@@ -991,11 +991,15 @@ pub(crate) fn ensure_vault_tls_leaf(
     Ok(())
 }
 
+fn end_previous_ca_window(certs_dir: &std::path::Path) {
+    let _ = fs::remove_file(certs_dir.join(crate::PREVIOUS_CA_FILE));
+}
+
 fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient, String> {
     // 1999-grot: a reader takes the trust as it is and never re-mints it.
     let certs_dir = crate::ca_trust_dir(debug)?;
-    let ca_pem = fs::read(certs_dir.join("intermediate.crt"))
-        .map_err(|e| format!("read Vault CA certificate: {e}"))?;
+    // 2000-camv: the current CA plus the one a mint replaced (one generation).
+    let ca_pem = crate::host_vault_trust_pem(&certs_dir)?;
     VaultClient::new_with_ca_certificate(base_url, token, &ca_pem)
         .map_err(|e| format!("build Vault TLS client: {e}"))
 }
@@ -1006,6 +1010,12 @@ fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient,
 /// healthy. Called automatically from `run_init`; the previous `--with-vault`
 /// opt-in is now a no-op.
 pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
+    // 2000-camv: a read-only process (`--cloud-usage`) never starts Vault.
+    if crate::read_only_process() {
+        return Err(
+            "refused:vault:read-only-process: a read-only command does not start Vault".into(),
+        );
+    }
     // Order 234 (R6): refuse before waiting on the lock during drain/stop.
     if !crate::runtime_phase::container_mutations_allowed() {
         return Err(crate::runtime_phase::refusal("ensure tillandsias-vault"));
@@ -1116,6 +1126,12 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
         }
     };
     let client = vault_client(&base_url, &root_token, debug)?;
+    // 2000-camv: Vault now SERVES a leaf from the current CA (it was just
+    // launched with it), so the replaced CA has nothing left to verify and
+    // its one-generation window ends. Not at leaf issuance: the on-disk leaf
+    // is reissued before the running check, while a running Vault still
+    // serves its old copy.
+    end_previous_ca_window(&certs_dir);
 
     rt.block_on(load_policies(&client, debug))?;
     rt.block_on(provision_approle_roles(&client, debug))?;
@@ -2305,8 +2321,22 @@ fn vault_up_or_start(
     running: impl FnOnce() -> bool,
     start: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
+    vault_up_or_start_unless(crate::read_only_process(), running, start)
+}
+
+/// 2000-camv: a read-only process (`--cloud-usage`) never starts Vault: a
+/// start from a hook's environment re-minted the host CA under the running
+/// Vault. It reports the stopped Vault instead.
+pub(crate) fn vault_up_or_start_unless(
+    read_only: bool,
+    running: impl FnOnce() -> bool,
+    start: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
     if running() {
         return Ok(());
+    }
+    if read_only {
+        return Err("vault-unavailable:not-running".into());
     }
     eprintln!(
         "note:cloudflare-store:vault-not-running:starting-the-vault-enclave-only (no other image is built or started)"
