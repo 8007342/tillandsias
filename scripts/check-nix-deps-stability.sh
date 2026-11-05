@@ -224,6 +224,7 @@ fi
 # cbm8 -> fncf), and run 41788810048 spent ~15 of its 29 build minutes on
 # deps. So the bump itself is perturbed here, and every file it touches is
 # restored on every exit path.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 BUMPED=(VERSION Cargo.lock)
 while IFS= read -r f; do BUMPED+=("$f"); done < <(git -C "$ROOT" ls-files 'crates/*/Cargo.toml' Cargo.toml)
 if ! git -C "$ROOT" diff --quiet -- "${BUMPED[@]}" 2>/dev/null; then
@@ -242,7 +243,12 @@ done
 ( cd "$ROOT" && bash scripts/bump-version.sh --bump-build >/dev/null 2>&1 \
     && cargo update --workspace --offline >/dev/null 2>&1 ) \
     || { echo "skip:nix-deps-stability:version-bump-unrunnable"; exit 0; }
-git -C "$ROOT" diff --quiet -- VERSION && { echo "violation:nix-deps-probe-vacuous:version-bump-did-not-move-VERSION"; exit 1; }
+if git -C "$ROOT" diff --quiet -- VERSION; then
+    echo "violation:nix-deps-probe-vacuous:version-bump-did-not-move-VERSION"
+    _afford "the version-bump arm ran bump-version.sh but VERSION did not change, so it observed no bump" \
+        "run scripts/bump-version.sh --bump-build by hand and fix why it leaves VERSION as it is"
+    exit 1
+fi
 bump_churn=""
 i=0
 for out in "${OUTPUTS[@]}"; do
@@ -254,9 +260,8 @@ restore_bump
 trap - EXIT HUP INT TERM
 if [ -n "$bump_churn" ]; then
     echo "violation:nix-deps-churn-on-version-bump:${bump_churn}"
-    echo "  a release version bump moved the crane deps derivation, so every release" >&2
-    echo "  recompiles every dependency crate. Keep the workspace crate versions fixed" >&2
-    echo "  and read the release version from VERSION (order 1993-cver)." >&2
+    _afford "a release version bump moved the crane deps derivation, so every release recompiles every dependency crate (1993-cver)" \
+        "keep the workspace crate versions fixed and read the release version from VERSION; bump-version.sh must not write Cargo.toml"
     exit 1
 fi
 
