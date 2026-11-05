@@ -992,7 +992,8 @@ pub(crate) fn ensure_vault_tls_leaf(
 }
 
 fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient, String> {
-    let certs_dir = tls_material_dir(debug)?;
+    // 1999-grot: a reader takes the trust as it is and never re-mints it.
+    let certs_dir = crate::ca_trust_dir(debug)?;
     let ca_pem = fs::read(certs_dir.join("intermediate.crt"))
         .map_err(|e| format!("read Vault CA certificate: {e}"))?;
     VaultClient::new_with_ca_certificate(base_url, token, &ca_pem)

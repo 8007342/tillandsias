@@ -4396,6 +4396,19 @@ pub(crate) fn cert_valid_for(cert: &Path, secs: u64) -> bool {
 /// Decided from the certificate's own notAfter, not file mtimes: the old
 /// 25-day mtime rule on a 30-day CA let a tray that launched on day 24 serve it
 /// past notAfter, and an mtime says nothing about the bytes it dates.
+/// 1999-grot: why a refresh happens, for the loud mint line.
+fn ca_refresh_reason(crt: &Path, key: &Path) -> &'static str {
+    if !crt.is_file() {
+        "cert-missing"
+    } else if !key.is_file() {
+        "key-missing"
+    } else if !cert_valid_for(crt, CERT_MIN_REMAINING_SECS) {
+        "cert-expiring"
+    } else {
+        "key-mismatch"
+    }
+}
+
 fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     if !crt.is_file() || !key.is_file() {
         return true;
@@ -4405,7 +4418,14 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     }
     // 1979-bm3u: a key from another generation than the cert is not a CA. The
     // refresh mints both halves together.
-    if !ca_key_matches_cert(crt, key) {
+    let Some(matches) = ca_key_check(crt, key) else {
+        eprintln!(
+            "[tillandsias] warn:ca-key-check-unverifiable: openssl could not run, so the CA \
+             pair is kept as it is (nothing is wiped on an unknown; 1999-grot)"
+        );
+        return false;
+    };
+    if !matches {
         warn!(
             spec = "secret-rotation",
             location = %crt.display(),
@@ -4455,7 +4475,7 @@ fn publish_ca_pair(
 /// generation lock dir is kept. Returns whether it wiped. A missing or expiring
 /// CA is the ordinary re-mint and is left to the caller.
 fn wipe_broken_ca_state(certs_dir: &Path, crt: &Path, key: &Path) -> bool {
-    if !crt.is_file() || !key.is_file() || ca_key_matches_cert(crt, key) {
+    if !crt.is_file() || !key.is_file() || ca_key_check(crt, key) != Some(false) {
         return false;
     }
     let Ok(entries) = std::fs::read_dir(certs_dir) else {
@@ -4495,14 +4515,20 @@ fn wipe_broken_ca_state(certs_dir: &Path, crt: &Path, key: &Path) -> bool {
 /// "No valid signing certificate", and nothing here noticed: every launch died
 /// at the proxy READY gate. An unreadable key or cert answers false (reissue),
 /// the way an unreadable cert already fails cert_valid_for.
+#[cfg(test)]
 fn ca_key_matches_cert(crt: &Path, key: &Path) -> bool {
-    let public = |mut c: Command| {
-        c.stdin(Stdio::null())
-            .stderr(Stdio::null())
-            .output()
-            .ok()
-            .filter(|o| o.status.success() && !o.stdout.is_empty())
-            .map(|o| o.stdout)
+    ca_key_check(crt, key) == Some(true)
+}
+
+/// 1999-grot: the key check, with "could not run the check" kept apart from
+/// "checked and wrong". `None` means openssl could not be SPAWNED for one
+/// side (a resource limit, a PATH without openssl): nothing about the pair is
+/// known, so nothing may be wiped on its account. A key that openssl runs on
+/// and rejects is still `Some(false)` (1979-bm3u's unreadable-key reissue).
+fn ca_key_check(crt: &Path, key: &Path) -> Option<bool> {
+    let public = |mut c: Command| -> Option<Option<Vec<u8>>> {
+        let o = c.stdin(Stdio::null()).stderr(Stdio::null()).output().ok()?;
+        Some(Some(o.stdout).filter(|out| o.status.success() && !out.is_empty()))
     };
     let mut of_cert = Command::new("openssl");
     of_cert.args(["x509", "-noout", "-pubkey", "-in"]).arg(crt);
@@ -4513,7 +4539,29 @@ fn ca_key_matches_cert(crt: &Path, key: &Path) -> bool {
         .args(["-pubout", "-in"])
         .arg(key)
         .envs(ca_key_store::pass_env());
-    matches!((public(of_cert), public(of_key)), (Some(a), Some(b)) if a == b)
+    let a = public(of_cert)?;
+    let b = public(of_key)?;
+    Some(matches!((a, b), (Some(a), Some(b)) if a == b))
+}
+
+/// 1999-grot: the trust a Vault CLIENT needs is the CA certificate alone.
+/// Verifying Vault's leaf never needs the CA key, so a reader must never
+/// re-mint: a mint replaced intermediate.crt under a running Vault whose leaf
+/// the old CA signed, and every later tray read failed TLS verification
+/// (macuahuitl 2026-11-04: GitHub rotation never ran; the token lapsed at its
+/// 8 h expiry). A present, unexpired certificate is returned as it is; only a
+/// missing or expired one falls through to [`ensure_ca_bundle`], where there
+/// is no chain to break.
+pub(crate) fn ca_trust_dir(debug: bool) -> Result<PathBuf, String> {
+    let certs_dir = PathBuf::from(ca_dir());
+    if ca_trust_is_usable(&certs_dir.join("intermediate.crt")) {
+        return Ok(certs_dir);
+    }
+    ensure_ca_bundle(debug)
+}
+
+fn ca_trust_is_usable(crt: &Path) -> bool {
+    crt.is_file() && cert_valid_for(crt, 0)
 }
 
 /// ORDER 1762-bano: the enclave certificates that stay valid for less than
@@ -4672,6 +4720,38 @@ mod ca_refresh_margin_tests {
             ca_key_matches_cert(&crt, &key),
             "the previous pair is still a pair"
         );
+    }
+
+    // ORDER 1999-grot: a Vault client's trust is the CA certificate alone, so a
+    // pair whose key is missing or from another generation still TRUSTS, and
+    // the reader keeps it instead of re-minting the CA under a running Vault.
+    // Pre-fix: FAILS, vault_client went through ensure_ca_bundle, which wiped
+    // and re-minted, and the served leaf stopped verifying.
+    #[test]
+    fn a_vault_reader_keeps_a_trusting_ca_whose_key_is_lost() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let (crt_a, _key_a) = mint(a.path(), 365);
+        let (_crt_b, key_b) = mint(b.path(), 365);
+        assert!(
+            ca_bundle_needs_refresh(&crt_a, &key_b),
+            "a minter would reissue"
+        );
+        assert!(ca_trust_is_usable(&crt_a), "a reader keeps the trust");
+        assert!(!ca_trust_is_usable(&a.path().join("absent.crt")));
+        assert_eq!(ca_refresh_reason(&crt_a, &key_b), "key-mismatch");
+        assert_eq!(
+            ca_refresh_reason(&crt_a, &a.path().join("none.key")),
+            "key-missing"
+        );
+        let src = include_str!("vault_bootstrap.rs");
+        let body = &src[src.find("fn vault_client(").unwrap()..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        assert!(
+            body.contains("crate::ca_trust_dir("),
+            "the reader path never mints"
+        );
+        assert!(!body.contains("tls_material_dir("), "{body}");
     }
 
     // 1979-bm3u: a certificate and a key from two generations is reissued, not
@@ -4952,6 +5032,18 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         // 1979-bm3u (operator, 2026-11-03: "wipe them all and recreate all from
         // scratch"): a broken pair is not repaired in place. Everything here is
         // removed and minted again from nothing, as on a first start.
+        eprintln!(
+            "[tillandsias] warn:ca-reminted:{}: pid={} exe={} vault-running={}: a new CA \
+             replaces the old one; a Vault serving a leaf from the old CA no longer \
+             verifies until it is restarted (1999-grot)",
+            ca_refresh_reason(&crt, &key),
+            std::process::id(),
+            std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "unknown".into()),
+            vault_bootstrap::container_running_answer("tillandsias-vault")
+                .map_or("unknown", |r| if r { "yes" } else { "no" }),
+        );
         wipe_broken_ca_state(&certs_dir, &crt, &key);
 
         // @trace spec:secret-rotation
