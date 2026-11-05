@@ -1385,11 +1385,38 @@ pub fn store_github_token_bundle(
 }
 
 /// 1742-zg7r: the Vault container must be running for a read to mean anything.
-fn github_store_reachable(vault_running: bool) -> Result<(), String> {
-    if vault_running {
-        Ok(())
+///
+/// 1999-grot: the refusal names WHICH answer it got. `None` is an inspect
+/// that did not answer (a wedged or unreachable podman), `Some(false)` a
+/// container podman says is stopped; both used to read `vault-unavailable`,
+/// as did a TLS failure, so 45 journal lines could not say which it was.
+fn github_store_reachable(vault_running: Option<bool>) -> Result<(), String> {
+    match vault_running {
+        Some(true) => Ok(()),
+        Some(false) => Err("vault-unavailable:not-running".into()),
+        None => Err("vault-unavailable:inspect-failed".into()),
+    }
+}
+
+/// 1999-grot: a transport failure reduced to a fixed class. The payload is a
+/// reqwest error string (it can carry the URL, never a body or a token), so
+/// only the class leaves this function.
+fn vault_network_reason(detail: &str) -> &'static str {
+    let d = detail.to_ascii_lowercase();
+    if d.contains("certificate")
+        || d.contains("tls")
+        || d.contains("handshake")
+        || d.contains("ssl")
+    {
+        "vault-unavailable:network-tls"
+    } else if d.contains("refused") {
+        "vault-unavailable:network-refused"
+    } else if d.contains("timed out") || d.contains("timeout") {
+        "vault-unavailable:network-timeout"
+    } else if d.contains("reset") || d.contains("broken pipe") || d.contains("closed") {
+        "vault-unavailable:network-reset"
     } else {
-        Err("vault-unavailable".into())
+        "vault-unavailable:network-other"
     }
 }
 
@@ -1420,7 +1447,7 @@ impl GitHubTokenStore for VaultGitHubTokenStore {
         // full check interval at every tray start, because the tray starts the
         // rotation before it starts Vault; Err takes the 60 s error backoff.
         // The Cloudflare store already fails closed the same way.
-        github_store_reachable(container_running(VAULT_CONTAINER_NAME))?;
+        github_store_reachable(container_running_answer(VAULT_CONTAINER_NAME))?;
         let _stability = vault_stability_lease(debug)?;
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
@@ -2228,7 +2255,7 @@ pub fn store_cloudflare_token_bundle(
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 fn cloudflare_vault_reason(e: &VaultError) -> &'static str {
     match e {
-        VaultError::Network(_) => "vault-unavailable",
+        VaultError::Network(detail) => vault_network_reason(detail),
         VaultError::Unauthorized(_) => "vault-unauthorized",
         VaultError::Sealed(_) => "vault-sealed",
         VaultError::NotFound(_) => "vault-not-found",
@@ -7770,21 +7797,52 @@ mod tests {
         );
     }
 
+    /// ORDER 1999-grot: a failed GitHub read names WHICH step failed, so a
+    /// journal line can tell a stopped Vault from a podman that did not answer
+    /// from a TLS failure. Pre-fix: FAILS, all three were `vault-unavailable`.
+    #[test]
+    fn a_failed_vault_read_names_the_step_that_failed() {
+        assert_eq!(
+            github_store_reachable(None),
+            Err("vault-unavailable:inspect-failed".to_string())
+        );
+        for (detail, reason) in [
+            (
+                "error sending request: invalid peer certificate: UnknownIssuer",
+                "network-tls",
+            ),
+            (
+                "tcp connect error: Connection refused (os error 111)",
+                "network-refused",
+            ),
+            ("operation timed out", "network-timeout"),
+            ("connection reset by peer", "network-reset"),
+            ("dispatch task is gone", "network-other"),
+        ] {
+            let got = github_vault_read(Err(VaultError::Network(format!(
+                "https://127.0.0.1:8201/v1/secret/data/github/token: {detail}"
+            ))))
+            .unwrap_err();
+            assert_eq!(got, format!("vault-unavailable:{reason}"), "{detail}");
+            assert!(!got.contains("127.0.0.1"), "only the class leaves");
+        }
+    }
+
     /// 1742-zg7r: the live store's two decisions, each a pure function so the
     /// gate can run them. A Vault that is not up is a REASON, not an absence.
     #[test]
     fn github_rotation_store_reports_an_unreachable_vault_as_a_reason() {
         assert_eq!(
-            github_store_reachable(false),
-            Err("vault-unavailable".to_string())
+            github_store_reachable(Some(false)),
+            Err("vault-unavailable:not-running".to_string())
         );
-        assert_eq!(github_store_reachable(true), Ok(()));
+        assert_eq!(github_store_reachable(Some(true)), Ok(()));
         let absent = github_vault_read(Err(VaultError::NotFound("secret/github/token".into())));
         assert_eq!(absent, Ok(None), "only NotFound means there is no token");
         for (err, reason) in [
             (
                 VaultError::Network("connection refused".into()),
-                "vault-unavailable",
+                "vault-unavailable:network-refused",
             ),
             (VaultError::Sealed("sealed".into()), "vault-sealed"),
             (VaultError::Unauthorized("403".into()), "vault-unauthorized"),
@@ -7805,7 +7863,7 @@ mod tests {
         }
         impl GitHubTokenStore for NotUpYet {
             fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
-                github_store_reachable(self.up.get())?;
+                github_store_reachable(Some(self.up.get()))?;
                 self.inner.read_bundle()
             }
             fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
@@ -7854,7 +7912,7 @@ mod tests {
         let store = SharedStore::with(&bundle_expiring_at(NOW - 60));
         let lock = test_lock("74hj");
         let check = |up: bool| {
-            github_store_reachable(up)?;
+            github_store_reachable(Some(up))?;
             rotate_github_token_if_due(
                 &store,
                 &fresh_pair,
