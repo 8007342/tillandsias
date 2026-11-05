@@ -4962,6 +4962,7 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 /// under the running Vault.
 static READ_ONLY_PROCESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+#[cfg_attr(not(all(feature = "host-services", feature = "vault")), allow(dead_code))]
 pub(crate) fn set_read_only_process() {
     READ_ONLY_PROCESS.store(true, std::sync::atomic::Ordering::SeqCst);
 }
