@@ -85,7 +85,11 @@ pub const CLOUDFLARE_APP_CLIENT_ID: &str = "d9d1303782dfe45c7e2d7bb9ce89c8a8";
 /// discovery URL answers 403 to Python's default `Python-urllib/3.9`
 /// User-Agent and 200 to reqwest's (none) and curl's. That this client
 /// sends none at all only works by luck.
-const USER_AGENT: &str = concat!("tillandsias/", env!("CARGO_PKG_VERSION"));
+/// 1993-cver: the release version comes from VERSION (the crate version is
+/// frozen so a release bump never moves Cargo.lock or the deps derivations).
+fn user_agent() -> String {
+    format!("tillandsias/{}", crate::VERSION.trim())
+}
 
 /// The device-code grant's URN (RFC 8628 §1's registered value). Cloudflare's
 /// discovery document LISTS it as of 2026-10-14 (measured, with a
@@ -220,7 +224,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
-                .user_agent(USER_AGENT)
+                .user_agent(user_agent())
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
@@ -241,7 +245,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
-                .user_agent(USER_AGENT)
+                .user_agent(user_agent())
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
@@ -266,7 +270,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
-                .user_agent(USER_AGENT)
+                .user_agent(user_agent())
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
