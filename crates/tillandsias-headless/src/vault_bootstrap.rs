@@ -988,14 +988,17 @@ pub(crate) fn ensure_vault_tls_leaf(
     crate::ca_key_store::seal(&tmp_key, &key, &[], false)
         .map_err(|e| format!("publish Vault TLS key: {e}"))?;
     fs::rename(&tmp_cert, &cert).map_err(|e| format!("publish Vault TLS cert: {e}"))?;
+    // 2000-camv: the leaf now comes from the current CA, so the replaced CA
+    // has nothing left to verify; its one-generation window ends here.
+    let _ = fs::remove_file(certs_dir.join(crate::PREVIOUS_CA_FILE));
     Ok(())
 }
 
 fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient, String> {
     // 1999-grot: a reader takes the trust as it is and never re-mints it.
     let certs_dir = crate::ca_trust_dir(debug)?;
-    let ca_pem = fs::read(certs_dir.join("intermediate.crt"))
-        .map_err(|e| format!("read Vault CA certificate: {e}"))?;
+    // 2000-camv: the current CA plus the one a mint replaced (one generation).
+    let ca_pem = crate::host_vault_trust_pem(&certs_dir)?;
     VaultClient::new_with_ca_certificate(base_url, token, &ca_pem)
         .map_err(|e| format!("build Vault TLS client: {e}"))
 }

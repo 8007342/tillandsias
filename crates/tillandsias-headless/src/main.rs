@@ -4544,6 +4544,46 @@ fn ca_key_check(crt: &Path, key: &Path) -> Option<bool> {
     Some(matches!((a, b), (Some(a), Some(b)) if a == b))
 }
 
+/// 2000-camv: the CA a mint replaced, kept beside the current one.
+pub(crate) const PREVIOUS_CA_FILE: &str = "previous.crt";
+
+fn keep_previous_ca(certs_dir: &Path, old: &[u8]) {
+    let tmp = certs_dir.join(format!("{PREVIOUS_CA_FILE}.{}.tmp", std::process::id()));
+    let kept = std::fs::write(&tmp, old)
+        .and_then(|()| std::fs::rename(&tmp, certs_dir.join(PREVIOUS_CA_FILE)));
+    if let Err(e) = kept {
+        let _ = std::fs::remove_file(&tmp);
+        eprintln!(
+            "[tillandsias] warn:ca-previous-not-kept: {e}; a Vault serving a leaf from the \
+             replaced CA stops verifying until it is relaunched (2000-camv)"
+        );
+    }
+}
+
+/// 2000-camv: what a HOST Vault client trusts: the current CA, plus the CA a
+/// mint replaced while that one is still valid. A Vault keeps serving the
+/// leaf the replaced CA signed until it is relaunched, and mirrors created
+/// before the mint hold only that CA, so this keeps the tray verifying
+/// without relaunching Vault under them. The previous CA is dropped when
+/// Vault's leaf is next reissued from the current CA (ensure_vault_tls_leaf),
+/// so the window is one generation. It widens nothing: the previous CA was
+/// trusted until the mint, and the mint is a repair (key lost, mismatched or
+/// expiring), never a revocation; --reset-guest removes the whole directory.
+pub(crate) fn host_vault_trust_pem(certs_dir: &Path) -> Result<Vec<u8>, String> {
+    let mut pem = std::fs::read(certs_dir.join("intermediate.crt"))
+        .map_err(|e| format!("read Vault CA certificate: {e}"))?;
+    let previous = certs_dir.join(PREVIOUS_CA_FILE);
+    if cert_valid_for(&previous, 0)
+        && let Ok(old) = std::fs::read(&previous)
+    {
+        if !pem.ends_with(b"\n") {
+            pem.push(b'\n');
+        }
+        pem.extend_from_slice(&old);
+    }
+    Ok(pem)
+}
+
 /// 1999-grot: the trust a Vault CLIENT needs is the CA certificate alone.
 /// Verifying Vault's leaf never needs the CA key, so a reader must never
 /// re-mint: a mint replaced intermediate.crt under a running Vault whose leaf
@@ -5024,6 +5064,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         // 1979-bm3u (operator, 2026-11-03: "wipe them all and recreate all from
         // scratch"): a broken pair is not repaired in place. Everything here is
         // removed and minted again from nothing, as on a first start.
+        // 2000-camv: the CA this mint replaces, while it is still valid. Host
+        // Vault clients keep trusting it for ONE generation, so a Vault still
+        // serving a leaf it signed stays verifiable and nothing relaunches it.
+        let replaced = std::fs::read(&crt).ok().filter(|_| cert_valid_for(&crt, 0));
         eprintln!(
             "[tillandsias] warn:ca-reminted:{}: pid={} exe={} vault-running={}: a new CA \
              replaces the old one; a Vault serving a leaf from the old CA no longer \
@@ -5132,6 +5176,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         publish_ca_pair(&tmp_crt, &crt, || {
             ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
         })?;
+        if let Some(old) = replaced {
+            keep_previous_ca(&certs_dir, &old);
+        }
 
         info!(
             accountability = true,
@@ -35351,6 +35398,93 @@ esac
             }
         }
         found
+    }
+
+    /// ORDER 2000-camv: a re-mint keeps the replaced CA for host Vault
+    /// clients, so a Vault still serving the old leaf keeps verifying and
+    /// nothing relaunches it under the mirrors; the next leaf reissue ends the
+    /// window. Pre-fix: FAILS, the old CA was gone and every tray read failed
+    /// TLS verification until Vault was relaunched.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn a_reminted_ca_keeps_the_replaced_one_trusted_until_the_leaf_is_reissued() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let dir = ensure_ca_bundle(false).expect("first mint");
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&dir, false).expect("leaf");
+        let old = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        std::fs::remove_file(dir.join("intermediate.key")).unwrap();
+        ensure_ca_bundle(false).expect("re-mint");
+        let new = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        assert_ne!(old, new, "the key was gone, so the CA was minted again");
+        assert_eq!(std::fs::read(dir.join(PREVIOUS_CA_FILE)).unwrap(), old);
+        let trust = host_vault_trust_pem(&dir).unwrap();
+        assert_eq!(
+            reqwest::Certificate::from_pem_bundle(&trust).unwrap().len(),
+            2
+        );
+        let served_leaf = dir.join("vault.crt");
+        let verifies = |ca: &[u8]| {
+            let bundle = dir.join("trust-under-test.pem");
+            std::fs::write(&bundle, ca).unwrap();
+            Command::new("openssl")
+                .args(["verify", "-CAfile"])
+                .arg(&bundle)
+                .arg(&served_leaf)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        assert!(
+            !verifies(&new),
+            "the current CA alone does not verify the old leaf"
+        );
+        assert!(
+            verifies(&trust),
+            "the host trust still verifies the served leaf"
+        );
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&dir, false).expect("reissue");
+        assert!(
+            !dir.join(PREVIOUS_CA_FILE).exists(),
+            "a leaf from the current CA ends the window"
+        );
+        assert!(
+            verifies(&new),
+            "the reissued leaf verifies against the current CA"
+        );
+    }
+
+    /// ORDER 2000-camv: two minters racing on an empty CA dir (two lanes, or a
+    /// tray and a lane) end with ONE complete pair that both of them return;
+    /// neither observes half of the other's mint, and the second does not
+    /// wipe the first's. Threads stand in for processes: the generation lock
+    /// is a directory in the CA dir, so it is the same lock either way.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn two_concurrent_ca_minters_end_with_one_matched_pair() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let (a, b) = std::thread::scope(|s| {
+            let a = s.spawn(|| {
+                ensure_ca_bundle(false).map(|d| std::fs::read(d.join("intermediate.crt")))
+            });
+            let b = s.spawn(|| {
+                ensure_ca_bundle(false).map(|d| std::fs::read(d.join("intermediate.crt")))
+            });
+            (a.join().unwrap(), b.join().unwrap())
+        });
+        let (a, b) = (a.unwrap().unwrap(), b.unwrap().unwrap());
+        let dir = PathBuf::from(ca_dir());
+        let on_disk = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        assert_eq!(a, on_disk, "the first minter's view is the final pair");
+        assert_eq!(b, on_disk, "the second minter's view is the final pair");
+        assert!(ca_key_matches_cert(
+            &dir.join("intermediate.crt"),
+            &dir.join("intermediate.key")
+        ));
     }
 
     /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch
