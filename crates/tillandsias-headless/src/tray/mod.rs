@@ -1152,7 +1152,7 @@ fn handle_control_connection(
                                 "IssueWebSession".to_string(),
                                 "EvictProject".to_string(),
                             ],
-                            build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                            build_version: Some(crate::VERSION.trim().to_string()), // 1993-cver
                         },
                     };
                     if write_control_envelope(&mut stream, &ack).is_err() {

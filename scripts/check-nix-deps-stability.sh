@@ -216,5 +216,54 @@ if [ -n "$churned" ]; then
     exit 1
 fi
 
-echo "ok:nix-deps-stable:${#OUTPUTS[@]} checked"
+# ── ARM 2, ORDER 1993-cver: A RELEASE VERSION BUMP ──────────────────────────
+# A release runs scripts/bump-version.sh, and every crate version it rewrote
+# landed in Cargo.lock: 765-8hc3's "Cargo.lock edit -> deps drv CHANGED",
+# once per release. Measured 2026-11-04 (lenovinha, nix 2.24.10): a local
+# --bump-build moved the plan and headless deps drvs (j3n7 -> k3kg,
+# cbm8 -> fncf), and run 41788810048 spent ~15 of its 29 build minutes on
+# deps. So the bump itself is perturbed here, and every file it touches is
+# restored on every exit path.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+BUMPED=(VERSION Cargo.lock)
+while IFS= read -r f; do BUMPED+=("$f"); done < <(git -C "$ROOT" ls-files 'crates/*/Cargo.toml' Cargo.toml)
+if ! git -C "$ROOT" diff --quiet -- "${BUMPED[@]}" 2>/dev/null; then
+    echo "skip:nix-deps-stability:version-files-dirty"
+    exit 0
+fi
+restore_bump() { git -C "$ROOT" checkout -- "${BUMPED[@]}" 2>/dev/null || true; }
+trap restore_bump EXIT HUP INT TERM
+declare -a BUMP_DEPS
+i=0
+for out in "${OUTPUTS[@]}"; do
+    line="$(probe "$out")" || { echo "skip:nix-deps-stability:nix-unusable"; exit 0; }
+    BUMP_DEPS[$i]="${line##*	}"
+    i=$((i + 1))
+done
+( cd "$ROOT" && bash scripts/bump-version.sh --bump-build >/dev/null 2>&1 \
+    && cargo update --workspace --offline >/dev/null 2>&1 ) \
+    || { echo "skip:nix-deps-stability:version-bump-unrunnable"; exit 0; }
+if git -C "$ROOT" diff --quiet -- VERSION; then
+    echo "violation:nix-deps-probe-vacuous:version-bump-did-not-move-VERSION"
+    _afford "the version-bump arm ran bump-version.sh but VERSION did not change, so it observed no bump" \
+        "run scripts/bump-version.sh --bump-build by hand and fix why it leaves VERSION as it is"
+    exit 1
+fi
+bump_churn=""
+i=0
+for out in "${OUTPUTS[@]}"; do
+    line="$(probe "$out")" || { echo "skip:nix-deps-stability:nix-unusable"; exit 0; }
+    [ "${line##*	}" != "${BUMP_DEPS[$i]}" ] && bump_churn="${bump_churn}${bump_churn:+,}${out}"
+    i=$((i + 1))
+done
+restore_bump
+trap - EXIT HUP INT TERM
+if [ -n "$bump_churn" ]; then
+    echo "violation:nix-deps-churn-on-version-bump:${bump_churn}"
+    _afford "a release version bump moved the crane deps derivation, so every release recompiles every dependency crate (1993-cver)" \
+        "keep the workspace crate versions fixed and read the release version from VERSION; bump-version.sh must not write Cargo.toml"
+    exit 1
+fi
+
+echo "ok:nix-deps-stable:${#OUTPUTS[@]} checked (source edit and version bump)"
 exit 0
