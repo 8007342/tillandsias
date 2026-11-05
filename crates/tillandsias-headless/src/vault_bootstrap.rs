@@ -988,10 +988,11 @@ pub(crate) fn ensure_vault_tls_leaf(
     crate::ca_key_store::seal(&tmp_key, &key, &[], false)
         .map_err(|e| format!("publish Vault TLS key: {e}"))?;
     fs::rename(&tmp_cert, &cert).map_err(|e| format!("publish Vault TLS cert: {e}"))?;
-    // 2000-camv: the leaf now comes from the current CA, so the replaced CA
-    // has nothing left to verify; its one-generation window ends here.
-    let _ = fs::remove_file(certs_dir.join(crate::PREVIOUS_CA_FILE));
     Ok(())
+}
+
+fn end_previous_ca_window(certs_dir: &std::path::Path) {
+    let _ = fs::remove_file(certs_dir.join(crate::PREVIOUS_CA_FILE));
 }
 
 fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient, String> {
@@ -1125,6 +1126,12 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
         }
     };
     let client = vault_client(&base_url, &root_token, debug)?;
+    // 2000-camv: Vault now SERVES a leaf from the current CA (it was just
+    // launched with it), so the replaced CA has nothing left to verify and
+    // its one-generation window ends. Not at leaf issuance: the on-disk leaf
+    // is reissued before the running check, while a running Vault still
+    // serves its old copy.
+    end_previous_ca_window(&certs_dir);
 
     rt.block_on(load_policies(&client, debug))?;
     rt.block_on(provision_approle_roles(&client, debug))?;

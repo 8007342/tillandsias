@@ -4962,7 +4962,10 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
 /// under the running Vault.
 static READ_ONLY_PROCESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-#[cfg_attr(not(all(feature = "host-services", feature = "vault")), allow(dead_code))]
+#[cfg_attr(
+    not(all(feature = "host-services", feature = "vault")),
+    allow(dead_code)
+)]
 pub(crate) fn set_read_only_process() {
     READ_ONLY_PROCESS.store(true, std::sync::atomic::Ordering::SeqCst);
 }
@@ -5135,8 +5138,8 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         let replaced = std::fs::read(&crt).ok().filter(|_| cert_valid_for(&crt, 0));
         eprintln!(
             "[tillandsias] warn:ca-reminted:{}: pid={} exe={} vault-running={}: a new CA \
-             replaces the old one; a Vault serving a leaf from the old CA no longer \
-             verifies until it is restarted (1999-grot)",
+             replaces the old one; host clients keep trusting the old CA until Vault is \
+             next relaunched with a leaf from the new one (1999-grot, 2000-camv)",
             ca_refresh_reason(&crt, &key),
             std::process::id(),
             std::env::current_exe()
@@ -35576,8 +35579,8 @@ esac
         );
         crate::vault_bootstrap::ensure_vault_tls_leaf(&dir, false).expect("reissue");
         assert!(
-            !dir.join(PREVIOUS_CA_FILE).exists(),
-            "a leaf from the current CA ends the window"
+            dir.join(PREVIOUS_CA_FILE).exists(),
+            "an on-disk reissue is not a relaunch: a running Vault still serves the old leaf"
         );
         assert!(
             verifies(&new),
