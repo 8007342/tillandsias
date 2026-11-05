@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, as promised to the operator; written for any project.
+packets:
+- packet_id: a-lane-running-an-old-binary-says-so
+  order: 2003-stbf
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, forge]
+  estimated_hours: 3
+  title: A forge lane running an older binary than the installed one says so, to the tray and to the agent inside
+  context: 'A lane process survives a tray quit and keeps the binary it started with, and it also serves the host-browser and studio tools. So restarting the tray after an install does not deliver a fix to a running forge, and on 2026-11-05 an old lane kept using old CA logic while the tray ran a newer build. Nothing tells the operator or the agent which forges are stale. Generic forge capability for any project.'
+  exit_criteria:
+  - 'With a lane started from build A and build B installed, the tray status and a tool the forge agent can call both report that lane as stale, naming both versions.'
+  - 'A lane whose binary matches the installed one reports current, and when the installed binary cannot be read it reports unknown rather than current.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features with a fixture for current, stale and unknown, plus one real install with a forge left running.'
+  unscoreable: 'none.'
+  next_action: 'Read how a lane records its own version, then write the failing three-outcome test. Report only: no automatic restart, since a forge may hold live work.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05, from the operator tray-restart CA question.
+  events:
+  - type: filed
+    ts: '2026-11-05T22:25:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
