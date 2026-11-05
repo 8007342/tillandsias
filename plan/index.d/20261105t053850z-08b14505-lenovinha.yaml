@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: studio-run-workflow-wall-time-outside-elapsed-s-is-measured-and-explained
+    event:
+      type: note
+      ts: "2026-11-05T05:38:50Z"
+      agent_id: linux-lenovinha-claude-20261105t053849z
+      host: lenovinha
+      summary: |
+        Measured on macuahuitl by macuahuitl-fedora (kumbia, tray from 86f53eaae, one QwenImage run, nothing else in flight): total_ms 344712, elapsed_s 343.13, wall about 347 s. stages_ms: connect 72, read_validate 1094, fetch 0, precheck 418, gpu_wait 0, vram_admit 161, run_0 342865, free 98, outputs 0. The largest stage is run_0, the ComfyUI run itself, at 99.5 percent; the podman-exec transport does not dominate. Wall minus elapsed_s is about 4 s, under the 10 s bound; the earlier 100 s gap is gone with calls non-blocking (1990-mcpq, #923, by inference). Both exit criteria are met.
