@@ -20876,9 +20876,34 @@ fn claim_forge_instance(
     host_mount: bool,
     debug: bool,
 ) -> Result<Option<resource_lock::ResourceLockGuard>, String> {
-    let explicit = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
-        .ok()
-        .is_some_and(|s| !s.trim().is_empty());
+    let explicit = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let Some((guard, instance)) =
+        claim_forge_instance_slot(project, host_mount, debug, explicit.as_deref())?
+    else {
+        return Ok(None);
+    };
+    if let Some(name) = &instance {
+        // The env write runs at the top of a lane launch, before any
+        // thread that reads the instance is spawned.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", name);
+        }
+    }
+    Ok(Some(guard))
+}
+
+/// 2000-envt: [`claim_forge_instance`] without the process environment. The
+/// caller passes the explicit instance it was given and gets back the claim
+/// and the instance it took (`None` = the default), so a test can take two
+/// slots in a row without reading or writing a variable that parallel tests
+/// also touch.
+fn claim_forge_instance_slot(
+    project: &str,
+    host_mount: bool,
+    debug: bool,
+    explicit: Option<&str>,
+) -> Result<Option<(resource_lock::ResourceLockGuard, Option<String>)>, String> {
+    let explicit = explicit.is_some_and(|s| !s.trim().is_empty());
     if explicit || host_mount {
         return Ok(None);
     }
@@ -20898,11 +20923,6 @@ fn claim_forge_instance(
             Err(e) => return Err(e),
         };
         if let Some(name) = &instance {
-            // The env write runs at the top of a lane launch, before any
-            // thread that reads the instance is spawned.
-            unsafe {
-                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", name);
-            }
             eprintln!(
                 "[tillandsias] {project}: another forge holds the default instance; \
                  this launch is instance {name} with its own workspace, sharing the \
@@ -20911,7 +20931,7 @@ fn claim_forge_instance(
         } else if debug {
             eprintln!("[tillandsias] {project}: forge instance default");
         }
-        return Ok(Some(guard));
+        return Ok(Some((guard, instance)));
     }
     Err(format!(
         "refused:forge-instance-slots-full:{project}: {FORGE_INSTANCE_SLOTS} forges of this \
@@ -27821,58 +27841,88 @@ mod tests {
     /// the first forge's workspace lock and died after 120 s.
     #[test]
     fn a_second_launch_of_a_project_takes_the_next_instance() {
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
-        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        // 2000-envt: the slot logic runs through claim_forge_instance_slot, which
+        // never reads or writes TILLANDSIAS_FORGE_INSTANCE, so a parallel test
+        // that sets the variable cannot change what this test observes.
         let project = format!("twin-{}-{}", std::process::id(), line!());
 
-        let first = claim_forge_instance(&project, false, false)
+        let (first, first_instance) = claim_forge_instance_slot(&project, false, false, None)
             .expect("first claim")
             .expect("an interactive launch claims a slot");
-        assert!(
-            std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err(),
+        assert_eq!(
+            first_instance, None,
             "the first launch keeps the default instance"
         );
-        let default_volume = forge_ram_workspace_volume(&project);
+        let default_volume = crate::local_projects::ram_workspace_volume(&project, "default");
 
-        let second = claim_forge_instance(&project, false, false)
+        let (second, second_instance) = claim_forge_instance_slot(&project, false, false, None)
             .expect("second claim")
             .expect("a second launch claims the next slot");
         assert_eq!(
-            std::env::var("TILLANDSIAS_FORGE_INSTANCE").as_deref(),
-            Ok("2"),
+            second_instance.as_deref(),
+            Some("2"),
             "the second launch is instance 2"
         );
         assert_ne!(
-            forge_ram_workspace_volume(&project),
+            crate::local_projects::ram_workspace_volume(&project, "2"),
             default_volume,
             "instance 2 gets its own RAM workspace, so it never waits on the first's lock"
         );
         assert!(
-            forge_container_name(&project).starts_with(&format!("tillandsias-{project}-forge-2")),
+            forge_container_name_with_instance(&project, second_instance.as_deref())
+                .starts_with(&format!("tillandsias-{project}-forge-2")),
             "instance 2 gets its own container name: {}",
-            forge_container_name(&project)
+            forge_container_name_with_instance(&project, second_instance.as_deref())
         );
 
-        // Already explicit (this process now carries "2"), and host-mount: no claim.
+        // Already explicit (a dispatcher's worker), and host-mount: no claim.
         assert!(
-            claim_forge_instance(&project, false, false)
+            claim_forge_instance_slot(&project, false, false, Some("2"))
                 .expect("explicit")
                 .is_none()
         );
-        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
         assert!(
-            claim_forge_instance(&project, true, false)
+            claim_forge_instance_slot(&project, true, false, None)
                 .expect("host mount")
                 .is_none()
         );
 
         // The default slot frees when the first launch ends.
         drop(first);
-        let again = claim_forge_instance(&project, false, false)
+        let (again, again_instance) = claim_forge_instance_slot(&project, false, false, None)
             .expect("third claim")
             .expect("the freed default slot is reused");
-        assert!(std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err());
+        assert_eq!(again_instance, None);
         drop((second, again));
+    }
+
+    /// 2000-envt: the env wrapper exports a non-default slot and leaves the
+    /// default unexported. It touches process env, so it holds env_lock like
+    /// every other test that does.
+    #[test]
+    fn claiming_a_second_instance_exports_it() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let project = format!("twin-env-{}-{}", std::process::id(), line!());
+        let first = claim_forge_instance(&project, false, false)
+            .unwrap()
+            .unwrap();
+        assert!(std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err());
+        let second = claim_forge_instance(&project, false, false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            std::env::var("TILLANDSIAS_FORGE_INSTANCE").as_deref(),
+            Ok("2")
+        );
+        assert!(
+            claim_forge_instance(&project, false, false)
+                .unwrap()
+                .is_none(),
+            "an exported instance is explicit: no second claim"
+        );
+        drop((first, second));
     }
 
     /// 1956-4pxj: the pusher's instance is read back from its container name,
