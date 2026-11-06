@@ -256,6 +256,8 @@ COPY cli/tillandsias-cache /opt/agents/tillandsias-cli/bin/tillandsias-cache
 COPY cli/tillandsias-impact /opt/agents/tillandsias-cli/bin/tillandsias-impact
 # 2007-uvtl: re-compose the trust bundle after an enclave CA rotation (python3, openssl).
 COPY cli/tillandsias-trust /opt/agents/tillandsias-cli/bin/tillandsias-trust
+# 2007-hear: a listening page for a folder of audio candidates (python3).
+COPY cli/tillandsias-listen /opt/agents/tillandsias-cli/bin/tillandsias-listen
 # 1874-pn3s: `flutter` is now a shell front that runs this lane client when the
 # lane is ready, else a cached SDK from the project cache, else a typed refusal.
 COPY cli/flutter-lane /opt/agents/tillandsias-cli/libexec/flutter-lane
@@ -271,7 +273,8 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/flutter /usr/local/bin/flutter \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-cache /usr/local/bin/tillandsias-cache \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-impact /usr/local/bin/tillandsias-impact \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-trust /usr/local/bin/tillandsias-trust
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-trust /usr/local/bin/tillandsias-trust \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-listen /usr/local/bin/tillandsias-listen
 
 # ── Skills mapping ─────────────────────────────────────────────
 # @trace

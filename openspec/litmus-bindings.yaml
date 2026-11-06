@@ -1101,6 +1101,8 @@ specs:
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:forge-listen-page
+  - litmus:web-audio-serving
   - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
   - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
