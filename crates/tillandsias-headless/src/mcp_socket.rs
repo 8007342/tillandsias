@@ -106,12 +106,27 @@ mod refused_wait_tests {
             .unwrap();
         let path = dir.path().join("s.sock");
         let listener = UnixListener::bind(&path).unwrap();
-        // SAFETY: the child only sleeps and _exits; it runs no Rust code
-        // that could touch a lock another thread held at fork time.
+        // SAFETY: the child only closes descriptors, sleeps and _exits; it
+        // runs no Rust code that could touch a lock another thread held at
+        // fork time.
+        //
+        // 2000-envt: fork copies EVERY descriptor in this process, including
+        // the flock'd lock files parallel tests hold at that instant, and this
+        // child keeps them for 300 ms. A test that dropped its lock then saw it
+        // still held (a_graceful_exit_leaves_another_owners_enclave_running,
+        // a_second_launch_of_a_project_takes_the_next_instance). The child
+        // keeps only the listener it exists to hold.
+        use std::os::fd::AsRawFd as _;
+        let keep = listener.as_raw_fd();
         let pid = unsafe { libc::fork() };
         assert!(pid >= 0, "fork");
         if pid == 0 {
             unsafe {
+                for fd in 3..1024 {
+                    if fd != keep {
+                        libc::close(fd);
+                    }
+                }
                 libc::usleep(300_000);
                 libc::_exit(0);
             }
