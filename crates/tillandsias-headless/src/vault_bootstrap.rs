@@ -1941,6 +1941,87 @@ fn should_warn_today(last_warned_day: &mut Option<u64>, now: u64) -> bool {
     true
 }
 
+/// Order 2006-rotw: alert the operator this long before the last known expiry
+/// when rotation is failing. Two hours leaves time to act on a failure that a
+/// 15-minute schedule (and its retry backoff) cannot fix by itself.
+pub const GITHUB_ROTATION_FAILING_MARGIN_SECS: u64 = 2 * 3600;
+
+/// What the operator should be told, at most once per failure episode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RotationWatchEvent {
+    /// Rotation is failing and the token is near or past expiry: one plain action.
+    Alert(String),
+    /// A later check succeeded after an alert: the alert no longer applies.
+    Cleared,
+}
+
+/// Order 2006-rotw: turn the scheduler's verdicts into at most one operator
+/// alert per failure episode.
+///
+/// A failing check cannot read the bundle (read:vault-unavailable is exactly
+/// that), so the deadline is the LAST expiry a successful check saw. With no
+/// expiry seen yet, nothing is alerted: there is no deadline to warn about,
+/// and the tray-start check fails before Vault is up on every healthy host.
+#[derive(Debug, Default)]
+pub struct GitHubRotationWatch {
+    last_expires_at: Option<u64>,
+    alerted: bool,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl GitHubRotationWatch {
+    pub fn observe(
+        &mut self,
+        out: &Result<DueCheck, String>,
+        now: u64,
+    ) -> Option<RotationWatchEvent> {
+        match out {
+            Ok(DueCheck::Rotated { expires_at, .. } | DueCheck::NotDue { expires_at, .. }) => {
+                self.last_expires_at = Some(*expires_at);
+                self.clear()
+            }
+            Ok(DueCheck::NoExpiry | DueCheck::NoToken | DueCheck::NoRefreshToken) => {
+                self.last_expires_at = None;
+                self.clear()
+            }
+            Ok(DueCheck::RefusedInForge) => None,
+            Err(e) => {
+                let exp = self.last_expires_at?;
+                if self.alerted || exp.saturating_sub(now) > GITHUB_ROTATION_FAILING_MARGIN_SECS {
+                    return None;
+                }
+                self.alerted = true;
+                Some(RotationWatchEvent::Alert(github_rotation_failing_message(
+                    e, exp, now,
+                )))
+            }
+        }
+    }
+
+    fn clear(&mut self) -> Option<RotationWatchEvent> {
+        std::mem::take(&mut self.alerted).then_some(RotationWatchEvent::Cleared)
+    }
+}
+
+/// The one plain action for a failing rotation. The error strings carry no
+/// token bytes (see rotate_github_token_if_due), and only a fixed phrase is
+/// chosen from them here, so none reach the desktop.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_rotation_failing_message(err: &str, expires_at: u64, now: u64) -> String {
+    let when = match expires_at.saturating_sub(now) {
+        0 => "has expired".to_string(),
+        left if left < 3600 => format!("expires in {} min", left.div_ceil(60)),
+        left => format!("expires in about {} h", left / 3600),
+    };
+    let fix = if err.contains(":read:") || err.contains(":lock:") || err.contains("vault") {
+        "Tillandsias cannot read the token from Vault. Quit and restart the Tillandsias tray; \
+         if this message returns, run `tillandsias --github-login`"
+    } else {
+        "GitHub did not renew the token. Run `tillandsias --github-login`"
+    };
+    format!("GitHub sign-in {when} and could not be renewed. {fix} to keep pushes working.")
+}
+
 /// The accountability event the spec requires for every rotation
 /// (gh-auth-script "Token Rotation and Expiration Management" ->
 /// spec:gh-auth-script; secret-rotation is tombstoned, 1397-eppt). Its own
@@ -1997,8 +2078,30 @@ pub fn spawn_github_token_rotation_scheduler(
         .spawn(move || {
             let mut backoff = std::time::Duration::ZERO;
             let mut last_warned_day: Option<u64> = None;
+            let mut watch = GitHubRotationWatch::default();
             loop {
                 let out = github_token_due_check_live(debug);
+                // Order 2006-rotw: a failing rotation near expiry is told, not only logged.
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                match watch.observe(&out, now) {
+                    Some(RotationWatchEvent::Alert(msg)) => {
+                        eprintln!("[tillandsias] warn:github-token-rotation-failing: {msg}");
+                        if let Some(cb) = &on_refresh_expiring {
+                            cb(msg);
+                        }
+                    }
+                    Some(RotationWatchEvent::Cleared) => {
+                        let msg = "GitHub sign-in renewed again; no action needed.".to_string();
+                        eprintln!("[tillandsias] ok:github-token-rotation-recovered");
+                        if let Some(cb) = &on_refresh_expiring {
+                            cb(msg);
+                        }
+                    }
+                    None => {}
+                }
                 // The 14-day refresh-expiry warning, at most once a day.
                 if let Ok(
                     DueCheck::Rotated {
@@ -7679,6 +7782,72 @@ mod tests {
         // The window boundary itself: exactly 30 min left is due, 30 min + 1 s is not.
         assert!(github_token_rotation_due(NOW + 30 * 60, NOW));
         assert!(!github_token_rotation_due(NOW + 30 * 60 + 1, NOW));
+    }
+
+    /// Order 2006-rotw: rotation failing while the token runs out reaches the
+    /// operator before it expires; recovery clears it; health is silent.
+    /// Red before 2006-rotw: read:vault-unavailable was only logged until
+    /// the token died (macuahuitl, 2026-11-05 17:10 PST).
+    #[test]
+    fn a_failing_rotation_alerts_before_expiry_and_recovery_clears_it() {
+        let exp = NOW + 8 * 3600;
+        let fail = || {
+            Err::<DueCheck, String>("github-token-rotation-failed:read:vault-unavailable".into())
+        };
+        let not_due = || {
+            Ok::<DueCheck, String>(DueCheck::NotDue {
+                expires_at: exp,
+                refresh_expires_at: None,
+            })
+        };
+
+        // Healthy: nothing, ever.
+        let mut w = GitHubRotationWatch::default();
+        assert_eq!(w.observe(&not_due(), NOW), None);
+        assert_eq!(w.observe(&not_due(), exp - 60), None);
+
+        // Failing far from expiry: logged only, no alert yet.
+        let mut w = GitHubRotationWatch::default();
+        assert_eq!(w.observe(&not_due(), NOW), None);
+        assert_eq!(w.observe(&fail(), NOW + 3600), None);
+        // Failing inside the margin: exactly one alert, naming the fix,
+        // carrying no token bytes.
+        let at = exp - GITHUB_ROTATION_FAILING_MARGIN_SECS;
+        let Some(RotationWatchEvent::Alert(msg)) = w.observe(&fail(), at) else {
+            panic!("no alert inside the margin");
+        };
+        assert!(msg.contains("Vault"), "{msg}");
+        assert!(msg.contains("tillandsias"), "{msg}");
+        assert!(!msg.contains("ghu_") && !msg.contains("ghr_"), "{msg}");
+        assert_eq!(
+            w.observe(&fail(), at + 60),
+            None,
+            "one alert, not one per retry"
+        );
+        // Recovery clears it once.
+        assert_eq!(
+            w.observe(&not_due(), at + 120),
+            Some(RotationWatchEvent::Cleared)
+        );
+        assert_eq!(w.observe(&not_due(), at + 180), None);
+
+        // A refused exchange names the login as the fix.
+        let mut w = GitHubRotationWatch::default();
+        w.observe(&not_due(), NOW);
+        let Some(RotationWatchEvent::Alert(msg)) = w.observe(
+            &Err(
+                "github-token-rotation-failed:GitHub refused the token refresh (bad_refresh_token)"
+                    .into(),
+            ),
+            at,
+        ) else {
+            panic!("no alert for a refused exchange");
+        };
+        assert!(msg.contains("tillandsias --github-login"), "{msg}");
+
+        // Never seen an expiry (Vault never answered): no invented deadline.
+        let mut w = GitHubRotationWatch::default();
+        assert_eq!(w.observe(&fail(), at), None);
     }
 
     /// Arm 4: GitHub rejects the refresh token -> the old records are intact
