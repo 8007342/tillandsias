@@ -1363,6 +1363,7 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:reverse-proxy-internal-shape
+  - litmus:router-key-home-absent
   coverage_ratio: 75
 - spec_id: host-guest-transport
   status: active

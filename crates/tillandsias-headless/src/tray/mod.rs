@@ -536,7 +536,7 @@ type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>;
 fn control_socket_path() -> PathBuf {
     // 1944-trsp: the same directory the CLI probes and the lock lives in (an
     // empty XDG_RUNTIME_DIR used to resolve differently here).
-    crate::control_socket_host_dir().join("control.sock")
+    crate::control_socket_file()
 }
 
 // Env var that overrides the default Linux-native host project root.
@@ -1414,6 +1414,8 @@ fn start_control_socket_server(shutdown: Arc<ShutdownLatch>) -> Result<(), Strin
     }
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod control socket: {err}"))?;
+    // ORDER 2007-rtky: older clients still dial the pre-2007 path.
+    crate::link_legacy_control_socket();
 
     let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
 
