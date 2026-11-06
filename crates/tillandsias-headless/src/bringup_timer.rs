@@ -305,38 +305,82 @@ mod tests {
         );
     }
 
-    /// 2004-in3v: every timed step in the opencode entrypoint is a bare call
-    /// between a mark and a done, names are unique, and the total span ends
-    /// at launch.
+    /// 2004-in3v: every forge entrypoint times each step as a bare call
+    /// between a mark and a done, with unique names, and ends a total span
+    /// at its launch line.
     #[test]
-    fn the_opencode_entrypoint_times_each_step_and_the_total() {
-        let src = std::fs::read_to_string(repo_file("images/default/entrypoint-forge-opencode.sh"))
-            .unwrap();
-        let lines: Vec<&str> = src.lines().collect();
-        let mut names = Vec::new();
-        for (i, line) in lines.iter().enumerate() {
-            if let Some(name) = line.strip_prefix("forge_step_done ") {
-                assert!(
-                    i >= 2 && lines[i - 2] == "forge_step_mark",
-                    "{name}: no mark before its step"
-                );
-                assert!(
-                    !lines[i - 1].starts_with("forge_step"),
-                    "{name}: no step between mark and done"
-                );
-                names.push(name);
+    fn every_forge_entrypoint_times_each_step_and_the_total() {
+        for (file, launch) in [
+            (
+                "entrypoint-forge-opencode.sh",
+                "trace_lifecycle \"entrypoint\" \"opencode launching\"",
+            ),
+            (
+                "entrypoint-forge-claude.sh",
+                "trace_lifecycle \"entrypoint\" \"claude launching\"",
+            ),
+            (
+                "entrypoint-forge-codex.sh",
+                "trace_lifecycle \"entrypoint\" \"codex launching\"",
+            ),
+            (
+                "entrypoint-forge-antigravity.sh",
+                "trace_lifecycle \"entrypoint\" \"antigravity launching\"",
+            ),
+            (
+                "entrypoint-forge-opencode-web.sh",
+                "trace_lifecycle \"exec\" \"launching opencode serve upstream ($OC_BIN)\"",
+            ),
+            (
+                "entrypoint-terminal.sh",
+                "trace_lifecycle \"entrypoint\" \"terminal launching\"",
+            ),
+        ] {
+            let src =
+                std::fs::read_to_string(repo_file(&format!("images/default/{file}"))).unwrap();
+            let lines: Vec<&str> = src.lines().collect();
+            let mut names = Vec::new();
+            for (i, line) in lines.iter().enumerate() {
+                if let Some(name) = line.strip_prefix("forge_step_done ") {
+                    assert!(
+                        i >= 2 && lines[i - 2] == "forge_step_mark",
+                        "{file} {name}: no mark"
+                    );
+                    assert!(
+                        !lines[i - 1].starts_with("forge_step"),
+                        "{file} {name}: no step"
+                    );
+                    names.push(name);
+                }
             }
+            assert!(names.len() >= 8, "{file}: {names:?}");
+            assert!(
+                names.contains(&"clone"),
+                "{file}: the clone is the step most likely to be slow"
+            );
+            let mut unique = names.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            assert_eq!(
+                unique.len(),
+                names.len(),
+                "{file}: duplicate step names: {names:?}"
+            );
+            let t0 = src
+                .find("FORGE_ENTRY_T0_US=\"${EPOCHREALTIME//[.,]/}\"")
+                .expect(file);
+            let first_step = src.find("forge_step_mark").unwrap();
+            assert!(
+                t0 < first_step,
+                "{file}: the total starts before the first step"
+            );
+            let total = src
+                .find("forge_step_line total ")
+                .unwrap_or_else(|| panic!("{file}: no total"));
+            let at = src
+                .find(launch)
+                .unwrap_or_else(|| panic!("{file}: no launch line"));
+            assert!(total > at, "{file}: the total span ends at launch");
         }
-        assert!(names.len() >= 10, "{names:?}");
-        let mut unique = names.clone();
-        unique.sort_unstable();
-        unique.dedup();
-        assert_eq!(unique.len(), names.len(), "duplicate step names: {names:?}");
-        assert!(src.contains("FORGE_ENTRY_T0_US=\"${EPOCHREALTIME//[.,]/}\""));
-        let total = src.find("forge_step_line total ").expect("total span");
-        let launching = src
-            .find("trace_lifecycle \"entrypoint\" \"opencode launching\"")
-            .unwrap();
-        assert!(total > launching, "the total span ends at launch");
     }
 }
