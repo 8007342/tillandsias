@@ -513,6 +513,14 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.extend(crate::studio::tool_descriptors());
             // 1969-7qm7: the index tool, then the deprecated flat aliases last.
             tools.push(crate::host_tools::index_descriptor());
+            // 2003-stbf: whether this lane runs the installed build.
+            tools.push(serde_json::json!({
+                "name": LANE_VERSION_TOOL,
+                "description": "Whether the lane serving this forge runs the installed Tillandsias \
+                    build: current, stale (naming both versions; the forge's tools keep the old \
+                    code until it is relaunched) or unknown. Reports only; restarts nothing.",
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}
+            }));
             let tools = crate::host_tools::with_deprecated_aliases(tools);
             serde_json::json!({ "result": { "tools": tools } })
         }
@@ -523,6 +531,19 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 crate::host_tools::canonical(req["params"]["name"].as_str().unwrap_or(""));
             let args = req["params"]["arguments"].as_object();
 
+            // 2003-stbf: does the lane serving this forge run the installed build?
+            if tool_name == LANE_VERSION_TOOL {
+                let mut resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": tillandsias_browser_mcp::framing::tool_result_content(
+                        lane_freshness(build_identity(), installed_build_identity().as_deref())
+                    )
+                });
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
             if tool_name == crate::host_tools::INDEX_TOOL {
                 let mut resp = serde_json::json!({
                     "jsonrpc": "2.0",
@@ -1682,6 +1703,110 @@ pub(crate) fn build_identity() -> &'static str {
             .unwrap_or_else(|_| "unknown".to_owned());
         format!("{}+{digest}", crate::VERSION.trim())
     })
+}
+
+/// ORDER 2003-stbf: the tool a forge agent calls to learn whether the lane
+/// serving it runs the installed build.
+pub(crate) const LANE_VERSION_TOOL: &str = "tillandsias.lane_version";
+
+fn digest8(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .take(8)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The version an installed binary's `--version` prints (`Tillandsias v<ver>`).
+pub(crate) fn parse_version_line(out: &str) -> Option<String> {
+    let v = out
+        .lines()
+        .next()?
+        .trim()
+        .strip_prefix("Tillandsias v")?
+        .trim();
+    (!v.is_empty()
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || ".-+".contains(c)))
+    .then(|| v.to_string())
+}
+
+/// ORDER 2003-stbf: the INSTALLED binary's identity, in [`build_identity`]'s
+/// `<version>+<digest>` form: the file now at this program's installed path
+/// (an upgrade replaces it under a running lane) and what its `--version`
+/// prints. `None` when either cannot be read.
+pub(crate) fn installed_build_identity() -> Option<String> {
+    let path = crate::self_exe::for_other_process().ok()?;
+    let bytes = fs::read(&path).ok()?;
+    let out = std::process::Command::new(&path)
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    let version = parse_version_line(&String::from_utf8_lossy(&out.stdout))?;
+    Some(format!("{version}+{}", digest8(&bytes)))
+}
+
+/// ORDER 2003-stbf: is a lane running `running` (a build id) current against
+/// the installed build? Report only: a forge may hold live work, so nothing is
+/// restarted. An unreadable installed build, or a lane that cannot name its
+/// own, is `unknown`, never `current`.
+pub(crate) fn lane_freshness(running: &str, installed: Option<&str>) -> serde_json::Value {
+    let version = |id: &str| id.split('+').next().unwrap_or(id).to_string();
+    match installed {
+        None => serde_json::json!({
+            "status": "unknown",
+            "lane": running,
+            "installed": null,
+            "why": "the installed binary could not be read, so this lane cannot be called current",
+        }),
+        Some(_) if running.ends_with("+unknown") || running.starts_with("unanswered") => {
+            serde_json::json!({
+                "status": "unknown",
+                "lane": running,
+                "installed": installed,
+                "why": "the lane did not name its own build",
+            })
+        }
+        Some(inst) if inst == running => serde_json::json!({
+            "status": "current",
+            "lane": running,
+            "installed": inst,
+        }),
+        Some(inst) => serde_json::json!({
+            "status": "stale",
+            "lane": running,
+            "installed": inst,
+            "lane_version": version(running),
+            "installed_version": version(inst),
+            "why": format!(
+                "this lane runs {} but {} is installed; its tools keep the old code until the \
+                 forge is relaunched (tillandsias <project>). Nothing is restarted automatically: \
+                 the forge may hold live work.",
+                version(running),
+                version(inst)
+            ),
+        }),
+    }
+}
+
+/// ORDER 2003-stbf: every lane socket on this host, by lane directory name.
+pub(crate) fn lane_sockets() -> Vec<(String, std::path::PathBuf)> {
+    let root = crate::control_socket_host_dir().join("mcp");
+    let mut out: Vec<(String, std::path::PathBuf)> = fs::read_dir(&root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let sock = e.path().join("mcp.sock");
+            sock.exists()
+                .then(|| (e.file_name().to_string_lossy().into_owned(), sock))
+        })
+        .collect();
+    out.sort();
+    out
 }
 
 /// 1961-8ats: what the process answering on `socket` says it is, read from
@@ -3018,5 +3143,49 @@ mod host_tool_discovery_fixtures {
         )
         .unwrap();
         assert_eq!(unknown["error"]["code"], -32601);
+    }
+}
+
+#[cfg(test)]
+mod lane_freshness_tests {
+    use super::*;
+
+    /// 2003-stbf: a lane is current only when its build matches the
+    /// installed one; a different installed build is stale, naming both
+    /// versions; an unreadable installed build or a lane that cannot name its
+    /// own is unknown, never current. Pre-fix: FAILS, nothing compared them.
+    #[test]
+    fn a_lane_reports_current_stale_or_unknown_against_the_installed_build() {
+        let cur = lane_freshness("56.11.6.1+aaaa", Some("56.11.6.1+aaaa"));
+        assert_eq!(cur["status"], "current");
+        let stale = lane_freshness("56.11.4.1+bbbb", Some("56.11.6.1+aaaa"));
+        assert_eq!(stale["status"], "stale");
+        assert_eq!(stale["lane_version"], "56.11.4.1");
+        assert_eq!(stale["installed_version"], "56.11.6.1");
+        let why = stale["why"].as_str().unwrap();
+        assert!(
+            why.contains("56.11.4.1") && why.contains("56.11.6.1") && why.contains("relaunched"),
+            "{why}"
+        );
+        // A rebuild at the same version is still a different build.
+        assert_eq!(
+            lane_freshness("56.11.6.1+bbbb", Some("56.11.6.1+aaaa"))["status"],
+            "stale"
+        );
+        assert_eq!(lane_freshness("56.11.6.1+aaaa", None)["status"], "unknown");
+        assert_eq!(
+            lane_freshness("56.11.6.1+unknown", Some("56.11.6.1+unknown"))["status"],
+            "unknown"
+        );
+        assert_eq!(
+            lane_freshness("unanswered (refused)", Some("56.11.6.1+aaaa"))["status"],
+            "unknown"
+        );
+        assert_eq!(
+            parse_version_line("Tillandsias v56.10.26.2\n").as_deref(),
+            Some("56.10.26.2")
+        );
+        assert_eq!(parse_version_line("something else"), None);
+        assert_eq!(parse_version_line("Tillandsias v$(rm -rf)"), None);
     }
 }
