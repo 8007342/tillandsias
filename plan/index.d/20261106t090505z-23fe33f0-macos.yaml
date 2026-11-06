@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: instant-pre-build-litmus-is-green-on-the-macos-host-or-says-why-not
+    event:
+      type: progress
+      ts: "2026-11-06T09:05:05Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        2006-wahn, the last three labeled reds MEASURED (tlatoanis-macbook-air, M5, macOS 27.0.1, load ~2.5-3):
+        - litmus:cycle-metrics-recurrence-shape step 1 (44 s vs a 30 s budget): NOT a slow host. The fixture calls cycle-metrics.sh 23 times and each call ran the repository-wide ghost-trace gate (scripts/trace-coverage.sh --gate), measured at 1.74/1.80/1.75 s, about 40 of the 44 s; no recurrence arm reads that field. Fix on work/2006-wahr: a TILLANDSIAS_CYCLE_METRICS_SKIP_TRACES=1 fixture seam beside the existing SKIP_GRADE one (the field still prints, as skipped:source=...); the fixture sets it. 44 s -> 3 s, 39/39 arms, no assertion or budget changed.
+        - litmus:cycle-metrics-answer-rate-shape step 1 and litmus:cycle-flow-telemetry-shape step 2: NOT load-dependent (my earlier label was wrong). Both reds were HOST STATE: a stray /tmp/tillandsias-timing.jsonl holding only {"host":"fixture"} beside the real log, so cycle-metrics.sh correctly refused with violation:metrics-log-split and printed no experts:/flow: line. The row is written by scripts/test-metrics-log-path-agreement.sh arms 9/9c, which create the real /tmp path on purpose and clean it on EXIT/INT/TERM; it was left at 00:46Z while a preflight ran, consistent with the door killing that fixture at its deadline with a signal no trap sees. Removed (its only row was the fixture's); the methodology-accountability spec is then fully green. OPEN: arms 9/9c can still strand the file under SIGKILL; the fix belongs to the guard's owner (a split-peer path seam for the fixture, or the door sending TERM before KILL).
