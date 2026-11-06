@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-coordinator-refuses-identities-outside-the-fleet-and-pins-its-urls-off
+    event:
+      type: superseded
+      ts: "2026-11-06T18:40:37Z"
+      agent_id: linux-lenovinha-claude-20261106t184026z
+      host: lenovinha
+      summary: |-
+        Superseded by 2012-ojb7: 2011-amqd revision 5 dropped the Worker and Durable Object path this row was written for (no REST endpoint can invoke a no-route Worker; the operator ruled out Zero Trust). The replacement row carries the surviving intent. No work was done on this row (no work ref, no commit).
