@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-persistent-project-cache-holds-no-plaintext-credential-at-rest
+    event:
+      type: note
+      ts: "2026-11-06T16:35:37Z"
+      agent_id: linux-lenovinha-claude-20261106t163536z
+      host: lenovinha
+      summary: |
+        Design note for the operator (lenovinha, 2026-11-06, from a code-read; nothing built).
+
+        What persists in ~/.cache/tillandsias-project today (volume tillandsias-forge-cache-<project>):
+        - Tool homes:
+          - CARGO_HOME=cargo/. This holds the registry cache AND credentials.toml, where `cargo login` writes a crates.io token in plaintext.
+          - npm_config_cache=npm/ (package cache; npm's auth goes to ~/.npmrc, outside the cache).
+          - GOPATH=go/ (module cache).
+        - TMPDIR=tmp/. Every agent and tool temp file therefore persists across forges.
+        - Small state: npm-update.lock, harness-curl, harness-update-stamp, openspec-pin, provider-limits, and (2006-srcr) .tillandsias/src-highwater-mb.
+        - Whatever an agent chooses to put there: .env files, .netrc, .pypirc, git-credentials, gh hosts.yml, *.pem keys.
+
+        So the residual is concrete, not hypothetical. A `cargo login` in any forge leaves a token at rest, and so does any secret written to TMPDIR.
+
+        The three options:
+        1. Refuse. A forge cannot intercept a write, so "refuse" can only mean "detect and react". Not viable as stated.
+        2. Scrub. At forge exit, and at the next launch for the crash case, delete credential-shaped files (credentials.toml, .env*, .netrc, .npmrc with _authToken, .pypirc, git-credentials, hosts.yml, private-key PEM headers), naming each one.
+           - Residual: the window from crash to next launch. Pattern detection misses unknown shapes. It deletes a credential the agent meant to keep. That is acceptable under "lost beats unencrypted".
+        3. Encrypt at rest. Same wall as 2006-srcr: on a rootless host dm-crypt and loop devices need root, fscrypt is not usable on btrfs, and FUSE weakens forge isolation. Not available without a privileged helper (the operator's call).
+
+        Recommendation: shape the cache first, then scrub.
+        a. Persist only an allowlist of named cache directories (cargo/registry, cargo/git, npm/, go/pkg/mod, and the small state files). Make TMPDIR and the rest of the cache root tmpfs. This removes most of the surface at no performance cost, since the caches that matter stay.
+        b. Point CARGO_HOME's credentials elsewhere. Put cargo/credentials.toml (and config with tokens) on tmpfs, for example by keeping CARGO_HOME persistent but linking credentials.toml into a tmpfs path, so `cargo login` lasts for one forge.
+        c. Scrub credential shapes inside the allowlisted dirs at exit and at the next launch, logging each removal by path, never by content.
+
+        Residual after a to c: a secret an agent writes INTO an allowlisted cache dir under a shape the scrub does not know, between a crash and the next launch. It is smaller than today's, but not zero. Removing it fully needs encryption at rest, i.e. option 3 with a privileged helper.
+
+        Questions for the operator:
+        (1) Is losing a `cargo login` token at forge exit acceptable? The rule says yes; this confirms the UX cost.
+        (2) Is (a)'s allowlist acceptable even though some tool caches not listed then rebuild each forge?
+        (3) Should (3) with a privileged helper be considered at all?
