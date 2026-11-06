@@ -135,16 +135,19 @@ mod at_rest {
 
     /// Test seam: a stub passphrase store in place of process memory.
     #[cfg(test)]
-    pub(super) static TEST_LOOKUP: Mutex<Option<fn() -> Result<Option<String>, String>>> =
-        Mutex::new(None);
+    pub(super) static TEST_LOOKUP: Mutex<Option<PassLookup>> = Mutex::new(None);
 
     static CACHE: Mutex<Option<String>> = Mutex::new(None);
+
+    /// A passphrase store's read: `Ok(Some)` stored, `Ok(None)` no entry,
+    /// `Err` unreadable.
+    pub(super) type PassLookup = fn() -> Result<Option<String>, String>;
 
     /// The store answers `Ok(Some)` for a stored passphrase, `Ok(None)` for
     /// no entry yet (a first run, which creates one), `Err` when it could
     /// not be read.
     pub(super) fn pass_with(
-        lookup: fn() -> Result<Option<String>, String>,
+        lookup: PassLookup,
         store: fn(&str) -> Result<(), String>,
     ) -> Option<String> {
         let mut cache = CACHE.lock().unwrap_or_else(|p| p.into_inner());
