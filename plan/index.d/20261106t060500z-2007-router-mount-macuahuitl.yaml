@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from a live check; generic for every Linux host.
+packets:
+- packet_id: the-router-cannot-reach-the-host-key-home
+  order: 2007-rtky
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [router, credentials]
+  estimated_hours: 3
+  title: The router container mounts only the runtime paths it needs, not the directory holding CA keys and secrets
+  context: 'On macuahuitl on 2026-11-05 the tillandsias-router container bound the whole /run/user/UID/tillandsias read-write at /run/host/tillandsias and ran as the host uid. From inside it, keys/ is listed and files in it are readable, including the unencrypted intermediate CA key, which can issue certificates the forges trust. The same mount covers secrets/, which was not read in this check. The router also serves previews. No exploit was attempted or shown.'
+  exit_criteria:
+  - 'Inside a running router, the key home and the secrets directory do not exist, tested in a real container.'
+  - 'Previews and the router sidecar still work through narrow mounts, tested by a preview round trip.'
+  verifiable_closure: 'A litmus that inspects the router mounts and tries the paths from inside it.'
+  unscoreable: 'none.'
+  next_action: 'List what the router and its sidecar actually read under /run/host/tillandsias, then replace the broad bind and write the failing mount test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05, live check.
+  events:
+  - {type: filed, ts: '2026-11-06T06:05:00Z', host: macuahuitl, summary: filed p1 ready}
