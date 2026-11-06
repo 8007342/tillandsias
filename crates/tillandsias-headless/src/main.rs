@@ -8400,6 +8400,56 @@ fn nonempty_runtime_dir(value: Option<String>) -> Option<PathBuf> {
 
 /// [`control_socket_host_dir`] for an explicit `XDG_RUNTIME_DIR` value. An
 /// empty value counts as unset (order 1748-fbqe, see [`nonempty_runtime_dir`]).
+/// ORDER 2007-rtky: the tray's control socket lives in its OWN subdirectory,
+/// so a container that needs the socket (the router) binds that directory and
+/// nothing else. The parent holds keys/ (the CA private key on tmpfs) and the
+/// key passphrase; binding the parent gave the router read-write access to
+/// both. A directory, not the socket file: a single-file bind keeps the old
+/// inode when the tray recreates the socket.
+pub(crate) const CONTROL_SOCKET_SUBDIR: &str = "control";
+
+/// The socket-only directory, created 0700 if missing.
+pub(crate) fn control_socket_dir() -> PathBuf {
+    let dir = control_socket_host_dir().join(CONTROL_SOCKET_SUBDIR);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        let _ = std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&dir);
+    }
+    #[cfg(not(unix))]
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// The tray's control socket (2007-rtky: inside [`control_socket_dir`]).
+pub(crate) fn control_socket_file() -> PathBuf {
+    control_socket_dir().join("control.sock")
+}
+
+/// ORDER 2007-rtky: the pre-2007 path, `<runtime>/tillandsias/control.sock`,
+/// kept as a relative symlink into the subdirectory so clients of an older
+/// build still reach a newer tray. Never replaces a real socket (an older tray
+/// still serving there).
+#[cfg(unix)]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn link_legacy_control_socket() {
+    let legacy = control_socket_host_dir().join("control.sock");
+    match std::fs::symlink_metadata(&legacy) {
+        Ok(m) if !m.file_type().is_symlink() => return,
+        Ok(_) => {
+            let _ = std::fs::remove_file(&legacy);
+        }
+        Err(_) => {}
+    }
+    let _ = std::os::unix::fs::symlink(
+        Path::new(CONTROL_SOCKET_SUBDIR).join("control.sock"),
+        &legacy,
+    );
+}
+
 fn control_socket_host_dir_from(xdg: Option<String>) -> PathBuf {
     let base = if let Some(runtime_dir) = nonempty_runtime_dir(xdg) {
         runtime_dir
@@ -8546,9 +8596,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         "-v".into(),
         format!("{}:/run/router/dynamic.Caddyfile:rw", dyn_file.display()),
         "-v".into(),
+        // ORDER 2007-rtky: the socket-only subdirectory, never its parent
+        // (which holds keys/ and the CA key passphrase).
         format!(
             "{}:/run/host/tillandsias:rw",
-            control_socket_host_dir().display()
+            control_socket_dir().display()
         ),
         "--mount".into(),
         format!(
@@ -16626,7 +16678,7 @@ fn maybe_spawn_detached_tray_for_cli(
         return;
     }
 
-    let socket_path = control_socket_host_dir().join("control.sock");
+    let socket_path = control_socket_file();
 
     // Fast path: if the socket is already accepting connections, an existing
     // tray (or an earlier sibling) is alive and there's no need to spawn a
@@ -18957,9 +19009,7 @@ fn read_control_frame_blocking(stream: &mut impl Read) -> Result<Vec<u8>, String
 /// The tray's control socket, as the tray computes it.
 #[cfg(unix)]
 fn tray_control_socket_path() -> PathBuf {
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
-        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
-    PathBuf::from(runtime_dir).join("tillandsias/control.sock")
+    control_socket_file()
 }
 
 /// Tell the tray the GitHub token is stored (order 679-rp9m), so its login
@@ -23881,7 +23931,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
     // ORDER 1944-trsp: only the socket THIS process bound. A headless exit or
     // a refused tray removing it left a live tray unreachable.
-    let socket_path = control_socket_host_dir().join("control.sock");
+    let socket_path = control_socket_file();
     if control_socket_is_ours(&socket_path) {
         debug!(path = %socket_path.display(), "removing control socket");
         let _ = fs::remove_file(&socket_path);
@@ -24292,6 +24342,157 @@ mod tests {
     /// the legacy tray `build_launch_spec`, both of which have no production
     /// callers and either of which would give a green assertion and change
     /// nothing).
+    #[test]
+    /// ORDER 2007-rtky: no container binds the tillandsias runtime directory
+    /// or anything holding keys/ (the CA private key on tmpfs) or the key
+    /// passphrase. The router binds only the socket-only subdirectory.
+    /// Pre-fix: FAILS, the router bound `<runtime>/tillandsias:/run/host/tillandsias:rw`.
+    fn no_container_binds_the_host_key_home() {
+        // The runtime dir comes from process env, which other tests and the
+        // gate's scratch HOME change concurrently (2000-envt). So nothing here
+        // re-reads it: the router's own bind names the runtime dir it saw, and
+        // every check is made against that one value (and the one captured
+        // here, which may differ).
+        let captured = control_socket_host_dir().to_string_lossy().into_owned();
+        let certs = PathBuf::from("/tmp/ca");
+        let sites: Vec<(&str, Vec<String>)> = vec![
+            ("proxy", build_proxy_run_args(&certs, "p:v1")),
+            (
+                "git",
+                build_git_run_args("alpha", None, &certs, "g:v1", None, None, None, None),
+            ),
+            ("inference", build_inference_run_args(&certs, "i:v1", false)),
+            ("router", build_router_run_args(&certs, "r:v1", 8080)),
+            (
+                "ssh-lane",
+                build_ssh_lane_sidecar_run_args("alpha", "m1", &certs, "s:v1", "sec"),
+            ),
+            (
+                "forge-agent",
+                build_forge_agent_run_argv(
+                    &PathBuf::from("/tmp/project"),
+                    "alpha",
+                    None,
+                    &certs,
+                    "1.2.3",
+                    ForgeAgentMode::Claude,
+                    false,
+                    false,
+                    &PathBuf::from("/tmp/cr"),
+                ),
+            ),
+        ];
+        // The host side of a `-v src:dst` or a `--mount ...source=src`, with dst.
+        fn binds(args: &[String]) -> Vec<(String, String)> {
+            let mut out = Vec::new();
+            for w in args.windows(2) {
+                if w[0] == "-v" || w[0] == "--volume" {
+                    let mut it = w[1].split(':');
+                    let src = it.next().unwrap_or("").to_string();
+                    out.push((src, it.next().unwrap_or("").to_string()));
+                } else if w[0] == "--mount" {
+                    let (mut src, mut dst) = (String::new(), String::new());
+                    for kv in w[1].split(',') {
+                        if let Some(v) = kv
+                            .strip_prefix("source=")
+                            .or_else(|| kv.strip_prefix("src="))
+                        {
+                            src = v.to_string();
+                        } else if let Some(v) = kv
+                            .strip_prefix("target=")
+                            .or_else(|| kv.strip_prefix("destination="))
+                            .or_else(|| kv.strip_prefix("dst="))
+                        {
+                            dst = v.to_string();
+                        }
+                    }
+                    out.push((src, dst));
+                }
+            }
+            out
+        }
+        let router = &sites.iter().find(|(n, _)| *n == "router").unwrap().1;
+        let socket_src = binds(router)
+            .into_iter()
+            .find(|(_, dst)| dst == "/run/host/tillandsias")
+            .map(|(src, _)| src.trim_end_matches('/').to_string())
+            .expect("the router binds a socket dir at /run/host/tillandsias");
+        let seen = socket_src
+            .strip_suffix(&format!("/{CONTROL_SOCKET_SUBDIR}"))
+            .unwrap_or_else(|| panic!("the router's socket bind {socket_src} is not the {CONTROL_SOCKET_SUBDIR}/ subdirectory"))
+            .to_string();
+        assert!(seen.ends_with("/tillandsias"), "{seen}");
+        for rt in [seen.as_str(), captured.as_str()] {
+            for (name, args) in &sites {
+                for (src, _) in binds(args) {
+                    let src = src.trim_end_matches('/');
+                    assert_ne!(
+                        src, rt,
+                        "{name} binds the runtime dir {rt}, which holds keys/"
+                    );
+                    assert!(
+                        !rt.starts_with(&format!("{src}/")),
+                        "{name} binds {src}, an ancestor of the key home"
+                    );
+                    assert!(
+                        !src.starts_with(&format!("{rt}/keys")) && !src.contains("ca-key-pass"),
+                        "{name} binds the key home or the passphrase: {src}"
+                    );
+                }
+            }
+        }
+        // The tray serves the socket in the same subdirectory the router binds.
+        let file = control_socket_file();
+        assert_eq!(file.file_name().unwrap(), "control.sock");
+        assert_eq!(
+            file.parent().unwrap().file_name().unwrap(),
+            CONTROL_SOCKET_SUBDIR
+        );
+
+        // Every other launch builder in the crate: no source names the bare
+        // runtime dir or the key store's directory.
+        // cargo runs a unit test with the package root as cwd.
+        let src_dir = Path::new("src");
+        assert!(
+            src_dir.join("main.rs").is_file(),
+            "run from the package root"
+        );
+        for entry in walk_rs(src_dir) {
+            let text = std::fs::read_to_string(&entry).unwrap();
+            for (i, line) in text.lines().enumerate() {
+                let l = line.trim_start();
+                if l.starts_with("//") {
+                    continue;
+                }
+                for bad in [
+                    // Split so this list does not match itself.
+                    concat!("control_socket_host_dir", "().display()"),
+                    concat!("runtime_dir_tillandsias", "().display()"),
+                ] {
+                    assert!(
+                        !line.contains(bad),
+                        "{}:{}: a container bind of the runtime dir: {line}",
+                        entry.display(),
+                        i + 1
+                    );
+                }
+            }
+        }
+    }
+
+    fn walk_rs(dir: &Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                out.extend(walk_rs(&p));
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+        out
+    }
+
     #[test]
     // @trace order:986-ahnc, order:972-6vaj, spec:security-privacy-isolation
     fn every_stack_launch_argv_satisfies_the_hardening_envelope() {
