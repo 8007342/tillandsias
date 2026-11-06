@@ -36,3 +36,21 @@ Nothing is filed until the operator answers the open questions in
 ## 5. Trust
 - [ ] 5.1 Add harness framing for instructions (author and source), with a
       fixture showing that an instruction cannot approve a consent-gated action.
+
+## 2011-amqd: free-tier queue (free-tier-queue.md §12, revision 5)
+
+- [ ] a. Fixture first: fake Queues and KV REST; empty pull costs a read, late ack, lost ack, expired, poison; budgets
+- [ ] b. Measure the wake path in Claude Code and OpenCode
+- [ ] c. Queue client: ttl/sent_at refusal, 48 KB cap, batch 1, verified ack, budgets in ops and requests
+- [ ] d. Host poller: 5 to 60 min, hourly DLQ
+- [ ] e. Inbox handler: outcome table, dedupe window, quarantine
+- [ ] f. Wake: deterministic plus the path b proved
+- [ ] g. Warm plan cache
+- [ ] h. Credentials: forge env-refusal litmus first, Vault host proxy, remove env path
+- [ ] i. Generic: [fleet] seeding, create with consent, relay as config, bring your own
+- [ ] j. Real API (operator): scope ids, attempts on lease expiry, max_retries 100 + DLQ by GET, refusals
+- [ ] k. Optional local classifier, measured
+- [ ] l. Retire cloud/coordinator after j
+- [ ] m. Signing: per-host keys, roster, verify before inbox
+- [ ] n. Receipts and outbox, undelivered at 24 h
+- [ ] o. Drift check and revoke-and-rotate runbook
