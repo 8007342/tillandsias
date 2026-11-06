@@ -24338,8 +24338,13 @@ mod tests {
 
         // Every other launch builder in the crate: no source names the bare
         // runtime dir or the key store's directory.
-        let src_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        for entry in walk_rs(&src_dir) {
+        // cargo runs a unit test with the package root as cwd.
+        let src_dir = Path::new("src");
+        assert!(
+            src_dir.join("main.rs").is_file(),
+            "run from the package root"
+        );
+        for entry in walk_rs(src_dir) {
             let text = std::fs::read_to_string(&entry).unwrap();
             for (i, line) in text.lines().enumerate() {
                 let l = line.trim_start();
