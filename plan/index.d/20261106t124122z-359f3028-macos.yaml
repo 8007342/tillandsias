@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-tray-icon-blushes-progressively-while-containers-are-created-shows-pups-when-the-work-completes-and-returns-to-plain-on-the-next-menu-open-with-a-per-platform-icon-set
+    event:
+      type: progress
+      ts: "2026-11-06T12:41:22Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        RELEASED to ready (WIP audit 2026-11-06, checked against trunk). Landed: criterion 1, the work-phase reducer and its openspec change, via #534 (b99b32e24, adopted dbd393122). LEFT: criterion 2 (per-platform icon set from build.rs), 3 (menu-open hooks per platform), 4 (typed container-work progress on the status reply), 5 (operator approval of each icon set, which gates 2), 6 (live check on a published release). The next action is the per-platform mock-ups for operator approval; nothing for them is on any branch.
