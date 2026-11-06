@@ -4481,6 +4481,46 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 /// is kept aside, the new cert goes in, then `seal_key` publishes the key; if
 /// that fails, the old cert is put back. It used to seal the key first, so a
 /// failed cert rename left a new key under the old cert (yoga, 2026-11-03).
+/// ORDER 2007-uvtl: where a forge sees the enclave CA certificate. A
+/// read-only bind of [`ca_trust_dir_for`], a directory holding ONLY the
+/// certificate, so the host's atomic replace on a rotation is visible inside a
+/// running forge. lib-common.sh composes the trust bundle from it at entry and
+/// `tillandsias-trust check` re-composes it after a rotation.
+pub(crate) const FORGE_CA_TRUST_MOUNT: &str = "/run/tillandsias/ca";
+
+/// The cert-only trust directory beside the CA directory: `<state>/ca-trust`.
+/// Never inside the CA directory, which holds (links to) the key.
+pub(crate) fn ca_trust_dir_for(certs_dir: &Path) -> PathBuf {
+    certs_dir.with_file_name("ca-trust")
+}
+
+/// ORDER 2007-uvtl: copy the published CA certificate (never a key) into the
+/// trust directory, atomically, when it differs. Called on every
+/// ensure_ca_bundle, so a mint and a kept CA both leave it current.
+fn publish_ca_trust(certs_dir: &Path) -> Result<PathBuf, String> {
+    let dir = ca_trust_dir_for(certs_dir);
+    let crt = std::fs::read(certs_dir.join("intermediate.crt"))
+        .map_err(|e| format!("ca-trust: read the CA certificate: {e}"))?;
+    let target = dir.join("intermediate.crt");
+    if std::fs::read(&target).is_ok_and(|have| have == crt) {
+        return Ok(dir);
+    }
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("ca-trust: create {}: {e}", dir.display()))?;
+    let tmp = dir.join(format!(".intermediate.crt.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, &crt).map_err(|e| format!("ca-trust: write {}: {e}", tmp.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644));
+    }
+    std::fs::rename(&tmp, &target).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("ca-trust: publish {}: {e}", target.display())
+    })?;
+    Ok(dir)
+}
+
 fn publish_ca_pair(
     tmp_crt: &Path,
     crt: &Path,
@@ -4794,6 +4834,57 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
         let (crt, key) = mint(tmp.path(), 61);
         assert!(!ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    /// 2007-uvtl: the trust directory holds the CA certificate and nothing
+    /// else, is replaced atomically when the certificate changes, and is left
+    /// alone when it does not. Pre-fix: FAILS, there was no trust directory;
+    /// forges bound the certificate FILE, whose old inode a running forge kept.
+    #[test]
+    fn the_ca_trust_dir_holds_only_the_current_certificate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ca = tmp.path().join("ca");
+        std::fs::create_dir_all(&ca).unwrap();
+        let (crt, key) = mint(&ca, 365);
+        let dir = publish_ca_trust(&ca).unwrap();
+        assert_eq!(dir, tmp.path().join("ca-trust"));
+        let listing = |d: &Path| {
+            let mut v: Vec<String> = std::fs::read_dir(d)
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            v.sort();
+            v
+        };
+        assert_eq!(
+            listing(&dir),
+            ["intermediate.crt"],
+            "no key, no staging left"
+        );
+        assert_eq!(
+            std::fs::read(dir.join("intermediate.crt")).unwrap(),
+            std::fs::read(&crt).unwrap()
+        );
+        assert!(key.exists());
+        let ino = |p: &Path| {
+            use std::os::unix::fs::MetadataExt as _;
+            std::fs::metadata(p).unwrap().ino()
+        };
+        let before = ino(&dir.join("intermediate.crt"));
+        publish_ca_trust(&ca).unwrap();
+        assert_eq!(
+            ino(&dir.join("intermediate.crt")),
+            before,
+            "unchanged: not rewritten"
+        );
+        let (crt2, _) = mint(&ca, 365);
+        publish_ca_trust(&ca).unwrap();
+        assert_eq!(
+            std::fs::read(dir.join("intermediate.crt")).unwrap(),
+            std::fs::read(&crt2).unwrap()
+        );
+        assert_eq!(listing(&dir), ["intermediate.crt"]);
     }
 
     /// 2007-ckun: an unavailable keyring with a valid CA refuses by name and
@@ -5455,6 +5546,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         }
     }
 
+    // 2007-uvtl: forges read the certificate from the cert-only directory.
+    publish_ca_trust(&certs_dir)?;
+
     // 755-qcxh: the proxy no longer reads this file through a bind mount —
     // it receives the key as a podman secret — so nothing legitimate needs it
     // wider than owner-only. Heal DOWN to 0600 every call so keys generated
@@ -5559,9 +5653,12 @@ fn build_stack_common_args(
         // One runtime trust input feeds lib-common.sh's rootless initializer.
         // Git, curl, Node, and Python then use the image's system-default path.
         "--mount".into(),
+        // 2007-uvtl: the cert-only trust DIRECTORY, read-only, so a CA
+        // rotation reaches a running forge (a single-file bind kept the old
+        // inode). It never holds a key.
         format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
+            "type=bind,source={},target={FORGE_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(certs_dir).display()
         ),
     ]);
     append_git_identity_env_args(&mut args, project_name);
@@ -10899,9 +10996,12 @@ fn build_opencode_forge_args(
             forge_tool_cache_volume(project_name)
         ),
         "--mount".into(),
+        // 2007-uvtl: the cert-only trust DIRECTORY, read-only, so a CA
+        // rotation reaches a running forge (a single-file bind kept the old
+        // inode). It never holds a key.
         format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
+            "type=bind,source={},target={FORGE_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(certs_dir).display()
         ),
     ]);
     // Project source routing. Both branches mount under
@@ -20753,7 +20853,7 @@ async fn ensure_inference_for_launch(
 ///
 /// Every option flows through the policy-validated `build_run_argv()` path —
 /// no raw `--unsafe` flags, no host home mounts. Project workspace lands at
-/// `/home/forge/src/<project>/`, CA cert at `/run/tillandsias/ca-chain.crt`.
+/// `/home/forge/src/<project>/`, CA cert in the read-only `/run/tillandsias/ca/` directory (2007-uvtl).
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 /// Name of the podman named volume backing a project's persistent forge tool/
@@ -21571,13 +21671,11 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
-    let ca_cert = certs_dir.join("intermediate.crt");
-    if ca_cert.exists() {
-        spec = spec.bind_mount(
-            ca_cert.display().to_string(),
-            "/run/tillandsias/ca-chain.crt",
-            true,
-        );
+    // 2007-uvtl: the cert-only trust directory, read-only (see FORGE_CA_TRUST_MOUNT).
+    // ensure_ca_bundle publishes the trust dir from this certificate.
+    let trust = ca_trust_dir_for(certs_dir);
+    if certs_dir.join("intermediate.crt").exists() {
+        spec = spec.bind_mount(trust.display().to_string(), FORGE_CA_TRUST_MOUNT, true);
     }
 
     // Order 505: mount only the per-lane MCP tool socket directory
@@ -28887,9 +28985,9 @@ mod tests {
         );
         assert!(
             argv.iter().any(|a| {
-                a.contains("target=/run/tillandsias/ca-chain.crt") && a.contains("readonly=true")
+                a.contains("target=/run/tillandsias/ca,") && a.contains("readonly=true")
             }),
-            "typed forge launcher must mount the single runtime CA input"
+            "typed forge launcher must mount the read-only CA trust directory (2007-uvtl)"
         );
         for forbidden in [
             "GIT_SSL_CAINFO=",
@@ -33594,8 +33692,7 @@ esac
         }
         assert!(
             args.iter().any(|arg| {
-                arg.contains("target=/run/tillandsias/ca-chain.crt")
-                    && arg.contains("readonly=true")
+                arg.contains("target=/run/tillandsias/ca,") && arg.contains("readonly=true")
             }),
             "opencode forge args must mount the single runtime CA input; got {args:?}"
         );
