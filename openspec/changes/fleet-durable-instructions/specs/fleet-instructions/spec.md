@@ -222,22 +222,30 @@ and `retry-after`. An agent SHALL NOT poll its queue or inbox on a timer.
 - **THEN** it makes about 26 pulls per queue plus hourly dead-letter pulls, and the fixture's counted
   requests stay under the stated budget
 
-### Requirement: the wake path is measured before it is relied on
+### Requirement: a sleeping agent waits on a held call, and the tray wakes it
 
-The host SHALL route a message to a lane by its queue and address before
-anything else; a model SHALL be consulted only for judgement among several
-lanes, and the local classifier SHALL be off by default until measured on the
-smallest supported host. Whether a lane notification reaches the model of each
-supported harness while it is idle SHALL be measured before it is used to wake
-an agent; where it does not, the host SHALL wake the lane through the harness's
-own prompt or relaunch path. (order 2011-amqd)
+The tray SHALL poll the queue, write accepted messages into the lane inbox, and
+decide which lane has targeted work: by queue and address first, and with the
+local classifier only for judgement among several lanes. A launching forge's
+agent SHALL start with a `what_next` call that the local MCP server holds open,
+with a progress notification at least every 10 minutes, until the tray signals
+work over a local socket. The agent SHALL re-arm the call when the harness ends
+it. The forge SHALL set each harness's launch settings so that the call is held
+rather than backgrounded. No agent SHALL poll on a timer. Whether a held call
+costs tokens, and each harness's real timeout, reconnect and expiry behaviour,
+SHALL be measured before this is relied on. (order 2011-amqd)
 
-#### Scenario: a harness that ignores notifications while idle
+#### Scenario: work arrives for a waiting agent
 
-- **WHEN** the measurement shows a harness does not surface a lane
-  notification to an idle model
-- **THEN** the host wakes that lane by its relaunch-with-prompt path instead,
-  and no agent polls
+- **WHEN** an agent is waiting on `what_next` and the tray accepts a message
+  addressed to its lane
+- **THEN** the held call returns with the inbox item and its refs, and no model
+  turn ran while the agent waited
+
+#### Scenario: the harness ends a held call
+
+- **WHEN** the harness's tool timeout ends a held `what_next` call
+- **THEN** the agent calls `what_next` again, costing one short turn
 
 ### Requirement: a plan warm cache is a rebuildable hint, never the record
 

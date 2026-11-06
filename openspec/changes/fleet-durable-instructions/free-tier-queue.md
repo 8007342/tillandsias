@@ -1,7 +1,8 @@
 # Addendum — the agent message queue on the Free plan (order 2011-amqd)
 
-Status: **proposed, design only. Revision 5**, after the operator's ruling of
-2026-11-06 and three adversarial reviews. Nothing is built, deployed or created
+Status: **proposed, design only. Revision 6**, after the operator's rulings of
+2026-11-06 (section 13 approved, the wake path, push research) and three
+adversarial reviews. Nothing is built, deployed or created
 on Cloudflare by this addendum.
 
 @trace order:2011-amqd, spec:fleet-instructions
@@ -165,29 +166,130 @@ told. Git held no record of a queued message.
   FYI and HEADS-UP messages are fire-and-forget, to keep the operation count
   down (§6).
 
-## 5. Waking an idle agent
+## 5. Waking an idle agent: the tray polls, a held call waits
 
-**[unproven]** The host can send an MCP `notifications/message` on a lane's
-connection. [code] `lane_events.rs` uses it, but as MCP's **logging**
-notification. Nothing shows that Claude Code or OpenCode surfaces it to an idle
-model.
+The operator's shape, 2026-11-06:
+- the **tray** polls the queue;
+- a **local model on the forge's host** decides whether there is targeted
+  work, and may start a terminal with an agent and a seed prompt;
+- a sleeping agent **does not poll**. A launching forge's agent starts with a
+  "what's next for me?" call, which stays idle on the local MCP server (or a
+  blocking shell command) until the tray pushes "there's work for you" over a
+  local socket.
 
-[proposed]:
-- **Row b measures it**, idle and busy, in both harnesses. If it works, idle
-  costs zero tokens.
-- **If not:** the host wakes the lane through the harness's own input path,
-  the 2011-rsme relaunch-with-prompt, at the tokens of one turn per wake.
-- **No agent ever polls on a timer.**
-- **The wake decision is deterministic:** a message in a lane's inbox is for
-  that lane. A model is needed only to choose among several idle lanes of one
-  host for a role-addressed message.
-  - The T0 local model is `qwen2.5-0.5b` Q4_K_M, 491 MB. It ran at 72 tok/s on
-    macuahuitl's CPU, the first run in a container was about 19× slower, and
-    nothing in the repo measures a low-end host. It is **off by default**; the
-    default is the longest-idle lane.
-  - The cloud alternative, Workers AI (10 000 neurons/day, roughly 20 000
-    decisions/day on `llama-3.2-1b`), is not chosen: content would leave the
-    host, and it needs another account-wide permission.
+### 5a. What the harnesses allow, read 2026-11-06
+
+| Harness | Hold one MCP call | Server push with no pending call | Notifications to the model |
+|---|---|---|---|
+| **Claude Code** | **[doc]** hard limit about 28 h (`MCP_TOOL_TIMEOUT` unset). The **idle** limit is 30 min for stdio servers and 5 min for HTTP or SSE. Progress counts as activity, and `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT=0` disables it. A call over 2 min **auto-backgrounds**; `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS=0` keeps it waiting. | **[doc]** "channels": `notifications/claude/channel` "arrives in Claude's context". It is a research preview, interactive only, stdio only, and needs `--dangerously-load-development-channels`. | `list_changed` only; logging is not documented as shown |
+| **OpenCode** | **[code]** `mcp.timeout.execution` defaults to 12 h. "The SDK timeout does not reset on progress", so 12 h is the wall. | none found | only `list_changed` and elicitation; no logging handler |
+| **Codex CLI** | **[code]** `tool_timeout_sec` defaults to 300 s, configurable | none | logged only |
+
+Sources, read 2026-11-06:
+- Claude Code: <https://code.claude.com/docs/en/mcp>, `/env-vars`,
+  `/tools-reference` and `/channels-reference`.
+- OpenCode: <https://opencode.ai/docs/mcp-servers/>, and
+  `packages/core/src/mcp/client.ts:37` ("12 hours") and `:520-521` at
+  sst/opencode@ec53c3b3.
+- Codex: `codex-rs/codex-mcp/src/rmcp_client.rs:122-123` and
+  `codex-rs/rmcp-client/src/logging_client_handler.rs` at openai/codex@ebe94e25.
+- MCP specification:
+  <https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle>,
+  "Timeouts".
+
+**[doc]** MCP itself: implementations "MAY … reset the timeout clock when
+receiving a progress notification", but "SHOULD always enforce a maximum
+timeout".
+
+**Waiting costs no tokens.** The model is sampled only when a result, a
+notification or a user message arrives. **[unproven]** No harness documents
+this as billing; row b measures it.
+
+### 5b. [proposed] The wake path
+
+1. **The tray polls** each project queue with a live lane, on §6's backoff, and
+   writes accepted messages into the lane inbox (§4a).
+2. **The tray decides** whether a message is targeted work for a lane:
+   - deterministically first: the lane's queue and address;
+   - the local T0 model only to choose among several idle lanes of one host for
+     a role-addressed message, off by default until measured (row k).
+3. **The tray may start** a terminal with an agent and a seed prompt when the
+   project has no live lane and the message is an instruction for it. This uses
+   the 2011-rsme relaunch-with-prompt.
+4. **A live lane's agent waits on a held call.** At launch the seed prompt has
+   it call `what_next {wait: true}` on the local MCP server.
+   - The server holds the call and sends a **progress notification every
+     10 min**. That keeps Claude Code's stdio idle limit, which progress
+     resets, from firing.
+   - When the tray pushes "work for you" over the local socket, the call
+     returns at once with the inbox item and any **continuation affordances**:
+     the item, its refs, and the `deliveries` and `attempts` counts.
+5. **Re-arm on expiry.** When the harness ends the call, the agent calls
+   `what_next` again. That costs **one short turn per expiry**:
+   - about every 28 h on Claude Code (hard limit, with progress keeping the
+     idle check alive);
+   - about every 12 h on OpenCode;
+   - about every 5 min on Codex, unless `tool_timeout_sec` is raised in the
+     forge's Codex config, which is what this design does.
+6. **Per-harness launch settings**, set by the forge, never by the agent:
+   - **Claude Code:** `CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS=0`, so the call holds
+     rather than backgrounds. The idle limit stays on, because progress
+     refreshes it.
+   - **OpenCode:** the default 12 h.
+   - **Codex:** `tool_timeout_sec` = 43 200.
+7. **Reconnect.** If the MCP server restarts:
+   - Claude Code retries a remote server up to five times;
+   - OpenCode marks it failed, which the user reconnects from `/mcps`.
+
+   **[proposed]** The local server is stdio, spawned by the harness, so a
+   restart is the harness's own respawn. Whether Claude Code respawns a crashed
+   stdio server is **[unproven]**, and row b checks it. Until then the agent
+   re-arms on any error.
+8. **Optional, Claude Code only:** a channel server can push with no pending
+   call, but it is preview and interactive-only behind a dangerous flag.
+   **Not the default.** It may be used where the operator enables it, never as
+   the only path.
+
+**Row b measures all of this** in a real forge:
+- that a held call costs no tokens while waiting;
+- each harness's real timeout and what it does at expiry;
+- that a progress notification keeps Claude Code's idle check alive;
+- the reconnect behaviour;
+- headless versus interactive.
+
+### 5c. Do we need to poll the queue at all? Push options on the Free plan
+
+Researched 2026-11-06 (cheatsheet):
+- **Queues:** pull is short-poll only, [doc] "Queues does not hold an open
+  connection (often referred to as 'long polling')", and push consumers are
+  Workers only.
+- **Durable Object WebSockets with hibernation:**
+  - available on Free;
+  - **[doc]** 20:1 billing on incoming messages, free outgoing, no duration
+    while hibernated;
+  - roughly 500–1 000 requests/day for 15 hosts, under 1 % of quota.
+  - **But** clients connect through a Worker on a reachable hostname, so the
+    endpoint is public. It answers anyone, at least with 401. Unauthenticated
+    hits spend the shared Free request quota, and token checks must be written
+    in Worker code, since Access is excluded.
+  - A queue also cannot have a Worker consumer and an HTTP pull consumer at
+    once, so the producer would have to notify the push channel itself.
+- **Pub/Sub:** gone (its page redirects).
+- **Tunnel:** inbound to the host, with a public hostname per host; private
+  mode is Zero Trust.
+- **SSE Workers:** public too.
+- **Email, Realtime and Cron:** not host channels.
+
+**Recommendation, stated plainly: keep polling.** No push option on the Free
+plan works without a public endpoint, and the operator approved the
+nothing-public shape.
+- The tray's conservative poll (§6: 5 → 60 min backoff, an hourly DLQ pull, no
+  polling without a live lane) costs about 40 % of the free queue operations at
+  planning load, and **nothing in agent tokens**, because agents wait on held
+  calls.
+- If the operator later accepts one token-checked public endpoint, the
+  hibernated Durable Object WebSocket is the cheap push to add **beside**
+  polling, never instead of it. That needs its own design row and review.
 
 ## 6. Polling and the budget
 
@@ -357,7 +459,20 @@ then is retired (row l).
 | n | **Receipts and outbox:** a signed receipt per instruction, ASK and BLOCKED; re-push at 20 h; `undelivered` at 24 h; a ledger event for instructions | local |
 | o | **Drift check and runbook:** a daily listing of queues and consumers against the seeded set; the revoke-and-rotate steps | j for the real list |
 
-## 13. Open questions for the operator
+## 13. Operator answers (2026-11-06) and remaining questions
+
+The operator, first-hand: "I approve all the recommendations": a 60 min idle
+ceiling, a dedicated account required, a 24 h TTL, T0 off by default, loopback
+login by default, and signing keys on a git roster. Exception: **the relay stays
+at `cloudflare.tillandsias.org` for now.** Real API use stays within this
+design's limits. Row j is unblocked.
+
+Remaining:
+- whether to add a token-checked public push endpoint later (§5c; recommended:
+  no, keep polling);
+- whether the Claude Code channel may be enabled where available (§5b.8).
+
+### Earlier questions (answered)
 
 1. Is a 60 min idle ceiling acceptable? The busy floor is 5 min, and local
    events wake at once.
@@ -379,6 +494,13 @@ the wake decision is deterministic first; names are seeded in the repo.
 the zero-token wake was marked unproven; the per-user API limit was budgeted;
 the TTL became 24 h; the OAuth and relay dependency was stated; the cache got a
 single writer.
+
+**Revision 5 → 6:** the wake path follows the operator: the tray polls, the
+tray decides, and agents wait on a held `what_next` call with progress
+keep-alives, re-armed on expiry, under per-harness launch settings. Notifications
+are not relied on: no harness surfaces logging to the model. Push on Free was
+researched; none works without a public endpoint, so polling stays. Section 13
+records the operator's approval.
 
 **Revision 4 → 5,** after review 3:
 
