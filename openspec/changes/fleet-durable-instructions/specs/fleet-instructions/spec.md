@@ -130,3 +130,66 @@ beyond the coordinator's existing heartbeat, and SHALL NOT shorten it.
 
 - **WHEN** a host has no running forge and no pushes
 - **THEN** it makes no instruction calls beyond the existing heartbeat
+
+### Requirement: the queue stays inside a stated Free-plan budget, enforced on the server
+
+The coordinator SHALL run on the Cloudflare Free plan only. It SHALL enforce a
+per-identity daily request cap and a per-account guard on the server, because a
+client limiter cannot bind a crashed, looping or compromised client. At a cap
+it SHALL answer 429 with `Retry-After` at the next 00:00 UTC. When a Durable
+Object limit is reached it SHALL answer JSON 503 with `Retry-After`, never an
+HTML error page. (order 2011-amqd)
+
+#### Scenario: a client restarted in a loop
+
+- **WHEN** one identity's `coord` is started 1 000 times in a row
+- **THEN** the server refuses it with 429 once it reaches its daily cap, and
+  the fixture's counted Worker requests for that identity stay at the cap
+
+#### Scenario: the budget fixture
+
+- **WHEN** the fixture runs 15 clients for an idle hour and a busy hour against
+  the local runtime with a fake clock
+- **THEN** the counted Worker requests, Durable Object requests and rows written
+  stay under the stated budgets, or the fixture fails naming the one exceeded
+
+### Requirement: a client honours server limits and backs off
+
+A client SHALL cache reads for at least 5 s per namespace, persist its daily
+count and backoff state across processes, never poll faster than its idle
+floor, honour `Retry-After`, treat an HTML or Cloudflare error-page body as
+out-of-budget until 00:00 UTC by the server's `Date` (plus a jitter), and back
+off exponentially with full jitter on network and 5xx errors. (order 2011-amqd)
+
+#### Scenario: the Cloudflare daily limit
+
+- **WHEN** the Worker answers with Cloudflare's Error 1027 page instead of JSON
+- **THEN** the client stops calling until the server's next 00:00 UTC plus a
+  jitter, and serves from the git-ledger fallback meanwhile
+
+### Requirement: only the fleet's identities reach the queue, and no credential sits in a forge
+
+The Worker SHALL refuse a request without a valid Access JWT for the team and
+application, and SHALL refuse a valid JWT whose identity is not on the fleet
+allowlist. Its workers.dev and preview URLs SHALL be disabled and its route
+SHALL fail closed. A forge SHALL never hold the host's service token; only the
+host-side proxy SHALL read it, from Vault, per call. (order 2011-amqd)
+
+#### Scenario: an identity outside the fleet
+
+- **WHEN** a request carries a valid JWT from the right team whose identity is
+  not on the allowlist
+- **THEN** it is refused with 403 and no Durable Object is called
+
+### Requirement: a settle requires the current lease
+
+`take` SHALL return a fresh lease token and increment a `deliveries` count, and
+`settle` and `release` SHALL require that token. A settle by a former holder
+whose lease expired SHALL change nothing, and a settle after TTL SHALL answer
+`expired`. (order 2011-amqd)
+
+#### Scenario: a late settle by a former holder
+
+- **WHEN** holder A's lease expires, B takes the instruction, and A then settles
+- **THEN** A's settle answers `not-holder`, the instruction stays with B, and
+  B's later settle removes it

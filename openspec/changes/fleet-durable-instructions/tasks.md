@@ -36,3 +36,17 @@ Nothing is filed until the operator answers the open questions in
 ## 5. Trust
 - [ ] 5.1 Add harness framing for instructions (author and source), with a
       fixture showing that an instruction cannot approve a consent-gated action.
+
+## 2011-amqd: free-tier queue (free-tier-queue.md §10)
+
+- [ ] a. Budget fixture first (runtime-measured rows, DO requests, alarms; crash-loop client)
+- [ ] b. Drop AUTOINCREMENT, trim by indexed range, coalesce sweeps
+- [ ] c. Server-side caps: in-memory bucket, per-identity daily cap, per-account guard
+- [ ] d. DO limit errors as JSON 503 with Retry-After; 64 KiB body cap; CPU measured
+- [ ] e. Fleet-identity allowlist, stale-cert cap, preview_urls = false
+- [ ] f. Instructions: put / take (lease token, deliveries) / settle / release
+- [ ] g. Client: idle floor, persisted state, out-of-budget handling, jittered backoff, cache
+- [ ] h. Host proxy reads the token from Vault; forge env-var refusal litmus
+- [ ] i. Seed prompt
+- [ ] j. cloud.usage reads DO requests and rows written
+- [ ] k. Operator-gated deploy (1830-hzsc extended)
