@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-06 at the coordinator's direction (macuahuitl-fedora), from the 2006-wahn fail-open.
+packets:
+- packet_id: a-gate-grep-that-fails-refuses-instead-of-passing
+  order: 2007-vy3p
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [security, portability, gates]
+  estimated_hours: 6
+  title: A grep inside a push or credential gate that fails (exit 2) refuses, never passes
+  context: 'Found by 2006-wahn: pre-push-local-gate.sh''s attestation-grammar ERE began ''^(|...''; BSD grep (macOS) rejects the empty alternative with exit 2 and `if grep -qv` read it as "no bad line", so the plan-only lane admitted every line on macOS (Linux GNU grep accepts the form). The class: any `if grep ...; then refuse` or `grep -q ... || continue` where exit 2 (a pattern this grep rejects, or a file it cannot read) takes the PASS branch. AUDIT on trunk fd15d3cde, macOS 27.0.1 BSD grep: 2530 literal grep patterns in scripts/*.sh and scripts/hooks/* compiled with /usr/bin/grep -E against empty input; 1 genuinely does not compile (the hook ERE, corrected in #951), 3 more are extractor artifacts of the ''"''"'' quote splice and compile in place. Decision sites: 502 positive `if grep` (rc 2 skips the branch), 8 of them `if grep -v`, and 110 negated `if ! grep` (rc 2 refuses: fail-closed already). GATES FIRST: pre-push-local-gate.sh has 22 grep uses; 2 exposed (the attestation grammar, the loop-status Cycle-only check) and now fixed; check-credential-channel.sh has 3, none exposed (the hosts.yml probe is behind [ -r ] with a static pattern; the others are WSL detection and a podman image list); check-purge-clears-vault-credentials.sh had 2 exposed `grep -q ... || continue` sites (an unreadable purge script was skipped and the guard answered ok) and now records a violation.'
+  exit_criteria:
+  - 'The push hook routes its file-reading gate greps through _grep_refuses (true on a match and on exit 2, false only on a clean miss), and the purge gate turns exit 2 into a named violation; scripts/lua/test-grep-exit-two-fails-closed.lua proves the old form fails open, the helper refuses on a bad pattern and an unreadable file, the hook is wired, and the pre-fix purge gate answered ok where the fix refuses. DONE on work/2007-vy3p.'
+  - 'A preflight decider compiles every literal grep pattern under the host grep and refuses one that exits 2, so a future bad pattern fails at the gate on the host that would mis-run it.'
+  - 'The remaining positive `if grep` sites in other guards (outside the push hook and the credential gates) are classified: a guard where exit 2 would read as pass is fixed the same way, the rest are noted as not decisions.'
+  verifiable_closure: 'The test passing in the macOS gate, plus the decider''s verdict on the tree.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the decider lands with the fix (1136-n8sh).'
+  next_action: 'Land the gate fixes, then write the pattern-compile decider and classify the other guards.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-06: audit the class across scripts/ and the hooks, report the count, fix credential and push gates first with a test that fails on the old form, treat exit 2 as a refusal so a future bad pattern fails closed, file it as its own row.'
+  events:
+  - type: filed
+    ts: '2026-11-06T05:20:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed in_progress with the gate fixes on work/2007-vy3p

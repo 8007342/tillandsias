@@ -163,6 +163,22 @@ WORK_REF_LANE="${WORK_REF_LANE:-0}"
 _PREPUSH_WARNED=0
 _PREPUSH_WARNED_NAMES=""
 
+# 2007-vy3p: a grep that FAILS (exit 2: a pattern this grep cannot compile, or
+# a file it cannot read) must refuse, never pass. `if grep -q BAD file` reads
+# exit 2 as "no bad line" and lets the push through: on macOS the
+# attestation-grammar ERE '^(|...' was rejected by BSD grep and the lane
+# admitted every line (2006-wahn). _grep_refuses is true on a match AND on an
+# error, false only on a clean miss (exit 1), so a future bad pattern fails
+# closed. Usage: if _grep_refuses <grep args...>; then refuse...; fi
+_grep_refuses() {
+    local _rc=0
+    LC_ALL=C grep "$@" || _rc=$?
+    if [[ "$_rc" -ge 2 ]]; then
+        echo "plan-only lane: grep exited $_rc on its own check (unreadable input or a pattern this grep rejects); refusing rather than passing (2007-vy3p)" >&2
+    fi
+    [[ "$_rc" -ne 1 ]]
+}
+
 refuse() {
     if [[ "$WORK_REF_LANE" == "1" ]]; then
         local _d="${TILLANDSIAS_HOOK_DECIDER:-pre-push}"
@@ -1420,7 +1436,11 @@ attempt_plan_only_lane() {
                     echo "plan-only lane: validation FAILED — ${files[$i]} has no '## Cycle' heading (full gate required)" >&2
                     rm -rf "$tmp"; return 1
                 fi
-                if grep -E '^## ' "$blob" | grep -v '^## Cycle ' | grep -q .; then
+                # 2007-vy3p: read the headings first, so an unreadable blob
+                # refuses here instead of reading as "no other section".
+                _hdr_rc=0
+                _hdrs="$(LC_ALL=C grep -E '^## ' "$blob")" || _hdr_rc=$?
+                if [[ "$_hdr_rc" -ge 2 ]] || printf '%s\n' "$_hdrs" | grep -v '^## Cycle ' | grep -q .; then
                     echo "plan-only lane: validation FAILED — ${files[$i]} carries a section other than '## Cycle' (loop-status fragments are Cycle-only; full gate required)" >&2
                     rm -rf "$tmp"; return 1
                 fi
@@ -1459,7 +1479,11 @@ attempt_plan_only_lane() {
                     # content still refuses.
                     awk '!started && /^# / { next } { started=1; print }' "$blob" > "$added"
                 fi
-                if LC_ALL=C grep -qvE '^(|## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [A-Za-z0-9._-]+|MO-FULL: (COMPLETE|BLOCKED) [0-9a-f]{40} [A-Za-z0-9][A-Za-z0-9._/-]* [0-9a-f]{40})$' "$added"; then
+                # An OPTIONAL group, not an empty alternative: BSD grep (macOS)
+                # rejects '(|' as an empty subexpression and exits 2, which this
+                # `if` read as "no bad line" and let every line through
+                # (2006-wahn).
+                if _grep_refuses -qvE '^(## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [A-Za-z0-9._-]+|MO-FULL: (COMPLETE|BLOCKED) [0-9a-f]{40} [A-Za-z0-9][A-Za-z0-9._/-]* [0-9a-f]{40})?$' "$added"; then
                     echo "plan-only lane: validation FAILED — ${files[$i]} added lines break the attestation-ledger grammar (full gate required)" >&2
                     rm -rf "$tmp"; return 1
                 fi
