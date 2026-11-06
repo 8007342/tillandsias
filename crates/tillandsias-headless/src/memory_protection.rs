@@ -114,9 +114,9 @@ pub(crate) fn verdict(container: &str, chain: &[Level]) -> (String, i32) {
 /// not read).
 #[cfg(target_os = "linux")]
 pub(crate) fn run_cli(container: &str) -> i32 {
-    let out = match std::process::Command::new("podman")
-        .args(["inspect", "-f", "{{.State.Pid}}", container])
-        .output()
+    let out = match tillandsias_podman::podman_cmd_sync()
+        .args(["inspect", "--format", "{{.State.Pid}}", container])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
     {
         Ok(o) if o.status.success() => o,
         Ok(o) => {
