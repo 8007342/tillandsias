@@ -175,6 +175,31 @@ specifically, and running with no login at all, are **implied, not stated**.
   - "10,000 Neurons per day at no charge".
   - `@cf/meta/llama-3.2-1b-instruct` costs "2457 neurons per M input tokens".
 
+## Push to a host without a public endpoint (read 2026-11-06)
+
+- **Queues** pull is short polling: "Queues does not hold an open connection
+  (often referred to as 'long polling') if there are no messages to deliver."
+  "A push-based consumer runs on Workers."
+  <https://developers.cloudflare.com/queues/configuration/pull-consumers/>
+- A queue cannot have both kinds of consumer: "If you have an existing
+  push-based consumer, you will need to remove that first." (same page)
+- **Durable Object WebSockets on Free:**
+  - "a 20:1 ratio is applied to incoming WebSocket messages".
+  - "There is no charge for outgoing WebSocket messages, nor for incoming
+    WebSocket protocol pings".
+  - Objects that are hibernated are "not billed for duration".
+  - Source: <https://developers.cloudflare.com/durable-objects/platform/pricing/>
+  - Clients connect through a Worker ("Proxy the request from the Worker to
+    the Durable Object"), so the hostname is public: "When enabled, your
+    workers.dev URL is available publicly."
+- **Pub/Sub:** `https://developers.cloudflare.com/pub-sub/` redirects to `/`.
+  No current product page was found.
+- **Cloudflare Tunnel** maps "public hostnames to local services", so it is
+  inbound to a host, not a push to it.
+  <https://developers.cloudflare.com/tunnel/>
+- **Verdict:** no push primitive on the Free plan reaches a host without a
+  public, token-checked endpoint.
+
 ## Not found on an official page (open)
 
 - How many Access seats Zero Trust Free includes.
