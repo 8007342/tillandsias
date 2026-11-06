@@ -27107,8 +27107,14 @@ mod tests {
                 entry("tillandsias-git-kumbia-kombat"),
             ]
         };
-        let dir = std::path::PathBuf::from("/dev/shm")
-            .join(format!("shsc-two-runs-{}", std::process::id()));
+        // /dev/shm on Linux; macOS has none, so its temp dir.
+        let shm = std::path::PathBuf::from("/dev/shm");
+        let root = if shm.is_dir() {
+            shm
+        } else {
+            std::env::temp_dir()
+        };
+        let dir = root.join(format!("shsc-two-runs-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let run_a = crate::tray_presence::acquire(&dir).expect("A owns the enclave");
         // B is another process: the lock names A's pid, which is not B's.
@@ -27124,7 +27130,16 @@ mod tests {
         // A, the owner, still sweeps its own enclave on exit.
         drop(run_a);
         crate::tray_presence::wait_released(&dir);
-        let owner = crate::tray_presence::owner_elsewhere(&dir);
+        // 2000-envt: owner_elsewhere probes by taking the lock, and a process
+        // a parallel test forks during that probe keeps the lock until it
+        // execs, so one probe can still read "held". Ask until it clears
+        // (bounded, as wait_released is); a real holder never would.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut owner = crate::tray_presence::owner_elsewhere(&dir);
+        while owner.is_some() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            owner = crate::tray_presence::owner_elsewhere(&dir);
+        }
         assert_eq!(shutdown_targets_for(enclave(), owner).len(), 4);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -28024,8 +28039,16 @@ mod tests {
                 .is_none()
         );
 
-        // The default slot frees when the first launch ends.
+        // The default slot frees when the first launch ends. A process a
+        // parallel test forks keeps a copy of the dropped lock until it execs
+        // (2000-envt: measured 215 in 20000 with 8 spawning threads), so wait,
+        // bounded, for the slot to read free before claiming it again.
         drop(first);
+        let default_slot = format!("forge-instance-{project}-default");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while resource_lock::is_held(&default_slot) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         let (again, again_instance) = claim_forge_instance_slot(&project, false, false, None)
             .expect("third claim")
             .expect("the freed default slot is reused");
