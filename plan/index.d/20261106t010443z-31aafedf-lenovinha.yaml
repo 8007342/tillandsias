@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-agent-in-any-forge-can-inspect-the-cache-and-the-impact-of-a-change
+    event:
+      type: note
+      ts: "2026-11-06T01:04:43Z"
+      agent_id: linux-lenovinha-claude-20261106t010443z
+      host: lenovinha
+      summary: |
+        Correction (coordinator's request): neither command exists on trunk. Both are NEW tools; the row's context wrongly implied they already exist. The only trunk hit for tillandsias-cache is a log prefix in scripts/manage-cache.sh, a host podman-image eviction script unrelated to this. There is no impact tool anywhere.
+        Spec source: 8007342/kumbia-kombat plan/forge-generic-services.md at ref work/1835-lvls, sections 2 and 3 plus "Decisions from macuahuitl-fedora (2026-11-03)".
+        Slice 1 is tillandsias-cache put/get/stats/prune: a content-addressed per-project stage cache. An entry is <root>/<stage>/<key>/ with .inputs.json, the key is the sha256 of canonical JSON, the entry is staged in a temporary sibling and renamed on success, the root sits under ~/.cache/tillandsias-project with an override, and a quota is enforced. Refusals: cache_inputs_not_canonical, cache_over_quota.
+        Slice 2 is tillandsias-impact plan {graph, from, to, rules}: a dry run that writes only report_path.
+        Both ship as forge-image CLIs in python3, which the image already carries (flutter-lane). Each is tested on a second-project fixture that is neither tillandsias nor kumbia.
