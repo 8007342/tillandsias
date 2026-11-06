@@ -2013,9 +2013,13 @@ pub fn github_rotation_failing_message(err: &str, expires_at: u64, now: u64) -> 
         left if left < 3600 => format!("expires in {} min", left.div_ceil(60)),
         left => format!("expires in about {} h", left / 3600),
     };
+    // The Vault case names --github-login (it relaunches Vault): a tray
+    // restart alone was never shown to restore it. On macuahuitl 2026-11-05 a
+    // running mirror stayed unauthorized after the relaunch until it was
+    // restarted, which 1998-mvrs has not yet made automatic.
     let fix = if err.contains(":read:") || err.contains(":lock:") || err.contains("vault") {
-        "Tillandsias cannot read the token from Vault. Quit and restart the Tillandsias tray; \
-         if this message returns, run `tillandsias --github-login`"
+        "Tillandsias cannot read the token from Vault. Run `tillandsias --github-login`; \
+         if pushes still fail after that, restart the project's git mirror"
     } else {
         "GitHub did not renew the token. Run `tillandsias --github-login`"
     };
@@ -7817,7 +7821,11 @@ mod tests {
             panic!("no alert inside the margin");
         };
         assert!(msg.contains("Vault"), "{msg}");
-        assert!(msg.contains("tillandsias"), "{msg}");
+        assert!(msg.contains("tillandsias --github-login"), "{msg}");
+        assert!(
+            msg.contains("git mirror") && !msg.contains("restart the Tillandsias tray"),
+            "{msg}"
+        );
         assert!(!msg.contains("ghu_") && !msg.contains("ghr_"), "{msg}");
         assert_eq!(
             w.observe(&fail(), at + 60),
