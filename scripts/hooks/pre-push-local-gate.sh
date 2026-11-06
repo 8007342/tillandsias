@@ -1459,7 +1459,11 @@ attempt_plan_only_lane() {
                     # content still refuses.
                     awk '!started && /^# / { next } { started=1; print }' "$blob" > "$added"
                 fi
-                if LC_ALL=C grep -qvE '^(|## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [A-Za-z0-9._-]+|MO-FULL: (COMPLETE|BLOCKED) [0-9a-f]{40} [A-Za-z0-9][A-Za-z0-9._/-]* [0-9a-f]{40})$' "$added"; then
+                # An OPTIONAL group, not an empty alternative: BSD grep (macOS)
+                # rejects '(|' as an empty subexpression and exits 2, which this
+                # `if` read as "no bad line" and let every line through
+                # (2006-wahn).
+                if LC_ALL=C grep -qvE '^(## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [A-Za-z0-9._-]+|MO-FULL: (COMPLETE|BLOCKED) [0-9a-f]{40} [A-Za-z0-9][A-Za-z0-9._/-]* [0-9a-f]{40})?$' "$added"; then
                     echo "plan-only lane: validation FAILED — ${files[$i]} added lines break the attestation-ledger grammar (full gate required)" >&2
                     rm -rf "$tmp"; return 1
                 fi
