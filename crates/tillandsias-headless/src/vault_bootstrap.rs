@@ -2853,10 +2853,7 @@ pub fn cloudflare_token_due_check_live(debug: bool) -> Result<CloudflareDueCheck
         return Ok(CloudflareDueCheck::RefusedInForge);
     }
     // 2007-rtmt: a timer never starts Vault; with Vault stopped it checks nothing.
-    let store = VaultCloudflareTokenStore {
-        debug,
-        may_start_vault: false,
-    };
+    let store = background_cloudflare_store(debug);
     let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
     let base_url = crate::cloudflare_oauth::base_url();
     cloudflare_background_tick(
@@ -2875,6 +2872,16 @@ pub fn cloudflare_token_due_check_live(debug: bool) -> Result<CloudflareDueCheck
             )
         },
     )
+}
+
+/// ORDER 2007-rtmt: the store a background rotation tick reads through. It
+/// never starts Vault (that path can reach the CA).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn background_cloudflare_store(debug: bool) -> VaultCloudflareTokenStore {
+    VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: false,
+    }
 }
 
 /// ORDER 2007-rtmt: a background rotation tick. With Vault stopped it runs
@@ -11778,20 +11785,35 @@ mod cloudflare_token_rotation_tests {
         assert_eq!(checks.get(), 1);
     }
 
-    /// 2007-rtmt: the scheduler's live store is the background kind, which
-    /// refuses to start Vault; the interactive stores (login, logout, cloud
-    /// usage) still may. Source-level: the live due-check builds its store
-    /// with `may_start_vault: false` and gates on the tick.
+    /// 2007-rtmt: the store the scheduler's tick reads through may not start
+    /// Vault, and that refusal is enforced: with Vault stopped its start
+    /// closure is never called and the error names vault-not-running.
     #[test]
-    fn the_live_rotation_tick_uses_the_background_gate() {
-        let src = include_str!("vault_bootstrap.rs");
-        let body = src
-            .split("pub fn cloudflare_token_due_check_live(")
-            .nth(1)
-            .and_then(|r| r.split("\n}\n").next())
-            .expect("the live due-check");
-        assert!(body.contains("cloudflare_background_tick("), "{body}");
-        assert!(body.contains("may_start_vault: false"), "{body}");
+    fn the_background_store_never_starts_vault() {
+        let store = background_cloudflare_store(false);
+        assert!(!store.may_start_vault);
+        let starts = std::cell::Cell::new(0u32);
+        let out = vault_up_or_start_unless(
+            !store.may_start_vault,
+            || false,
+            || {
+                starts.set(starts.get() + 1);
+                Ok(())
+            },
+        );
+        assert_eq!(out, Err("vault-unavailable:not-running".to_string()));
+        assert_eq!(starts.get(), 0);
+        // Negative control: an interactive store does start a stopped Vault.
+        let out = vault_up_or_start_unless(
+            false,
+            || false,
+            || {
+                starts.set(starts.get() + 1);
+                Ok(())
+            },
+        );
+        assert_eq!(out, Ok(()));
+        assert_eq!(starts.get(), 1);
     }
 
     #[test]
