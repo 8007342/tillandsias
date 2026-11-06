@@ -88,7 +88,10 @@ else
             row "mcp:$name" skip "disabled in $MCP_CONFIG"
             continue
         fi
-        mapfile -t argv < <(printf '%s' "$cmd" | jq -r '.[]')
+        # A read loop, not mapfile: same argv, and it also runs under the bash
+        # 3.2 a macOS host uses for the doctor's fixture (2006-wahn).
+        argv=()
+        while IFS= read -r _arg; do argv+=("$_arg"); done < <(printf '%s' "$cmd" | jq -r '.[]')
         if [ "${#argv[@]}" -eq 0 ] || { [ ! -x "${argv[0]}" ] && ! command -v "${argv[0]}" >/dev/null 2>&1; }; then
             row "mcp:$name" failed "command not found: ${argv[0]:-<empty>}"
             continue
