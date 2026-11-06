@@ -2296,7 +2296,10 @@ pub fn cloudflare_login_stored_in(store: &dyn CloudflareTokenStore) -> Result<bo
 // Called by the vsock handler; the Linux tray joins in 1719-83po slice 4.
 #[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
 pub fn cloudflare_login_stored_live(debug: bool) -> Result<bool, String> {
-    cloudflare_login_stored_in(&VaultCloudflareTokenStore { debug })
+    cloudflare_login_stored_in(&VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: true,
+    })
 }
 
 /// Delete the Cloudflare bundle (1505-kc5f `--cloudflare-logout`): the
@@ -2392,6 +2395,10 @@ fn cloudflare_vault_reason(e: &VaultError) -> &'static str {
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 pub struct VaultCloudflareTokenStore {
     pub debug: bool,
+    /// 2007-rtmt: an interactive caller (login, logout, cloud usage) may start
+    /// a stopped Vault; a background timer may not, because the start runs
+    /// the full CA path and a timer must never be able to change the CA.
+    pub may_start_vault: bool,
 }
 
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
@@ -2424,13 +2431,6 @@ impl VaultCloudflareTokenStore {
 /// refused vault-unavailable and its remedy sent the operator to `--init`,
 /// which rebuilt every image and froze the desktop, while the write path
 /// already knew how to start Vault by itself.
-fn vault_up_or_start(
-    running: impl FnOnce() -> bool,
-    start: impl FnOnce() -> Result<(), String>,
-) -> Result<(), String> {
-    vault_up_or_start_unless(crate::read_only_process(), running, start)
-}
-
 /// 2000-camv: a read-only process (`--cloud-usage`) never starts Vault: a
 /// start from a hook's environment re-minted the host CA under the running
 /// Vault. It reports the stopped Vault instead.
@@ -2456,7 +2456,8 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
         // Start Vault alone when it is stopped (1770-z575); the login reads
         // here BEFORE anything single-use is spent, so a start that fails
         // still refuses before the browser step.
-        vault_up_or_start(
+        vault_up_or_start_unless(
+            crate::read_only_process() || !self.may_start_vault,
             || container_running(VAULT_CONTAINER_NAME),
             || ensure_vault_running(self.debug),
         )?;
@@ -2503,7 +2504,8 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
         // Bring Vault itself up (the same idempotent path `--init` uses, for
         // Vault alone); if that fails the write is REFUSED. There is no other
         // store.
-        vault_up_or_start(
+        vault_up_or_start_unless(
+            crate::read_only_process() || !self.may_start_vault,
             || container_running(VAULT_CONTAINER_NAME),
             || ensure_vault_running(self.debug),
         )?;
@@ -2701,6 +2703,10 @@ pub enum CloudflareDueCheck {
     /// A forge never rotates: no forge policy can read either path, and a
     /// second rotating process would race the host's.
     RefusedInForge,
+    /// 2007-rtmt: a background tick found Vault stopped and checked nothing.
+    /// A timer never starts Vault (that path can reach the CA), so with Vault
+    /// down there is nothing it can rotate; the next tick looks again.
+    VaultNotRunning,
 }
 
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
@@ -2720,6 +2726,9 @@ impl CloudflareDueCheck {
                 "ok:cloudflare-token-rotation:expiry-unknown".into()
             }
             CloudflareDueCheck::NoToken => "ok:cloudflare-token-rotation:no-token".into(),
+            CloudflareDueCheck::VaultNotRunning => {
+                "skip:cloudflare-token-rotation:vault-not-running".into()
+            }
             CloudflareDueCheck::NoRefreshToken => {
                 "ok:cloudflare-token-rotation:no-refresh-token".into()
             }
@@ -2840,20 +2849,55 @@ pub fn cloudflare_token_due_check_live(debug: bool) -> Result<CloudflareDueCheck
         .map_err(|_| cloudflare_rotation_failure("clock"))?
         .as_secs();
     let forge = host_kind_is_forge(std::env::var("TILLANDSIAS_HOST_KIND").ok().as_deref());
-    let store = VaultCloudflareTokenStore { debug };
+    if forge {
+        return Ok(CloudflareDueCheck::RefusedInForge);
+    }
+    // 2007-rtmt: a timer never starts Vault; with Vault stopped it checks nothing.
+    let store = background_cloudflare_store(debug);
     let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
     let base_url = crate::cloudflare_oauth::base_url();
-    rotate_cloudflare_token_if_due(
-        &store,
-        &|client_id, refresh_token| {
-            perform_cloudflare_token_refresh(&http, &base_url, client_id, refresh_token)
+    cloudflare_background_tick(
+        || container_running(VAULT_CONTAINER_NAME),
+        || {
+            rotate_cloudflare_token_if_due(
+                &store,
+                &|client_id, refresh_token| {
+                    perform_cloudflare_token_refresh(&http, &base_url, client_id, refresh_token)
+                },
+                now,
+                forge,
+                CLOUDFLARE_ROTATION_LOCK,
+                std::time::Duration::from_secs(60),
+                debug,
+            )
         },
-        now,
-        forge,
-        CLOUDFLARE_ROTATION_LOCK,
-        std::time::Duration::from_secs(60),
-        debug,
     )
+}
+
+/// ORDER 2007-rtmt: the store a background rotation tick reads through. It
+/// never starts Vault (that path can reach the CA).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn background_cloudflare_store(debug: bool) -> VaultCloudflareTokenStore {
+    VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: false,
+    }
+}
+
+/// ORDER 2007-rtmt: a background rotation tick. With Vault stopped it runs
+/// nothing (no store read, so no Vault start and no CA path) and reports
+/// [`CloudflareDueCheck::VaultNotRunning`]; with Vault up it runs `check`.
+/// The store refuses to start Vault too, for the race where Vault stops
+/// between the two.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn cloudflare_background_tick(
+    vault_running: impl FnOnce() -> bool,
+    check: impl FnOnce() -> Result<CloudflareDueCheck, String>,
+) -> Result<CloudflareDueCheck, String> {
+    if !vault_running() {
+        return Ok(CloudflareDueCheck::VaultNotRunning);
+    }
+    check()
 }
 
 /// The regular interval after a verdict; after a failure, 1 min doubling,
@@ -11675,8 +11719,10 @@ mod cloudflare_token_rotation_tests {
             .nth(1)
             .and_then(|rest| rest.split("fn delete_record(").next())
             .expect("write_record body");
-        // Needle split so this test's own text cannot match it.
-        let needle = concat!("vault_up_or", "_start(");
+        // Needle split so this test's own text cannot match it. 2007-rtmt:
+        // the store starts Vault through the gated form, which a background
+        // store (may_start_vault: false) refuses.
+        let needle = concat!("vault_up_or", "_start_unless(");
         let mut misses = Vec::new();
         if !read.contains(needle) {
             misses.push("read_bundle does not start Vault when it is stopped");
@@ -11687,11 +11733,95 @@ mod cloudflare_token_rotation_tests {
         assert!(misses.is_empty(), "{}", misses.join("; "));
     }
 
+    /// 2007-rtmt: a background rotation tick never starts Vault and never
+    /// reaches the CA path. With Vault stopped it reports vault-not-running by
+    /// name, without running the check at all, so nothing reads or mints the
+    /// CA and no login is needed to know there is nothing to do. With Vault
+    /// running, the check runs as before (a missing login is no-token).
+    /// Pre-fix: FAILS, the tick's store started Vault through
+    /// ensure_vault_running, the full ensure_ca_bundle path.
+    #[test]
+    fn a_rotation_tick_with_vault_stopped_starts_nothing_and_touches_no_ca() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ca = tmp.path().join("intermediate.crt");
+        std::fs::write(
+            &ca,
+            b"-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        let before = std::fs::read(&ca).unwrap();
+        let checks = std::cell::Cell::new(0u32);
+        let out = cloudflare_background_tick(
+            || false,
+            || {
+                checks.set(checks.get() + 1);
+                Ok(CloudflareDueCheck::NoToken)
+            },
+        );
+        assert_eq!(out, Ok(CloudflareDueCheck::VaultNotRunning));
+        assert_eq!(
+            out.as_ref().unwrap().verdict(),
+            "skip:cloudflare-token-rotation:vault-not-running"
+        );
+        assert_eq!(
+            checks.get(),
+            0,
+            "no store read, so no Vault start and no CA path"
+        );
+        assert_eq!(
+            std::fs::read(&ca).unwrap(),
+            before,
+            "the CA is byte-identical"
+        );
+        // Vault running: the check runs once; no stored login is no-token.
+        let out = cloudflare_background_tick(
+            || true,
+            || {
+                checks.set(checks.get() + 1);
+                Ok(CloudflareDueCheck::NoToken)
+            },
+        );
+        assert_eq!(out, Ok(CloudflareDueCheck::NoToken));
+        assert_eq!(checks.get(), 1);
+    }
+
+    /// 2007-rtmt: the store the scheduler's tick reads through may not start
+    /// Vault, and that refusal is enforced: with Vault stopped its start
+    /// closure is never called and the error names vault-not-running.
+    #[test]
+    fn the_background_store_never_starts_vault() {
+        let store = background_cloudflare_store(false);
+        assert!(!store.may_start_vault);
+        let starts = std::cell::Cell::new(0u32);
+        let out = vault_up_or_start_unless(
+            !store.may_start_vault,
+            || false,
+            || {
+                starts.set(starts.get() + 1);
+                Ok(())
+            },
+        );
+        assert_eq!(out, Err("vault-unavailable:not-running".to_string()));
+        assert_eq!(starts.get(), 0);
+        // Negative control: an interactive store does start a stopped Vault.
+        let out = vault_up_or_start_unless(
+            false,
+            || false,
+            || {
+                starts.set(starts.get() + 1);
+                Ok(())
+            },
+        );
+        assert_eq!(out, Ok(()));
+        assert_eq!(starts.get(), 1);
+    }
+
     #[test]
     fn cloudflare_store_starts_only_vault_when_it_is_stopped() {
         let mut starts = 0;
         assert_eq!(
-            super::vault_up_or_start(
+            super::vault_up_or_start_unless(
+                false,
                 || false,
                 || {
                     starts += 1;
@@ -11703,13 +11833,18 @@ mod cloudflare_token_rotation_tests {
         assert_eq!(starts, 1, "a stopped Vault is started exactly once");
         // A failed start refuses by a fixed word; the caller never proceeds.
         assert_eq!(
-            super::vault_up_or_start(|| false, || Err("podman: no such image".into())),
+            super::vault_up_or_start_unless(
+                false,
+                || false,
+                || Err("podman: no such image".into())
+            ),
             Err("vault-start-failed".to_string())
         );
         // NEGATIVE CONTROL: a running Vault is never started again.
         let mut started = false;
         assert_eq!(
-            super::vault_up_or_start(
+            super::vault_up_or_start_unless(
+                false,
                 || true,
                 || {
                     started = true;

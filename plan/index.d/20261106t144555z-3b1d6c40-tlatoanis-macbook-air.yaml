@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    field: status
+    value: implemented
+    ts: "2026-11-06T14:45:55Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    event:
+      type: progress
+      ts: "2026-11-06T14:45:55Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: land(962) f4bb2a72a; 50/50 full-suite runs of the three tests; mechanism measured (215/20000 inherited-flock repro)
