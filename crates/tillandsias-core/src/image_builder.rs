@@ -123,8 +123,31 @@ fn image_build_identity_for_policy(
     collect_context_entries(&context_root, &context_root, &mut entries)?;
     entries.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
 
+    // 2004-qzem: hash only what the Containerfile can read, when every
+    // COPY/ADD source is a literal path; otherwise the whole tree, as before.
+    let containerfile_text = fs::read_to_string(&containerfile)
+        .map_err(|e| ImageBuilderError::Io(format!("read Containerfile: {e}")))?;
+    let derived = containerfile_context_sources(&containerfile_text);
+    if let Some(sources) = &derived {
+        let own = containerfile
+            .strip_prefix(&context_root)
+            .ok()
+            .and_then(|p| p.to_str())
+            .map(|p| p.replace('\\', "/"))
+            .unwrap_or_default();
+        entries.retain(|e| {
+            e.relative_path == own
+                || sources.iter().any(|src| {
+                    e.relative_path == *src || e.relative_path.starts_with(&format!("{src}/"))
+                })
+        });
+    }
+
     let mut hasher = Sha256::new();
     hash_field(&mut hasher, b"schema", b"tillandsias-image-build-v1");
+    if derived.is_some() {
+        hash_field(&mut hasher, b"context_scope", b"containerfile-sources");
+    }
     hash_field(&mut hasher, b"image_name", spec.image_name.as_bytes());
     hash_field(&mut hasher, b"layer_policy", layer_policy.as_bytes());
     for entry in entries {
@@ -207,6 +230,82 @@ struct ContextEntry {
     kind: &'static str,
     mode: u32,
     payload: Vec<u8>,
+}
+
+/// 2004-qzem: the build-context paths a Containerfile can read, or `None`
+/// when that cannot be known for certain from its text.
+///
+/// `None` (hash the whole context) whenever a source is anything but a literal
+/// relative path: a variable, a glob, the whole context, a URL, the JSON form,
+/// a heredoc, an unknown flag, or a `--mount` anywhere (a bind mount reads the
+/// context outside COPY). `COPY --from=` reads another stage, not the context,
+/// and is skipped. Deriving the list from the file means a COPY added later is
+/// hashed with no second place to update.
+fn containerfile_context_sources(text: &str) -> Option<Vec<String>> {
+    let mut logical = Vec::new();
+    let mut current = String::new();
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if current.is_empty() && trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some(head) = trimmed.strip_suffix('\\') {
+            current.push_str(head);
+            current.push(' ');
+        } else {
+            current.push_str(trimmed);
+            logical.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        logical.push(current);
+    }
+
+    let mut sources = Vec::new();
+    for instruction in &logical {
+        if instruction.contains("--mount") || instruction.contains("<<") {
+            return None;
+        }
+        let mut words = instruction.split_whitespace();
+        let Some(keyword) = words.next() else {
+            continue;
+        };
+        let keyword = keyword.to_ascii_uppercase();
+        if keyword != "COPY" && keyword != "ADD" {
+            continue;
+        }
+        let mut args = Vec::new();
+        let mut from_stage = false;
+        for word in words {
+            if let Some(flag) = word.strip_prefix("--") {
+                let name = flag.split('=').next().unwrap_or_default();
+                match name {
+                    "from" => from_stage = true,
+                    "chown" | "chmod" | "link" => {}
+                    _ => return None,
+                }
+            } else {
+                args.push(word);
+            }
+        }
+        if from_stage {
+            continue;
+        }
+        if args.first().is_some_and(|a| a.starts_with('[')) || args.len() < 2 {
+            return None;
+        }
+        for src in &args[..args.len() - 1] {
+            if src.contains(['$', '*', '?', '[']) || src.contains("://") {
+                return None;
+            }
+            let path = src.trim_start_matches("./").trim_end_matches('/');
+            if path.is_empty() || path == "." || path.starts_with('/') || path.contains("..") {
+                return None;
+            }
+            sources.push(path.to_string());
+        }
+    }
+    Some(sources)
 }
 
 fn collect_context_entries(
@@ -1227,6 +1326,174 @@ mod tests {
         assert_eq!(
             squashed.labels.get(IMAGE_LAYER_POLICY_LABEL),
             Some(&IMAGE_LAYER_POLICY.to_string())
+        );
+    }
+
+    /// 2004-qzem fixture: forge-base reads only its own Containerfile; forge
+    /// copies one script and one directory, as images/default does.
+    fn forge_pair(root: &Path) -> (ImageBuildSpec, ImageBuildSpec) {
+        fs::create_dir_all(root.join("config-overlay")).unwrap();
+        fs::write(
+            root.join("Containerfile.base"),
+            "FROM fedora\nARG PIN=1.0\nRUN dnf install -y tool-$PIN \\\n    && true\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("Containerfile"),
+            "ARG BASE_IMAGE\nFROM $BASE_IMAGE\nCOPY lib-common.sh /usr/local/lib/lib-common.sh\nCOPY --chmod=0755 config-overlay/ /etc/overlay/\nCOPY --from=builder /out /opt/out\n",
+        )
+        .unwrap();
+        fs::write(root.join("lib-common.sh"), "echo common\n").unwrap();
+        fs::write(root.join("other.sh"), "echo other\n").unwrap();
+        fs::write(root.join("config-overlay/a.conf"), "a=1\n").unwrap();
+        let base = ImageBuildSpec {
+            image_name: "forge-base".to_string(),
+            context_root: root.to_path_buf(),
+            containerfile: root.join("Containerfile.base"),
+            build_args: BTreeMap::new(),
+            dependency_digests: BTreeMap::new(),
+            version: "1".to_string(),
+        };
+        let forge = ImageBuildSpec {
+            image_name: "forge".to_string(),
+            containerfile: root.join("Containerfile"),
+            ..base.clone()
+        };
+        (base, forge)
+    }
+
+    /// The forge digest as the launcher computes it: it carries the base's.
+    fn forge_digest(base: &ImageBuildSpec, forge: &ImageBuildSpec) -> (String, String) {
+        let b = image_build_identity(base).unwrap().source_digest;
+        let mut f = forge.clone();
+        f.dependency_digests
+            .insert("forge-base".to_string(), b.clone());
+        (b, image_build_identity(&f).unwrap().source_digest)
+    }
+
+    #[test]
+    fn an_unrelated_forge_script_edit_retags_forge_base_and_rebuilds_forge() {
+        let temp = TempDir::new().unwrap();
+        let (base, forge) = forge_pair(temp.path());
+        let (b0, f0) = forge_digest(&base, &forge);
+
+        // A file no Containerfile reads: neither digest moves.
+        fs::write(temp.path().join("other.sh"), "echo edited\n").unwrap();
+        let (b1, f1) = forge_digest(&base, &forge);
+        assert_eq!((&b0, &f0), (&b1, &f1), "unread file moved a digest");
+
+        // A file only forge copies: forge-base retags, forge rebuilds.
+        fs::write(temp.path().join("lib-common.sh"), "echo edited\n").unwrap();
+        let (b2, f2) = forge_digest(&base, &forge);
+        assert_eq!(b0, b2, "forge-base must not rebuild for a forge script");
+        assert_ne!(f0, f2, "forge must rebuild for a script it copies");
+
+        // A file inside a copied directory counts too.
+        fs::write(temp.path().join("config-overlay/a.conf"), "a=2\n").unwrap();
+        let (_, f3) = forge_digest(&base, &forge);
+        assert_ne!(f2, f3, "a file under a copied directory must rebuild forge");
+        let decision = decide_image_build(
+            image_build_identity(&base).unwrap(),
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some(b0),
+                version_alias_matches: false,
+                latest_alias_matches: false,
+                force: false,
+            },
+        );
+        assert_eq!(decision.action, ImageBuildAction::Retag);
+    }
+
+    /// Negative arms: everything forge-base really reads still rebuilds it.
+    #[test]
+    fn whatever_forge_base_reads_still_rebuilds_it() {
+        let temp = TempDir::new().unwrap();
+        let (base, forge) = forge_pair(temp.path());
+        let (b0, f0) = forge_digest(&base, &forge);
+
+        // Its pin, in the Containerfile text.
+        let cf = temp.path().join("Containerfile.base");
+        let text = fs::read_to_string(&cf).unwrap();
+        fs::write(&cf, text.replace("PIN=1.0", "PIN=1.1")).unwrap();
+        let (b1, f1) = forge_digest(&base, &forge);
+        assert_ne!(b0, b1, "a pin edit must rebuild forge-base");
+        assert_ne!(f0, f1, "and forge, through the base digest");
+
+        // A build arg.
+        let mut with_arg = base.clone();
+        with_arg
+            .build_args
+            .insert("PIN".to_string(), "2.0".to_string());
+        assert_ne!(
+            b1,
+            image_build_identity(&with_arg).unwrap().source_digest,
+            "a build arg must rebuild forge-base"
+        );
+
+        // A COPY added later is hashed with no second place to update.
+        fs::write(
+            &cf,
+            format!(
+                "{}COPY other.sh /opt/other.sh\n",
+                fs::read_to_string(&cf).unwrap()
+            ),
+        )
+        .unwrap();
+        let b2 = image_build_identity(&base).unwrap().source_digest;
+        assert_ne!(b1, b2);
+        fs::write(temp.path().join("other.sh"), "echo edited\n").unwrap();
+        assert_ne!(
+            b2,
+            image_build_identity(&base).unwrap().source_digest,
+            "a file forge-base starts copying must rebuild it"
+        );
+    }
+
+    /// The real forge pair: forge-base reads only itself, and forge's COPY
+    /// lines are all literal, so a script edit can never rebuild forge-base.
+    #[test]
+    fn the_real_forge_containerfiles_are_scoped_by_their_sources() {
+        let dir = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../images/default");
+        let base = fs::read_to_string(dir.join("Containerfile.base")).unwrap();
+        assert_eq!(containerfile_context_sources(&base), Some(Vec::new()));
+        let forge = fs::read_to_string(dir.join("Containerfile")).unwrap();
+        let sources = containerfile_context_sources(&forge).expect("forge COPY lines are literal");
+        assert!(sources.iter().any(|s| s == "lib-common.sh"), "{sources:?}");
+    }
+
+    /// A source the parser cannot read for certain hashes the whole context.
+    #[test]
+    fn an_unreadable_copy_falls_back_to_the_whole_context() {
+        for copy in [
+            "COPY $SRC /x",
+            "COPY *.sh /x/",
+            "COPY . /x",
+            "COPY [\"a\", \"/x\"]",
+            "ADD https://example.invalid/a /x",
+            "RUN --mount=type=bind,source=a,target=/a true",
+            "COPY --parents a /x",
+            "COPY ../a /x",
+        ] {
+            assert_eq!(
+                containerfile_context_sources(&format!("FROM scratch\n{copy}\n")),
+                None,
+                "{copy}"
+            );
+        }
+        let temp = TempDir::new().unwrap();
+        let (base, _) = forge_pair(temp.path());
+        let cf = temp.path().join("Containerfile.base");
+        fs::write(&cf, "FROM fedora\nCOPY $SRC /x\n").unwrap();
+        let before = image_build_identity(&base).unwrap().source_digest;
+        fs::write(temp.path().join("other.sh"), "echo edited\n").unwrap();
+        assert_ne!(
+            before,
+            image_build_identity(&base).unwrap().source_digest,
+            "the whole-context fallback must see every file"
         );
     }
 
