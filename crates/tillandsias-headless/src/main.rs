@@ -4840,6 +4840,46 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
     }
 
+    /// 2003-stbf: --status-check names every lane's build against the
+    /// installed one: stale (both named), current, or unknown when either
+    /// cannot be read. Pre-fix: FAILS, it listed no lanes.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn status_check_names_each_lane_current_stale_or_unknown() {
+        let lanes = vec![
+            ("game-a".to_string(), PathBuf::from("/x/game-a/mcp.sock")),
+            ("game-b".to_string(), PathBuf::from("/x/game-b/mcp.sock")),
+            (
+                "site-default".to_string(),
+                PathBuf::from("/x/site-default/mcp.sock"),
+            ),
+        ];
+        let ask = |p: &Path| match p.to_str().unwrap() {
+            "/x/game-a/mcp.sock" => "56.11.6.1+aaaa".to_string(),
+            "/x/game-b/mcp.sock" => "56.11.4.1+bbbb".to_string(),
+            _ => "unanswered (refused)".to_string(),
+        };
+        let lines = lane_freshness_lines(&lanes, Some("56.11.6.1+aaaa"), &ask);
+        assert_eq!(lines[0], "ok:lane-current:game-a: 56.11.6.1+aaaa");
+        assert!(
+            lines[1].starts_with(
+                "warn:lane-stale:game-b: runs 56.11.4.1+bbbb, installed 56.11.6.1+aaaa"
+            ),
+            "{}",
+            lines[1]
+        );
+        assert!(
+            lines[2].starts_with("note:lane-unknown:site-default"),
+            "{}",
+            lines[2]
+        );
+        let none = lane_freshness_lines(&lanes, None, &ask);
+        assert!(
+            none.iter().all(|l| l.starts_with("note:lane-unknown:")),
+            "{none:?}"
+        );
+    }
+
     /// 2007-uvtl: the trust directory holds the CA certificate and nothing
     /// else, is replaced atomically when the certificate changes, and is left
     /// alone when it does not. Pre-fix: FAILS, there was no trust directory;
@@ -13937,9 +13977,47 @@ fn print_status_check_verdict() {
     println!("{}", status_check_verdict_line(&reasons));
 }
 
+/// ORDER 2003-stbf: one line per running lane: `lane:<name> <status> ...`,
+/// with both builds named. `ask` reads what a lane socket answers.
+#[cfg(feature = "host-services")]
+pub(crate) fn lane_freshness_lines(
+    lanes: &[(String, PathBuf)],
+    installed: Option<&str>,
+    ask: &dyn Fn(&Path) -> String,
+) -> Vec<String> {
+    lanes
+        .iter()
+        .map(|(name, sock)| {
+            let f = crate::mcp_socket::lane_freshness(&ask(sock), installed);
+            let status = f["status"].as_str().unwrap_or("unknown");
+            let lane = f["lane"].as_str().unwrap_or("?");
+            let inst = f["installed"].as_str().unwrap_or("unreadable");
+            match status {
+                "stale" => format!(
+                    "warn:lane-stale:{name}: runs {lane}, installed {inst}; relaunch that forge to use the installed build"
+                ),
+                "current" => format!("ok:lane-current:{name}: {lane}"),
+                _ => format!("note:lane-unknown:{name}: lane {lane}, installed {inst}"),
+            }
+        })
+        .collect()
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
+    // 2003-stbf: which running forge lanes still run an older build.
+    #[cfg(feature = "host-services")]
+    for line in lane_freshness_lines(
+        &crate::mcp_socket::lane_sockets(),
+        crate::mcp_socket::installed_build_identity().as_deref(),
+        &|sock| {
+            crate::mcp_socket::lane_server_build(sock)
+                .unwrap_or_else(|e| format!("unanswered ({e})"))
+        },
+    ) {
+        eprintln!("[tillandsias] {line}");
+    }
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
