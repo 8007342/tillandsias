@@ -237,6 +237,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## security
 
+- oauth-callback-relay.md          — Use this cheatsheet when a native or CLI app signs in with OAuth through a [pull-on-demand: stub]
 - owasp-top-10-2021.md             — You're writing or reviewing any web-facing software, APIs, or services that tou… [bundled, partial-verify]
 
 ## test
