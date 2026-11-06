@@ -517,7 +517,8 @@ fn file_name(path: &Path) -> &str {
 }
 
 /// ORDER 2007-ckun: remove staging files a dead process left: the mint's
-/// `<name>.<pid>.<nanos>.tmp` and the refill's `<name>.refill.<pid>.tmp`,
+/// `<name>.<pid>.<nanos>.tmp`, the refill's `<name>.refill.<pid>.tmp` and the
+/// preview CA's `<name>.<pid>.tmp` (2008-pvck),
 /// beside `persisted` and in this session's key home. Each is a private key
 /// (or its certificate) from a mint that started and never published. Only
 /// these exact shapes are removed, and only when `<pid>` is not running, so a
@@ -570,6 +571,8 @@ fn staged_pid(file: &str, prefix: &str) -> Option<u32> {
     let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
     match rest.split('.').collect::<Vec<_>>()[..] {
         ["refill", pid] if digits(pid) => pid.parse().ok(),
+        // 2008-pvck: the preview CA stages its key as <name>.<pid>.tmp.
+        [pid] if digits(pid) => pid.parse().ok(),
         [pid, nanos] if digits(pid) && digits(nanos) => pid.parse().ok(),
         _ => None,
     }
@@ -980,6 +983,7 @@ mod tests {
             "intermediate.key.2781247.1793822354424113489.tmp",
             "intermediate.crt.2781247.1793822354424113489.tmp",
             "intermediate.key.refill.95528.tmp",
+            "intermediate.key.95529.tmp",
             "intermediate.key.4242.1.tmp",
             &format!("intermediate.key.{me}.7.tmp"),
             "intermediate.key",
@@ -999,6 +1003,7 @@ mod tests {
             [
                 "intermediate.crt.2781247.1793822354424113489.tmp",
                 "intermediate.key.2781247.1793822354424113489.tmp",
+                "intermediate.key.95529.tmp",
                 "intermediate.key.refill.95528.tmp",
             ]
         );
