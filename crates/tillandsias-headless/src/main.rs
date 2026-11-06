@@ -8342,6 +8342,7 @@ pub(crate) fn control_socket_file() -> PathBuf {
 /// build still reach a newer tray. Never replaces a real socket (an older tray
 /// still serving there).
 #[cfg(unix)]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn link_legacy_control_socket() {
     let legacy = control_socket_host_dir().join("control.sock");
     match std::fs::symlink_metadata(&legacy) {
