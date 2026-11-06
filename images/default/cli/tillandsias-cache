@@ -1,0 +1,402 @@
+#!/usr/bin/env python3
+# @trace order:2005-ccli
+"""tillandsias-cache: a content-addressed cache for expensive project stages.
+
+Usage: tillandsias-cache <put|get|stats|prune> [options]
+
+  put   --stage S --inputs FILE|- --file PATH [--file PATH ...] [--provenance FILE]
+        -> {"key": K, "path": DIR, "stored": true|false}
+  get   --stage S (--inputs FILE|- | --key K) [--out-dir DIR]
+        -> {"hit": true, "key": K, "paths": [...]}   exit 0
+        -> {"hit": false, "key": K}                  exit 1
+  stats [--stage S]
+        -> {"entries": N, "bytes": B, "last_used": ISO8601|null, "quota": Q}
+  prune [--stage S] [--older-than DAYS] [--keep-referenced-by FILE]
+        -> {"removed": N, "bytes": B}
+
+An entry is <root>/<stage>/<key>/ holding the stored files, .inputs.json and,
+when given, .provenance.json (schema tillandsias.provenance/v1). The key is the
+sha256 of the inputs as canonical JSON: sorted keys, compact separators, UTF-8.
+WHAT counts as a stage's inputs is the project's business; put upstream keys
+and model sha256 in them so a key changes exactly when its output would.
+
+An entry is written into a temporary sibling and renamed into place only when
+complete, so an interrupted run leaves nothing that looks finished.
+
+The root is $TILLANDSIAS_STAGE_CACHE, else <project cache>/stage-cache, where
+the project cache is $TILLANDSIAS_PROJECT_CACHE, else
+~/.cache/tillandsias-project (the forge's persistent per-project volume). It
+must already exist: outside a forge there is no project cache, and the command
+says so instead of answering an empty result.
+
+The quota is $TILLANDSIAS_STAGE_CACHE_QUOTA bytes (default 4 GiB); a put that
+would pass it is refused. Per project only: nothing is shared across projects.
+
+Results go to stdout as one JSON object. A refusal goes to stderr as
+`refused:tillandsias-cache:<reason>: <detail>` and exits 2; reasons include
+cache_inputs_not_canonical, cache_over_quota, no_project_cache.
+"""
+import hashlib
+import json
+import math
+import os
+import shutil
+import sys
+import time
+
+TOOL = "tillandsias-cache"
+DEFAULT_QUOTA = 4 * 1024 ** 3
+PROVENANCE_SCHEMA = "tillandsias.provenance/v1"
+INPUTS = ".inputs.json"
+PROVENANCE = ".provenance.json"
+LAST_USED = ".last_used"
+TMP_PREFIX = ".tmp-"
+
+
+class Refusal(Exception):
+    def __init__(self, reason, detail):
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+
+
+def emit(obj, code=0):
+    sys.stdout.write(json.dumps(obj, sort_keys=True) + "\n")
+    sys.exit(code)
+
+
+# ---- the root ------------------------------------------------------------
+
+def project_cache():
+    return os.environ.get("TILLANDSIAS_PROJECT_CACHE") or os.path.join(
+        os.path.expanduser("~"), ".cache", "tillandsias-project"
+    )
+
+
+def cache_root():
+    override = os.environ.get("TILLANDSIAS_STAGE_CACHE")
+    if override:
+        parent = os.path.dirname(os.path.abspath(override)) or "/"
+        if not os.path.isdir(parent):
+            raise Refusal(
+                "no_project_cache",
+                f"the parent of TILLANDSIAS_STAGE_CACHE ({parent}) does not exist",
+            )
+        root = override
+    else:
+        pc = project_cache()
+        if not os.path.isdir(pc):
+            raise Refusal(
+                "no_project_cache",
+                f"no project cache at {pc}: run this inside a Tillandsias forge, or set "
+                "TILLANDSIAS_PROJECT_CACHE or TILLANDSIAS_STAGE_CACHE",
+            )
+        root = os.path.join(pc, "stage-cache")
+    os.makedirs(root, exist_ok=True)
+    return root
+
+
+def quota():
+    raw = os.environ.get("TILLANDSIAS_STAGE_CACHE_QUOTA", "")
+    if not raw:
+        return DEFAULT_QUOTA
+    try:
+        q = int(raw)
+    except ValueError:
+        raise Refusal("bad_quota", f"TILLANDSIAS_STAGE_CACHE_QUOTA={raw!r} is not a byte count")
+    if q <= 0:
+        raise Refusal("bad_quota", f"TILLANDSIAS_STAGE_CACHE_QUOTA={raw!r} must be positive")
+    return q
+
+
+def check_name(kind, value):
+    ok = (
+        value
+        and not value.startswith(".")
+        and all(c.isalnum() or c in "._-" for c in value)
+    )
+    if not ok:
+        raise Refusal(f"bad_{kind}", f"{kind} {value!r} must be [A-Za-z0-9._-]+ and not start with '.'")
+    return value
+
+
+# ---- the key -------------------------------------------------------------
+
+def _no_duplicates(pairs):
+    seen = {}
+    for k, v in pairs:
+        if k in seen:
+            raise Refusal("cache_inputs_not_canonical", f"duplicate key {k!r} in the inputs")
+        seen[k] = v
+    return seen
+
+
+def _reject_constant(name):
+    raise Refusal("cache_inputs_not_canonical", f"{name} has no canonical JSON form")
+
+
+def _check_finite(v, where="inputs"):
+    if isinstance(v, float) and not math.isfinite(v):
+        raise Refusal("cache_inputs_not_canonical", f"{where} holds a non-finite number")
+    if isinstance(v, dict):
+        for k, x in v.items():
+            _check_finite(x, f"{where}.{k}")
+    elif isinstance(v, list):
+        for i, x in enumerate(v):
+            _check_finite(x, f"{where}[{i}]")
+
+
+def load_inputs(source):
+    try:
+        text = sys.stdin.read() if source == "-" else open(source, encoding="utf-8").read()
+    except OSError as e:
+        raise Refusal("inputs_unreadable", f"{source}: {e}")
+    except UnicodeDecodeError:
+        raise Refusal("cache_inputs_not_canonical", f"{source} is not UTF-8")
+    try:
+        value = json.loads(text, object_pairs_hook=_no_duplicates, parse_constant=_reject_constant)
+    except ValueError as e:
+        raise Refusal("cache_inputs_not_canonical", f"{source} is not JSON: {e}")
+    if not isinstance(value, dict):
+        raise Refusal("cache_inputs_not_canonical", "the inputs must be one JSON object")
+    _check_finite(value)
+    return value
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def key_of(inputs):
+    return hashlib.sha256(canonical(inputs)).hexdigest()
+
+
+# ---- entries -------------------------------------------------------------
+
+def tree_bytes(path):
+    total = 0
+    for dirpath, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(dirpath, f)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def entries(root, stage=None):
+    """(stage, key, path) of every COMPLETED entry; temporaries are skipped."""
+    stages = [stage] if stage else sorted(os.listdir(root))
+    for s in stages:
+        sdir = os.path.join(root, s)
+        if s.startswith(".") or not os.path.isdir(sdir):
+            continue
+        for k in sorted(os.listdir(sdir)):
+            path = os.path.join(sdir, k)
+            if k.startswith(".") or not os.path.isfile(os.path.join(path, INPUTS)):
+                continue
+            yield s, k, path
+
+
+def last_used(path):
+    marker = os.path.join(path, LAST_USED)
+    try:
+        return os.stat(marker).st_mtime
+    except OSError:
+        return os.stat(os.path.join(path, INPUTS)).st_mtime
+
+
+def stored_files(path):
+    return sorted(
+        os.path.join(path, f) for f in os.listdir(path) if not f.startswith(".")
+    )
+
+
+# ---- commands ------------------------------------------------------------
+
+def cmd_put(a):
+    root = cache_root()
+    stage = check_name("stage", a.stage)
+    inputs = load_inputs(a.inputs)
+    key = key_of(inputs)
+    if not a.files:
+        raise Refusal("no_files", "put needs at least one --file")
+    names = {}
+    for f in a.files:
+        if not os.path.isfile(f):
+            raise Refusal("file_missing", f"{f} is not a file")
+        base = os.path.basename(f)
+        if base.startswith("."):
+            raise Refusal("bad_file", f"{f}: a stored file name must not start with '.'")
+        if base in names:
+            raise Refusal("bad_file", f"two files are named {base!r}")
+        names[base] = f
+    prov = None
+    if a.provenance:
+        try:
+            prov = json.load(open(a.provenance, encoding="utf-8"))
+        except (OSError, ValueError) as e:
+            raise Refusal("provenance_unreadable", f"{a.provenance}: {e}")
+        if not isinstance(prov, dict) or prov.get("schema") != PROVENANCE_SCHEMA:
+            raise Refusal(
+                "provenance_not_v1",
+                f"{a.provenance} must be a {PROVENANCE_SCHEMA} record (one sidecar format)",
+            )
+
+    final = os.path.join(root, stage, key)
+    if os.path.isfile(os.path.join(final, INPUTS)):
+        emit({"key": key, "path": final, "stored": False})
+
+    incoming = sum(os.path.getsize(f) for f in names.values())
+    used = sum(tree_bytes(p) for _s, _k, p in entries(root))
+    q = quota()
+    if used + incoming > q:
+        raise Refusal(
+            "cache_over_quota",
+            f"storing {incoming} bytes would bring the cache to {used + incoming} of {q} "
+            "(prune, or raise TILLANDSIAS_STAGE_CACHE_QUOTA)",
+        )
+
+    os.makedirs(os.path.join(root, stage), exist_ok=True)
+    tmp = os.path.join(root, stage, f"{TMP_PREFIX}{key}-{os.getpid()}")
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.mkdir(tmp)
+    try:
+        for base, src in names.items():
+            shutil.copyfile(src, os.path.join(tmp, base))
+        if prov is not None:
+            with open(os.path.join(tmp, PROVENANCE), "w", encoding="utf-8") as fh:
+                json.dump(prov, fh, sort_keys=True)
+        # .inputs.json last: its presence is what marks an entry complete.
+        with open(os.path.join(tmp, INPUTS), "wb") as fh:
+            fh.write(canonical(inputs) + b"\n")
+        try:
+            os.rename(tmp, final)
+        except OSError:
+            # Another writer finished the same key first: theirs stands.
+            if os.path.isfile(os.path.join(final, INPUTS)):
+                shutil.rmtree(tmp, ignore_errors=True)
+                emit({"key": key, "path": final, "stored": False})
+            raise
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    emit({"key": key, "path": final, "stored": True})
+
+
+def cmd_get(a):
+    root = cache_root()
+    stage = check_name("stage", a.stage)
+    if bool(a.inputs) == bool(a.key):
+        raise Refusal("bad_args", "get takes exactly one of --inputs or --key")
+    key = key_of(load_inputs(a.inputs)) if a.inputs else a.key
+    if not (len(key) == 64 and all(c in "0123456789abcdef" for c in key)):
+        raise Refusal("bad_key", f"{key!r} is not a sha256 key")
+    path = os.path.join(root, stage, key)
+    if not os.path.isfile(os.path.join(path, INPUTS)):
+        emit({"hit": False, "key": key}, 1)
+    files = stored_files(path)
+    if a.out_dir:
+        os.makedirs(a.out_dir, exist_ok=True)
+        out = []
+        for f in files:
+            dst = os.path.join(a.out_dir, os.path.basename(f))
+            shutil.copyfile(f, dst)
+            out.append(dst)
+        files = out
+    with open(os.path.join(path, LAST_USED), "w") as fh:
+        fh.write(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
+    emit({"hit": True, "key": key, "paths": files})
+
+
+def iso(t):
+    return None if t is None else time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+
+
+def cmd_stats(a):
+    root = cache_root()
+    stage = check_name("stage", a.stage) if a.stage else None
+    n, total, newest = 0, 0, None
+    for _s, _k, path in entries(root, stage):
+        n += 1
+        total += tree_bytes(path)
+        t = last_used(path)
+        newest = t if newest is None else max(newest, t)
+    emit({"entries": n, "bytes": total, "last_used": iso(newest), "quota": quota()})
+
+
+def cmd_prune(a):
+    root = cache_root()
+    stage = check_name("stage", a.stage) if a.stage else None
+    keep = set()
+    if a.keep_referenced_by:
+        try:
+            text = open(a.keep_referenced_by, encoding="utf-8").read()
+        except OSError as e:
+            raise Refusal("keep_list_unreadable", f"{a.keep_referenced_by}: {e}")
+        keep = {line.strip() for line in text.splitlines() if line.strip()}
+    if a.older_than is None and not a.keep_referenced_by:
+        raise Refusal(
+            "bad_args",
+            "prune needs --older-than DAYS or --keep-referenced-by FILE (it never empties the cache unasked)",
+        )
+    cutoff = None if a.older_than is None else time.time() - a.older_than * 86400
+    removed, freed = 0, 0
+    for _s, key, path in list(entries(root, stage)):
+        if key in keep:
+            continue
+        if cutoff is not None and last_used(path) >= cutoff:
+            continue
+        size = tree_bytes(path)
+        shutil.rmtree(path)
+        removed += 1
+        freed += size
+    # Temporaries an interrupted put left behind are never a finished entry.
+    for s in [stage] if stage else os.listdir(root):
+        sdir = os.path.join(root, s)
+        if os.path.isdir(sdir):
+            for k in os.listdir(sdir):
+                if k.startswith(TMP_PREFIX):
+                    shutil.rmtree(os.path.join(sdir, k), ignore_errors=True)
+    emit({"removed": removed, "bytes": freed})
+
+
+def parse(argv):
+    import argparse
+
+    p = argparse.ArgumentParser(prog=TOOL, description=__doc__.split("\n\n")[0])
+    sub = p.add_subparsers(dest="cmd", required=True)
+    put = sub.add_parser("put", help="store files under a stage's inputs")
+    put.add_argument("--stage", required=True)
+    put.add_argument("--inputs", required=True, help="JSON object file, or - for stdin")
+    put.add_argument("--file", dest="files", action="append", default=[])
+    put.add_argument("--provenance")
+    get = sub.add_parser("get", help="look up an entry by inputs or key")
+    get.add_argument("--stage", required=True)
+    get.add_argument("--inputs")
+    get.add_argument("--key")
+    get.add_argument("--out-dir")
+    st = sub.add_parser("stats", help="entries, bytes and last use")
+    st.add_argument("--stage")
+    pr = sub.add_parser("prune", help="remove old or unreferenced entries")
+    pr.add_argument("--stage")
+    pr.add_argument("--older-than", type=float)
+    pr.add_argument("--keep-referenced-by")
+    return p.parse_args(argv)
+
+
+def main(argv):
+    if argv and argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(__doc__)
+        return 0
+    a = parse(argv)
+    try:
+        {"put": cmd_put, "get": cmd_get, "stats": cmd_stats, "prune": cmd_prune}[a.cmd](a)
+    except Refusal as r:
+        sys.stderr.write(f"refused:{TOOL}:{r.reason}: {r.detail}\n")
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
