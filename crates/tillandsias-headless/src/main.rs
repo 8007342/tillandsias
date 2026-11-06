@@ -81,6 +81,7 @@ mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+mod memory_protection;
 mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
 #[cfg(feature = "host-services")]
@@ -445,6 +446,18 @@ fn main() {
             eprintln!("  remedy: use the installed tray build of tillandsias");
             std::process::exit(2);
         }
+    }
+
+    // Order 1913-fh6l: `--memory-protection <container>`, a read-only probe of
+    // whether the container's memory.low protects anything: it walks the
+    // cgroup chain up to the root and reports the effective protection. Also
+    // listed in known_flags (five sites).
+    if let Some(idx) = user_args.iter().position(|a| a == "--memory-protection") {
+        let Some(container) = user_args.get(idx + 1).filter(|c| !c.starts_with("--")) else {
+            eprintln!("usage: tillandsias --memory-protection <container>");
+            std::process::exit(2);
+        };
+        std::process::exit(memory_protection::run_cli(container));
     }
 
     // Order 1506-q7ab: `--msg-serve [--once]`, the same-host mover. Dispatched
@@ -1019,6 +1032,8 @@ fn main() {
         "--via",
         // Order 1966-47vt: dispatched early (cloud_usage::call_live).
         "--cloud-usage",
+        // Order 1913-fh6l: dispatched early (memory_protection::run_cli).
+        "--memory-protection",
         // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
         // too so no reorder can make it `Unsupported option`.
         "--msg-serve",
@@ -1997,6 +2012,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --cloud-usage [--debug]");
+    println!("       tillandsias --memory-protection <container>");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -2075,6 +2091,9 @@ fn print_usage(version: &str) {
     );
     println!(
         "  --cloud-usage  Read-only: used vs free-tier cap this month per provider (Cloudflare Workers Builds minutes, GitHub Actions cache/run minutes/billing), as JSON; the same numbers as the cloud.usage MCP tool"
+    );
+    println!(
+        "  --memory-protection <container>  Read-only: does the container's memory.low protect anything? Walks its cgroup chain to the root and prints each level's memory.low and the effective protection; exits 1 when an ancestor caps it below the reservation"
     );
     println!(
         "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
