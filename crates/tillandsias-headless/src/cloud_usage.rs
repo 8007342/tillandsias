@@ -568,7 +568,10 @@ pub(crate) fn call_live(
     debug: bool,
 ) -> Result<Value, String> {
     let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
-    let cf_store = crate::vault_bootstrap::VaultCloudflareTokenStore { debug };
+    let cf_store = crate::vault_bootstrap::VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: true,
+    };
     let gh_store = crate::vault_bootstrap::VaultGitHubTokenStore { debug };
     let freshen = || crate::vault_bootstrap::cloudflare_token_due_check_live(debug).map(|_| ());
     let cf_api_base = cloudflare_mcp::api_base_url();

@@ -1751,7 +1751,10 @@ pub fn run_cli(args: &[String]) -> i32 {
     };
     let debug = args.iter().any(|a| a == "--debug");
     let http = cloudflare_oauth::ReqwestHttpClient::default();
-    let store = vault_bootstrap::VaultCloudflareTokenStore { debug };
+    let store = vault_bootstrap::VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: true,
+    };
     let host_is_forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
     let mut stdout = std::io::stdout();
     let result = match cmd {
