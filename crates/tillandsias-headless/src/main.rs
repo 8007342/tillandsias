@@ -4488,6 +4488,10 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 /// `tillandsias-trust check` re-composes it after a rotation.
 pub(crate) const FORGE_CA_TRUST_MOUNT: &str = "/run/tillandsias/ca";
 
+/// 1998-mvrs (b): where the git image (mirror, ssh lane) sees the cert-only
+/// trust directory. `/etc/tillandsias/ca.crt` is a symlink into it.
+pub(crate) const MIRROR_CA_TRUST_MOUNT: &str = "/etc/tillandsias/ca-trust";
+
 /// The cert-only trust directory beside the CA directory: `<state>/ca-trust`.
 /// Never inside the CA directory, which holds (links to) the key.
 pub(crate) fn ca_trust_dir_for(certs_dir: &Path) -> PathBuf {
@@ -7109,10 +7113,14 @@ fn build_git_run_args(
         args.push("--env".into());
         args.push("VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token".into());
     }
+    // 1998-mvrs (b): the cert-only trust DIRECTORY, read-only, so a CA
+    // rotation reaches a running mirror (a single-file bind kept the old
+    // inode). The image links /etc/tillandsias/ca.crt into it, and the
+    // entrypoint restarts Vault Agent when a valid new CA appears.
     args.push("--mount".into());
     args.push(format!(
-        "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-        certs_dir.join("intermediate.crt").display()
+        "type=bind,source={},target={MIRROR_CA_TRUST_MOUNT},readonly=true",
+        ca_trust_dir_for(certs_dir).display()
     ));
     args.push(image.into());
     // Image ENTRYPOINT is /usr/local/bin/entrypoint.sh which runs the right
@@ -15904,10 +15912,11 @@ fn build_ssh_lane_sidecar_run_args(
         "VAULT_CACERT=/etc/tillandsias/ca.crt".into(),
         "--env".into(),
         "VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token".into(),
+        // 1998-mvrs (b): same image as the mirror; see MIRROR_CA_TRUST_MOUNT.
         "--mount".into(),
         format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
+            "type=bind,source={},target={MIRROR_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(certs_dir).display()
         ),
         "--entrypoint".into(),
         "/usr/local/bin/ssh-lane-sidecar".into(),
@@ -24441,11 +24450,40 @@ mod tests {
     /// the legacy tray `build_launch_spec`, both of which have no production
     /// callers and either of which would give a green assertion and change
     /// nothing).
+    /// 1998-mvrs (b): the mirror and the ssh lane bind the cert-only trust
+    /// DIRECTORY read-only, never the certificate file, so a rotation reaches
+    /// them. Pre-fix: FAILS, both bound intermediate.crt at
+    /// /etc/tillandsias/ca.crt (a single-file bind keeps the old inode).
     #[test]
+    fn the_mirror_and_ssh_lane_bind_the_ca_trust_directory() {
+        let certs = PathBuf::from("/tmp/state/ca");
+        let want = format!(
+            "type=bind,source={},target={MIRROR_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(&certs).display()
+        );
+        for (name, args) in [
+            (
+                "git",
+                build_git_run_args("alpha", None, &certs, "g:v1", None, None, None, None),
+            ),
+            (
+                "ssh-lane",
+                build_ssh_lane_sidecar_run_args("alpha", "m1", &certs, "s:v1", "sec"),
+            ),
+        ] {
+            assert!(args.contains(&want), "{name}: {args:?}");
+            assert!(
+                !args.iter().any(|a| a.contains("intermediate.crt")),
+                "{name} binds the certificate file"
+            );
+        }
+    }
+
     /// ORDER 2007-rtky: no container binds the tillandsias runtime directory
     /// or anything holding keys/ (the CA private key on tmpfs) or the key
     /// passphrase. The router binds only the socket-only subdirectory.
     /// Pre-fix: FAILS, the router bound `<runtime>/tillandsias:/run/host/tillandsias:rw`.
+    #[test]
     fn no_container_binds_the_host_key_home() {
         // The runtime dir comes from process env, which other tests and the
         // gate's scratch HOME change concurrently (2000-envt). So nothing here

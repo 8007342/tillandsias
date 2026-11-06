@@ -571,6 +571,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:mirror-ca-trust-watch
   - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
