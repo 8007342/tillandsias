@@ -39,8 +39,10 @@ const KEYRING_PREFIX: &str = "ca-key:";
 struct Store {
     /// The 0700 tmpfs directory holding this session's key bytes.
     home: PathBuf,
-    /// The keyring read: an entry's value, or `None` (absent or unreachable).
-    read: fn(&str) -> Option<String>,
+    /// The keyring read: `Ok(Some)` an entry, `Ok(None)` no entry, `Err` the
+    /// keyring could not answer (locked, no session bus, timed out). 2007-ckun:
+    /// the two are not the same: only a proven absence lets the CA be minted.
+    read: fn(&str) -> Result<Option<String>, String>,
     /// The keyring write.
     write: fn(&str, &str) -> Result<(), String>,
 }
@@ -76,6 +78,10 @@ pub(crate) enum Materialized {
     /// Plaintext was deleted, or the key could not be refilled; the caller's
     /// missing-key check re-mints.
     Gone,
+    /// 2007-ckun: the key is missing and the keyring could not be ASKED. The
+    /// key may well exist there, so the caller must not mint: it keeps a
+    /// valid certificate and refuses by name until the keyring answers.
+    Unavailable,
 }
 
 /// Reconcile one key path before the caller asks whether its key is usable.
@@ -377,7 +383,7 @@ impl Store {
     #[cfg_attr(all(test, not(target_os = "linux")), allow(dead_code))]
     fn at(
         home: PathBuf,
-        read: fn(&str) -> Option<String>,
+        read: fn(&str) -> Result<Option<String>, String>,
         write: fn(&str, &str) -> Result<(), String>,
     ) -> Option<Self> {
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
@@ -421,9 +427,19 @@ impl Store {
         let Ok(cert_bytes) = std::fs::read(cert) else {
             return Materialized::Gone;
         };
-        let Some(pem) = (self.read)(&keyring_user(persisted))
-            .and_then(|entry| unseal_entry(&entry, &cert_bytes))
-        else {
+        let entry = match (self.read)(&keyring_user(persisted)) {
+            Ok(entry) => entry,
+            Err(e) => {
+                eprintln!(
+                    "[tillandsias] warn:ca-key-unavailable:{}: the key is not on tmpfs and \
+                     the keyring could not be read ({e}); the CA is kept, not minted again \
+                     (2007-ckun)",
+                    file_name(persisted)
+                );
+                return Materialized::Unavailable;
+            }
+        };
+        let Some(pem) = entry.and_then(|entry| unseal_entry(&entry, &cert_bytes)) else {
             return Materialized::Gone;
         };
         let staged = self.staging_path(persisted, &format!("refill.{}", std::process::id()));
@@ -500,6 +516,65 @@ fn file_name(path: &Path) -> &str {
         .expect("a key path ends in a UTF-8 file name")
 }
 
+/// ORDER 2007-ckun: remove staging files a dead process left: the mint's
+/// `<name>.<pid>.<nanos>.tmp` and the refill's `<name>.refill.<pid>.tmp`,
+/// beside `persisted` and in this session's key home. Each is a private key
+/// (or its certificate) from a mint that started and never published. Only
+/// these exact shapes are removed, and only when `<pid>` is not running, so a
+/// mint in progress elsewhere keeps its files and nothing unrecognised is
+/// touched. Returns the names removed, each logged ok:ca-staging-swept.
+pub(crate) fn sweep_stale_staging(persisted: &Path) -> Vec<String> {
+    let mut dirs: Vec<PathBuf> = persisted
+        .parent()
+        .map(Path::to_path_buf)
+        .into_iter()
+        .collect();
+    if let Some(store) = session() {
+        dirs.push(store.home.clone());
+    }
+    let alive = |pid: u32| Path::new(&format!("/proc/{pid}")).exists();
+    sweep_in(&dirs, file_name(persisted), &alive)
+}
+
+fn sweep_in(dirs: &[PathBuf], name: &str, alive: &dyn Fn(u32) -> bool) -> Vec<String> {
+    let mut swept = Vec::new();
+    let prefixes = [name.to_string(), name.replace(".key", ".crt")];
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let file = e.file_name().to_string_lossy().into_owned();
+            let Some(pid) = prefixes.iter().find_map(|p| staged_pid(&file, p)) else {
+                continue;
+            };
+            if pid == std::process::id() || alive(pid) {
+                continue;
+            }
+            scrub(&e.path());
+            eprintln!(
+                "[tillandsias] ok:ca-staging-swept:{file}: left by pid {pid}, not running (2007-ckun)"
+            );
+            swept.push(file);
+        }
+    }
+    swept
+}
+
+/// The pid in `<prefix>.<pid>.<digits>.tmp` or `<prefix>.refill.<pid>.tmp`.
+fn staged_pid(file: &str, prefix: &str) -> Option<u32> {
+    let rest = file
+        .strip_prefix(prefix)?
+        .strip_prefix('.')?
+        .strip_suffix(".tmp")?;
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    match rest.split('.').collect::<Vec<_>>()[..] {
+        ["refill", pid] if digits(pid) => pid.parse().ok(),
+        [pid, nanos] if digits(pid) && digits(nanos) => pid.parse().ok(),
+        _ => None,
+    }
+}
+
 fn staged_name(persisted: &Path, unique: &str) -> String {
     format!("{}.{unique}.tmp", file_name(persisted))
 }
@@ -562,13 +637,12 @@ fn unseal_entry(entry: &str, cert_bytes: &[u8]) -> Option<String> {
         .then(|| pem.to_string())
 }
 
-/// A locked or unreachable keyring answers like an absent entry: either way
-/// there is no key to refill, and the CA is minted again.
+/// 2007-ckun: a locked or unreachable keyring is an ERROR, never "no entry".
+/// Before, both read as absent, the key was Gone and the CA was minted again
+/// under a running Vault and proxy.
 #[cfg(all(unix, feature = "vault", not(test)))]
-fn keyring_read(user: &str) -> Option<String> {
+fn keyring_read(user: &str) -> Result<Option<String>, String> {
     crate::vault_bootstrap::keyring_get_blocking(user)
-        .ok()
-        .flatten()
 }
 
 #[cfg(all(unix, feature = "vault", not(test)))]
@@ -588,9 +662,13 @@ mod tests {
     /// Tests share KEYRING, so they run one at a time.
     static SERIAL: Mutex<()> = Mutex::new(());
 
-    fn fake_read(user: &str) -> Option<String> {
+    fn fake_read(user: &str) -> Result<Option<String>, String> {
         let ring = KEYRING.lock().unwrap();
-        ring.iter().find(|(u, _)| u == user).map(|(_, v)| v.clone())
+        Ok(ring.iter().find(|(u, _)| u == user).map(|(_, v)| v.clone()))
+    }
+
+    fn locked_read(_user: &str) -> Result<Option<String>, String> {
+        Err("org.freedesktop.Secret.Error.IsLocked".into())
     }
 
     fn fake_write(user: &str, value: &str) -> Result<(), String> {
@@ -704,7 +782,7 @@ mod tests {
         assert_eq!(at_rest::pass_with(empty_lookup, refusing_store), None);
         let made = at_rest::pass_with(empty_lookup, accepting_store).expect("created");
         assert_eq!(
-            fake_read("ca-key-pass:at-rest").as_deref(),
+            fake_read("ca-key-pass:at-rest").unwrap().as_deref(),
             Some(made.as_str())
         );
         assert_eq!(
@@ -850,6 +928,90 @@ mod tests {
             store2.materialize(&leaf, &state2.path().join("intermediate.crt"), false),
             Materialized::Gone
         );
+    }
+
+    /// 2007-ckun: a dangling key with a LOCKED keyring is Unavailable, not
+    /// Gone, so the caller keeps the CA instead of minting; a keyring that
+    /// answers "no entry" is still Gone. Pre-fix: FAILS, both were Gone.
+    #[test]
+    fn a_locked_keyring_is_unavailable_not_a_missing_key() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        KEYRING.lock().unwrap().clear();
+        let (_shm, state, store) = store(fake_write);
+        let persisted = mint(&store, state.path(), b"cert", true);
+        let crt = state.path().join("intermediate.crt");
+        std::fs::remove_file(store.home.join("intermediate.key")).unwrap();
+        let locked = Store {
+            home: store.home.clone(),
+            read: locked_read,
+            write: fake_write,
+        };
+        assert_eq!(
+            locked.materialize(&persisted, &crt, true),
+            Materialized::Unavailable
+        );
+        assert!(
+            std::fs::symlink_metadata(&persisted).is_ok(),
+            "the link is left for the next call to refill"
+        );
+        // The keyring unlocks: the same link refills.
+        assert_eq!(
+            store.materialize(&persisted, &crt, true),
+            Materialized::Refilled
+        );
+        // A keyring that answers with no entry is a proven absence.
+        std::fs::remove_file(store.home.join("intermediate.key")).unwrap();
+        KEYRING.lock().unwrap().clear();
+        assert_eq!(
+            store.materialize(&persisted, &crt, true),
+            Materialized::Gone
+        );
+    }
+
+    /// 2007-ckun: staging files of dead processes are swept, those of a live
+    /// one (and this process) are kept, and nothing of another shape is
+    /// touched. Pre-fix: FAILS, nothing swept them (five cleartext keys on
+    /// macuahuitl, Nov 4-5).
+    #[test]
+    fn stale_ca_staging_is_swept_and_live_or_unknown_files_are_kept() {
+        let dir = tempfile::tempdir_in("/dev/shm").unwrap();
+        let me = std::process::id();
+        let names = [
+            "intermediate.key.2781247.1793822354424113489.tmp",
+            "intermediate.crt.2781247.1793822354424113489.tmp",
+            "intermediate.key.refill.95528.tmp",
+            "intermediate.key.4242.1.tmp",
+            &format!("intermediate.key.{me}.7.tmp"),
+            "intermediate.key",
+            "intermediate.key.119",
+            "intermediate.key.abc.1.tmp",
+            "vault.key.2781247.1.tmp",
+        ]
+        .map(String::from);
+        for n in &names {
+            std::fs::write(dir.path().join(n), b"x").unwrap();
+        }
+        let alive = |pid: u32| pid == 4242;
+        let mut swept = sweep_in(&[dir.path().to_path_buf()], "intermediate.key", &alive);
+        swept.sort();
+        assert_eq!(
+            swept,
+            [
+                "intermediate.crt.2781247.1793822354424113489.tmp",
+                "intermediate.key.2781247.1793822354424113489.tmp",
+                "intermediate.key.refill.95528.tmp",
+            ]
+        );
+        for kept in [
+            "intermediate.key.4242.1.tmp",
+            &format!("intermediate.key.{me}.7.tmp"),
+            "intermediate.key",
+            "intermediate.key.119",
+            "intermediate.key.abc.1.tmp",
+            "vault.key.2781247.1.tmp",
+        ] {
+            assert!(dir.path().join(kept).exists(), "{kept} kept");
+        }
     }
 
     fn store_with_ring() -> (tempfile::TempDir, tempfile::TempDir, Store) {
