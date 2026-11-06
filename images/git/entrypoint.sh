@@ -85,6 +85,79 @@ start_vault_agent() {
     return 1
 }
 
+# 1998-mvrs (b): follow an enclave CA rotation without a mirror restart.
+# Vault Agent loads its CA (vault-agent.hcl ca_cert, /etc/tillandsias/ca.crt,
+# a symlink into the read-only ca-trust directory) once, when it builds its
+# client, so after a rotation it kept the old CA and the mirror sat at
+# agent-unauthenticated until restarted by hand (macuahuitl 2026-11-05).
+# This watcher restarts the Agent when a VALID new CA appears. inotify on the
+# directory (busybox inotifyd) when available, else a check once a minute,
+# never faster (operator policy: non-real-time checks at minutes). An invalid
+# certificate is reported once by name and the Agent keeps the CA it has;
+# there is no restart loop.
+CA_TRUST_DIR="${CA_TRUST_DIR:-/etc/tillandsias/ca-trust}"
+CA_TRUST_POLL_SECS="${CA_TRUST_POLL_SECS:-60}"
+case "$CA_TRUST_POLL_SECS" in ''|*[!0-9]*) CA_TRUST_POLL_SECS=60 ;; esac
+[ "$CA_TRUST_POLL_SECS" -ge 60 ] || CA_TRUST_POLL_SECS=60
+VAULT_AGENT_PID_FILE="${VAULT_AGENT_PID_FILE:-/tmp/tillandsias-vault-agent.pid}"
+
+ca_trust_digest() {
+    sha256sum "$CA_TRUST_DIR/intermediate.crt" 2>/dev/null | cut -c1-64
+}
+
+# Prints the reason a certificate is not a usable CA; prints nothing when it is.
+ca_trust_invalid_reason() {
+    _ct="$CA_TRUST_DIR/intermediate.crt"
+    _ext="$(openssl x509 -in "$_ct" -noout -ext basicConstraints 2>/dev/null)" \
+        || { echo "does not parse as an X.509 certificate"; return; }
+    case "$_ext" in *CA:TRUE*) ;; *) echo "is not a CA certificate"; return ;; esac
+    openssl x509 -in "$_ct" -noout -checkend 0 >/dev/null 2>&1 || echo "has expired"
+}
+
+restart_vault_agent_for_ca() {
+    _old="$(cat "$VAULT_AGENT_PID_FILE" 2>/dev/null || true)"
+    if [ -n "$_old" ] && kill -0 "$_old" 2>/dev/null; then
+        kill -TERM "$_old" 2>/dev/null || true
+        _w=0
+        while kill -0 "$_old" 2>/dev/null && [ "$_w" -lt 5 ]; do sleep 1; _w=$((_w + 1)); done
+        kill -KILL "$_old" 2>/dev/null || true
+    fi
+    start_vault_agent
+}
+
+ca_trust_check() {
+    _now="$(ca_trust_digest)"
+    [ -n "$_now" ] || return 0
+    [ "$_now" = "$CA_TRUST_SEEN" ] && return 0
+    _why="$(ca_trust_invalid_reason)"
+    if [ -n "$_why" ]; then
+        if [ "$_now" != "$CA_TRUST_REFUSED" ]; then
+            echo "[ca-trust] refused:ca_trust_invalid: the new enclave CA certificate $_why; Vault Agent keeps the previous CA" >&2
+            CA_TRUST_REFUSED="$_now"
+        fi
+        return 0
+    fi
+    echo "[ca-trust] ok:ca-rotated:$(printf %.12s "$CA_TRUST_SEEN")->$(printf %.12s "$_now"): restarting Vault Agent on the new CA"
+    CA_TRUST_SEEN="$_now"
+    if restart_vault_agent_for_ca; then
+        echo "[ca-trust] ok:vault-agent-restarted"
+    else
+        echo "[ca-trust] warn:vault-agent-restart-failed: see the [vault-agent] lines above" >&2
+    fi
+}
+
+watch_ca_trust() {
+    CA_TRUST_SEEN="$(ca_trust_digest)"
+    CA_TRUST_REFUSED=""
+    if command -v inotifyd >/dev/null 2>&1 && [ -d "$CA_TRUST_DIR" ]; then
+        echo "[ca-trust] watching $CA_TRUST_DIR (inotify)"
+        inotifyd - "$CA_TRUST_DIR:wmyn" | while read -r _ev; do ca_trust_check; done
+    else
+        echo "[ca-trust] watching $CA_TRUST_DIR every ${CA_TRUST_POLL_SECS}s (no inotifyd): a rotation leaves Vault Agent stale for up to that long"
+        while sleep "$CA_TRUST_POLL_SECS"; do ca_trust_check; done
+    fi
+}
+
 # CA certificate from podman secret.
 # @trace spec:podman-secrets-integration, spec:git-mirror-service
 # Git CLI uses GIT_SSL_CAINFO to trust custom CA certificates.
@@ -480,6 +553,13 @@ shutdown_git_service() {
     # Stop Agent before revoking its current sink token. Revoking first leaves
     # a race in which Agent observes the invalid token, re-authenticates, and
     # writes a fresh token between revoke-self and process termination.
+    # 1998-mvrs (b): stop the CA watcher first, so it cannot restart the
+    # Agent being stopped, and stop an Agent it restarted (known by its pid file).
+    [ -n "${CA_TRUST_WATCH_PID:-}" ] && kill -TERM "$CA_TRUST_WATCH_PID" 2>/dev/null || true
+    _restarted="$(cat "$VAULT_AGENT_PID_FILE" 2>/dev/null || true)"
+    if [ -n "$_restarted" ] && [ "$_restarted" != "$VAULT_AGENT_PID" ]; then
+        kill -TERM "$_restarted" 2>/dev/null || true
+    fi
     if [ -n "$VAULT_AGENT_PID" ]; then
         kill -TERM "$VAULT_AGENT_PID" 2>/dev/null || true
         agent_waited=0
@@ -497,7 +577,7 @@ shutdown_git_service() {
     if [ -s "$VAULT_TOKEN_FILE" ] && command -v vault-cli >/dev/null 2>&1; then
         vault-cli revoke-self >/dev/null 2>&1 || true
     fi
-    for pid in "${GIT_DAEMON_PID:-}" "$VAULT_AGENT_PID" "$MIRROR_RECONCILER_PID"; do
+    for pid in "${CA_TRUST_WATCH_PID:-}" "$(cat "$VAULT_AGENT_PID_FILE" 2>/dev/null || true)" "${GIT_DAEMON_PID:-}" "$VAULT_AGENT_PID" "$MIRROR_RECONCILER_PID"; do
         [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
     done
     exit "$exit_status"
@@ -510,6 +590,10 @@ trap 'shutdown_git_service 0' SIGTERM SIGINT
 # child, revoke any token sink it wrote, and leave a failing exit status.
 start_vault_agent
 start_mirror_reconciler
+if [ -r /run/secrets/vault-approle ] && [ "${TILLANDSIAS_CA_TRUST_WATCH:-1}" = "1" ]; then
+    watch_ca_trust &
+    CA_TRUST_WATCH_PID=$!
+fi
 # receive-pack IS enabled — it is the forge's live push path (order 450).
 #
 # Order 423 removed --enable=receive-pack to close an "anonymous write path",

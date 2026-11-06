@@ -475,6 +475,7 @@ specs:
   - litmus:forge-stage-cache-in-image
   - litmus:forge-impact-plan-cli
   - litmus:forge-impact-plan-in-image
+  - litmus:forge-trust-refresh-cli
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
@@ -570,6 +571,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:mirror-ca-trust-watch
   - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent

@@ -18,7 +18,10 @@ set -euo pipefail
 # ephemeral trust bundle; no environment-specific CA path is required.
 init_runtime_ca_trust() {
     local vendor_bundle="/usr/local/share/tillandsias/vendor-ca-bundle.crt"
-    local runtime_ca="/run/tillandsias/ca-chain.crt"
+    # 2007-uvtl: the read-only cert-only directory; the single-file bind is
+    # what an older launcher still provides.
+    local runtime_ca="/run/tillandsias/ca/intermediate.crt"
+    [ -r "$runtime_ca" ] || runtime_ca="/run/tillandsias/ca-chain.crt"
     local trust_bundle="/run/tillandsias/ca-bundle.crt"
     local temporary_bundle
 

@@ -5899,6 +5899,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # (it drops the env-dep it set itself). Refuses a new site in test code
     # beyond its per-file floor and prints the count; the fixture shows the
     # defect on a real cargo (two copies, one target) and the guard's arms.
+    # ORDER 2007-vy3p — a grep pattern this host's grep cannot compile makes
+    # grep exit 2, and `if grep -q` reads exit 2 as a clean miss: the check
+    # passes without having run (2006-wahn: BSD grep rejected the attestation
+    # grammar's '^(|...' and the plan-only lane admitted every line). Compiles
+    # every literal pattern in scripts/ and the hooks under THIS grep; the
+    # fixture also proves the push and purge gates refuse on exit 2.
+    _step "Checking every literal grep pattern compiles under this grep (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/check-grep-patterns-compile.lua" 2>&1; then
+        _error "a grep pattern does not compile under this host's grep — a gate using it would pass without running (2007-vy3p)"
+        exit 1
+    fi
+    _step "Checking gate greps fail closed on exit 2 (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/test-grep-exit-two-fails-closed.lua" 2>&1; then
+        _error "a gate grep reads exit 2 as a pass — see the FAIL lines above (2007-vy3p)"
+        exit 1
+    fi
     _step "Checking for new compile-time CARGO_MANIFEST_DIR paths in tests (1590-j20f)..."
     if ! _run_lua_decider "scripts/lua/check-manifest-dir-env.lua" 2>&1; then
         _error "a test reads a fixture through compile-time env!(\"CARGO_MANIFEST_DIR\") — use std::env::var(\"CARGO_MANIFEST_DIR\") at runtime (1590-j20f)"
