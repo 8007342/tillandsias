@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-06T23:24:52Z, at coordinator macuahuitl-fedora's request (operator-observed regression).
+packets:
+- packet_id: the-git-image-serves-a-readable-ca-under-a-single-file-bind-as-well-as-the-trust-directory-bind
+  order: 2018-cabd
+  status: in_progress
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [images, git-mirror, vault, linux]
+  estimated_hours: 2
+  title: The git image's /etc/tillandsias/ca.crt is a symlink to a file the image never creates, so single-file CA binds are unreadable and token reads fail
+  context: 'Operator on macuahuitl 2026-11-06, after #961 (1998-mvrs b): repeated GitHub Login prompts and the tray stuck loading repos; journal "vault-cli: CA bundle not readable at /etc/tillandsias/ca.crt" 17 times in an hour from short-lived containers. images/git/Containerfile made ca.crt a symlink to ca-trust/intermediate.crt and never created the target. The mirror binds the trust directory and worked; remote_projects.rs:331 and :792 (repo listing, clone) bind the single file at /etc/tillandsias/ca.crt, which lands on the missing target. Only the git image carries the symlink (all ten local images checked). Coordinator reproduced it and tested the fix as a local derived image.'
+  exit_criteria:
+  - 'The built git image reads the bound CA under -v file, --mount file and the directory bind, in a real container; a control build of the pre-fix shape fails the file binds. litmus:git-image-ca-bind-styles.'
+  - 'Why the gate missed it is stated: no test ran the built image with a single-file bind.'
+  verifiable_closure: 'litmus:git-image-ca-bind-styles green on a Linux host, plus the operator no longer seeing login prompts on macuahuitl after the image is rebuilt.'
+  unscoreable: 'none.'
+  next_action: 'Land work/2018-cabd.'
+  provenance: operator-observed on macuahuitl 2026-11-06 via coordinator macuahuitl-fedora; diagnosed and fixed by lenovinha-silverblue.
+  events:
+  - {type: filed, ts: '2026-11-06T23:24:52Z', host: lenovinha, summary: filed p0 in_progress}
+- packet_id: a-cloud-lane-sizes-its-source-tmpfs-from-the-config-on-the-branch-the-forge-checks-out
+  order: 2006-srcs
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [forge, launcher, git-mirror, linux]
+  estimated_hours: 4
+  title: A cloud lane ignores the declared [forge] src_mb when the config is committed on the integration branch and not on the mirror's HEAD
+  context: 'macuahuitl 2026-11-06, first real run of 2006-srcr: kumbia-kombat commits [forge] src_mb = 4096, memory.max 12 GiB, yet /home/forge/src was 1.5 GB. CAUSE (code and GitHub, lenovinha): forge_declared_src_mb runs git show HEAD:.tillandsias/config.toml in the mirror, whose HEAD is upstream default main; the config exists only on game. A cloud forge resolves its seed itself (lib-common resolve_forge_seed_branch: the discipline seed integration.forge, here game), so the forge works on game while its tmpfs is sized from main; None falls back to the floor.'
+  exit_criteria:
+  - 'The launcher reads src_mb from the branch the forge will check out, by the same rule as resolve_forge_seed_branch (host checkout branch; else the seed integration.forge or linux; else default_branch; else main or master; HEAD last), and logs which branch it read.'
+  - 'A real-launch test on a cloud project whose config exists only on its integration branch shows the declared size in the forge; red on trunk first.'
+  verifiable_closure: 'A real cloud-lane launch of kumbia-kombat on a Linux host showing /home/forge/src at the declared size (clamped).'
+  unscoreable: 'none.'
+  next_action: 'Implement on work/2006-srcs (coordinator pre-created at dc99ed162).'
+  provenance: coordinator macuahuitl-fedora 2026-11-06; cause by lenovinha-silverblue.
+  events:
+  - {type: filed, ts: '2026-11-06T23:24:52Z', host: lenovinha, summary: filed p1 ready, reopens 2006-srcr closure}
