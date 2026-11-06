@@ -82,7 +82,11 @@ snapshot() {
 # run_u <home> <answer-file-or-path> [args...]  -> sets OUT and RC
 run_u() {
     _home="$1"; _tty="$2"; shift 2
+    # The seeded home is the Linux layout, so run the Linux arm on every host:
+    # on a Mac the real uname picks the macOS arm, which looks for other paths
+    # and targets the real /usr/local/bin (2006-wahn).
     OUT="$(HOME="$_home" PATH="$STUBBIN:$PATH" \
+        TILLANDSIAS_UNINSTALL_FAKE_UNAME=Linux \
         TILLANDSIAS_UNINSTALL_TTY="$_tty" \
         TILLANDSIAS_UNINSTALL_APPS_DIR="$_home/Applications" \
         TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1437" \

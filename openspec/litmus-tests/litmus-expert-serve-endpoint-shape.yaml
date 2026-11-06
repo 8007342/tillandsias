@@ -50,7 +50,7 @@ critical_path:
     expected_behavior: "ok: server-ready"
 
   - step: "BEHAVIOURAL: GET /v1/models lists exactly the five domain ids"
-    command: "curl -s http://127.0.0.1:21436/v1/models > /tmp/.litmus-920e/models.json && test \"$(jq -r '.data[].id' /tmp/.litmus-920e/models.json | paste -sd ,)\" = 'all,spec,code,methodology,cheatsheet' && jq -e '.object == \"list\"' /tmp/.litmus-920e/models.json >/dev/null && echo 'ok: five-domain-models'"
+    command: "curl -s http://127.0.0.1:21436/v1/models > /tmp/.litmus-920e/models.json && test \"$(jq -r '.data[].id' /tmp/.litmus-920e/models.json | paste -sd , -)\" = 'all,spec,code,methodology,cheatsheet' && jq -e '.object == \"list\"' /tmp/.litmus-920e/models.json >/dev/null && echo 'ok: five-domain-models'"
     timeout_ms: 30000
     expected_behavior: "ok: five-domain-models"
 

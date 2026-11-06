@@ -45,7 +45,7 @@ printf a | m secret create s1 - >/dev/null; printf b | m secret create s2 - >/de
 m secret rm s1 s2 >/dev/null 2>&1; r5=$?
 left="$(ls "$SD" | tr '\n' ' ')"
 m secret rm --all >/dev/null 2>&1; r5b=$?
-left2="$(ls "$SD" | wc -l)"
+left2="$(ls "$SD" | wc -l | tr -d ' ')" # BSD wc pads the count
 [ "$r5" = 0 ] && [ "$left" = "s3 " ] && [ "$r5b" = 0 ] && [ "$left2" = 0 ] \
     && ok "5: rm takes several names; --all removes the rest" || bad "5: multi rm rc=$r5 left=[$left]; --all rc=$r5b left=$left2"
 
