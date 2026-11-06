@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-can-play-audio-candidates-for-the-operator
+    field: next_action
+    value: 'Implemented (#963, 0c94cf1cf): tillandsias-listen writes an escaped listening page and refuses folders git would pick up; the web image serves audio media types and answers Range with 206. Left: a person confirming they hear playback in a visible host window (the operator or kumbia''s session).'
+    ts: "2026-11-06T14:41:16Z"
+    host: lenovinha
+    replaces_sha256: "d3d821a6ed63698bcd1ffbefbcb7a12292f3a03991719a02a60add8625e1774d"
+
+events:
+  - packet_id: a-forge-can-play-audio-candidates-for-the-operator
+    event:
+      type: note
+      ts: "2026-11-06T14:41:16Z"
+      host: lenovinha
+      summary: |-
+        state the live run left
