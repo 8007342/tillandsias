@@ -815,6 +815,7 @@ mod tests {
 
     fn ok(result: serde_json::Value) -> Result<HttpResponse, String> {
         Ok(HttpResponse {
+            retry_after_s: None,
             status: 200,
             body:
                 serde_json::json!({"success": true, "errors": [], "messages": [], "result": result})
@@ -824,6 +825,7 @@ mod tests {
 
     fn status(code: u16, body: &str) -> Result<HttpResponse, String> {
         Ok(HttpResponse {
+            retry_after_s: None,
             status: code,
             body: body.into(),
         })

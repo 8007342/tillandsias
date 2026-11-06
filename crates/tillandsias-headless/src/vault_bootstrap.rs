@@ -11403,6 +11403,7 @@ mod cloudflare_token_rotation_tests {
         impl crate::cloudflare_oauth::HttpClient for Http {
             fn get(&self, _: &str) -> Result<crate::cloudflare_oauth::HttpResponse, String> {
                 Ok(crate::cloudflare_oauth::HttpResponse {
+                    retry_after_s: None,
                     status: 200,
                     body: serde_json::json!({
                         "authorization_endpoint": "https://a/auth",
@@ -11418,6 +11419,7 @@ mod cloudflare_token_rotation_tests {
             ) -> Result<crate::cloudflare_oauth::HttpResponse, String> {
                 self.posts.fetch_add(1, Ordering::SeqCst);
                 Ok(crate::cloudflare_oauth::HttpResponse {
+                    retry_after_s: None,
                     status: 200,
                     body: r#"{"access_token":"n","expires_in":10}"#.into(),
                 })
