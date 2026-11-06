@@ -38,6 +38,30 @@ pub struct ForgeBudget {
 
 const GIB: u64 = 1024;
 
+/// The tier (design §6): `(memory.max, memory.low, swap, concurrent forges)`
+/// before the clamp to this host's RAM. One place, so the budget and the
+/// forge count it is sized for cannot drift apart.
+fn tier(nproc: u32, mem_total_mib: u64) -> (u64, u64, u64, u64) {
+    if mem_total_mib >= 32 * GIB {
+        (12 * GIB, 4 * GIB, 12 * GIB, 4)
+    } else if nproc >= 8 {
+        (6 * GIB, 2 * GIB, 8 * GIB, 2)
+    } else {
+        (3 * GIB, GIB, 4 * GIB, 1)
+    }
+}
+
+/// This host's thread count and RAM; a host whose RAM cannot be read reads
+/// as 8 GiB (the floor tier on a small machine), never a guess upward.
+fn this_host() -> (u32, u64) {
+    let nproc = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
+    let mem = std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|s| parse_mem_total_mib(&s))
+        .unwrap_or(8 * GIB);
+    (nproc, mem)
+}
+
 impl ForgeBudget {
     /// The budget for a host with `nproc` threads and `mem_total_mib` RAM.
     ///
@@ -49,13 +73,7 @@ impl ForgeBudget {
     /// three quarters of the host's RAM, so a small guest keeps room for its
     /// own kernel and daemons.
     pub fn for_host(nproc: u32, mem_total_mib: u64) -> Self {
-        let (max, low, swap) = if mem_total_mib >= 32 * GIB {
-            (12 * GIB, 4 * GIB, 12 * GIB)
-        } else if nproc >= 8 {
-            (6 * GIB, 2 * GIB, 8 * GIB)
-        } else {
-            (3 * GIB, GIB, 4 * GIB)
-        };
+        let (max, low, swap, _forges) = tier(nproc, mem_total_mib);
         let max = max.min(mem_total_mib.saturating_mul(3) / 4).max(GIB);
         let low = low.min(max / 2);
         ForgeBudget {
@@ -67,15 +85,24 @@ impl ForgeBudget {
         }
     }
 
+    /// ORDER 1913-fh6l. How many forges this host's tier is sized to run at
+    /// once (four on a >= 32 GiB host, two on a fat host, one on the floor),
+    /// so the slice that holds them can protect all of their `memory.low`.
+    pub fn concurrent_forges(nproc: u32, mem_total_mib: u64) -> u64 {
+        tier(nproc, mem_total_mib).3
+    }
+
+    /// [`Self::concurrent_forges`] for THIS host, read as [`Self::for_this_host`] is.
+    pub fn concurrent_forges_on_this_host() -> u64 {
+        let (nproc, mem) = this_host();
+        Self::concurrent_forges(nproc, mem)
+    }
+
     /// The budget for THIS host, read from /proc/meminfo and the scheduler.
     /// A host whose RAM cannot be read gets the floor tier (the smallest
     /// budget), never a guess upward.
     pub fn for_this_host() -> Self {
-        let nproc = std::thread::available_parallelism().map_or(1, |n| n.get() as u32);
-        let mem = std::fs::read_to_string("/proc/meminfo")
-            .ok()
-            .and_then(|s| parse_mem_total_mib(&s))
-            .unwrap_or(8 * GIB);
+        let (nproc, mem) = this_host();
         Self::for_host(nproc, mem)
     }
 
@@ -131,6 +158,16 @@ fn parse_mem_total_mib(meminfo: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1913-fh6l: the forge count follows the same tier as the budget.
+    #[test]
+    fn the_forge_count_follows_the_tier() {
+        assert_eq!(ForgeBudget::concurrent_forges(16, 64 * GIB), 4);
+        assert_eq!(ForgeBudget::concurrent_forges(8, 8 * GIB), 2);
+        assert_eq!(ForgeBudget::concurrent_forges(4, 8 * GIB), 1);
+        // The 8 vCPU / 8 GiB macOS guest: two forges at 2 GiB memory.low.
+        assert_eq!(ForgeBudget::for_host(8, 8 * GIB).memory_low_mib, 2 * GIB);
+    }
 
     /// 1911-3dqo: on every tier a sibling's memory.high sits below the
     /// forge's and it protects nothing, so reclaim lands on it first.
