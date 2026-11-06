@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget
+    field: next_action
+    value: 'TARGET (operator ruling 2026-11-06, revision 7): a planning day for 15 hosts (400 messages, 100 instructions, 2 busy hours) costs at most 2 500 queue operations (25 % of the Free 10 000) and at most 2 000 API requests. The fixture FAILS above either. Expected about 2 010 operations and about 1 500 requests (design section 6). Model the documented behaviour: an empty pull costs a read; operations are per message, not per batch; a late ack is accepted; a lost ack response; an Expired or poison message. Write the failing test first.'
+    ts: "2026-11-06T19:28:28Z"
+    host: lenovinha
+    replaces_sha256: "2bc0f51d3dbbcb4ea6ed272586be6183bb79b0647b56bea8aa0ec2d6088c562a"
+
+events:
+  - packet_id: the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget
+    event:
+      type: note
+      ts: "2026-11-06T19:28:28Z"
+      host: lenovinha
+      summary: |-
+        revision 7 budget target
