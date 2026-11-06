@@ -4410,6 +4410,40 @@ fn ca_refresh_reason(crt: &Path, key: &Path) -> &'static str {
     }
 }
 
+/// ORDER 2007-ckun: the CA key is missing because the keyring could not be
+/// asked. While the certificate is valid, minting would replace a CA whose key
+/// may be one keyring unlock away, under a running Vault and proxy, so refuse
+/// by name instead. An expired certificate is minted as before.
+fn refuse_mint_for_unavailable_key(
+    materialized: ca_key_store::Materialized,
+    crt: &Path,
+) -> Result<(), String> {
+    if materialized == ca_key_store::Materialized::Unavailable && cert_valid_for(crt, 0) {
+        return Err(format!(
+            "ca-key-unavailable: the CA key for {} is not on tmpfs and the keyring could not \
+             be read; the CA is kept rather than replaced. Unlock the keyring (log in to the \
+             desktop session) and retry (2007-ckun)",
+            crt.display()
+        ));
+    }
+    Ok(())
+}
+
+/// ORDER 2007-ckun: a mint's staged key and certificate, removed on drop. A
+/// failed openssl, a permissions or read error, or a failed seal used to
+/// return with the cleartext key still in the key home.
+struct StagedCaPair {
+    paths: [PathBuf; 2],
+}
+
+impl Drop for StagedCaPair {
+    fn drop(&mut self) {
+        for p in &self.paths {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
 fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     if !crt.is_file() || !key.is_file() {
         return true;
@@ -4760,6 +4794,56 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
         let (crt, key) = mint(tmp.path(), 61);
         assert!(!ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    /// 2007-ckun: an unavailable keyring with a valid CA refuses by name and
+    /// mints nothing; with an expired CA, or any other materialize outcome,
+    /// the usual refresh rules decide. Pre-fix: FAILS, no such refusal.
+    #[test]
+    fn an_unavailable_ca_key_keeps_a_valid_ca_and_refuses_by_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (crt, _key) = mint(tmp.path(), 365);
+        let before = std::fs::read(&crt).unwrap();
+        let e = refuse_mint_for_unavailable_key(ca_key_store::Materialized::Unavailable, &crt)
+            .unwrap_err();
+        assert!(
+            e.starts_with("ca-key-unavailable:") && e.contains("keyring"),
+            "{e}"
+        );
+        assert_eq!(std::fs::read(&crt).unwrap(), before, "the CA is untouched");
+        for m in [
+            ca_key_store::Materialized::Gone,
+            ca_key_store::Materialized::Present,
+            ca_key_store::Materialized::Inactive,
+            ca_key_store::Materialized::Refilled,
+        ] {
+            assert!(refuse_mint_for_unavailable_key(m, &crt).is_ok(), "{m:?}");
+        }
+        let missing = tmp.path().join("absent.crt");
+        assert!(
+            refuse_mint_for_unavailable_key(ca_key_store::Materialized::Unavailable, &missing)
+                .is_ok(),
+            "no valid CA to keep: minting is allowed"
+        );
+    }
+
+    /// 2007-ckun: a mint that fails after openssl wrote its key leaves no
+    /// staged file. Pre-fix: FAILS, tmp_key survived every early return.
+    #[test]
+    fn a_failed_mint_leaves_no_staged_key() {
+        let tmp = tempfile::tempdir().unwrap();
+        let key = tmp.path().join("intermediate.key.1.2.tmp");
+        let crt = tmp.path().join("intermediate.crt.1.2.tmp");
+        std::fs::write(&key, b"-----BEGIN PRIVATE KEY-----").unwrap();
+        std::fs::write(&crt, b"cert").unwrap();
+        let fail = || -> Result<(), String> {
+            let _staged = StagedCaPair {
+                paths: [key.clone(), crt.clone()],
+            };
+            Err("openssl exited 1 after writing -keyout".into())
+        };
+        assert!(fail().is_err());
+        assert!(!key.exists() && !crt.exists(), "both staged files are gone");
     }
 
     // 1979-bm3u root cause: a mint that fails part-way never leaves a new key
@@ -5196,7 +5280,10 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // 1118-fqfk slice 2b: the key path is a link into tmpfs. Plaintext is
     // deleted and a dangling link is refilled from the keyring, before the
     // usable check below decides whether to mint.
-    ca_key_store::materialize(&key, &crt, true);
+    // 2007-ckun: staging a dead mint left behind (cleartext keys) goes first.
+    ca_key_store::sweep_stale_staging(&key);
+    let materialized = ca_key_store::materialize(&key, &crt, true);
+    refuse_mint_for_unavailable_key(materialized, &crt)?;
     let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
@@ -5268,6 +5355,11 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         );
         let tmp_crt = certs_dir.join(format!("intermediate.crt.{unique}.tmp"));
         let tmp_key = ca_key_store::staging_path(&key, &unique);
+        // 2007-ckun: every exit before publish removes both; publish renames
+        // them away, so after it there is nothing left to remove.
+        let _staged = StagedCaPair {
+            paths: [tmp_key.clone(), tmp_crt.clone()],
+        };
         let mut command = Command::new("openssl");
         command.args([
             "req",
