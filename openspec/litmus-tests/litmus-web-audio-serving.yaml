@@ -1,0 +1,31 @@
+# @trace spec:local-web-preview, order:2007-hear
+name: litmus:web-audio-serving
+spec: local-web-preview
+phase: post-build
+status: active
+description: >
+  Order 2007-hear: the built static preview image (images/web, busybox httpd)
+  serves audio candidates with their media types (flac, mp3, ogg, opus, wav,
+  m4a) and reports whether it answers Range requests with 206, which browsers
+  use to seek. Measured 2026-11-06 on lenovinha: 206 with Content-Range.
+severity: medium
+size: small
+preconditions:
+  - a localhost/tillandsias-web image is built (or TILLANDSIAS_WEB_IMAGE names one)
+critical_path:
+  - step: "Req: the built web image serves each audio type with its media type and reports Range support"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-web-audio-serving.lua 2>&1"
+    timeout_ms: 400000
+    success_pattern: "ok:web-audio-serving:2 arms"
+observability:
+  traces:
+    - "@trace order:2007-hear"
+  expected_log: "ok:web-audio-serving:2 arms"
+  log_fields:
+    spec: "local-web-preview"
+    test: "web-audio-serving"
+rollback:
+  on_failure: >
+    The web image lacks /etc/httpd.conf (images/web/httpd.conf; flake.nix
+    web-image copies it too) or httpd was started without it.
+  command: "podman run --rm --entrypoint cat localhost/tillandsias-web /etc/httpd.conf"

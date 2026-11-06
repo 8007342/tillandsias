@@ -318,6 +318,8 @@
         forgeCliCommands = ./images/default/cli;
         forgeShellHelpers = ./images/default/config-overlay/shell-helpers.sh;
         webEntrypoint = ./images/web/entrypoint.sh;
+        # 2007-hear: busybox httpd audio MIME types.
+        webHttpdConf = ./images/web/httpd.conf;
         forgeImageRoot = pkgs.buildEnv {
           name = "tillandsias-forge-root";
           paths = with pkgs; [
@@ -565,6 +567,8 @@
               chmod 1777 ./tmp
               cp ${webEntrypoint} ./entrypoint.sh
               chmod +x ./entrypoint.sh
+              mkdir -p ./etc
+              cp ${webHttpdConf} ./etc/httpd.conf
             '';
 
             config = {

@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    event:
+      type: note
+      ts: "2026-11-06T13:43:27Z"
+      agent_id: linux-lenovinha-claude-20261106t134326z
+      host: lenovinha
+      summary: |
+        Part (c), from a code-read of trunk (lenovinha). The --github-login path relaunches Vault, and here is why a running mirror then stayed agent-unauthenticated, as on macuahuitl 2026-11-05 at 19:15 PST.
+
+        The path:
+        - run_provider_login calls container_deps::ensure_git_login, which resolves CaBundle, then Vault, then Proxy. The git mirror is NOT in that set, so login never touches it.
+        - CaBundle runs ensure_ca_bundle. On builds before #955, a keyring miss there reminted the CA.
+        - Vault runs ensure_vault_running. It probes a RUNNING Vault with a client that trusts the CURRENT CA (wait_for_vault_api_ready, vault_bootstrap.rs). After a remint, Vault still serves its leaf from the previous CA, so the probe fails ("container present but health probe returned ...; relaunching"). The bootstrap then relaunches Vault with a new leaf from the new CA, and end_previous_ca_window ends the old CA's window.
+        - Proxy is replaced when its CA generation is stale (proxy_ca_check).
+
+        The mirror kept its single-file bind of the OLD intermediate.crt (the old inode), so its Vault Agent could not verify the relaunched Vault's new leaf. It stayed agent-unauthenticated until restarted.
+
+        What fixes this:
+        - #955 (2007-ckun) stops the churn that triggered it.
+        - #961 (part b) makes a running mirror follow a CA change: a read-only cert-only directory bind, plus a Vault Agent restart on a valid new CA.
+
+        No further code is needed for (c). The relaunch is correct when the CA changed.
+
+        Still open, each needing a live lane run with operator consent:
+        - (a) Under an UNCHANGED CA, time a Vault relaunch until the mirror reaches upstream-auth:authorized. That case is the Agent re-authenticating against a new container, not a trust change.
+        - (b) One live rotation under a running mirror.
