@@ -594,6 +594,7 @@ mod tests {
 
     fn ok(v: serde_json::Value) -> Result<HttpResponse, String> {
         Ok(HttpResponse {
+            retry_after_s: None,
             status: 200,
             body: serde_json::json!({"success": true, "errors": [], "result": v}).to_string(),
         })
@@ -732,6 +733,7 @@ mod tests {
                             serde_json::json!({"build_uuid": id, "status": "stopped", "build_outcome": "success", "trigger": b["trigger"]}),
                         ),
                         None => Ok(HttpResponse {
+                            retry_after_s: None,
                             status: 404,
                             body: "{}".into(),
                         }),
@@ -749,6 +751,7 @@ mod tests {
                     }
                 }
                 _ => Ok(HttpResponse {
+                    retry_after_s: None,
                     status: 404,
                     body: "{}".into(),
                 }),

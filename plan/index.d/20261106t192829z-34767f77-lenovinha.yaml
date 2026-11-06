@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-host-poller-backs-off-from-five-to-sixty-minutes-and-pulls-its-dead-letter-queue-hourly
+    field: next_action
+    value: 'Revision 7: one poller per host, for its own single queue (all projects); start no faster than 5 min with a per-host random stagger (0-5 min) plus jitter; back off x4 to a 120 min ceiling; DLQ pulled every 6 h; reset to 5 min on a delivery, local send or lane start; batch_size up to 100 with one ack per batch. The fixture shows about 14 pulls plus 4 DLQ pulls per idle day.'
+    ts: "2026-11-06T19:28:29Z"
+    host: lenovinha
+    replaces_sha256: "2bc0f51d3dbbcb4ea6ed272586be6183bb79b0647b56bea8aa0ec2d6088c562a"
+
+events:
+  - packet_id: the-host-poller-backs-off-from-five-to-sixty-minutes-and-pulls-its-dead-letter-queue-hourly
+    event:
+      type: note
+      ts: "2026-11-06T19:28:29Z"
+      host: lenovinha
+      summary: |-
+        revision 7 poll schedule
