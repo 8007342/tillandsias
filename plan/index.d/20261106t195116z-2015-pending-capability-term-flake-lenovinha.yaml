@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (opus5), 2026-11-06, on coordinator macuahuitl-fedora's request.
+packets:
+- packet_id: the-pending-capability-wedge-fixture-term-arm-does-not-race-its-own-probe
+  order: 2015-wba3
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [tests, gate, fixtures]
+  estimated_hours: 2
+  depends_on: []
+  title: The pending-capability wedge fixture's TERM arm does not race its own probe under load
+  context: 'scripts/test-pending-capability-row-does-not-wedge.sh evicted #973, a model-pin change it cannot plausibly affect, with: "FAIL: TERM mid-run: rc=143 scaffolds before=1 after=1 (never-held); live changed=no" (8 passed, 1 failed). killed_run (:207-217) waits up to 30 s (300 x 0.1 s) for the child''s hold file, then sends the signal whether or not the hold appeared, and reports "never-held" when it did not. Under load the child did not reach its hold within 30 s, so the TERM landed before the probe, nothing was held or removed, and the arm reported FAIL, though the trap behaviour it tests was never exercised. It should have been could-not-run. The coordinator''s reading, not proven: a timing flake. The live plan/ was unchanged, so the property the gate protects held. Do not weaken the assertion.'
+  exit_criteria:
+  - 'The TERM and KILL arms signal only after the hold appeared. When the 30 s wait ends without a hold, the arm sends no signal and reports could-not-run naming the wait, never FAIL and never pass.'
+  - 'The wait is measured: the time to the hold is printed, so a slow host shows up as a slow host rather than as a broken trap.'
+  - 'Repeated 20 times under a CPU-load generator, the arm passes every time, and with the trap removed it fails every time.'
+  verifiable_closure: 'The fixture run 20 times under load, recorded in the row, plus the negative control with the trap removed.'
+  unscoreable: 'none.'
+  next_action: 'Read killed_run and the probe in scripts/test-pending-capability-row-does-not-wedge.sh; make killed_run return could-not-run when the hold never appeared within its wait (do not signal then), print the time-to-hold, and keep every assertion.'
+  provenance: lenovinha opus5 2026-11-06, from the #973 eviction log line relayed by coordinator macuahuitl-fedora.
+  events:
+  - type: filed
+    ts: '2026-11-06T19:51:16Z'
+    host: lenovinha
+    summary: filed p2 ready
