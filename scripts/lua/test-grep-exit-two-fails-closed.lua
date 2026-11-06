@@ -58,8 +58,11 @@ end
 fs.write(REL .. "/bad-line", "prose that breaks the grammar\n")
 
 -- 1: the old form takes the pass branch when grep cannot compile its pattern.
-local r1 = bash("if LC_ALL=C grep -qvE '^(|x)$' '" .. DIR .. "/bad-line' 2>/dev/null; then echo refused; else echo passed; fi")
-arm("1 FORM `if grep -qvE '^(|x)$'` takes the pass branch here (grep exit 2 read as a clean miss)",
+-- '^(x' (an unmatched paren) is rejected by GNU and BSD grep alike, so this
+-- arm holds on every host. '^(|x)$', the 2006-wahn form, is rejected only by
+-- BSD grep; arm 5 proves the decider refuses it by its text everywhere.
+local r1 = bash("if LC_ALL=C grep -qvE '^(x' '" .. DIR .. "/bad-line' 2>/dev/null; then echo refused; else echo passed; fi")
+arm("1 FORM `if grep -qvE '^(x'` (a pattern grep cannot compile) takes the pass branch (exit 2 read as a clean miss)",
     text.trim(r1.stdout or "") == "passed", text.trim(r1.stdout or ""))
 
 -- 2: the helper, extracted from the hook and run for real.
@@ -70,7 +73,7 @@ local function verdict_of(args)
 end
 local m = verdict_of("-qE 'prose' '" .. DIR .. "/bad-line'")
 local miss = verdict_of("-qE 'nothing-like-this' '" .. DIR .. "/bad-line'")
-local badpat = verdict_of("-qvE '^(|x)$' '" .. DIR .. "/bad-line'")
+local badpat = verdict_of("-qvE '^(x' '" .. DIR .. "/bad-line'")
 local unreadable = verdict_of("-qE 'x' '" .. DIR .. "/no-such-file'")
 arm("2 HELPER _grep_refuses: match refuses, clean miss passes, bad pattern refuses, unreadable file refuses",
     m == "refuse" and miss == "pass" and badpat == "refuse" and unreadable == "refuse",
@@ -132,11 +135,14 @@ local function compile_verdict(line)
     return text.trim(r.stdout or ""), r.code
 end
 local bad_out, bad_rc = compile_verdict([["if grep -qvE '^(|## x)\$' f; then echo refuse; fi"]])
+local unc_out, unc_rc = compile_verdict([["if grep -qvE '^(## x' f; then echo refuse; fi"]])
 local good_out, good_rc = compile_verdict([["if grep -qvE '^(## x)?\$' f; then echo refuse; fi"]])
-arm("5 COMPILE the decider refuses the old '^(|' ERE and accepts the optional-group form",
+arm("5 COMPILE the decider refuses the '^(|' ERE on EVERY host (by its text: GNU grep compiles it) and an uncompilable one, and accepts the optional-group form",
     bad_rc == 1 and bad_out == "violation:grep-patterns-compile:scripts/a.sh:2"
+        and unc_rc == 1 and unc_out == "violation:grep-patterns-compile:scripts/a.sh:2"
         and good_rc == 0 and good_out == "ok:grep-patterns-compile:1 patterns",
-    "bad rc=" .. tostring(bad_rc) .. " [" .. bad_out .. "]; good rc=" .. tostring(good_rc) .. " [" .. good_out .. "]")
+    "empty-alt rc=" .. tostring(bad_rc) .. " [" .. bad_out .. "]; uncompilable rc=" .. tostring(unc_rc) ..
+        " [" .. unc_out .. "]; good rc=" .. tostring(good_rc) .. " [" .. good_out .. "]")
 
 -- 6: the attestation checker's exempt README, unreadable.
 local att = DIR .. "/att"
@@ -157,8 +163,25 @@ local function att_verdict(script_src)
     }, "\n"))
     return text.trim(r.stdout or "")
 end
+-- The pre-fix form, rebuilt from the current file by undoing the fix (a git
+-- revision would carry the fix once it lands).
+local fixed_block = [[
+                _rc=0; grep -qE '^MO-FULL: ' "$f" 2>/dev/null || _rc=$?
+                if [ "$_rc" -ge 2 ]; then
+                    printf 'REFUSED: %s\n' "$f" >&2
+                    printf '   exempt file could not be read (grep exit %s), so no marker check ran on it\n' "$_rc" >&2
+                    violations=$((violations + 1))
+                elif [ "$_rc" -eq 0 ]; then
+]]
+local old_block = [[
+                if grep -qE '^MO-FULL: ' "$f" 2>/dev/null; then
+]]
+local cur = fs.read(ROOT .. "/scripts/check-mo-full-attestations.sh")
+local s_, e_ = cur:find(fixed_block, 1, true)
+local pre_src = s_ and (cur:sub(1, s_ - 1) .. old_block .. cur:sub(e_ + 1)) or nil
+fs.write(REL .. "/pre-fix-attest.sh", pre_src or "echo 'rc=? the fix block was not found' ; exit 9\n")
 local now6 = att_verdict("cp '" .. ROOT .. "/scripts/check-mo-full-attestations.sh' /dev/stdout")
-local pre6 = att_verdict("git -C '" .. ROOT .. "' show HEAD:scripts/check-mo-full-attestations.sh")
+local pre6 = att_verdict("cat '" .. DIR .. "/pre-fix-attest.sh'")
 arm("6 README an unreadable exempt README is refused now; the pre-fix form passed it unchecked",
     now6:find("^rc=1 violation:mo%-full%-attestations") ~= nil and pre6:find("^rc=0 ok:mo%-full%-attestations") ~= nil,
     "now [" .. now6 .. "]; pre-fix [" .. pre6 .. "]")

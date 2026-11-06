@@ -19,6 +19,13 @@
 -- and reopened around a literal quote) is skipped too: the text between the
 -- quotes is not the pattern grep receives.
 --
+-- PORTABILITY, ON EVERY HOST. GNU grep accepts an empty alternative in an
+-- ERE ('(|a)', 'a||b', '(a|)'); BSD grep rejects it. A Linux gate compiling
+-- with GNU grep would never see the 2006-wahn pattern, so an ERE with an empty
+-- alternative is refused by its text wherever this runs (bracket expressions
+-- and escaped characters are removed first, so '[(|]' and '\(|' are not it).
+-- Write the optional form instead: '^(a|b)?$'.
+--
 -- HOW (inside the 5 s door deadline). All ERE patterns go to one -f file and
 -- all BRE patterns to another, and grep compiles each file once against an
 -- empty input. Only when a file fails (exit 2) is it bisected, one pattern
@@ -86,7 +93,8 @@ for _, path in ipairs(files) do
                             local fixed = flags:find("%-[%a]*F") or flags:find("%-%-fixed%-strings")
                             local ere = flags:find("%-[%a]*E") or flags:find("%-%-extended%-regexp")
                             if not fixed and after ~= '"' and pat ~= "" then
-                                found[#found + 1] = { file = path:sub(#ROOT + 2), line = n, pattern = pat, ere = ere ~= nil }
+                                local rel = path:sub(1, #ROOT + 1) == ROOT .. "/" and path:sub(#ROOT + 2) or path
+                                found[#found + 1] = { file = rel, line = n, pattern = pat, ere = ere ~= nil }
                             end
                             pos = close + 1
                         end
@@ -117,6 +125,52 @@ local function compiles(patterns, ere)
 end
 
 local bad = {}
+
+-- The empty-alternative refusal, by text (see PORTABILITY above).
+-- Reduce an ERE to its operators: an escaped character and a whole bracket
+-- expression (with its [:class:], [=e=] and [.c.] items, and a leading ] or ^]
+-- that is a literal) each become one atom "x".
+local function operators(pat)
+    local out, i, n = {}, 1, #pat
+    while i <= n do
+        local c = pat:sub(i, i)
+        if c == "\\" then
+            out[#out + 1] = "x"; i = i + 2
+        elseif c == "[" then
+            local j = i + 1
+            if pat:sub(j, j) == "^" then j = j + 1 end
+            if pat:sub(j, j) == "]" then j = j + 1 end
+            while j <= n and pat:sub(j, j) ~= "]" do
+                local two = pat:sub(j, j + 1)
+                if two == "[:" or two == "[=" or two == "[." then
+                    local close = pat:find(pat:sub(j + 1, j + 1) .. "]", j + 2, true)
+                    j = close and close + 2 or n + 1
+                else
+                    j = j + 1
+                end
+            end
+            out[#out + 1] = "x"; i = j + 1
+        else
+            out[#out + 1] = c; i = i + 1
+        end
+    end
+    return table.concat(out)
+end
+local function empty_alternative(pat)
+    local p = operators(pat)
+    return p:find("(|", 1, true) or p:find("||", 1, true) or p:find("|)", 1, true)
+        or p:find("^|") or p:find("|$")
+end
+local flagged = {}
+for _, f in ipairs(found) do
+    if f.ere and empty_alternative(f.pattern) then
+        flagged[f] = true
+        bad[#bad + 1] = f.file .. ":" .. f.line
+        log.raw("  " .. f.file .. ":" .. f.line .. " (ERE) has an empty alternative, which BSD grep rejects")
+        log.raw("    and GNU grep accepts, so it passes a Linux gate and fails open on macOS: " .. f.pattern:sub(1, 160))
+    end
+end
+
 for _, ere in ipairs({ true, false }) do
     local group = {}
     for _, f in ipairs(found) do
@@ -126,7 +180,8 @@ for _, ere in ipairs({ true, false }) do
     for _, f in ipairs(group) do pats[#pats + 1] = f.pattern end
     if #pats > 0 and not compiles(pats, ere) then
         for _, f in ipairs(group) do
-            local ok, err = compiles({ f.pattern }, ere)
+            local ok, err = true, nil
+            if not flagged[f] then ok, err = compiles({ f.pattern }, ere) end
             if not ok then
                 bad[#bad + 1] = f.file .. ":" .. f.line
                 log.raw("  " .. f.file .. ":" .. f.line .. (ere and " (ERE)" or " (BRE)") ..
