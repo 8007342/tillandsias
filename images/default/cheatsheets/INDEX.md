@@ -70,11 +70,12 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## cloud
 
-- cloudflare-workers-static-assets.md — ## Provenance [pull-on-demand: stub]
-- gcp-buildpacks.md                   — deploying to Cloud Run with the "Google Cloud's buildpacks" build [bundled, partial-verify]
-- gcp-cloud-run-deploy-paths.md       — a web app should deploy to Google Cloud Run from its GitHub repo, [bundled, partial-verify]
-- gcp-cloudbuild-yaml.md              — a repo needs its own Cloud Build pipeline (tests before deploy, [bundled, partial-verify]
-- gcp-dockerfile-for-cloud-run.md     — deploying to Cloud Run with the "Dockerfile" build type, or any [bundled, partial-verify]
+- cloudflare-free-tier-storage-limits.md — Use this cheatsheet when choosing where a Worker on the **Free** plan keeps sta… [pull-on-demand: stub]
+- cloudflare-workers-static-assets.md    — ## Provenance [pull-on-demand: stub]
+- gcp-buildpacks.md                      — deploying to Cloud Run with the "Google Cloud's buildpacks" build [bundled, partial-verify]
+- gcp-cloud-run-deploy-paths.md          — a web app should deploy to Google Cloud Run from its GitHub repo, [bundled, partial-verify]
+- gcp-cloudbuild-yaml.md                 — a repo needs its own Cloud Build pipeline (tests before deploy, [bundled, partial-verify]
+- gcp-dockerfile-for-cloud-run.md        — deploying to Cloud Run with the "Dockerfile" build type, or any [bundled, partial-verify]
 
 ## concurrent-git
 
