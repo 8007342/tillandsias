@@ -241,4 +241,102 @@ mod tests {
         assert_eq!(row["exit"], 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    fn repo_file(rel: &str) -> std::path::PathBuf {
+        std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..")
+        .join(rel)
+    }
+
+    /// 2004-in3v: the forge entrypoint's timer helpers, run for real. One
+    /// line per step in the lifecycle log, none on stderr unless debugging.
+    #[test]
+    #[cfg(unix)]
+    fn forge_step_helpers_log_one_line_per_step_and_stay_off_the_screen() {
+        let lib = repo_file("images/default/lib-common.sh");
+        let t = tempfile::tempdir().unwrap();
+        let log = t.path().join("lifecycle.log");
+        let script = format!(
+            "eval \"$(sed -n '/^_forge_now_us()/,/^}}/p;/^forge_step_line()/,/^}}/p;\
+             /^forge_step_mark()/,/^}}/p;/^forge_step_done()/,/^}}/p' '{}')\"\n\
+             set -e\nforge_step_mark\ntrue\nforge_step_done first\n\
+             forge_step_mark\nX=exported\nforge_step_done second\n\
+             [ \"$X\" = exported ]\n",
+            lib.display()
+        );
+        let run = |debug: &str| {
+            let _ = std::fs::remove_file(&log);
+            let out = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(&script)
+                .env("TILLANDSIAS_LIFECYCLE_LOG", &log)
+                .env("TILLANDSIAS_DEBUG", debug)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            (
+                std::fs::read_to_string(&log).unwrap(),
+                String::from_utf8_lossy(&out.stderr).into_owned(),
+            )
+        };
+        let (logged, stderr) = run("");
+        let lines: Vec<&str> = logged.lines().collect();
+        assert_eq!(lines.len(), 2, "{logged}");
+        for (line, step) in lines.iter().zip(["first", "second"]) {
+            let ms = line
+                .strip_prefix(&format!("bringup: step=forge-entry-{step} ms="))
+                .unwrap_or_else(|| panic!("bad line: {line}"));
+            assert!(ms.parse::<u64>().is_ok(), "{line}");
+        }
+        assert!(stderr.is_empty(), "the agent's screen got: {stderr}");
+        let (_, debug_stderr) = run("1");
+        assert_eq!(
+            debug_stderr
+                .lines()
+                .filter(|l| l.starts_with("bringup: "))
+                .count(),
+            2
+        );
+    }
+
+    /// 2004-in3v: every timed step in the opencode entrypoint is a bare call
+    /// between a mark and a done, names are unique, and the total span ends
+    /// at launch.
+    #[test]
+    fn the_opencode_entrypoint_times_each_step_and_the_total() {
+        let src = std::fs::read_to_string(repo_file("images/default/entrypoint-forge-opencode.sh"))
+            .unwrap();
+        let lines: Vec<&str> = src.lines().collect();
+        let mut names = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if let Some(name) = line.strip_prefix("forge_step_done ") {
+                assert!(
+                    i >= 2 && lines[i - 2] == "forge_step_mark",
+                    "{name}: no mark before its step"
+                );
+                assert!(
+                    !lines[i - 1].starts_with("forge_step"),
+                    "{name}: no step between mark and done"
+                );
+                names.push(name);
+            }
+        }
+        assert!(names.len() >= 10, "{names:?}");
+        let mut unique = names.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), names.len(), "duplicate step names: {names:?}");
+        assert!(src.contains("FORGE_ENTRY_T0_US=\"${EPOCHREALTIME//[.,]/}\""));
+        let total = src.find("forge_step_line total ").expect("total span");
+        let launching = src
+            .find("trace_lifecycle \"entrypoint\" \"opencode launching\"")
+            .unwrap();
+        assert!(total > launching, "the total span ends at launch");
+    }
 }
