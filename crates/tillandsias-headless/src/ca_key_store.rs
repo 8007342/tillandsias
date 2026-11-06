@@ -185,7 +185,10 @@ mod at_rest {
         Some(value)
     }
 
+    // Its callers are the linux-only tests below; the same allow as this
+    // file's other linux-test helpers keeps the darwin clippy gate green.
     #[cfg(test)]
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub(super) fn reset_cache() {
         *CACHE.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
