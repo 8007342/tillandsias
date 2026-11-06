@@ -67,6 +67,11 @@ pub const SAVE_CLASSES: &[&str] = &[
     "SaveWEBM",
     "SaveAnimatedWEBP",
     "SaveAnimatedPNG",
+    // 2007-acst: ACE-Step and every other ComfyUI core audio saver.
+    "SaveAudio",
+    "SaveAudioMP3",
+    "SaveAudioOpus",
+    "SaveAudioAdvanced",
 ];
 
 fn is_save_class(class: &str) -> bool {
@@ -955,8 +960,14 @@ fn set_text(inputs: &mut serde_json::Map<String, Value>, text: &str) {
 /// `plan.seed + i`, and every SaveImage prefixed `studio/<job>/<i>` (D2).
 /// 1983-svid: what one output file is.
 enum OutputKind {
-    Image { w: u32, h: u32, alpha: bool },
+    Image {
+        w: u32,
+        h: u32,
+        alpha: bool,
+    },
     Video,
+    /// 2007-acst: flac (SaveAudio), mp3, opus, wav.
+    Audio,
 }
 
 /// A PNG is an image (its IHDR read); mp4, webm, an animated webp or gif is
@@ -974,8 +985,15 @@ fn output_kind(file: &str, bytes: &[u8]) -> Result<OutputKind, String> {
                 Ok(OutputKind::Video)
             }
         }
+        "flac" | "mp3" | "opus" | "ogg" | "wav" => {
+            if bytes.is_empty() {
+                Err(format!("engine_failed: {file} is empty"))
+            } else {
+                Ok(OutputKind::Audio)
+            }
+        }
         other => Err(format!(
-            "engine_failed: {file} is an unexpected output type ({other}); the studio returns png images and mp4/webm/webp/gif videos"
+            "engine_failed: {file} is an unexpected output type ({other}); the studio returns png images, mp4/webm/webp/gif videos and flac/mp3/opus/wav audio"
         )),
     }
 }
@@ -1444,7 +1462,7 @@ pub fn call(
     let elapsed = t0.elapsed().as_secs_f64();
     if produced.is_empty() {
         return Err(
-            "engine_failed: the workflow finished but produced no output file (image or video)"
+            "engine_failed: the workflow finished but produced no output file (image, video or audio)"
                 .into(),
         );
     }
@@ -1502,6 +1520,10 @@ pub fn call(
             }
             OutputKind::Video => {
                 out["kind"] = json!("video");
+                out["bytes"] = json!(bytes.len());
+            }
+            OutputKind::Audio => {
+                out["kind"] = json!("audio");
                 out["bytes"] = json!(bytes.len());
             }
         }
@@ -1872,7 +1894,11 @@ impl StudioEngine for HttpStudio {
                 let mut images = Vec::new();
                 if let Some(outs) = entry["outputs"].as_object() {
                     for node in outs.values() {
-                        for img in node["images"].as_array().into_iter().flatten() {
+                        // 2007-acst: audio savers report under "audio", not "images".
+                        let listed = ["images", "audio"]
+                            .into_iter()
+                            .flat_map(|k| node[k].as_array().into_iter().flatten());
+                        for img in listed {
                             if img["type"] == "output"
                                 && let (Some(f), Some(s)) =
                                     (img["filename"].as_str(), img["subfolder"].as_str())
@@ -1983,6 +2009,21 @@ mod tests {
         let mut mixed = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
         mixed["13"] = json!({"class_type":"SaveWEBM","inputs":{"filename_prefix":"v","images":["8",0],"codec":"vp9","fps":16.0,"crf":32.0}});
         std::fs::write(wf.join("mixed.api.json"), mixed.to_string()).unwrap();
+        // 2007-acst: ACE-Step 1.5 XL text-to-music, the shape of Comfy-Org's
+        // audio_ace_step1_5_xl_turbo template in API form.
+        let ace = json!({
+            "1": {"class_type":"UNETLoader","inputs":{"unet_name":"acestep_v1.5_xl_turbo_bf16.safetensors","weight_dtype":"default"}},
+            "2": {"class_type":"DualCLIPLoader","inputs":{"clip_name1":"qwen_0.6b_ace15.safetensors","clip_name2":"qwen_4b_ace15.safetensors","type":"ace","device":"default"}},
+            "3": {"class_type":"VAELoader","inputs":{"vae_name":"ace_1.5_vae.safetensors"}},
+            "4": {"class_type":"TextEncodeAceStepAudio1.5","inputs":{"clip":["2",0],"tags":"baked tags","lyrics":"[inst]","seed":0,"bpm":120,"duration":30.0,"timesignature":"4","language":"en","keyscale":"C major"}},
+            "5": {"class_type":"ConditioningZeroOut","inputs":{"conditioning":["4",0]}},
+            "6": {"class_type":"EmptyAceStep1.5LatentAudio","inputs":{"seconds":30.0,"batch_size":1}},
+            "7": {"class_type":"ModelSamplingAuraFlow","inputs":{"model":["1",0],"shift":3.0}},
+            "8": {"class_type":"KSampler","inputs":{"model":["7",0],"positive":["4",0],"negative":["5",0],"latent_image":["6",0],"seed":0,"steps":8,"cfg":1.0,"sampler_name":"euler","scheduler":"simple","denoise":1.0}},
+            "9": {"class_type":"VAEDecodeAudio","inputs":{"samples":["8",0],"vae":["3",0]}},
+            "10": {"class_type":"SaveAudio","inputs":{"audio":["9",0],"filename_prefix":"audio/x"}}
+        });
+        std::fs::write(wf.join("ace.api.json"), ace.to_string()).unwrap();
         let mut rembg = serde_json::from_str::<Value>(&workflow(I1_CKPT, None)).unwrap();
         rembg["12"] = json!({"class_type":"LoadRembgByBiRefNetModel",
                              "inputs":{"model":"model.safetensors","device":"AUTO"}});
@@ -2042,7 +2083,11 @@ mod tests {
                 let dir = out_dir.join(sub);
                 std::fs::create_dir_all(&dir).unwrap();
                 // 1983-svid: a video node writes a .webm, as ComfyUI does.
-                let name = if class == "SaveImage" {
+                let name = if class.starts_with("SaveAudio") {
+                    let n = format!("{stem}_00001_.flac");
+                    std::fs::write(dir.join(&n), b"fLaC audio bytes").map_err(|e| e.to_string())?;
+                    n
+                } else if class == "SaveImage" {
                     let n = format!("{stem}_00001_.png");
                     image::RgbaImage::new(64, 64)
                         .save(dir.join(&n))
@@ -2377,6 +2422,69 @@ mod tests {
         );
     }
 
+    /// 2007-acst: an ACE-Step 1.5 XL workflow runs through the studio lane:
+    /// its pinned weights are admitted, tags/seed/bpm/keyscale are set per
+    /// run on the encoder node, an override that reaches no input is refused
+    /// by name, and the audio output comes back with its provenance.
+    /// Pre-fix: FAILS, the ACE-Step weights and audio nodes were not pinned
+    /// (model_refused / node_not_pinned) and an audio file was not an output.
+    #[test]
+    fn an_ace_step_audio_run_takes_per_run_overrides_and_returns_audio() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("acst-proj", "a");
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let run = |ov: Value| {
+            call(
+                "acst-proj",
+                "a",
+                &json!({"workflow":"tool/art/workflows/ace.api.json","overrides":ov}),
+                &mut |_| {},
+            )
+        };
+        let ok = run(json!({
+            "$node:4.tags": "lofi, warm keys, 82 bpm",
+            "$node:4.seed": 42,
+            "$node:4.bpm": 82,
+            "$node:4.keyscale": "A minor"
+        }));
+        let typo = run(json!({"$node:4.key": "A minor"}));
+        let prompts = engine.prompts.lock().unwrap().clone();
+        let fetched = engine.fetched.lock().unwrap().clone();
+        install_seam(None);
+
+        let ok = ok.unwrap_or_else(|e| panic!("{e}"));
+        let enc = &prompts[0]["4"]["inputs"];
+        assert_eq!(enc["tags"], "lofi, warm keys, 82 bpm");
+        assert_eq!(enc["seed"], 42);
+        assert_eq!(enc["bpm"], 82);
+        assert_eq!(enc["keyscale"], "A minor");
+        for f in [
+            "acestep_v1.5_xl_turbo_bf16.safetensors",
+            "qwen_0.6b_ace15.safetensors",
+            "qwen_4b_ace15.safetensors",
+            "ace_1.5_vae.safetensors",
+        ] {
+            assert!(
+                fetched.iter().any(|x| x.ends_with(f)),
+                "{f} not fetched: {fetched:?}"
+            );
+        }
+        let outs = ok["outputs"].as_array().unwrap();
+        assert_eq!(outs.len(), 1, "{ok}");
+        assert_eq!(outs[0]["kind"], "audio");
+        let p = outs[0]["path"].as_str().unwrap();
+        assert!(p.ends_with(".flac") && p.contains("/studio/"), "{p}");
+        assert!(outs[0]["bytes"].as_u64().unwrap() > 0);
+        assert!(outs[0]["provenance_path"].is_string());
+
+        let e = typo.unwrap_err();
+        assert!(
+            e.contains("node 4 has no input key") && e.contains("keyscale"),
+            "{e}"
+        );
+    }
+
     /// An unexpected output type is named, never accepted or dropped.
     #[test]
     fn an_unexpected_output_type_fails_by_name() {
@@ -2386,6 +2494,16 @@ mod tests {
             matches!(output_kind("a.exr", b"x"), Err(e) if e.contains("unexpected output type (exr)"))
         );
         assert!(matches!(output_kind("a.mp4", b"x"), Ok(OutputKind::Video)));
+        for ext in ["flac", "mp3", "opus", "wav"] {
+            assert!(
+                matches!(
+                    output_kind(&format!("a.{ext}"), b"x"),
+                    Ok(OutputKind::Audio)
+                ),
+                "{ext}"
+            );
+        }
+        assert!(matches!(output_kind("a.flac", b""), Err(e) if e.contains("empty")));
     }
 
     /// An engine that reports a models dir and a fixed loader list.
