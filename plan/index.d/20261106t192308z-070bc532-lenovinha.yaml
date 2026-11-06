@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: studio-jobs-are-tickets-that-survive-a-lane-restart
+    field: next_action
+    value: 'Implemented (#967, 4cebdc864): studio.queue_workflow returns a ticket at once; studio.job_status reports queued, running, done with outputs, or failed; tickets live on the host and survive a lane restart (a dead owner reads failed: interrupted). Left: a real studio run on hardware.'
+    ts: "2026-11-06T19:23:08Z"
+    host: lenovinha
+    replaces_sha256: "56b3a5d2b5fa629c348c1f20262a73fec5186194aaa19ba6868b63ee43135680"
+
+events:
+  - packet_id: studio-jobs-are-tickets-that-survive-a-lane-restart
+    event:
+      type: note
+      ts: "2026-11-06T19:23:08Z"
+      host: lenovinha
+      summary: |-
+        state what is left
