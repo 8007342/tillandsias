@@ -24256,8 +24256,12 @@ mod tests {
     /// passphrase. The router binds only the socket-only subdirectory.
     /// Pre-fix: FAILS, the router bound `<runtime>/tillandsias:/run/host/tillandsias:rw`.
     fn no_container_binds_the_host_key_home() {
-        let runtime = control_socket_host_dir();
-        let rt = runtime.display().to_string();
+        // The runtime dir comes from process env, which other tests and the
+        // gate's scratch HOME change concurrently (2000-envt). So nothing here
+        // re-reads it: the router's own bind names the runtime dir it saw, and
+        // every check is made against that one value (and the one captured
+        // here, which may differ).
+        let captured = control_socket_host_dir().to_string_lossy().into_owned();
         let certs = PathBuf::from("/tmp/ca");
         let sites: Vec<(&str, Vec<String>)> = vec![
             ("proxy", build_proxy_run_args(&certs, "p:v1")),
@@ -24286,54 +24290,71 @@ mod tests {
                 ),
             ),
         ];
-        // The host side of a `-v src:dst` or a `--mount ...source=src`.
-        fn sources(args: &[String]) -> Vec<String> {
+        // The host side of a `-v src:dst` or a `--mount ...source=src`, with dst.
+        fn binds(args: &[String]) -> Vec<(String, String)> {
             let mut out = Vec::new();
             for w in args.windows(2) {
                 if w[0] == "-v" || w[0] == "--volume" {
-                    out.push(w[1].split(':').next().unwrap_or("").to_string());
+                    let mut it = w[1].split(':');
+                    let src = it.next().unwrap_or("").to_string();
+                    out.push((src, it.next().unwrap_or("").to_string()));
                 } else if w[0] == "--mount" {
+                    let (mut src, mut dst) = (String::new(), String::new());
                     for kv in w[1].split(',') {
                         if let Some(v) = kv
                             .strip_prefix("source=")
                             .or_else(|| kv.strip_prefix("src="))
                         {
-                            out.push(v.to_string());
+                            src = v.to_string();
+                        } else if let Some(v) = kv
+                            .strip_prefix("target=")
+                            .or_else(|| kv.strip_prefix("destination="))
+                            .or_else(|| kv.strip_prefix("dst="))
+                        {
+                            dst = v.to_string();
                         }
                     }
+                    out.push((src, dst));
                 }
             }
             out
         }
-        let mut router_dir = None;
-        for (name, args) in &sites {
-            for src in sources(args) {
-                let src = src.trim_end_matches('/');
-                assert_ne!(
-                    src, rt,
-                    "{name} binds the runtime dir {rt}, which holds keys/"
-                );
-                assert!(
-                    !rt.starts_with(&format!("{src}/")),
-                    "{name} binds {src}, an ancestor of the key home"
-                );
-                assert!(
-                    !src.starts_with(&format!("{rt}/keys")) && !src.contains("ca-key-pass"),
-                    "{name} binds the key home or the passphrase: {src}"
-                );
-                if *name == "router" && src.starts_with(&rt) {
-                    router_dir = Some(src.to_string());
+        let router = &sites.iter().find(|(n, _)| *n == "router").unwrap().1;
+        let socket_src = binds(router)
+            .into_iter()
+            .find(|(_, dst)| dst == "/run/host/tillandsias")
+            .map(|(src, _)| src.trim_end_matches('/').to_string())
+            .expect("the router binds a socket dir at /run/host/tillandsias");
+        let seen = socket_src
+            .strip_suffix(&format!("/{CONTROL_SOCKET_SUBDIR}"))
+            .unwrap_or_else(|| panic!("the router's socket bind {socket_src} is not the {CONTROL_SOCKET_SUBDIR}/ subdirectory"))
+            .to_string();
+        assert!(seen.ends_with("/tillandsias"), "{seen}");
+        for rt in [seen.as_str(), captured.as_str()] {
+            for (name, args) in &sites {
+                for (src, _) in binds(args) {
+                    let src = src.trim_end_matches('/');
+                    assert_ne!(
+                        src, rt,
+                        "{name} binds the runtime dir {rt}, which holds keys/"
+                    );
+                    assert!(
+                        !rt.starts_with(&format!("{src}/")),
+                        "{name} binds {src}, an ancestor of the key home"
+                    );
+                    assert!(
+                        !src.starts_with(&format!("{rt}/keys")) && !src.contains("ca-key-pass"),
+                        "{name} binds the key home or the passphrase: {src}"
+                    );
                 }
             }
         }
+        // The tray serves the socket in the same subdirectory the router binds.
+        let file = control_socket_file();
+        assert_eq!(file.file_name().unwrap(), "control.sock");
         assert_eq!(
-            router_dir.as_deref(),
-            Some(control_socket_dir().display().to_string().as_str()),
-            "the router binds the socket-only subdirectory"
-        );
-        assert_eq!(
-            control_socket_file(),
-            control_socket_dir().join("control.sock")
+            file.parent().unwrap().file_name().unwrap(),
+            CONTROL_SOCKET_SUBDIR
         );
 
         // Every other launch builder in the crate: no source names the bare
