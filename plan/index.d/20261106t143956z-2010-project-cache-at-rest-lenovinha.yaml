@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (opus5), 2026-11-06, on the coordinator's ruling for 2006-srcr.
+packets:
+- packet_id: the-persistent-project-cache-holds-no-plaintext-credential-at-rest
+  order: 2010-r3y5
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge, credentials]
+  estimated_hours: 4
+  title: The persistent project cache cannot keep a plaintext credential at rest
+  context: 'Each forge mounts ~/.cache/tillandsias-project as a persistent, unencrypted volume that survives the forge. Tillandsias writes no credential there, but an agent can: a .env file, a git credential store, an npm or pip token config, or a pasted key. Those then rest in plaintext on the host disk across forges and reboots. That breaks the operator rule that a lost credential beats an unencrypted one at rest. This exists today and was found while ruling on 2006-srcr, whose fix sends build outputs to that cache, with a remedy text that says "build outputs, not secrets". Generic forge capability: every project''s forge has this cache.'
+  exit_criteria:
+  - 'A credential-shaped file an agent writes into the project cache does not rest there in plaintext across a forge restart: it is refused, removed or kept encrypted, and the agent is told which.'
+  - 'Build outputs and tool caches in the project cache keep working across forges.'
+  verifiable_closure: 'A litmus in a real forge that plants a credential-shaped file in the cache, replaces the forge, and finds no plaintext copy, while a build cache survives.'
+  unscoreable: 'none.'
+  next_action: 'List what legitimately persists in the cache today (tool caches, build outputs) and which credential shapes agents and tools write. Then choose between refusing, scrubbing at forge exit, and encrypting at rest, stating the choice and its residual in the row before building.'
+  provenance: lenovinha opus5 2026-11-06 on coordinator macuahuitl-fedora's 2006-srcr ruling.
+  events:
+  - type: filed
+    ts: '2026-11-06T14:39:56Z'
+    host: lenovinha
+    summary: filed p2 ready

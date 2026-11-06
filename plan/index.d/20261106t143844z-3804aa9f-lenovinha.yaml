@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-checkout-has-room-for-worktrees-and-builds
+    event:
+      type: note
+      ts: "2026-11-06T14:38:44Z"
+      agent_id: linux-lenovinha-claude-20261106t143844z
+      host: lenovinha
+      summary: |
+        Choice (lenovinha, before building): a per-forge DISK volume that is wiped, not a larger memory-backed limit.
+
+        Today /home/forge/src is a per-launch tmpfs, sized at 4x the mirror's pack size and clamped to [1536, 4096] MB (tillandsias-core config.rs, compute_hot_budget). A tmpfs size is a cap, not a reservation, and every page written counts in the forge's memory cgroup and in host RAM. A small repo gets the 1.5 GB floor, and kumbia's worktrees and builds filled it.
+
+        Why not more memory:
+        - Art and media pipelines write gigabytes.
+        - A cap tied to host RAM either stays too small on a 16 GB host or lets one forge's checkout push the host into swap or an OOM kill. That trades a named ENOSPC for an unnamed OOM.
+        - It cannot scale with the project.
+
+        Why a wiped disk volume:
+        - It scales with free disk, which is usually far larger than RAM.
+        - It keeps the checkout ephemeral: a podman volume named and labelled per launch is removed when the forge exits, and a launch sweeps any volume a crash left behind, by label, before it creates its own. The replaced forge shows no leftover checkout, which is this row's closure.
+        - No credentials are at rest in it. The checkout carries no tokens; the mirror holds the credential. The disk copy is wiped with the forge.
+
+        Plan:
+        1. A per-launch volume at /home/forge/src in place of the tmpfs, with a label and a launch id, removed on exit and swept at the next launch.
+        2. Before launch, a free-disk floor. If the host lacks the disk, the launch refuses by name with the free and needed bytes, rather than failing later.
+        3. A forge-side check (tillandsias-doctor, and the shell prompt hook) that warns at 85% use of /home/forge/src, naming the path and the largest worktrees or build directories.
+        4. A litmus in a real forge that fills past 1.5 GB and still commits, and shows no leftover volume after the forge is replaced.
+
+        Cost: the checkout's bytes sit on the host's disk, unencrypted, until the forge exits. That is the same class of data as the project's own host checkout, and credentials stay out.
