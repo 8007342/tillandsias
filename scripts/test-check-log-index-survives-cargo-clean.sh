@@ -53,6 +53,9 @@ skip() { skipped=$((skipped + 1)); echo "skip: $1"; }
 # portable default; either way one tree, removed on exit.
 SCRATCH_ROOT="$("$ROOT/scripts/scratch-dir.sh" fixtures 2>/dev/null)" || SCRATCH_ROOT="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$SCRATCH_ROOT/check-log-index.XXXXXX")" || { echo "FAIL: mktemp"; exit 1; }
+# macOS $TMPDIR ends in "/", so the path above holds "//"; the resolver's own
+# `pwd` collapses it, so compare against the same normalized form.
+W="$(cd "$W" && pwd)"
 trap 'rm -rf "$W"' EXIT INT TERM
 
 # A tree with the resolver (and the reader) in place, and a legacy index.
