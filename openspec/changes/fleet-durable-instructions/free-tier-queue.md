@@ -1,5 +1,11 @@
 # Addendum — the agent message queue on the Free plan (order 2011-amqd)
 
+> **Superseded in part by `fuzzy-context-cache.md` (revision 8, operator ruling
+> 2026-11-06).** Its store (Queues), delivery (leases, receipts, DLQ) and budget
+> no longer apply: the operator set a soft goal under 1 % of each free quota,
+> which Queues cannot meet. The sections below stay as the record of what was
+> weighed. Sections that still apply are named in revision 8 §5.
+
 Status: **proposed, design only. Revision 7** (the operator ruled 2026-11-06
 to stretch Cloudflare usage much further; immediate responses are not needed).
 Built on revision 6, after the operator's rulings of
