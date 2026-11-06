@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-fleet-queue-path-is-measured-on-the-real-cloudflare-api-before-it-is-relied-on
+    field: status
+    value: ready
+    ts: "2026-11-06T19:01:45Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-fleet-queue-path-is-measured-on-the-real-cloudflare-api-before-it-is-relied-on
+    event:
+      type: note
+      ts: "2026-11-06T19:01:45Z"
+      host: lenovinha
+      summary: |-
+        operator approved section 13 (2026-11-06); real API use within the design limits
