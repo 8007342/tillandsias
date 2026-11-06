@@ -37,16 +37,17 @@ Nothing is filed until the operator answers the open questions in
 - [ ] 5.1 Add harness framing for instructions (author and source), with a
       fixture showing that an instruction cannot approve a consent-gated action.
 
-## 2011-amqd: free-tier queue (free-tier-queue.md §10)
+## 2011-amqd: free-tier queue (free-tier-queue.md §11, revision 4)
 
-- [ ] a. Budget fixture first (runtime-measured rows, DO requests, alarms; crash-loop client)
-- [ ] b. Drop AUTOINCREMENT, trim by indexed range, coalesce sweeps
-- [ ] c. Server-side caps: in-memory bucket, per-identity daily cap, per-account guard
-- [ ] d. DO limit errors as JSON 503 with Retry-After; 64 KiB body cap; CPU measured
-- [ ] e. Fleet-identity allowlist, stale-cert cap, preview_urls = false
-- [ ] f. Instructions: put / take (lease token, deliveries) / settle / release
-- [ ] g. Client: idle floor, persisted state, out-of-budget handling, jittered backoff, cache
-- [ ] h. Host proxy reads the token from Vault; forge env-var refusal litmus
-- [ ] i. Seed prompt
-- [ ] j. cloud.usage reads DO requests and rows written
-- [ ] k. Operator-gated deploy (1830-hzsc extended)
+- [ ] a. Fixture first: fake Queues and KV REST counting every request type and queue operation; budgets; crash-loop host
+- [ ] b. Measure the wake path: does a lane notification reach the model in Claude Code and OpenCode, idle and busy
+- [ ] c. Queue client: push, pull (batch 1, lease), ack by lease_id, 429 / retry-after, per-host daily budget
+- [ ] d. Host poller: per-host queues and -any, 2 to 60 min backoff, resets
+- [ ] e. Queue to lane inbox: ack after fsync; dedupe by id
+- [ ] f. Wake: deterministic routing plus the path b proved
+- [ ] g. Warm plan cache: single writer, KV throttle, freshness
+- [ ] h. Credentials: forge env-refusal litmus first, then Vault host proxy, then remove env path
+- [ ] i. Generic: [fleet] seeding, create with consent, relay URL as config, bring-your-own client or token
+- [ ] j. Real API: scope ids from GET /oauth/scopes, empty-pull cost, refusals, attempts (operator)
+- [ ] k. Optional local classifier, measured on a low-end host
+- [ ] l. Retire cloud/coordinator after j

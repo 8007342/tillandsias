@@ -131,65 +131,80 @@ beyond the coordinator's existing heartbeat, and SHALL NOT shorten it.
 - **WHEN** a host has no running forge and no pushes
 - **THEN** it makes no instruction calls beyond the existing heartbeat
 
-### Requirement: the queue stays inside a stated Free-plan budget, enforced on the server
+### Requirement: messages travel through a named Cloudflare queue over the account API, with no public endpoint
 
-The coordinator SHALL run on the Cloudflare Free plan only. It SHALL enforce a
-per-identity daily request cap and a per-account guard on the server, because a
-client limiter cannot bind a crashed, looping or compromised client. At a cap
-it SHALL answer 429 with `Retry-After` at the next 00:00 UTC. When a Durable
-Object limit is reached it SHALL answer JSON 503 with `Retry-After`, never an
-HTML error page. (order 2011-amqd)
+Fleet messages SHALL be pushed to, pulled from and acked on a Cloudflare Queue
+named in the project's committed `.tillandsias/config.toml`, through the
+Cloudflare REST API with the user's token, held on the host. There SHALL be no
+Worker, route or public URL on this path, and no name, domain or account of the
+Tillandsias project SHALL be hard-coded. (order 2011-amqd)
 
-#### Scenario: a client restarted in a loop
+#### Scenario: another account's token
 
-- **WHEN** one identity's `coord` is started 1 000 times in a row
-- **THEN** the server refuses it with 429 once it reaches its daily cap, and
-  the fixture's counted Worker requests for that identity stay at the cap
+- **WHEN** a pull or push is made with a token of another Cloudflare account,
+  or with no token
+- **THEN** Cloudflare refuses it, and nothing is read or written
 
-#### Scenario: the budget fixture
+### Requirement: each addressee host has its own queue, and the host acks only after a durable local write
 
-- **WHEN** the fixture runs 15 clients for an idle hour and a busy hour against
-  the local runtime with a fake clock
-- **THEN** the counted Worker requests, Durable Object requests and rows written
-  stay under the stated budgets, or the fixture fails naming the one exceeded
+Messages SHALL be pushed to a queue per (project, host), or to a project `-any`
+queue, so that no host ever retries a message to route it. A host SHALL pull
+with a batch size of 1 and SHALL ack a message by its lease id only after
+writing it durably into the addressee lane's local inbox. A message whose lease
+ran out SHALL be delivered again with the same envelope `id`, and the lane inbox
+SHALL drop a duplicate `id`. A queued message's TTL SHALL NOT exceed the
+queue's retention (24 h on the Free plan). (order 2011-amqd)
 
-### Requirement: a client honours server limits and backs off
+#### Scenario: the host dies between pull and ack
 
-A client SHALL cache reads for at least 5 s per namespace, persist its daily
-count and backoff state across processes, never poll faster than its idle
-floor, honour `Retry-After`, treat an HTML or Cloudflare error-page body as
-out-of-budget until 00:00 UTC by the server's `Date` (plus a jitter), and back
-off exponentially with full jitter on network and 5xx errors. (order 2011-amqd)
+- **WHEN** a host pulls a message, writes it into the lane inbox, and dies
+  before acking
+- **THEN** the message is pulled again after its lease, the lane inbox keeps a
+  single copy by `id`, and the agent sees it once
 
-#### Scenario: the Cloudflare daily limit
+### Requirement: only the host polls, with backoff, and an agent never polls on a timer
 
-- **WHEN** the Worker answers with Cloudflare's Error 1027 page instead of JSON
-- **THEN** the client stops calling until the server's next 00:00 UTC plus a
-  jitter, and serves from the git-ledger fallback meanwhile
+Only one poller per host SHALL pull its own queues, and the project `-any`
+queue only while it has an idle lane of that project. Empty pulls SHALL back
+off exponentially with jitter from 2 minutes to a 60-minute ceiling, and a
+delivered message, a local send or a lane start SHALL reset it. Every request
+type SHALL be counted against a per-user budget, and the host SHALL honour 429
+and `retry-after`. An agent SHALL NOT poll its queue or inbox on a timer.
+(order 2011-amqd)
 
-### Requirement: only the fleet's identities reach the queue, and no credential sits in a forge
+#### Scenario: an idle day
 
-The Worker SHALL refuse a request without a valid Access JWT for the team and
-application, and SHALL refuse a valid JWT whose identity is not on the fleet
-allowlist. Its workers.dev and preview URLs SHALL be disabled and its route
-SHALL fail closed. A forge SHALL never hold the host's service token; only the
-host-side proxy SHALL read it, from Vault, per call. (order 2011-amqd)
+- **WHEN** a host with one live lane sees no messages for 24 hours
+- **THEN** it makes about 28 pulls per queue, and the fixture's counted
+  requests stay under the stated budget
 
-#### Scenario: an identity outside the fleet
+### Requirement: the wake path is measured before it is relied on
 
-- **WHEN** a request carries a valid JWT from the right team whose identity is
-  not on the allowlist
-- **THEN** it is refused with 403 and no Durable Object is called
+The host SHALL route a message to a lane by its queue and address before
+anything else; a model SHALL be consulted only for judgement among several
+lanes, and the local classifier SHALL be off by default until measured on the
+smallest supported host. Whether a lane notification reaches the model of each
+supported harness while it is idle SHALL be measured before it is used to wake
+an agent; where it does not, the host SHALL wake the lane through the harness's
+own prompt or relaunch path. (order 2011-amqd)
 
-### Requirement: a settle requires the current lease
+#### Scenario: a harness that ignores notifications while idle
 
-`take` SHALL return a fresh lease token and increment a `deliveries` count, and
-`settle` and `release` SHALL require that token. A settle by a former holder
-whose lease expired SHALL change nothing, and a settle after TTL SHALL answer
-`expired`. (order 2011-amqd)
+- **WHEN** the measurement shows a harness does not surface a lane
+  notification to an idle model
+- **THEN** the host wakes that lane by its relaunch-with-prompt path instead,
+  and no agent polls
 
-#### Scenario: a late settle by a former holder
+### Requirement: a plan warm cache is a rebuildable hint, never the record
 
-- **WHEN** holder A's lease expires, B takes the instruction, and A then settles
-- **THEN** A's settle answers `not-holder`, the instruction stays with B, and
-  B's later settle removes it
+The host SHALL keep a compact project overview (at most 64 KiB) in a named KV
+namespace, written at most once per 10 minutes after a successful push. Each
+overview SHALL carry its git `synced_sha`. A reader SHALL mark it possibly
+outdated when the mirror's head differs, and SHALL be able to rebuild it from
+the ledger at any time. (order 2011-amqd)
+
+#### Scenario: a lost cache
+
+- **WHEN** the overview key is missing or older than the mirror's head
+- **THEN** the forge starts from the ledger, and the next push rewrites the
+  overview

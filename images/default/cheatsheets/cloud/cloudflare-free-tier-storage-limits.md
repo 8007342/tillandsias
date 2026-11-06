@@ -126,6 +126,55 @@ specifically, and running with no login at all, are **implied, not stated**.
   location. The 429 in its examples is returned by **your** code.
 - WAF rate limiting rules on Free count by IP only.
 
+## REST access without a Worker (read 2026-11-06)
+
+- **No REST endpoint invokes a Worker or calls a Durable Object:** not found on
+  an official page. A Worker with no route runs only from its handlers (fetch,
+  scheduled, queue, email, tail, alarm, connect),
+  <https://developers.cloudflare.com/workers/runtime-apis/handlers/>.
+- **Queues HTTP pull consumer**
+  (<https://developers.cloudflare.com/queues/configuration/pull-consumers/>):
+  - `POST /accounts/{id}/queues/{queue_id}/messages/pull` with
+    `visibility_timeout_ms` and `batch_size`: "`visibility_timeout` (defaults to
+    30 second; max 12 hours)", "`batch_size` (defaults to 5; max 100)".
+  - `POST …/messages/ack` takes "an array of `lease_id` objects to acknowledge
+    and/or retry". "A `lease_id` is no longer valid once this timeout has been
+    reached."
+  - It is short polling: "Queues does not hold an open connection".
+  - It needs `queues#read` and `queues#write`: "A consumer must be able to
+    write to a queue to acknowledge messages."
+- **Queues push over REST:** `POST /accounts/{account_id}/queues/{queue_id}/messages`
+  "Pushes a message to a Queue". Accepted permissions are "`Queues Write`
+  `Workers Scripts Write`" (API reference). One older page still says "To send
+  and receive messages, you must use a Worker"; the endpoints above contradict
+  it.
+- **KV over REST:** `PUT …/storage/kv/namespaces/{id}/values/{key}` takes
+  `expiration_ttl` ("Must be at least 60"). REST writes count against the
+  Free plan: "Writing 5,000 keys via the REST API incurs the same write costs
+  as making 5,000 `PUT` calls in a Worker" (KV pricing).
+- **D1 over REST:** `POST /accounts/{id}/d1/database/{id}/query`. Multiple
+  statements "will be executed as a batch". D1's own guidance says the "REST
+  API primarily interacts with the control plane". Whether a REST batch is
+  atomic is not stated.
+- **API rate limit**
+  (<https://developers.cloudflare.com/fundamentals/api/reference/limits/>):
+  - "Client API per user/account token | 1200/5 minutes", applied
+    "cumulatively regardless of whether the request is made via the
+    dashboard, API key, or API token".
+  - Over the limit, "all API calls for the next five minutes will be
+    blocked, receiving a `HTTP 429`", with a `retry-after` header.
+- **Permissions**
+  (<https://developers.cloudflare.com/fundamentals/api/reference/permissions/>):
+  - The names are "D1 Read/Edit", "Queues Read/Edit" and "Workers KV Storage
+    Read/Edit".
+  - They are account-scoped. No per-queue or per-namespace scoping is
+    documented.
+  - No list of OAuth scope names was found on an official page.
+- **Workers AI on Free**
+  (<https://developers.cloudflare.com/workers-ai/platform/pricing/>):
+  - "10,000 Neurons per day at no charge".
+  - `@cf/meta/llama-3.2-1b-instruct` costs "2457 neurons per M input tokens".
+
 ## Not found on an official page (open)
 
 - How many Access seats Zero Trust Free includes.
