@@ -471,6 +471,8 @@ specs:
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
+  - litmus:forge-impact-plan-cli
+  - litmus:forge-impact-plan-in-image
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
