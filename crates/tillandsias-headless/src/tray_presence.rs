@@ -193,7 +193,14 @@ mod tests {
     use super::*;
 
     fn scratch(tag: &str) -> PathBuf {
-        let d = PathBuf::from("/dev/shm").join(format!("trsp-{tag}-{}", std::process::id()));
+        // /dev/shm on Linux; macOS has none, so its temp dir.
+        let shm = PathBuf::from("/dev/shm");
+        let root = if shm.is_dir() {
+            shm
+        } else {
+            std::env::temp_dir()
+        };
+        let d = root.join(format!("trsp-{tag}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d
     }
@@ -257,6 +264,49 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Leave `path` as a dead tray leaves it: a socket file whose listener
+    /// lived and died in another process.
+    ///
+    /// 2001-sock: the listener must never exist in THIS process. A listener
+    /// bound and dropped here is copied into every child a parallel test forks
+    /// before that child's exec, and while a copy lives, connect succeeds on
+    /// the "dead" socket (measured: 5718 of 20000 trials with 8 spawning
+    /// threads, 0 of 20000 with none). A child that binds, listens and exits
+    /// holds the only copy, so the socket is dead once it is reaped.
+    fn stale_socket_from_a_dead_process(path: &Path) {
+        use std::os::unix::ffi::OsStrExt as _;
+        let bytes = path.as_os_str().as_bytes();
+        // SAFETY: all-zero is a valid sockaddr_un; built before the fork so
+        // the child only makes syscalls.
+        let mut addr: libc::sockaddr_un = unsafe { std::mem::zeroed() };
+        assert!(bytes.len() < addr.sun_path.len(), "socket path too long");
+        addr.sun_family = libc::AF_UNIX as libc::sa_family_t;
+        for (dst, src) in addr.sun_path.iter_mut().zip(bytes) {
+            *dst = *src as libc::c_char;
+        }
+        let len = std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
+        // SAFETY: the child calls only async-signal-safe functions, then _exit.
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0, "fork failed");
+        if pid == 0 {
+            unsafe {
+                let fd = libc::socket(libc::AF_UNIX, libc::SOCK_STREAM, 0);
+                let ok = fd >= 0
+                    && libc::bind(fd, (&raw const addr).cast(), len) == 0
+                    && libc::listen(fd, 1) == 0;
+                libc::_exit(if ok { 0 } else { 1 });
+            }
+        }
+        let mut status = 0;
+        // SAFETY: pid is our own child.
+        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert!(
+            libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0,
+            "the child could not bind {}",
+            path.display()
+        );
+    }
+
     /// A stale socket file (its tray died) is replaced; the guard only
     /// protects a socket that answers.
     #[test]
@@ -264,9 +314,11 @@ mod tests {
         let dir = scratch("stale");
         std::fs::create_dir_all(&dir).unwrap();
         let sock = dir.join("control.sock");
-        drop(bind_control_socket(&sock).unwrap());
+        stale_socket_from_a_dead_process(&sock);
         assert!(sock.exists(), "the dead listener left its file");
-        assert!(bind_control_socket(&sock).is_ok());
+        if let Err(e) = bind_control_socket(&sock) {
+            panic!("a dead tray's socket must be replaced: {e}");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 
