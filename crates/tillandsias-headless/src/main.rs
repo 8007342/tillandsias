@@ -4644,13 +4644,18 @@ fn ca_trust_is_usable(crt: &Path) -> bool {
 }
 
 /// ORDER 1762-bano: the enclave certificates that stay valid for less than
-/// `margin_secs`, by name ("ca", "vault-leaf"). A missing or unreadable one
-/// counts as expiring.
+/// `margin_secs`, by name ("ca", "vault-leaf"). A present but unreadable one
+/// counts as expiring. 2003-kypa: a MISSING one is not expiring: it is minted
+/// at the next launch, and "Restart Tillandsias to renew" for a leaf a Vault
+/// that never launched does not have was the wrong message.
 #[cfg(feature = "tray")]
 pub(crate) fn expiring_enclave_certs(certs_dir: &Path, margin_secs: u64) -> Vec<&'static str> {
     [("ca", "intermediate.crt"), ("vault-leaf", "vault.crt")]
         .into_iter()
-        .filter(|(_, file)| !cert_valid_for(&certs_dir.join(file), margin_secs))
+        .filter(|(_, file)| {
+            let path = certs_dir.join(file);
+            path.exists() && !cert_valid_for(&path, margin_secs)
+        })
         .map(|(name, _)| name)
         .collect()
 }
@@ -4955,13 +4960,24 @@ mod ca_refresh_margin_tests {
         assert!(ca_bundle_needs_refresh(&crt, &key));
     }
 
-    // 1762-bano: inside 72 h is named (the warning arm), a year is not; a
-    // missing Vault leaf counts as expiring.
+    // 1762-bano: inside 72 h is named (the warning arm), a year is not.
+    // 2003-kypa: a missing Vault leaf is NOT expiring (it is minted at the
+    // next launch); a present one inside 72 h is.
     #[cfg(feature = "tray")]
     #[test]
     fn enclave_certs_inside_seventy_two_hours_are_named_as_expiring() {
         let tmp = tempfile::tempdir().unwrap();
         mint(tmp.path(), 2);
+        assert_eq!(
+            expiring_enclave_certs(tmp.path(), 72 * 60 * 60),
+            vec!["ca"],
+            "a missing vault.crt is not named"
+        );
+        std::fs::copy(
+            tmp.path().join("intermediate.crt"),
+            tmp.path().join("vault.crt"),
+        )
+        .unwrap();
         assert_eq!(
             expiring_enclave_certs(tmp.path(), 72 * 60 * 60),
             vec!["ca", "vault-leaf"]
