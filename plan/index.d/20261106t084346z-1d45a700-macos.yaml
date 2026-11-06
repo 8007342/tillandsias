@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-gate-grep-that-fails-refuses-instead-of-passing
+    event:
+      type: progress
+      ts: "2026-11-06T08:43:46Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        2007-vy3p criteria 2 and 3 on work/2007-vy3r (tlatoanis-macbook-air, macOS 27.0.1 BSD grep, trunk at branch time):
+        (2) scripts/lua/check-grep-patterns-compile.lua compiles every literal single-quoted grep pattern in scripts/*.sh and scripts/hooks/* under the host grep: all ERE patterns in one -f file and all BRE in another, bisected one by one only when a file exits 2 (2608 patterns in about 1 s, inside the door deadline). -F patterns and '"'"' splices are skipped. Registered in build.sh beside the manifest-dir step, with test-grep-exit-two-fails-closed.lua (which #952 had not registered). Today: ok:grep-patterns-compile:2608 patterns. Arm 5 proves it refuses '^(|## x)$' and accepts '^(## x)?$'.
+        (3) CLASSIFIED: of the 502 positive `if grep` sites, 18 are in guards (scripts/check-*.sh); the rest are fixtures and tooling. Of the 18: 9 read stdin or a herestring (exit 2 only from a bad pattern, now caught by the decider), 8 read a file but their then-branch counts or reports ok (exit 2 falls to the refusing or uncounted branch), and ONE read a file and refused on a match: check-mo-full-attestations.sh's exempt-README marker check, where an unreadable README was passed unchecked. Fixed: exit 2 refuses by name; arm 6 shows the HEAD form answered ok and the fix refuses.

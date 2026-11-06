@@ -5113,6 +5113,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
         exit 1
     fi
+    # 2000-camv: the one host-services INTEGRATION test the gate runs. The
+    # --workspace pass builds integration tests with default features, where
+    # --cloud-usage is not compiled, so this fixture (a read must never mint
+    # the operator's CA) only blocks when it is run here, by name.
+    _step "Running --cloud-usage never-mints fixture (2000-camv)..."
+    _cu_rc=0
+    _run cargo test -p tillandsias-headless --test cloud_usage_never_mints \
+        --features tray,listen-vsock --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee -a "$_fg_transcript" || _cu_rc="${PIPESTATUS[0]}"
+    if [[ $_cu_rc -ne 0 ]]; then
+        _error "fail:cloud-usage-never-mints: --cloud-usage changed the CA directory or did not run (cargo rc=$_cu_rc) — transcript: $_fg_transcript"
+        _error "  why: a read-only command that mints replaces the host CA under a running Vault, and every tray read then fails TLS verification"
+        _error "  remedy: keep --cloud-usage read-only (set_read_only_process) and re-run: cargo test -p tillandsias-headless --test cloud_usage_never_mints --features tray,listen-vsock"
+        exit 1
+    fi
     # CRITERION 2: state how many actually RAN, so "ran 0 because the feature
     # was off" is distinguishable from "ran and passed". A pass that silently
     # executes nothing is the failure this packet exists to close, and it has
@@ -5884,6 +5899,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # (it drops the env-dep it set itself). Refuses a new site in test code
     # beyond its per-file floor and prints the count; the fixture shows the
     # defect on a real cargo (two copies, one target) and the guard's arms.
+    # ORDER 2007-vy3p — a grep pattern this host's grep cannot compile makes
+    # grep exit 2, and `if grep -q` reads exit 2 as a clean miss: the check
+    # passes without having run (2006-wahn: BSD grep rejected the attestation
+    # grammar's '^(|...' and the plan-only lane admitted every line). Compiles
+    # every literal pattern in scripts/ and the hooks under THIS grep; the
+    # fixture also proves the push and purge gates refuse on exit 2.
+    _step "Checking every literal grep pattern compiles under this grep (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/check-grep-patterns-compile.lua" 2>&1; then
+        _error "a grep pattern does not compile under this host's grep — a gate using it would pass without running (2007-vy3p)"
+        exit 1
+    fi
+    _step "Checking gate greps fail closed on exit 2 (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/test-grep-exit-two-fails-closed.lua" 2>&1; then
+        _error "a gate grep reads exit 2 as a pass — see the FAIL lines above (2007-vy3p)"
+        exit 1
+    fi
     _step "Checking for new compile-time CARGO_MANIFEST_DIR paths in tests (1590-j20f)..."
     if ! _run_lua_decider "scripts/lua/check-manifest-dir-env.lua" 2>&1; then
         _error "a test reads a fixture through compile-time env!(\"CARGO_MANIFEST_DIR\") — use std::env::var(\"CARGO_MANIFEST_DIR\") at runtime (1590-j20f)"

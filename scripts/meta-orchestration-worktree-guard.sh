@@ -142,8 +142,15 @@ load_state() {
         requested="$1"
         local retired_stamp superseded=0
         retired_stamp="$(stamp_path boundary-retired 2>/dev/null || true)"
+        # The stamp holds the CANONICAL path (snapshot resolves it with pwd -P),
+        # and the requested directory is gone, so canonicalize its parent: on
+        # macOS $TMPDIR is /var/..., which resolves to /private/var/....
+        local requested_canon=""
+        requested_canon="$(cd "$(dirname "$requested")" 2>/dev/null && pwd -P)/$(basename "$requested")" \
+            || requested_canon=""
         if [[ -n "$retired_stamp" && -f "$retired_stamp" ]] \
-            && grep -Fqx "$requested" "$retired_stamp"; then
+            && { grep -Fqx "$requested" "$retired_stamp" \
+                || { [[ -n "$requested_canon" ]] && grep -Fqx "$requested_canon" "$retired_stamp"; }; }; then
             superseded=1
         fi
         if [[ "$superseded" -eq 1 ]]; then

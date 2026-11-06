@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from kumbia-forge's catalogue; written for any project.
+packets:
+- packet_id: an-agent-in-any-forge-can-inspect-the-cache-and-the-impact-of-a-change
+  order: 2005-ccli
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 3
+  title: The tillandsias-cache and impact commands are available inside the forge image
+  context: 'Forge agents asked for the cache and impact tools from inside the forge and could not reach them. Generic forge capability; kumbia-kombat reported it, and it must also serve other projects. Check what the commands are called on trunk before building, and report if one does not exist yet.'
+  exit_criteria:
+  - 'In a freshly built forge image, each command runs without a host checkout and answers its help and one real query, for a project that is not tillandsias.'
+  - 'Run outside a forge or with no project cache, each command names what is missing and exits nonzero rather than reporting an empty result as success.'
+  verifiable_closure: 'A litmus that runs both commands in the built forge image.'
+  unscoreable: 'none.'
+  next_action: 'Locate the commands on trunk, then write the failing image litmus. Credentials stay out of the image.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge catalogue.
+  events:
+  - type: filed
+    ts: '2026-11-06T01:00:00Z'
+    host: macuahuitl
+    summary: filed p2 ready

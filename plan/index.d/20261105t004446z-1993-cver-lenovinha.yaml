@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-05, coordinator-assigned (release build cache, read from run 41788810048).
+packets:
+- packet_id: a-release-version-bump-leaves-cargo-lock-and-the-crane-deps-derivations-unchanged-so-a-warm-release-reuses-its-dependency-builds
+  order: 1993-cver
+  status: in_progress
+  kind: perf
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [release, nix, crane, versioning, build-time]
+  estimated_hours: 4
+  title: A release version bump leaves Cargo.lock and the crane deps derivations unchanged, so a warm release reuses its dependency builds
+  context: 'Run 41788810048 (v56.11.4.1): the Linux Nix build step took 28 min 48 s with a Nix cache restore. The primary key hash(flake.lock, Cargo.lock) missed; the only Cargo.lock change since v56.11.3.1 was the release bumping four workspace crate versions, a Cargo.lock edit, which flake.nix 765-8hc3 records as moving the deps drv. All 7 cargo-package-deps derivations rebuilt (~15-16 min of the step by log timestamps). Proven locally (containerized nix 2.24.10): a --bump-build moved the plan and headless deps drvs (j3n7 -> k3kg, cbm8 -> fncf) on trunk; on this branch the same bump changes only VERSION and the deps drvs stay i1pjdz76 / 7z4czf5l.'
+  exit_criteria:
+  - 'check-nix-deps-stability.sh has a version-bump arm. Pre-fix result: FAILS on trunk, violation:nix-deps-churn-on-version-bump.'
+  - 'A local bump-version --bump-build changes only VERSION and leaves the deps drv hashes unchanged.'
+  - 'Every reader of the crate version reads VERSION instead (enumerated in the PR).'
+  - 'EXPECTATION, not yet measured: ~15 min less on a warm release cut; macuahuitl measures it on the next cut.'
+  verifiable_closure: 'bash scripts/check-nix-deps-stability.sh; the next release run timing.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs nix; the saving needs a real cut (1136-n8sh).'
+  related: [765-8hc3]
+  next_action: 'Land; macuahuitl measures the next cut.'
+  provenance: coordinator macuahuitl-fedora 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-05T00:44:46Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

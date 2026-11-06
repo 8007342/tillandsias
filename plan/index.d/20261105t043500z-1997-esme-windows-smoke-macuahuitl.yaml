@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from the operator's fresh Windows install and esme-windows-forge's smoke of v56.11.4.1.
+packets:
+- packet_id: windows-tray-opencode-web-menu-items-open-something-or-say-why-not
+  order: 1997-wocw
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags: [windows, tray, opencode, browser]
+  estimated_hours: 3
+  title: Windows tray OpenCode Web menu items open something or say why not
+  context: 'Operator on a fresh Windows install chose OpenCode Web and nothing ever launched. In crates/tillandsias-windows-tray/src/notify_icon.rs the OpenOpenCodeWeb and ProjectOpenCodeWeb actions only log "browser action: no URL until the VM + router are up (gui-passthrough pending)", at v56.11.4.1 and on linux-next. That the operator hit this arm is the likely cause, not yet confirmed from their tray.log.'
+  exit_criteria:
+  - 'On Windows, choosing OpenCode Web either opens the app or shows the user a message saying why it cannot. Pre-fix result: FAILS, only a log line.'
+  verifiable_closure: 'Choose OpenCode Web on a Windows tray and observe a window or a visible message.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs a real Windows tray.'
+  next_action: 'Read the operator tray.log to confirm the arm, then decide between the dev-browser path and a visible refusal.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T04:35:00Z'
+    host: macuahuitl
+    summary: filed p1 ready
+- packet_id: browser-open-on-a-fresh-install-does-not-fail-on-a-missing-preview-ca-and-its-port-guidance-agrees-with-its-allowlist
+  order: 1997-bpca
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [browser, windows, tls]
+  estimated_hours: 2
+  title: browser.open on a fresh install does not fail on a missing preview CA, and its port guidance agrees with its allowlist
+  context: 'esme-windows-forge, tray 56.11.4.1+0b81b4d6dc70f4d3, freshly formatted laptop, preview stopped. https://www.tillandsias.localhost:8080/ gave BROWSER_LAUNCH_FAILED "the preview CA certificate is unreadable: No such file or directory". https://www.tillandsias.localhost:18443/ gave URL_NOT_ALLOWED "port must be 8080 (got Some(18443))", while the tool description uses 18443 as its example, and the http form told the caller to use https on the preview port. Whether a running preview would create the CA is untested.'
+  exit_criteria:
+  - 'browser.open on a fresh install with no preview running creates the CA or returns a refusal naming the next step. Pre-fix result: FAILS with a raw os error.'
+  - 'The URL in the tool description and the URL in each refusal are accepted by the allowlist.'
+  verifiable_closure: 'cargo test -p tillandsias-browser-mcp, plus one browser.open on a fresh install.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs a fresh install for the live half.'
+  next_action: 'Check where the CA is created and when; align the description with the allowlist.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T04:35:00Z'
+    host: macuahuitl
+    summary: filed p1 ready
+- packet_id: windows-install-that-needs-wsl-says-restart-to-finish-and-finishes-after-the-restart
+  order: 1997-wwsl
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags: [windows, installer, wsl]
+  estimated_hours: 2
+  title: A Windows install that needs WSL says restart to finish, and finishes after the restart
+  context: 'Operator on a freshly formatted laptop: the irm|iex install failed on missing WSL and the error prompted a restart. The tray launched after the restart. The exact text was not captured.'
+  exit_criteria:
+  - 'On a machine without WSL, the installer presents the restart as a step, not a failure, and the install completes after it with no second command, or says exactly what to run. Pre-fix result: reported as a failure.'
+  verifiable_closure: 'Run the installer on a Windows machine without WSL enabled.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs a Windows machine without WSL.'
+  next_action: 'Read the installer WSL branch and capture its current text.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T04:35:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: experts-healthy-agrees-with-the-launch-log-on-a-floor-tier-forge
+  order: 1997-exph
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [experts, forge, floor-tier]
+  estimated_hours: 2
+  title: experts-healthy agrees with the launch log on a floor-tier forge
+  context: 'esme-windows-forge, 4 cores, 7.6 GiB: /tmp/forge-lifecycle.log says "experts | degraded (build-timeout): cargo build exceeded 600s" and "expert-serve | skipped (no-binary)", while check-fleet-membership.sh prints ok:experts-healthy. A launch that runs a 600 s cargo build on a floor-tier host also works against the seconds-on-warm-forge goal.'
+  exit_criteria:
+  - 'With the launch log reporting degraded experts, the membership check does not print ok. Pre-fix result: FAILS.'
+  - 'A floor-tier forge launch does not start a cargo build it cannot finish.'
+  verifiable_closure: 'Run the membership check against a fixture lifecycle log reporting degraded.'
+  unscoreable: 'unpinnable-until-the-guard-exists: fixture to be written with the fix.'
+  next_action: 'Read what experts-healthy actually probes.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T04:35:00Z'
+    host: macuahuitl
+    summary: filed p2 ready

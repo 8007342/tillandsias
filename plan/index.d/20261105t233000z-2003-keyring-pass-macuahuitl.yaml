@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from lenovinha's code reading; not yet proven live.
+packets:
+- packet_id: a-failed-keyring-read-makes-the-ca-key-unavailable-not-fresh
+  order: 2003-kypa
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [vault, credentials]
+  estimated_hours: 3
+  title: A failed keyring read leaves the at-rest CA passphrase unavailable instead of generating a fresh one
+  context: 'In ca_key_store::at_rest the passphrase falls back to a fresh random value when the durable keyring read fails, for example on a locked keyring or with no session bus, and it is cached for the process. The process then cannot decrypt the key at rest, and anything it writes is sealed with a passphrase nobody keeps. Suspected, unproven, as a cause of repeated CA replacement on macuahuitl on 2026-11-05. No plaintext fallback is allowed.'
+  exit_criteria:
+  - 'With a stub keyring that fails on first read and then recovers, the process reports the passphrase unavailable, writes no key material, and reads the existing key once the keyring recovers, with the CA directory byte-identical throughout.'
+  - 'A first run with a working keyring that holds no passphrase still creates one and stores it.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features ca_key_store plus a real locked-keyring run on a Linux host.'
+  unscoreable: 'none.'
+  next_action: 'Distinguish keyring read failed from keyring has no entry, and remove the process-lifetime caching of a failed read. Write the failing test first.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from lenovinha-silverblue.
+  events:
+  - type: filed
+    ts: '2026-11-05T23:30:00Z'
+    host: macuahuitl
+    summary: filed p1 ready

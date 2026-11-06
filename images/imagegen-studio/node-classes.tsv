@@ -40,6 +40,7 @@ comfyui-core	TextEncodeQwenImageEditPlus
 comfyui-core	CFGNorm
 comfyui-core	EmptyFlux2LatentImage
 comfyui-core	Flux2Scheduler
+comfyui-core	FluxKontextMultiReferenceLatentMethod
 comfyui-core	ReferenceLatent
 comfyui-core	WanVaceToVideo
 comfyui-core	TrimVideoLatent
@@ -215,3 +216,11 @@ ComfyUI_BiRefNet_ll	RembgByBiRefNet
 ComfyUI_BiRefNet_ll	RembgByBiRefNetAdvanced
 ComfyUI_BiRefNet_ll	GetMaskByBiRefNet
 ComfyUI_BiRefNet_ll	BlurFusionForegroundEstimation
+# 2007-acst: ACE-Step 1.5 text-to-music and the core audio savers (comfy_extras/nodes_ace.py, nodes_audio.py at the pinned v0.40.0).
+comfyui-core	TextEncodeAceStepAudio1.5
+comfyui-core	EmptyAceStep1.5LatentAudio
+comfyui-core	VAEDecodeAudio
+comfyui-core	SaveAudio
+comfyui-core	SaveAudioMP3
+comfyui-core	SaveAudioOpus
+comfyui-core	SaveAudioAdvanced

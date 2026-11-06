@@ -11,6 +11,9 @@
 #
 # @trace spec:browser-isolation-tray-integration, spec:default-image, spec:environment-runtime, spec:secrets-management, spec:simplified-tray-ux
 
+# 2004-in3v: the start of the forge-entry-total span (bash 5 in the image).
+FORGE_ENTRY_T0_US="${EPOCHREALTIME//[.,]/}"
+
 source /usr/local/lib/tillandsias/lib-common.sh
 
 # @trace gap:ON-008
@@ -66,16 +69,28 @@ trace_lifecycle "entrypoint" "opencode web starting"
 # @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 # Shared project materialization routine. It uses a host-mounted project when
 # the launcher provides one, otherwise it clones from the git mirror.
+forge_step_mark
 clone_project_from_mirror
+forge_step_done clone
 
 # ── OpenCode + OpenSpec (hard-installed) ───────────────────
 # @trace spec:default-image, spec:forge-shell-tools, spec:simplified-tray-ux
+forge_step_mark
 require_opencode
+forge_step_done require-harness
 [ -x "$OC_BIN" ] || harness_missing_fatal opencode
+forge_step_mark
 apply_opencode_config_overlay
+forge_step_done config-overlay
+forge_step_mark
 require_openspec
+forge_step_done require-openspec
+forge_step_mark
 prepare_opencode_vault_auth
+forge_step_done vault-auth
+forge_step_mark
 opencode_actual_auth_ok "$OC_BIN"
+forge_step_done auth-check
 
 trace_lifecycle "entrypoint" "opencode web ready"
 
@@ -98,15 +113,21 @@ fi
 export_ssh_env || true
 
 # ── Find project directory ──────────────────────────────────
+forge_step_mark
 find_project_dir
+forge_step_done find-project
 
 # ── Export project environment ───────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
+forge_step_mark
 export_project_env
+forge_step_done project-env
 
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+forge_step_mark
 configure_git_identity
+forge_step_done git-identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── OpenSpec init (only when absent, silent) ────────────────
@@ -114,11 +135,17 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
 # The CLI is the project's pinned version when openspec/cli-version exists
 # (order 1441-myz3; see ensure_openspec_pinned).
+forge_step_mark
 ensure_openspec_pinned "$PROJECT_DIR"
+forge_step_done openspec-pin
 # Flaky-optional installs (dev tools, prebuilt tools) run in
 # the background with status files and first-use shims (order 1951-vv5m).
+forge_step_mark
 start_flaky_installs
+forge_step_done flaky-installs
+forge_step_mark
 openspec_init_if_absent "$PROJECT_DIR" opencode
+forge_step_done openspec-init
 
 # ── Host lane before the agent (order 1863-eckw) ────────────
 # OpenCode spawns its host-browser MCP client once, at serve start, and never
@@ -128,7 +155,9 @@ wait_for_lane_socket 10
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme
+forge_step_mark
 inject_startup_context "$PROJECT_DIR"
+forge_step_done startup-context
 
 # ── Launch OpenCode Web Server ──────────────────────────────
 # @trace spec:browser-isolation-tray-integration, spec:default-image
@@ -137,6 +166,7 @@ inject_startup_context "$PROJECT_DIR"
 # event streams alive for the browser-facing route.
 trace_lifecycle "entrypoint" "opencode web serving behind local proxy on 0.0.0.0:4096"
 trace_lifecycle "exec" "launching opencode serve upstream ($OC_BIN)"
+forge_step_line total "$((($(_forge_now_us) - ${FORGE_ENTRY_T0_US:-$(_forge_now_us)}) / 1000))"
 "$OC_BIN" serve --hostname 127.0.0.1 --port 4097 &
 OC_PID=$!
 cleanup() {

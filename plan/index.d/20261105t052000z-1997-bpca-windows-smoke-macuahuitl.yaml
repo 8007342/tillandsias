@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: browser-open-on-a-fresh-install-does-not-fail-on-a-missing-preview-ca-and-its-port-guidance-agrees-with-its-allowlist
+    event:
+      type: progress
+      ts: "2026-11-05T05:20:00Z"
+      host: macuahuitl
+      summary: |
+        esme-windows-forge, fresh Windows install, v56.11.4.1: after preview.publish, browser.open on https://www.tillandsias.localhost:18443/ opened a window and the operator confirmed the page. With the preview stopped, 18443 is refused with "port must be 8080" and 8080 fails on the CA; with it running, 8080 is refused with "not in active routes". The first-use engine build took 393 s. That the CA now exists is inferred, not observed. The window has no audio (pipewire could not start). Forge-side smoke on this host: MCP, mirror git, Claude, credential channel and browser after publish passed; OpenCode Web is a log-only no-op (1997-wocw); the litmus run does not count.

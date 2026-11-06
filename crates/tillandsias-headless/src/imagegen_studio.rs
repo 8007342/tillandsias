@@ -110,6 +110,39 @@ pub fn project_forges(project: &str, running: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// 1987-smnt: the studio's model-folder map, from THIS tray (not baked into
+/// the image): a changed map needs a tray rebuild and studio.restart, never a
+/// studio image rebuild.
+pub const MODEL_PATHS_YAML: &str =
+    include_str!("../../../images/imagegen-studio/extra_model_paths.yaml");
+
+/// Where ComfyUI reads its folder map (the baked copy it replaces).
+pub const MODEL_PATHS_IN_CONTAINER: &str = "/opt/comfyui/extra_model_paths.yaml";
+
+/// The host file the studio mounts: under the model cache's parent, written
+/// at every start from [`MODEL_PATHS_YAML`].
+pub fn model_paths_file(models_dir: &Path) -> PathBuf {
+    models_dir
+        .parent()
+        .unwrap_or(models_dir)
+        .join("imagegen-studio")
+        .join("extra_model_paths.yaml")
+}
+
+/// Write the folder map the studio will mount (atomic rename).
+pub fn write_model_paths(models_dir: &Path) -> Result<PathBuf, String> {
+    let path = model_paths_file(models_dir);
+    let dir = path.parent().expect("a parent");
+    std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let tmp = path.with_extension("yaml.tmp");
+    // 1991-dovl: a dev overlay map replaces the compiled one.
+    let text = crate::dev_overlay::read(crate::dev_overlay::MODEL_PATHS)
+        .unwrap_or_else(|| MODEL_PATHS_YAML.to_string());
+    std::fs::write(&tmp, text).map_err(|e| format!("{}: {e}", tmp.display()))?;
+    std::fs::rename(&tmp, &path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(path)
+}
+
 pub fn container_name(project: &str) -> String {
     format!("tillandsias-{project}-studio")
 }
@@ -149,6 +182,12 @@ pub fn run_args(
         format!("tillandsias.studio.project={project}"),
         "-v".to_string(),
         format!("{}:/models:ro", plan.models_dir.display()),
+        // 1987-smnt: the folder map comes from the tray, read-only.
+        "-v".to_string(),
+        format!(
+            "{}:{MODEL_PATHS_IN_CONTAINER}:ro",
+            model_paths_file(&plan.models_dir).display()
+        ),
         "-v".to_string(),
         format!("{out_volume}:/out"),
     ];
@@ -351,14 +390,86 @@ pub fn start_on_demand(
     project: &str,
     running: &dyn Fn() -> bool,
     launch: &mut dyn FnMut() -> Result<(), String>,
+    listening: &dyn Fn() -> Probe,
 ) -> Result<serde_json::Value, String> {
     let already = running();
     if !already {
         launch().map_err(|e| format!("studio_start_failed: {e}"))?;
     }
-    let mut v = status_json(project, already || running());
+    // 1990-stry: answer only once ComfyUI answers (a container can be up
+    // with its server still loading nodes and models).
+    let waited = wait_until_listening(project, listening, LISTEN_BUDGET, LISTEN_POLL)?;
+    let mut v = status_json(project, true);
     v["started"] = serde_json::json!(!already);
+    v["listening_after_ms"] = serde_json::json!(waited.as_millis() as u64);
     Ok(v)
+}
+
+/// 1990-stry: what one readiness probe saw.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Probe {
+    /// ComfyUI answered `/system_stats`.
+    Listening,
+    /// The container runs; ComfyUI does not answer yet.
+    Starting,
+    /// The container is not running (it exited or was removed).
+    Exited,
+}
+
+/// How long studio.start waits for ComfyUI (a cold start loads every pinned
+/// custom node), and how often it asks.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub const LISTEN_BUDGET: std::time::Duration = std::time::Duration::from_secs(300);
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub const LISTEN_POLL: std::time::Duration = std::time::Duration::from_millis(500);
+
+/// 1990-stry: poll `probe` until ComfyUI listens. An exited container fails
+/// at once; a budget overrun fails by name. Returns how long it took.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub fn wait_until_listening(
+    project: &str,
+    probe: &dyn Fn() -> Probe,
+    budget: std::time::Duration,
+    poll: std::time::Duration,
+) -> Result<std::time::Duration, String> {
+    let t0 = std::time::Instant::now();
+    loop {
+        match probe() {
+            Probe::Listening => return Ok(t0.elapsed()),
+            Probe::Exited => {
+                return Err(format!(
+                    "studio_exited: {} stopped before ComfyUI listened; see podman logs {}",
+                    container_name(project),
+                    container_name(project)
+                ));
+            }
+            Probe::Starting if t0.elapsed() >= budget => {
+                return Err(format!(
+                    "studio_not_listening: ComfyUI in {} did not answer on :{STUDIO_PORT} within {} s; \
+                     the container still runs (podman logs {})",
+                    container_name(project),
+                    budget.as_secs(),
+                    container_name(project)
+                ));
+            }
+            Probe::Starting => std::thread::sleep(poll),
+        }
+    }
+}
+
+/// The production probe: the container's state, then ComfyUI's own
+/// `/system_stats` from inside it (the studio publishes no host port).
+#[cfg(feature = "host-services")]
+pub fn probe_listening(project: &str) -> Probe {
+    if !is_running(project) {
+        return Probe::Exited;
+    }
+    let script = "import urllib.request,sys\ntry:\n urllib.request.urlopen('http://127.0.0.1:8188/system_stats',timeout=3)\nexcept Exception:\n sys.exit(1)";
+    match podman_out(&["exec", &container_name(project), "python3", "-c", script]) {
+        Ok(_) => Probe::Listening,
+        Err(_) => Probe::Starting,
+    }
 }
 
 #[cfg(feature = "host-services")]
@@ -370,6 +481,11 @@ pub fn tool_descriptors() -> Vec<serde_json::Value> {
             "name": "studio.start",
             "description": "Start this project's ComfyUI studio on demand: an appliance on this project's own network (no host port, no egress; another project cannot reach it). Idempotent; builds the image on first use; a call while it runs connects this forge to it. It stops with the forge. The result's window_url opens the SAME studio for the operator and you together: browser.open {url: window_url, dev: true}. studio.run_workflow needs it running.",
             "inputSchema": empty,
+        }),
+        serde_json::json!({
+            "name": "studio.restart",
+            "description": "Restart this project's ComfyUI studio: a fresh container that reads the tray's current model-folder map (and any change since start), same network and window route. Use it after a pin or folder-map change; no image rebuild.",
+            "inputSchema": empty.clone(),
         }),
         serde_json::json!({
             "name": "studio.status",
@@ -401,6 +517,8 @@ pub async fn start(
     );
     // 1985-stdu: the project's own network exists before the studio joins it.
     let cidr = ensure_network(project_name)?;
+    // 1987-smnt: the tray's folder map, written fresh before every start.
+    write_model_paths(&plan.models_dir)?;
     let mut args = run_args(plan, project_name, &out_volume, host_has_cdi_gpu(), &budget);
     // 1913-ebv8: in the forge's slice, ranked before it.
     args.extend(crate::oom_slice_args());
@@ -488,6 +606,33 @@ mod tests {
         );
     }
 
+    /// ORDER 1987-smnt: the studio reads the tray's folder map through a
+    /// read-only mount over the baked copy, written fresh at start. Pre-fix:
+    /// FAILS, the map was baked into the image (a change needed a rebuild).
+    #[test]
+    fn the_studio_mounts_the_trays_folder_map() {
+        let cache =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let p = plan_explicit(cache.path());
+        let a = run_args(
+            &p,
+            "proj",
+            "v",
+            false,
+            &StudioBudget::for_host(13_811, 9_000, 16),
+        );
+        let host = model_paths_file(&p.models_dir);
+        let mount = format!("{}:{MODEL_PATHS_IN_CONTAINER}:ro", host.display());
+        assert!(a.contains(&mount), "{a:?}");
+        let written = write_model_paths(&p.models_dir).unwrap();
+        assert_eq!(written, host);
+        assert_eq!(std::fs::read_to_string(&host).unwrap(), MODEL_PATHS_YAML);
+        assert!(
+            host.starts_with(cache.path()),
+            "under the cache, never the image"
+        );
+    }
+
     /// ORDER 1985-stdu: only THIS project's forges join its studio network;
     /// a project whose name extends this one's is not matched.
     #[test]
@@ -546,17 +691,17 @@ mod tests {
             up.set(true);
             Ok(())
         };
-        let r = start_on_demand("p", &|| up.get(), &mut launch).unwrap();
+        let r = start_on_demand("p", &|| up.get(), &mut launch, &|| Probe::Listening).unwrap();
         assert_eq!(
             (r["started"].as_bool(), r["running"].as_bool()),
             (Some(true), Some(true))
         );
-        let r = start_on_demand("p", &|| up.get(), &mut launch).unwrap();
+        let r = start_on_demand("p", &|| up.get(), &mut launch, &|| Probe::Listening).unwrap();
         assert_eq!(r["started"], false);
         assert_eq!(launches.get(), 1, "exactly one studio");
         assert_eq!(r["url"], "http://studio:8188");
         let mut fails = || Err("no image".to_string());
-        let e = start_on_demand("q", &|| false, &mut fails).unwrap_err();
+        let e = start_on_demand("q", &|| false, &mut fails, &|| Probe::Listening).unwrap_err();
         assert!(e.starts_with("studio_start_failed:"), "{e}");
     }
 
@@ -585,6 +730,61 @@ mod tests {
                 "{argv:?}"
             );
         }
+    }
+
+    /// ORDER 1990-stry: studio.start answers only once ComfyUI listens; a
+    /// container that exits fails at once, and a budget overrun fails by
+    /// name. Pre-fix: FAILS, start_on_demand returned as soon as the
+    /// container was created.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn studio_start_answers_only_once_comfyui_listens() {
+        let calls = std::cell::Cell::new(0);
+        let probe = || {
+            calls.set(calls.get() + 1);
+            if calls.get() < 4 {
+                Probe::Starting
+            } else {
+                Probe::Listening
+            }
+        };
+        let poll = std::time::Duration::from_millis(1);
+        let waited =
+            wait_until_listening("p", &probe, std::time::Duration::from_secs(5), poll).unwrap();
+        assert_eq!(calls.get(), 4, "it kept asking until ComfyUI answered");
+        assert!(waited < std::time::Duration::from_secs(5));
+        let e = wait_until_listening(
+            "p",
+            &|| Probe::Exited,
+            std::time::Duration::from_secs(5),
+            poll,
+        )
+        .unwrap_err();
+        assert!(e.starts_with("studio_exited:"), "{e}");
+        let e = wait_until_listening(
+            "p",
+            &|| Probe::Starting,
+            std::time::Duration::from_millis(20),
+            poll,
+        )
+        .unwrap_err();
+        assert!(
+            e.starts_with("studio_not_listening:") && e.contains(":8188"),
+            "{e}"
+        );
+        // start_on_demand waits too, and reports how long.
+        let mut launch = || Ok(());
+        let n = std::cell::Cell::new(0);
+        let r = start_on_demand("p", &|| false, &mut launch, &|| {
+            n.set(n.get() + 1);
+            if n.get() < 2 {
+                Probe::Starting
+            } else {
+                Probe::Listening
+            }
+        })
+        .unwrap();
+        assert!(r["listening_after_ms"].is_u64() && n.get() == 2, "{r}");
     }
 
     /// ORDER 1969-cfyt: the studio runs as the forge's own user, so SaveImage

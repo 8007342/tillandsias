@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-podman"
-version = "56.11.4"
+version = "0.0.0"  # 1993-cver: frozen; the release version is VERSION
 edition.workspace = true
 license.workspace = true
 authors.workspace = true

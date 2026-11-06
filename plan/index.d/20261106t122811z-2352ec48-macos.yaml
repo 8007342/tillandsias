@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    event:
+      type: progress
+      ts: "2026-11-06T12:28:11Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        2000-envt PARTIAL on work/2000-envt (tlatoanis-macbook-air): the instance-claim logic is split into claim_forge_instance_slot(project, host_mount, debug, explicit), which never reads or writes TILLANDSIAS_FORGE_INSTANCE and returns the instance it took; claim_forge_instance keeps the env read and export for every real launch path, unchanged. tests::a_second_launch_of_a_project_takes_the_next_instance (the one that evicted #935 and #957) now runs on the core with no process-env access and builds names through forge_container_name_with_instance / local_projects::ram_workspace_volume; the env export is covered by a new tests::claiming_a_second_instance_exports_it, which holds env_lock like every env-touching test (main.rs's env_lock and test_support's are the same mutex). MEASURED, 50 full tillandsias-headless test-binary runs, all tests parallel: claiming_a_second_instance_exports_it 50/50; a_second_launch_of_a_project_takes_the_next_instance 49/50. RESIDUAL, OPEN: one failure in about 90 runs remains with no env access in the test. Ruled out: the lock dir (test builds use a per-process dir, and no test sets TMPDIR), the lane-socket owner check, and project-name collisions. A capture loop is running to read the panic; the follow-up goes on a new ref.

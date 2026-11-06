@@ -471,6 +471,11 @@ specs:
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
+  - litmus:forge-stage-cache-cli
+  - litmus:forge-stage-cache-in-image
+  - litmus:forge-impact-plan-cli
+  - litmus:forge-impact-plan-in-image
+  - litmus:forge-trust-refresh-cli
   - litmus:mcp-discoverability-shape
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
@@ -566,6 +571,7 @@ specs:
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
+  - litmus:mirror-ca-trust-watch
   - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
@@ -1095,6 +1101,8 @@ specs:
 - spec_id: local-web-preview
   status: draft
   litmus_tests:
+  - litmus:forge-listen-page
+  - litmus:web-audio-serving
   - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
   - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
@@ -1306,6 +1314,7 @@ specs:
   - litmus:git-mirror-vault-agent-auto-auth
   - litmus:forge-secret-capability-contract
   - litmus:proxy-ca-key-not-world-readable
+  - litmus:forge-image-no-secrets
   coverage_ratio: 75
   last_verified: '2026-07-28'
 - spec_id: tillandsias-vault
@@ -1358,6 +1367,7 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:reverse-proxy-internal-shape
+  - litmus:router-key-home-absent
   coverage_ratio: 75
 - spec_id: host-guest-transport
   status: active

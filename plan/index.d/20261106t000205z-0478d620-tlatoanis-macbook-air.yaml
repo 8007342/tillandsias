@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-warm-layer-is-committed-and-preferred
+    field: status
+    value: obsoleted
+    ts: "2026-11-06T00:02:05Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: forge-warm-layer-is-committed-and-preferred
+    event:
+      type: completed
+      ts: "2026-11-06T00:02:05Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        status 'obsoleted' with evidence_refs: superseded by 2004-in3v and 2004-qzem; criterion 1 met per litmus-forge-firstrun-prebuilt-tools-arch-shape; no-secrets carried to 2004-in3v

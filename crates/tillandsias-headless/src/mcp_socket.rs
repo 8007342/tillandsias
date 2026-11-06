@@ -58,6 +58,38 @@ pub(crate) mod test_runtime_root {
     }
 }
 
+#[cfg(test)]
+mod call_gate_tests {
+    use super::*;
+
+    /// ORDER 1990-mcpq: the limit concurrency owes (779-dqsv): never more
+    /// than `max` calls at once, and a freed slot admits the next.
+    #[test]
+    fn the_call_gate_never_admits_more_than_its_limit() {
+        let gate = CallGate::new(2);
+        let a = gate.enter();
+        let b = gate.enter();
+        assert_eq!(gate.running(), 2);
+        let g = gate.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let _c = g.enter();
+            tx.send(()).unwrap();
+        });
+        assert!(
+            rx.recv_timeout(std::time::Duration::from_millis(200))
+                .is_err(),
+            "a third call waits while two run"
+        );
+        drop(a);
+        rx.recv_timeout(std::time::Duration::from_secs(2))
+            .expect("a freed slot admits it");
+        waiter.join().unwrap();
+        drop(b);
+        assert_eq!(gate.running(), 0);
+    }
+}
+
 #[cfg(all(test, unix))]
 mod refused_wait_tests {
     use super::*;
@@ -74,12 +106,27 @@ mod refused_wait_tests {
             .unwrap();
         let path = dir.path().join("s.sock");
         let listener = UnixListener::bind(&path).unwrap();
-        // SAFETY: the child only sleeps and _exits; it runs no Rust code
-        // that could touch a lock another thread held at fork time.
+        // SAFETY: the child only closes descriptors, sleeps and _exits; it
+        // runs no Rust code that could touch a lock another thread held at
+        // fork time.
+        //
+        // 2000-envt: fork copies EVERY descriptor in this process, including
+        // the flock'd lock files parallel tests hold at that instant, and this
+        // child keeps them for 300 ms. A test that dropped its lock then saw it
+        // still held (a_graceful_exit_leaves_another_owners_enclave_running,
+        // a_second_launch_of_a_project_takes_the_next_instance). The child
+        // keeps only the listener it exists to hold.
+        use std::os::fd::AsRawFd as _;
+        let keep = listener.as_raw_fd();
         let pid = unsafe { libc::fork() };
         assert!(pid >= 0, "fork");
         if pid == 0 {
             unsafe {
+                for fd in 3..1024 {
+                    if fd != keep {
+                        libc::close(fd);
+                    }
+                }
                 libc::usleep(300_000);
                 libc::_exit(0);
             }
@@ -342,7 +389,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 "capabilities": { "tools": {} },
                 "serverInfo": {
                     "name": "tillandsias-host-services",
-                    "version": env!("CARGO_PKG_VERSION"),
+                    // 1993-cver: the release version, from VERSION.
+                    "version": crate::VERSION.trim(),
                     "buildId": build_identity(),
                 },
                 // 1969-7qm7: the grouped index is what the agent sees FIRST.
@@ -658,6 +706,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                                 debug,
                             ))
                         },
+                        &|| crate::imagegen_studio::probe_listening(project_label),
                     )
                     .and_then(|mut result| {
                         // 1985-stdu: already running: connect this forge
@@ -688,6 +737,47 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     serde_json::json!({
                         "result": tillandsias_browser_mcp::framing::tool_result_content(listing)
                     })
+                }
+                // 1987-smnt: a fresh container reads the tray's current folder map.
+                "studio.restart" => {
+                    crate::imagegen_studio::stop(project_label);
+                    let version = crate::VERSION.trim();
+                    let client = tillandsias_podman::PodmanClient::new();
+                    let plan = crate::imagegen_studio::plan_explicit(
+                        &tillandsias_core::cache_root::cache_root(),
+                    );
+                    match rt
+                        .block_on(crate::imagegen_studio::start(
+                            &client,
+                            &plan,
+                            project_label,
+                            version,
+                            debug,
+                        ))
+                        .and_then(|()| {
+                            // 1990-stry: answer once ComfyUI listens again.
+                            crate::imagegen_studio::wait_until_listening(
+                                project_label,
+                                &|| crate::imagegen_studio::probe_listening(project_label),
+                                crate::imagegen_studio::LISTEN_BUDGET,
+                                crate::imagegen_studio::LISTEN_POLL,
+                            )
+                        })
+                        .map(|_| {
+                            let mut v = crate::imagegen_studio::status_json(
+                                project_label,
+                                crate::imagegen_studio::is_running(project_label),
+                            );
+                            v["restarted"] = serde_json::json!(true);
+                            v
+                        }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": format!("studio_restart_failed: {e}") }
+                        }),
+                    }
                 }
                 "studio.status" => {
                     let running = crate::imagegen_studio::is_running(project_label);
@@ -1187,6 +1277,10 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         )),
         false,
     );
+    // 1990-mcpq: shared by the per-call threads below, under one gate.
+    let browser = std::sync::Arc::new(browser);
+    let rt = std::sync::Arc::new(rt);
+    let gate = CallGate::new(MAX_CONCURRENT_CALLS);
     // Order 1655-urz9 + 776-jcf3 (operator, 2026-10-24): browser.open with no
     // device names desktop. The per-project `[browser] device` used to be read
     // from the host checkout's `.tillandsias/config.toml`; there is no host
@@ -1281,6 +1375,48 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             }
             // 1971-mcpu: a panic inside one tool answers that call with a
             // typed error; it never closes the lane's connection.
+            // 1990-mcpq: a tools/call runs on its own thread, so a long
+            // one (a studio workflow) never holds back the next call on
+            // this connection (kumbia: browser.open waited >120 s). Replies
+            // go out through the one shared writer, matched by id.
+            Ok(req) if req["method"] == "tools/call" => {
+                let (browser, rt, shared) = (browser.clone(), rt.clone(), shared.clone());
+                let (label, instance) = (project_label.clone(), identity.instance.clone());
+                let id = req.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                // Backpressure: wait here (reading no more lines) while
+                // MAX_CONCURRENT_CALLS run.
+                let slot = gate.enter();
+                let spawned =
+                    std::thread::Builder::new()
+                        .name("mcp-call".into())
+                        .spawn(move || {
+                            let _slot = slot;
+                            let write = |line: &str| {
+                                let mut w = shared.lock().unwrap_or_else(|p| p.into_inner());
+                                let _ = w.write_all(format!("{line}\n").as_bytes());
+                            };
+                            let resp = dispatch_guarded(&req, || {
+                                handle_mcp_jsonrpc_streaming(
+                                    &label,
+                                    &instance,
+                                    &req,
+                                    &browser,
+                                    &rt,
+                                    &mut |line| write(&cap_response_line(&line)),
+                                )
+                            });
+                            if let Some(resp) = resp {
+                                write(&cap_response_line(&resp));
+                            }
+                        });
+                match spawned {
+                    Ok(_) => None,
+                    Err(e) => Some(mcp_error(
+                        &serde_json::json!({ "id": id }),
+                        format!("could not start a call thread: {e}"),
+                    )),
+                }
+            }
             Ok(req) => dispatch_guarded(&req, || {
                 handle_mcp_jsonrpc_streaming(
                     &project_label,
@@ -1316,6 +1452,53 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 return;
             }
         }
+    }
+}
+
+/// ORDER 1990-mcpq: at most this many tools/call run at once on ONE
+/// connection. The read loop waits for a slot before starting the next call
+/// (backpressure, never a refusal), so a client cannot spawn without bound.
+pub(crate) const MAX_CONCURRENT_CALLS: usize = 8;
+
+/// The per-connection call gate: `enter` blocks while `max` calls run.
+pub(crate) struct CallGate {
+    running: std::sync::Mutex<usize>,
+    freed: std::sync::Condvar,
+    max: usize,
+}
+
+impl CallGate {
+    pub(crate) fn new(max: usize) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(CallGate {
+            running: std::sync::Mutex::new(0),
+            freed: std::sync::Condvar::new(),
+            max,
+        })
+    }
+
+    /// Wait for a slot; the returned guard frees it when dropped.
+    pub(crate) fn enter(self: &std::sync::Arc<Self>) -> CallSlot {
+        let mut n = self.running.lock().unwrap_or_else(|p| p.into_inner());
+        while *n >= self.max {
+            n = self.freed.wait(n).unwrap_or_else(|p| p.into_inner());
+        }
+        *n += 1;
+        CallSlot(self.clone())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn running(&self) -> usize {
+        *self.running.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+pub(crate) struct CallSlot(std::sync::Arc<CallGate>);
+
+impl Drop for CallSlot {
+    fn drop(&mut self) {
+        let mut n = self.0.running.lock().unwrap_or_else(|p| p.into_inner());
+        *n -= 1;
+        self.0.freed.notify_one();
     }
 }
 
@@ -1409,7 +1592,7 @@ pub(crate) const LANE_TRAY_MARKER: &str = "tray-owned";
 pub(crate) const LANE_ADOPT_TICK: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Hand lane `(project, instance)` to the tray (see [`LANE_TRAY_MARKER`]).
-#[cfg_attr(any(test, not(feature = "host-services")), allow(dead_code))]
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), String> {
     let dir = mcp_socket_host_dir_for_lane(project, instance);
     fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {e}", dir.display()))?;
@@ -1418,6 +1601,29 @@ pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), 
         .map_err(|e| format!("failed to write {}: {e}", marker.display()))?;
     let _ = fs::set_permissions(&marker, fs::Permissions::from_mode(0o600));
     Ok(())
+}
+
+/// ORDER 1988-trkp: before a keep-forges exit, hand every lane this process
+/// serves to the next tray (the marker its adoption tick binds). Returns the
+/// lanes marked.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn mark_served_lanes_for_adoption() -> Vec<LaneListenerKey> {
+    let lanes: Vec<LaneListenerKey> = lane_listener_registry()
+        .lock()
+        .expect("lane registry lock")
+        .iter()
+        .cloned()
+        .collect();
+    lanes
+        .into_iter()
+        .filter(|(p, i)| match mark_lane_tray_owned(p, i) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(project = %p, instance = %i, error = %e, "1988-trkp: could not mark lane for adoption");
+                false
+            }
+        })
+        .collect()
 }
 
 fn lane_instance(instance: &str) -> &str {

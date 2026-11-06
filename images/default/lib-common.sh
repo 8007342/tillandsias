@@ -18,7 +18,10 @@ set -euo pipefail
 # ephemeral trust bundle; no environment-specific CA path is required.
 init_runtime_ca_trust() {
     local vendor_bundle="/usr/local/share/tillandsias/vendor-ca-bundle.crt"
-    local runtime_ca="/run/tillandsias/ca-chain.crt"
+    # 2007-uvtl: the read-only cert-only directory; the single-file bind is
+    # what an older launcher still provides.
+    local runtime_ca="/run/tillandsias/ca/intermediate.crt"
+    [ -r "$runtime_ca" ] || runtime_ca="/run/tillandsias/ca-chain.crt"
     local trust_bundle="/run/tillandsias/ca-bundle.crt"
     local temporary_bundle
 
@@ -211,6 +214,46 @@ trace_lifecycle() {
     if [ -n "${TILLANDSIAS_DEBUG:-}" ]; then
         echo "$line" >&2
     fi
+}
+
+# 2004-in3v: the forge entrypoint's bring-up step timer, the 1915-brst shape.
+#
+#   forge_step_mark
+#   some_step "$arg"
+#   forge_step_done some-step
+#
+# logs `bringup: step=forge-entry-some-step ms=<n>` from timestamps at the
+# step's two boundaries; no poll. The step itself stays a bare line: `set -e`
+# and every litmus that pins the call (e.g. ^clone_project_from_mirror$)
+# see it unchanged, and a step that fails exits before its line, as before.
+# The line goes to the lifecycle log, and to stderr only under
+# TILLANDSIAS_DEBUG (stderr is the agent's screen).
+_forge_now_us() {
+    local t="${EPOCHREALTIME:-}"
+    if [ -n "$t" ]; then
+        echo "${t//[.,]/}"
+    else
+        echo "$(($(date +%s) * 1000000))"
+    fi
+}
+
+forge_step_line() {
+    local line="bringup: step=forge-entry-$1 ms=$2"
+    echo "$line" >>"${TILLANDSIAS_LIFECYCLE_LOG:-/tmp/forge-lifecycle.log}" 2>/dev/null || true
+    if [ -n "${TILLANDSIAS_DEBUG:-}" ]; then
+        echo "$line" >&2
+    fi
+}
+
+forge_step_mark() {
+    FORGE_STEP_T0_US="$(_forge_now_us)"
+}
+
+forge_step_done() {
+    local now
+    now="$(_forge_now_us)"
+    forge_step_line "$1" "$(((now - ${FORGE_STEP_T0_US:-$now}) / 1000))"
+    FORGE_STEP_T0_US="$now"
 }
 
 export_pull_cache_path() {

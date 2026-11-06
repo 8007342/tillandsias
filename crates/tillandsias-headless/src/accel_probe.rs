@@ -837,7 +837,7 @@ fn promote_proven_container_lanes(doc: &mut CapabilityDocument) {
 pub fn probe_identity() -> String {
     format!(
         "{}+{}",
-        env!("CARGO_PKG_VERSION"),
+        crate::VERSION.trim(), // 1993-cver: the release version, from VERSION
         env!("TILLANDSIAS_PROBE_REVISION")
     )
 }
@@ -3263,6 +3263,66 @@ fn spec_file_delivers_nvidia(path: &std::path::Path) -> bool {
     std::fs::read_to_string(path)
         .map(|b| spec_body_delivers_nvidia(&b))
         .unwrap_or(false)
+}
+
+/// 2001-bwgl: the `--device` values for a visible browser window. The image
+/// carries Mesa only, so NVIDIA arrives through CDI, which injects the host's
+/// matching driver libraries. Raw NVIDIA nodes without them crash Chromium's
+/// GPU process until it disables WebGL altogether; with no deliverable CDI the
+/// window gets no NVIDIA device and takes software rendering. Mesa drives every
+/// other render node. Compute-only nodes such as /dev/kfd stay out.
+fn browser_gpu_device_list(
+    nvidia_present: bool,
+    nvidia_cdi: bool,
+    render_nodes: &[(String, bool)],
+) -> Vec<String> {
+    let mut devices = Vec::new();
+    if nvidia_present && nvidia_cdi {
+        devices.push("nvidia.com/gpu=all".to_string());
+    }
+    devices.extend(
+        render_nodes
+            .iter()
+            .filter(|(_, is_nvidia)| !is_nvidia)
+            .map(|(node, _)| node.clone()),
+    );
+    devices
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn browser_gpu_devices() -> Vec<String> {
+    let mut nodes: Vec<(String, bool)> = std::fs::read_dir("/dev/dri")
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("renderD") {
+                return None;
+            }
+            let driver = std::fs::read_link(format!("/sys/class/drm/{name}/device/driver")).ok();
+            let is_nvidia = driver
+                .as_deref()
+                .and_then(std::path::Path::file_name)
+                .is_some_and(|d| d == "nvidia");
+            Some((format!("/dev/dri/{name}"), is_nvidia))
+        })
+        .collect();
+    nodes.sort();
+    let nvidia_present = std::path::Path::new("/dev/nvidiactl").exists();
+    let nvidia_cdi = nvidia_cdi_deliverable();
+    if nvidia_present && !nvidia_cdi {
+        eprintln!(
+            "[tillandsias] warn:browser-gpu-software: this NVIDIA host has no usable CDI spec, so \
+             browser windows render in software; remedy: generate one with nvidia-ctk cdi generate"
+        );
+    }
+    browser_gpu_device_list(nvidia_present, nvidia_cdi, &nodes)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn browser_gpu_devices() -> Vec<String> {
+    browser_gpu_device_list(false, false, &[])
 }
 
 #[cfg(target_os = "linux")]
@@ -6159,6 +6219,27 @@ mod tests {
         // The last value that IS a PCI id, so the boundary is pinned on both
         // sides and a widened type would red this pair, not just the one above.
         assert_eq!(super::parse_pci_id("0xffff"), Some(0xffff));
+    }
+
+    /// 2001-bwgl: raw NVIDIA nodes without their libraries killed WebGL.
+    /// Pre-fix: the window received /dev/nvidia* and the NVIDIA render node.
+    #[test]
+    fn a_browser_window_gets_only_a_gpu_it_has_a_driver_for() {
+        let nvidia = ("/dev/dri/renderD128".to_string(), true);
+        let amd = ("/dev/dri/renderD129".to_string(), false);
+        assert_eq!(
+            browser_gpu_device_list(true, true, std::slice::from_ref(&nvidia)),
+            vec!["nvidia.com/gpu=all"]
+        );
+        assert!(browser_gpu_device_list(true, false, std::slice::from_ref(&nvidia)).is_empty());
+        assert_eq!(
+            browser_gpu_device_list(false, false, std::slice::from_ref(&amd)),
+            vec!["/dev/dri/renderD129"]
+        );
+        assert_eq!(
+            browser_gpu_device_list(true, true, &[nvidia, amd]),
+            vec!["nvidia.com/gpu=all", "/dev/dri/renderD129"]
+        );
     }
 
     /// ORDER 935-jhh5. The old `cdi_ok = effective_tier == "gpu-cuda"` was

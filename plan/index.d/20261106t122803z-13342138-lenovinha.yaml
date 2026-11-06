@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    field: next_action
+    value: '(b) is implemented as #961 (289656c77): the mirror and ssh lane bind the read-only cert-only CA directory, and the entrypoint restarts Vault Agent on a valid new CA (inotifyd, or a 60 s poll). Still open for (b): one live CA rotation under a running mirror on a real host (needs operator consent for the lane); after it works, drop the "restart the project''s git mirror" step from the 2006-rotw Vault-case alert. Still open, unchanged: (a) relaunch Vault under an unchanged CA and time the mirror from relaunch to upstream-auth:authorized, then make the agent re-check promptly on a Vault relaunch or justify the 60 s bound; (c) read the --github-login path for a Vault relaunch.'
+    ts: "2026-11-06T12:28:03Z"
+    host: lenovinha
+    replaces_sha256: "60438f13a586ccf791acc33afd9b005a96f7a346bd83b1fd02731ad7c34116a8"
+
+events:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    event:
+      type: note
+      ts: "2026-11-06T12:28:03Z"
+      host: lenovinha
+      summary: |-
+        (b) landed; (a) and (c) remain

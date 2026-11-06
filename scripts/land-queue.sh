@@ -140,6 +140,14 @@ export TILLANDSIAS_CARGO_INCREMENTAL="${TILLANDSIAS_CARGO_INCREMENTAL:-0}"
 # ORDER 1765-q7rg: the ~1-min decider door run on the merge result BEFORE the
 # ~21-min gate. Set to the empty string to disable (the fixture's default).
 PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
+# ORDER 1992-lqpb: rebuild tillandsias-plan from the MERGE RESULT and let
+# check-plan-binary-current.sh install it, before the preflight and the gate.
+# A stale ~/.local/bin/tillandsias-plan otherwise failed fixtures inside the
+# gate (test-pre-push-plan-lane-fails-closed-without-binary, a plan-lane
+# refusal) and the queue evicted an innocent candidate; the fix was a hand
+# rebuild. A refresh that fails stops the run with no eviction. Set to the
+# empty string to disable (the fixture's default).
+PLAN_REFRESH="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH-cargo build -q --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh}"
 REMOTE="${TILLANDSIAS_LAND_QUEUE_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 LOCKDIR="${TILLANDSIAS_LAND_QUEUE_LOCK:-$ROOT/.git/tillandsias-land-queue.lock}"
@@ -641,6 +649,20 @@ $_nlwhy
     if [ "$DRY_RUN" -eq 1 ]; then
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"
         continue
+    fi
+    # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
+    # The binary's state is this HOST's, never the candidate's: a refresh that
+    # cannot make it current stops the run and evicts nobody.
+    if [ -n "$PLAN_REFRESH" ]; then
+        _rlog="$_RUNDIR/pr-$num-plan-refresh.log"
+        ( eval "$PLAN_REFRESH" ) < /dev/null > "$_rlog" 2>&1
+        _rrc=$?
+        if [ "$_rrc" -ne 0 ]; then
+            say "could-not-run:land-queue:stale-plan-binary:rc=$_rrc — the plan binary could not be refreshed from the merge of #$num; no candidate is evicted for this host's state (log: $_rlog)"
+            say "remedy: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then run the queue again"
+            exit 3
+        fi
+        rm -f "$_rlog"
     fi
     # ── ORDER 1765-q7rg: THE PREFLIGHT DOOR BEFORE THE FULL GATE ─────────────
     # The tree-only deciders answer in about a minute; a decider-level red

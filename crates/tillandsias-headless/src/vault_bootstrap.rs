@@ -991,10 +991,15 @@ pub(crate) fn ensure_vault_tls_leaf(
     Ok(())
 }
 
+fn end_previous_ca_window(certs_dir: &std::path::Path) {
+    let _ = fs::remove_file(certs_dir.join(crate::PREVIOUS_CA_FILE));
+}
+
 fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient, String> {
-    let certs_dir = tls_material_dir(debug)?;
-    let ca_pem = fs::read(certs_dir.join("intermediate.crt"))
-        .map_err(|e| format!("read Vault CA certificate: {e}"))?;
+    // 1999-grot: a reader takes the trust as it is and never re-mints it.
+    let certs_dir = crate::ca_trust_dir(debug)?;
+    // 2000-camv: the current CA plus the one a mint replaced (one generation).
+    let ca_pem = crate::host_vault_trust_pem(&certs_dir)?;
     VaultClient::new_with_ca_certificate(base_url, token, &ca_pem)
         .map_err(|e| format!("build Vault TLS client: {e}"))
 }
@@ -1005,6 +1010,12 @@ fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient,
 /// healthy. Called automatically from `run_init`; the previous `--with-vault`
 /// opt-in is now a no-op.
 pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
+    // 2000-camv: a read-only process (`--cloud-usage`) never starts Vault.
+    if crate::read_only_process() {
+        return Err(
+            "refused:vault:read-only-process: a read-only command does not start Vault".into(),
+        );
+    }
     // Order 234 (R6): refuse before waiting on the lock during drain/stop.
     if !crate::runtime_phase::container_mutations_allowed() {
         return Err(crate::runtime_phase::refusal("ensure tillandsias-vault"));
@@ -1115,6 +1126,12 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
         }
     };
     let client = vault_client(&base_url, &root_token, debug)?;
+    // 2000-camv: Vault now SERVES a leaf from the current CA (it was just
+    // launched with it), so the replaced CA has nothing left to verify and
+    // its one-generation window ends. Not at leaf issuance: the on-disk leaf
+    // is reissued before the running check, while a running Vault still
+    // serves its old copy.
+    end_previous_ca_window(&certs_dir);
 
     rt.block_on(load_policies(&client, debug))?;
     rt.block_on(provision_approle_roles(&client, debug))?;
@@ -1385,11 +1402,38 @@ pub fn store_github_token_bundle(
 }
 
 /// 1742-zg7r: the Vault container must be running for a read to mean anything.
-fn github_store_reachable(vault_running: bool) -> Result<(), String> {
-    if vault_running {
-        Ok(())
+///
+/// 1999-grot: the refusal names WHICH answer it got. `None` is an inspect
+/// that did not answer (a wedged or unreachable podman), `Some(false)` a
+/// container podman says is stopped; both used to read `vault-unavailable`,
+/// as did a TLS failure, so 45 journal lines could not say which it was.
+fn github_store_reachable(vault_running: Option<bool>) -> Result<(), String> {
+    match vault_running {
+        Some(true) => Ok(()),
+        Some(false) => Err("vault-unavailable:not-running".into()),
+        None => Err("vault-unavailable:inspect-failed".into()),
+    }
+}
+
+/// 1999-grot: a transport failure reduced to a fixed class. The payload is a
+/// reqwest error string (it can carry the URL, never a body or a token), so
+/// only the class leaves this function.
+fn vault_network_reason(detail: &str) -> &'static str {
+    let d = detail.to_ascii_lowercase();
+    if d.contains("certificate")
+        || d.contains("tls")
+        || d.contains("handshake")
+        || d.contains("ssl")
+    {
+        "vault-unavailable:network-tls"
+    } else if d.contains("refused") {
+        "vault-unavailable:network-refused"
+    } else if d.contains("timed out") || d.contains("timeout") {
+        "vault-unavailable:network-timeout"
+    } else if d.contains("reset") || d.contains("broken pipe") || d.contains("closed") {
+        "vault-unavailable:network-reset"
     } else {
-        Err("vault-unavailable".into())
+        "vault-unavailable:network-other"
     }
 }
 
@@ -1420,7 +1464,7 @@ impl GitHubTokenStore for VaultGitHubTokenStore {
         // full check interval at every tray start, because the tray starts the
         // rotation before it starts Vault; Err takes the 60 s error backoff.
         // The Cloudflare store already fails closed the same way.
-        github_store_reachable(container_running(VAULT_CONTAINER_NAME))?;
+        github_store_reachable(container_running_answer(VAULT_CONTAINER_NAME))?;
         let _stability = vault_stability_lease(debug)?;
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
@@ -1897,6 +1941,91 @@ fn should_warn_today(last_warned_day: &mut Option<u64>, now: u64) -> bool {
     true
 }
 
+/// Order 2006-rotw: alert the operator this long before the last known expiry
+/// when rotation is failing. Two hours leaves time to act on a failure that a
+/// 15-minute schedule (and its retry backoff) cannot fix by itself.
+pub const GITHUB_ROTATION_FAILING_MARGIN_SECS: u64 = 2 * 3600;
+
+/// What the operator should be told, at most once per failure episode.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RotationWatchEvent {
+    /// Rotation is failing and the token is near or past expiry: one plain action.
+    Alert(String),
+    /// A later check succeeded after an alert: the alert no longer applies.
+    Cleared,
+}
+
+/// Order 2006-rotw: turn the scheduler's verdicts into at most one operator
+/// alert per failure episode.
+///
+/// A failing check cannot read the bundle (read:vault-unavailable is exactly
+/// that), so the deadline is the LAST expiry a successful check saw. With no
+/// expiry seen yet, nothing is alerted: there is no deadline to warn about,
+/// and the tray-start check fails before Vault is up on every healthy host.
+#[derive(Debug, Default)]
+pub struct GitHubRotationWatch {
+    last_expires_at: Option<u64>,
+    alerted: bool,
+}
+
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+impl GitHubRotationWatch {
+    pub fn observe(
+        &mut self,
+        out: &Result<DueCheck, String>,
+        now: u64,
+    ) -> Option<RotationWatchEvent> {
+        match out {
+            Ok(DueCheck::Rotated { expires_at, .. } | DueCheck::NotDue { expires_at, .. }) => {
+                self.last_expires_at = Some(*expires_at);
+                self.clear()
+            }
+            Ok(DueCheck::NoExpiry | DueCheck::NoToken | DueCheck::NoRefreshToken) => {
+                self.last_expires_at = None;
+                self.clear()
+            }
+            Ok(DueCheck::RefusedInForge) => None,
+            Err(e) => {
+                let exp = self.last_expires_at?;
+                if self.alerted || exp.saturating_sub(now) > GITHUB_ROTATION_FAILING_MARGIN_SECS {
+                    return None;
+                }
+                self.alerted = true;
+                Some(RotationWatchEvent::Alert(github_rotation_failing_message(
+                    e, exp, now,
+                )))
+            }
+        }
+    }
+
+    fn clear(&mut self) -> Option<RotationWatchEvent> {
+        std::mem::take(&mut self.alerted).then_some(RotationWatchEvent::Cleared)
+    }
+}
+
+/// The one plain action for a failing rotation. The error strings carry no
+/// token bytes (see rotate_github_token_if_due), and only a fixed phrase is
+/// chosen from them here, so none reach the desktop.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub fn github_rotation_failing_message(err: &str, expires_at: u64, now: u64) -> String {
+    let when = match expires_at.saturating_sub(now) {
+        0 => "has expired".to_string(),
+        left if left < 3600 => format!("expires in {} min", left.div_ceil(60)),
+        left => format!("expires in about {} h", left / 3600),
+    };
+    // The Vault case names --github-login (it relaunches Vault): a tray
+    // restart alone was never shown to restore it. On macuahuitl 2026-11-05 a
+    // running mirror stayed unauthorized after the relaunch until it was
+    // restarted, which 1998-mvrs has not yet made automatic.
+    let fix = if err.contains(":read:") || err.contains(":lock:") || err.contains("vault") {
+        "Tillandsias cannot read the token from Vault. Run `tillandsias --github-login`; \
+         if pushes still fail after that, restart the project's git mirror"
+    } else {
+        "GitHub did not renew the token. Run `tillandsias --github-login`"
+    };
+    format!("GitHub sign-in {when} and could not be renewed. {fix} to keep pushes working.")
+}
+
 /// The accountability event the spec requires for every rotation
 /// (gh-auth-script "Token Rotation and Expiration Management" ->
 /// spec:gh-auth-script; secret-rotation is tombstoned, 1397-eppt). Its own
@@ -1953,8 +2082,30 @@ pub fn spawn_github_token_rotation_scheduler(
         .spawn(move || {
             let mut backoff = std::time::Duration::ZERO;
             let mut last_warned_day: Option<u64> = None;
+            let mut watch = GitHubRotationWatch::default();
             loop {
                 let out = github_token_due_check_live(debug);
+                // Order 2006-rotw: a failing rotation near expiry is told, not only logged.
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                match watch.observe(&out, now) {
+                    Some(RotationWatchEvent::Alert(msg)) => {
+                        eprintln!("[tillandsias] warn:github-token-rotation-failing: {msg}");
+                        if let Some(cb) = &on_refresh_expiring {
+                            cb(msg);
+                        }
+                    }
+                    Some(RotationWatchEvent::Cleared) => {
+                        let msg = "GitHub sign-in renewed again; no action needed.".to_string();
+                        eprintln!("[tillandsias] ok:github-token-rotation-recovered");
+                        if let Some(cb) = &on_refresh_expiring {
+                            cb(msg);
+                        }
+                    }
+                    None => {}
+                }
                 // The 14-day refresh-expiry warning, at most once a day.
                 if let Ok(
                     DueCheck::Rotated {
@@ -2145,7 +2296,10 @@ pub fn cloudflare_login_stored_in(store: &dyn CloudflareTokenStore) -> Result<bo
 // Called by the vsock handler; the Linux tray joins in 1719-83po slice 4.
 #[cfg_attr(not(feature = "listen-vsock"), allow(dead_code))]
 pub fn cloudflare_login_stored_live(debug: bool) -> Result<bool, String> {
-    cloudflare_login_stored_in(&VaultCloudflareTokenStore { debug })
+    cloudflare_login_stored_in(&VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: true,
+    })
 }
 
 /// Delete the Cloudflare bundle (1505-kc5f `--cloudflare-logout`): the
@@ -2228,7 +2382,7 @@ pub fn store_cloudflare_token_bundle(
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 fn cloudflare_vault_reason(e: &VaultError) -> &'static str {
     match e {
-        VaultError::Network(_) => "vault-unavailable",
+        VaultError::Network(detail) => vault_network_reason(detail),
         VaultError::Unauthorized(_) => "vault-unauthorized",
         VaultError::Sealed(_) => "vault-sealed",
         VaultError::NotFound(_) => "vault-not-found",
@@ -2241,6 +2395,10 @@ fn cloudflare_vault_reason(e: &VaultError) -> &'static str {
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
 pub struct VaultCloudflareTokenStore {
     pub debug: bool,
+    /// 2007-rtmt: an interactive caller (login, logout, cloud usage) may start
+    /// a stopped Vault; a background timer may not, because the start runs
+    /// the full CA path and a timer must never be able to change the CA.
+    pub may_start_vault: bool,
 }
 
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
@@ -2273,12 +2431,19 @@ impl VaultCloudflareTokenStore {
 /// refused vault-unavailable and its remedy sent the operator to `--init`,
 /// which rebuilt every image and froze the desktop, while the write path
 /// already knew how to start Vault by itself.
-fn vault_up_or_start(
+/// 2000-camv: a read-only process (`--cloud-usage`) never starts Vault: a
+/// start from a hook's environment re-minted the host CA under the running
+/// Vault. It reports the stopped Vault instead.
+pub(crate) fn vault_up_or_start_unless(
+    read_only: bool,
     running: impl FnOnce() -> bool,
     start: impl FnOnce() -> Result<(), String>,
 ) -> Result<(), String> {
     if running() {
         return Ok(());
+    }
+    if read_only {
+        return Err("vault-unavailable:not-running".into());
     }
     eprintln!(
         "note:cloudflare-store:vault-not-running:starting-the-vault-enclave-only (no other image is built or started)"
@@ -2291,7 +2456,8 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
         // Start Vault alone when it is stopped (1770-z575); the login reads
         // here BEFORE anything single-use is spent, so a start that fails
         // still refuses before the browser step.
-        vault_up_or_start(
+        vault_up_or_start_unless(
+            crate::read_only_process() || !self.may_start_vault,
             || container_running(VAULT_CONTAINER_NAME),
             || ensure_vault_running(self.debug),
         )?;
@@ -2338,7 +2504,8 @@ impl CloudflareTokenStore for VaultCloudflareTokenStore {
         // Bring Vault itself up (the same idempotent path `--init` uses, for
         // Vault alone); if that fails the write is REFUSED. There is no other
         // store.
-        vault_up_or_start(
+        vault_up_or_start_unless(
+            crate::read_only_process() || !self.may_start_vault,
             || container_running(VAULT_CONTAINER_NAME),
             || ensure_vault_running(self.debug),
         )?;
@@ -2536,6 +2703,10 @@ pub enum CloudflareDueCheck {
     /// A forge never rotates: no forge policy can read either path, and a
     /// second rotating process would race the host's.
     RefusedInForge,
+    /// 2007-rtmt: a background tick found Vault stopped and checked nothing.
+    /// A timer never starts Vault (that path can reach the CA), so with Vault
+    /// down there is nothing it can rotate; the next tick looks again.
+    VaultNotRunning,
 }
 
 #[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
@@ -2555,6 +2726,9 @@ impl CloudflareDueCheck {
                 "ok:cloudflare-token-rotation:expiry-unknown".into()
             }
             CloudflareDueCheck::NoToken => "ok:cloudflare-token-rotation:no-token".into(),
+            CloudflareDueCheck::VaultNotRunning => {
+                "skip:cloudflare-token-rotation:vault-not-running".into()
+            }
             CloudflareDueCheck::NoRefreshToken => {
                 "ok:cloudflare-token-rotation:no-refresh-token".into()
             }
@@ -2675,20 +2849,55 @@ pub fn cloudflare_token_due_check_live(debug: bool) -> Result<CloudflareDueCheck
         .map_err(|_| cloudflare_rotation_failure("clock"))?
         .as_secs();
     let forge = host_kind_is_forge(std::env::var("TILLANDSIAS_HOST_KIND").ok().as_deref());
-    let store = VaultCloudflareTokenStore { debug };
+    if forge {
+        return Ok(CloudflareDueCheck::RefusedInForge);
+    }
+    // 2007-rtmt: a timer never starts Vault; with Vault stopped it checks nothing.
+    let store = background_cloudflare_store(debug);
     let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
     let base_url = crate::cloudflare_oauth::base_url();
-    rotate_cloudflare_token_if_due(
-        &store,
-        &|client_id, refresh_token| {
-            perform_cloudflare_token_refresh(&http, &base_url, client_id, refresh_token)
+    cloudflare_background_tick(
+        || container_running(VAULT_CONTAINER_NAME),
+        || {
+            rotate_cloudflare_token_if_due(
+                &store,
+                &|client_id, refresh_token| {
+                    perform_cloudflare_token_refresh(&http, &base_url, client_id, refresh_token)
+                },
+                now,
+                forge,
+                CLOUDFLARE_ROTATION_LOCK,
+                std::time::Duration::from_secs(60),
+                debug,
+            )
         },
-        now,
-        forge,
-        CLOUDFLARE_ROTATION_LOCK,
-        std::time::Duration::from_secs(60),
-        debug,
     )
+}
+
+/// ORDER 2007-rtmt: the store a background rotation tick reads through. It
+/// never starts Vault (that path can reach the CA).
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn background_cloudflare_store(debug: bool) -> VaultCloudflareTokenStore {
+    VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: false,
+    }
+}
+
+/// ORDER 2007-rtmt: a background rotation tick. With Vault stopped it runs
+/// nothing (no store read, so no Vault start and no CA path) and reports
+/// [`CloudflareDueCheck::VaultNotRunning`]; with Vault up it runs `check`.
+/// The store refuses to start Vault too, for the race where Vault stops
+/// between the two.
+#[cfg_attr(not(any(feature = "tray", feature = "listen-vsock")), allow(dead_code))]
+pub(crate) fn cloudflare_background_tick(
+    vault_running: impl FnOnce() -> bool,
+    check: impl FnOnce() -> Result<CloudflareDueCheck, String>,
+) -> Result<CloudflareDueCheck, String> {
+    if !vault_running() {
+        return Ok(CloudflareDueCheck::VaultNotRunning);
+    }
+    check()
 }
 
 /// The regular interval after a verdict; after a failure, 1 min doubling,
@@ -7623,6 +7832,76 @@ mod tests {
         assert!(!github_token_rotation_due(NOW + 30 * 60 + 1, NOW));
     }
 
+    /// Order 2006-rotw: rotation failing while the token runs out reaches the
+    /// operator before it expires; recovery clears it; health is silent.
+    /// Red before 2006-rotw: read:vault-unavailable was only logged until
+    /// the token died (macuahuitl, 2026-11-05 17:10 PST).
+    #[test]
+    fn a_failing_rotation_alerts_before_expiry_and_recovery_clears_it() {
+        let exp = NOW + 8 * 3600;
+        let fail = || {
+            Err::<DueCheck, String>("github-token-rotation-failed:read:vault-unavailable".into())
+        };
+        let not_due = || {
+            Ok::<DueCheck, String>(DueCheck::NotDue {
+                expires_at: exp,
+                refresh_expires_at: None,
+            })
+        };
+
+        // Healthy: nothing, ever.
+        let mut w = GitHubRotationWatch::default();
+        assert_eq!(w.observe(&not_due(), NOW), None);
+        assert_eq!(w.observe(&not_due(), exp - 60), None);
+
+        // Failing far from expiry: logged only, no alert yet.
+        let mut w = GitHubRotationWatch::default();
+        assert_eq!(w.observe(&not_due(), NOW), None);
+        assert_eq!(w.observe(&fail(), NOW + 3600), None);
+        // Failing inside the margin: exactly one alert, naming the fix,
+        // carrying no token bytes.
+        let at = exp - GITHUB_ROTATION_FAILING_MARGIN_SECS;
+        let Some(RotationWatchEvent::Alert(msg)) = w.observe(&fail(), at) else {
+            panic!("no alert inside the margin");
+        };
+        assert!(msg.contains("Vault"), "{msg}");
+        assert!(msg.contains("tillandsias --github-login"), "{msg}");
+        assert!(
+            msg.contains("git mirror") && !msg.contains("restart the Tillandsias tray"),
+            "{msg}"
+        );
+        assert!(!msg.contains("ghu_") && !msg.contains("ghr_"), "{msg}");
+        assert_eq!(
+            w.observe(&fail(), at + 60),
+            None,
+            "one alert, not one per retry"
+        );
+        // Recovery clears it once.
+        assert_eq!(
+            w.observe(&not_due(), at + 120),
+            Some(RotationWatchEvent::Cleared)
+        );
+        assert_eq!(w.observe(&not_due(), at + 180), None);
+
+        // A refused exchange names the login as the fix.
+        let mut w = GitHubRotationWatch::default();
+        w.observe(&not_due(), NOW);
+        let Some(RotationWatchEvent::Alert(msg)) = w.observe(
+            &Err(
+                "github-token-rotation-failed:GitHub refused the token refresh (bad_refresh_token)"
+                    .into(),
+            ),
+            at,
+        ) else {
+            panic!("no alert for a refused exchange");
+        };
+        assert!(msg.contains("tillandsias --github-login"), "{msg}");
+
+        // Never seen an expiry (Vault never answered): no invented deadline.
+        let mut w = GitHubRotationWatch::default();
+        assert_eq!(w.observe(&fail(), at), None);
+    }
+
     /// Arm 4: GitHub rejects the refresh token -> the old records are intact
     /// and the error names github-token-rotation-failed.
     #[test]
@@ -7770,21 +8049,52 @@ mod tests {
         );
     }
 
+    /// ORDER 1999-grot: a failed GitHub read names WHICH step failed, so a
+    /// journal line can tell a stopped Vault from a podman that did not answer
+    /// from a TLS failure. Pre-fix: FAILS, all three were `vault-unavailable`.
+    #[test]
+    fn a_failed_vault_read_names_the_step_that_failed() {
+        assert_eq!(
+            github_store_reachable(None),
+            Err("vault-unavailable:inspect-failed".to_string())
+        );
+        for (detail, reason) in [
+            (
+                "error sending request: invalid peer certificate: UnknownIssuer",
+                "network-tls",
+            ),
+            (
+                "tcp connect error: Connection refused (os error 111)",
+                "network-refused",
+            ),
+            ("operation timed out", "network-timeout"),
+            ("connection reset by peer", "network-reset"),
+            ("dispatch task is gone", "network-other"),
+        ] {
+            let got = github_vault_read(Err(VaultError::Network(format!(
+                "https://127.0.0.1:8201/v1/secret/data/github/token: {detail}"
+            ))))
+            .unwrap_err();
+            assert_eq!(got, format!("vault-unavailable:{reason}"), "{detail}");
+            assert!(!got.contains("127.0.0.1"), "only the class leaves");
+        }
+    }
+
     /// 1742-zg7r: the live store's two decisions, each a pure function so the
     /// gate can run them. A Vault that is not up is a REASON, not an absence.
     #[test]
     fn github_rotation_store_reports_an_unreachable_vault_as_a_reason() {
         assert_eq!(
-            github_store_reachable(false),
-            Err("vault-unavailable".to_string())
+            github_store_reachable(Some(false)),
+            Err("vault-unavailable:not-running".to_string())
         );
-        assert_eq!(github_store_reachable(true), Ok(()));
+        assert_eq!(github_store_reachable(Some(true)), Ok(()));
         let absent = github_vault_read(Err(VaultError::NotFound("secret/github/token".into())));
         assert_eq!(absent, Ok(None), "only NotFound means there is no token");
         for (err, reason) in [
             (
                 VaultError::Network("connection refused".into()),
-                "vault-unavailable",
+                "vault-unavailable:network-refused",
             ),
             (VaultError::Sealed("sealed".into()), "vault-sealed"),
             (VaultError::Unauthorized("403".into()), "vault-unauthorized"),
@@ -7805,7 +8115,7 @@ mod tests {
         }
         impl GitHubTokenStore for NotUpYet {
             fn read_bundle(&self) -> Result<Option<GitHubTokenBundle>, String> {
-                github_store_reachable(self.up.get())?;
+                github_store_reachable(Some(self.up.get()))?;
                 self.inner.read_bundle()
             }
             fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
@@ -7854,7 +8164,7 @@ mod tests {
         let store = SharedStore::with(&bundle_expiring_at(NOW - 60));
         let lock = test_lock("74hj");
         let check = |up: bool| {
-            github_store_reachable(up)?;
+            github_store_reachable(Some(up))?;
             rotate_github_token_if_due(
                 &store,
                 &fresh_pair,
@@ -11409,8 +11719,10 @@ mod cloudflare_token_rotation_tests {
             .nth(1)
             .and_then(|rest| rest.split("fn delete_record(").next())
             .expect("write_record body");
-        // Needle split so this test's own text cannot match it.
-        let needle = concat!("vault_up_or", "_start(");
+        // Needle split so this test's own text cannot match it. 2007-rtmt:
+        // the store starts Vault through the gated form, which a background
+        // store (may_start_vault: false) refuses.
+        let needle = concat!("vault_up_or", "_start_unless(");
         let mut misses = Vec::new();
         if !read.contains(needle) {
             misses.push("read_bundle does not start Vault when it is stopped");
@@ -11421,11 +11733,95 @@ mod cloudflare_token_rotation_tests {
         assert!(misses.is_empty(), "{}", misses.join("; "));
     }
 
+    /// 2007-rtmt: a background rotation tick never starts Vault and never
+    /// reaches the CA path. With Vault stopped it reports vault-not-running by
+    /// name, without running the check at all, so nothing reads or mints the
+    /// CA and no login is needed to know there is nothing to do. With Vault
+    /// running, the check runs as before (a missing login is no-token).
+    /// Pre-fix: FAILS, the tick's store started Vault through
+    /// ensure_vault_running, the full ensure_ca_bundle path.
+    #[test]
+    fn a_rotation_tick_with_vault_stopped_starts_nothing_and_touches_no_ca() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ca = tmp.path().join("intermediate.crt");
+        std::fs::write(
+            &ca,
+            b"-----BEGIN CERTIFICATE-----\nca\n-----END CERTIFICATE-----\n",
+        )
+        .unwrap();
+        let before = std::fs::read(&ca).unwrap();
+        let checks = std::cell::Cell::new(0u32);
+        let out = cloudflare_background_tick(
+            || false,
+            || {
+                checks.set(checks.get() + 1);
+                Ok(CloudflareDueCheck::NoToken)
+            },
+        );
+        assert_eq!(out, Ok(CloudflareDueCheck::VaultNotRunning));
+        assert_eq!(
+            out.as_ref().unwrap().verdict(),
+            "skip:cloudflare-token-rotation:vault-not-running"
+        );
+        assert_eq!(
+            checks.get(),
+            0,
+            "no store read, so no Vault start and no CA path"
+        );
+        assert_eq!(
+            std::fs::read(&ca).unwrap(),
+            before,
+            "the CA is byte-identical"
+        );
+        // Vault running: the check runs once; no stored login is no-token.
+        let out = cloudflare_background_tick(
+            || true,
+            || {
+                checks.set(checks.get() + 1);
+                Ok(CloudflareDueCheck::NoToken)
+            },
+        );
+        assert_eq!(out, Ok(CloudflareDueCheck::NoToken));
+        assert_eq!(checks.get(), 1);
+    }
+
+    /// 2007-rtmt: the store the scheduler's tick reads through may not start
+    /// Vault, and that refusal is enforced: with Vault stopped its start
+    /// closure is never called and the error names vault-not-running.
+    #[test]
+    fn the_background_store_never_starts_vault() {
+        let store = background_cloudflare_store(false);
+        assert!(!store.may_start_vault);
+        let starts = std::cell::Cell::new(0u32);
+        let out = vault_up_or_start_unless(
+            !store.may_start_vault,
+            || false,
+            || {
+                starts.set(starts.get() + 1);
+                Ok(())
+            },
+        );
+        assert_eq!(out, Err("vault-unavailable:not-running".to_string()));
+        assert_eq!(starts.get(), 0);
+        // Negative control: an interactive store does start a stopped Vault.
+        let out = vault_up_or_start_unless(
+            false,
+            || false,
+            || {
+                starts.set(starts.get() + 1);
+                Ok(())
+            },
+        );
+        assert_eq!(out, Ok(()));
+        assert_eq!(starts.get(), 1);
+    }
+
     #[test]
     fn cloudflare_store_starts_only_vault_when_it_is_stopped() {
         let mut starts = 0;
         assert_eq!(
-            super::vault_up_or_start(
+            super::vault_up_or_start_unless(
+                false,
                 || false,
                 || {
                     starts += 1;
@@ -11437,13 +11833,18 @@ mod cloudflare_token_rotation_tests {
         assert_eq!(starts, 1, "a stopped Vault is started exactly once");
         // A failed start refuses by a fixed word; the caller never proceeds.
         assert_eq!(
-            super::vault_up_or_start(|| false, || Err("podman: no such image".into())),
+            super::vault_up_or_start_unless(
+                false,
+                || false,
+                || Err("podman: no such image".into())
+            ),
             Err("vault-start-failed".to_string())
         );
         // NEGATIVE CONTROL: a running Vault is never started again.
         let mut started = false;
         assert_eq!(
-            super::vault_up_or_start(
+            super::vault_up_or_start_unless(
+                false,
                 || true,
                 || {
                     started = true;

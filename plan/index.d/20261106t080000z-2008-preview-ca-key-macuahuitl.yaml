@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-06, from lenovinha's code reading.
+packets:
+- packet_id: an-unavailable-keyring-never-replaces-the-preview-ca
+  order: 2008-pvck
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [credentials]
+  estimated_hours: 2
+  title: The preview CA keeps its key and refuses to mint when the keyring is unavailable
+  context: 'preview_ca.rs reads its key through the same materialize path that 2007-ckun fixed for the intermediate CA. By code reading it still treats an unavailable keyring as a missing key.'
+  exit_criteria:
+  - 'With a valid preview certificate and an unavailable keyring, the preview CA files stay byte-identical and the refusal is named.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features preview_ca'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test using the 2007-ckun tri-state result.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06 from lenovinha-silverblue.
+  events:
+  - {type: filed, ts: '2026-11-06T08:00:00Z', host: macuahuitl, summary: filed p2 ready}

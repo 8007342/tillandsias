@@ -63,8 +63,7 @@ use tillandsias_core::image_builder::{
 use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
     ContainerSpec, MountMode, NonForceRemoval, OperationKind, PodmanClient, current_runtime_lane,
-    detect_gpu_devices, podman_cmd_sync, require_desktop_user_session,
-    require_headless_service_account,
+    podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
 };
 use tracing::{debug, error, info, warn};
 
@@ -74,6 +73,8 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+// 1991-dovl: dev-build overlay over the compiled-in studio tables.
+mod dev_overlay;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
 mod bringup_timer;
 mod device_poll_view;
@@ -421,6 +422,8 @@ fn main() {
     if user_args.iter().any(|a| a == "--cloud-usage") {
         #[cfg(all(feature = "host-services", feature = "vault"))]
         {
+            // 2000-camv: a read. It never starts Vault and never mints the CA.
+            set_read_only_process();
             let debug = user_args.iter().any(|a| a == "--debug");
             match cloud_usage::call_live(None, debug) {
                 Ok(v) => {
@@ -782,6 +785,9 @@ fn main() {
     // `--reset-install` on exactly this ground: it would have named the one
     // thing the flag is forbidden to touch.
     let reset_state = user_args.iter().any(|a| a == "--reset-state");
+    // 1988-trkp: the explicit "stop every forge and service" (a plain tray
+    // Quit keeps forges running for the next tray).
+    let stop_all = user_args.iter().any(|a| a == "--stop-all");
 
     // @trace spec:enclave-service-catalog
     // `--publish-local <project>` — order 364 e2e closure: bring up the
@@ -974,6 +980,7 @@ fn main() {
         // reading it, which is the only check that could have caught this.
         "--reset-guest",
         "--reset-state",
+        "--stop-all",
         "--headless",
         "--force-downgrade",
         "--tray",
@@ -1370,6 +1377,14 @@ fn main() {
     // convention, exit 1 on any Err. macneo asked for exact numeric propagation
     // and then withdrew the request for this reason — one imperfect convention
     // beats two correct-looking ones.
+    if stop_all {
+        if let Err(e) = run_stop_all() {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
     if reset_state {
         if let Err(e) = run_reset_state(debug) {
             eprintln!("Error: {}", e);
@@ -1990,6 +2005,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cache-clear [--debug]");
     println!("       tillandsias --reset-guest [--debug]");
     println!("       tillandsias --reset-state [--debug]");
+    println!("       tillandsias --stop-all");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
     println!("       tillandsias --claude <project> [--debug|--diagnostics]");
@@ -2027,6 +2043,11 @@ fn print_usage(version: &str) {
         "  --reset-guest  EPHEMERAL RESET: wipe the guest substrate (vault + enclave \
          containers/volumes/secrets; keeps the model cache) and re-initialize. \
          Destructive by design; you'll re-authenticate once"
+    );
+    println!(
+        "  --stop-all     Stop every forge and enclave service, and the tray. A plain tray \
+         Quit or restart leaves forges running and the next tray takes their tools over \
+         (order 1988-trkp)."
     );
     println!(
         "  --reset-state  SOFT LOCAL RESET: removes derived state (Tillandsias \
@@ -4376,6 +4397,53 @@ pub(crate) fn cert_valid_for(cert: &Path, secs: u64) -> bool {
 /// Decided from the certificate's own notAfter, not file mtimes: the old
 /// 25-day mtime rule on a 30-day CA let a tray that launched on day 24 serve it
 /// past notAfter, and an mtime says nothing about the bytes it dates.
+/// 1999-grot: why a refresh happens, for the loud mint line.
+fn ca_refresh_reason(crt: &Path, key: &Path) -> &'static str {
+    if !crt.is_file() {
+        "cert-missing"
+    } else if !key.is_file() {
+        "key-missing"
+    } else if !cert_valid_for(crt, CERT_MIN_REMAINING_SECS) {
+        "cert-expiring"
+    } else {
+        "key-mismatch"
+    }
+}
+
+/// ORDER 2007-ckun: the CA key is missing because the keyring could not be
+/// asked. While the certificate is valid, minting would replace a CA whose key
+/// may be one keyring unlock away, under a running Vault and proxy, so refuse
+/// by name instead. An expired certificate is minted as before.
+fn refuse_mint_for_unavailable_key(
+    materialized: ca_key_store::Materialized,
+    crt: &Path,
+) -> Result<(), String> {
+    if materialized == ca_key_store::Materialized::Unavailable && cert_valid_for(crt, 0) {
+        return Err(format!(
+            "ca-key-unavailable: the CA key for {} is not on tmpfs and the keyring could not \
+             be read; the CA is kept rather than replaced. Unlock the keyring (log in to the \
+             desktop session) and retry (2007-ckun)",
+            crt.display()
+        ));
+    }
+    Ok(())
+}
+
+/// ORDER 2007-ckun: a mint's staged key and certificate, removed on drop. A
+/// failed openssl, a permissions or read error, or a failed seal used to
+/// return with the cleartext key still in the key home.
+struct StagedCaPair {
+    paths: [PathBuf; 2],
+}
+
+impl Drop for StagedCaPair {
+    fn drop(&mut self) {
+        for p in &self.paths {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+}
+
 fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     if !crt.is_file() || !key.is_file() {
         return true;
@@ -4385,7 +4453,18 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     }
     // 1979-bm3u: a key from another generation than the cert is not a CA. The
     // refresh mints both halves together.
-    if !ca_key_matches_cert(crt, key) {
+    let matches = match ca_key_check_detail(crt, key) {
+        Ok(m) => m,
+        Err(why) => {
+            eprintln!(
+                "[tillandsias] warn:ca-key-check-unverifiable:{why}: the CA key or \
+                 certificate could not be read, so the pair is kept as it is (only a \
+                 proven mismatch is reissued; 1999-grot, 2001-cakr)"
+            );
+            return false;
+        }
+    };
+    if !matches {
         warn!(
             spec = "secret-rotation",
             location = %crt.display(),
@@ -4402,6 +4481,50 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 /// is kept aside, the new cert goes in, then `seal_key` publishes the key; if
 /// that fails, the old cert is put back. It used to seal the key first, so a
 /// failed cert rename left a new key under the old cert (yoga, 2026-11-03).
+/// ORDER 2007-uvtl: where a forge sees the enclave CA certificate. A
+/// read-only bind of [`ca_trust_dir_for`], a directory holding ONLY the
+/// certificate, so the host's atomic replace on a rotation is visible inside a
+/// running forge. lib-common.sh composes the trust bundle from it at entry and
+/// `tillandsias-trust check` re-composes it after a rotation.
+pub(crate) const FORGE_CA_TRUST_MOUNT: &str = "/run/tillandsias/ca";
+
+/// 1998-mvrs (b): where the git image (mirror, ssh lane) sees the cert-only
+/// trust directory. `/etc/tillandsias/ca.crt` is a symlink into it.
+pub(crate) const MIRROR_CA_TRUST_MOUNT: &str = "/etc/tillandsias/ca-trust";
+
+/// The cert-only trust directory beside the CA directory: `<state>/ca-trust`.
+/// Never inside the CA directory, which holds (links to) the key.
+pub(crate) fn ca_trust_dir_for(certs_dir: &Path) -> PathBuf {
+    certs_dir.with_file_name("ca-trust")
+}
+
+/// ORDER 2007-uvtl: copy the published CA certificate (never a key) into the
+/// trust directory, atomically, when it differs. Called on every
+/// ensure_ca_bundle, so a mint and a kept CA both leave it current.
+fn publish_ca_trust(certs_dir: &Path) -> Result<PathBuf, String> {
+    let dir = ca_trust_dir_for(certs_dir);
+    let crt = std::fs::read(certs_dir.join("intermediate.crt"))
+        .map_err(|e| format!("ca-trust: read the CA certificate: {e}"))?;
+    let target = dir.join("intermediate.crt");
+    if std::fs::read(&target).is_ok_and(|have| have == crt) {
+        return Ok(dir);
+    }
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| format!("ca-trust: create {}: {e}", dir.display()))?;
+    let tmp = dir.join(format!(".intermediate.crt.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, &crt).map_err(|e| format!("ca-trust: write {}: {e}", tmp.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644));
+    }
+    std::fs::rename(&tmp, &target).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("ca-trust: publish {}: {e}", target.display())
+    })?;
+    Ok(dir)
+}
+
 fn publish_ca_pair(
     tmp_crt: &Path,
     crt: &Path,
@@ -4435,7 +4558,7 @@ fn publish_ca_pair(
 /// generation lock dir is kept. Returns whether it wiped. A missing or expiring
 /// CA is the ordinary re-mint and is left to the caller.
 fn wipe_broken_ca_state(certs_dir: &Path, crt: &Path, key: &Path) -> bool {
-    if !crt.is_file() || !key.is_file() || ca_key_matches_cert(crt, key) {
+    if !crt.is_file() || !key.is_file() || ca_key_check(crt, key) != Some(false) {
         return false;
     }
     let Ok(entries) = std::fs::read_dir(certs_dir) else {
@@ -4475,35 +4598,142 @@ fn wipe_broken_ca_state(certs_dir: &Path, crt: &Path, key: &Path) -> bool {
 /// "No valid signing certificate", and nothing here noticed: every launch died
 /// at the proxy READY gate. An unreadable key or cert answers false (reissue),
 /// the way an unreadable cert already fails cert_valid_for.
+#[cfg(test)]
 fn ca_key_matches_cert(crt: &Path, key: &Path) -> bool {
-    let public = |mut c: Command| {
-        c.stdin(Stdio::null())
+    ca_key_check(crt, key) == Some(true)
+}
+
+/// 1999-grot, 2001-cakr: the key check. `Some(false)` is a POSITIVE proof of a
+/// mismatch: openssl read BOTH public keys and they differ. Anything short of
+/// that is `None` (unknown) and names the side that could not be read: openssl
+/// not spawnable, a nonzero exit, or empty output. Before 2001-cakr a nonzero
+/// `openssl pkey` exit (a transient failure, or a key passphrase from another
+/// generation) answered "mismatch" and wiped the CA under a running Vault.
+/// Credentials lost beats credentials broken, but a CA lost to a flaky probe
+/// is neither: an unknown keeps the pair.
+fn ca_key_check(crt: &Path, key: &Path) -> Option<bool> {
+    ca_key_check_detail(crt, key).ok()
+}
+
+/// The check with the reason an unknown is unknown, for the warn line.
+fn ca_key_check_detail(crt: &Path, key: &Path) -> Result<bool, String> {
+    let public = |side: &str, mut c: Command| -> Result<Vec<u8>, String> {
+        let o = c
+            .stdin(Stdio::null())
             .stderr(Stdio::null())
             .output()
-            .ok()
-            .filter(|o| o.status.success() && !o.stdout.is_empty())
-            .map(|o| o.stdout)
+            .map_err(|e| format!("{side}:spawn-failed:{e}"))?;
+        if !o.status.success() {
+            return Err(format!("{side}:exit-{}", o.status.code().unwrap_or(-1)));
+        }
+        if o.stdout.is_empty() {
+            return Err(format!("{side}:empty-output"));
+        }
+        Ok(o.stdout)
     };
     let mut of_cert = Command::new("openssl");
     of_cert.args(["x509", "-noout", "-pubkey", "-in"]).arg(crt);
-    let mut of_key = Command::new("openssl");
+    let mut of_key = Command::new(ca_key_openssl_bin());
     of_key
         .arg("pkey")
         .args(ca_key_store::key_in_args())
         .args(["-pubout", "-in"])
         .arg(key)
         .envs(ca_key_store::pass_env());
-    matches!((public(of_cert), public(of_key)), (Some(a), Some(b)) if a == b)
+    let a = public("cert", of_cert)?;
+    let b = public("key", of_key)?;
+    Ok(a == b)
+}
+
+/// The openssl the key half of the check runs. A test seam only: under
+/// `cfg(test)` a thread may plant a stub to model a transient failure.
+fn ca_key_openssl_bin() -> std::ffi::OsString {
+    #[cfg(test)]
+    if let Some(p) = CA_KEY_OPENSSL_STUB.with(|s| s.borrow().clone()) {
+        return p.into_os_string();
+    }
+    "openssl".into()
+}
+
+#[cfg(test)]
+thread_local! {
+    static CA_KEY_OPENSSL_STUB: std::cell::RefCell<Option<PathBuf>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// 2000-camv: the CA a mint replaced, kept beside the current one.
+pub(crate) const PREVIOUS_CA_FILE: &str = "previous.crt";
+
+fn keep_previous_ca(certs_dir: &Path, old: &[u8]) {
+    let tmp = certs_dir.join(format!("{PREVIOUS_CA_FILE}.{}.tmp", std::process::id()));
+    let kept = std::fs::write(&tmp, old)
+        .and_then(|()| std::fs::rename(&tmp, certs_dir.join(PREVIOUS_CA_FILE)));
+    if let Err(e) = kept {
+        let _ = std::fs::remove_file(&tmp);
+        eprintln!(
+            "[tillandsias] warn:ca-previous-not-kept: {e}; a Vault serving a leaf from the \
+             replaced CA stops verifying until it is relaunched (2000-camv)"
+        );
+    }
+}
+
+/// 2000-camv: what a HOST Vault client trusts: the current CA, plus the CA a
+/// mint replaced while that one is still valid. A Vault keeps serving the
+/// leaf the replaced CA signed until it is relaunched, and mirrors created
+/// before the mint hold only that CA, so this keeps the tray verifying
+/// without relaunching Vault under them. The previous CA is dropped when
+/// Vault's leaf is next reissued from the current CA (ensure_vault_tls_leaf),
+/// so the window is one generation. It widens nothing: the previous CA was
+/// trusted until the mint, and the mint is a repair (key lost, mismatched or
+/// expiring), never a revocation; --reset-guest removes the whole directory.
+pub(crate) fn host_vault_trust_pem(certs_dir: &Path) -> Result<Vec<u8>, String> {
+    let mut pem = std::fs::read(certs_dir.join("intermediate.crt"))
+        .map_err(|e| format!("read Vault CA certificate: {e}"))?;
+    let previous = certs_dir.join(PREVIOUS_CA_FILE);
+    if cert_valid_for(&previous, 0)
+        && let Ok(old) = std::fs::read(&previous)
+    {
+        if !pem.ends_with(b"\n") {
+            pem.push(b'\n');
+        }
+        pem.extend_from_slice(&old);
+    }
+    Ok(pem)
+}
+
+/// 1999-grot: the trust a Vault CLIENT needs is the CA certificate alone.
+/// Verifying Vault's leaf never needs the CA key, so a reader must never
+/// re-mint: a mint replaced intermediate.crt under a running Vault whose leaf
+/// the old CA signed, and every later tray read failed TLS verification
+/// (macuahuitl 2026-11-04: GitHub rotation never ran; the token lapsed at its
+/// 8 h expiry). A present, unexpired certificate is returned as it is; only a
+/// missing or expired one falls through to [`ensure_ca_bundle`], where there
+/// is no chain to break.
+pub(crate) fn ca_trust_dir(debug: bool) -> Result<PathBuf, String> {
+    let certs_dir = PathBuf::from(ca_dir());
+    if ca_trust_is_usable(&certs_dir.join("intermediate.crt")) {
+        return Ok(certs_dir);
+    }
+    ensure_ca_bundle(debug)
+}
+
+fn ca_trust_is_usable(crt: &Path) -> bool {
+    crt.is_file() && cert_valid_for(crt, 0)
 }
 
 /// ORDER 1762-bano: the enclave certificates that stay valid for less than
-/// `margin_secs`, by name ("ca", "vault-leaf"). A missing or unreadable one
-/// counts as expiring.
+/// `margin_secs`, by name ("ca", "vault-leaf"). A present but unreadable one
+/// counts as expiring. 2003-kypa: a MISSING one is not expiring: it is minted
+/// at the next launch, and "Restart Tillandsias to renew" for a leaf a Vault
+/// that never launched does not have was the wrong message.
 #[cfg(feature = "tray")]
 pub(crate) fn expiring_enclave_certs(certs_dir: &Path, margin_secs: u64) -> Vec<&'static str> {
     [("ca", "intermediate.crt"), ("vault-leaf", "vault.crt")]
         .into_iter()
-        .filter(|(_, file)| !cert_valid_for(&certs_dir.join(file), margin_secs))
+        .filter(|(_, file)| {
+            let path = certs_dir.join(file);
+            path.exists() && !cert_valid_for(&path, margin_secs)
+        })
         .map(|(name, _)| name)
         .collect()
 }
@@ -4610,6 +4840,108 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
     }
 
+    /// 2007-uvtl: the trust directory holds the CA certificate and nothing
+    /// else, is replaced atomically when the certificate changes, and is left
+    /// alone when it does not. Pre-fix: FAILS, there was no trust directory;
+    /// forges bound the certificate FILE, whose old inode a running forge kept.
+    #[test]
+    #[cfg(unix)]
+    fn the_ca_trust_dir_holds_only_the_current_certificate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let ca = tmp.path().join("ca");
+        std::fs::create_dir_all(&ca).unwrap();
+        let (crt, key) = mint(&ca, 365);
+        let dir = publish_ca_trust(&ca).unwrap();
+        assert_eq!(dir, tmp.path().join("ca-trust"));
+        let listing = |d: &Path| {
+            let mut v: Vec<String> = std::fs::read_dir(d)
+                .unwrap()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect();
+            v.sort();
+            v
+        };
+        assert_eq!(
+            listing(&dir),
+            ["intermediate.crt"],
+            "no key, no staging left"
+        );
+        assert_eq!(
+            std::fs::read(dir.join("intermediate.crt")).unwrap(),
+            std::fs::read(&crt).unwrap()
+        );
+        assert!(key.exists());
+        let ino = |p: &Path| {
+            use std::os::unix::fs::MetadataExt as _;
+            std::fs::metadata(p).unwrap().ino()
+        };
+        let before = ino(&dir.join("intermediate.crt"));
+        publish_ca_trust(&ca).unwrap();
+        assert_eq!(
+            ino(&dir.join("intermediate.crt")),
+            before,
+            "unchanged: not rewritten"
+        );
+        let (crt2, _) = mint(&ca, 365);
+        publish_ca_trust(&ca).unwrap();
+        assert_eq!(
+            std::fs::read(dir.join("intermediate.crt")).unwrap(),
+            std::fs::read(&crt2).unwrap()
+        );
+        assert_eq!(listing(&dir), ["intermediate.crt"]);
+    }
+
+    /// 2007-ckun: an unavailable keyring with a valid CA refuses by name and
+    /// mints nothing; with an expired CA, or any other materialize outcome,
+    /// the usual refresh rules decide. Pre-fix: FAILS, no such refusal.
+    #[test]
+    fn an_unavailable_ca_key_keeps_a_valid_ca_and_refuses_by_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (crt, _key) = mint(tmp.path(), 365);
+        let before = std::fs::read(&crt).unwrap();
+        let e = refuse_mint_for_unavailable_key(ca_key_store::Materialized::Unavailable, &crt)
+            .unwrap_err();
+        assert!(
+            e.starts_with("ca-key-unavailable:") && e.contains("keyring"),
+            "{e}"
+        );
+        assert_eq!(std::fs::read(&crt).unwrap(), before, "the CA is untouched");
+        for m in [
+            ca_key_store::Materialized::Gone,
+            ca_key_store::Materialized::Present,
+            ca_key_store::Materialized::Inactive,
+            ca_key_store::Materialized::Refilled,
+        ] {
+            assert!(refuse_mint_for_unavailable_key(m, &crt).is_ok(), "{m:?}");
+        }
+        let missing = tmp.path().join("absent.crt");
+        assert!(
+            refuse_mint_for_unavailable_key(ca_key_store::Materialized::Unavailable, &missing)
+                .is_ok(),
+            "no valid CA to keep: minting is allowed"
+        );
+    }
+
+    /// 2007-ckun: a mint that fails after openssl wrote its key leaves no
+    /// staged file. Pre-fix: FAILS, tmp_key survived every early return.
+    #[test]
+    fn a_failed_mint_leaves_no_staged_key() {
+        let tmp = tempfile::tempdir().unwrap();
+        let key = tmp.path().join("intermediate.key.1.2.tmp");
+        let crt = tmp.path().join("intermediate.crt.1.2.tmp");
+        std::fs::write(&key, b"-----BEGIN PRIVATE KEY-----").unwrap();
+        std::fs::write(&crt, b"cert").unwrap();
+        let fail = || -> Result<(), String> {
+            let _staged = StagedCaPair {
+                paths: [key.clone(), crt.clone()],
+            };
+            Err("openssl exited 1 after writing -keyout".into())
+        };
+        assert!(fail().is_err());
+        assert!(!key.exists() && !crt.exists(), "both staged files are gone");
+    }
+
     // 1979-bm3u root cause: a mint that fails part-way never leaves a new key
     // next to the old certificate. MEASURED on yoga after the 2026-11-03 reboot:
     // a key dated 11:27 under the 09:01 certificate, squid dead. Each failure
@@ -4654,6 +4986,30 @@ mod ca_refresh_margin_tests {
         );
     }
 
+    // ORDER 1999-grot: a Vault client's trust is the CA certificate alone, so a
+    // pair whose key is missing or from another generation still TRUSTS, and
+    // the reader keeps it instead of re-minting the CA under a running Vault.
+    // Pre-fix: FAILS, vault_client went through ensure_ca_bundle, which wiped
+    // and re-minted, and the served leaf stopped verifying.
+    #[test]
+    fn a_vault_reader_keeps_a_trusting_ca_whose_key_is_lost() {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let (crt_a, _key_a) = mint(a.path(), 365);
+        let (_crt_b, key_b) = mint(b.path(), 365);
+        assert!(
+            ca_bundle_needs_refresh(&crt_a, &key_b),
+            "a minter would reissue"
+        );
+        assert!(ca_trust_is_usable(&crt_a), "a reader keeps the trust");
+        assert!(!ca_trust_is_usable(&a.path().join("absent.crt")));
+        assert_eq!(ca_refresh_reason(&crt_a, &key_b), "key-mismatch");
+        assert_eq!(
+            ca_refresh_reason(&crt_a, &a.path().join("none.key")),
+            "key-missing"
+        );
+    }
+
     // 1979-bm3u: a certificate and a key from two generations is reissued, not
     // kept. Red before 1979-bm3u: the pair passed (both files, a year left).
     #[test]
@@ -4672,10 +5028,57 @@ mod ca_refresh_margin_tests {
             ca_bundle_needs_refresh(&crt_a, &key_b),
             "a mismatched pair is reissued"
         );
+        // 2001-cakr flips 1979-bm3u here: an unreadable key is an UNKNOWN,
+        // not a mismatch, and is kept (only a proven mismatch is reissued).
         std::fs::write(&key_b, "not a key").unwrap();
+        assert_eq!(ca_key_check(&crt_a, &key_b), None);
         assert!(
-            ca_bundle_needs_refresh(&crt_a, &key_b),
-            "an unreadable key is reissued"
+            !ca_bundle_needs_refresh(&crt_a, &key_b),
+            "an unreadable key is kept, not reissued"
+        );
+    }
+
+    // 2001-cakr: a transient `openssl pkey` failure is an unknown, never a
+    // mismatch. With a stub that exits 1 for the key read, a MATCHED pair is
+    // neither refreshed nor wiped, and the CA dir is byte-identical. Red before
+    // 2001-cakr: a nonzero exit answered Some(false) and the pair was wiped.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_key_read_leaves_the_ca_dir_byte_identical() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = tempfile::tempdir().unwrap();
+        let (crt, key) = mint(dir.path(), 365);
+        std::fs::write(dir.path().join("vault.crt"), "leaf").unwrap();
+        let stub = bin.path().join("openssl");
+        std::fs::write(&stub, "#!/bin/sh\necho 'unable to load key' >&2\nexit 1\n").unwrap();
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let snap = |d: &Path| -> Vec<(String, Vec<u8>)> {
+            let mut v: Vec<_> = std::fs::read_dir(d)
+                .unwrap()
+                .flatten()
+                .map(|e| {
+                    let n = e.file_name().to_string_lossy().into_owned();
+                    (n, std::fs::read(e.path()).unwrap_or_default())
+                })
+                .collect();
+            v.sort();
+            v
+        };
+        let before = snap(dir.path());
+        CA_KEY_OPENSSL_STUB.with(|s| *s.borrow_mut() = Some(stub.clone()));
+        let detail = ca_key_check_detail(&crt, &key);
+        let refresh = ca_bundle_needs_refresh(&crt, &key);
+        let wiped = wipe_broken_ca_state(dir.path(), &crt, &key);
+        CA_KEY_OPENSSL_STUB.with(|s| *s.borrow_mut() = None);
+        assert_eq!(detail, Err("key:exit-1".to_string()));
+        assert!(!refresh, "an unreadable key is not a reason to re-mint");
+        assert!(!wiped, "an unreadable key is not a reason to wipe");
+        assert_eq!(snap(dir.path()), before, "the CA dir changed");
+        assert_eq!(
+            ca_key_check(&crt, &key),
+            Some(true),
+            "the real pair still matches"
         );
     }
 
@@ -4737,13 +5140,24 @@ mod ca_refresh_margin_tests {
         assert!(ca_bundle_needs_refresh(&crt, &key));
     }
 
-    // 1762-bano: inside 72 h is named (the warning arm), a year is not; a
-    // missing Vault leaf counts as expiring.
+    // 1762-bano: inside 72 h is named (the warning arm), a year is not.
+    // 2003-kypa: a missing Vault leaf is NOT expiring (it is minted at the
+    // next launch); a present one inside 72 h is.
     #[cfg(feature = "tray")]
     #[test]
     fn enclave_certs_inside_seventy_two_hours_are_named_as_expiring() {
         let tmp = tempfile::tempdir().unwrap();
         mint(tmp.path(), 2);
+        assert_eq!(
+            expiring_enclave_certs(tmp.path(), 72 * 60 * 60),
+            vec!["ca"],
+            "a missing vault.crt is not named"
+        );
+        std::fs::copy(
+            tmp.path().join("intermediate.crt"),
+            tmp.path().join("vault.crt"),
+        )
+        .unwrap();
         assert_eq!(
             expiring_enclave_certs(tmp.path(), 72 * 60 * 60),
             vec!["ca", "vault-leaf"]
@@ -4818,8 +5232,67 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// ORDER 2000-camv: a READ-ONLY process (`--cloud-usage`, run from the
+/// pre-push hook's release preflight) never starts Vault and never mints the
+/// CA. Caught on macuahuitl 2026-11-04 23:43:56: the CA was re-minted within
+/// 0.2 s of `tillandsias --cloud-usage` starting under the pre-push hook. Its
+/// Cloudflare store read starts Vault when podman says it is stopped
+/// (vault_up_or_start), and that start reaches ensure_ca_bundle; in a hook's
+/// environment both answers can be wrong, and a mint there replaced the CA
+/// under the running Vault.
+static READ_ONLY_PROCESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg_attr(
+    not(all(feature = "host-services", feature = "vault")),
+    allow(dead_code)
+)]
+pub(crate) fn set_read_only_process() {
+    READ_ONLY_PROCESS.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+pub(crate) fn read_only_process() -> bool {
+    READ_ONLY_PROCESS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn refuse_mint_in_read_only_process(read_only: bool) -> Result<(), String> {
+    if read_only {
+        Err("refused:ca-bundle:read-only-process\n  \
+             why: a read-only command (--cloud-usage) must not mint the host CA; a mint \
+             replaces it under a running Vault (2000-camv)\n  \
+             remedy: start Tillandsias (the tray), which owns the CA and Vault"
+            .into())
+    } else {
+        Ok(())
+    }
+}
+
+/// ORDER 2000-camv: a fake-podman run (a litmus fixture) never reaches the
+/// operator's real CA. Two --ci-full fixtures ran the real binary with the
+/// real HOME through ensure_ca_bundle, which can wipe and re-mint the host CA
+/// under a running Vault; on a gate host that shares HOME with the tray (a
+/// toolbox) that is the operator's CA. Refused before anything is read,
+/// materialized or written.
+#[cfg(unix)]
+fn refuse_fake_podman_in_real_home(
+    certs_dir: &Path,
+    fake_podman: bool,
+    passwd_home: Option<&Path>,
+) -> Result<(), String> {
+    match passwd_home {
+        Some(home) if fake_podman && home.as_os_str().len() > 1 && certs_dir.starts_with(home) => {
+            Err(format!(
+                "refused:ca-bundle:fake-podman-in-real-home:{}\n  \
+                 why: a LITMUS_PODMAN_MODE run reached the operator's real CA directory, where a \
+                 mint replaces the CA under a running Vault (2000-camv)\n  \
+                 remedy: run the fixture with HOME and XDG_RUNTIME_DIR on a scratch directory",
+                certs_dir.display()
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// The passwd home of this user, which HOME cannot fake.
-#[cfg(test)]
 #[cfg(unix)]
 fn passwd_home() -> Option<PathBuf> {
     // SAFETY: getpwuid returns a pointer into static storage or null; it is
@@ -4886,6 +5359,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     }
     #[cfg(test)]
     refuse_real_home_in_test(&certs_dir)?;
+    #[cfg(unix)]
+    refuse_fake_podman_in_real_home(
+        &certs_dir,
+        std::env::var_os("LITMUS_PODMAN_MODE").is_some_and(|v| !v.is_empty()),
+        passwd_home().as_deref(),
+    )?;
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     // Order 472 slice 3: the generation before any refresh, so a mint or a
@@ -4897,10 +5376,14 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // 1118-fqfk slice 2b: the key path is a link into tmpfs. Plaintext is
     // deleted and a dangling link is refilled from the keyring, before the
     // usable check below decides whether to mint.
-    ca_key_store::materialize(&key, &crt, true);
+    // 2007-ckun: staging a dead mint left behind (cleartext keys) goes first.
+    ca_key_store::sweep_stale_staging(&key);
+    let materialized = ca_key_store::materialize(&key, &crt, true);
+    refuse_mint_for_unavailable_key(materialized, &crt)?;
     let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
+        refuse_mint_in_read_only_process(read_only_process())?;
         let lock_dir = certs_dir.join(".ca-generation.lock");
         let mut acquired_lock = false;
         for _ in 0..50 {
@@ -4932,6 +5415,22 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         // 1979-bm3u (operator, 2026-11-03: "wipe them all and recreate all from
         // scratch"): a broken pair is not repaired in place. Everything here is
         // removed and minted again from nothing, as on a first start.
+        // 2000-camv: the CA this mint replaces, while it is still valid. Host
+        // Vault clients keep trusting it for ONE generation, so a Vault still
+        // serving a leaf it signed stays verifiable and nothing relaunches it.
+        let replaced = std::fs::read(&crt).ok().filter(|_| cert_valid_for(&crt, 0));
+        eprintln!(
+            "[tillandsias] warn:ca-reminted:{}: pid={} exe={} vault-running={}: a new CA \
+             replaces the old one; host clients keep trusting the old CA until Vault is \
+             next relaunched with a leaf from the new one (1999-grot, 2000-camv)",
+            ca_refresh_reason(&crt, &key),
+            std::process::id(),
+            std::env::current_exe()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|_| "unknown".into()),
+            vault_bootstrap::container_running_answer("tillandsias-vault")
+                .map_or("unknown", |r| if r { "yes" } else { "no" }),
+        );
         wipe_broken_ca_state(&certs_dir, &crt, &key);
 
         // @trace spec:secret-rotation
@@ -4952,6 +5451,11 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         );
         let tmp_crt = certs_dir.join(format!("intermediate.crt.{unique}.tmp"));
         let tmp_key = ca_key_store::staging_path(&key, &unique);
+        // 2007-ckun: every exit before publish removes both; publish renames
+        // them away, so after it there is nothing left to remove.
+        let _staged = StagedCaPair {
+            paths: [tmp_key.clone(), tmp_crt.clone()],
+        };
         let mut command = Command::new("openssl");
         command.args([
             "req",
@@ -5028,6 +5532,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         publish_ca_pair(&tmp_crt, &crt, || {
             ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
         })?;
+        if let Some(old) = replaced {
+            keep_previous_ca(&certs_dir, &old);
+        }
 
         info!(
             accountability = true,
@@ -5043,6 +5550,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             eprintln!("[tillandsias] refreshed CA bundle at {}", crt.display());
         }
     }
+
+    // 2007-uvtl: forges read the certificate from the cert-only directory.
+    publish_ca_trust(&certs_dir)?;
 
     // 755-qcxh: the proxy no longer reads this file through a bind mount —
     // it receives the key as a podman secret — so nothing legitimate needs it
@@ -5148,9 +5658,12 @@ fn build_stack_common_args(
         // One runtime trust input feeds lib-common.sh's rootless initializer.
         // Git, curl, Node, and Python then use the image's system-default path.
         "--mount".into(),
+        // 2007-uvtl: the cert-only trust DIRECTORY, read-only, so a CA
+        // rotation reaches a running forge (a single-file bind kept the old
+        // inode). It never holds a key.
         format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
+            "type=bind,source={},target={FORGE_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(certs_dir).display()
         ),
     ]);
     append_git_identity_env_args(&mut args, project_name);
@@ -6600,10 +7113,14 @@ fn build_git_run_args(
         args.push("--env".into());
         args.push("VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token".into());
     }
+    // 1998-mvrs (b): the cert-only trust DIRECTORY, read-only, so a CA
+    // rotation reaches a running mirror (a single-file bind kept the old
+    // inode). The image links /etc/tillandsias/ca.crt into it, and the
+    // entrypoint restarts Vault Agent when a valid new CA appears.
     args.push("--mount".into());
     args.push(format!(
-        "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-        certs_dir.join("intermediate.crt").display()
+        "type=bind,source={},target={MIRROR_CA_TRUST_MOUNT},readonly=true",
+        ca_trust_dir_for(certs_dir).display()
     ));
     args.push(image.into());
     // Image ENTRYPOINT is /usr/local/bin/entrypoint.sh which runs the right
@@ -7989,6 +8506,56 @@ fn nonempty_runtime_dir(value: Option<String>) -> Option<PathBuf> {
 
 /// [`control_socket_host_dir`] for an explicit `XDG_RUNTIME_DIR` value. An
 /// empty value counts as unset (order 1748-fbqe, see [`nonempty_runtime_dir`]).
+/// ORDER 2007-rtky: the tray's control socket lives in its OWN subdirectory,
+/// so a container that needs the socket (the router) binds that directory and
+/// nothing else. The parent holds keys/ (the CA private key on tmpfs) and the
+/// key passphrase; binding the parent gave the router read-write access to
+/// both. A directory, not the socket file: a single-file bind keeps the old
+/// inode when the tray recreates the socket.
+pub(crate) const CONTROL_SOCKET_SUBDIR: &str = "control";
+
+/// The socket-only directory, created 0700 if missing.
+pub(crate) fn control_socket_dir() -> PathBuf {
+    let dir = control_socket_host_dir().join(CONTROL_SOCKET_SUBDIR);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        let _ = std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(&dir);
+    }
+    #[cfg(not(unix))]
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// The tray's control socket (2007-rtky: inside [`control_socket_dir`]).
+pub(crate) fn control_socket_file() -> PathBuf {
+    control_socket_dir().join("control.sock")
+}
+
+/// ORDER 2007-rtky: the pre-2007 path, `<runtime>/tillandsias/control.sock`,
+/// kept as a relative symlink into the subdirectory so clients of an older
+/// build still reach a newer tray. Never replaces a real socket (an older tray
+/// still serving there).
+#[cfg(unix)]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn link_legacy_control_socket() {
+    let legacy = control_socket_host_dir().join("control.sock");
+    match std::fs::symlink_metadata(&legacy) {
+        Ok(m) if !m.file_type().is_symlink() => return,
+        Ok(_) => {
+            let _ = std::fs::remove_file(&legacy);
+        }
+        Err(_) => {}
+    }
+    let _ = std::os::unix::fs::symlink(
+        Path::new(CONTROL_SOCKET_SUBDIR).join("control.sock"),
+        &legacy,
+    );
+}
+
 fn control_socket_host_dir_from(xdg: Option<String>) -> PathBuf {
     let base = if let Some(runtime_dir) = nonempty_runtime_dir(xdg) {
         runtime_dir
@@ -8135,9 +8702,11 @@ fn build_router_run_args(certs_dir: &Path, image: &str, host_port: u16) -> Vec<S
         "-v".into(),
         format!("{}:/run/router/dynamic.Caddyfile:rw", dyn_file.display()),
         "-v".into(),
+        // ORDER 2007-rtky: the socket-only subdirectory, never its parent
+        // (which holds keys/ and the CA key passphrase).
         format!(
             "{}:/run/host/tillandsias:rw",
-            control_socket_host_dir().display()
+            control_socket_dir().display()
         ),
         "--mount".into(),
         format!(
@@ -10436,9 +11005,12 @@ fn build_opencode_forge_args(
             forge_tool_cache_volume(project_name)
         ),
         "--mount".into(),
+        // 2007-uvtl: the cert-only trust DIRECTORY, read-only, so a CA
+        // rotation reaches a running forge (a single-file bind kept the old
+        // inode). It never holds a key.
         format!(
-            "type=bind,source={},target=/run/tillandsias/ca-chain.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
+            "type=bind,source={},target={FORGE_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(certs_dir).display()
         ),
     ]);
     // Project source routing. Both branches mount under
@@ -15340,10 +15912,11 @@ fn build_ssh_lane_sidecar_run_args(
         "VAULT_CACERT=/etc/tillandsias/ca.crt".into(),
         "--env".into(),
         "VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token".into(),
+        // 1998-mvrs (b): same image as the mirror; see MIRROR_CA_TRUST_MOUNT.
         "--mount".into(),
         format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
+            "type=bind,source={},target={MIRROR_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(certs_dir).display()
         ),
         "--entrypoint".into(),
         "/usr/local/bin/ssh-lane-sidecar".into(),
@@ -16215,7 +16788,7 @@ fn maybe_spawn_detached_tray_for_cli(
         return;
     }
 
-    let socket_path = control_socket_host_dir().join("control.sock");
+    let socket_path = control_socket_file();
 
     // Fast path: if the socket is already accepting connections, an existing
     // tray (or an earlier sibling) is alive and there's no need to spawn a
@@ -17966,15 +18539,65 @@ fn opencode_web_http_status(url: &str, cookie_header: Option<String>) -> Result<
     })
 }
 
+/// ORDER 1989-owrd: how long an OpenCode Web wait keeps going while the forge
+/// still runs. A cold forge (the opencode binary's first run from the
+/// project cache) answered ~41 s after start on lenovinha 2026-11-04, past the
+/// old fixed 30 s, which failed a healthy launch.
+const OPENCODE_WEB_BUDGET: Duration = Duration::from_secs(300);
+/// How often the waits re-read the forge container's state.
+const OPENCODE_WEB_FORGE_CHECK: Duration = Duration::from_secs(3);
+
+/// 1989-owrd: one decision of an OpenCode Web wait.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WebWait {
+    KeepWaiting,
+    /// The forge container is no longer running: fail now, not at the budget.
+    ForgeGone,
+    /// The budget passed while the forge still ran.
+    OutOfTime,
+}
+
+/// The pure rule: wait while the forge runs and the budget lasts.
+fn web_wait_step(elapsed: Duration, budget: Duration, forge_running: bool) -> WebWait {
+    if !forge_running {
+        WebWait::ForgeGone
+    } else if elapsed >= budget {
+        WebWait::OutOfTime
+    } else {
+        WebWait::KeepWaiting
+    }
+}
+
+/// Whether the forge container runs (re-read every OPENCODE_WEB_FORGE_CHECK).
+fn forge_still_running(forge_container: &str) -> bool {
+    let mut cmd = tillandsias_podman::podman_cmd_sync();
+    cmd.args(["inspect", "--format", "{{.State.Running}}", forge_container]);
+    cmd.output_bounded(Duration::from_secs(10))
+        .ok()
+        .filter(|o| o.status.success())
+        .is_some_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "true")
+}
+
 fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
     let mut last_outcome = String::from("no HTTP probe attempted");
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(2);
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
     let mut attempt = 1;
+    let forge_container = forge_container_name(project_name);
+    let mut forge_running = true;
+    let mut checked = std::time::Instant::now();
 
-    while start.elapsed() < timeout {
+    // 1989-owrd: wait while the forge runs (cold start), fail fast if it stops.
+    let verdict = loop {
+        if checked.elapsed() >= OPENCODE_WEB_FORGE_CHECK {
+            forge_running = forge_still_running(&forge_container);
+            checked = std::time::Instant::now();
+        }
+        match web_wait_step(start.elapsed(), OPENCODE_WEB_BUDGET, forge_running) {
+            WebWait::KeepWaiting => {}
+            other => break other,
+        }
         match opencode_web_http_status(url, None) {
             Ok(401) => return Ok(()),
             Ok(502) => {
@@ -18005,12 +18628,18 @@ fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Re
         std::thread::sleep(backoff);
         backoff = (backoff * 2).min(max_backoff);
         attempt += 1;
-    }
+    };
 
-    let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
+    let why = match verdict {
+        WebWait::ForgeGone => format!("the forge container {forge_container} stopped"),
+        _ => format!(
+            "{} s passed while the forge still ran",
+            OPENCODE_WEB_BUDGET.as_secs()
+        ),
+    };
     Err(format!(
-        "OpenCode Web auth gate did not become ready in 30s.\n\
+        "OpenCode Web auth gate did not become ready ({why}).\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -18040,10 +18669,21 @@ fn wait_for_authenticated_opencode_web(
     let mut backoff = Duration::from_millis(100);
     let max_backoff = Duration::from_secs(2);
     let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(30);
     let mut attempt = 1;
+    let forge_container = forge_container_name(project_name);
+    let mut forge_running = true;
+    let mut checked = std::time::Instant::now();
 
-    while start.elapsed() < timeout {
+    // 1989-owrd: wait while the forge runs (cold start), fail fast if it stops.
+    let verdict = loop {
+        if checked.elapsed() >= OPENCODE_WEB_FORGE_CHECK {
+            forge_running = forge_still_running(&forge_container);
+            checked = std::time::Instant::now();
+        }
+        match web_wait_step(start.elapsed(), OPENCODE_WEB_BUDGET, forge_running) {
+            WebWait::KeepWaiting => {}
+            other => break other,
+        }
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
             Ok(401) => {
@@ -18084,12 +18724,18 @@ fn wait_for_authenticated_opencode_web(
         std::thread::sleep(backoff);
         backoff = (backoff * 2).min(max_backoff);
         attempt += 1;
-    }
+    };
 
-    let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
+    let why = match verdict {
+        WebWait::ForgeGone => format!("the forge container {forge_container} stopped"),
+        _ => format!(
+            "{} s passed while the forge still ran",
+            OPENCODE_WEB_BUDGET.as_secs()
+        ),
+    };
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session in 30s.\n\
+        "OpenCode Web app did not become reachable with a registered session ({why}).\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -18097,6 +18743,48 @@ fn wait_for_authenticated_opencode_web(
          full transcript, then verify the enclave network + router are\n\
          healthy via `tillandsias --status`."
     ))
+}
+
+/// ORDER 1989-owrd: an OpenCode Web wait keeps going while the forge still
+/// runs (a cold forge answered ~41 s after start), fails at once when the
+/// forge is gone, and only then at the budget. Pre-fix: FAILS, both waits
+/// stopped at a fixed 30 s whatever the forge was doing.
+#[cfg(test)]
+#[test]
+fn an_opencode_web_wait_outlasts_a_cold_forge_and_fails_fast_when_it_stops() {
+    let cold = Duration::from_secs(41);
+    assert!(
+        OPENCODE_WEB_BUDGET > cold + Duration::from_secs(30),
+        "room for a cold start"
+    );
+    assert_eq!(
+        web_wait_step(Duration::from_secs(45), OPENCODE_WEB_BUDGET, true),
+        WebWait::KeepWaiting
+    );
+    assert_eq!(
+        web_wait_step(Duration::from_secs(2), OPENCODE_WEB_BUDGET, false),
+        WebWait::ForgeGone
+    );
+    assert_eq!(
+        web_wait_step(OPENCODE_WEB_BUDGET, OPENCODE_WEB_BUDGET, true),
+        WebWait::OutOfTime
+    );
+    let src = include_str!("main.rs");
+    let gate = src.split("fn wait_for_opencode_web_route(").nth(1).unwrap();
+    let gate = &gate[..gate.find("\n}\n").unwrap()];
+    assert!(
+        !gate.contains("Duration::from_secs(30)"),
+        "no fixed 30 s left in the route wait"
+    );
+    let app = src
+        .split("fn wait_for_authenticated_opencode_web(")
+        .nth(1)
+        .unwrap();
+    let app = &app[..app.find("\n}\n").unwrap()];
+    assert!(
+        !app.contains("Duration::from_secs(30)"),
+        "no fixed 30 s left in the app wait"
+    );
 }
 
 #[cfg(test)]
@@ -18368,12 +19056,9 @@ fn build_project_browser_spec_on(
             .env("PULSE_SERVER", server);
     }
 
-    for device_flag in detect_gpu_devices() {
-        if let Some(device) = device_flag.strip_prefix("--device=") {
-            spec = spec.device(device);
-        } else {
-            spec = spec.option(device_flag);
-        }
+    // 2001-bwgl: only a GPU this window has a driver for.
+    for device in accel_probe::browser_gpu_devices() {
+        spec = spec.device(device);
     }
 
     Ok(spec)
@@ -18434,9 +19119,7 @@ fn read_control_frame_blocking(stream: &mut impl Read) -> Result<Vec<u8>, String
 /// The tray's control socket, as the tray computes it.
 #[cfg(unix)]
 fn tray_control_socket_path() -> PathBuf {
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
-        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
-    PathBuf::from(runtime_dir).join("tillandsias/control.sock")
+    control_socket_file()
 }
 
 /// Tell the tray the GitHub token is stored (order 679-rp9m), so its login
@@ -20180,7 +20863,7 @@ async fn ensure_inference_for_launch(
 ///
 /// Every option flows through the policy-validated `build_run_argv()` path —
 /// no raw `--unsafe` flags, no host home mounts. Project workspace lands at
-/// `/home/forge/src/<project>/`, CA cert at `/run/tillandsias/ca-chain.crt`.
+/// `/home/forge/src/<project>/`, CA cert in the read-only `/run/tillandsias/ca/` directory (2007-uvtl).
 /// @trace spec:forge-as-only-runtime
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 /// Name of the podman named volume backing a project's persistent forge tool/
@@ -20303,9 +20986,34 @@ fn claim_forge_instance(
     host_mount: bool,
     debug: bool,
 ) -> Result<Option<resource_lock::ResourceLockGuard>, String> {
-    let explicit = std::env::var("TILLANDSIAS_FORGE_INSTANCE")
-        .ok()
-        .is_some_and(|s| !s.trim().is_empty());
+    let explicit = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let Some((guard, instance)) =
+        claim_forge_instance_slot(project, host_mount, debug, explicit.as_deref())?
+    else {
+        return Ok(None);
+    };
+    if let Some(name) = &instance {
+        // The env write runs at the top of a lane launch, before any
+        // thread that reads the instance is spawned.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", name);
+        }
+    }
+    Ok(Some(guard))
+}
+
+/// 2000-envt: [`claim_forge_instance`] without the process environment. The
+/// caller passes the explicit instance it was given and gets back the claim
+/// and the instance it took (`None` = the default), so a test can take two
+/// slots in a row without reading or writing a variable that parallel tests
+/// also touch.
+fn claim_forge_instance_slot(
+    project: &str,
+    host_mount: bool,
+    debug: bool,
+    explicit: Option<&str>,
+) -> Result<Option<(resource_lock::ResourceLockGuard, Option<String>)>, String> {
+    let explicit = explicit.is_some_and(|s| !s.trim().is_empty());
     if explicit || host_mount {
         return Ok(None);
     }
@@ -20325,11 +21033,6 @@ fn claim_forge_instance(
             Err(e) => return Err(e),
         };
         if let Some(name) = &instance {
-            // The env write runs at the top of a lane launch, before any
-            // thread that reads the instance is spawned.
-            unsafe {
-                std::env::set_var("TILLANDSIAS_FORGE_INSTANCE", name);
-            }
             eprintln!(
                 "[tillandsias] {project}: another forge holds the default instance; \
                  this launch is instance {name} with its own workspace, sharing the \
@@ -20338,7 +21041,7 @@ fn claim_forge_instance(
         } else if debug {
             eprintln!("[tillandsias] {project}: forge instance default");
         }
-        return Ok(Some(guard));
+        return Ok(Some((guard, instance)));
     }
     Err(format!(
         "refused:forge-instance-slots-full:{project}: {FORGE_INSTANCE_SLOTS} forges of this \
@@ -20998,13 +21701,11 @@ fn build_forge_agent_run_args_with_vault(
         }
     }
 
-    let ca_cert = certs_dir.join("intermediate.crt");
-    if ca_cert.exists() {
-        spec = spec.bind_mount(
-            ca_cert.display().to_string(),
-            "/run/tillandsias/ca-chain.crt",
-            true,
-        );
+    // 2007-uvtl: the cert-only trust directory, read-only (see FORGE_CA_TRUST_MOUNT).
+    // ensure_ca_bundle publishes the trust dir from this certificate.
+    let trust = ca_trust_dir_for(certs_dir);
+    if certs_dir.join("intermediate.crt").exists() {
+        spec = spec.bind_mount(trust.display().to_string(), FORGE_CA_TRUST_MOUNT, true);
     }
 
     // Order 505: mount only the per-lane MCP tool socket directory
@@ -23158,6 +23859,93 @@ fn load_config(_path: &str) -> Result<(), String> {
 /// 4. Cleanup ephemeral resources (sockets, mounts, logs).
 ///
 /// @trace spec:graceful-shutdown, spec:app-lifecycle
+/// ORDER 1988-trkp (operator, first-hand 2026-11-04): what a tray exit stops.
+/// A plain Quit, a SIGTERM or an upgrade restart KEEPS forges and the enclave
+/// running and hands every served lane to the next tray; only an explicit
+/// `tillandsias --stop-all` (its marker) stops everything.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ShutdownPlan {
+    pub stop_containers: bool,
+    pub revoke_container_tokens: bool,
+    pub mark_lanes_for_adoption: bool,
+}
+
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn shutdown_plan(stop_all_requested: bool) -> ShutdownPlan {
+    ShutdownPlan {
+        stop_containers: stop_all_requested,
+        revoke_container_tokens: stop_all_requested,
+        mark_lanes_for_adoption: !stop_all_requested,
+    }
+}
+
+/// The marker `--stop-all` leaves for the tray it signals.
+pub(crate) fn stop_all_marker() -> PathBuf {
+    control_socket_host_dir().join("stop-all-requested")
+}
+
+/// Read and clear the stop-all marker (one request, one exit).
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn take_stop_all_request() -> bool {
+    let m = stop_all_marker();
+    let present = m.is_file();
+    if present {
+        let _ = fs::remove_file(&m);
+    }
+    present
+}
+
+/// SIGTERM the tray (the exit path every Quit takes). Off unix the tray is
+/// not a separate signalable process here, so this refuses.
+#[cfg(unix)]
+fn signal_tray_to_exit(pid: u32) -> bool {
+    // SAFETY: a plain kill(2) of the tray's own pid read from its lock.
+    unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
+}
+
+#[cfg(not(unix))]
+fn signal_tray_to_exit(_pid: u32) -> bool {
+    false
+}
+
+/// `tillandsias --stop-all`: stop every forge and service. A running tray is
+/// asked (marker + SIGTERM) and awaited; with none, this process tears down.
+pub(crate) fn run_stop_all() -> Result<(), String> {
+    let dir = control_socket_host_dir();
+    match crate::tray_presence::owner_elsewhere(&dir) {
+        Some(Some(pid)) => {
+            fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            fs::write(stop_all_marker(), b"stop-all\n")
+                .map_err(|e| format!("{}: {e}", stop_all_marker().display()))?;
+            if !signal_tray_to_exit(pid) {
+                let _ = fs::remove_file(stop_all_marker());
+                return Err(format!("could not signal the tray (pid {pid})"));
+            }
+            eprintln!("[tillandsias] asked the tray (pid {pid}) to stop everything; waiting...");
+            // The tray's full stop is bounded at 45 s (containers) + 10 s
+            // (tokens); wait a little longer than that, then say so.
+            let deadline = std::time::Instant::now() + Duration::from_secs(90);
+            while crate::tray_presence::owner_elsewhere(&dir).is_some()
+                && std::time::Instant::now() < deadline
+            {
+                std::thread::sleep(Duration::from_millis(250));
+            }
+            if crate::tray_presence::owner_elsewhere(&dir).is_some() {
+                return Err(format!("the tray (pid {pid}) is still running after 90 s"));
+            }
+            eprintln!("[tillandsias] stopped: every forge and service is down");
+            Ok(())
+        }
+        _ => {
+            let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+            rt.block_on(graceful_shutdown_async())?;
+            eprintln!("[tillandsias] stopped: every forge and service is down");
+            Ok(())
+        }
+    }
+}
+
 pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     debug!("starting graceful shutdown sequence");
     let owner_elsewhere = crate::tray_presence::owner_elsewhere(&control_socket_host_dir());
@@ -23271,7 +24059,7 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
     // ORDER 1944-trsp: only the socket THIS process bound. A headless exit or
     // a refused tray removing it left a live tray unreachable.
-    let socket_path = control_socket_host_dir().join("control.sock");
+    let socket_path = control_socket_file();
     if control_socket_is_ours(&socket_path) {
         debug!(path = %socket_path.display(), "removing control socket");
         let _ = fs::remove_file(&socket_path);
@@ -23682,6 +24470,186 @@ mod tests {
     /// the legacy tray `build_launch_spec`, both of which have no production
     /// callers and either of which would give a green assertion and change
     /// nothing).
+    /// 1998-mvrs (b): the mirror and the ssh lane bind the cert-only trust
+    /// DIRECTORY read-only, never the certificate file, so a rotation reaches
+    /// them. Pre-fix: FAILS, both bound intermediate.crt at
+    /// /etc/tillandsias/ca.crt (a single-file bind keeps the old inode).
+    #[test]
+    fn the_mirror_and_ssh_lane_bind_the_ca_trust_directory() {
+        let certs = PathBuf::from("/tmp/state/ca");
+        let want = format!(
+            "type=bind,source={},target={MIRROR_CA_TRUST_MOUNT},readonly=true",
+            ca_trust_dir_for(&certs).display()
+        );
+        for (name, args) in [
+            (
+                "git",
+                build_git_run_args("alpha", None, &certs, "g:v1", None, None, None, None),
+            ),
+            (
+                "ssh-lane",
+                build_ssh_lane_sidecar_run_args("alpha", "m1", &certs, "s:v1", "sec"),
+            ),
+        ] {
+            assert!(args.contains(&want), "{name}: {args:?}");
+            assert!(
+                !args.iter().any(|a| a.contains("intermediate.crt")),
+                "{name} binds the certificate file"
+            );
+        }
+    }
+
+    /// ORDER 2007-rtky: no container binds the tillandsias runtime directory
+    /// or anything holding keys/ (the CA private key on tmpfs) or the key
+    /// passphrase. The router binds only the socket-only subdirectory.
+    /// Pre-fix: FAILS, the router bound `<runtime>/tillandsias:/run/host/tillandsias:rw`.
+    #[test]
+    fn no_container_binds_the_host_key_home() {
+        // The runtime dir comes from process env, which other tests and the
+        // gate's scratch HOME change concurrently (2000-envt). So nothing here
+        // re-reads it: the router's own bind names the runtime dir it saw, and
+        // every check is made against that one value (and the one captured
+        // here, which may differ).
+        let captured = control_socket_host_dir().to_string_lossy().into_owned();
+        let certs = PathBuf::from("/tmp/ca");
+        let sites: Vec<(&str, Vec<String>)> = vec![
+            ("proxy", build_proxy_run_args(&certs, "p:v1")),
+            (
+                "git",
+                build_git_run_args("alpha", None, &certs, "g:v1", None, None, None, None),
+            ),
+            ("inference", build_inference_run_args(&certs, "i:v1", false)),
+            ("router", build_router_run_args(&certs, "r:v1", 8080)),
+            (
+                "ssh-lane",
+                build_ssh_lane_sidecar_run_args("alpha", "m1", &certs, "s:v1", "sec"),
+            ),
+            (
+                "forge-agent",
+                build_forge_agent_run_argv(
+                    &PathBuf::from("/tmp/project"),
+                    "alpha",
+                    None,
+                    &certs,
+                    "1.2.3",
+                    ForgeAgentMode::Claude,
+                    false,
+                    false,
+                    &PathBuf::from("/tmp/cr"),
+                ),
+            ),
+        ];
+        // The host side of a `-v src:dst` or a `--mount ...source=src`, with dst.
+        fn binds(args: &[String]) -> Vec<(String, String)> {
+            let mut out = Vec::new();
+            for w in args.windows(2) {
+                if w[0] == "-v" || w[0] == "--volume" {
+                    let mut it = w[1].split(':');
+                    let src = it.next().unwrap_or("").to_string();
+                    out.push((src, it.next().unwrap_or("").to_string()));
+                } else if w[0] == "--mount" {
+                    let (mut src, mut dst) = (String::new(), String::new());
+                    for kv in w[1].split(',') {
+                        if let Some(v) = kv
+                            .strip_prefix("source=")
+                            .or_else(|| kv.strip_prefix("src="))
+                        {
+                            src = v.to_string();
+                        } else if let Some(v) = kv
+                            .strip_prefix("target=")
+                            .or_else(|| kv.strip_prefix("destination="))
+                            .or_else(|| kv.strip_prefix("dst="))
+                        {
+                            dst = v.to_string();
+                        }
+                    }
+                    out.push((src, dst));
+                }
+            }
+            out
+        }
+        let router = &sites.iter().find(|(n, _)| *n == "router").unwrap().1;
+        let socket_src = binds(router)
+            .into_iter()
+            .find(|(_, dst)| dst == "/run/host/tillandsias")
+            .map(|(src, _)| src.trim_end_matches('/').to_string())
+            .expect("the router binds a socket dir at /run/host/tillandsias");
+        let seen = socket_src
+            .strip_suffix(&format!("/{CONTROL_SOCKET_SUBDIR}"))
+            .unwrap_or_else(|| panic!("the router's socket bind {socket_src} is not the {CONTROL_SOCKET_SUBDIR}/ subdirectory"))
+            .to_string();
+        assert!(seen.ends_with("/tillandsias"), "{seen}");
+        for rt in [seen.as_str(), captured.as_str()] {
+            for (name, args) in &sites {
+                for (src, _) in binds(args) {
+                    let src = src.trim_end_matches('/');
+                    assert_ne!(
+                        src, rt,
+                        "{name} binds the runtime dir {rt}, which holds keys/"
+                    );
+                    assert!(
+                        !rt.starts_with(&format!("{src}/")),
+                        "{name} binds {src}, an ancestor of the key home"
+                    );
+                    assert!(
+                        !src.starts_with(&format!("{rt}/keys")) && !src.contains("ca-key-pass"),
+                        "{name} binds the key home or the passphrase: {src}"
+                    );
+                }
+            }
+        }
+        // The tray serves the socket in the same subdirectory the router binds.
+        let file = control_socket_file();
+        assert_eq!(file.file_name().unwrap(), "control.sock");
+        assert_eq!(
+            file.parent().unwrap().file_name().unwrap(),
+            CONTROL_SOCKET_SUBDIR
+        );
+
+        // Every other launch builder in the crate: no source names the bare
+        // runtime dir or the key store's directory.
+        // cargo runs a unit test with the package root as cwd.
+        let src_dir = Path::new("src");
+        assert!(
+            src_dir.join("main.rs").is_file(),
+            "run from the package root"
+        );
+        for entry in walk_rs(src_dir) {
+            let text = std::fs::read_to_string(&entry).unwrap();
+            for (i, line) in text.lines().enumerate() {
+                let l = line.trim_start();
+                if l.starts_with("//") {
+                    continue;
+                }
+                for bad in [
+                    // Split so this list does not match itself.
+                    concat!("control_socket_host_dir", "().display()"),
+                    concat!("runtime_dir_tillandsias", "().display()"),
+                ] {
+                    assert!(
+                        !line.contains(bad),
+                        "{}:{}: a container bind of the runtime dir: {line}",
+                        entry.display(),
+                        i + 1
+                    );
+                }
+            }
+        }
+    }
+
+    fn walk_rs(dir: &Path) -> Vec<PathBuf> {
+        let mut out = Vec::new();
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                out.extend(walk_rs(&p));
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+        out
+    }
+
     #[test]
     // @trace order:986-ahnc, order:972-6vaj, spec:security-privacy-isolation
     fn every_stack_launch_argv_satisfies_the_hardening_envelope() {
@@ -26139,8 +27107,14 @@ mod tests {
                 entry("tillandsias-git-kumbia-kombat"),
             ]
         };
-        let dir = std::path::PathBuf::from("/dev/shm")
-            .join(format!("shsc-two-runs-{}", std::process::id()));
+        // /dev/shm on Linux; macOS has none, so its temp dir.
+        let shm = std::path::PathBuf::from("/dev/shm");
+        let root = if shm.is_dir() {
+            shm
+        } else {
+            std::env::temp_dir()
+        };
+        let dir = root.join(format!("shsc-two-runs-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let run_a = crate::tray_presence::acquire(&dir).expect("A owns the enclave");
         // B is another process: the lock names A's pid, which is not B's.
@@ -26156,7 +27130,16 @@ mod tests {
         // A, the owner, still sweeps its own enclave on exit.
         drop(run_a);
         crate::tray_presence::wait_released(&dir);
-        let owner = crate::tray_presence::owner_elsewhere(&dir);
+        // 2000-envt: owner_elsewhere probes by taking the lock, and a process
+        // a parallel test forks during that probe keeps the lock until it
+        // execs, so one probe can still read "held". Ask until it clears
+        // (bounded, as wait_released is); a real holder never would.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let mut owner = crate::tray_presence::owner_elsewhere(&dir);
+        while owner.is_some() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            owner = crate::tray_presence::owner_elsewhere(&dir);
+        }
         assert_eq!(shutdown_targets_for(enclave(), owner).len(), 4);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -27010,58 +27993,96 @@ mod tests {
     /// the first forge's workspace lock and died after 120 s.
     #[test]
     fn a_second_launch_of_a_project_takes_the_next_instance() {
-        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
-        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        // 2000-envt: the slot logic runs through claim_forge_instance_slot, which
+        // never reads or writes TILLANDSIAS_FORGE_INSTANCE, so a parallel test
+        // that sets the variable cannot change what this test observes.
         let project = format!("twin-{}-{}", std::process::id(), line!());
 
-        let first = claim_forge_instance(&project, false, false)
+        let (first, first_instance) = claim_forge_instance_slot(&project, false, false, None)
             .expect("first claim")
             .expect("an interactive launch claims a slot");
-        assert!(
-            std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err(),
+        assert_eq!(
+            first_instance, None,
             "the first launch keeps the default instance"
         );
-        let default_volume = forge_ram_workspace_volume(&project);
+        let default_volume = crate::local_projects::ram_workspace_volume(&project, "default");
 
-        let second = claim_forge_instance(&project, false, false)
+        let (second, second_instance) = claim_forge_instance_slot(&project, false, false, None)
             .expect("second claim")
             .expect("a second launch claims the next slot");
         assert_eq!(
-            std::env::var("TILLANDSIAS_FORGE_INSTANCE").as_deref(),
-            Ok("2"),
+            second_instance.as_deref(),
+            Some("2"),
             "the second launch is instance 2"
         );
         assert_ne!(
-            forge_ram_workspace_volume(&project),
+            crate::local_projects::ram_workspace_volume(&project, "2"),
             default_volume,
             "instance 2 gets its own RAM workspace, so it never waits on the first's lock"
         );
         assert!(
-            forge_container_name(&project).starts_with(&format!("tillandsias-{project}-forge-2")),
+            forge_container_name_with_instance(&project, second_instance.as_deref())
+                .starts_with(&format!("tillandsias-{project}-forge-2")),
             "instance 2 gets its own container name: {}",
-            forge_container_name(&project)
+            forge_container_name_with_instance(&project, second_instance.as_deref())
         );
 
-        // Already explicit (this process now carries "2"), and host-mount: no claim.
+        // Already explicit (a dispatcher's worker), and host-mount: no claim.
         assert!(
-            claim_forge_instance(&project, false, false)
+            claim_forge_instance_slot(&project, false, false, Some("2"))
                 .expect("explicit")
                 .is_none()
         );
-        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
         assert!(
-            claim_forge_instance(&project, true, false)
+            claim_forge_instance_slot(&project, true, false, None)
                 .expect("host mount")
                 .is_none()
         );
 
-        // The default slot frees when the first launch ends.
+        // The default slot frees when the first launch ends. A process a
+        // parallel test forks keeps a copy of the dropped lock until it execs
+        // (2000-envt: measured 215 in 20000 with 8 spawning threads), so wait,
+        // bounded, for the slot to read free before claiming it again.
         drop(first);
-        let again = claim_forge_instance(&project, false, false)
+        let default_slot = format!("forge-instance-{project}-default");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while resource_lock::is_held(&default_slot) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let (again, again_instance) = claim_forge_instance_slot(&project, false, false, None)
             .expect("third claim")
             .expect("the freed default slot is reused");
-        assert!(std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err());
+        assert_eq!(again_instance, None);
         drop((second, again));
+    }
+
+    /// 2000-envt: the env wrapper exports a non-default slot and leaves the
+    /// default unexported. It touches process env, so it holds env_lock like
+    /// every other test that does.
+    #[test]
+    fn claiming_a_second_instance_exports_it() {
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&["TILLANDSIAS_FORGE_INSTANCE"]);
+        restore.remove("TILLANDSIAS_FORGE_INSTANCE");
+        let project = format!("twin-env-{}-{}", std::process::id(), line!());
+        let first = claim_forge_instance(&project, false, false)
+            .unwrap()
+            .unwrap();
+        assert!(std::env::var("TILLANDSIAS_FORGE_INSTANCE").is_err());
+        let second = claim_forge_instance(&project, false, false)
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            std::env::var("TILLANDSIAS_FORGE_INSTANCE").as_deref(),
+            Ok("2")
+        );
+        assert!(
+            claim_forge_instance(&project, false, false)
+                .unwrap()
+                .is_none(),
+            "an exported instance is explicit: no second claim"
+        );
+        drop((first, second));
     }
 
     /// 1956-4pxj: the pusher's instance is read back from its container name,
@@ -28076,9 +29097,9 @@ mod tests {
         );
         assert!(
             argv.iter().any(|a| {
-                a.contains("target=/run/tillandsias/ca-chain.crt") && a.contains("readonly=true")
+                a.contains("target=/run/tillandsias/ca,") && a.contains("readonly=true")
             }),
-            "typed forge launcher must mount the single runtime CA input"
+            "typed forge launcher must mount the read-only CA trust directory (2007-uvtl)"
         );
         for forbidden in [
             "GIT_SSL_CAINFO=",
@@ -32783,8 +33804,7 @@ esac
         }
         assert!(
             args.iter().any(|arg| {
-                arg.contains("target=/run/tillandsias/ca-chain.crt")
-                    && arg.contains("readonly=true")
+                arg.contains("target=/run/tillandsias/ca,") && arg.contains("readonly=true")
             }),
             "opencode forge args must mount the single runtime CA input; got {args:?}"
         );
@@ -35045,6 +36065,162 @@ esac
             }
         }
         found
+    }
+
+    /// ORDER 2000-camv: a read-only process refuses to mint and to start
+    /// Vault; an ordinary process does both as before. Pre-fix: FAILS, the
+    /// pre-push hook's --cloud-usage re-minted the operator's CA.
+    #[test]
+    fn a_read_only_process_neither_mints_nor_starts_vault() {
+        let err = refuse_mint_in_read_only_process(true).unwrap_err();
+        assert!(
+            err.starts_with("refused:ca-bundle:read-only-process"),
+            "{err}"
+        );
+        assert!(err.contains("why:") && err.contains("remedy:"));
+        assert_eq!(refuse_mint_in_read_only_process(false), Ok(()));
+        let mut started = false;
+        let r = crate::vault_bootstrap::vault_up_or_start_unless(
+            true,
+            || false,
+            || {
+                started = true;
+                Ok(())
+            },
+        );
+        assert_eq!(r, Err("vault-unavailable:not-running".to_string()));
+        assert!(!started, "a read-only process never starts Vault");
+        let r = crate::vault_bootstrap::vault_up_or_start_unless(
+            false,
+            || false,
+            || {
+                started = true;
+                Ok(())
+            },
+        );
+        assert_eq!(r, Ok(()));
+        assert!(started);
+    }
+
+    /// ORDER 2000-camv: a fake-podman (litmus) run is refused before it can
+    /// touch a CA dir under the passwd home; a scratch HOME, or a real run,
+    /// passes. Pre-fix: FAILS, the fixture minted in the operator's CA.
+    #[test]
+    #[cfg(unix)]
+    fn a_fake_podman_run_cannot_reach_the_real_ca() {
+        let home = Path::new("/home/op");
+        let real =
+            Path::new(&tillandsias_core::ca_path::state_root_expanded("/home/op")).join("ca");
+        let err = refuse_fake_podman_in_real_home(&real, true, Some(home)).unwrap_err();
+        assert!(
+            err.starts_with("refused:ca-bundle:fake-podman-in-real-home:"),
+            "{err}"
+        );
+        assert!(err.contains("why:") && err.contains("remedy:"), "{err}");
+        let scratch_ca = Path::new(&tillandsias_core::ca_path::state_root_expanded(
+            "/tmp/litmus-home",
+        ))
+        .join("ca");
+        let scratch = scratch_ca.as_path();
+        assert_eq!(
+            refuse_fake_podman_in_real_home(scratch, true, Some(home)),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_fake_podman_in_real_home(&real, false, Some(home)),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_fake_podman_in_real_home(&real, true, Some(Path::new("/"))),
+            Ok(())
+        );
+    }
+
+    /// ORDER 2000-camv: a re-mint keeps the replaced CA for host Vault
+    /// clients, so a Vault still serving the old leaf keeps verifying and
+    /// nothing relaunches it under the mirrors; the next leaf reissue ends the
+    /// window. Pre-fix: FAILS, the old CA was gone and every tray read failed
+    /// TLS verification until Vault was relaunched.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn a_reminted_ca_keeps_the_replaced_one_trusted_until_the_leaf_is_reissued() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let dir = ensure_ca_bundle(false).expect("first mint");
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&dir, false).expect("leaf");
+        let old = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        std::fs::remove_file(dir.join("intermediate.key")).unwrap();
+        ensure_ca_bundle(false).expect("re-mint");
+        let new = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        assert_ne!(old, new, "the key was gone, so the CA was minted again");
+        assert_eq!(std::fs::read(dir.join(PREVIOUS_CA_FILE)).unwrap(), old);
+        let trust = host_vault_trust_pem(&dir).unwrap();
+        assert_eq!(
+            reqwest::Certificate::from_pem_bundle(&trust).unwrap().len(),
+            2
+        );
+        let served_leaf = dir.join("vault.crt");
+        let verifies = |ca: &[u8]| {
+            let bundle = dir.join("trust-under-test.pem");
+            std::fs::write(&bundle, ca).unwrap();
+            Command::new("openssl")
+                .args(["verify", "-CAfile"])
+                .arg(&bundle)
+                .arg(&served_leaf)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        assert!(
+            !verifies(&new),
+            "the current CA alone does not verify the old leaf"
+        );
+        assert!(
+            verifies(&trust),
+            "the host trust still verifies the served leaf"
+        );
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&dir, false).expect("reissue");
+        assert!(
+            dir.join(PREVIOUS_CA_FILE).exists(),
+            "an on-disk reissue is not a relaunch: a running Vault still serves the old leaf"
+        );
+        assert!(
+            verifies(&new),
+            "the reissued leaf verifies against the current CA"
+        );
+    }
+
+    /// ORDER 2000-camv: two minters racing on an empty CA dir (two lanes, or a
+    /// tray and a lane) end with ONE complete pair that both of them return;
+    /// neither observes half of the other's mint, and the second does not
+    /// wipe the first's. Threads stand in for processes: the generation lock
+    /// is a directory in the CA dir, so it is the same lock either way.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn two_concurrent_ca_minters_end_with_one_matched_pair() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let (a, b) = std::thread::scope(|s| {
+            let a = s.spawn(|| {
+                ensure_ca_bundle(false).map(|d| std::fs::read(d.join("intermediate.crt")))
+            });
+            let b = s.spawn(|| {
+                ensure_ca_bundle(false).map(|d| std::fs::read(d.join("intermediate.crt")))
+            });
+            (a.join().unwrap(), b.join().unwrap())
+        });
+        let (a, b) = (a.unwrap().unwrap(), b.unwrap().unwrap());
+        let dir = PathBuf::from(ca_dir());
+        let on_disk = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        assert_eq!(a, on_disk, "the first minter's view is the final pair");
+        assert_eq!(b, on_disk, "the second minter's view is the final pair");
+        assert!(ca_key_matches_cert(
+            &dir.join("intermediate.crt"),
+            &dir.join("intermediate.key")
+        ));
     }
 
     /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch
@@ -38408,6 +39584,48 @@ mod mirror_seed_failure_tests {
             entry.contains(&format!("retry_msg \"{GIT_MIRROR_SEED_FAILURE_MARKER}")),
             "images/git/entrypoint.sh no longer prints {GIT_MIRROR_SEED_FAILURE_MARKER:?}; the launcher would never surface a seed failure"
         );
+    }
+}
+
+/// ORDER 1988-trkp (operator, first-hand 2026-11-04): a tray exit keeps
+/// forges unless `--stop-all` asked. Pre-fix: FAILS, every exit stopped all
+/// containers and revoked the forges' tokens (no shutdown_plan existed).
+#[cfg(all(test, unix, feature = "host-services"))]
+mod tray_keeps_forges_tests {
+    use super::*;
+
+    #[test]
+    fn a_plain_exit_keeps_forges_and_only_stop_all_stops_them() {
+        let keep = shutdown_plan(false);
+        assert!(!keep.stop_containers && !keep.revoke_container_tokens);
+        assert!(keep.mark_lanes_for_adoption);
+        let all = shutdown_plan(true);
+        assert!(all.stop_containers && all.revoke_container_tokens);
+        assert!(!all.mark_lanes_for_adoption);
+    }
+
+    /// The lanes this process serves are marked, so the next tray's adoption
+    /// tick binds them and the forge's tools reconnect.
+    #[test]
+    fn a_keep_exit_marks_every_served_lane_for_the_next_tray() {
+        let scratch = std::env::temp_dir().join(format!("trkp-{}", std::process::id()));
+        let _root = mcp_socket::test_runtime_root::set(&scratch);
+        let key = ("trkp-proj".to_string(), "default".to_string());
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .insert(key.clone());
+        let marked = mcp_socket::mark_served_lanes_for_adoption();
+        mcp_socket::lane_listener_registry()
+            .lock()
+            .unwrap()
+            .remove(&key);
+        let marker = mcp_socket::mcp_socket_host_dir_for_lane("trkp-proj", "default")
+            .join(mcp_socket::LANE_TRAY_MARKER);
+        let exists = marker.is_file();
+        let _ = std::fs::remove_dir_all(&scratch);
+        assert!(marked.contains(&key), "{marked:?}");
+        assert!(exists, "the next tray adopts it by this marker");
     }
 }
 

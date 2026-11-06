@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from lenovinha's code reading; generic for every host.
+packets:
+- packet_id: a-rotation-scheduler-cannot-mint-a-ca-or-start-vault-needlessly
+  order: 2007-rtmt
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [vault, credentials]
+  estimated_hours: 3
+  title: A token rotation check reads existing CA trust and does not start Vault when nothing is stored
+  context: 'By code reading, the Cloudflare rotation store reaches ensure_vault_running and the full CA bundle path when Vault is not running, and the scheduler starts Vault before it knows whether a login exists. A background timer should not be able to change the CA. This is a defect on reading alone. It is NOT shown to be the 2026-11-05 21:22 PST replacement on macuahuitl: Vault was continuously up from 19:15 then, so this path should not have fired, and that replacement is still unexplained.'
+  exit_criteria:
+  - 'With Vault down, a rotation tick leaves the CA directory byte-identical, and reports Vault unavailable by name.'
+  - 'With no stored login, a rotation tick starts no Vault and reports nothing to rotate.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features with a stub podman counting Vault starts and a CA directory compare.'
+  unscoreable: 'none.'
+  next_action: 'Move the rotation stores to ca_trust_dir, then write both failing tests.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from lenovinha-silverblue.
+  events:
+  - {type: filed, ts: '2026-11-06T05:35:00Z', host: macuahuitl, summary: filed p1 ready}

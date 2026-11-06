@@ -47,7 +47,10 @@ scanned=0
 violations=()
 while IFS= read -r f; do
     [ -f "$f" ] || continue
-    grep -qF -- "$DESTROYS" "$f" || continue
+    # 2007-vy3p: exit 2 (unreadable file) is a violation, not a skip: a file
+    # this guard cannot read is a purge path it cannot clear.
+    _rc=0; grep -qF -- "$DESTROYS" "$f" || _rc=$?
+    case "$_rc" in 0) ;; 1) continue ;; *) violations+=("$f:unreadable-grep-exit-$_rc"); continue ;; esac
     scanned=$((scanned + 1))
     # The definition site names the function too; it is the clearer, not a
     # caller, and requiring it to call itself would be nonsense.
@@ -72,7 +75,10 @@ LINUX_DESTROYS='podman[[:space:]]+system[[:space:]]+reset'
 
 while IFS= read -r f; do
     [ -f "$f" ] || continue
-    grep -qE "^[^#]*${LINUX_DESTROYS}" "$f" || continue
+    # 2007-vy3p: exit 2 (unreadable file, or a pattern this grep rejects —
+    # this one is built from a variable) is a violation, never a skip.
+    _rc=0; grep -qE "^[^#]*${LINUX_DESTROYS}" "$f" || _rc=$?
+    case "$_rc" in 0) ;; 1) continue ;; *) violations+=("$f:unreadable-grep-exit-$_rc"); continue ;; esac
     scanned=$((scanned + 1))
     case "$f" in
         scripts/clear-vault-host-credentials.sh) continue ;;

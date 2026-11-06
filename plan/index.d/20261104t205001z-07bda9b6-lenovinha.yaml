@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-studio-pins-sdxl-full-step-qwen-image-edit-flux-2-klein-and-wan-vace-weights-for-kumbia-kombat-once-the-operator-confirms-their-licences
+    field: status
+    value: completed
+    ts: "2026-11-04T20:50:01Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-studio-pins-sdxl-full-step-qwen-image-edit-flux-2-klein-and-wan-vace-weights-for-kumbia-kombat-once-the-operator-confirms-their-licences
+    event:
+      type: completed
+      ts: "2026-11-04T20:50:01Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 4ae52574a
+  - packet_id: the-studio-pins-sdxl-full-step-qwen-image-edit-flux-2-klein-and-wan-vace-weights-for-kumbia-kombat-once-the-operator-confirms-their-licences
+    event:
+      type: note
+      ts: "2026-11-04T20:50:01Z"
+      host: lenovinha
+      summary: |-
+        landed on linux-next at 4ae52574a

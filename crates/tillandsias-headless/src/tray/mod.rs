@@ -536,7 +536,7 @@ type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>;
 fn control_socket_path() -> PathBuf {
     // 1944-trsp: the same directory the CLI probes and the lock lives in (an
     // empty XDG_RUNTIME_DIR used to resolve differently here).
-    crate::control_socket_host_dir().join("control.sock")
+    crate::control_socket_file()
 }
 
 // Env var that overrides the default Linux-native host project root.
@@ -1075,6 +1075,16 @@ pub fn start_mcp_socket_server() -> Result<(), String> {
 fn spawn_lane_adoption() {
     static STARTED: std::sync::Once = std::sync::Once::new();
     STARTED.call_once(|| {
+        // 1991-dovl: say which dev overlay files are active, so they get
+        // made durable (committed) and deleted. A release build has none.
+        let overlay = crate::dev_overlay::active_entries();
+        if !overlay.is_empty() {
+            eprintln!(
+                "[tillandsias] WARNING: dev overlay active ({}): {}. Commit these into the tree and delete the overlay.",
+                crate::dev_overlay::dir().map(|d| d.display().to_string()).unwrap_or_default(),
+                overlay.join(", ")
+            );
+        }
         crate::mcp_socket::adopt_marked_lanes();
         let _ = std::thread::Builder::new()
             .name("lane-adoption".into())
@@ -1142,7 +1152,7 @@ fn handle_control_connection(
                                 "IssueWebSession".to_string(),
                                 "EvictProject".to_string(),
                             ],
-                            build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                            build_version: Some(crate::VERSION.trim().to_string()), // 1993-cver
                         },
                     };
                     if write_control_envelope(&mut stream, &ack).is_err() {
@@ -1404,6 +1414,8 @@ fn start_control_socket_server(shutdown: Arc<ShutdownLatch>) -> Result<(), Strin
     }
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod control socket: {err}"))?;
+    // ORDER 2007-rtky: older clients still dial the pre-2007 path.
+    crate::link_legacy_control_socket();
 
     let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
 
@@ -4258,15 +4270,31 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // exit anyway.
         //
         // @trace spec:graceful-shutdown, spec:app-lifecycle
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(45),
-            crate::graceful_shutdown_async(),
-        )
-        .await
-        {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
-            Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+        // 1988-trkp: a plain exit keeps forges and hands their lanes on;
+        // only `tillandsias --stop-all` stops everything.
+        let plan = crate::shutdown_plan(crate::take_stop_all_request());
+        if plan.mark_lanes_for_adoption {
+            let lanes = crate::mcp_socket::mark_served_lanes_for_adoption();
+            info!(
+                lanes = lanes.len(),
+                "1988-trkp: tray exiting, forges left running; the next tray adopts their lanes (tillandsias --stop-all stops everything)"
+            );
+            eprintln!(
+                "[tillandsias] tray exiting; {} lane(s) and their forges keep running. `tillandsias --stop-all` stops everything.",
+                lanes.len()
+            );
+        }
+        if plan.stop_containers {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(45),
+                crate::graceful_shutdown_async(),
+            )
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
+                Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+            }
         }
         // Order 1859-v5iv: a clean exit leaves no run for the next start to reap.
         if let Some(run) = crate::dead_run::run_label_value() {
@@ -4276,8 +4304,9 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // @trace spec:tillandsias-vault — revoke per-container AppRole
         // tokens before exit so vault audit reflects clean shutdown.
         // Time-bounded for the same reason as graceful shutdown.
+        // 1988-trkp: kept forges keep using their tokens.
         #[cfg(feature = "vault")]
-        {
+        if plan.revoke_container_tokens {
             match tokio::time::timeout(
                 std::time::Duration::from_secs(10),
                 crate::vault_bootstrap::revoke_pending_container_tokens(false),
@@ -4991,8 +5020,8 @@ mod tests {
         assert_eq!(
             tools.len() - cloudflare,
             // 1966-47vt: + cloud.usage when the store is built in.
-            if cfg!(feature = "vault") { 45 } else { 44 },
-            "5 preview.* + toolchain.prepare + image.generate + 7 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models) + 13 browser.* + 4 webstudio.* + tillandsias.index + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
+            if cfg!(feature = "vault") { 46 } else { 45 },
+            "5 preview.* + toolchain.prepare + image.generate + 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart) + 13 browser.* + 4 webstudio.* + tillandsias.index + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5063,8 +5092,8 @@ mod tests {
             assert_eq!(
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
-                if cfg!(feature = "vault") { 45 } else { 44 },
-                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 7 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models), 13 browser.*, 4 webstudio.*, tillandsias.index, the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
+                if cfg!(feature = "vault") { 46 } else { 45 },
+                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart), 13 browser.*, 4 webstudio.*, tillandsias.index, the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5214,12 +5243,12 @@ mod tests {
         );
     }
 
-    /// Order 779-dqsv: pin what the lane transport ACTUALLY enforces, now
-    /// that the unreachable 16-call semaphore is gone. The loop reads one
-    /// line, handles it to completion, and only then reads the next — so a
-    /// second request cannot begin before the first response is written.
-    /// This is the guarantee a future concurrent transport would have to
-    /// deliberately break (and would then owe a real, bindable limit).
+    /// Order 779-dqsv, as amended by 1990-mcpq: requests OTHER than tools/call
+    /// (here tools/list) are still handled one at a time, in order. A
+    /// tools/call now runs on its own thread so a long one cannot hold back
+    /// the next; the bindable limit that concurrency owes is
+    /// mcp_socket::MAX_CONCURRENT_CALLS per connection (CallGate, tested in
+    /// call_gate_tests).
     #[test]
     fn mcp_lane_transport_serializes_one_call_at_a_time() {
         use std::io::{BufRead, BufReader, Write};
@@ -5492,6 +5521,83 @@ mod tests {
         });
     }
 
+    /// ORDER 1990-mcpq: a long tool call must not block another call on the
+    /// SAME connection (kumbia: browser.open waited >120 s behind a QwenImage
+    /// workflow). A 3 s image.generate is sent, then tools/list; the list must
+    /// answer at once, before the slow call. Pre-fix: FAILS, dispatch is serial.
+    #[test]
+    fn a_slow_tool_call_does_not_block_a_fast_one_on_the_same_connection() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        struct Slow;
+        impl crate::imagegen_tool::Engine for Slow {
+            fn generate(
+                &self,
+                job: &crate::imagegen_tool::Job,
+                out_dir: &std::path::Path,
+                names: &[String],
+                _p: &mut dyn FnMut(crate::imagegen_tool::Progress),
+            ) -> Result<crate::imagegen_tool::EngineOut, String> {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                for n in names {
+                    image::RgbImage::new(job.width, job.height)
+                        .save(out_dir.join(n))
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(crate::imagegen_tool::EngineOut {
+                    backend: "vulkan".into(),
+                    first_use: false,
+                    timings: Default::default(),
+                })
+            }
+        }
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        crate::imagegen_tool::install_seam(Some(crate::imagegen_tool::Seam {
+            engine: std::sync::Arc::new(Slow),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I0".into(),
+            present: Some(vec!["I0".into()]),
+        }));
+        let order = with_known_demo_project(|| {
+            let (server_side, client_side) = UnixStream::pair().expect("pair");
+            let identity = LaneIdentity::new("demo", "default");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+            let mut w = client_side.try_clone().unwrap();
+            let mut lines = BufReader::new(client_side).lines();
+            writeln!(w, r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"image.generate","arguments":{{"prompt":"x","seed":1}}}}}}"#).unwrap();
+            writeln!(
+                w,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{{}}}}"#
+            )
+            .unwrap();
+            let t0 = std::time::Instant::now();
+            let mut order = Vec::new();
+            while order.len() < 2 {
+                let v: serde_json::Value =
+                    serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+                if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
+                    order.push((id, t0.elapsed()));
+                }
+            }
+            drop(w);
+            drop(lines);
+            let _ = server.join();
+            order
+        });
+        crate::imagegen_tool::install_seam(None);
+        assert_eq!(order[0].0, 2, "tools/list answers first: {order:?}");
+        assert!(
+            order[0].1 < std::time::Duration::from_secs(1),
+            "and at once: {order:?}"
+        );
+    }
+
     /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
     /// lane peer — one JSON-RPC object per line, replies in order.
     ///
@@ -5558,7 +5664,7 @@ mod tests {
             assert_eq!(
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
-                if cfg!(feature = "vault") { 45 } else { 44 },
+                if cfg!(feature = "vault") { 46 } else { 45 },
                 "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
             );
 

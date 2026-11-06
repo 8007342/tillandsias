@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+# @trace order:2007-uvtl
+"""tillandsias-trust: keep a running forge's TLS trust on the enclave's current CA.
+
+Usage: tillandsias-trust check
+
+A forge composes its trust bundle (/run/tillandsias/ca-bundle.crt, which the
+system bundle path points at) once, at entry: the image's vendor roots plus the
+enclave CA. When the host rotates that CA, the proxy re-signs with the new one
+and a running forge still trusts the old one: uv says "invalid peer
+certificate: BadSignature", curl says error 19.
+
+`check` compares the enclave CA in the bundle with the one the host publishes
+in the READ-ONLY directory /run/tillandsias/ca/ and, when they differ and the
+published one is a valid CA, re-composes the bundle in place:
+
+  ok:trust-current:<serial>               nothing to do
+  ok:trust-refreshed:<old>-><new>         the bundle now trusts the new CA
+  refused:tillandsias-trust:<reason>: ... exit 2, the bundle is unchanged
+
+The certificate is read ONLY from that mount, and only while it is mounted
+read-only: nothing a forge can write is ever a trust source. A published
+certificate that is not a CA, has expired or does not parse is refused and the
+old bundle kept.
+
+Not covered here: the proxy's own leaf and the git mirror's Vault trust live in
+their containers, not in this forge.
+"""
+import os
+import subprocess
+import sys
+
+TOOL = "tillandsias-trust"
+MOUNT = os.environ.get("TILLANDSIAS_TRUST_MOUNT", "/run/tillandsias/ca")
+BUNDLE = os.environ.get("TILLANDSIAS_TRUST_BUNDLE", "/run/tillandsias/ca-bundle.crt")
+VENDOR = os.environ.get(
+    "TILLANDSIAS_TRUST_VENDOR", "/usr/local/share/tillandsias/vendor-ca-bundle.crt"
+)
+REMEDY = "relaunch the forge (tillandsias <project>) to remount the enclave CA"
+
+
+class Refusal(Exception):
+    def __init__(self, reason, detail):
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+
+
+def mount_is_read_only(path):
+    """The mount itself must be read-only: a writable directory, even at the
+    expected path, could be filled by anything running in the forge."""
+    try:
+        return bool(os.statvfs(path).f_flag & os.ST_RDONLY)
+    except OSError:
+        return False
+
+
+def openssl(args, data):
+    r = subprocess.run(["openssl", *args], input=data, capture_output=True, timeout=30)
+    return r.returncode, r.stdout.decode("utf-8", "replace"), r.stderr.decode("utf-8", "replace")
+
+
+def facts(pem, what):
+    """serial and fingerprint of a valid CA certificate, else a Refusal."""
+    code, out, err = openssl(
+        ["x509", "-noout", "-serial", "-fingerprint", "-sha256", "-ext", "basicConstraints"], pem
+    )
+    if code != 0:
+        raise Refusal("ca_trust_invalid", f"{what} does not parse as an X.509 certificate")
+    if "CA:TRUE" not in out:
+        raise Refusal("ca_trust_invalid", f"{what} is not a CA certificate (no CA:TRUE)")
+    code, _, _ = openssl(["x509", "-noout", "-checkend", "0"], pem)
+    if code != 0:
+        raise Refusal("ca_trust_invalid", f"{what} has expired")
+    serial = next((l.split("=", 1)[1] for l in out.splitlines() if l.startswith("serial=")), "?")
+    fp = next((l.split("=", 1)[1] for l in out.splitlines() if "Fingerprint=" in l), "")
+    return serial.strip(), fp.strip()
+
+
+def check():
+    if not os.path.isdir(MOUNT):
+        raise Refusal("ca_trust_mount_absent", f"{MOUNT} is not mounted; {REMEDY}")
+    if not mount_is_read_only(MOUNT):
+        raise Refusal(
+            "ca_trust_mount_writable",
+            f"{MOUNT} is not a read-only mount, so it is not a trust source; {REMEDY}",
+        )
+    try:
+        new = open(os.path.join(MOUNT, "intermediate.crt"), "rb").read()
+    except OSError as e:
+        raise Refusal("ca_trust_mount_absent", f"{MOUNT}/intermediate.crt: {e.strerror}; {REMEDY}")
+    new_serial, new_fp = facts(new, f"{MOUNT}/intermediate.crt")
+    try:
+        vendor = open(VENDOR, "rb").read()
+        bundle = open(BUNDLE, "rb").read()
+    except OSError as e:
+        raise Refusal("ca_trust_bundle_unreadable", f"{e.filename}: {e.strerror}; {REMEDY}")
+    old = bundle[len(vendor):] if bundle.startswith(vendor) else b""
+    old_serial = "none"
+    if old.strip():
+        code, out, _ = openssl(["x509", "-noout", "-serial", "-fingerprint", "-sha256"], old)
+        if code == 0:
+            if next((l.split("=", 1)[1].strip() for l in out.splitlines() if "Fingerprint=" in l), "") == new_fp:
+                print(f"ok:trust-current:{new_serial}")
+                return 0
+            old_serial = next((l.split("=", 1)[1].strip() for l in out.splitlines() if l.startswith("serial=")), "?")
+    tmp = f"{BUNDLE}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(vendor)
+            if not vendor.endswith(b"\n"):
+                fh.write(b"\n")
+            fh.write(new)
+        os.chmod(tmp, 0o444)
+        os.replace(tmp, BUNDLE)
+    except OSError as e:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise Refusal("ca_trust_bundle_unwritable", f"{BUNDLE}: {e.strerror}; {REMEDY}")
+    print(f"ok:trust-refreshed:{old_serial}->{new_serial}")
+    return 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(__doc__)
+        return 0 if argv else 2
+    if argv != ["check"]:
+        sys.stderr.write(f"refused:{TOOL}:usage: only `check` is supported\n")
+        return 2
+    try:
+        return check()
+    except Refusal as r:
+        sys.stderr.write(f"refused:{TOOL}:{r.reason}: {r.detail}\n")
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
