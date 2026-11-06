@@ -147,7 +147,8 @@ Tillandsias project SHALL be hard-coded. (order 2011-amqd)
 
 ### Requirement: each addressee host has its own queue, routed by the sender, with a dead-letter queue
 
-Messages SHALL be pushed to the addressee host's own queue per project. The
+Messages SHALL be pushed to the addressee host's own queue, one per host for
+all of its projects, routed by the envelope's project. The
 sender SHALL resolve a role to one host from the fleet roster, and there SHALL
 be no queue shared by several consuming hosts. Each consumer SHALL be created
 with `max_retries` at the documented maximum and a dead-letter queue, verified
@@ -194,7 +195,7 @@ the later of the envelope's expiry and its arrival plus 24 hours.
 
 ### Requirement: a message the sender expects is receipted, and a missing receipt is reported
 
-For instructions, ASK and BLOCKED messages, the sending host SHALL keep an
+For instructions, the sending host SHALL keep an
 outbox record (a ledger event for an instruction), and the receiving host SHALL
 send a signed receipt when it accepts the message. With no receipt after 20
 hours the sender SHALL re-push once with the same `id`, and with none by 24
@@ -209,8 +210,9 @@ hours it SHALL report `undelivered` once. (order 2011-amqd)
 ### Requirement: only the host polls, with backoff, and an agent never polls on a timer
 
 Only one poller per host SHALL pull its own queues, and only while it has a
-live lane of that project. Empty pulls SHALL back
-off exponentially with jitter from 5 minutes to a 60-minute ceiling, and a
+live lane of that project. Polling SHALL start no faster than
+every 5 minutes, with a per-host random stagger, and empty pulls SHALL back off
+quickly (×4) to a 120-minute ceiling, and a
 delivered message, a local send or a lane start SHALL reset it. Every request
 type SHALL be counted against a per-user budget, and the host SHALL honour 429
 and `retry-after`. An agent SHALL NOT poll its queue or inbox on a timer.
@@ -219,7 +221,7 @@ and `retry-after`. An agent SHALL NOT poll its queue or inbox on a timer.
 #### Scenario: an idle day
 
 - **WHEN** a host with one live lane sees no messages for 24 hours
-- **THEN** it makes about 26 pulls per queue plus hourly dead-letter pulls, and the fixture's counted
+- **THEN** it makes about 14 pulls plus 4 dead-letter pulls, and the fixture's counted
   requests stay under the stated budget
 
 ### Requirement: a sleeping agent waits on a held call, and the tray wakes it
@@ -260,3 +262,16 @@ the ledger at any time. (order 2011-amqd)
 - **WHEN** the overview key is missing or older than the mirror's head
 - **THEN** the forge starts from the ledger, and the next push rewrites the
   overview
+
+### Requirement: a planning day stays under a stated budget, and the fixture fails above it
+
+The host SHALL take as many messages as a batch allows in one pull and ack a
+batch in one request. For the planning fleet (15 hosts, 400 messages and 100
+instructions a day, 2 busy hours), a day SHALL cost at most 2 500 queue
+operations (25 % of the Free 10 000) and 2 000 API requests. The budget fixture
+SHALL fail above either. (order 2011-amqd)
+
+#### Scenario: several messages for one host
+
+- **WHEN** five messages wait in one host's queue
+- **THEN** the host fetches them with one pull and acks them with one request
