@@ -65,45 +65,79 @@ pub(crate) fn read_chain(cgroup_root: &Path, rel: &str) -> Result<Vec<Level>, St
     Ok(chain)
 }
 
-/// The most protection the chain can give its leaf: the minimum `memory.low`
-/// along it, `None` when every level is `max`.
-pub(crate) fn effective_low(chain: &[Level]) -> Option<u64> {
-    chain.iter().filter_map(|l| l.low).min()
+/// How many levels, leaf first, belong to the container itself: up to and
+/// including its `libpod-<id>` scope. Without a scope on the path (another
+/// runtime), only the leaf is the container's own.
+fn own_levels(chain: &[Level]) -> usize {
+    chain
+        .iter()
+        .position(|l| {
+            l.path
+                .rsplit('/')
+                .next()
+                .is_some_and(|last| last.starts_with("libpod-"))
+        })
+        .map_or(chain.len().min(1), |i| i + 1)
 }
 
-/// The ancestor that caps the leaf's protection (the first level, from the
-/// root down, holding the minimum), for the report.
+/// The container's reservation: the largest `memory.low` among its own
+/// levels, wherever podman put it (0 when it set none).
+pub(crate) fn requested_low(chain: &[Level]) -> u64 {
+    chain[..own_levels(chain)]
+        .iter()
+        .map(|l| l.low.unwrap_or(0))
+        .max()
+        .unwrap_or(0)
+}
+
+/// The most the ancestors above the container's own levels allow: their
+/// smallest `memory.low`, `None` when every one is `max`.
+pub(crate) fn ancestor_cap(chain: &[Level]) -> Option<u64> {
+    chain[own_levels(chain)..]
+        .iter()
+        .filter_map(|l| l.low)
+        .min()
+}
+
+/// The effective protection: the reservation, capped by the ancestors.
+/// Protection set on a level flows down to its children under
+/// `memory_recursiveprot`, so the container's own leaf at 0 does not cap it.
+pub(crate) fn effective_low(chain: &[Level]) -> u64 {
+    let req = requested_low(chain);
+    ancestor_cap(chain).map_or(req, |cap| cap.min(req))
+}
+
+/// The ancestor that caps the protection (the first, from the root down,
+/// holding the smallest value), for the report.
 pub(crate) fn limiting_level(chain: &[Level]) -> Option<&Level> {
-    let eff = effective_low(chain)?;
-    chain.iter().rev().find(|l| l.low == Some(eff))
+    let cap = ancestor_cap(chain)?;
+    chain[own_levels(chain)..]
+        .iter()
+        .rev()
+        .find(|l| l.low == Some(cap))
 }
 
-/// The probe's one-line verdict for a container whose own (leaf) reservation
-/// is `chain[0]`: ok when the chain grants at least that, a violation naming
-/// the limiting ancestor otherwise.
+/// The probe's one-line verdict: ok when the ancestors allow the whole
+/// reservation, a violation naming the limiting ancestor otherwise.
 pub(crate) fn verdict(container: &str, chain: &[Level]) -> (String, i32) {
-    let requested = chain.first().and_then(|l| l.low).unwrap_or(0);
+    let requested = requested_low(chain);
     let eff = effective_low(chain);
-    let eff_n = eff.unwrap_or(u64::MAX);
     if requested == 0 {
         return (
             format!("ok:memory-protection:{container}:requested=0 (no reservation to protect)"),
             0,
         );
     }
-    if eff_n >= requested {
+    if eff >= requested {
         return (
-            format!(
-                "ok:memory-protection:{container}:requested={requested}:effective={}",
-                eff.map_or("max".into(), |v| v.to_string())
-            ),
+            format!("ok:memory-protection:{container}:requested={requested}:effective={eff}"),
             0,
         );
     }
     let at = limiting_level(chain).map_or("?", |l| l.path.as_str());
     (
         format!(
-            "violation:memory-protection-void:{container}:requested={requested}:effective={eff_n}:limited-by={at}"
+            "violation:memory-protection-void:{container}:requested={requested}:effective={eff}:limited-by={at}"
         ),
         1,
     )
@@ -203,7 +237,7 @@ mod tests {
         ]);
         let chain = read_chain(t.path(), SCOPE).unwrap();
         assert_eq!(chain.len(), 3);
-        assert_eq!(effective_low(&chain), Some(0));
+        assert_eq!(effective_low(&chain), 0);
         let (line, rc) = verdict("forge", &chain);
         assert_eq!(rc, 1);
         assert_eq!(
@@ -221,7 +255,7 @@ mod tests {
             (SCOPE, "2147483648"),
         ]);
         let chain = read_chain(t.path(), SCOPE).unwrap();
-        assert_eq!(effective_low(&chain), Some(2147483648));
+        assert_eq!(effective_low(&chain), 2147483648);
         let (line, rc) = verdict("forge", &chain);
         assert_eq!(
             (
@@ -244,6 +278,37 @@ mod tests {
         assert!(
             line.ends_with(":effective=1073741824:limited-by=/machine.slice"),
             "{line}"
+        );
+    }
+
+    /// Where podman puts the reservation does not matter: on the scope with
+    /// the leaf at 0 (protection flows down under memory_recursiveprot), the
+    /// leaf is protected as far as the ancestors allow, and an unprotected
+    /// ancestor still voids it.
+    #[test]
+    fn a_reservation_on_the_scope_protects_a_leaf_at_zero() {
+        let covered = tree(&[
+            ("/machine.slice", "4294967296"),
+            ("/machine.slice/libpod-abc.scope", "2147483648"),
+            (SCOPE, "0"),
+        ]);
+        let chain = read_chain(covered.path(), SCOPE).unwrap();
+        assert_eq!(requested_low(&chain), 2147483648);
+        assert_eq!(
+            verdict("forge", &chain).1,
+            0,
+            "{:?}",
+            verdict("forge", &chain)
+        );
+        let void = tree(&[
+            ("/machine.slice", "0"),
+            ("/machine.slice/libpod-abc.scope", "2147483648"),
+            (SCOPE, "0"),
+        ]);
+        let chain = read_chain(void.path(), SCOPE).unwrap();
+        assert_eq!(
+            verdict("forge", &chain).0,
+            "violation:memory-protection-void:forge:requested=2147483648:effective=0:limited-by=/machine.slice"
         );
     }
 
