@@ -422,6 +422,8 @@ fn main() {
     if user_args.iter().any(|a| a == "--cloud-usage") {
         #[cfg(all(feature = "host-services", feature = "vault"))]
         {
+            // 2000-camv: a read. It never starts Vault and never mints the CA.
+            set_read_only_process();
             let debug = user_args.iter().any(|a| a == "--debug");
             match cloud_usage::call_live(None, debug) {
                 Ok(v) => {
@@ -4581,6 +4583,46 @@ thread_local! {
         const { std::cell::RefCell::new(None) };
 }
 
+/// 2000-camv: the CA a mint replaced, kept beside the current one.
+pub(crate) const PREVIOUS_CA_FILE: &str = "previous.crt";
+
+fn keep_previous_ca(certs_dir: &Path, old: &[u8]) {
+    let tmp = certs_dir.join(format!("{PREVIOUS_CA_FILE}.{}.tmp", std::process::id()));
+    let kept = std::fs::write(&tmp, old)
+        .and_then(|()| std::fs::rename(&tmp, certs_dir.join(PREVIOUS_CA_FILE)));
+    if let Err(e) = kept {
+        let _ = std::fs::remove_file(&tmp);
+        eprintln!(
+            "[tillandsias] warn:ca-previous-not-kept: {e}; a Vault serving a leaf from the \
+             replaced CA stops verifying until it is relaunched (2000-camv)"
+        );
+    }
+}
+
+/// 2000-camv: what a HOST Vault client trusts: the current CA, plus the CA a
+/// mint replaced while that one is still valid. A Vault keeps serving the
+/// leaf the replaced CA signed until it is relaunched, and mirrors created
+/// before the mint hold only that CA, so this keeps the tray verifying
+/// without relaunching Vault under them. The previous CA is dropped when
+/// Vault's leaf is next reissued from the current CA (ensure_vault_tls_leaf),
+/// so the window is one generation. It widens nothing: the previous CA was
+/// trusted until the mint, and the mint is a repair (key lost, mismatched or
+/// expiring), never a revocation; --reset-guest removes the whole directory.
+pub(crate) fn host_vault_trust_pem(certs_dir: &Path) -> Result<Vec<u8>, String> {
+    let mut pem = std::fs::read(certs_dir.join("intermediate.crt"))
+        .map_err(|e| format!("read Vault CA certificate: {e}"))?;
+    let previous = certs_dir.join(PREVIOUS_CA_FILE);
+    if cert_valid_for(&previous, 0)
+        && let Ok(old) = std::fs::read(&previous)
+    {
+        if !pem.ends_with(b"\n") {
+            pem.push(b'\n');
+        }
+        pem.extend_from_slice(&old);
+    }
+    Ok(pem)
+}
+
 /// 1999-grot: the trust a Vault CLIENT needs is the CA certificate alone.
 /// Verifying Vault's leaf never needs the CA key, so a reader must never
 /// re-mint: a mint replaced intermediate.crt under a running Vault whose leaf
@@ -4994,8 +5036,67 @@ fn enforce_ca_key_mode(_key: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// ORDER 2000-camv: a READ-ONLY process (`--cloud-usage`, run from the
+/// pre-push hook's release preflight) never starts Vault and never mints the
+/// CA. Caught on macuahuitl 2026-11-04 23:43:56: the CA was re-minted within
+/// 0.2 s of `tillandsias --cloud-usage` starting under the pre-push hook. Its
+/// Cloudflare store read starts Vault when podman says it is stopped
+/// (vault_up_or_start), and that start reaches ensure_ca_bundle; in a hook's
+/// environment both answers can be wrong, and a mint there replaced the CA
+/// under the running Vault.
+static READ_ONLY_PROCESS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg_attr(
+    not(all(feature = "host-services", feature = "vault")),
+    allow(dead_code)
+)]
+pub(crate) fn set_read_only_process() {
+    READ_ONLY_PROCESS.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+pub(crate) fn read_only_process() -> bool {
+    READ_ONLY_PROCESS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn refuse_mint_in_read_only_process(read_only: bool) -> Result<(), String> {
+    if read_only {
+        Err("refused:ca-bundle:read-only-process\n  \
+             why: a read-only command (--cloud-usage) must not mint the host CA; a mint \
+             replaces it under a running Vault (2000-camv)\n  \
+             remedy: start Tillandsias (the tray), which owns the CA and Vault"
+            .into())
+    } else {
+        Ok(())
+    }
+}
+
+/// ORDER 2000-camv: a fake-podman run (a litmus fixture) never reaches the
+/// operator's real CA. Two --ci-full fixtures ran the real binary with the
+/// real HOME through ensure_ca_bundle, which can wipe and re-mint the host CA
+/// under a running Vault; on a gate host that shares HOME with the tray (a
+/// toolbox) that is the operator's CA. Refused before anything is read,
+/// materialized or written.
+#[cfg(unix)]
+fn refuse_fake_podman_in_real_home(
+    certs_dir: &Path,
+    fake_podman: bool,
+    passwd_home: Option<&Path>,
+) -> Result<(), String> {
+    match passwd_home {
+        Some(home) if fake_podman && home.as_os_str().len() > 1 && certs_dir.starts_with(home) => {
+            Err(format!(
+                "refused:ca-bundle:fake-podman-in-real-home:{}\n  \
+                 why: a LITMUS_PODMAN_MODE run reached the operator's real CA directory, where a \
+                 mint replaces the CA under a running Vault (2000-camv)\n  \
+                 remedy: run the fixture with HOME and XDG_RUNTIME_DIR on a scratch directory",
+                certs_dir.display()
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// The passwd home of this user, which HOME cannot fake.
-#[cfg(test)]
 #[cfg(unix)]
 fn passwd_home() -> Option<PathBuf> {
     // SAFETY: getpwuid returns a pointer into static storage or null; it is
@@ -5062,6 +5163,12 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     }
     #[cfg(test)]
     refuse_real_home_in_test(&certs_dir)?;
+    #[cfg(unix)]
+    refuse_fake_podman_in_real_home(
+        &certs_dir,
+        std::env::var_os("LITMUS_PODMAN_MODE").is_some_and(|v| !v.is_empty()),
+        passwd_home().as_deref(),
+    )?;
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
     // Order 472 slice 3: the generation before any refresh, so a mint or a
@@ -5077,6 +5184,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     let should_refresh = ca_bundle_needs_refresh(&crt, &key);
 
     if should_refresh {
+        refuse_mint_in_read_only_process(read_only_process())?;
         let lock_dir = certs_dir.join(".ca-generation.lock");
         let mut acquired_lock = false;
         for _ in 0..50 {
@@ -5108,10 +5216,14 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         // 1979-bm3u (operator, 2026-11-03: "wipe them all and recreate all from
         // scratch"): a broken pair is not repaired in place. Everything here is
         // removed and minted again from nothing, as on a first start.
+        // 2000-camv: the CA this mint replaces, while it is still valid. Host
+        // Vault clients keep trusting it for ONE generation, so a Vault still
+        // serving a leaf it signed stays verifiable and nothing relaunches it.
+        let replaced = std::fs::read(&crt).ok().filter(|_| cert_valid_for(&crt, 0));
         eprintln!(
             "[tillandsias] warn:ca-reminted:{}: pid={} exe={} vault-running={}: a new CA \
-             replaces the old one; a Vault serving a leaf from the old CA no longer \
-             verifies until it is restarted (1999-grot)",
+             replaces the old one; host clients keep trusting the old CA until Vault is \
+             next relaunched with a leaf from the new one (1999-grot, 2000-camv)",
             ca_refresh_reason(&crt, &key),
             std::process::id(),
             std::env::current_exe()
@@ -5216,6 +5328,9 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         publish_ca_pair(&tmp_crt, &crt, || {
             ca_key_store::seal(&tmp_key, &key, &crt_bytes, true)
         })?;
+        if let Some(old) = replaced {
+            keep_previous_ca(&certs_dir, &old);
+        }
 
         info!(
             accountability = true,
@@ -35432,6 +35547,162 @@ esac
             }
         }
         found
+    }
+
+    /// ORDER 2000-camv: a read-only process refuses to mint and to start
+    /// Vault; an ordinary process does both as before. Pre-fix: FAILS, the
+    /// pre-push hook's --cloud-usage re-minted the operator's CA.
+    #[test]
+    fn a_read_only_process_neither_mints_nor_starts_vault() {
+        let err = refuse_mint_in_read_only_process(true).unwrap_err();
+        assert!(
+            err.starts_with("refused:ca-bundle:read-only-process"),
+            "{err}"
+        );
+        assert!(err.contains("why:") && err.contains("remedy:"));
+        assert_eq!(refuse_mint_in_read_only_process(false), Ok(()));
+        let mut started = false;
+        let r = crate::vault_bootstrap::vault_up_or_start_unless(
+            true,
+            || false,
+            || {
+                started = true;
+                Ok(())
+            },
+        );
+        assert_eq!(r, Err("vault-unavailable:not-running".to_string()));
+        assert!(!started, "a read-only process never starts Vault");
+        let r = crate::vault_bootstrap::vault_up_or_start_unless(
+            false,
+            || false,
+            || {
+                started = true;
+                Ok(())
+            },
+        );
+        assert_eq!(r, Ok(()));
+        assert!(started);
+    }
+
+    /// ORDER 2000-camv: a fake-podman (litmus) run is refused before it can
+    /// touch a CA dir under the passwd home; a scratch HOME, or a real run,
+    /// passes. Pre-fix: FAILS, the fixture minted in the operator's CA.
+    #[test]
+    #[cfg(unix)]
+    fn a_fake_podman_run_cannot_reach_the_real_ca() {
+        let home = Path::new("/home/op");
+        let real =
+            Path::new(&tillandsias_core::ca_path::state_root_expanded("/home/op")).join("ca");
+        let err = refuse_fake_podman_in_real_home(&real, true, Some(home)).unwrap_err();
+        assert!(
+            err.starts_with("refused:ca-bundle:fake-podman-in-real-home:"),
+            "{err}"
+        );
+        assert!(err.contains("why:") && err.contains("remedy:"), "{err}");
+        let scratch_ca = Path::new(&tillandsias_core::ca_path::state_root_expanded(
+            "/tmp/litmus-home",
+        ))
+        .join("ca");
+        let scratch = scratch_ca.as_path();
+        assert_eq!(
+            refuse_fake_podman_in_real_home(scratch, true, Some(home)),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_fake_podman_in_real_home(&real, false, Some(home)),
+            Ok(())
+        );
+        assert_eq!(
+            refuse_fake_podman_in_real_home(&real, true, Some(Path::new("/"))),
+            Ok(())
+        );
+    }
+
+    /// ORDER 2000-camv: a re-mint keeps the replaced CA for host Vault
+    /// clients, so a Vault still serving the old leaf keeps verifying and
+    /// nothing relaunches it under the mirrors; the next leaf reissue ends the
+    /// window. Pre-fix: FAILS, the old CA was gone and every tray read failed
+    /// TLS verification until Vault was relaunched.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn a_reminted_ca_keeps_the_replaced_one_trusted_until_the_leaf_is_reissued() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let dir = ensure_ca_bundle(false).expect("first mint");
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&dir, false).expect("leaf");
+        let old = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        std::fs::remove_file(dir.join("intermediate.key")).unwrap();
+        ensure_ca_bundle(false).expect("re-mint");
+        let new = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        assert_ne!(old, new, "the key was gone, so the CA was minted again");
+        assert_eq!(std::fs::read(dir.join(PREVIOUS_CA_FILE)).unwrap(), old);
+        let trust = host_vault_trust_pem(&dir).unwrap();
+        assert_eq!(
+            reqwest::Certificate::from_pem_bundle(&trust).unwrap().len(),
+            2
+        );
+        let served_leaf = dir.join("vault.crt");
+        let verifies = |ca: &[u8]| {
+            let bundle = dir.join("trust-under-test.pem");
+            std::fs::write(&bundle, ca).unwrap();
+            Command::new("openssl")
+                .args(["verify", "-CAfile"])
+                .arg(&bundle)
+                .arg(&served_leaf)
+                .output()
+                .unwrap()
+                .status
+                .success()
+        };
+        assert!(
+            !verifies(&new),
+            "the current CA alone does not verify the old leaf"
+        );
+        assert!(
+            verifies(&trust),
+            "the host trust still verifies the served leaf"
+        );
+        crate::vault_bootstrap::ensure_vault_tls_leaf(&dir, false).expect("reissue");
+        assert!(
+            dir.join(PREVIOUS_CA_FILE).exists(),
+            "an on-disk reissue is not a relaunch: a running Vault still serves the old leaf"
+        );
+        assert!(
+            verifies(&new),
+            "the reissued leaf verifies against the current CA"
+        );
+    }
+
+    /// ORDER 2000-camv: two minters racing on an empty CA dir (two lanes, or a
+    /// tray and a lane) end with ONE complete pair that both of them return;
+    /// neither observes half of the other's mint, and the second does not
+    /// wipe the first's. Threads stand in for processes: the generation lock
+    /// is a directory in the CA dir, so it is the same lock either way.
+    #[test]
+    #[cfg(feature = "vault")]
+    fn two_concurrent_ca_minters_end_with_one_matched_pair() {
+        let _pseam_lock = podman_seam_lock();
+        let _guard = env_lock();
+        let _home = ScratchHome::new();
+        let (a, b) = std::thread::scope(|s| {
+            let a = s.spawn(|| {
+                ensure_ca_bundle(false).map(|d| std::fs::read(d.join("intermediate.crt")))
+            });
+            let b = s.spawn(|| {
+                ensure_ca_bundle(false).map(|d| std::fs::read(d.join("intermediate.crt")))
+            });
+            (a.join().unwrap(), b.join().unwrap())
+        });
+        let (a, b) = (a.unwrap().unwrap(), b.unwrap().unwrap());
+        let dir = PathBuf::from(ca_dir());
+        let on_disk = std::fs::read(dir.join("intermediate.crt")).unwrap();
+        assert_eq!(a, on_disk, "the first minter's view is the final pair");
+        assert_eq!(b, on_disk, "the second minter's view is the final pair");
+        assert!(ca_key_matches_cert(
+            &dir.join("intermediate.crt"),
+            &dir.join("intermediate.key")
+        ));
     }
 
     /// 1898-hyhf exit criterion 1: with HOME and the runtime dir on scratch

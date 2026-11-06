@@ -5113,6 +5113,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
         exit 1
     fi
+    # 2000-camv: the one host-services INTEGRATION test the gate runs. The
+    # --workspace pass builds integration tests with default features, where
+    # --cloud-usage is not compiled, so this fixture (a read must never mint
+    # the operator's CA) only blocks when it is run here, by name.
+    _step "Running --cloud-usage never-mints fixture (2000-camv)..."
+    _cu_rc=0
+    _run cargo test -p tillandsias-headless --test cloud_usage_never_mints \
+        --features tray,listen-vsock --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee -a "$_fg_transcript" || _cu_rc="${PIPESTATUS[0]}"
+    if [[ $_cu_rc -ne 0 ]]; then
+        _error "fail:cloud-usage-never-mints: --cloud-usage changed the CA directory or did not run (cargo rc=$_cu_rc) — transcript: $_fg_transcript"
+        _error "  why: a read-only command that mints replaces the host CA under a running Vault, and every tray read then fails TLS verification"
+        _error "  remedy: keep --cloud-usage read-only (set_read_only_process) and re-run: cargo test -p tillandsias-headless --test cloud_usage_never_mints --features tray,listen-vsock"
+        exit 1
+    fi
     # CRITERION 2: state how many actually RAN, so "ran 0 because the feature
     # was off" is distinguishable from "ran and passed". A pass that silently
     # executes nothing is the failure this packet exists to close, and it has

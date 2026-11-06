@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-06 at the coordinator's direction (macuahuitl-fedora), from the 1918-wfrg premise check.
+packets:
+- packet_id: forge-entrypoint-reports-per-step-times-and-reaches-the-agent-in-seconds
+  order: 2004-in3v
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [observability, runtime, images]
+  estimated_hours: 4
+  title: The forge entrypoint reports each step's time, and on the macOS M5 tier reaches the agent within 4 s of container start
+  context: 'Supersedes 1918-wfrg (its warm-layer premise was stale). Measured on tlatoanis-macbook-air (Apple M5, 16 GiB, macOS 27.0.1; guest 8 vCPU / 8 GiB, kernel 7.2.13, v56.11.4.1), warm launch 2026-11-05: podman container create 08:17:09.19Z, start 08:17:09.43Z, first entrypoint exec 08:17:20.3Z, so about 11 s inside the entrypoint before the agent. Nothing yet says which steps take that time. Linux and macOS may differ, so each figure is stated per tier; Windows is out of scope here and is measured later. CARRIED from 1918-wfrg: nothing inspects a built forge image for credentials. Today no image is committed from a running container, so nothing can capture one, but no test pins that.'
+  exit_criteria:
+  - 'Each entrypoint step prints one ''bringup: step=forge-entry-<name> ms=<n>'' line (the 1915-brst shape), taken from timestamps at the step boundaries with no new poll, and a test asserts the lines.'
+  - 'A macOS M5-tier warm launch (regime: the guest above, image present, project cache warm) is recorded with its per-step breakdown, then brought to 4 s or less from container start to agent exec, or the row records which step cannot get there and why.'
+  - 'A litmus asserts that no forge image the launcher builds contains a file under /run/secrets or an agent credential path (the 1918-wfrg no-secrets criterion, carried).'
+  verifiable_closure: 'The per-step lines from a published-release warm launch on the macOS M5 tier attached, plus the entrypoint-step and no-secrets tests passing.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the step lines and the image litmus land with the fix (1136-n8sh).'
+  next_action: 'Add the step timers to images/default/entrypoint.sh and the agent entrypoints, then read the breakdown from the next published release on the macOS M5 tier.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-06: close 1918-wfrg as superseded, file the entrypoint-time row with per-step timings, a target in seconds and the regime, Linux and macOS stated separately, Windows later.'
+  events:
+  - type: filed
+    ts: '2026-11-06T00:20:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed p1 ready, superseding 1918-wfrg
+- packet_id: forge-base-digest-covers-only-what-its-containerfile-reads
+  order: 2004-qzem
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [images, podman, runtime]
+  estimated_hours: 3
+  title: forge-base is rebuilt only when Containerfile.base changes, not whenever any file in images/default changes
+  context: 'Found while closing 1918-wfrg. forge-base and forge share the context images/default (image_specs). image_build_identity (tillandsias-core image_builder) hashes the whole context tree, but Containerfile.base has no COPY or ADD, so its output depends only on its own text. Every release that edits any forge script therefore rebuilds forge-base, which installs packages, and forge with it. The inputs are real content, not a per-release stamp: v56.11.3.1 to v56.11.4.1 changed 3 files in images/default (lib-common.sh, host-tools-index.md, forge-agent-guidance.md), and Containerfile.base itself last changed in d3baa3889. Measured on tlatoanis-macbook-air (M5, guest 8 vCPU / 8 GiB), 2026-11-04 v56.11.4.1 first launch: "Building Forge" at 07:55:48Z, forge-base tagged 07:57:17Z (89 s), forge tagged 07:57:33Z (16 s). A content-unchanged forge-base would retag (ImageBuildAction::Retag) instead.'
+  exit_criteria:
+  - 'The forge-base source digest is unchanged when only files that Containerfile.base does not read change; a fixture edits lib-common.sh and asserts the same forge-base digest and a changed forge digest.'
+  - 'An edit to Containerfile.base, or to a file it COPYs if one is added later, still changes the forge-base digest; a fixture asserts it.'
+  - 'A first launch of a release that changes only forge scripts logs a forge-base Retag on the macOS M5 tier, against 89 s of rebuild today.'
+  verifiable_closure: 'The two digest fixtures passing, plus the image-ensure line from a published release that changed only forge scripts.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the digest fixtures land with the fix (1136-n8sh).'
+  next_action: 'Scope the forge-base identity to Containerfile.base plus the paths its COPY/ADD lines name (none today), then write the two fixtures.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-06, condition 2 on closing 1918-wfrg: name the input that changed and file it if every release pays.'
+  events:
+  - type: filed
+    ts: '2026-11-06T00:20:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed p1 ready from the 1918-wfrg rebuild finding
