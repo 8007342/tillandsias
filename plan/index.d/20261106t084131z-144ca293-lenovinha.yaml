@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-unavailable-keyring-never-reads-as-a-missing-ca-key
+    field: status
+    value: done
+    ts: "2026-11-06T08:41:31Z"
+    host: lenovinha
+
+events:
+  - packet_id: an-unavailable-keyring-never-reads-as-a-missing-ca-key
+    event:
+      type: completed
+      ts: "2026-11-06T08:41:31Z"
+      host: lenovinha
+      summary: |-
+        status 'done' with evidence_refs: b7067a1ca: land #955
+  - packet_id: an-unavailable-keyring-never-reads-as-a-missing-ca-key
+    event:
+      type: note
+      ts: "2026-11-06T08:41:31Z"
+      host: lenovinha
+      summary: |-
+        landed #955; relaunch on macuahuitl v56.11.6.1 swept all five strays with their own ok:ca-staging-swept lines
