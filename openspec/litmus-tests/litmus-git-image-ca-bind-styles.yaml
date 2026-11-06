@@ -13,7 +13,7 @@ description: >
   the regression that made vault-cli refuse "CA bundle not readable" and the
   tray loop on GitHub login on macuahuitl.
 severity: critical
-size: medium
+size: long
 inputs:
   - images/git/**
   - scripts/lua/test-git-image-ca-bind-styles.lua
