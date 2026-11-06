@@ -17,6 +17,10 @@
 --   4 PURGE     check-purge-clears-vault-credentials.sh reports an unreadable
 --               purge script as a violation; the pre-fix form skipped it and
 --               answered ok
+--   5 COMPILE   check-grep-patterns-compile.lua refuses a script holding the
+--               old empty-alternative ERE and accepts the optional-group form
+--   6 README    check-mo-full-attestations.sh refuses an unreadable exempt
+--               README; the pre-fix form (HEAD) skipped its marker check
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-grep-exit-two-fails-closed.lua
 
@@ -115,6 +119,49 @@ else
         "now rc=" .. tostring(now_rc) .. " [" .. now .. "]; pre-fix rc=" .. tostring(before_rc) .. " [" .. before .. "]" ..
             (pre.code ~= 0 and (" (pre-fix rebuild failed: " .. tostring(pre.stderr) .. ")") or ""))
 end
+
+-- 5: the pattern-compile decider, on a scratch tree, with a negative control.
+local scan = DIR .. "/scan"
+local function compile_verdict(line)
+    local r = bash(table.concat({
+        "mkdir -p '" .. scan .. "/scripts/hooks'",
+        "printf '%s\\n' '#!/bin/sh' " .. line .. " > '" .. scan .. "/scripts/a.sh'",
+        ". '" .. ROOT .. "/scripts/plan-binary-probe.sh'",
+        "TILLANDSIAS_GREP_SCAN_ROOT='" .. scan .. "' \"$(resolve_plan_binary)\" script run '" .. ROOT .. "/scripts/lua/check-grep-patterns-compile.lua' 2>/dev/null",
+    }, "\n"))
+    return text.trim(r.stdout or ""), r.code
+end
+local bad_out, bad_rc = compile_verdict([["if grep -qvE '^(|## x)\$' f; then echo refuse; fi"]])
+local good_out, good_rc = compile_verdict([["if grep -qvE '^(## x)?\$' f; then echo refuse; fi"]])
+arm("5 COMPILE the decider refuses the old '^(|' ERE and accepts the optional-group form",
+    bad_rc == 1 and bad_out == "violation:grep-patterns-compile:scripts/a.sh:2"
+        and good_rc == 0 and good_out == "ok:grep-patterns-compile:1 patterns",
+    "bad rc=" .. tostring(bad_rc) .. " [" .. bad_out .. "]; good rc=" .. tostring(good_rc) .. " [" .. good_out .. "]")
+
+-- 6: the attestation checker's exempt README, unreadable.
+local att = DIR .. "/att"
+local function att_verdict(script_src)
+    local r = bash(table.concat({
+        "set -e",
+        "rm -rf '" .. att .. "'; mkdir -p '" .. att .. "/scripts' '" .. att .. "/plan/mo-full-attestations.d'",
+        script_src .. " > '" .. att .. "/scripts/check-mo-full-attestations.sh'",
+        "cp '" .. ROOT .. "/scripts/plan-binary-probe.sh' '" .. att .. "/scripts/'",
+        "printf '#!/bin/sh\\necho fixture-nonledger-host\\n' > '" .. att .. "/scripts/mo-full-attest.sh'; chmod +x '" .. att .. "/scripts/mo-full-attest.sh'",
+        "printf '# grammar\\n    MO-FULL: COMPLETE <sha> <branch> <sha>\\n' > '" .. att .. "/plan/mo-full-attestations.d/README.md'",
+        "cd '" .. att .. "' && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm f",
+        "chmod 000 '" .. att .. "/plan/mo-full-attestations.d/README.md'",
+        "set +e",
+        "out=$(bash scripts/check-mo-full-attestations.sh 2>/dev/null); rc=$?",
+        "chmod 644 '" .. att .. "/plan/mo-full-attestations.d/README.md'",
+        "echo \"rc=$rc $out\"",
+    }, "\n"))
+    return text.trim(r.stdout or "")
+end
+local now6 = att_verdict("cp '" .. ROOT .. "/scripts/check-mo-full-attestations.sh' /dev/stdout")
+local pre6 = att_verdict("git -C '" .. ROOT .. "' show HEAD:scripts/check-mo-full-attestations.sh")
+arm("6 README an unreadable exempt README is refused now; the pre-fix form passed it unchecked",
+    now6:find("^rc=1 violation:mo%-full%-attestations") ~= nil and pre6:find("^rc=0 ok:mo%-full%-attestations") ~= nil,
+    "now [" .. now6 .. "]; pre-fix [" .. pre6 .. "]")
 
 bash("chmod -R u+rwx '" .. DIR .. "' 2>/dev/null; rm -rf '" .. DIR .. "'")
 if #failed > 0 then

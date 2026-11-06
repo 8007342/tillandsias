@@ -313,7 +313,14 @@ if [ -d "$ledger_dir" ]; then
                 # "0 markers verified". The README's own example is INDENTED
                 # (see its grammar block), so a marker at column 0 in an exempt
                 # file is fabricated by construction.
-                if grep -qE '^MO-FULL: ' "$f" 2>/dev/null; then
+                # 2007-vy3p: only a clean miss (exit 1) passes. An unreadable
+                # exempt file (exit 2) is a file this check could not clear.
+                _rc=0; grep -qE '^MO-FULL: ' "$f" 2>/dev/null || _rc=$?
+                if [ "$_rc" -ge 2 ]; then
+                    printf 'REFUSED: %s\n' "$f" >&2
+                    printf '   exempt file could not be read (grep exit %s), so no marker check ran on it\n' "$_rc" >&2
+                    violations=$((violations + 1))
+                elif [ "$_rc" -eq 0 ]; then
                     printf 'REFUSED: %s\n' "$f" >&2
                     printf '   exempt file carries a column-0 MO-FULL marker — fabricated or misplaced\n' >&2
                     printf '   (document the grammar indented, as the rest of this README does)\n' >&2
