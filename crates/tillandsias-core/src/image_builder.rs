@@ -1454,7 +1454,10 @@ mod tests {
     /// lines are all literal, so a script edit can never rebuild forge-base.
     #[test]
     fn the_real_forge_containerfiles_are_scoped_by_their_sources() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../images/default");
+        let dir = PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../../images/default");
         let base = fs::read_to_string(dir.join("Containerfile.base")).unwrap();
         assert_eq!(containerfile_context_sources(&base), Some(Vec::new()));
         let forge = fs::read_to_string(dir.join("Containerfile")).unwrap();
