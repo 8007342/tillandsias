@@ -465,6 +465,9 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::imagegen_tool::descriptor());
             // 1956-x7xp: the headless studio workflow runner, beside it.
             tools.push(crate::studio_tool::descriptor());
+            // 2002-stjb: the same run as a ticket, and its status.
+            tools.push(crate::studio_jobs::queue_descriptor());
+            tools.push(crate::studio_jobs::status_descriptor());
             // 1986-snpx: the read-only model listing beside it.
             tools.push(crate::studio_tool::models_descriptor());
             // 1969-cfyt: the studio appliance, started on demand.
@@ -664,6 +667,24 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             emit(line);
                         }
                     }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 2002-stjb: queue a run as a job; read its ticket.
+                "studio.queue_workflow" | "studio.job_status" => {
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    let out = if tool_name == "studio.queue_workflow" {
+                        crate::studio_jobs::queue(project_label, instance, arguments)
+                    } else {
+                        crate::studio_jobs::status(project_label, instance, arguments)
+                    };
+                    match out {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),

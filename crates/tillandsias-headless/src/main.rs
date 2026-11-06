@@ -101,6 +101,9 @@ mod gpu_queue;
 mod provenance;
 #[cfg(feature = "host-services")]
 mod studio_tool;
+// 2002-stjb: studio runs queued as tickets; uses studio_tool.
+#[cfg(feature = "host-services")]
+mod studio_jobs;
 // 1959-xsy5 (D12): the GPU-free, byte-reproducible pixel finish.
 #[cfg(feature = "host-services")]
 mod pixel_finish;
