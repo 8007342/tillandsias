@@ -4841,6 +4841,7 @@ mod ca_refresh_margin_tests {
     /// alone when it does not. Pre-fix: FAILS, there was no trust directory;
     /// forges bound the certificate FILE, whose old inode a running forge kept.
     #[test]
+    #[cfg(unix)]
     fn the_ca_trust_dir_holds_only_the_current_certificate() {
         let tmp = tempfile::tempdir().unwrap();
         let ca = tmp.path().join("ca");
