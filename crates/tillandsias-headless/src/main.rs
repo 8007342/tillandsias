@@ -102,6 +102,9 @@ mod gpu_queue;
 mod provenance;
 #[cfg(feature = "host-services")]
 mod studio_tool;
+// 2002-stjb: studio runs queued as tickets; uses studio_tool.
+#[cfg(feature = "host-services")]
+mod studio_jobs;
 // 1959-xsy5 (D12): the GPU-free, byte-reproducible pixel finish.
 #[cfg(feature = "host-services")]
 mod pixel_finish;
@@ -4897,6 +4900,24 @@ mod ca_refresh_margin_tests {
             none.iter().all(|l| l.starts_with("note:lane-unknown:")),
             "{none:?}"
         );
+    }
+
+    /// 2006-srcr: the recorded high-water mark parses as one positive MB
+    /// value (anything else is no record), and the project's declared need is
+    /// read from `[forge] src_mb`. Pre-fix: FAILS, neither existed.
+    #[test]
+    fn the_src_high_water_record_and_the_declared_need_parse() {
+        assert_eq!(parse_src_high_water("1843\n"), Some(1843));
+        assert_eq!(parse_src_high_water(" 7 "), Some(7));
+        for bad in ["", "0", "-5", "12.5", "lots", "1843 MB"] {
+            assert_eq!(parse_src_high_water(bad), None, "{bad:?}");
+        }
+        let cfg: tillandsias_core::config::ProjectConfig =
+            toml::from_str("[forge]\nsrc_mb = 3072\n").unwrap();
+        assert_eq!(cfg.forge.and_then(|f| f.src_mb), Some(3072));
+        let none: tillandsias_core::config::ProjectConfig = toml::from_str("").unwrap();
+        assert!(none.forge.is_none());
+        assert_eq!(FORGE_SRC_HIGH_WATER_FILE, ".tillandsias/src-highwater-mb");
     }
 
     /// 2007-uvtl: the trust directory holds the CA certificate and nothing
@@ -21000,10 +21021,14 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
 fn forge_hot_src_tmpfs(project_name: &str) -> String {
     // Order 1729-kg5q: the floor fits a build, clamped to half the forge's
     // memory.max (the size is a cap counted in that cgroup, not a reservation).
-    let budget = tillandsias_core::config::compute_source_budget(
+    // 2006-srcr: the last forge's recorded high-water mark and the project's
+    // declared need raise it, never past the same ceiling.
+    let budget = tillandsias_core::config::compute_source_budget_with(
         forge_mirror_pack_size_kb(project_name),
         &tillandsias_core::config::ForgeConfig::default(),
         tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
+        forge_src_high_water_mb(project_name),
+        forge_declared_src_mb(project_name),
     );
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
@@ -21379,6 +21404,53 @@ fn forge_mirror_pack_size_kb(project_name: &str) -> u64 {
             0
         }
     }
+}
+
+/// ORDER 2006-srcr: where a forge records its `/home/forge/src` high-water
+/// mark, inside the project's persistent tool cache (a number, never a
+/// secret). `tillandsias-room --record` writes it; the next launch reads it.
+pub(crate) const FORGE_SRC_HIGH_WATER_FILE: &str = ".tillandsias/src-highwater-mb";
+
+/// The high-water mark a file holds: one positive integer of MB.
+pub(crate) fn parse_src_high_water(text: &str) -> Option<u32> {
+    text.trim().parse::<u32>().ok().filter(|mb| *mb > 0)
+}
+
+/// The project's recorded high-water mark, read from its tool-cache volume on
+/// the host. None when there is no volume, no record, or it cannot be read.
+fn forge_src_high_water_mb(project_name: &str) -> Option<u32> {
+    let mut probe = podman_command();
+    probe.args([
+        "volume",
+        "inspect",
+        "--format",
+        "{{.Mountpoint}}",
+        &forge_tool_cache_volume(project_name),
+    ]);
+    let mountpoint = podman_command_output(probe, false).ok()?;
+    let path = std::path::Path::new(mountpoint.trim()).join(FORGE_SRC_HIGH_WATER_FILE);
+    parse_src_high_water(&std::fs::read_to_string(path).ok()?)
+}
+
+/// The project's declared need, `[forge] src_mb` in the committed
+/// `.tillandsias/config.toml`, read from the mirror's HEAD (a clone-only forge
+/// has no host checkout to read it from).
+fn forge_declared_src_mb(project_name: &str) -> Option<u32> {
+    let mut probe = podman_command();
+    probe.args([
+        "exec".to_string(),
+        format!("tillandsias-git-{project_name}"),
+        "git".into(),
+        "-C".into(),
+        format!("/srv/git/{project_name}"),
+        "show".into(),
+        "HEAD:.tillandsias/config.toml".into(),
+    ]);
+    let text = podman_command_output(probe, false).ok()?;
+    toml::from_str::<tillandsias_core::config::ProjectConfig>(&text)
+        .ok()?
+        .forge?
+        .src_mb
 }
 
 /// The podman argv for [`forge_mirror_pack_size_kb`]: `count-objects -v`
