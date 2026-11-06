@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-memory-low-is-void-because-its-ancestors-protect-nothing
+    event:
+      type: progress
+      ts: "2026-11-06T09:33:18Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        1913-fh6l claimed; TODAY'S RED ON THE macOS GUEST (tlatoanis-macbook-air, VZ guest kernel 7.2.13, v56.11.4.1, read-only via the installed tray's --exec-guest). The macOS guest runs podman as ROOT, so containers sit under machine.slice, not the user manager's user.slice that the lenovinha evidence describes. Measured on the running tillandsias-vault container: /machine.slice low=0 min=0, /machine.slice/libpod-<id>.scope low=0 min=0, .../container low=0 min=0, with memory_recursiveprot mounted. A forge's --memory-reservation (memory.low 2G) on its libpod scope is therefore capped by a machine.slice that protects nothing: the same void, one slice over. PLATFORM SPLIT for the fix: on the macOS (and Windows WSL) guest tillandsias owns root, so a machine.slice MemoryLow drop-in can ship with guest provisioning and needs no operator step; the Linux bare-metal arm keeps the row's user-manager plus operator-root plan. NEXT: the ancestor-walk probe in headless (reads /proc/<pid>/cgroup and every ancestor's memory.low and memory.min, reports the effective protection), red on today's guest, then the guest drop-in.
