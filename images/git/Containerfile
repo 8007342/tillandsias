@@ -148,7 +148,14 @@ RUN chmod +x /usr/local/bin/ssh-lane-sidecar
 # @trace spec:tillandsias-vault, spec:git-mirror-service
 # 1998-mvrs (b): the host binds the cert-only trust DIRECTORY at
 # /etc/tillandsias/ca-trust; every reader keeps the /etc/tillandsias/ca.crt path.
-RUN mkdir -p /etc/tillandsias \
+# 2018-cabd: one-shot helpers (remote_projects.rs: repo listing, clone) bind the
+# single FILE at /etc/tillandsias/ca.crt instead. A bind onto a symlink lands on
+# its target, so the target must exist in the image: without it the bind is not
+# readable and vault-cli refuses "CA bundle not readable". The empty file is
+# only a mount point; a directory bind over ca-trust/ hides it.
+RUN mkdir -p /etc/tillandsias/ca-trust \
+    && touch /etc/tillandsias/ca-trust/intermediate.crt \
+    && chmod 644 /etc/tillandsias/ca-trust/intermediate.crt \
     && ln -sf ca-trust/intermediate.crt /etc/tillandsias/ca.crt
 COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl
 COPY vault-agent-signer.hcl /etc/tillandsias/vault-agent-signer.hcl
