@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: image-generate-reports-its-engine-timings-and-a-second-call-within-minutes-reuses-a-warm-engine
+    event:
+      type: measurement
+      ts: '2026-11-03T07:15:00Z'
+      host: yoga
+      summary: |-
+        MEASURED on yoga (840M vulkan, imagegen v56.11.1.2, sd.cpp master-1015-e41fbcf): the tool's own one-shot sd-cli container run by hand, I0 SDXS 512, 1 step, 3 runs, each line stamped on arrival from `podman run` start. Totals 7144 / 7149 / 6985 ms (the tool's 7.5-8.3 s adds ~0.5 s around it). Split, run 2: container up and first sd-cli line at 0.10 s; Vulkan auto-probes (flash attention, conv2d direct) 0.34 -> 1.41 s; text encoder + UNet tensor load and compute-buffer sizing 1.41 -> 3.43 s; sampling 2.04 s (engine line "sampling completed"); TAESD decode 1.21 s; save 0.12 s. So ~3.3 s per call is per-process setup (probes + load + buffer sizing) that a warm engine pays once; container start itself is ~0.1 s, not the cost. Sampling + decode (~3.2 s) is compute. The 1.28 s/image figure from 2026-10-27 does not match today's 2.0 s sampling + 1.2 s decode for the same model; not explained yet.

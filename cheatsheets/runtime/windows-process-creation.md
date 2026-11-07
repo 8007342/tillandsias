@@ -19,7 +19,7 @@ committed_for_project: false
 
 # Windows process creation flags
 
-@trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
+@trace spec:cross-platform, spec:wsl-runtime, spec:no-terminal-flicker
 @cheatsheet runtime/wsl-on-windows.md, runtime/powershell.md
 
 **Use when**: spawning native exes (`wsl.exe`, `podman.exe`, `cmd.exe`, anything that allocates a console) from a Windows GUI process or a PowerShell-backgrounded task. Without `CREATE_NO_WINDOW` each spawn flashes a console window, even with stdio redirected.

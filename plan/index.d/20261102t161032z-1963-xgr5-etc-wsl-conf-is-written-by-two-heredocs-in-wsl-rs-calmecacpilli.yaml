@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli 2026-11-02 while resolving the 1410-ugvw spec/cheatsheet conflict against yolanda's measurement.
+packets:
+  - packet_id: etc-wsl-conf-is-written-by-two-separate-heredocs-in-wsl-rs-so-the-recipe-and-provision-paths-can-drift
+    order: 1963-xgr5
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags:
+      - windows
+      - wsl
+      - vm-layer
+      - testing
+    estimated_hours: 2
+    observed_by: calmecacpilli
+    title: /etc/wsl.conf for the tillandsias distro is written by two separate heredocs in crates/tillandsias-vm-layer/src/wsl.rs (739-749 and 864-877); a knob added to one path and not the other silently changes what wsl-runtime Requirement 1 measures
+    context: 'Read 2026-11-02 on calmecacpilli (text only, no cargo). wsl.rs:739-749 (post-import wiring of a recipe-materialized distro) and wsl.rs:864-877 (VmRuntime::provision, step 2) each carry their own `cat > /etc/wsl.conf << EOF` heredoc. Both currently emit [boot] systemd=true, [interop] enabled=true, appendWindowsPath=false, [automount] enabled=false; the second also emits [user] default=forge, and a comment at 734-738 explains why the first deliberately does not. yolanda (live Windows guest, 2026-11-02, relayed by macuahuitl-fedora) measured exactly those keys, so the two copies agree TODAY. Nothing pins that: the existing test provisioning_writers_use_stdin_delivery (wsl.rs ~1580) counts the writers (expects two) and checks delivery, not content equality. cheatsheets/runtime/wsl2-isolation-boundary.md and wsl-runtime Requirement 1 now cite 739-749 as THE writer; a change landing only at 864-877 makes both documents wrong for one of the two provisioning paths.'
+    exit_criteria:
+      - 'ONE function (or one const template) produces the wsl.conf text; both provisioning paths call it, with the [user] default=forge line as an explicit parameter rather than a second copy of the heredoc.'
+      - 'A named cargo test in tillandsias-vm-layer asserts the recipe path and the provision path emit the same [boot]/[interop]/[automount] keys and values, and that the only difference is the [user] section; it is red on today''s tree if either heredoc is edited alone.'
+      - 'provisioning_writers_use_stdin_delivery still passes (stdin delivery unchanged).'
+    verifiable_closure: 'cargo test -p tillandsias-vm-layer wsl_conf_single_writer -- --nocapture passes; the test name is cited in the closure event. Red on today''s tree by construction: the test does not exist and the two heredocs are independent strings.'
+    next_action: 'On a Windows or any compiling host: extract the heredoc into fn wsl_conf_text(default_user: Option<&str>) -> String in wsl.rs, call it from both sites, add the test; update the wsl.rs line citations in cheatsheets/runtime/wsl2-isolation-boundary.md and openspec/specs/wsl-runtime/spec.md Requirement 1 to the new single site.'
+    provenance: calmecacpilli 2026-11-02, from the 1410-ugvw note of the same day; measurement by yolanda relayed by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: '2026-11-02T16:10:32Z'
+        host: calmecacpilli
+        summary: filed p3 while correcting wsl2-isolation-boundary.md and wsl-runtime Requirement 1 against yolanda's measured wsl.conf; both documents cite wsl.rs:739-749 and a second writer exists at 864-877

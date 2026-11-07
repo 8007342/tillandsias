@@ -1,0 +1,61 @@
+# @trace spec:local-web-preview
+# @trace order:1861-nmpp, order:1860-auhm (spec: openspec/changes/web-studio-lanes, not yet archived)
+#
+# Order 1861-nmpp: the GrapesJS studio LANE. studio-grapesjs is the forge image
+# plus the studio front and the GrapesJS core (BSD-3-Clause, vendored at build
+# time and verified against its pinned sha512), built from
+# images/studio/Containerfile.grapesjs as the launcher builds it on first use.
+# Bound under local-web-preview until the web-studio-lane spec is archived.
+#
+# The fixture builds it on the local forge image, runs it with the registry
+# entry and --network none on a throwaway git checkout, and asserts through the
+# front: the vendored core and the project's page are served, the editor names
+# no external URL, a save posted to /__studio/save lands in index.html as a
+# `studio(grapesjs): save index.html` commit touching nothing else, a path
+# outside the allowlist is refused and writes nothing, egress is blocked, and
+# the REAL editor in headless chromium saves its own edit and its project data.
+# Pre-fix (trunk before this change): there is no Containerfile.grapesjs, so
+# the build fails and the fixture exits 1.
+#
+# REGIME: post-build. No local forge image, or a build that cannot fetch the
+# pinned tarball, exits 3 (could-not-run:studio-grapesjs:...), never a green.
+name: litmus:studio-grapesjs-saves-through-the-shared-endpoint
+spec: local-web-preview
+phase: post-build
+description: >
+  Pin 1861-nmpp: the GrapesJS studio lane serves a vendored, hash-pinned core
+  with no CDN or egress, and every save goes through the shared studio
+  endpoint, which commits allowlisted paths into the checkout and refuses the rest.
+severity: high
+size: long
+
+preconditions:
+  - workspace contains images/studio/Containerfile.grapesjs and scripts/test-studio-grapesjs.sh
+  - a local localhost/tillandsias-forge image; localhost/tillandsias-chromium-framework for the browser arm
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-studio-grapesjs.sh && test -x scripts/test-studio-grapesjs.sh && echo 'ok: studio-grapesjs-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: studio-grapesjs-suite-parses"
+
+  - step: "the lane saves through the shared endpoint as a commit, refuses outside its allowlist, no egress"
+    command: "bash scripts/test-studio-grapesjs.sh"
+    timeout_ms: 900000
+    expected_behavior: "PASS: the GrapesJS lane saves through the shared endpoint as a commit, refuses outside its allowlist, no egress"
+
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "PASS: the GrapesJS lane saves through the shared endpoint as a commit, refuses outside its allowlist, no egress"
+  log_fields:
+    spec: local-web-preview
+    test: studio-grapesjs-saves-through-the-shared-endpoint
+    artifact: images/studio/Containerfile.grapesjs
+
+rollback:
+  on_failure: >
+    The lane image no longer vendors the pinned core, the editor stopped saving
+    through /__studio/save, the front stopped guarding or committing, or the
+    editor page reaches an external URL.
+  command: "grep -n 'GRAPESJS_\\|studio-front' images/studio/Containerfile.grapesjs"

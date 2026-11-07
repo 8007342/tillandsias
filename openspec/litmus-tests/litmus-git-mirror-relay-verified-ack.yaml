@@ -34,9 +34,14 @@ critical_path:
     expected_behavior: "ok: relay ack shape"
 
   - step: "post-receive is bookkeeping and cannot claim acknowledgement"
-    command: "grep -Fq 'Post-receive cannot' images/git/post-receive-hook.sh && ! grep -Eq 'git push|vault-cli' images/git/post-receive-hook.sh && echo 'ok: post-receive bookkeeping only'"
+    command: "grep -Fq 'Post-receive cannot' images/git/post-receive-hook.sh && ! grep -Eq 'git push|secret/github|git-credential-tillandsias|relay-refs' images/git/post-receive-hook.sh && echo 'ok: post-receive bookkeeping only'"
     timeout_ms: 5000
     expected_behavior: "ok: post-receive bookkeeping only"
+
+  - step: "NEGATIVE CONTROL: a post-receive hook that relays (git push, or reads the GitHub credential) must FAIL the ban above"
+    command: "d=$(mktemp -d); for line in 'git push origin HEAD' 'vault-cli read -field=token secret/github/token'; do cp images/git/post-receive-hook.sh \"$d/hook\"; printf '%s\\n' \"$line\" >> \"$d/hook\"; if ! grep -Eq 'git push|secret/github|git-credential-tillandsias|relay-refs' \"$d/hook\"; then echo \"FAIL: ban misses: $line\"; rm -rf \"$d\"; exit 1; fi; done; rm -rf \"$d\"; echo 'ok: the ban catches both relay forms'"
+    timeout_ms: 5000
+    expected_behavior: "ok: the ban catches both relay forms"
 
 observability:
   traces:

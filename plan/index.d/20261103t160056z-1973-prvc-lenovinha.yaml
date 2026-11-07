@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned (operator Kumbia trial).
+packets:
+- packet_id: a-studio-run-workflow-result-carries-provenance-once-in-the-sidecar-and-stays-compact
+  order: 1973-prvc
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, mcp, tokens]
+  estimated_hours: 1
+  title: A studio.run_workflow result carries provenance once, in the sidecar, and stays compact
+  context: 'Kumbia batch (64 jobs x 4 candidates): each count=4 result was about 25k tokens because the full provenance record was inline per output and again at the top level. The record is already written to each output sidecar.'
+  exit_criteria:
+  - 'A count=4 result is under about 2k tokens and still carries every output path, seed and provenance_path. Pre-fix result: FAILS, 7027 bytes in the fixture (inline records); 1358 after.'
+  - 'verbose: true returns the full record inline, as before.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- studio_tool::'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixture with a stub engine (1136-n8sh).'
+  next_action: 'Land with 1971-mcpu and 1972-stfx after the release cut.'
+  provenance: Kumbia batch relayed by macuahuitl-fedora 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-03T16:00:56Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

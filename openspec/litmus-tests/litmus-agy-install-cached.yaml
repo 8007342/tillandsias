@@ -1,0 +1,35 @@
+# @trace spec:default-image
+# @trace order:1968-2wpe, order:307
+#
+# MEASURED on yoga 2026-11-02: every warm forge launch downloaded the agy CLI
+# again (5.7 / 6.2 s), because require_antigravity installed it into the --rm
+# container's /usr/local/bin. It now installs onto the persistent tool-cache
+# volume and refreshes at most once per TILLANDSIAS_AGY_REFRESH_SECS.
+# Red before 1968-2wpe: the WARM arm sees a second download.
+name: litmus:agy-install-cached
+spec: default-image
+phase: pre-build
+description: The forge installs the agy CLI once onto the persistent tool cache; a warm launch neither downloads nor updates it inside the refresh window
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash; stub curl and agy under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "a fresh launch downloads once into the tool cache; a warm launch reuses it; a stale stamp updates without downloading"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-agy-install-cached.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:agy-install-cached:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "four arms: premise, FRESH, WARM, STALE"
+  log_fields:
+    spec: "default-image"
+    test: "agy-install-cached"
+
+rollback:
+  on_failure: "read the FAIL lines; the function is require_antigravity in images/default/lib-common.sh"
+  command: "grep -n 'require_antigravity\\|last-refresh.epoch\\|TILLANDSIAS_AGY_REFRESH_SECS' images/default/lib-common.sh"

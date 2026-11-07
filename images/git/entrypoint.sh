@@ -85,6 +85,79 @@ start_vault_agent() {
     return 1
 }
 
+# 1998-mvrs (b): follow an enclave CA rotation without a mirror restart.
+# Vault Agent loads its CA (vault-agent.hcl ca_cert, /etc/tillandsias/ca.crt,
+# a symlink into the read-only ca-trust directory) once, when it builds its
+# client, so after a rotation it kept the old CA and the mirror sat at
+# agent-unauthenticated until restarted by hand (macuahuitl 2026-11-05).
+# This watcher restarts the Agent when a VALID new CA appears. inotify on the
+# directory (busybox inotifyd) when available, else a check once a minute,
+# never faster (operator policy: non-real-time checks at minutes). An invalid
+# certificate is reported once by name and the Agent keeps the CA it has;
+# there is no restart loop.
+CA_TRUST_DIR="${CA_TRUST_DIR:-/etc/tillandsias/ca-trust}"
+CA_TRUST_POLL_SECS="${CA_TRUST_POLL_SECS:-60}"
+case "$CA_TRUST_POLL_SECS" in ''|*[!0-9]*) CA_TRUST_POLL_SECS=60 ;; esac
+[ "$CA_TRUST_POLL_SECS" -ge 60 ] || CA_TRUST_POLL_SECS=60
+VAULT_AGENT_PID_FILE="${VAULT_AGENT_PID_FILE:-/tmp/tillandsias-vault-agent.pid}"
+
+ca_trust_digest() {
+    sha256sum "$CA_TRUST_DIR/intermediate.crt" 2>/dev/null | cut -c1-64
+}
+
+# Prints the reason a certificate is not a usable CA; prints nothing when it is.
+ca_trust_invalid_reason() {
+    _ct="$CA_TRUST_DIR/intermediate.crt"
+    _ext="$(openssl x509 -in "$_ct" -noout -ext basicConstraints 2>/dev/null)" \
+        || { echo "does not parse as an X.509 certificate"; return; }
+    case "$_ext" in *CA:TRUE*) ;; *) echo "is not a CA certificate"; return ;; esac
+    openssl x509 -in "$_ct" -noout -checkend 0 >/dev/null 2>&1 || echo "has expired"
+}
+
+restart_vault_agent_for_ca() {
+    _old="$(cat "$VAULT_AGENT_PID_FILE" 2>/dev/null || true)"
+    if [ -n "$_old" ] && kill -0 "$_old" 2>/dev/null; then
+        kill -TERM "$_old" 2>/dev/null || true
+        _w=0
+        while kill -0 "$_old" 2>/dev/null && [ "$_w" -lt 5 ]; do sleep 1; _w=$((_w + 1)); done
+        kill -KILL "$_old" 2>/dev/null || true
+    fi
+    start_vault_agent
+}
+
+ca_trust_check() {
+    _now="$(ca_trust_digest)"
+    [ -n "$_now" ] || return 0
+    [ "$_now" = "$CA_TRUST_SEEN" ] && return 0
+    _why="$(ca_trust_invalid_reason)"
+    if [ -n "$_why" ]; then
+        if [ "$_now" != "$CA_TRUST_REFUSED" ]; then
+            echo "[ca-trust] refused:ca_trust_invalid: the new enclave CA certificate $_why; Vault Agent keeps the previous CA" >&2
+            CA_TRUST_REFUSED="$_now"
+        fi
+        return 0
+    fi
+    echo "[ca-trust] ok:ca-rotated:$(printf %.12s "$CA_TRUST_SEEN")->$(printf %.12s "$_now"): restarting Vault Agent on the new CA"
+    CA_TRUST_SEEN="$_now"
+    if restart_vault_agent_for_ca; then
+        echo "[ca-trust] ok:vault-agent-restarted"
+    else
+        echo "[ca-trust] warn:vault-agent-restart-failed: see the [vault-agent] lines above" >&2
+    fi
+}
+
+watch_ca_trust() {
+    CA_TRUST_SEEN="$(ca_trust_digest)"
+    CA_TRUST_REFUSED=""
+    if command -v inotifyd >/dev/null 2>&1 && [ -d "$CA_TRUST_DIR" ]; then
+        echo "[ca-trust] watching $CA_TRUST_DIR (inotify)"
+        inotifyd - "$CA_TRUST_DIR:wmyn" | while read -r _ev; do ca_trust_check; done
+    else
+        echo "[ca-trust] watching $CA_TRUST_DIR every ${CA_TRUST_POLL_SECS}s (no inotifyd): a rotation leaves Vault Agent stale for up to that long"
+        while sleep "$CA_TRUST_POLL_SECS"; do ca_trust_check; done
+    fi
+}
+
 # CA certificate from podman secret.
 # @trace spec:podman-secrets-integration, spec:git-mirror-service
 # Git CLI uses GIT_SSL_CAINFO to trust custom CA certificates.
@@ -240,8 +313,15 @@ if [ -n "$PROJECT" ]; then
         # the launcher should pass a clean URL).
         REDACTED_URL="$(echo "$TILLANDSIAS_PROJECT_REMOTE_URL" | sed -E 's#https://[^@/]+@#https://***@#')"
         echo "[git-service] setting $PROJECT_REPO origin to $REDACTED_URL"
-        git -C "$PROJECT_REPO" remote remove origin 2>/dev/null || true
-        git -C "$PROJECT_REPO" remote add origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
+        # 1977-xpus: set-url, never remove+add. `git remote remove` deletes the
+        # remote's tracking refs, so on this persistent volume every warm start
+        # re-listed every upstream branch as new and the forge waited 6.7-12 s
+        # for it (measured on yoga 2026-11-03).
+        if git -C "$PROJECT_REPO" remote get-url origin >/dev/null 2>&1; then
+            git -C "$PROJECT_REPO" remote set-url origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
+        else
+            git -C "$PROJECT_REPO" remote add origin "$TILLANDSIAS_PROJECT_REMOTE_URL"
+        fi
         # @trace spec:git-mirror-service
         # Reconciliation fetches land in remote-tracking refs ONLY. The old
         # "+refs/*:refs/*" mapped upstream branches directly onto the mirror's
@@ -473,6 +553,13 @@ shutdown_git_service() {
     # Stop Agent before revoking its current sink token. Revoking first leaves
     # a race in which Agent observes the invalid token, re-authenticates, and
     # writes a fresh token between revoke-self and process termination.
+    # 1998-mvrs (b): stop the CA watcher first, so it cannot restart the
+    # Agent being stopped, and stop an Agent it restarted (known by its pid file).
+    [ -n "${CA_TRUST_WATCH_PID:-}" ] && kill -TERM "$CA_TRUST_WATCH_PID" 2>/dev/null || true
+    _restarted="$(cat "$VAULT_AGENT_PID_FILE" 2>/dev/null || true)"
+    if [ -n "$_restarted" ] && [ "$_restarted" != "$VAULT_AGENT_PID" ]; then
+        kill -TERM "$_restarted" 2>/dev/null || true
+    fi
     if [ -n "$VAULT_AGENT_PID" ]; then
         kill -TERM "$VAULT_AGENT_PID" 2>/dev/null || true
         agent_waited=0
@@ -490,7 +577,7 @@ shutdown_git_service() {
     if [ -s "$VAULT_TOKEN_FILE" ] && command -v vault-cli >/dev/null 2>&1; then
         vault-cli revoke-self >/dev/null 2>&1 || true
     fi
-    for pid in "${GIT_DAEMON_PID:-}" "$VAULT_AGENT_PID" "$MIRROR_RECONCILER_PID"; do
+    for pid in "${CA_TRUST_WATCH_PID:-}" "$(cat "$VAULT_AGENT_PID_FILE" 2>/dev/null || true)" "${GIT_DAEMON_PID:-}" "$VAULT_AGENT_PID" "$MIRROR_RECONCILER_PID"; do
         [ -n "$pid" ] && kill -TERM "$pid" 2>/dev/null || true
     done
     exit "$exit_status"
@@ -503,6 +590,10 @@ trap 'shutdown_git_service 0' SIGTERM SIGINT
 # child, revoke any token sink it wrote, and leave a failing exit status.
 start_vault_agent
 start_mirror_reconciler
+if [ -r /run/secrets/vault-approle ] && [ "${TILLANDSIAS_CA_TRUST_WATCH:-1}" = "1" ]; then
+    watch_ca_trust &
+    CA_TRUST_WATCH_PID=$!
+fi
 # receive-pack IS enabled — it is the forge's live push path (order 450).
 #
 # Order 423 removed --enable=receive-pack to close an "anonymous write path",
@@ -611,95 +702,35 @@ fi
 # Safety: build an explicit refspec list from this mirror's local refs.
 # Anything not in /srv/git/<project>/refs/ is NOT touched upstream. We never
 # pass `--mirror` or `--all` here because the mirror is sparse by design.
-for mirror in "$GIT_SERVICE_ROOT"/*; do
-    [ -d "$mirror" ] || continue
-    # Repair an unborn HEAD on ANY mirror before transport work — including
-    # local-only mirrors (no origin) that skip the fetch paths below but
-    # already hold forge-pushed heads a clone must be able to check out.
-    ensure_mirror_head "$mirror" || true
-    REMOTE="$(git -C "$mirror" remote get-url origin 2>/dev/null || true)"
-    [ -n "$REMOTE" ] || continue
+# ORDER 1968-psy9. THE PER-REF STARTUP RETRY-PUSH RUNS AFTER READY, AND NOT AT
+# ALL WITHOUT AN UPSTREAM CREDENTIAL. MEASURED on yoga 2026-11-02: it walked
+# 1489 refs one push each, every one refused "HTTPS upstream credential is
+# unavailable", for 49.3 s, and READY waited for all of it, so every warm forge
+# launch waited too. The seed fetch and the exported-head fast-forward above
+# still run BEFORE READY (a forge must clone current heads); only this
+# mirror->GitHub recovery relay moves after it.
+#
+# The credential test is relay-refs.sh's own: an https remote needs
+# secret/github/token readable through the Vault Agent sink. Without it every
+# per-ref push would fail the same way, so the whole sweep is ONE line. The next
+# forge push relays through the live hook as before.
+_startup_upstream_credential() {
+    case "$1" in
+        https://*) ;;
+        *) return 0 ;;  # ssh / local remotes are not gated on the GitHub token
+    esac
+    command -v vault-cli >/dev/null 2>&1 || return 1
+    [ -r "${VAULT_TOKEN_FILE:-/run/secrets/vault-token}" ] || return 1
+    vault-cli read -field=token secret/github/token >/dev/null 2>&1
+}
 
-    # Seed an empty mirror or skip if it has no upstream
-    if ! git -C "$mirror" rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
-       && [ -z "$(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null)" ]; then
-        retry_msg "[git-mirror] Startup: $mirror has no refs but has origin. Fetching upstream to seed mirror."
-        # @trace spec:git-mirror-service
-        # Seed the exported refs explicitly. The configured default refspec only
-        # populates refs/remotes/origin/* (safe reconciliation), which would
-        # leave a fresh mirror with no cloneable heads/tags. This one-time seed
-        # writes local heads and tags directly so clones over the git daemon see
-        # them; subsequent reconcile fetches use the safe tracking refspec.
-        # 1910-nb6m: seed-mirror retries a transport failure with backoff.
-        if ! FETCH_OUTPUT="$("$SEED_MIRROR" "$mirror" 2>&1)"; then
-            case "$FETCH_OUTPUT" in
-                # @trace spec:git-mirror-service
-                # 777-i7hf/731-eupn honesty: an auth refusal must never read
-                # like "upstream empty". Name the credential channel so the
-                # operator repairs Vault/GitHub login, not the upstream repo.
-                *"could not read Username"*|*"terminal prompts disabled"*|*"Authentication failed"*|*"Invalid username or password"*|*"error: 401"*|*"error: 403"*)
-                    retry_msg "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials (private repository?) and none were accepted. This is NOT an empty upstream. Check the [vault-agent] log and the Vault GitHub token (GitHub Login). $FETCH_OUTPUT"
-                    ;;
-                *)
-                    retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
-                    ;;
-            esac
-        fi
-        # The seed just wrote refs/heads/* into a repo whose HEAD may still
-        # point at a branch upstream never had (unborn-HEAD defect). Repoint
-        # HEAD now so the very first clone checks out a real branch.
-        ensure_mirror_head "$mirror" || true
-        continue
+# startup_retry_push <mirror> <remote> <ref-count>
+startup_retry_push() {
+    mirror="$1"; REMOTE="$2"; REF_COUNT="$3"
+    if ! _startup_upstream_credential "$REMOTE"; then
+        retry_msg "[git-mirror] Startup retry-push SKIPPED: $mirror -> $REMOTE ($REF_COUNT ref(s)): no upstream credential, so every per-ref push would be refused. Run GitHub Login; the next forge push relays through the live hook."
+        return 0
     fi
-
-    # Build synthetic receive records so startup recovery uses the exact same
-    # Vault-backed, atomic relay helper as live pushes.
-    UPDATE_RECORDS=""
-    REF_COUNT=0
-    for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
-        NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
-        UPDATE_RECORDS="${UPDATE_RECORDS}${NEWSHA} ${NEWSHA} ${ref}
-"
-        REF_COUNT=$((REF_COUNT + 1))
-    done
-    if [ "$REF_COUNT" -eq 0 ]; then
-        continue
-    fi
-
-    # @trace spec:git-mirror-service
-    # Fetch upstream state before the retry push so we don't get rejected for
-    # non-fast-forward when the mirror was behind GitHub during the previous
-    # session's post-receive relay. A fetch failure is non-fatal — the push
-    # will fail visibly and the next forge commit will trigger a fresh relay.
-    FETCH_OUTPUT="$(git -C "$mirror" fetch origin 2>&1)" || retry_msg "[git-mirror] Startup retry-push fetch failed (non-fatal): $FETCH_OUTPUT"
-    if [ -n "$FETCH_OUTPUT" ]; then
-        retry_msg "[git-mirror] Startup retry-push fetch output: $FETCH_OUTPUT"
-    fi
-
-    # @trace spec:git-mirror-service
-    # Coherence (order 449): advance this mirror's EXPORTED heads to upstream
-    # where fast-forwardable, so a forge cloning over git:// gets CURRENT code.
-    # The fetch above only populates refs/remotes/origin/* (tracking refs); the
-    # cloneable refs/heads/* are NOT advanced by it. Without this step a mirror
-    # left behind GitHub — e.g. the host pushed DIRECT to origin (order 449) —
-    # keeps serving STALE heads; a forge then commits on stale and its push is
-    # rejected non-fast-forward. That is the coherence break Hy3 hit 2026-07-20
-    # and the reason concurrent forges could not push transparently.
-    # NON-forced (NO leading '+'): a head carrying local un-relayed commits that
-    # would need a rewind is LEFT ALONE (fetch reports "[rejected] non-fast-
-    # forward") and is relayed UP by the per-ref push below. This is the
-    # GitHub->mirror direction; the per-ref retry-push below is mirror->GitHub —
-    # together they keep the mirror coherent both ways. Never --mirror/--all:
-    # only the explicit exported refs/heads/* set (same sparse-mirror invariant
-    # as the seed and relay paths).
-    FF_OUTPUT="$(git -C "$mirror" fetch origin 'refs/heads/*:refs/heads/*' 2>&1)" || retry_msg "[git-mirror] Startup exported-head fast-forward (non-fatal; diverged heads relay UP below): $FF_OUTPUT"
-    if [ -n "$FF_OUTPUT" ]; then
-        retry_msg "[git-mirror] Startup exported-head fast-forward: $FF_OUTPUT"
-    fi
-    # New heads may have just arrived (e.g. an existing volume whose seed
-    # predates the unborn-HEAD fix); make sure HEAD names a cloneable one.
-    ensure_mirror_head "$mirror" || true
-
     # Per-ref relay (order 441): the OLD sweep fed ALL refs to one
     # `git push --atomic` call, so a single stranded (non-fast-forward) ref
     # rejected the ENTIRE transaction and no fast-forwardable ref was flushed.
@@ -747,6 +778,99 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     if [ -n "$stranded" ]; then
         retry_msg "[git-mirror] Startup retry-push: $REF_COUNT ref(s) attempted; stranded=$stranded"
     fi
+}
+
+PENDING_RETRY_PUSH=""
+for mirror in "$GIT_SERVICE_ROOT"/*; do
+    [ -d "$mirror" ] || continue
+    # Repair an unborn HEAD on ANY mirror before transport work — including
+    # local-only mirrors (no origin) that skip the fetch paths below but
+    # already hold forge-pushed heads a clone must be able to check out.
+    ensure_mirror_head "$mirror" || true
+    REMOTE="$(git -C "$mirror" remote get-url origin 2>/dev/null || true)"
+    [ -n "$REMOTE" ] || continue
+
+    # Seed an empty mirror or skip if it has no upstream
+    if ! git -C "$mirror" rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
+       && [ -z "$(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null)" ]; then
+        retry_msg "[git-mirror] Startup: $mirror has no refs but has origin. Fetching upstream to seed mirror."
+        # @trace spec:git-mirror-service
+        # Seed the exported refs explicitly. The configured default refspec only
+        # populates refs/remotes/origin/* (safe reconciliation), which would
+        # leave a fresh mirror with no cloneable heads/tags. This one-time seed
+        # writes local heads and tags directly so clones over the git daemon see
+        # them; subsequent reconcile fetches use the safe tracking refspec.
+        # 1910-nb6m: seed-mirror retries a transport failure with backoff.
+        if ! FETCH_OUTPUT="$("$SEED_MIRROR" "$mirror" 2>&1)"; then
+            case "$FETCH_OUTPUT" in
+                # @trace spec:git-mirror-service
+                # 777-i7hf/731-eupn honesty: an auth refusal must never read
+                # like "upstream empty". Name the credential channel so the
+                # operator repairs Vault/GitHub login, not the upstream repo.
+                *"could not read Username"*|*"terminal prompts disabled"*|*"Authentication failed"*|*"Invalid username or password"*|*"error: 401"*|*"error: 403"*)
+                    retry_msg "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials (private repository?) and none were accepted. This is NOT an empty upstream. Check the [vault-agent] log and the Vault GitHub token (GitHub Login). $FETCH_OUTPUT"
+                    ;;
+                *)
+                    retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
+                    ;;
+            esac
+        fi
+        # The seed just wrote refs/heads/* into a repo whose HEAD may still
+        # point at a branch upstream never had (unborn-HEAD defect). Repoint
+        # HEAD now so the very first clone checks out a real branch.
+        ensure_mirror_head "$mirror" || true
+        continue
+    fi
+
+    # 1977-xpus: one for-each-ref, not a `git rev-parse` per ref. The loop that
+    # stood here built UPDATE_RECORDS, which nothing has read since 1968-psy9
+    # moved the retry-push after READY, and it spawned git once per ref (1506
+    # on the tillandsias mirror) ahead of READY on every start.
+    REF_COUNT="$(git -C "$mirror" for-each-ref --format='x' refs/heads refs/tags 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "$REF_COUNT" -eq 0 ]; then
+        continue
+    fi
+
+    # @trace spec:git-mirror-service
+    # Fetch upstream state before the retry push so we don't get rejected for
+    # non-fast-forward when the mirror was behind GitHub during the previous
+    # session's post-receive relay. A fetch failure is non-fatal — the push
+    # will fail visibly and the next forge commit will trigger a fresh relay.
+    FETCH_OUTPUT="$(git -C "$mirror" fetch origin 2>&1)" || retry_msg "[git-mirror] Startup retry-push fetch failed (non-fatal): $FETCH_OUTPUT"
+    if [ -n "$FETCH_OUTPUT" ]; then
+        retry_msg "[git-mirror] Startup retry-push fetch output: $FETCH_OUTPUT"
+    fi
+
+    # @trace spec:git-mirror-service
+    # Coherence (order 449): advance this mirror's EXPORTED heads to upstream
+    # where fast-forwardable, so a forge cloning over git:// gets CURRENT code.
+    # The fetch above only populates refs/remotes/origin/* (tracking refs); the
+    # cloneable refs/heads/* are NOT advanced by it. Without this step a mirror
+    # left behind GitHub — e.g. the host pushed DIRECT to origin (order 449) —
+    # keeps serving STALE heads; a forge then commits on stale and its push is
+    # rejected non-fast-forward. That is the coherence break Hy3 hit 2026-07-20
+    # and the reason concurrent forges could not push transparently.
+    # NON-forced (NO leading '+'): a head carrying local un-relayed commits that
+    # would need a rewind is LEFT ALONE (fetch reports "[rejected] non-fast-
+    # forward") and is relayed UP by the per-ref push below. This is the
+    # GitHub->mirror direction; the per-ref retry-push below is mirror->GitHub —
+    # together they keep the mirror coherent both ways. Never --mirror/--all:
+    # only the explicit exported refs/heads/* set (same sparse-mirror invariant
+    # as the seed and relay paths).
+    # 1977-xpus: from the tracking refs the fetch above just refreshed, not a
+    # second round trip to upstream (measured on yoga: 140-159 ms against
+    # 700-730 ms). Same non-forced refspec, so the same heads are left alone.
+    FF_OUTPUT="$(git -C "$mirror" fetch . 'refs/remotes/origin/*:refs/heads/*' 2>&1)" || retry_msg "[git-mirror] Startup exported-head fast-forward (non-fatal; diverged heads relay UP below): $FF_OUTPUT"
+    if [ -n "$FF_OUTPUT" ]; then
+        retry_msg "[git-mirror] Startup exported-head fast-forward: $FF_OUTPUT"
+    fi
+    # New heads may have just arrived (e.g. an existing volume whose seed
+    # predates the unborn-HEAD fix); make sure HEAD names a cloneable one.
+    ensure_mirror_head "$mirror" || true
+
+    # 1968-psy9: queued, not run here: startup_retry_push runs after READY.
+    PENDING_RETRY_PUSH="${PENDING_RETRY_PUSH}${mirror}|${REMOTE}|${REF_COUNT}
+"
 done
 
 # @trace spec:git-mirror-service
@@ -797,6 +921,16 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
 done
 if [ "$_mirrors_seeded" -eq 1 ] && [ "$_mirror_count" -gt 0 ]; then
     notify_ready "mirror seeded ($_mirror_count)"
+fi
+
+# 1968-psy9: the queued startup retry-pushes, after READY, in the background so
+# the daemon (waited on below) keeps serving and READY was never held by them.
+if [ -n "$PENDING_RETRY_PUSH" ]; then
+    (
+        printf '%s' "$PENDING_RETRY_PUSH" | while IFS='|' read -r _m _r _n; do
+            [ -n "$_m" ] && startup_retry_push "$_m" "$_r" "$_n"
+        done
+    ) &
 fi
 
 # The git daemon, Vault Agent, and shutdown trap were all started ABOVE, before

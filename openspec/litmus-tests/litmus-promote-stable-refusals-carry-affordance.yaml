@@ -1,0 +1,35 @@
+# @trace spec:ci-release, order:1247-amcu
+name: litmus:promote-stable-refusals-carry-affordance
+spec: ci-release
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/promote-stable.sh says WHY it refused and WHAT
+  would make it not a refusal, as labelled "  why:" / "  remedy:" stderr lines
+  (or its own explanation lines, marked affordance-ok) beside its unchanged
+  stdout verdict (1247-amcu). The fixture RUNS only the caller-error
+  refusals, which exit before the first gh call, so it never reads or touches
+  a GitHub release; a static arm fails any verdict site added later without
+  an affordance.
+
+preconditions:
+  - workspace contains scripts/promote-stable.sh
+  - workspace contains scripts/lua/test-promote-stable-affordances.lua
+
+critical_path:
+  - step: "the caller-error refusals carry why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-promote-stable-affordances.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:promote-stable-affordances:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "a promotion refusal names its rule and how to clear it"
+  log_fields:
+    spec: "ci-release"
+    test: "promote-stable-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in promote-stable.sh ships without why/remedy"

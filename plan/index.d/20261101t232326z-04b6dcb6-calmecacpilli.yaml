@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: comfyui-studio-forge-agent-surface-design-reference-conditioning-controlnet-lora-transparent-output-batch-metadata
+    event:
+      type: note
+      ts: "2026-11-01T23:23:26Z"
+      agent_id: forge-forge-tillandsias-claude-20261101t232326z
+      host: calmecacpilli
+      summary: |
+        KUMBIA-KOMBAT P0 ASKS (coordinator relay, 2026-11-01). Their spec: kumbia-kombat work/1830-pipe plan/asset-pipeline-requirements.md, on a remote internal to their forge; ask them to paste it.
+        - R1, headless invocation: comfy.run_workflow takes an API-format workflow JSON committed in the project repo, named input PNGs by path on a shared mount, seed and prompt overrides, batch N, and reports progress. It returns output paths plus provenance, shaped like 1871-47ex.
+        - R2, ControlNet: OpenPose for SDXL; depth or lineart from a puppet render.
+        - R3, reference: IP-Adapter without InsightFace now; LoRA training later.
+        - R4, output shape: one frame per image, fixed canvas, baseline and scale; alpha through BiRefNet or BEN2.
+        - R7, provenance: workflow hash; sha256 and licence of every model, LoRA and ControlNet; seed; prompts; input hashes; engine version.
+        DECISION RECORDED: the design adopts ONE shared contract, which both game forges agreed. It has three parts: a family spec JSON, a queue/results JSON, and a provenance schema. It also carries per-cell baseline and pivot, a pose list with control images, reserved palette ramps, reference images, and a pack-to-project manifest.
+        OPEN DECISIONS:
+        (a) the path and lifetime of the shared forge-studio I/O mount;
+        (b) where trained LoRAs live and who approves them;
+        (c) running a batch at a tier without a consent token per call. (c) changes the operator's consent experience, so the OPERATOR must rule on it; no agent decides it.
+        Interim path for their human opponents: 1954-gdi6.

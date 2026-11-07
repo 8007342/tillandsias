@@ -21,3 +21,17 @@ Don't use `pkill -f` or `killall -r`. Your command runs as `bash -c "<your comma
 ## Generating images
 
 `image.generate` runs the biggest model already on this computer unless you name a `tier`; any tier up to what the computer can run may be named directly. The only thing it asks about is downloading a model's files the first time: the result is `consent_required` (or carries `bigger_tier_offer`) with an `ask` sentence naming the one-time download in GB and minutes. Show the user that sentence exactly as written. Only if they say yes, call `image.generate` again with the same prompt, that `tier` and its `consent_token`. A token works once; the yes holds for this computer, so that tier never asks again. Never start a download on your own: without a token you get `consent_required` and nothing runs.
+
+## Host tools: which one starts what
+
+One MCP server, registered as `host-browser`, carries every host-side tool. The names are grouped by what they do, and the server's `initialize` reply (or `tillandsias.index {}`) lists them:
+
+- `preview.*` — this project's local web preview at `www.<project>.localhost`. `preview.publish` STARTS a sibling web container; `preview.status`, `preview.reload`, `preview.stop`, `preview.logs` act on it. For a framework dev server, run it inside the forge instead.
+- `toolchain.*` — `toolchain.prepare` STARTS a one-time build of a shared toolchain image (flutter); the `flutter` command calls it for you.
+- `image.*` — `image.generate` generates images locally (stable-diffusion.cpp; starts the engine on the host GPU queue on first use).
+- `studio.*` — the headless ComfyUI pipeline: `studio.run_workflow` and `studio.key_footage` queue GPU work in the project's studio container (it must be running: call `studio.start {}` first, no relaunch; `studio.status {}` says whether it is up). `studio.start` returns a `window_url`: `browser.open {url: window_url, dev: true}` opens the SAME studio in a window the operator can use with you; `studio.validate_family`, `studio.finish_pixels`, `studio.contact_sheet` start nothing.
+- `browser.*` — `browser.open` STARTS a browser window on the host (the forge has no browser binary); the rest drive it.
+- `cloudflare.*` — read-only views of the operator's Cloudflare account; call `cloudflare.scope_probe` first.
+- `webstudio.*` — the visual co-edit studios (GrapesJS, Decap, Tina, Puck); `webstudio.open` starts nothing from the lane today and names the operator command.
+
+The flat names `publish_local`, `service_status`, `service_stop`, `service_reload`, `service_logs`, `toolchain_prepare`, `studio_options`, `studio_open`, `studio_changes`, `studio_publish_request` still work for one release as deprecated aliases; prefer the namespaced names.

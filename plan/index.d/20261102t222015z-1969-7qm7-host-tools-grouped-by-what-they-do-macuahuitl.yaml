@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: host-tools-are-named-by-what-they-do-with-deprecated-flat-aliases-and-a-grouped-index-the-agent-sees-first
+    order: 1969-7qm7
+    status: in_progress
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, mcp, discoverability, host-services, imagegen, studio]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    title: Host tools are named by what they do, the flat names stay as deprecated aliases for one release, and the agent sees a grouped index first
+    context: 'Operator request 2026-11-02: tooling grew organically; host-browser also hosts image generation and sibling-container starts and agents cannot find the tools. MEASURED on linux-next 572fed56e: the server registered as host-browser advertises 28 non-cloudflare tools under three naming schemes (publish_local/service_*/toolchain_prepare/studio_* beside browser.*/image.*/studio.*/cloudflare.*); studio_* (GrapesJS/Decap co-edit) collides with studio.* (ComfyUI); no description says which tool starts a sibling container; initialize carries no instructions; studio_unavailable names tillandsias.toml (the file is .tillandsias/config.toml); the forge guidance names only image.generate and the cheatsheet index has no host-tools entry. Spec: openspec/changes/host-tool-discovery.'
+    exit_criteria:
+      - 'tools/list advertises preview.*, toolchain.prepare, image.generate, studio.*, browser.*, cloudflare.*, webstudio.* and tillandsias.index, and the ten flat names LAST, each described as "Deprecated alias of <canonical>" with the same inputSchema.'
+      - 'tools/call under a deprecated alias answers byte-identically to its canonical name (fixture over the real dispatcher).'
+      - 'Every host tool description says what it starts (sibling web container, toolchain image build, engine, studio container, host browser window) or "Starts nothing" (fixture).'
+      - 'initialize carries instructions rendered from the same table as tillandsias.index (fixture).'
+      - 'forge-agent-guidance.md, web-services.md and cheatsheets/tooling/host-tools-index.md carry the grouped index and the alias table.'
+    verifiable_closure: 'cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock host_tool_discovery_fixtures host_tools::tests mcp_initialize_and_tools_list_advertise_publish_tool_family'
+    next_action: 'Land work/1969-7qm7 into linux-next. Left after it: the later slices in openspec/changes/host-tool-discovery/tasks.md (register the socket under a whole-surface name beside host-browser; studio.start on demand per 1969-cfyt; drop the aliases one release later).'
+    provenance: macuahuitl 2026-11-02 (tooling architect session) from the operator request and the measured tools/list.
+    depends_on: []
+    related: [1969-cfyt, 779-3trn, 1874-kkrc, 1860-auhm, 1956-x7xp, 1772-irs3, 1724-kcj4]
+    events:
+      - type: filed
+        ts: '2026-11-02T22:20:15Z'
+        host: macuahuitl
+        summary: filed and claimed with the first slice implemented on work/1969-7qm7

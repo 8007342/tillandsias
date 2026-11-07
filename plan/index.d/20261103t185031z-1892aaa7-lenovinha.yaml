@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-lane-socket-owner-test-stops-mutating-the-process-wide-environment-so-it-cannot-race-parallel-tests
+    event:
+      type: note
+      ts: "2026-11-03T18:50:31Z"
+      agent_id: linux-lenovinha-opus5-20261103t185031z
+      host: lenovinha
+      summary: |
+        RECURRENCE on lenovinha 2026-11-03, on trees that contain 1969-scp2 (5c6dfa76a). Two process-wide-race flakes, each failing once and passing alone:
+        1. mcp_socket::lane_adoption_tests::a_rejoin_serves_a_lane_whose_launcher_was_killed. Full gate run of work/1975-istp (604550493): panicked at crates/tillandsias-headless/src/mcp_socket.rs:1941:9: "the fixture must reproduce the refusing socket". It passed 3/3 alone and in the full rerun after a trunk merge.
+        2. lane_socket_owner_tests::a_cli_lane_refuses_by_name_when_another_process_owns_its_socket. cargo test --bin tillandsias --features tray,listen-vsock on work/1969-cfyt merged with trunk (local tree 298f6e15c, includes #895): panicked at crates/tillandsias-headless/src/main.rs:38216:9: "assertion left == right failed: a departed owner's socket". It failed 1 of 2 full runs and 2 of 3 full runs that day. A live tray was running on the host the whole time (PID 3452580, with its own lane sockets), which may share the state these fixtures race on.

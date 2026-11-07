@@ -163,11 +163,19 @@ impl VaultClient {
         token: impl Into<String>,
         ca_pem: &[u8],
     ) -> Result<Self, VaultError> {
-        let certificate = reqwest::Certificate::from_pem(ca_pem)
+        // 2000-camv: the PEM may hold more than one CA (the current one and the
+        // one a mint replaced); each is a trust root.
+        let certificates = reqwest::Certificate::from_pem_bundle(ca_pem)
             .map_err(|e| VaultError::Other(format!("invalid Vault CA certificate: {e}")))?;
-        let builder = reqwest::Client::builder()
-            .timeout(Duration::from_secs(10))
-            .add_root_certificate(certificate);
+        if certificates.is_empty() {
+            return Err(VaultError::Other(
+                "invalid Vault CA certificate: no certificate in the PEM".into(),
+            ));
+        }
+        let mut builder = reqwest::Client::builder().timeout(Duration::from_secs(10));
+        for certificate in certificates {
+            builder = builder.add_root_certificate(certificate);
+        }
         // 1924-vprx: this crate's unit tests skip the host proxy lookup.
         #[cfg(test)]
         let builder = builder.no_proxy();

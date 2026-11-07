@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: family-contract-v1-json-schema-and-static-checker-studio-validate-family
+    event:
+      type: completed
+      ts: "2026-11-07T10:29:38Z"
+      agent_id: linux-lenovinha-opus5-20261107t102938z
+      host: lenovinha
+      summary: |-
+        Already implemented on trunk; closing with evidence (lenovinha audit 2026-11-07). a124af0ab added studio_contract.rs and studio.validate_family; contract/family-spec.v1.schema.json covers kinds, per-room native size, camera on targets, gates as data, regions, poses, clips, qa and targets. mcp_socket.rs registers validate_family. All 4 exit criteria are met. Named test studio_contract_refuses_outline_inside_a_gate passes, with unknown_kind, region_mask_colours_declared and missing-input tests; 56/56 studio_ tests green with --features host-services at ce7aade37+.

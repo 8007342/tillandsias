@@ -70,11 +70,12 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## cloud
 
-- cloudflare-workers-static-assets.md — ## Provenance [pull-on-demand: stub]
-- gcp-buildpacks.md                   — deploying to Cloud Run with the "Google Cloud's buildpacks" build [bundled, partial-verify]
-- gcp-cloud-run-deploy-paths.md       — a web app should deploy to Google Cloud Run from its GitHub repo, [bundled, partial-verify]
-- gcp-cloudbuild-yaml.md              — a repo needs its own Cloud Build pipeline (tests before deploy, [bundled, partial-verify]
-- gcp-dockerfile-for-cloud-run.md     — deploying to Cloud Run with the "Dockerfile" build type, or any [bundled, partial-verify]
+- cloudflare-free-tier-storage-limits.md — Use this cheatsheet when choosing where a Worker on the **Free** plan keeps sta… [pull-on-demand: stub]
+- cloudflare-workers-static-assets.md    — ## Provenance [pull-on-demand: stub]
+- gcp-buildpacks.md                      — deploying to Cloud Run with the "Google Cloud's buildpacks" build [bundled, partial-verify]
+- gcp-cloud-run-deploy-paths.md          — a web app should deploy to Google Cloud Run from its GitHub repo, [bundled, partial-verify]
+- gcp-cloudbuild-yaml.md                 — a repo needs its own Cloud Build pipeline (tests before deploy, [bundled, partial-verify]
+- gcp-dockerfile-for-cloud-run.md        — deploying to Cloud Run with the "Dockerfile" build type, or any [bundled, partial-verify]
 
 ## concurrent-git
 
@@ -237,6 +238,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## security
 
+- oauth-callback-relay.md          — Use this cheatsheet when a native or CLI app signs in with OAuth through a [pull-on-demand: stub]
 - owasp-top-10-2021.md             — You're writing or reviewing any web-facing software, APIs, or services that tou… [bundled, partial-verify]
 
 ## test
@@ -258,6 +260,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - awk-word-boundary.md                    — an `awk` search came back empty and you are about to report the [bundled, partial-verify]
 - exit-status-is-not-an-answer.md         — **Check what it produced.** `cmd || fallback`, `if cmd; then`, and [bundled, partial-verify]
 - git-bash-cannot-fork-or-enumerate.md    — you are running a project script from Git Bash and it fails in a [bundled, partial-verify]
+- host-tools-index.md                     — you are inside a forge and need to know which host tool publishes a preview, op… [bundled, partial-verify]
 - msys-cr-blindness.md                    — you are about to answer "does this file have CRLF line endings?" [bundled, partial-verify]
 - recursive-grep-symlinks.md              — you are about to assert a UNIVERSAL NEGATIVE ("nothing in this tree [bundled, partial-verify]
 

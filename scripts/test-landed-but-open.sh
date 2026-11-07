@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1367-emjg
 #
-# test-landed-but-open.sh — scripts/check-landed-but-open.sh lists the orders a
+# test-landed-but-open.sh — scripts/lua/check-landed-but-open.lua lists the orders a
 # CODE landing cites whose ledger row is still open, and nothing else.
 # Scratch repo; statuses from --status-file.
 #
@@ -17,14 +17,19 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-C="$ROOT/scripts/check-landed-but-open.sh"
+C="$ROOT/scripts/lua/check-landed-but-open.lua"
+. "$ROOT/scripts/plan-binary-probe.sh"
+# Resolve from the CHECKOUT and absolutise before any cd (1401-x76w, 84f37ff24).
+PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" &&
+    case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || PLAN=""
+[ -n "$PLAN" ] || { echo "FAIL: landed-but-open 0/1 (1367-emjg): no plan binary resolves"; exit 1; }
 W="$(mktemp -d "${TMPDIR:-/tmp}/landed-but-open-test.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 pass=0
 fail=0
 ok() { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail + 1)); }
-[ -x "$C" ] || { bad "arm 1: $C does not exist"; echo "FAIL: landed-but-open 0/1 (1367-emjg)"; exit 1; }
+[ -f "$C" ] || { bad "arm 1: $C does not exist"; echo "FAIL: landed-but-open 0/1 (1367-emjg)"; exit 1; }
 
 export GIT_CONFIG_GLOBAL="$W/gitconfig" GIT_CONFIG_NOSYSTEM=1
 printf '[user]\n\tname = t\n\temail = t@example.invalid\n' >"$GIT_CONFIG_GLOBAL"
@@ -47,7 +52,7 @@ commit openspec/specs/x/spec.md "spec(5555-eeee): the requirement lands before t
 commit docs/y.md "docs(5555-eeee): describe it"
 printf '1111-aaaa ready\n2222-bbbb completed\n3333-cccc ready\n4444-dddd ready\n5555-eeee ready\n' >"$W/status"
 
-run() { (cd "$R" && bash "$C" --ref HEAD --since "1 day ago" --status-file "$W/status" "$@"); }
+run() { (cd "$R" && "$PLAN" script run "$C" -- --ref HEAD --since "1 day ago" --status-file "$W/status" "$@"); }
 out="$(run)"; rc=$?
 
 grep -q "^suspect:1111-aaaa:ready:${A_SHA} " <<<"$out" &&

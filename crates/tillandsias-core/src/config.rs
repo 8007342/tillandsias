@@ -293,6 +293,39 @@ pub fn compute_source_budget(pack_size_kb: u64, config: &ForgeConfig, memory_max
         .min(config.hot_path_max_mb)
 }
 
+/// ORDER 2006-srcr: [`compute_source_budget`] that also takes the project's
+/// recorded `/home/forge/src` high-water mark (MB, written by the previous
+/// forge) and its declared need (`[forge] src_mb`). The budget is the largest
+/// of today's recipe, the high-water mark plus 25% headroom, and the declared
+/// need, clamped to the SAME ceiling as before (`hot_path_max_mb`) and to half
+/// the forge's memory: a tmpfs size is a cap counted in the forge's memory
+/// cgroup, so growth from history never raises the RAM limit. With neither
+/// input it is exactly `compute_source_budget`.
+pub fn compute_source_budget_with(
+    pack_size_kb: u64,
+    config: &ForgeConfig,
+    memory_max_mib: u64,
+    high_water_mb: Option<u32>,
+    declared_mb: Option<u32>,
+) -> u32 {
+    let base = compute_source_budget(pack_size_kb, config, memory_max_mib);
+    let from_history = high_water_mb.map_or(0, |hw| hw.saturating_add(hw / 4));
+    let want = from_history.max(declared_mb.unwrap_or(0));
+    if want <= base {
+        return base;
+    }
+    let half = u32::try_from(memory_max_mib / 2).unwrap_or(u32::MAX);
+    want.min(config.hot_path_max_mb).min(half).max(base)
+}
+
+/// The `[forge]` section of per-project config (order 2006-srcr).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct ProjectForgeConfig {
+    /// The `/home/forge/src` room this project needs, in MB: a checkout plus
+    /// its worktrees and builds. Raised to, never past, the hot-path ceiling.
+    pub src_mb: Option<u32>,
+}
+
 /// Global configuration loaded from `~/.config/tillandsias/config.toml`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GlobalConfig {
@@ -398,6 +431,9 @@ pub struct ProjectConfig {
 
     /// The `[imagegen]` section (order 1874-zry8).
     pub imagegen: Option<ImagegenConfig>,
+
+    /// The `[forge]` section (order 2006-srcr).
+    pub forge: Option<ProjectForgeConfig>,
 }
 
 /// The `[imagegen]` section of per-project config.
@@ -407,6 +443,13 @@ pub struct ImagegenConfig {
     /// is never built and its container never runs (order 1874-zry8).
     #[serde(default)]
     pub studio: bool,
+    /// Opt in to the CorridorKey 2.0 proof of concept, `studio.key_footage`
+    /// (order 1956-ucix). Absent or false: the tool is not listed and the
+    /// imagegen-corridorkey image is never built. No automatic wiring ships
+    /// to other users until Corridor has seen the demo (operator ruling on
+    /// 1954-xy5m).
+    #[serde(default)]
+    pub corridorkey: bool,
 }
 
 /// The `[browser]` section of per-project config.
@@ -976,6 +1019,46 @@ pub fn detect_host_os() -> String {
 
 #[cfg(test)]
 mod tests {
+    /// 2006-srcr: a project whose last forge came near the limit gets room at
+    /// the next launch, from its recorded high-water mark (plus headroom) or
+    /// its declared need, never past the existing ceiling nor half the forge's
+    /// memory. No history and no declaration keeps today's budget exactly.
+    /// Pre-fix: FAILS, the budget knew only the pack size.
+    #[test]
+    fn the_source_budget_follows_the_recorded_high_water_and_the_declared_need() {
+        let cfg = ForgeConfig::default();
+        let mem = 16 * 1024; // a 16 GiB forge memory.max
+        let today = compute_source_budget(10 * 1024, &cfg, mem);
+        assert_eq!(
+            compute_source_budget_with(10 * 1024, &cfg, mem, None, None),
+            today
+        );
+        // A forge that reached 1500 MB of a 1536 MB tmpfs: 1500 x 1.25 = 1875.
+        assert_eq!(
+            compute_source_budget_with(10 * 1024, &cfg, mem, Some(1500), None),
+            1875
+        );
+        // A declared need wins when it is larger.
+        assert_eq!(
+            compute_source_budget_with(10 * 1024, &cfg, mem, Some(1500), Some(3000)),
+            3000
+        );
+        // Never past the configured ceiling (4096), nor half the memory.
+        assert_eq!(
+            compute_source_budget_with(0, &cfg, mem, Some(9000), None),
+            4096
+        );
+        assert_eq!(
+            compute_source_budget_with(0, &cfg, 4096, Some(3000), Some(3000)),
+            2048
+        );
+        // A small high-water never lowers today's budget.
+        assert_eq!(
+            compute_source_budget_with(10 * 1024, &cfg, mem, Some(10), None),
+            today
+        );
+    }
+
     use super::*;
     use std::path::Path;
 

@@ -1,0 +1,27 @@
+# @trace order:2022-nuph
+packets:
+- packet_id: nvidia-cdi-currency-covers-every-spec-dir-podman-reads
+  order: 2022-nuph
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [gpu, cdi, nvidia, podman, currency]
+  estimated_hours: 3
+  related: [1248-j6vd, 935-jhh5]
+  owned_files:
+  - scripts/nvidia-cdi-ensure.sh
+  title: 'nvidia-cdi-ensure checks only the user CDI dir, while podman resolves a duplicate device from the LAST dir it reads, so a stale /etc/cdi spec silently wins over a fresh user spec'
+  context: 'Found 2026-11-07 while closing 1248-j6vd. nvidia-cdi-ensure.sh checks currency (driver stamp and hostPaths) only in TILLANDSIAS_CDI_DIR, which defaults to ~/.config/cdi. On macuahuitl that dir held a 610.57.04 stamp and no spec, while podman used /etc/cdi/nvidia.yaml, which no check reads. The fleet containers.conf (935-jhh5) sets cdi_spec_dirs = [~/.config/cdi, /etc/cdi, /var/run/cdi]. MEASURED on lenovinha (podman 5.8.9 rootless): a fake kind probe.tillandsias/gpu=all defined in two dirs with different env resolved to the dir listed LAST, both orders tried: [user, sys] gave sys, and [sys, user] gave user. So with the fleet order, an /etc/cdi spec for nvidia.com/gpu shadows a regenerated user spec. The j6vd stale-hostPath failure can recur in /etc/cdi with the user-dir check printing ok, and the regeneration it does then fixes nothing.'
+  exit_criteria:
+  - 'nvidia-cdi-ensure checks the hostPaths of every nvidia spec in the cdi_spec_dirs podman reads, not only TILLANDSIAS_CDI_DIR'
+  - 'a stale spec in a root-owned dir is reported (not regenerated) with a named operator instruction: the exact command (sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml, or remove the system spec), stated as the operator''s step; the script never runs sudo'
+  - 'when a later dir shadows the user spec, the verdict says which spec podman will resolve, with the measured precedence (last listed dir wins) cited'
+  - 'NEGATIVE CONTROL: a host with only a current user spec, or only a current system spec, still reports ok:nvidia-cdi:current and regenerates nothing'
+  verifiable_closure: 'a fixture with scratch CDI dirs in the fleet order (seam for the dir list) shows a stale later-dir spec reported with the operator instruction and no sudo, and the negative control unchanged; plus one live check on an NVIDIA host.'
+  unscoreable: 'none.'
+  next_action: 'Read scripts/nvidia-cdi-ensure.sh and how it could read cdi_spec_dirs (podman info, or containers.conf); write the fixture red first.'
+  provenance: 'lenovinha 2026-11-07 from the 1248-j6vd closure, filed on the coordinator (macuahuitl) request.'
+  events:
+  - {type: filed, ts: '2026-11-07T10:46:45Z', host: lenovinha, summary: 'filed p2 ready, with the CDI precedence measured on lenovinha'}

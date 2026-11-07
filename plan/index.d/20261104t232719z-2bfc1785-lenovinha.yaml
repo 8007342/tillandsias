@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: slice-f-cargo-the-remaining-27-cargo-test-and-37-cargo-other-litmus-commands-share-the-tree-state-cache-so-one-crate-is-tested-or-built-once-per-gate
+    event:
+      type: note
+      ts: "2026-11-04T23:27:19Z"
+      agent_id: linux-lenovinha-opus5-20261104t232719z
+      host: lenovinha
+      summary: |
+        PART 2 DESCOPED (coordinator macuahuitl-fedora agreed 2026-11-04), measured on lenovinha first. Of the 37 cargo-other sites, ~27 are `cargo run -p tillandsias-plan -- <verb>` as one stage of a fixture script. A warm no-op cargo run costs 0.54 s vs 0.35 s for the binary directly, so converting all of them saves ~5 s per gate. Profiles: 32 litmus steps run --release, 11 debug; the debug runs reuse the dev deps cargo test already builds (just a link), and the release binary is built by the gate anyway, so no build is saved. Replacing cargo run with the probed binary (resolve_plan_binary) was rejected: it returns any runnable binary, possibly stale, and would drop the freshness cargo run guarantees. The cargo-other criterion is closed as not worth its cost.
+        DONE in this change: the census false positive. The cargo families now match the command with single-quoted text removed, so `grep -F '# 1 = cargo test'` is not a cargo invocation. Census: cargo-test 1 -> 0, cargo-other 37 -> 35 (two more quoted-text false positives reclassified as file-grep/script-output); piped=920 unchanged.

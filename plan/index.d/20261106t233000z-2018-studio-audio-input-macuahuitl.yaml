@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-06, from kumbia-forge; written for any project.
+packets:
+- packet_id: a-studio-workflow-can-take-audio-as-input
+  order: 2018-auin
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 3
+  title: Audio-to-audio studio workflows can load an input file through run_workflow
+  context: 'A forge needs to re-render a join of two takes. run_workflow refused LoadAudio with node_not_pinned; inputs binds only LoadImage. Core ComfyUI classes reported by /object_info: LoadAudio, VAEEncodeAudio, SetLatentNoiseMask, AudioConcat, TrimAudioDuration; verify each against the pinned ComfyUI. Uploading through /upload/image returned ok, yet the LoadAudio list stayed empty. Generic forge capability.'
+  exit_criteria:
+  - 'run_workflow inputs binds a LoadAudio audio field as it does a LoadImage image, and a real audio-to-audio run on a GPU host returns audio with provenance.'
+  - 'A class not in the pinned ComfyUI stays refused by name.'
+  verifiable_closure: 'A studio_tool test plus one real GPU run.'
+  unscoreable: 'none.'
+  next_action: 'Pin the classes after checking them against the pinned ComfyUI, then extend the input binding, test first.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T23:30:00Z', host: macuahuitl, summary: filed p2 ready}

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-07T03:36:26Z, at the coordinator's request (#982 eviction).
+packets:
+- packet_id: a-terminated-lua-runner-exits-128-plus-term-even-under-host-memory-pressure
+  order: 2020-ffzn
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua-runtime, tests, flake, linux]
+  estimated_hours: 3
+  title: lua_proc managed_script test saw the TERMed runner exit 1 instead of 143 and evicted an unrelated PR
+  context: 'OBSERVED by coordinator macuahuitl-fedora 2026-11-06 landing PR 982 (2006-srcs), which does not touch this code: lua_proc::managed_script::a_terminated_runner_takes_its_script_owned_child_with_it, crates/tillandsias-plan/tests/lua_proc.rs:288, assertion left Some(1), right Some(143). The host was under heavy load at the time (swap full, a forge thrashing). Timing is the coordinator''s guess, unproven. The test waits only for the child pid file before sending SIGTERM, so a TERM arriving before the runner reaches its TERM handling, or a runner that turns the TERM into a script error, could exit 1.'
+  exit_criteria:
+  - 'The cause of exit 1 is named and reproduced (for example under stress-ng memory pressure or a delayed signal-handler install), red before the fix.'
+  - 'The fix keeps the assertion at Some(128 + SIGTERM): the test is not weakened, retried or loosened.'
+  - 'The test passes 200 runs in a row under the reproducing load.'
+  verifiable_closure: 'cargo test -p tillandsias-plan --test lua_proc managed_script green 200x under load on a Linux host.'
+  unscoreable: 'none.'
+  next_action: 'Read how the runner installs its TERM handling relative to proc.spawn, then try to reproduce exit 1 by sending SIGTERM at the earliest moment the pid file exists, under memory pressure.'
+  provenance: lenovinha-silverblue 2026-11-06, from the coordinator's eviction report on PR 982.
+  events:
+  - {type: filed, ts: '2026-11-07T03:36:26Z', host: lenovinha, summary: filed p2 ready}

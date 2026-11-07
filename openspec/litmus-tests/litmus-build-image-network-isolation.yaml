@@ -1,0 +1,34 @@
+# @trace spec:init-incremental-builds, order:1955-chrn, order:1955-hq7k
+name: litmus:build-image-network-isolation
+spec: init-incremental-builds
+phase: pre-build
+size: instant
+severity: high
+description: >
+  scripts/build-image.sh never pairs --isolation chroot (its default) with a
+  build network other than host. podman refuses that pair ("cannot set
+  --network other than host with --isolation chroot"), so 1955-hq7k's
+  unconditional --network=private failed every image build. Non-chroot
+  isolations keep --network=private.
+
+preconditions:
+  - workspace contains scripts/build-image.sh
+  - workspace contains scripts/test-build-image-network-isolation.sh
+
+critical_path:
+  - step: "chroot builds carry no --network, oci builds carry --network=private, and build-image.sh sets no network outside the helper"
+    command: "bash scripts/test-build-image-network-isolation.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: build-network-isolation 3/3"
+
+observability:
+  traces:
+    - "@trace spec:init-incremental-builds"
+  expected_log: "the build network follows the build isolation"
+  log_fields:
+    spec: "init-incremental-builds"
+    test: "build-image-network-isolation"
+
+failure_modes:
+  - "an unconditional --network returns to build-image.sh and every chroot build fails"
+  - "the dead-IPv6 fix is dropped for non-chroot builds"

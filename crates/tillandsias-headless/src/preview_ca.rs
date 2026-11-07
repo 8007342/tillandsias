@@ -43,9 +43,35 @@ fn usable(dir: &Path, margin_secs: u64) -> bool {
 /// less than `margin_secs`. Launch passes `CERT_MIN_REMAINING_SECS`; a publish
 /// passes 0. Returns whether it minted.
 pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
+    ensure_in_with(dir, margin_secs, &|key, crt| {
+        crate::ca_key_store::materialize(key, crt, true)
+    })
+}
+
+/// [`ensure_in`] with the key reconciliation as a seam (2008-pvck tests).
+fn ensure_in_with(
+    dir: &Path,
+    margin_secs: u64,
+    materialize: &dyn Fn(&Path, &Path) -> crate::ca_key_store::Materialized,
+) -> Result<bool, String> {
+    // 2008-pvck: staging a dead mint left behind goes first.
+    crate::ca_key_store::sweep_stale_staging(&dir.join(KEY));
     // 1118-fqfk slice 2b: the key is a link into tmpfs, refilled from the
     // keyring after a reboot; plaintext is deleted and the CA minted again.
-    crate::ca_key_store::materialize(&dir.join(KEY), &dir.join(CRT), true);
+    let materialized = materialize(&dir.join(KEY), &dir.join(CRT));
+    // 2008-pvck: a keyring that could not be ASKED is not a missing key. While
+    // the preview CA is valid, keep it (every published leaf still verifies)
+    // and refuse by name, as the enclave CA does (2007-ckun).
+    if materialized == crate::ca_key_store::Materialized::Unavailable
+        && crate::cert_valid_for(&dir.join(CRT), 0)
+    {
+        return Err(
+            "router_not_ready: preview-ca-key-unavailable: the preview CA key is not on \
+                    tmpfs and the keyring could not be read; the CA is kept, not replaced. \
+                    Unlock the keyring and retry (2008-pvck)"
+                .into(),
+        );
+    }
     if usable(dir, margin_secs) {
         return Ok(false);
     }
@@ -62,6 +88,9 @@ pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
         .map_err(|_| "router_not_ready: preview CA staging unavailable")?;
     let crt = staging.path().join(CRT);
     let key = crate::ca_key_store::staging_path(&dir.join(KEY), &std::process::id().to_string());
+    // 2008-pvck: every exit before publish removes the staged key (seal
+    // renames it away on success).
+    let _staged = StagedKey(key.clone());
     let status = Command::new("openssl")
         .args([
             "req",
@@ -104,6 +133,15 @@ pub(crate) fn ensure_in(dir: &Path, margin_secs: u64) -> Result<bool, String> {
     std::fs::rename(&crt, dir.join(CRT))
         .map_err(|_| "router_not_ready: preview CA publication failed")?;
     Ok(true)
+}
+
+/// 2008-pvck: a staged preview CA key, removed on drop.
+struct StagedKey(PathBuf);
+
+impl Drop for StagedKey {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
 
 /// `ensure_in(dir(), margin_secs)`, returning the directory.
@@ -261,6 +299,33 @@ mod tests {
             ensure_in(dir.path(), 0).unwrap(),
             "a missing key: re-minted"
         );
+    }
+
+    /// 2008-pvck: a preview CA key the keyring could not be asked for keeps a
+    /// valid CA and refuses by name; it mints only with no valid CA. Pre-fix:
+    /// FAILS, an unavailable keyring re-minted the preview CA, so every
+    /// published leaf stopped verifying.
+    #[test]
+    fn an_unavailable_preview_key_keeps_a_valid_ca_and_refuses_by_name() {
+        use crate::ca_key_store::Materialized;
+        let dir = tempfile::tempdir().unwrap();
+        assert!(ensure_in(dir.path(), 0).unwrap());
+        let before = std::fs::read(dir.path().join(CRT)).unwrap();
+        std::fs::remove_file(dir.path().join(KEY)).unwrap();
+        let e = ensure_in_with(dir.path(), 0, &|_, _| Materialized::Unavailable).unwrap_err();
+        assert!(e.contains("preview-ca-key-unavailable"), "{e}");
+        assert_eq!(std::fs::read(dir.path().join(CRT)).unwrap(), before, "kept");
+        // A proven absence still mints.
+        assert!(ensure_in_with(dir.path(), 0, &|_, _| Materialized::Gone).unwrap());
+        assert_ne!(std::fs::read(dir.path().join(CRT)).unwrap(), before);
+        // No staged key is left in the directory either way.
+        let left: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".tmp"))
+            .collect();
+        assert!(left.is_empty(), "{left:?}");
     }
 
     #[test]

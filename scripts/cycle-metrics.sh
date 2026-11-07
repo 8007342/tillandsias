@@ -368,6 +368,9 @@ if [ "$_tl_reporting" = 1 ] && [ -z "${TILLANDSIAS_TIMING_LOG:-}" ]; then
     _tl_other=""
     case "$TIMING_LOG" in
         /tmp/*) _tl_other="$REPO_ROOT/.cache/metrics/$_tl_base" ;;
+        # 1966-ubsw: always /tmp — the split is the SHARED fallback; the gate's
+        # private fallback dir is checked by build.sh, and probing it here blinded
+        # this guard to a real /tmp split (1455-d7hc).
         *)      _tl_other="/tmp/$_tl_base" ;;
     esac
     if [ -n "$_tl_other" ] && [ "$_tl_other" != "$TIMING_LOG" ] && [ -s "$_tl_other" ]; then
@@ -1627,7 +1630,14 @@ fi
 # current, exit 1 (a new ghost, or a baseline that must be pruned) is stale,
 # any other exit is an unavailable: that carries the code.
 traces_probe="$REPO_ROOT/scripts/trace-coverage.sh"
-if [ ! -e "$traces_probe" ]; then
+if [ "${TILLANDSIAS_CYCLE_METRICS_SKIP_TRACES:-0}" = 1 ]; then
+    # 2006-wahn: a FIXTURE that asks about other lines opts out of the
+    # repository-wide ghost-trace gate, measured at 1.75 s a call on the macOS
+    # M5 tier; the recurrence fixture calls this script 23 times, so the probe
+    # alone outran its 30 s step budget. Like SKIP_GRADE, the field still prints
+    # and says why. Never set by a cycle.
+    traces="skipped:source=TILLANDSIAS_CYCLE_METRICS_SKIP_TRACES"
+elif [ ! -e "$traces_probe" ]; then
     traces="unavailable:probe-missing:scripts/trace-coverage.sh"
 elif [ ! -x "$traces_probe" ]; then
     traces="unavailable:probe-not-executable:scripts/trace-coverage.sh"

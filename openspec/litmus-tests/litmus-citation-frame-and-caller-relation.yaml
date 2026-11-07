@@ -144,9 +144,9 @@ critical_path:
     # Counts the frame-specific unit tests rather than the whole suite, so a
     # regression that deletes them is a failure rather than a smaller number
     # nobody reads.
-    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && exit 1; n=$(printf '%s' \"$out\" | grep -cE '^test (gitref::tests::(the_four_relations|a_commit_the_reader_never_fetched|file_at_reads|is_ancestor_says)|answer::tests::(a_citation_in_the_callers_future|a_span_that_moved|a_fabricated_span|a_range_past|a_file_that_shrank|a_stamped_caller_relation|an_underivable|a_reader_standing|an_uncommitted_edit|the_default_citation_commit|an_unframed_envelope)).* ok$'); test \"$n\" -ge 15 || { echo \"FAIL: only $n frame unit pins ran\"; exit 1; }; echo \"ok: frame-unit-pins-green n=$n\""
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-plan --min-ok 'gitref::tests::the_four_relations' 1 --min-ok 'gitref::tests::a_commit_the_reader_never_fetched' 1 --min-ok 'gitref::tests::file_at_reads' 1 --min-ok 'gitref::tests::is_ancestor_says' 1 --min-ok 'answer::tests::a_citation_in_the_callers_future' 1 --min-ok 'answer::tests::a_span_that_moved' 1 --min-ok 'answer::tests::a_fabricated_span' 1 --min-ok 'answer::tests::a_range_past' 1 --min-ok 'answer::tests::a_file_that_shrank' 1 --min-ok 'answer::tests::a_stamped_caller_relation' 1 --min-ok 'answer::tests::an_underivable' 1 --min-ok 'answer::tests::a_reader_standing' 1 --min-ok 'answer::tests::an_uncommitted_edit' 1 --min-ok 'answer::tests::the_default_citation_commit' 1 --min-ok 'answer::tests::an_unframed_envelope' 1 --name frame-unit-pins-green"
     timeout_ms: 300000
-    expected_behavior: "ok: frame-unit-pins-green"
+    expected_behavior: "ok:frame-unit-pins-green"
 
 observability:
   traces:

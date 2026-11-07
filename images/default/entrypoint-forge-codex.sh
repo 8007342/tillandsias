@@ -22,6 +22,9 @@
 # before any of the container-only setup below (sourcing lib-common.sh,
 # cloning, project discovery, the harness launch), so the print and the
 # "nothing moved out of inbox/new" property are testable in isolation.
+# 2004-in3v: the start of the forge-entry-total span (bash 5 in the image).
+FORGE_ENTRY_T0_US="${EPOCHREALTIME//[.,]/}"
+
 tillandsias_print_pending_fleet_messages() {
     command -v tillandsias-plan >/dev/null 2>&1 || return 0
     local out count who
@@ -100,21 +103,29 @@ fi
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
+forge_step_mark
 populate_hot_paths
+forge_step_done hot-paths
 
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft.
-ensure_forge_prebuilt_tools >>/tmp/forge-lifecycle.log 2>&1 &
+# Flaky-optional installs run in the background with status files and
+# first-use shims (order 1951-vv5m).
+forge_step_mark
+start_flaky_installs
+forge_step_done flaky-installs
 ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "codex starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 # Shared dual-transport clone — supports filesystem (Windows/WSL) and git
 # daemon (Linux/podman). See lib-common.sh::clone_project_from_mirror.
+forge_step_mark
 clone_project_from_mirror
+forge_step_done clone
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
@@ -123,9 +134,13 @@ clone_project_from_mirror
 export_ssh_env || true
 
 # ── Find project directory ──────────────────────────────────
+forge_step_mark
 find_project_dir
+forge_step_done find-project
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+forge_step_mark
 configure_git_identity
+forge_step_done git-identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # @trace order:1447-nmq3
 # Trust the checked-out project in the worker's (ephemeral) CODEX_HOME so Codex
@@ -134,11 +149,15 @@ seed_codex_project_trust "$PROJECT_DIR" || true
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme
+forge_step_mark
 inject_startup_context "$PROJECT_DIR"
+forge_step_done startup-context
 
 # ── Agent binary (EVERY_LAUNCH install/update) ─────────────
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+forge_step_mark
 require_codex
+forge_step_done require-harness
 [ -x "$CX_BIN" ] || harness_missing_fatal codex
 
 # API-key launches need no OAuth state. Otherwise restore the complete opaque
@@ -172,7 +191,9 @@ if [ -x /usr/local/bin/register-codex-experts ]; then
 fi
 
 # ── Banner ──────────────────────────────────────────────────────
+forge_step_mark
 show_banner "codex"
+forge_step_done banner
 
 # ── Launch Codex ────────────────────────────────────────────
 # @trace plan/issues/codex-forge-yolo-defaults-2026-07-04.md (order 171)
@@ -227,5 +248,6 @@ if [ -n "${TILLANDSIAS_CODEX_PROMPT:-}" ]; then
 fi
 
 trace_lifecycle "entrypoint" "codex launching"
+forge_step_line total "$((($(_forge_now_us) - ${FORGE_ENTRY_T0_US:-$(_forge_now_us)}) / 1000))"
 trace_lifecycle "exec" "launching codex"
 exec /usr/local/bin/codex-oauth-session -- codex "${codex_forge_args[@]}" "$@"

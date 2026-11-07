@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    field: next_action
+    value: 'Measure (a) again with the 2000-camv build: relaunch Vault under an unchanged CA and time the mirror from relaunch to upstream-auth:authorized; then make the agent re-check promptly on a Vault relaunch, or justify the 60 s bound. For (b), decide with the coordinator whether the tray recreates mirrors after a CA change or mirrors bind the CA directory instead of the file. For (c), read the --github-login path for a Vault relaunch. Live runs on lenovinha need operator consent per run.'
+    ts: "2026-11-06T00:13:16Z"
+    host: lenovinha
+    replaces_sha256: "04d6ed3bf5c356df982e21b8a8fe957444b634b291b476267b237fe08ec75faa"
+
+events:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    event:
+      type: note
+      ts: "2026-11-06T00:13:16Z"
+      host: lenovinha
+      summary: |-
+        reworded next step

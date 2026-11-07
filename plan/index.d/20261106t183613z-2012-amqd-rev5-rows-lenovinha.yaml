@@ -1,0 +1,354 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (opus5), 2026-11-06: the revision-5 implementation rows of 2011-amqd (openspec/changes/fleet-durable-instructions/free-tier-queue.md section 12), replacing the 2012 rows filed at 831787179.
+packets:
+- packet_id: the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget
+  order: 2012-u67n
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: []
+  title: 'The fleet queue fixture counts every Queues and KV REST request and operation against the budget'
+  context: 'First of the revision-5 rows. A fake Queues and KV REST server that models the documented behaviour: an empty pull costs a read, a late ack is accepted, a lost ack response, an Expired message, a poison message. It counts every request type and queue operation against the budgets in the design, section 6. Row a of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'An idle day for 30 queues and a busy hour report counts per request type and per operation, and fail above the stated budgets.'
+  - 'A crash-loop host is held by its persisted per-host budget in operations and requests.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: whether-a-lane-notification-reaches-an-idle-model-is-measured-in-two-harnesses
+  order: 2012-v0m4
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: []
+  title: 'Whether a lane notification reaches an idle model is measured in Claude Code and OpenCode'
+  context: 'The zero-token wake rests on an MCP notifications/message (a logging notification) reaching the model; nothing shows it does. Measure, idle and busy, in a real forge. See the design, section 5. Row b of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'The result per harness, idle and busy, is recorded in the row with the forge build and harness versions.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-host-queue-client-pushes-and-pulls-with-verified-acks-inside-a-per-host-budget
+  order: 2012-znqg
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'The host queue client pushes and pulls with verified acks inside a per-host budget'
+  context: 'Against the fixture: push refusing ttl_s over 86 400 or no sent_at, with a 48 KB cap; pull with batch_size 1 and a lease; an ack counted only when ackCount is 1 and warnings is empty; 429 with retry-after; full-jitter backoff; a persisted per-host budget in operations and requests. See the design, sections 2, 4a and 6. Row c of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'Fixture tests cover each, including a lost ack response and a late ack.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-host-poller-backs-off-from-five-to-sixty-minutes-and-pulls-its-dead-letter-queue-hourly
+  order: 2012-kk0j
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'The host poller backs off from 5 to 60 minutes, pulls its dead-letter queue hourly, and polls only with a live lane'
+  context: 'One poller per host, for its own queue per project with a live lane; backoff 5 min doubling to 60 min with jitter; resets on a delivery, a local send or a lane start; the DLQ is pulled once an hour. See the design, section 6. Row d of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'The fixture shows about 26 pulls per queue on an idle day plus 24 DLQ pulls, and none without a live lane.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-pull-handler-acks-every-final-outcome-and-keeps-a-dedupe-window-of-a-day
+  order: 2012-808c
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'The pull handler acks every final outcome, quarantines invalid messages, and keeps a dedupe window of a day'
+  context: 'Ack on Accepted (after the fsync into the 1506 inbox), Duplicate, Expired, and invalid (quarantined); leave un-acked only on an inbox I/O error. Keep seen until the later of the envelope expiry and arrival + 24 h; reject a sent_at more than 5 min in the future. See the design, sections 4a and 4b. Row e of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'A host killed between the inbox write and the ack yields one copy after redelivery.'
+  - 'An Expired or poison message is acked once and not pulled again.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-host-wakes-the-addressed-lane-deterministically-by-the-path-row-b-proved
+  order: 2012-kuw4
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget, whether-a-lane-notification-reaches-an-idle-model-is-measured-in-two-harnesses]
+  title: 'The host wakes the addressed lane deterministically, by the path row b proved'
+  context: 'A message in a lane inbox wakes that lane; among several idle lanes of one host for a role, the longest-idle one. Wake by notification if row b proved it, else by the 2011-rsme relaunch prompt. No agent polls. See the design, section 5. Row f of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'Tests cover an addressed message, a role with one and with several idle lanes, and the fallback wake.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-plan-warm-cache-is-a-single-writer-kv-overview-rebuildable-from-the-ledger
+  order: 2012-33e6
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'The plan warm cache is a single-writer KV overview, rebuildable from the ledger'
+  context: 'A compact overview (64 KiB or less) written only by the host whose mirror received the push, at most once per 10 min per project, read at forge start with a synced_sha freshness check. See the design, section 8. Row g of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'The fixture counts KV writes per push and per day; a missing cache starts the forge from the ledger.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: no-cloudflare-credential-or-signing-key-reaches-a-forge
+  order: 2012-p6w4
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2.5
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'No Cloudflare credential or signing key reaches a forge, and the host proxy reads them from Vault'
+  context: 'The env-refusal litmus lands first (TILLANDSIAS_COORD_CLIENT_SECRET, TILLANDSIAS_COORD_JWT, any Cloudflare credential or host signing key refused in a forge environment), then the Vault-backed host proxy, then removal of the env path. See the design, section 9. Row h of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'The litmus refuses each variable in a forge environment.'
+  - 'The host proxy holds the token in memory only.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: fleet-names-are-seeded-in-the-user-repo-and-nothing-of-ours-is-hard-coded
+  order: 2012-j89a
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2.5
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'Fleet names are seeded in the user repo, and nothing of the Tillandsias project is hard-coded'
+  context: 'First-use [fleet] seeding in .tillandsias/config.toml; one create-with-consent prompt naming each queue, consumer, DLQ and namespace; the login relay as config with a loopback default; bring-your-own OAuth client or API token on a dedicated account. See the design, sections 7 and 10. Row i of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'A static check finds no tillandsias.org or account id in the queue path.'
+  - 'A repo with no [fleet] stays local-only.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-fleet-queue-path-is-measured-on-the-real-cloudflare-api-before-it-is-relied-on
+  order: 2012-a3m9
+  status: blocked
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'The fleet queue path is measured on the real Cloudflare API before it is relied on'
+  context: 'Needs the operator: the queue grant on a dedicated account and one real queue. Read the scope ids from GET /client/v4/oauth/scopes; measure whether a lease expiry or a failed ack increments attempts; verify max_retries 100 and the DLQ by GET; record the refusal of a wrong-account and a missing token. Blocked on the operator answers in the design, section 13. Row j of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'Each measurement is recorded in the row, with usage read before and after.'
+  verifiable_closure: 'Operator-gated; recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Waits for row j and the operator answers in openspec/changes/fleet-durable-instructions/free-tier-queue.md section 13.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 blocked
+- packet_id: the-local-wake-classifier-is-measured-on-the-smallest-supported-host
+  order: 2012-sc0l
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'The local wake classifier is measured on the smallest supported host before it is enabled'
+  context: 'T0 qwen2.5-0.5b on CPU: prompt-processing time for a 200-token decision, RAM, cold start. Off by default until measured. See the design, section 5. Row k of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'The measurement and the chosen default are recorded in the row.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: cloud-coordinator-is-retired-once-the-queues-path-is-proven
+  order: 2012-dwx3
+  status: blocked
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 1
+  depends_on: [the-fleet-queue-path-is-measured-on-the-real-cloudflare-api-before-it-is-relied-on]
+  title: 'cloud/coordinator is retired once the Queues path is proven'
+  context: 'The Worker, Durable Object and Access code (never deployed) are kept as a reference until row j passes, then removed. Blocked on row j. See the design, section 11. Row l of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'cloud/coordinator is removed and no code or test refers to it.'
+  verifiable_closure: 'Operator-gated; recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Waits for row j and the operator answers in openspec/changes/fleet-durable-instructions/free-tier-queue.md section 13.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 blocked
+- packet_id: every-fleet-envelope-is-signed-by-its-sending-host-and-verified-before-the-inbox
+  order: 2012-ojb7
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget]
+  title: 'Every fleet envelope is signed by its sending host and verified before the inbox'
+  context: 'Queues Edit is full CRUDL on every queue, and the lane inbox trusts the envelope from. Per-host keys in Vault, public halves on plan/fleet/peers/<host>.pub; sign the canonical envelope at send; verify signature and from before the inbox write; ack, quarantine and report a failure once. See the design, section 3. Row m of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'A forged instruction with a valid token but no valid signature never reaches a lane inbox and is reported as bad-signature.'
+  - 'A host not on the roster is refused.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: a-receipted-message-that-is-not-receipted-within-a-day-is-reported-undelivered
+  order: 2012-zdr2
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: [the-fleet-queue-fixture-counts-every-queues-and-kv-rest-request-against-the-budget, every-fleet-envelope-is-signed-by-its-sending-host-and-verified-before-the-inbox]
+  title: 'A message the sender expects is receipted, and one not receipted within a day is reported undelivered'
+  context: 'For instruction, ASK and BLOCKED: an outbox record (a ledger event for an instruction), a signed receipt from the receiving host on accept, a re-push with the same id at 20 h, undelivered at 24 h. A host down past 24 h is reported, never lost silently. See the design, section 4c. Row n of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'A host down for 30 hours yields one undelivered report and a ledger event for the instruction.'
+  verifiable_closure: 'Fixture or measurement recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: queue-configuration-drift-is-detected-daily-and-a-leak-has-a-runbook
+  order: 2012-b2rl
+  status: blocked
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-fleet-queue-path-is-measured-on-the-real-cloudflare-api-before-it-is-relied-on]
+  title: 'Queue configuration drift is detected daily, and a token leak has a revoke-and-rotate runbook'
+  context: 'List the dedicated account queues and consumers daily against the seeded set: report an extra queue or consumer, a changed max_retries or a missing DLQ. Document revoke, sign-in, consumer re-verification and signing-key rotation. Blocked on row j for the real listing. See the design, section 7. Row o of 2011-amqd revision 5; build only, no deploy, no cloud resource unless the row says so.'
+  exit_criteria:
+  - 'A fixture drift (an extra consumer, max_retries 0) is reported.'
+  - 'The runbook is in the cheatsheet.'
+  verifiable_closure: 'Operator-gated; recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Waits for row j and the operator answers in openspec/changes/fleet-durable-instructions/free-tier-queue.md section 13.'
+  provenance: lenovinha opus5 2026-11-06 from 2011-amqd revision 5, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:36:13Z'
+    host: lenovinha
+    summary: filed p1 blocked

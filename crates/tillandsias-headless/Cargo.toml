@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "56.11.1"
+version = "0.0.0"  # 1993-cver: frozen; the release version is VERSION
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
@@ -77,6 +77,10 @@ dirs = { workspace = true, optional = true }
 
 # Phase 4: Native tray UI (optional)
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+# 1959-xsy5 (D12): the pixel finish writes PNGs with fixed settings and no
+# ancillary chunks, and indexed PNGs, which image does not expose. Same 0.18
+# png that image already pulls in.
+png = { version = "0.18", optional = true }
 zbus = { version = "4.4.0", default-features = false, features = ["tokio"], optional = true }
 zvariant = { version = "4.2.0", optional = true }
 
@@ -91,6 +95,9 @@ tokio-vsock = { workspace = true, optional = true }
 # binary is compiled without the `vault` cargo feature.
 wiremock = "0.6"
 tillandsias-vault-client = { path = "../tillandsias-vault-client" }
+# 1954-btht: the tray fixture drives the real dbusmenu interface over a
+# private peer-to-peer bus (no session bus, no desktop). Test-only feature.
+zbus = { version = "4.4.0", default-features = false, features = ["tokio", "p2p"] }
 
 [target.'cfg(unix)'.dependencies]
 # Used by the in-VM PTY handler (control-wire-pty-attach Tasks 4.x):
@@ -120,7 +127,7 @@ listen-vsock = ["host-services", "tokio-vsock", "tillandsias-control-wire/vsock"
 # tray (zbus, image) that `tray` brings.
 # 1874-kkrc: `image` (pure Rust PNG) for image.generate's thumbnails, which
 # the VM guest serves too.
-host-services = ["image"]
+host-services = ["image", "png"]
 # ORDER 1916-embd: the DEV loop. Embed no runtime assets and read them from
 # this checkout at runtime (TILLANDSIAS_ASSET_SOURCE_ROOT overrides), so an
 # asset edit costs no rustc work. Off by default: every release path embeds

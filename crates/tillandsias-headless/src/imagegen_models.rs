@@ -37,6 +37,12 @@ const MODELS_TSV: &str = include_str!("../../../images/imagegen/models.tsv");
 /// and under an allowed licence.
 const REGISTER_TSV: &str = include_str!("../../../images/models/licence-register.tsv");
 
+/// The shipped register (1954-gdi6: image.generate gates ControlNet and LoRA files on it).
+#[cfg(feature = "host-services")]
+pub fn register_tsv() -> &'static str {
+    REGISTER_TSV
+}
+
 /// Refuse `row` unless `register` carries it exactly (repo, revision, file,
 /// sha256), `gated` false and an allowed spdx.
 pub fn register_admits(register: &str, row: &ModelFile) -> Result<(), String> {
@@ -72,6 +78,11 @@ pub fn register_admits(register: &str, row: &ModelFile) -> Result<(), String> {
 /// Only these formats are ever fetched: a pickle checkpoint executes code on load.
 const ALLOWED_SUFFIXES: &[&str] = &[".safetensors", ".gguf"];
 
+/// The role column: the sd-cli flag the file is passed as (imagegen_tool.rs
+/// `run_args`). `model` is a full checkpoint (I0, I1); FLUX (I2, I3) is four
+/// separate files per sd.cpp docs/flux.md.
+pub const ROLES: &[&str] = &["model", "diffusion_model", "vae", "clip_l", "t5xxl"];
+
 /// One pinned file.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelFile {
@@ -86,6 +97,22 @@ pub struct ModelFile {
 }
 
 impl ModelFile {
+    /// 1954-gdi6: a ControlNet (`controlnet:<name>`) or LoRA (`lora`) row;
+    /// 1956-bh6j: or a studio-only weight (`studio:<kind>`: ipadapter,
+    /// clip_vision, layer_model, birefnet). Aux rows are never part of a tier
+    /// download; they are fetched only when a request or workflow names them.
+    pub fn is_aux(&self) -> bool {
+        self.role == "lora"
+            || self.role.starts_with("controlnet:")
+            || self.role.starts_with("studio:")
+    }
+
+    /// The base tier an aux row pairs with: the first segment of its `tier`
+    /// column (`I1/controlnet-openpose` pairs with I1).
+    pub fn base_tier(&self) -> &str {
+        self.tier.split('/').next().unwrap_or(&self.tier)
+    }
+
     /// The pinned download URL: a commit, never a branch.
     pub fn url(&self) -> String {
         format!(
@@ -140,6 +167,16 @@ pub fn parse_manifest(body: &str) -> Result<Vec<ModelFile>, String> {
                 n + 1
             ));
         }
+        // An aux row (ControlNet, LoRA, studio weight) is fetched only when a
+        // request names it and never passed as a tier's sd-cli role flag.
+        if !row.is_aux() && !ROLES.contains(&row.role.as_str()) {
+            return Err(format!(
+                "models.tsv line {}: role {} is not one of {} (nor an aux lora|controlnet:<name>|studio:<kind>)",
+                n + 1,
+                row.role,
+                ROLES.join("|")
+            ));
+        }
         if !ALLOWED_SUFFIXES.iter().any(|s| row.file.ends_with(s)) {
             return Err(format!(
                 "models.tsv line {}: {} is not .safetensors or .gguf",
@@ -160,15 +197,37 @@ pub fn parse_manifest(body: &str) -> Result<Vec<ModelFile>, String> {
 }
 
 /// The shipped manifest.
+/// 1986-snpx: the sha256 (first 12) of the models.tsv compiled into THIS
+/// binary, so a stale tray reads as a stale table, not a licence refusal.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub fn manifest_digest() -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(MODELS_TSV.as_bytes())
+        .iter()
+        .take(6)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 pub fn manifest() -> Vec<ModelFile> {
+    // 1991-dovl: a dev build appends overlay pins (read per call). They still
+    // run only when the compiled-in licence register admits them. An overlay
+    // that does not parse is ignored, loudly, never half-applied.
+    if let Some(extra) = crate::dev_overlay::read(crate::dev_overlay::MODELS) {
+        match parse_manifest(&crate::dev_overlay::append(MODELS_TSV, Some(extra))) {
+            Ok(rows) => return rows,
+            Err(e) => eprintln!("[tillandsias] dev overlay models.tsv ignored: {e}"),
+        }
+    }
     parse_manifest(MODELS_TSV).expect("images/imagegen/models.tsv parses (fixture-checked)")
 }
 
 /// The files tier `tier` needs. Empty when the tier has no pinned files yet.
+/// ControlNet and LoRA rows (1954-gdi6) are fetched only when a request names them.
 pub fn files_for_tier(manifest: &[ModelFile], tier: &str) -> Vec<ModelFile> {
     manifest
         .iter()
-        .filter(|m| m.tier == tier)
+        .filter(|m| m.tier == tier && !m.is_aux())
         .cloned()
         .collect()
 }
@@ -715,6 +774,85 @@ mod tests {
             + &"0".repeat(64)
             + "\t1\tcc-by-nc-4.0";
         assert!(parse_manifest(&nc).is_err());
+    }
+
+    #[test]
+    fn studio_rows_are_aux_and_never_part_of_a_tier_download() {
+        // 1956-bh6j: a studio:<kind> row pairs with its base tier but is not
+        // fetched by the tier download; a plain model row is.
+        let rev = "0".repeat(40);
+        let sha = "0".repeat(64);
+        let body = format!(
+            "I1\tmodel\ta/b\t{rev}\tm.safetensors\t{sha}\t1\topenrail++\n\
+             I1/ipadapter\tstudio:ipadapter\th94/IP-Adapter\t{rev}\tsdxl_models/ip.safetensors\t{sha}\t1\tapache-2.0\n\
+             I1/controlnet-union\tcontrolnet:union\txinsir/u\t{rev}\tu.safetensors\t{sha}\t1\tapache-2.0\n\
+             I1/lora\tlora\tn/p\t{rev}\tp.safetensors\t{sha}\t1\tcreativeml-openrail-m\n"
+        );
+        let m = parse_manifest(&body).unwrap();
+        assert_eq!(m.len(), 4);
+        assert!(!m[0].is_aux());
+        for row in &m[1..] {
+            assert!(row.is_aux(), "{} is aux", row.role);
+            assert_eq!(row.base_tier(), "I1");
+        }
+        assert_eq!(m[1].cache_name(), "ip.safetensors");
+        let i1 = files_for_tier(&m, "I1");
+        assert_eq!(i1.len(), 1, "only the model row belongs to the I1 download");
+        // The shipped manifest: every studio row is aux, under I1, and in the register.
+        let shipped = manifest();
+        let studio: Vec<_> = shipped
+            .iter()
+            .filter(|r| r.role.starts_with("studio:"))
+            .collect();
+        assert!(studio.len() >= 5, "the D4 studio weights are pinned");
+        for row in studio {
+            assert!(row.is_aux());
+            assert_eq!(row.base_tier(), "I1");
+            register_admits(REGISTER_TSV, row).unwrap();
+        }
+    }
+
+    /// 1959-flux: I2 and I3 (FLUX.1-schnell) are pinned too, each with the four
+    /// files sd.cpp's docs/flux.md loads separately: the transformer as
+    /// `--diffusion-model` (never `--model`, which expects a full checkpoint),
+    /// the `ae` VAE, CLIP-L and T5-XXL. Every file comes from one UNGATED
+    /// Apache-2.0 repo and is in the licence register.
+    #[test]
+    fn the_shipped_manifest_pins_i2_and_i3_flux_with_the_four_sd_cpp_roles() {
+        let m = manifest();
+        for (tier, quant) in [("I2", "Q4_0"), ("I3", "Q8_0")] {
+            let rows = files_for_tier(&m, tier);
+            let mut roles: Vec<&str> = rows.iter().map(|r| r.role.as_str()).collect();
+            roles.sort_unstable();
+            assert_eq!(
+                roles,
+                ["clip_l", "diffusion_model", "t5xxl", "vae"],
+                "{tier} roles"
+            );
+            let transformer = rows.iter().find(|r| r.role == "diffusion_model").unwrap();
+            assert!(
+                transformer.file.contains("schnell") && transformer.file.contains(quant),
+                "{tier} transformer {}",
+                transformer.file
+            );
+            assert!(
+                rows.iter().all(|r| r.licence == "apache-2.0"),
+                "{tier} licence"
+            );
+            for row in &rows {
+                register_admits(REGISTER_TSV, row).unwrap();
+            }
+        }
+        // The VAE is the same ae.safetensors on both rungs: fetched once per tier dir,
+        // but one pin.
+        let vae = |t: &str| {
+            files_for_tier(&m, t)
+                .into_iter()
+                .find(|r| r.role == "vae")
+                .unwrap()
+                .sha256
+        };
+        assert_eq!(vae("I2"), vae("I3"));
     }
 
     /// LIVE, opt-in: fetch tier `TILLANDSIAS_IMAGEGEN_LIVE_TIER` (default I0)

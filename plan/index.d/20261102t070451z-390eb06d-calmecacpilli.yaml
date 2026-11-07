@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: everything-tillandsias-owns-on-a-host-lives-under-tillandsias-home-and-a-first-launch-migrates-the-legacy-roots
+    event:
+      type: list-replace
+      ts: "2026-11-02T07:04:51Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t070451z
+      host: calmecacpilli
+      field: exit_criteria
+      items:
+        - "scripts/test-tillandsias-home-layout.sh fresh arm: after a hermetic --init nothing exists under the legacy roots and ~/.tillandsias/{config,downloads,vault,cache,state} exist (pre-fix result: FAILS — every legacy root is written today)"
+        - "legacy arm: a seeded ~/.cache/tillandsias with vault-data, models and packages is migrated to vault/data, downloads/models and cache/packages with equal digests and the legacy root is removed (pre-fix result: FAILS — no migration exists)"
+        - "second-run arm: a second launch moves nothing and prints no migration line (pre-fix result: FAILS)"
+        - "mixed arm: an interrupted migration (half moved) converges without prompting and names any .legacy-<ts> copy (pre-fix result: FAILS)"
+        - "seam arm: with TILLANDSIAS_HOME=/tmp/x every path the command touched is under /tmp/x (pre-fix result: FAILS — XDG and ~/.cache are consulted)"
+        - "cargo test -p tillandsias-core home:: passes (pre-fix result: FAILS — module absent)"
+        - "override arm: the override (one config file key or env var) relocates the whole root and, where the design allows, each heavy sub-tree on its own (images/podman store, models, caches, scratch/temp, logs) via the same config file or env; every path touched lands under the overridden location (pre-fix result: FAILS — no override exists)"
+        - "dogfood: the dev hosts use the override — macuahuitl's own user config points the root (or its heavy sub-trees) at /srv/fastbuild on the RAID, set in the host's user config, never in code; the end-user default stays ~/.tillandsias (pre-fix result: FAILS — macuahuitl writes to the default roots)"
+      summary: |-
+        operator ruling 2026-11-02: config overrides, dogfooded on dev hosts

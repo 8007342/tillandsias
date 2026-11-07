@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: instant-pre-build-litmus-is-green-on-the-macos-host-or-says-why-not
+    event:
+      type: progress
+      ts: "2026-11-06T09:21:47Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        2006-wahn: the /tmp/tillandsias-timing.jsonl leak is ROOT-CAUSED and FIXED on work/2006-wahr. Reproduced: a preflight on this host deadline-kills scripts/test-metrics-log-path-agreement.sh at 5 s while arm 9 holds the real /tmp file, and the file outlived the run (watched: fixture gone 01:14:45, file still present at 01:16:02). The door sends TERM, then KILL 1 s later; bash defers a trap while a foreground child runs, and arm 9's reporter calls (the full report against the real 58k-row log plus the 1.75 s trace gate) outlast the grace, so KILL lands before the EXIT trap. Deterministic test (TERM 0.3 s after the file appears, KILL 0.3 s later): pre-fix 3/3 STRANDED; with the fix (every reporter call between create and rm runs as `( ... ) & wait`, which TERM interrupts, plus SKIP_TRACES to shorten the window) 5/5 clean on TERM. Then a real preflight killed the fixture at its deadline and left no file. Fixture still 19/19 green.

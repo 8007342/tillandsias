@@ -79,6 +79,21 @@ run_agent() {
     { "$@" 2>&1 1>&3 3>&- | tee -a "$err_copy" >&2; } 3>&1
     return "${PIPESTATUS[0]}"
 }
+# Order 1914-twan criterion 3: say it BEFORE launch when the last session's
+# refreshed sign-in never reached Vault (the copy failed, or a kill beat it):
+# the restored token is then most likely used up, and Codex would only 401.
+if "$VAULT_HELPER" stale 2>/dev/null; then
+    printf '\nYour last Codex session refreshed its sign-in, but the new one never reached Vault,\nso the saved sign-in is probably used up. Sign in again now? [Y/n] ' >&2
+    answer=''
+    if read -r answer && [[ ! "$answer" =~ ^[Nn] ]]; then
+        if TILLANDSIAS_CODEX_BIN="$1" "$RELOGIN_HELPER"; then
+            "$VAULT_HELPER" clear-stale 2>/dev/null
+            echo "Signed in. Starting Codex." >&2
+        else
+            echo "Sign-in did not finish; starting Codex with the saved sign-in." >&2
+        fi
+    fi
+fi
 run_agent "$@"
 agent_status=$?
 if [[ "$agent_status" -ne 0 ]] && grep -Eqi 'unauthorized|(^|[^0-9])401([^0-9]|$)' "$err_copy"; then
@@ -86,6 +101,7 @@ if [[ "$agent_status" -ne 0 ]] && grep -Eqi 'unauthorized|(^|[^0-9])401([^0-9]|$
     answer=''
     if read -r answer && [[ ! "$answer" =~ ^[Nn] ]]; then
         if TILLANDSIAS_CODEX_BIN="$1" "$RELOGIN_HELPER"; then
+            "$VAULT_HELPER" clear-stale 2>/dev/null
             echo "Signed in. Starting Codex again." >&2
             run_agent "$@"
             agent_status=$?

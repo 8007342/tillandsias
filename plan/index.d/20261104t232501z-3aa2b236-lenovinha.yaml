@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: studio-run-workflow-wall-time-outside-elapsed-s-is-measured-and-explained
+    field: next_action
+    value: 'Stage logging landed at 86f53eaae (stages_ms, total_ms, a per-prompt transport line). LEFT: one quiet QwenImage run on macuahuitl with that build; then fix whichever stage dominates (suspect: each ComfyUI request is a podman exec, /history polled every 500 ms).'
+    ts: "2026-11-04T23:25:01Z"
+    host: lenovinha
+    replaces_sha256: "6891116806558f5d7205ecac56c784cb8ceb2bfdd0d2dfc3dbaffeed2dc31ceb"
+
+events:
+  - packet_id: studio-run-workflow-wall-time-outside-elapsed-s-is-measured-and-explained
+    event:
+      type: note
+      ts: "2026-11-04T23:25:01Z"
+      host: lenovinha
+      summary: |-
+        logging landed

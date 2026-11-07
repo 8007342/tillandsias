@@ -23,6 +23,14 @@
 --                   studio is listed but refused at launch, naming the packet
 --   packet          the lane's order
 --   needs_cloud_account  true: listed, never recommended (Onlook until 1865)
+--   kind            "forge" (default): the studio runs IN the forge, from its own
+--                   image stacked on the forge base, behind the studio front, and
+--                   edits the checkout. "sibling" (1921-2krx): the studio runs in
+--                   its OWN container next to the forge, from `image`, never sees
+--                   the checkout (entry is the image's own; write_allowlist must
+--                   be empty), and is reached only through the router's OTP
+--                   route studio.<label> -> tillandsias-<project>-studio:<port>.
+--   image           sibling only: the image the sibling runs (built on first use)
 --
 -- Silex is deliberately absent (operator ruling 2026-10-25).
 
@@ -44,7 +52,7 @@ return {
       entry = { "/usr/local/bin/studio-grapesjs" }, port = 4096,
       save_adapter = "endpoint",
       write_allowlist = { "*.html", "**/*.html", "*.css", "**/*.css", ".tillandsias/studio/grapesjs/**" },
-      status = "planned", packet = "1861-nmpp",
+      status = "ready", packet = "1861-nmpp",
     },
     {
       id = "decap", name = "Decap CMS", license = "MIT",
@@ -53,7 +61,7 @@ return {
       entry = { "/usr/local/bin/studio-decap" }, port = 4096,
       save_adapter = "own-writer",
       write_allowlist = { "content/**", "_posts/**", "src/content/**", "static/**", "admin/config.yml", "admin/index.html" },
-      status = "planned", packet = "1862-wrx5",
+      status = "ready", packet = "1862-wrx5",
     },
     {
       id = "tina", name = "TinaCMS", license = "Apache-2.0",
@@ -62,7 +70,7 @@ return {
       entry = { "/usr/local/bin/studio-tina" }, port = 4096,
       save_adapter = "own-writer",
       write_allowlist = { "content/**", "tina/config.ts", "tina/config.js", ".gitignore" },
-      status = "planned", packet = "1863-dmke",
+      status = "ready", packet = "1863-dmke",
     },
     {
       id = "puck", name = "Puck", license = "MIT",
@@ -71,16 +79,31 @@ return {
       entry = { "/usr/local/bin/studio-puck" }, port = 4096,
       save_adapter = "endpoint",
       write_allowlist = { ".tillandsias/studio/puck/**" },
-      status = "planned", packet = "1864-ay3x",
+      status = "ready", packet = "1864-ay3x",
     },
     {
+      -- 1865-dn5h DEGRADED (measured 2026-11-02, plan/issues/onlook-offline-viability-2026-11-02-yoga.md):
+      -- needs a CodeSandbox account, so listed with its reason and never recommended.
+      -- RECHECK: revisit when Onlook ships a local runner or an open desktop app.
       id = "onlook", name = "Onlook", license = "Apache-2.0",
-      brief = "Visual editor for Next.js and Tailwind that edits the code directly.",
+      brief = "Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
       frameworks = {},
       entry = { "/usr/local/bin/studio-onlook" }, port = 4096,
       save_adapter = "own-writer",
       write_allowlist = { "app/**", "src/**", "components/**", "public/**" },
       status = "planned", packet = "1865-dn5h", needs_cloud_account = true,
+    },
+    {
+      -- 1874-zry8 builds the image; 1921-2krx opens it as a studio. Not
+      -- recommended for any site framework: it makes images, not pages.
+      id = "comfyui", name = "ComfyUI", license = "GPL-3.0-only",
+      brief = "Node-based image generation on the local models, outputs to the lane's scratch volume.",
+      frameworks = {},
+      kind = "sibling", image = "imagegen-studio",
+      entry = {}, port = 8188,
+      save_adapter = "own-writer",
+      write_allowlist = {},
+      status = "ready", packet = "1921-2krx",
     },
   },
 }
