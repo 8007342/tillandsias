@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-07, from the failed v56.11.7.1 macOS smoke, at the coordinator's direction.
+packets:
+- packet_id: after-a-forge-image-build-every-new-process-in-the-macos-guest-segfaults
+  order: 2029-b87w
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, vm, kernel, podman]
+  estimated_hours: 6
+  title: After the forge image build every new process in the macOS VZ guest segfaults, so the forge never starts and the VM cannot shut down cleanly
+  context: 'v56.11.7.1 macOS smoke on tlatoanis-macbook-air (Apple M5, 16 GiB, macOS 27.0.1; guest 8 vCPU / 8 GiB, Fedora 44, kernel 7.2.15, podman 5.8.9, btrfs root; tillandsias.slice MemoryLow per 1913-fh6l), after a clean reset and provision and the operator''s own GitHub and Cloudflare sign-ins. Twice in a row the forge build ended and the guest broke. Current boot console: "crun-buildah-buildah… .scope: Consumed 22.409s CPU time over 55.555s wall clock time, 4.2G memory peak, 2.4G written to disk" at 262 s, then from 278 s EVERY new process segfaults: podman healthcheck transient units "Main process exited, code=dumped, status=11/SEGV" every ~30 s, `--exec-guest ''echo hello; uname -r''` exit 139 signal 11, `podman ps` and `rpm -q` likewise, and the tray''s GitHub-login terminal opens and closes at once. Long-running daemons (tillandsias-headless, vault, proxy) keep answering. On the first occurrence (22:11:12Z) the guest service then stopped answering vsock ("Connection reset by peer"), the drain failed and the VM was force-stopped (twice), which triggered 1642-cc54''s rebuild and lost the sign-ins. ROOT CAUSE UNPROVEN: kernel segfault lines are not on the serial console and nothing can be exec''d to read the journal. Suspects: the 7.2.15 guest kernel (or VZ memory/balloon) corrupting file-backed pages under the 4.2 GiB build peak, a damaged shared library, or swap. Host-side evidence saved at target/smoke-e2e/evidence-segv-20261107t222652z (console.log, tray.log, unclean-rebuilds.log, VM dir listing, diagnose.json).'
+  exit_criteria:
+  - 'The guest prints kernel warnings and segfault lines to the serial console (e.g. loglevel / printk for that boot), so the next occurrence names the faulting library and address; and the smoke driver captures them before any restart.'
+  - 'The cause is named from that evidence, reproduced deliberately (a forge-sized build in a fresh guest), and fixed or pinned (kernel, package, or a guest memory setting), with a forge launch reaching Ready after a cold build on the macOS M5 tier.'
+  verifiable_closure: 'A published-release macOS smoke whose forge turn returns its token after a cold forge build.'
+  unscoreable: 'none.'
+  next_action: 'Make the guest log kernel messages to the serial console, then reproduce with one cold forge build on a fresh guest and read the faulting library.'
+  provenance: 'Measured on the operator''s Mac 2026-11-07; coordinator macuahuitl-fedora: "File (a), (b), (c)".'
+  events:
+  - type: filed
+    ts: '2026-11-07T22:29:16Z'
+    host: tlatoanis-macbook-air
+    summary: filed p0 ready from the failed v56.11.7.1 macOS smoke
+- packet_id: an-unclean-macos-guest-restart-keeps-the-crashed-boots-console
+  order: 2029-ku5y
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, vm, observability]
+  estimated_hours: 2
+  title: An unclean macOS guest restart keeps the crashed boot's console instead of overwriting it
+  context: 'Same run as 2029-b87w: after the force-stop at 22:15Z the next start''s REBUILD left only one console.log (no console.log.prev), so the console of the boot that broke at 22:11 was gone, and with it the only kernel record of the first occurrence. A rebuild after an unclean stop is exactly when the previous console matters most.'
+  exit_criteria:
+  - 'Before a start overwrites console.log, the previous one is kept (console.log.prev, or a timestamped copy after an unclean stop), including across a REBUILD; a test starts twice and finds both.'
+  verifiable_closure: 'The test, plus a live unclean restart that keeps the crashed boot''s console.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the test lands with the fix (1136-n8sh).'
+  next_action: 'Find where start() opens console.log and where the REBUILD clears the VM directory, and rotate before either.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-07, finding (b).'
+  events:
+  - type: filed
+    ts: '2026-11-07T22:29:16Z'
+    host: tlatoanis-macbook-air
+    summary: filed p1 ready from the failed v56.11.7.1 macOS smoke
