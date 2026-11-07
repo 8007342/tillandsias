@@ -573,6 +573,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:mirror-ca-trust-watch
+  - litmus:git-image-ca-bind-styles
   - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent
