@@ -4902,6 +4902,118 @@ mod ca_refresh_margin_tests {
         );
     }
 
+    /// 2006-srcs: kumbia-kombat's real seed (main) names `integration.forge:
+    /// game`; the candidates follow the forge's order.
+    #[test]
+    fn the_discipline_seed_names_the_forge_branch_first() {
+        let seed = "version: 1\nlevel: 2\nwork_ref: 'work/[0-9]{3,4}-[a-z0-9]{4}'\n\
+                    default_branch: main\nintegration:\n  linux: game\n  forge: game\n  windows: game\n";
+        assert_eq!(
+            discipline_seed_branch_candidates(seed),
+            ["game", "game", "main"]
+        );
+        assert_eq!(
+            discipline_seed_branch_candidates("default_branch: \"trunk\"\n"),
+            ["trunk"]
+        );
+        assert!(discipline_seed_branch_candidates("").is_empty());
+    }
+
+    /// 2006-srcs, against a REAL bare repository shaped like kumbia-kombat's
+    /// mirror: HEAD and main carry the seed but no config; `game` carries
+    /// `src_mb = 4096`. Reading HEAD (the 2006-srcr code) finds nothing; the
+    /// seed branch finds 4096. CONTROL: with no seed, main (no config) is read.
+    #[test]
+    fn the_declared_src_mb_is_read_on_the_branch_the_forge_checks_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let work = tmp.path().join("work");
+        let bare = tmp.path().join("mirror.git");
+        let sh = |dir: &std::path::Path, args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args([
+                    "-c",
+                    "user.name=t",
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "commit.gpgsign=false",
+                ])
+                .args(args)
+                .env_remove("GIT_DIR")
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        std::fs::create_dir_all(work.join(".tillandsias")).unwrap();
+        sh(&work, &["init", "-q", "-b", "main"]);
+        std::fs::write(
+            work.join(".tillandsias/branch-discipline.yaml"),
+            "default_branch: main\nintegration:\n  forge: game\n",
+        )
+        .unwrap();
+        sh(&work, &["add", "."]);
+        sh(&work, &["commit", "-q", "-m", "seed"]);
+        sh(&work, &["switch", "-q", "-c", "game"]);
+        std::fs::write(
+            work.join(".tillandsias/config.toml"),
+            "[forge]\nsrc_mb = 4096\n",
+        )
+        .unwrap();
+        sh(&work, &["add", "."]);
+        sh(&work, &["commit", "-q", "-m", "config"]);
+        sh(&work, &["switch", "-q", "main"]);
+        sh(
+            tmp.path(),
+            &[
+                "clone",
+                "-q",
+                "--bare",
+                work.to_str().unwrap(),
+                bare.to_str().unwrap(),
+            ],
+        );
+        let git_in = |repo: std::path::PathBuf| {
+            move |args: &[&str]| -> Option<String> {
+                let out = std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&repo)
+                    .args(args)
+                    .env_remove("GIT_DIR")
+                    .output()
+                    .ok()?;
+                out.status
+                    .success()
+                    .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+            }
+        };
+        let git = git_in(bare.clone());
+        assert!(
+            git(&["show", "HEAD:.tillandsias/config.toml"]).is_none(),
+            "HEAD has no config"
+        );
+        assert_eq!(
+            declared_src_mb_on_seed_branch(&git),
+            Some(("game".into(), 4096))
+        );
+        // CONTROL: drop the seed's integration branch; the forge would check out
+        // main, which declares nothing, so nothing is read.
+        sh(&work, &["switch", "-q", "main"]);
+        std::fs::write(
+            work.join(".tillandsias/branch-discipline.yaml"),
+            "default_branch: main\n",
+        )
+        .unwrap();
+        sh(&work, &["commit", "-q", "-am", "no integration"]);
+        sh(&bare, &["fetch", "-q", work.to_str().unwrap(), "main:main"]);
+        assert_eq!(declared_src_mb_on_seed_branch(&git), None);
+    }
+
     /// 2006-srcr: the recorded high-water mark parses as one positive MB
     /// value (anything else is no record), and the project's declared need is
     /// read from `[forge] src_mb`. Pre-fix: FAILS, neither existed.
@@ -21433,24 +21545,116 @@ fn forge_src_high_water_mb(project_name: &str) -> Option<u32> {
 }
 
 /// The project's declared need, `[forge] src_mb` in the committed
-/// `.tillandsias/config.toml`, read from the mirror's HEAD (a clone-only forge
-/// has no host checkout to read it from).
+/// `.tillandsias/config.toml`, read from the mirror (a clone-only forge has no
+/// host checkout to read it from).
+///
+/// 2006-srcs: read on the branch the forge will CHECK OUT, never the mirror's
+/// HEAD. A cloud forge resolves its own seed (lib-common
+/// `resolve_forge_seed_branch`): kumbia-kombat's seed names `integration.forge:
+/// game`, its config lives only on `game`, and HEAD is `main`, so reading HEAD
+/// sized the tmpfs at the floor.
 fn forge_declared_src_mb(project_name: &str) -> Option<u32> {
-    let mut probe = podman_command();
-    probe.args([
-        "exec".to_string(),
-        format!("tillandsias-git-{project_name}"),
-        "git".into(),
-        "-C".into(),
-        format!("/srv/git/{project_name}"),
-        "show".into(),
-        "HEAD:.tillandsias/config.toml".into(),
-    ]);
-    let text = podman_command_output(probe, false).ok()?;
-    toml::from_str::<tillandsias_core::config::ProjectConfig>(&text)
+    let container = format!("tillandsias-git-{project_name}");
+    let repo = format!("/srv/git/{project_name}");
+    let git = |args: &[&str]| -> Option<String> {
+        let mut probe = podman_command();
+        let mut argv: Vec<String> = vec![
+            "exec".into(),
+            container.clone(),
+            "git".into(),
+            "-C".into(),
+            repo.clone(),
+        ];
+        argv.extend(args.iter().map(|a| a.to_string()));
+        probe.args(argv);
+        podman_command_output(probe, false).ok()
+    };
+    let (branch, mb) = declared_src_mb_on_seed_branch(&git)?;
+    eprintln!(
+        "[tillandsias] [forge-launch] [forge] src_mb = {mb} read from the mirror's '{branch}'"
+    );
+    Some(mb)
+}
+
+/// The integration and default branches named by a discipline seed, in the
+/// forge's order: `integration.forge`, `integration.linux`, `default_branch`.
+fn discipline_seed_branch_candidates(seed: &str) -> Vec<String> {
+    let clean = |v: &str| v.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
+    let mut integration: Vec<(String, String)> = Vec::new();
+    let mut default_branch = None;
+    let mut in_integration = false;
+    for line in seed.lines() {
+        if line.starts_with("integration:") {
+            in_integration = true;
+            continue;
+        }
+        if in_integration
+            && !line.starts_with(char::is_whitespace)
+            && !line.trim().is_empty()
+            && !line.starts_with('#')
+        {
+            in_integration = false;
+        }
+        if in_integration {
+            if let Some((k, v)) = line.trim().split_once(':') {
+                integration.push((k.trim().to_string(), clean(v)));
+            }
+        } else if let Some(v) = line.strip_prefix("default_branch:") {
+            default_branch.get_or_insert_with(|| clean(v));
+        }
+    }
+    let mut out = Vec::new();
+    for key in ["forge", "linux"] {
+        if let Some((_, v)) = integration.iter().find(|(k, _)| k == key)
+            && !v.is_empty()
+        {
+            out.push(v.clone());
+        }
+    }
+    if let Some(v) = default_branch.filter(|v| !v.is_empty()) {
+        out.push(v);
+    }
+    out
+}
+
+/// The branch a cloud forge checks out, by the rule of lib-common
+/// `resolve_forge_seed_branch` in a bare mirror (branches are `refs/heads/*`):
+/// the discipline seed read from main, master, then HEAD (first readable);
+/// its candidates, first existing; else main or master; else HEAD. Then
+/// `[forge] src_mb` from THAT branch's config. `git` runs one git command in
+/// the mirror and returns stdout on success.
+fn declared_src_mb_on_seed_branch(
+    git: &dyn Fn(&[&str]) -> Option<String>,
+) -> Option<(String, u32)> {
+    let exists =
+        |b: &str| git(&["rev-parse", "--verify", "-q", &format!("refs/heads/{b}")]).is_some();
+    let mut chosen = None;
+    for r in ["main", "master", "HEAD"] {
+        let Some(seed) = git(&["show", &format!("{r}:.tillandsias/branch-discipline.yaml")]) else {
+            continue;
+        };
+        if seed.trim().is_empty() {
+            continue;
+        }
+        chosen = discipline_seed_branch_candidates(&seed)
+            .into_iter()
+            .find(|b| exists(b));
+        break;
+    }
+    let branch = chosen
+        .or_else(|| {
+            ["main", "master"]
+                .into_iter()
+                .find(|b| exists(b))
+                .map(String::from)
+        })
+        .unwrap_or_else(|| "HEAD".into());
+    let text = git(&["show", &format!("{branch}:.tillandsias/config.toml")])?;
+    let mb = toml::from_str::<tillandsias_core::config::ProjectConfig>(&text)
         .ok()?
         .forge?
-        .src_mb
+        .src_mb?;
+    Some((branch, mb))
 }
 
 /// The podman argv for [`forge_mirror_pack_size_kb`]: `count-objects -v`
