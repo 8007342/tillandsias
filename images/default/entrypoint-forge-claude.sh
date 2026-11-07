@@ -120,6 +120,8 @@ forge_step_done bypass-consent
 # ~/.claude/settings.json (additive, idempotent, forge-gated). The approvals
 # restore below only touches ~/.claude.json, so it cannot undo this.
 seed_claude_pretooluse_hook || true
+# order:2017-wtbr: sub-agent worktrees start from the session's HEAD.
+seed_claude_worktree_base_head || true
 # Operator-approved interactive dialogs, restored from vault (2026-08-31):
 # first-ever launch prompts once — those are valid prompts — the watcher
 # below harvests the approval, and every later forge launch restores it.

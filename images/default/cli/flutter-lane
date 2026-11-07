@@ -112,15 +112,21 @@ def prepare():
 
 
 def project_cwd():
+    """(cwd_root, cwd): relative to the checkout, or (2017-flwt) to the project
+    cache for a worktree under <cache>/worktrees/<name>."""
     # TILLANDSIAS_PROJECT_ROOT is a test seam; in a forge the root is fixed.
     root = os.environ.get("TILLANDSIAS_PROJECT_ROOT") or (f"/home/forge/src/{PROJECT}" if PROJECT else "")
     if not root or not os.path.isdir(root):
         die("no project is attached to this forge (TILLANDSIAS_PROJECT is unset or missing)")
     here = os.path.realpath(os.getcwd())
     root = os.path.realpath(root)
-    if here != root and not here.startswith(root + "/"):
-        die(f"run flutter inside the project, under {root}")
-    return os.path.relpath(here, root) if here != root else ""
+    if here == root or here.startswith(root + "/"):
+        return "project", (os.path.relpath(here, root) if here != root else "")
+    cache = os.path.realpath(os.environ.get("TILLANDSIAS_PROJECT_CACHE") or "/home/forge/.cache/tillandsias-project")
+    worktrees = os.path.join(cache, "worktrees")
+    if here.startswith(worktrees + "/"):
+        return "cache", os.path.relpath(here, cache)
+    die(f"run flutter inside the project, under {root}, or in a worktree under {worktrees}/<name>")
 
 
 def reads_stdin(argv, tty):
@@ -140,7 +146,8 @@ def run(argv):
         except OSError:
             pass
     s = connect()
-    params = {"toolchain": "flutter", "argv": argv, "cwd": project_cwd(), "tty": tty, "rows": rows, "cols": cols}
+    cwd_root, cwd = project_cwd()
+    params = {"toolchain": "flutter", "argv": argv, "cwd": cwd, "cwd_root": cwd_root, "tty": tty, "rows": rows, "cols": cols}
     s.sendall((json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tillandsias/exec", "params": params}) + "\n").encode())
 
     buf = b""
