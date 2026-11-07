@@ -3269,11 +3269,39 @@ _clear_stale_npm_staging() {
     find "$parent" -maxdepth 1 -type d -name ".${base}-*" -exec rm -rf {} + 2>/dev/null || true
 }
 
+# ORDER 2027-e2cf: the version each npm harness is installed at. A harness
+# listed here is installed at exactly this version, and a cached copy at any
+# other version is replaced. One that is not listed installs @latest, and the
+# trace says so: an unpinned client changes under every lane with no commit.
+#
+# opencode-ai 1.19.4. Cold Linux lanes died with "EPROTO: The TLS handshake
+# failed" in 5 of 6 runs from 2026-10-31. Nothing in the proxy or forge network
+# path changed between v56.10.30.1 and v56.10.31.1. The forge installed
+# @latest, and 1.19.5 was published 2026-10-28T06:17Z. 1.19.4 is the last
+# release before that onset. It is the A/B's control and not yet proven
+# better; whatever the A/B favours replaces it here, in one reviewed line.
+harness_pin() {
+    case "$1" in
+        opencode-ai) echo "1.19.4" ;;
+        *) return 1 ;;
+    esac
+}
+
 _require_harness() {
     # $1=friendly-name  $2=npm-package  $3=bin-name  → echoes resolved path
-    local name="$1" pkg="$2" bin="$3" path errlog
+    local name="$1" pkg="$2" bin="$3" path errlog pin spec have
+    pin="$(harness_pin "$pkg" 2>/dev/null)" || pin=""
+    spec="$pkg@${pin:-latest}"
     path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
     [ -x "$path" ] || path="${TILLANDSIAS_HARNESS_FALLBACK_DIR:-/usr/local/bin}/$bin"
+    # A cached copy at another version than the pin is not this forge's harness.
+    if [ -n "$pin" ] && [ -x "$path" ]; then
+        have="$("$path" --version 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+        if [ "$have" != "$pin" ]; then
+            trace_lifecycle "harness" "$name is ${have:-unknown}, pinned $pin (2027-e2cf) — reinstalling the pin"
+            path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin.not-the-pin"
+        fi
+    fi
     # Updater race (2026-07-11 gate incident): a SIBLING container's
     # background ensure_forge_harnesses replaces the shared prefix's bin
     # symlinks non-atomically, so a launch landing in that window sees the
@@ -3294,12 +3322,16 @@ _require_harness() {
         [ -x "$path" ] && trace_lifecycle "harness" "$name appeared after ${waited}s (sibling updater)"
     fi
     if [ ! -x "$path" ]; then
-        trace_lifecycle "harness" "$name missing — install latest"
+        if [ -n "$pin" ]; then
+            trace_lifecycle "harness" "$name: installing pinned $spec (2027-e2cf)"
+        else
+            trace_lifecycle "harness" "$name missing — install $spec (unpinned: this version can change with no commit; 2027-e2cf)"
+        fi
         # order 559: clear any stale npm atomic-staging dir so a killed prior
         # install cannot block this one with ENOTEMPTY.
         _clear_stale_npm_staging "$pkg"
         errlog="$(mktemp /tmp/npm-install-${bin}.XXXXXX 2>/dev/null || echo /tmp/npm-install-$bin.err)"
-        if ! npm install -g --no-audit --no-fund "$pkg@latest" >"$errlog" 2>&1; then
+        if ! npm install -g --no-audit --no-fund "$spec" >"$errlog" 2>&1; then
             trace_lifecycle "harness" "$name install FAILED (non-fatal): $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
             trace_lifecycle "harness" "$name install log: $errlog"
             echo "$path"

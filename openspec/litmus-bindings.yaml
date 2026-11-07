@@ -340,6 +340,7 @@ specs:
   - litmus:forge-policy-binary-discoverability
   - litmus:forge-plan-binary-on-path
   - litmus:npm-harness-install-idempotent-shape
+  - litmus:forge-opencode-is-pinned
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:provider-usage-limit

@@ -1,0 +1,35 @@
+# @trace spec:default-image
+# @trace order:2027-e2cf
+#
+# Cold Linux lanes died on their model request with "EPROTO: The TLS handshake
+# failed" in 5 of 6 runs from 2026-10-31, and nothing in the proxy or forge
+# network path had changed. The forge installed opencode-ai@latest, and 1.19.5
+# was published 2026-10-28. Red before 2027-e2cf: a fresh forge installs @latest
+# and a cached 1.19.5 is kept.
+name: litmus:forge-opencode-is-pinned
+spec: default-image
+phase: pre-build
+description: The forge installs opencode-ai at its pinned version, replaces a cached copy at another version, keeps one at the pin, and names an unpinned @latest install as unpinned
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, sed; a stub npm on a scratch PATH (no network)
+
+critical_path:
+  - step: "fresh install is the pin, a drifted cache is reinstalled, a pinned cache is kept, an unpinned harness says so"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-opencode-is-pinned.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:forge-opencode-is-pinned:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "four arms: FRESH, DRIFT, KEEP, UNPINNED"
+  log_fields:
+    spec: "default-image"
+    test: "forge-opencode-is-pinned"
+
+rollback:
+  on_failure: "read the FAIL lines; the pin is harness_pin in images/default/lib-common.sh, applied by _require_harness"
+  command: "grep -n 'harness_pin' images/default/lib-common.sh"
