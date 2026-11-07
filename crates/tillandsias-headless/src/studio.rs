@@ -3,9 +3,9 @@
 //! Every visual web studio is declared once in `images/studio/registry.lua`
 //! (Lua owns the registry; `scripts/lua/build-studio-registry.lua` writes
 //! `data/studios.json`, embedded here). This module only consumes it:
-//! framework detection and the choice list (`studio_options`), the web lane a
+//! framework detection and the choice list (`webstudio.options`, 1969-7qm7; `studio_options` is its deprecated alias), the web lane a
 //! studio launches as (the OpenCode Web route, OTP and window, under
-//! `studio.<label>`), and the co-edit feed (`studio_changes`), read from the
+//! `studio.<label>`), and the co-edit feed (`webstudio.changes`), read from the
 //! forge's own checkout.
 //!
 //! The write-back guard is NOT here: saves land in the forge's checkout, so the
@@ -207,6 +207,15 @@ impl WebLane {
                 ids.join(", ")
             )
         })?;
+        // 1865-dn5h: a studio that needs a cloud account cannot run in the
+        // offline forge, so it is refused for THAT reason, not as unbuilt.
+        if s.needs_cloud_account {
+            return Err(format!(
+                "studio {} needs a cloud account and cannot run offline in the forge ({}); \
+                 choose another studio from the list",
+                s.name, s.packet
+            ));
+        }
         if s.status != "ready" {
             return Err(format!(
                 "studio {} is listed but its lane is not built yet: order {} lands its image",
@@ -354,13 +363,13 @@ fn git_in_lane(project: &str, instance: &str, args: &[String]) -> Result<String,
 pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({
-            "name": "studio_options",
-            "description": "List the visual web studios this project can be opened in, with a brief each and at most one marked [Recommended] for the project's detected framework. Studios whose lane is not built yet are listed with a note.",
+            "name": "webstudio.options",
+            "description": "List the visual web studios (GrapesJS, Decap, Tina, Puck, Onlook) this project can be opened in for co-editing, with a brief each and at most one marked [Recommended] for the project's detected framework. Studios whose lane is not built yet are listed with a note. Starts nothing. Not the ComfyUI image studio: that is studio.run_workflow.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
         serde_json::json!({
-            "name": "studio_open",
-            "description": "Open this project in a studio by id (from studio_options). The user and you then co-edit the same live page; every save is committed.",
+            "name": "webstudio.open",
+            "description": "Open this project in a visual web studio by id (from webstudio.options), so the user and you co-edit the same live page with every save committed. Today this starts nothing from the lane: the reply names the operator command that opens the studio window (opening it from a lane is order 1859-57mi).",
             "inputSchema": {
                 "type": "object",
                 "properties": { "studio": { "type": "string" } },
@@ -368,16 +377,16 @@ pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
             }
         }),
         serde_json::json!({
-            "name": "studio_changes",
-            "description": "Commits since a cursor (a commit id; omit it for the last 20), oldest first, each with its author, subject, saved paths and diff. Studio saves appear here as studio(<id>): save <paths>. Pass the last sha back as the next cursor.",
+            "name": "webstudio.changes",
+            "description": "Commits in this project since a cursor (a commit id; omit it for the last 20), oldest first, each with its author, subject, saved paths and diff. Web-studio saves appear here as studio(<id>): save <paths>. Pass the last sha back as the next cursor. Starts nothing.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "cursor": { "type": "string" } }
             }
         }),
         serde_json::json!({
-            "name": "studio_publish_request",
-            "description": "Ask the operator to publish the site (deploy branch only, on explicit request).",
+            "name": "webstudio.publish_request",
+            "description": "Ask the operator to publish the site to its Cloudflare domain (deploy branch only, on the user's explicit request). Starts nothing and deploys nothing itself; the handoff to the deploy tool is order 1866-9696.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
     ]
@@ -392,7 +401,7 @@ pub(crate) fn call(
     args: &serde_json::Value,
 ) -> Option<Result<serde_json::Value, String>> {
     Some(match name {
-        "studio_options" => (|| {
+        "webstudio.options" => (|| {
             let files: Vec<String> = git_in_lane(project, instance, &["ls-files".to_string()])?
                 .lines()
                 .map(str::to_string)
@@ -406,7 +415,7 @@ pub(crate) fn call(
             let framework = detect_framework(&files, pkg.as_deref());
             Ok(serde_json::json!({ "framework": framework, "options": options(framework) }))
         })(),
-        "studio_open" => {
+        "webstudio.open" => {
             let id = args["studio"].as_str().unwrap_or("");
             WebLane::studio(id).and_then(|lane| {
                 Err(format!(
@@ -416,10 +425,10 @@ pub(crate) fn call(
                 ))
             })
         }
-        "studio_changes" => changes_git_args(args["cursor"].as_str())
+        "webstudio.changes" => changes_git_args(args["cursor"].as_str())
             .and_then(|a| git_in_lane(project, instance, &a))
             .map(|out| serde_json::json!({ "changes": parse_changes(&out) })),
-        "studio_publish_request" => Err(
+        "webstudio.publish_request" => Err(
             "publish is not wired yet: the handoff to the deploy tool is order 1866-9696"
                 .to_string(),
         ),
@@ -439,6 +448,38 @@ mod tests {
             ["grapesjs", "decap", "tina", "puck", "onlook", "comfyui"]
         );
         assert!(registry().studios.iter().all(|s| !s.brief.is_empty()));
+    }
+
+    /// 1865-dn5h: measured 2026-11-02 (plan/issues/onlook-offline-viability-
+    /// 2026-11-02-yoga.md), Onlook needs a CodeSandbox account and cannot run
+    /// offline. While degraded it is never [Recommended], for ANY detected
+    /// framework (Next.js + Tailwind included), it is listed with its reason,
+    /// and a launch is refused for that reason, not as an unbuilt lane.
+    #[test]
+    fn onlook_is_never_recommended_and_says_why_it_cannot_launch() {
+        let onlook = find("onlook").expect("onlook is listed");
+        assert!(onlook.needs_cloud_account, "the measurement says degraded");
+        assert!(
+            onlook.brief.contains("CodeSandbox"),
+            "the brief says why: {}",
+            onlook.brief
+        );
+        let mut frameworks: Vec<Option<&str>> = registry()
+            .frameworks
+            .iter()
+            .map(|f| Some(f.id.as_str()))
+            .collect();
+        frameworks.push(None);
+        for fw in frameworks {
+            let opts = options(fw);
+            let o = opts.iter().find(|o| o.id == "onlook").expect("listed");
+            assert!(!o.recommended, "Onlook recommended for {fw:?}");
+            assert!(!o.label.contains("[Recommended]"), "{fw:?}: {}", o.label);
+            assert_eq!(o.note.as_deref(), Some("needs cloud account"), "{fw:?}");
+        }
+        let refused = WebLane::studio("onlook").expect_err("degraded studio is refused");
+        assert!(refused.contains("needs a cloud account"), "{refused}");
+        assert!(!refused.contains("not built yet"), "{refused}");
     }
 
     /// 1862-wrx5: a Hugo site (hugo.toml, or the older config.toml) is a

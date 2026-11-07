@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-harness-refresh-lock-left-by-a-stopped-forge-is-reclaimed-at-once-not-after-an-hour-of-silently-skipped-refreshes
+    order: 1971-rikj
+    status: in_progress
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, images, launch, harness]
+    estimated_hours: 2
+    title: A harness-refresh lock left by a stopped forge is reclaimed at once, not after an hour of silently skipped refreshes
+    context: 'MEASURED on yoga 2026-11-02 while measuring 1968-2wpe: ensure_forge_harnesses (images/default/lib-common.sh) takes $HOME/.cache/tillandsias-project/npm-update.lock, a bare mkdir on the PERSISTENT tool-cache volume. A forge stopped mid-refresh (podman stop, 3 s after the prompt) never ran its EXIT trap; the lock dir stayed (created 20:33:47 -0800) and the next three launches returned 0 from ensure_forge_harnesses with no lifecycle line at all, so the harnesses (agy, claude, npm) were never refreshed. The only recovery is the -mmin +60 reclaim. Every forge is a new container, so a lock from another container cannot have a live holder.'
+    exit_criteria:
+      - 'The lock records its holder (container hostname + pid); a launch reclaims a lock whose holder is another container or a dead pid at once, and runs the refresh, logging one "reclaimed" lifecycle line.'
+      - 'A lock held by a LIVE process in the same container is still respected (no concurrent npm), and logs one "skipped: refresh in progress" line instead of returning silently.'
+      - 'A fixture executes the real ensure_forge_harnesses lock prologue: a 2-minute-old lock from another hostname is reclaimed (red on today''s tree, which skips silently), and a live same-container holder is respected.'
+    verifiable_closure: 'The fixture red on today''s lib-common.sh and green after, named with its litmus in the same commit.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'yoga: write holder identity into the lock dir, reclaim on foreign hostname or dead pid, log the skip; fixture over the cut-out prologue.'
+    provenance: macuahuitl-fedora 2026-11-03 (coordinator) from yoga's 1968-2wpe measurement; filed and claimed by yoga.
+    depends_on: []
+    related: [1968-2wpe, 284]
+    events:
+      - type: filed
+        ts: '2026-11-03T05:30:00Z'
+        host: yoga
+        summary: filed at the coordinator's request and claimed by yoga

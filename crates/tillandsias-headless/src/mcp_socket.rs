@@ -28,7 +28,140 @@ use tracing::warn;
 ///
 /// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
 pub(crate) fn mcp_socket_base_dir() -> PathBuf {
+    #[cfg(test)]
+    if let Some(root) = test_runtime_root::get() {
+        return mcp_socket_base_dir_from(Some(root));
+    }
     mcp_socket_base_dir_from(env::var("XDG_RUNTIME_DIR").ok())
+}
+
+/// 1969-scp2: a THREAD-LOCAL runtime root for tests, so a test can place lane
+/// sockets under a scratch dir without `std::env::set_var("XDG_RUNTIME_DIR")`,
+/// which every parallel test thread would see.
+#[cfg(test)]
+pub(crate) mod test_runtime_root {
+    use std::cell::RefCell;
+    thread_local! { static ROOT: RefCell<Option<String>> = const { RefCell::new(None) }; }
+    pub(crate) fn get() -> Option<String> {
+        ROOT.with(|r| r.borrow().clone())
+    }
+    /// Set for this thread until the guard drops.
+    pub(crate) fn set(root: &std::path::Path) -> Guard {
+        ROOT.with(|r| *r.borrow_mut() = Some(root.to_string_lossy().into_owned()));
+        Guard
+    }
+    pub(crate) struct Guard;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            ROOT.with(|r| *r.borrow_mut() = None);
+        }
+    }
+}
+
+#[cfg(test)]
+mod call_gate_tests {
+    use super::*;
+
+    /// ORDER 1990-mcpq: the limit concurrency owes (779-dqsv): never more
+    /// than `max` calls at once, and a freed slot admits the next.
+    #[test]
+    fn the_call_gate_never_admits_more_than_its_limit() {
+        let gate = CallGate::new(2);
+        let a = gate.enter();
+        let b = gate.enter();
+        assert_eq!(gate.running(), 2);
+        let g = gate.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let _c = g.enter();
+            tx.send(()).unwrap();
+        });
+        assert!(
+            rx.recv_timeout(std::time::Duration::from_millis(200))
+                .is_err(),
+            "a third call waits while two run"
+        );
+        drop(a);
+        rx.recv_timeout(std::time::Duration::from_secs(2))
+            .expect("a freed slot admits it");
+        waiter.join().unwrap();
+        drop(b);
+        assert_eq!(gate.running(), 0);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod refused_wait_tests {
+    use super::*;
+
+    /// ORDER 1980-lsrc, deterministic: a forked child that has not exec'd yet
+    /// holds the listener, so right after the drop the socket still ACCEPTS
+    /// (the flake: the old fixtures asserted a refusal here). Waiting sees it
+    /// refuse once the child is gone.
+    #[test]
+    fn a_listener_held_by_a_forked_child_is_waited_out() {
+        let dir = tempfile::Builder::new()
+            .prefix("lsrc")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let path = dir.path().join("s.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        // SAFETY: the child only closes descriptors, sleeps and _exits; it
+        // runs no Rust code that could touch a lock another thread held at
+        // fork time.
+        //
+        // 2000-envt: fork copies EVERY descriptor in this process, including
+        // the flock'd lock files parallel tests hold at that instant, and this
+        // child keeps them for 300 ms. A test that dropped its lock then saw it
+        // still held (a_graceful_exit_leaves_another_owners_enclave_running,
+        // a_second_launch_of_a_project_takes_the_next_instance). The child
+        // keeps only the listener it exists to hold.
+        use std::os::fd::AsRawFd as _;
+        let keep = listener.as_raw_fd();
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0, "fork");
+        if pid == 0 {
+            unsafe {
+                for fd in 3..1024 {
+                    if fd != keep {
+                        libc::close(fd);
+                    }
+                }
+                libc::usleep(300_000);
+                libc::_exit(0);
+            }
+        }
+        drop(listener);
+        let immediate = UnixStream::connect(&path).is_ok();
+        let waited = wait_until_refused(&path);
+        let mut status = 0;
+        unsafe { libc::waitpid(pid, &mut status, 0) };
+        assert!(
+            immediate,
+            "the race: a dropped listener a fork holds still accepts"
+        );
+        assert!(waited, "and it refuses once the fork is gone");
+    }
+}
+
+/// ORDER 1980-lsrc: wait (up to ~3 s) until `path` refuses connections.
+///
+/// A test that drops its listener and expects the next connect to be refused
+/// races every parallel test that spawns a process: between fork and exec the
+/// child holds a copy of each fd, the listener included (CLOEXEC closes it
+/// only at exec), so for that window the "departed" socket still accepts.
+/// That made `a_cli_lane_refuses_by_name_when_another_process_owns_its_socket`
+/// and the lane-adoption fixture flake on lenovinha after 1969-scp2.
+#[cfg(test)]
+pub(crate) fn wait_until_refused(path: &std::path::Path) -> bool {
+    for _ in 0..300 {
+        match UnixStream::connect(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => return true,
+            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(_) => return false,
+        }
+    }
+    false
 }
 
 /// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test
@@ -256,19 +389,26 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 "capabilities": { "tools": {} },
                 "serverInfo": {
                     "name": "tillandsias-host-services",
-                    "version": env!("CARGO_PKG_VERSION"),
+                    // 1993-cver: the release version, from VERSION.
+                    "version": crate::VERSION.trim(),
                     "buildId": build_identity(),
-                }
+                },
+                // 1969-7qm7: the grouped index is what the agent sees FIRST.
+                "instructions": crate::host_tools::instructions(),
             }
         }),
         // Order 779-3trn: the host-services trio PLUS the browser family.
         // The browser descriptors come from the composed server itself, so
         // what is advertised is exactly what `tools/call` will dispatch.
+        // 1969-7qm7: canonical names are namespaced by what the tool does
+        // (preview.*, toolchain.*, image.*, studio.*, browser.*, cloudflare.*,
+        // webstudio.*), each description says what it starts, and the flat
+        // names are listed LAST as deprecated aliases for one release.
         "tools/list" => {
             let mut tools = vec![
                 serde_json::json!({
-                    "name": "publish_local",
-                    "description": "Publish this authenticated lane's WEB preview on the local reverse proxy. The managed auto profile selects static or local Wrangler; re-publishing reconciles the same live-source service. For an app that lives in a subdirectory with its own wrangler config (a monorepo), pass app_dir: that directory, relative to the project; everything is then served from inside it.",
+                    "name": "preview.publish",
+                    "description": "Publish this lane's project as a local WEB preview at www.<project>.localhost. STARTS a sibling web container on the enclave (the managed auto profile selects a static server or local Wrangler; never a deploy). Re-publishing reconciles the same live-source service. For an app in a subdirectory with its own wrangler config (a monorepo), pass app_dir: that directory, relative to the project. Not for a framework dev server: run that inside the forge.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -280,13 +420,13 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     }
                 }),
                 serde_json::json!({
-                    "name": "service_status",
-                    "description": "Report the state of this project's published local service.",
+                    "name": "preview.status",
+                    "description": "Report the state of this project's local WEB preview (the sibling web container preview.publish started), with its URL and, after a failed publish, last_failure with its remedy. Starts nothing.",
                     "inputSchema": { "type": "object", "properties": {} }
                 }),
                 serde_json::json!({
-                    "name": "service_stop",
-                    "description": "Stop this project's published local service and remove its route.",
+                    "name": "preview.stop",
+                    "description": "Stop this project's local WEB preview container and remove its route. Starts nothing.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -296,8 +436,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     }
                 }),
                 serde_json::json!({
-                    "name": "service_reload",
-                    "description": "Reload the authenticated lane's existing WEB preview runtime. This does not open or refresh a browser. A preview that died is recreated from its recorded profile.",
+                    "name": "preview.reload",
+                    "description": "Reload this lane's existing local WEB preview runtime (restarts the sibling web container from its recorded profile; a preview that died is recreated). Does not open or refresh a browser: use browser.open for that.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -308,8 +448,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 }),
                 // 1723-2fiq: after the pinned lifecycle four.
                 serde_json::json!({
-                    "name": "service_logs",
-                    "description": "Read the last lines of this lane's WEB preview output (its server's stdout and stderr), with its state and exit code. Use it when service_status says the preview is not serving.",
+                    "name": "preview.logs",
+                    "description": "Read the last lines of this lane's local WEB preview output (its server's stdout and stderr), with its state and exit code. Use it when preview.status says the preview is not serving. Starts nothing.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -323,8 +463,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 // (whose order is pinned). Prepare never blocks: the
                 // forge's `flutter` shim polls it and shows the progress.
                 serde_json::json!({
-                    "name": "toolchain_prepare",
-                    "description": "Prepare an opt-in toolchain for this lane (one time: builds the shared image). Never blocks: returns state ready, preparing (with retry_after_s, and while it builds the step and elapsed seconds) or failed. Preparing is not an error: call again after retry_after_s. force: true rebuilds an image whose last build failed now. The forge's `flutter` command calls this for you.",
+                    "name": "toolchain.prepare",
+                    "description": "Prepare an opt-in toolchain for this lane. STARTS a one-time build of the shared toolchain image (flutter) beside the forge. Never blocks: returns state ready, preparing (with retry_after_s, and while it builds the step and elapsed seconds) or failed. Preparing is not an error: call again after retry_after_s. force: true rebuilds an image whose last build failed now. The forge's `flutter` command calls this for you.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -340,8 +480,17 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::imagegen_tool::descriptor());
             // 1956-x7xp: the headless studio workflow runner, beside it.
             tools.push(crate::studio_tool::descriptor());
+            // 2002-stjb: the same run as a ticket, and its status.
+            tools.push(crate::studio_jobs::queue_descriptor());
+            tools.push(crate::studio_jobs::status_descriptor());
+            // 1986-snpx: the read-only model listing beside it.
+            tools.push(crate::studio_tool::models_descriptor());
+            // 1969-cfyt: the studio appliance, started on demand.
+            tools.extend(crate::imagegen_studio::tool_descriptors());
             // 1956-26qh: the GPU-free family contract checker, beside it.
             tools.push(validate_family_descriptor());
+            // 1957-emar: the GPU arbiter's status and unload, beside them.
+            tools.extend(crate::gpu_queue::tool_descriptors());
             // 1959-xsy5 (D12): the GPU-free pixel finish, beside it.
             tools.push(crate::pixel_finish::descriptor());
             // 1959-xsy5 (D13): the review contact sheet, beside it.
@@ -357,13 +506,56 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // family (both lists above are pinned).
             #[cfg(feature = "vault")]
             tools.extend(crate::cloudflare_mcp::tool_descriptors());
-            // 1860-auhm: the studio co-edit tools, last (every list above is pinned).
+            // 1966-47vt: cloud.usage, right after the cloudflare.* family.
+            #[cfg(feature = "vault")]
+            tools.push(crate::cloud_usage::descriptor());
+            // 1860-auhm: the web-studio co-edit tools (webstudio.*, 1969-7qm7).
             tools.extend(crate::studio::tool_descriptors());
+            // 1969-7qm7: the index tool, then the deprecated flat aliases last.
+            tools.push(crate::host_tools::index_descriptor());
+            // 2003-stbf: whether this lane runs the installed build.
+            tools.push(serde_json::json!({
+                "name": LANE_VERSION_TOOL,
+                "description": "Whether the lane serving this forge runs the installed Tillandsias \
+                    build: current, stale (naming both versions; the forge's tools keep the old \
+                    code until it is relaunched) or unknown. Reports only; restarts nothing.",
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}
+            }));
+            let tools = crate::host_tools::with_deprecated_aliases(tools);
             serde_json::json!({ "result": { "tools": tools } })
         }
         "tools/call" => {
-            let tool_name = req["params"]["name"].as_str().unwrap_or("");
+            // 1969-7qm7: a deprecated flat alias runs exactly as its canonical
+            // name; the dispatcher below only ever sees canonical names.
+            let tool_name =
+                crate::host_tools::canonical(req["params"]["name"].as_str().unwrap_or(""));
             let args = req["params"]["arguments"].as_object();
+
+            // 2003-stbf: does the lane serving this forge run the installed build?
+            if tool_name == LANE_VERSION_TOOL {
+                let mut resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": tillandsias_browser_mcp::framing::tool_result_content(
+                        lane_freshness(build_identity(), installed_build_identity().as_deref())
+                    )
+                });
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
+            if tool_name == crate::host_tools::INDEX_TOOL {
+                let mut resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": tillandsias_browser_mcp::framing::tool_result_content(
+                        crate::host_tools::index_result()
+                    )
+                });
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
 
             // Order 779-3trn: the browser family is served by the composed
             // BrowserMcpServer, whose project label came from the accepting
@@ -389,6 +581,24 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             // 1772-irs3: served by this process with the operator's stored
             // Cloudflare sign-in; the forge only names the tool. Nothing in
             // the request chooses the account, method or path.
+            // 1966-47vt: cloud.usage reads the Vault-stored GitHub App and
+            // Cloudflare tokens here, host-side; the forge only names it.
+            #[cfg(feature = "vault")]
+            if tool_name == crate::cloud_usage::TOOL_NAME {
+                let body = match crate::cloud_usage::call_live(args, debug) {
+                    Ok(result) => serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                    }),
+                    Err(e) => return Some(mcp_error(req, e)),
+                };
+                let mut resp = body;
+                resp["jsonrpc"] = serde_json::json!("2.0");
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
+
             #[cfg(feature = "vault")]
             if tool_name.starts_with("cloudflare.") {
                 let body = match crate::cloudflare_mcp::call_live(tool_name, args, debug) {
@@ -427,7 +637,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             }
 
             match tool_name {
-                "publish_local" => {
+                "preview.publish" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -435,7 +645,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for local publish"),
+                            format!("Category {category} is not supported for preview.publish"),
                         ));
                     }
                     let runtime = match preview_runtime(args) {
@@ -493,6 +703,137 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             emit(line);
                         }
                     }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 2002-stjb: queue a run as a job; read its ticket.
+                "studio.queue_workflow" | "studio.job_status" => {
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    let out = if tool_name == "studio.queue_workflow" {
+                        crate::studio_jobs::queue(project_label, instance, arguments)
+                    } else {
+                        crate::studio_jobs::status(project_label, instance, arguments)
+                    };
+                    match out {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 1969-cfyt: the forge agent starts the studio on demand.
+                "studio.start" => {
+                    let version = crate::VERSION.trim();
+                    match crate::imagegen_studio::start_on_demand(
+                        project_label,
+                        &|| crate::imagegen_studio::is_running(project_label),
+                        &mut || {
+                            let client = tillandsias_podman::PodmanClient::new();
+                            let plan = crate::imagegen_studio::plan_explicit(
+                                &tillandsias_core::cache_root::cache_root(),
+                            );
+                            rt.block_on(crate::imagegen_studio::start(
+                                &client,
+                                &plan,
+                                project_label,
+                                version,
+                                debug,
+                            ))
+                        },
+                        &|| crate::imagegen_studio::probe_listening(project_label),
+                    )
+                    .and_then(|mut result| {
+                        // 1985-stdu: already running: connect this forge
+                        // and refresh the window route.
+                        if result["started"] == false {
+                            crate::imagegen_studio::reattach(project_label, debug)?;
+                        }
+                        result["window_url"] =
+                            serde_json::json!(crate::imagegen_studio::window_url(project_label));
+                        Ok(result)
+                    }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "studio.models" => {
+                    let engine = crate::studio_tool::HttpStudio::for_this_host(project_label).ok();
+                    let listing = crate::studio_tool::models_listing(
+                        &crate::imagegen_models::models_dir(),
+                        engine
+                            .as_ref()
+                            .map(|e| e as &dyn crate::studio_tool::StudioEngine),
+                    );
+                    serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(listing)
+                    })
+                }
+                // 1987-smnt: a fresh container reads the tray's current folder map.
+                "studio.restart" => {
+                    crate::imagegen_studio::stop(project_label);
+                    let version = crate::VERSION.trim();
+                    let client = tillandsias_podman::PodmanClient::new();
+                    let plan = crate::imagegen_studio::plan_explicit(
+                        &tillandsias_core::cache_root::cache_root(),
+                    );
+                    match rt
+                        .block_on(crate::imagegen_studio::start(
+                            &client,
+                            &plan,
+                            project_label,
+                            version,
+                            debug,
+                        ))
+                        .and_then(|()| {
+                            // 1990-stry: answer once ComfyUI listens again.
+                            crate::imagegen_studio::wait_until_listening(
+                                project_label,
+                                &|| crate::imagegen_studio::probe_listening(project_label),
+                                crate::imagegen_studio::LISTEN_BUDGET,
+                                crate::imagegen_studio::LISTEN_POLL,
+                            )
+                        })
+                        .map(|_| {
+                            let mut v = crate::imagegen_studio::status_json(
+                                project_label,
+                                crate::imagegen_studio::is_running(project_label),
+                            );
+                            v["restarted"] = serde_json::json!(true);
+                            v
+                        }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": format!("studio_restart_failed: {e}") }
+                        }),
+                    }
+                }
+                "studio.status" => {
+                    let running = crate::imagegen_studio::is_running(project_label);
+                    serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(
+                            crate::imagegen_studio::status_json(project_label, running)
+                        )
+                    })
+                }
+                // 1957-emar: GPU status and an unload routed through the arbiter.
+                "gpu.status" | "gpu.unload_model" => {
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    match crate::gpu_queue::call_tool(tool_name, arguments).expect("a gpu tool") {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
@@ -569,12 +910,12 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "toolchain_prepare" => serde_json::json!({
+                "toolchain.prepare" => serde_json::json!({
                     "result": tillandsias_browser_mcp::framing::tool_result_content(
                         crate::toolchain_exec::prepare(&req["params"]["arguments"], debug)
                     )
                 }),
-                "service_status" => {
+                "preview.status" => {
                     match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
@@ -584,7 +925,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "service_stop" => {
+                "preview.stop" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -592,7 +933,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for service_stop"),
+                            format!("Category {category} is not supported for preview.stop"),
                         ));
                     }
                     match rt.block_on(crate::local_web_preview::stop(
@@ -608,7 +949,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "service_reload" => {
+                "preview.reload" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -616,7 +957,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for service_reload"),
+                            format!("Category {category} is not supported for preview.reload"),
                         ));
                     }
                     match rt.block_on(crate::local_web_preview::reload(
@@ -632,7 +973,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                "service_logs" => {
+                "preview.logs" => {
                     let category = match web_category(args) {
                         Ok(category) => category,
                         Err(message) => return Some(mcp_error(req, message)),
@@ -640,7 +981,7 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                     if category != "WEB" {
                         return Some(mcp_error(
                             req,
-                            format!("Category {category} is not supported for service_logs"),
+                            format!("Category {category} is not supported for preview.logs"),
                         ));
                     }
                     let lines = args
@@ -818,6 +1159,35 @@ pub(crate) fn validate_family_in_lane(
     }))
 }
 
+/// ORDER 1971-mcpu: run one request's dispatch so a panic in any tool
+/// becomes that call's `tool_panicked` error. Before this, a panic unwound the
+/// connection thread and the forge lost every host tool ("Connection closed").
+pub(crate) fn dispatch_guarded(
+    req: &serde_json::Value,
+    dispatch: impl FnOnce() -> Option<serde_json::Value>,
+) -> Option<serde_json::Value> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(dispatch)) {
+        Ok(resp) => resp,
+        Err(payload) => {
+            let what = payload
+                .downcast_ref::<&str>()
+                .map(|s| (*s).to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "non-string panic payload".into());
+            let tool = req["params"]["name"].as_str().unwrap_or("");
+            warn!(spec = "mcp-tool-socket", tool, panic = %what, "tool panicked; answered with a typed error");
+            // A notification has no id and gets no reply, panic or not.
+            req.get("id")?;
+            Some(mcp_error(
+                req,
+                format!(
+                    "tool_panicked: {tool} failed inside the host ({what}); the connection stays open"
+                ),
+            ))
+        }
+    }
+}
+
 pub(crate) fn mcp_error(req: &serde_json::Value, message: String) -> serde_json::Value {
     serde_json::json!({
         "jsonrpc": "2.0",
@@ -949,6 +1319,10 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         )),
         false,
     );
+    // 1990-mcpq: shared by the per-call threads below, under one gate.
+    let browser = std::sync::Arc::new(browser);
+    let rt = std::sync::Arc::new(rt);
+    let gate = CallGate::new(MAX_CONCURRENT_CALLS);
     // Order 1655-urz9 + 776-jcf3 (operator, 2026-10-24): browser.open with no
     // device names desktop. The per-project `[browser] device` used to be read
     // from the host checkout's `.tillandsias/config.toml`; there is no host
@@ -1041,16 +1415,62 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 );
                 return;
             }
-            Ok(req) => handle_mcp_jsonrpc_streaming(
-                &project_label,
-                &identity.instance,
-                &req,
-                &browser,
-                &rt,
-                &mut |line| {
-                    let _ = write_line(&cap_response_line(&line));
-                },
-            ),
+            // 1971-mcpu: a panic inside one tool answers that call with a
+            // typed error; it never closes the lane's connection.
+            // 1990-mcpq: a tools/call runs on its own thread, so a long
+            // one (a studio workflow) never holds back the next call on
+            // this connection (kumbia: browser.open waited >120 s). Replies
+            // go out through the one shared writer, matched by id.
+            Ok(req) if req["method"] == "tools/call" => {
+                let (browser, rt, shared) = (browser.clone(), rt.clone(), shared.clone());
+                let (label, instance) = (project_label.clone(), identity.instance.clone());
+                let id = req.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                // Backpressure: wait here (reading no more lines) while
+                // MAX_CONCURRENT_CALLS run.
+                let slot = gate.enter();
+                let spawned =
+                    std::thread::Builder::new()
+                        .name("mcp-call".into())
+                        .spawn(move || {
+                            let _slot = slot;
+                            let write = |line: &str| {
+                                let mut w = shared.lock().unwrap_or_else(|p| p.into_inner());
+                                let _ = w.write_all(format!("{line}\n").as_bytes());
+                            };
+                            let resp = dispatch_guarded(&req, || {
+                                handle_mcp_jsonrpc_streaming(
+                                    &label,
+                                    &instance,
+                                    &req,
+                                    &browser,
+                                    &rt,
+                                    &mut |line| write(&cap_response_line(&line)),
+                                )
+                            });
+                            if let Some(resp) = resp {
+                                write(&cap_response_line(&resp));
+                            }
+                        });
+                match spawned {
+                    Ok(_) => None,
+                    Err(e) => Some(mcp_error(
+                        &serde_json::json!({ "id": id }),
+                        format!("could not start a call thread: {e}"),
+                    )),
+                }
+            }
+            Ok(req) => dispatch_guarded(&req, || {
+                handle_mcp_jsonrpc_streaming(
+                    &project_label,
+                    &identity.instance,
+                    &req,
+                    &browser,
+                    &rt,
+                    &mut |line| {
+                        let _ = write_line(&cap_response_line(&line));
+                    },
+                )
+            }),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -1074,6 +1494,53 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 return;
             }
         }
+    }
+}
+
+/// ORDER 1990-mcpq: at most this many tools/call run at once on ONE
+/// connection. The read loop waits for a slot before starting the next call
+/// (backpressure, never a refusal), so a client cannot spawn without bound.
+pub(crate) const MAX_CONCURRENT_CALLS: usize = 8;
+
+/// The per-connection call gate: `enter` blocks while `max` calls run.
+pub(crate) struct CallGate {
+    running: std::sync::Mutex<usize>,
+    freed: std::sync::Condvar,
+    max: usize,
+}
+
+impl CallGate {
+    pub(crate) fn new(max: usize) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(CallGate {
+            running: std::sync::Mutex::new(0),
+            freed: std::sync::Condvar::new(),
+            max,
+        })
+    }
+
+    /// Wait for a slot; the returned guard frees it when dropped.
+    pub(crate) fn enter(self: &std::sync::Arc<Self>) -> CallSlot {
+        let mut n = self.running.lock().unwrap_or_else(|p| p.into_inner());
+        while *n >= self.max {
+            n = self.freed.wait(n).unwrap_or_else(|p| p.into_inner());
+        }
+        *n += 1;
+        CallSlot(self.clone())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn running(&self) -> usize {
+        *self.running.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+pub(crate) struct CallSlot(std::sync::Arc<CallGate>);
+
+impl Drop for CallSlot {
+    fn drop(&mut self) {
+        let mut n = self.0.running.lock().unwrap_or_else(|p| p.into_inner());
+        *n -= 1;
+        self.0.freed.notify_one();
     }
 }
 
@@ -1167,7 +1634,7 @@ pub(crate) const LANE_TRAY_MARKER: &str = "tray-owned";
 pub(crate) const LANE_ADOPT_TICK: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Hand lane `(project, instance)` to the tray (see [`LANE_TRAY_MARKER`]).
-#[cfg_attr(any(test, not(feature = "host-services")), allow(dead_code))]
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), String> {
     let dir = mcp_socket_host_dir_for_lane(project, instance);
     fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {e}", dir.display()))?;
@@ -1176,6 +1643,29 @@ pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), 
         .map_err(|e| format!("failed to write {}: {e}", marker.display()))?;
     let _ = fs::set_permissions(&marker, fs::Permissions::from_mode(0o600));
     Ok(())
+}
+
+/// ORDER 1988-trkp: before a keep-forges exit, hand every lane this process
+/// serves to the next tray (the marker its adoption tick binds). Returns the
+/// lanes marked.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn mark_served_lanes_for_adoption() -> Vec<LaneListenerKey> {
+    let lanes: Vec<LaneListenerKey> = lane_listener_registry()
+        .lock()
+        .expect("lane registry lock")
+        .iter()
+        .cloned()
+        .collect();
+    lanes
+        .into_iter()
+        .filter(|(p, i)| match mark_lane_tray_owned(p, i) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(project = %p, instance = %i, error = %e, "1988-trkp: could not mark lane for adoption");
+                false
+            }
+        })
+        .collect()
 }
 
 fn lane_instance(instance: &str) -> &str {
@@ -1199,7 +1689,9 @@ pub(crate) fn build_identity() -> &'static str {
     static ID: OnceLock<String> = OnceLock::new();
     ID.get_or_init(|| {
         use sha2::{Digest, Sha256};
-        let digest = env::current_exe()
+        // 1984-pexe: /proc/self/exe reads the RUNNING build even after an
+        // upgrade replaced its file (current_exe then names "… (deleted)").
+        let digest = crate::self_exe::for_spawn()
             .and_then(fs::read)
             .map(|bytes| {
                 let hash = Sha256::digest(&bytes);
@@ -1211,6 +1703,110 @@ pub(crate) fn build_identity() -> &'static str {
             .unwrap_or_else(|_| "unknown".to_owned());
         format!("{}+{digest}", crate::VERSION.trim())
     })
+}
+
+/// ORDER 2003-stbf: the tool a forge agent calls to learn whether the lane
+/// serving it runs the installed build.
+pub(crate) const LANE_VERSION_TOOL: &str = "tillandsias.lane_version";
+
+fn digest8(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .take(8)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The version an installed binary's `--version` prints (`Tillandsias v<ver>`).
+pub(crate) fn parse_version_line(out: &str) -> Option<String> {
+    let v = out
+        .lines()
+        .next()?
+        .trim()
+        .strip_prefix("Tillandsias v")?
+        .trim();
+    (!v.is_empty()
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || ".-+".contains(c)))
+    .then(|| v.to_string())
+}
+
+/// ORDER 2003-stbf: the INSTALLED binary's identity, in [`build_identity`]'s
+/// `<version>+<digest>` form: the file now at this program's installed path
+/// (an upgrade replaces it under a running lane) and what its `--version`
+/// prints. `None` when either cannot be read.
+pub(crate) fn installed_build_identity() -> Option<String> {
+    let path = crate::self_exe::for_other_process().ok()?;
+    let bytes = fs::read(&path).ok()?;
+    let out = std::process::Command::new(&path)
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    let version = parse_version_line(&String::from_utf8_lossy(&out.stdout))?;
+    Some(format!("{version}+{}", digest8(&bytes)))
+}
+
+/// ORDER 2003-stbf: is a lane running `running` (a build id) current against
+/// the installed build? Report only: a forge may hold live work, so nothing is
+/// restarted. An unreadable installed build, or a lane that cannot name its
+/// own, is `unknown`, never `current`.
+pub(crate) fn lane_freshness(running: &str, installed: Option<&str>) -> serde_json::Value {
+    let version = |id: &str| id.split('+').next().unwrap_or(id).to_string();
+    match installed {
+        None => serde_json::json!({
+            "status": "unknown",
+            "lane": running,
+            "installed": null,
+            "why": "the installed binary could not be read, so this lane cannot be called current",
+        }),
+        Some(_) if running.ends_with("+unknown") || running.starts_with("unanswered") => {
+            serde_json::json!({
+                "status": "unknown",
+                "lane": running,
+                "installed": installed,
+                "why": "the lane did not name its own build",
+            })
+        }
+        Some(inst) if inst == running => serde_json::json!({
+            "status": "current",
+            "lane": running,
+            "installed": inst,
+        }),
+        Some(inst) => serde_json::json!({
+            "status": "stale",
+            "lane": running,
+            "installed": inst,
+            "lane_version": version(running),
+            "installed_version": version(inst),
+            "why": format!(
+                "this lane runs {} but {} is installed; its tools keep the old code until the \
+                 forge is relaunched (tillandsias <project>). Nothing is restarted automatically: \
+                 the forge may hold live work.",
+                version(running),
+                version(inst)
+            ),
+        }),
+    }
+}
+
+/// ORDER 2003-stbf: every lane socket on this host, by lane directory name.
+pub(crate) fn lane_sockets() -> Vec<(String, std::path::PathBuf)> {
+    let root = crate::control_socket_host_dir().join("mcp");
+    let mut out: Vec<(String, std::path::PathBuf)> = fs::read_dir(&root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let sock = e.path().join("mcp.sock");
+            sock.exists()
+                .then(|| (e.file_name().to_string_lossy().into_owned(), sock))
+        })
+        .collect();
+    out.sort();
+    out
 }
 
 /// 1961-8ats: what the process answering on `socket` says it is, read from
@@ -1817,8 +2413,9 @@ mod lane_adoption_tests {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
         drop(UnixListener::bind(&path).unwrap());
+        // 1980-lsrc: a parallel test's fork may hold the listener until exec.
         assert!(
-            matches!(UnixStream::connect(&path), Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused),
+            wait_until_refused(&path),
             "the fixture must reproduce the refusing socket"
         );
         path
@@ -2060,6 +2657,7 @@ mod image_generate_fixtures {
                     .map_err(|e| e.to_string())?;
             }
             Ok(EngineOut {
+                timings: Default::default(),
                 backend: "vulkan".into(),
                 first_use: false,
             })
@@ -2177,6 +2775,7 @@ mod image_generate_fixtures {
             .join(crate::imagegen_tool::lane_volume("kkrc-proj", "a"))
             .join(path.rsplit('/').next().unwrap());
         assert!(host.is_file(), "{}", host.display());
+        crate::imagegen_tool::flush_thumbnails();
         let thumb = r["thumbnail_path"].as_str().unwrap();
         let thumb_host = scratch
             .path()
@@ -2198,6 +2797,112 @@ mod image_generate_fixtures {
         assert_eq!(lines[0]["method"], "notifications/progress");
         assert_eq!(lines[0]["params"]["progressToken"], "t1");
         assert_eq!(lines[2]["params"]["progress"], 3.0);
+    }
+
+    /// ORDER 1971-mcpu: the Kumbia trial's first ControlNet call (I1,
+    /// openpose, a LoRA, 768x960, count 2) closed the whole lane connection.
+    /// Through the real dispatcher with a stub engine, it must answer.
+    #[test]
+    fn image_generate_with_control_net_and_lora_answers() {
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        install_seam(Some(Seam {
+            engine: std::sync::Arc::new(Stub),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I1".into(),
+            present: Some(vec!["I0".into(), "I1".into()]),
+        }));
+        let vol = scratch
+            .path()
+            .join(crate::imagegen_tool::lane_volume("mcpu-proj", "a"))
+            .join("kumbia");
+        std::fs::create_dir_all(&vol).unwrap();
+        image::RgbImage::new(768, 960)
+            .save(vol.join("smoke.pose.png"))
+            .unwrap();
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("mcpu-proj", "a", None, true);
+        let req = serde_json::json!({
+            "jsonrpc":"2.0","id":3,"method":"tools/call",
+            "params":{"name":"image.generate","arguments":{
+                "prompt":"a fighter, pixel art","tier":"I1","control_net":"openpose",
+                "control_image":"/work/tmp/imagegen/kumbia/smoke.pose.png",
+                "loras":[{"name":"pixel-art-xl","weight":0.8}],
+                "width":768,"height":960,"seed":930000,"count":2}}
+        });
+        let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            handle_mcp_jsonrpc("mcpu-proj", "a", &req, &browser, &rt)
+        }));
+        install_seam(None);
+        let reply = got
+            .expect("image.generate with control_net panicked")
+            .unwrap();
+        assert_eq!(reply["id"], 3, "{reply}");
+        assert!(reply["error"].is_null(), "{reply}");
+    }
+
+    struct Panics;
+    impl Engine for Panics {
+        fn generate(
+            &self,
+            _: &Job,
+            _: &Path,
+            _: &[String],
+            _: &mut dyn FnMut(Progress),
+        ) -> Result<EngineOut, String> {
+            panic!("models.tsv role controlnet:openpose has no sd-cli flag");
+        }
+    }
+
+    /// ORDER 1971-mcpu: a tool that panics answers its own call with a typed
+    /// `tool_panicked` error, and the next call on the same path still works.
+    /// Pre-fix: the panic unwound the connection thread (dispatch_guarded
+    /// did not exist; the lane lost all 40 host tools).
+    #[test]
+    fn a_panicking_tool_answers_with_a_typed_error_and_the_next_call_works() {
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        let seam = |engine: std::sync::Arc<dyn Engine>| Seam {
+            engine,
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I0".into(),
+            present: Some(vec!["I0".into()]),
+        };
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("guard-proj", "a", None, true);
+        let call = |id: u64| {
+            serde_json::json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+                "params":{"name":"image.generate","arguments":{"prompt":"x","seed":1}}})
+        };
+
+        install_seam(Some(seam(std::sync::Arc::new(Panics))));
+        let req = call(7);
+        let reply = dispatch_guarded(&req, || {
+            handle_mcp_jsonrpc("guard-proj", "a", &req, &browser, &rt)
+        })
+        .expect("a call with an id is answered");
+        assert_eq!(reply["id"], 7, "{reply}");
+        let msg = reply["error"]["message"].as_str().unwrap_or("");
+        assert!(
+            msg.starts_with("tool_panicked: image.generate") && msg.contains("controlnet:openpose"),
+            "{reply}"
+        );
+
+        install_seam(Some(seam(std::sync::Arc::new(Stub))));
+        let req = call(8);
+        let reply = dispatch_guarded(&req, || {
+            handle_mcp_jsonrpc("guard-proj", "a", &req, &browser, &rt)
+        })
+        .unwrap();
+        install_seam(None);
+        assert!(reply["error"].is_null(), "the next call works: {reply}");
+        assert_eq!(reply["id"], 8);
     }
 }
 
@@ -2255,5 +2960,232 @@ fn live_image_generate_through_the_lane_socket() {
         eprintln!("host file: {}", host.display());
         assert!(host.is_file());
         break;
+    }
+}
+
+/// Order 1969-7qm7: the grouped host tool surface. A deprecated flat name
+/// behaves exactly as its namespaced canonical name, every description says
+/// what the tool starts, and the `initialize` reply carries the grouped index.
+#[cfg(test)]
+mod host_tool_discovery_fixtures {
+    use super::*;
+
+    fn list(
+        browser: &tillandsias_browser_mcp::BrowserMcpServer,
+        rt: &tokio::runtime::Runtime,
+    ) -> Vec<serde_json::Value> {
+        handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}),
+            browser,
+            rt,
+        )
+        .unwrap()["result"]["tools"]
+            .as_array()
+            .cloned()
+            .unwrap()
+    }
+
+    #[test]
+    fn initialize_carries_the_grouped_index_as_instructions() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        let init = handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}),
+            &browser,
+            &rt,
+        )
+        .unwrap();
+        let text = init["result"]["instructions"]
+            .as_str()
+            .expect("instructions");
+        assert_eq!(text, crate::host_tools::instructions());
+        for prefix in [
+            "preview.*",
+            "image.*",
+            "studio.*",
+            "browser.*",
+            "webstudio.*",
+        ] {
+            assert!(text.contains(prefix), "{prefix}");
+        }
+    }
+
+    #[test]
+    fn every_renamed_tool_is_listed_under_both_names_with_one_schema() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        let tools = list(&browser, &rt);
+        for (canonical, alias) in crate::host_tools::RENAMED {
+            let c = tools
+                .iter()
+                .find(|t| t["name"] == *canonical)
+                .unwrap_or_else(|| panic!("{canonical} listed"));
+            let a = tools
+                .iter()
+                .find(|t| t["name"] == *alias)
+                .unwrap_or_else(|| panic!("{alias} listed"));
+            assert_eq!(
+                c["inputSchema"], a["inputSchema"],
+                "{alias} keeps {canonical}'s schema"
+            );
+            let d = a["description"].as_str().unwrap();
+            assert!(
+                d.starts_with(&format!("Deprecated alias of {canonical}")),
+                "{d}"
+            );
+            assert!(
+                !c["description"].as_str().unwrap().contains("Deprecated"),
+                "{canonical}"
+            );
+        }
+        let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+        let mut seen = std::collections::BTreeSet::new();
+        for n in &names {
+            assert!(seen.insert(*n), "{n} listed twice: {names:?}");
+        }
+    }
+
+    #[test]
+    fn descriptions_name_what_each_host_tool_starts() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        let tools = list(&browser, &rt);
+        let desc = |name: &str| -> String {
+            tools
+                .iter()
+                .find(|t| t["name"] == name)
+                .unwrap_or_else(|| panic!("{name}"))["description"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+        assert!(desc("preview.publish").contains("STARTS a sibling web container"));
+        assert!(
+            desc("toolchain.prepare")
+                .contains("STARTS a one-time build of the shared toolchain image")
+        );
+        assert!(desc("image.generate").contains("locally on this computer"));
+        assert!(desc("studio.run_workflow").contains("studio container"));
+        assert!(desc("webstudio.open").contains("starts nothing from the lane"));
+        assert!(desc("webstudio.options").contains("Not the ComfyUI image studio"));
+        for n in [
+            "preview.status",
+            "preview.stop",
+            "preview.logs",
+            "webstudio.changes",
+            "webstudio.publish_request",
+            crate::host_tools::INDEX_TOOL,
+        ] {
+            assert!(
+                desc(n).to_lowercase().contains("starts nothing"),
+                "{n}: {}",
+                desc(n)
+            );
+        }
+    }
+
+    #[test]
+    fn a_deprecated_alias_dispatches_exactly_as_its_canonical_name() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server("p", "default", None, true);
+        // preview.stop and preview.reload refuse a non-WEB category BEFORE any
+        // host side effect, so the refusal text is the behaviour to compare.
+        for (canonical, alias) in [
+            ("preview.stop", "service_stop"),
+            ("preview.reload", "service_reload"),
+            ("preview.logs", "service_logs"),
+            ("preview.publish", "publish_local"),
+        ] {
+            let call = |name: &str| {
+                handle_mcp_jsonrpc(
+                    "p",
+                    "default",
+                    &serde_json::json!({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":name,"arguments":{"category":"API"}}}),
+                    &browser,
+                    &rt,
+                )
+                .unwrap()
+            };
+            let (c, a) = (call(canonical), call(alias));
+            assert_eq!(c, a, "{alias} and {canonical} answer identically");
+            assert_eq!(c["id"], 9);
+            assert!(
+                c["error"]["message"].as_str().unwrap().contains(canonical),
+                "{c}"
+            );
+        }
+        // The index tool answers under its own name, and an unknown name is
+        // still unknown (the alias table rewrites only its own rows).
+        let idx = handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":crate::host_tools::INDEX_TOOL,"arguments":{}}}),
+            &browser,
+            &rt,
+        )
+        .unwrap();
+        let text = idx["result"]["content"][0]["text"].as_str().unwrap();
+        let payload: serde_json::Value = serde_json::from_str(text).unwrap();
+        assert_eq!(
+            payload["deprecated_aliases"].as_array().unwrap().len(),
+            crate::host_tools::RENAMED.len()
+        );
+        let unknown = handle_mcp_jsonrpc(
+            "p",
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"publish.local","arguments":{}}}),
+            &browser,
+            &rt,
+        )
+        .unwrap();
+        assert_eq!(unknown["error"]["code"], -32601);
+    }
+}
+
+#[cfg(test)]
+mod lane_freshness_tests {
+    use super::*;
+
+    /// 2003-stbf: a lane is current only when its build matches the
+    /// installed one; a different installed build is stale, naming both
+    /// versions; an unreadable installed build or a lane that cannot name its
+    /// own is unknown, never current. Pre-fix: FAILS, nothing compared them.
+    #[test]
+    fn a_lane_reports_current_stale_or_unknown_against_the_installed_build() {
+        let cur = lane_freshness("56.11.6.1+aaaa", Some("56.11.6.1+aaaa"));
+        assert_eq!(cur["status"], "current");
+        let stale = lane_freshness("56.11.4.1+bbbb", Some("56.11.6.1+aaaa"));
+        assert_eq!(stale["status"], "stale");
+        assert_eq!(stale["lane_version"], "56.11.4.1");
+        assert_eq!(stale["installed_version"], "56.11.6.1");
+        let why = stale["why"].as_str().unwrap();
+        assert!(
+            why.contains("56.11.4.1") && why.contains("56.11.6.1") && why.contains("relaunched"),
+            "{why}"
+        );
+        // A rebuild at the same version is still a different build.
+        assert_eq!(
+            lane_freshness("56.11.6.1+bbbb", Some("56.11.6.1+aaaa"))["status"],
+            "stale"
+        );
+        assert_eq!(lane_freshness("56.11.6.1+aaaa", None)["status"], "unknown");
+        assert_eq!(
+            lane_freshness("56.11.6.1+unknown", Some("56.11.6.1+unknown"))["status"],
+            "unknown"
+        );
+        assert_eq!(
+            lane_freshness("unanswered (refused)", Some("56.11.6.1+aaaa"))["status"],
+            "unknown"
+        );
+        assert_eq!(
+            parse_version_line("Tillandsias v56.10.26.2\n").as_deref(),
+            Some("56.10.26.2")
+        );
+        assert_eq!(parse_version_line("something else"), None);
+        assert_eq!(parse_version_line("Tillandsias v$(rm -rf)"), None);
     }
 }

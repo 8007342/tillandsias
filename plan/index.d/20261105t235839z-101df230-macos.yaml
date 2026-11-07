@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-warm-layer-is-committed-and-preferred
+    event:
+      type: progress
+      ts: "2026-11-05T23:58:39Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        1918-wfrg PREMISE CHECK before building (tlatoanis-macbook-air, guest 8 vCPU / 8 GiB, v56.11.4.1 installed). Source reads: install_archive is gone from Containerfile.base (litmus-forge-firstrun-prebuilt-tools-arch-shape pins it); the first-run tools install through install_prebuilt / ensure_forge_prebuilt_tools in images/default/lib-common.sh into the persistent CARGO_HOME volume, backgrounded and skipped when present, so a VERSION bump does not reinstall them. A content-unchanged bump already takes ImageBuildAction::Retag (forge_image_tag is per VERSION; images also carry a sha256-<source-digest> tag). Guest measurements: after the v56.11.4.1 bump the images were REBUILT because their source digest changed (forge-base created 07:56:54Z, forge 07:57:30Z, 36 s apart on 2026-11-04); a warm launch on 2026-11-05 went container create 08:17:09.19 -> start 08:17:09.43 -> first entrypoint exec 08:17:20.3 (about 11 s of entrypoint). Exit criterion 1 ("no install_archive") is already true; the open question is what a post-bump image rebuild costs end to end, which the 1915-brst image-ensure line measures on the next release. Asked the coordinator to re-scope before code.

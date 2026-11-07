@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned (taking yoga's deferred image stamp from 1920-lnch while yoga is offline).
+packets:
+- packet_id: a-warm-launch-skips-the-ensure-helper-for-an-image-its-success-stamp-says-is-current
+  order: 1975-istp
+  status: in_progress
+  kind: perf
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [launch, images, perf]
+  estimated_hours: 3
+  title: A warm launch skips the ensure helper for an image its success stamp says is current
+  context: 'yoga measured (1968-psy9, 1920-lnch notes, 2026-11-03) about 250-300 ms per image outside podman on every warm launch, helper detach plus source hashing, even when every image is current: about 1.5 s over five images. 1920-lnch deferred "the image stamp" without a row. The stamp records the embedded assets digest (every image source and build arg derives from it), the tag and the image id after a successful ensure; a later ensure with the same binary assets, tag and podman-held id returns before the detach. A developer checkout (TILLANDSIAS_ROOT) or a forced retry never trusts a stamp.'
+  exit_criteria:
+  - 'A warm ensure of an image whose stamp is current routes to no helper. Pre-fix result: FAILS, every ensure asked the detach decision and spawned a helper.'
+  - 'A stamp from another binary, another tag, a removed image or a rebuilt image is not current.'
+  - 'Warm-launch pre-launch wall time drops, before and after measured on one host, 3 runs each.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- image_success_stamp; plus the 3+3 run TILLANDSIAS_PODMAN_BIN timeline on one host.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the decision is a Rust unit fixture; the timing needs a live warm launch (1136-n8sh).'
+  related: [1920-lnch, 1968-psy9]
+  next_action: 'Land the stamp; then the 3+3 warm-launch measurement (a CLI lane run on lenovinha needs operator consent per run; yoga can run it when back).'
+  provenance: coordinator macuahuitl-fedora 2026-11-03, from yoga's warm-launch timeline.
+  events:
+  - type: filed
+    ts: '2026-11-03T18:32:50Z'
+    host: lenovinha
+    summary: filed p2 in_progress, claimed by opus5

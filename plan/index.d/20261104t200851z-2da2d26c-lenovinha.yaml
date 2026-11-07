@@ -1,0 +1,19 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-tray-quit-or-restart-keeps-forges-running-and-the-next-tray-adopts-their-lanes-and-stop-all-is-the-explicit-full-stop
+    event:
+      type: note
+      ts: "2026-11-04T20:08:51Z"
+      agent_id: linux-lenovinha-opus5-20261104t200851z
+      host: lenovinha
+      summary: |
+        LIVE PROOF on lenovinha 2026-11-04 (operator-consented, one run), this branch's debug build as the tray. Forge: tillandsias --cloud 8007342/mcp-test --opencode-web. Baseline: forge StartedAt 12:06:35.97 PST; a tools/call gpu.status on its lane socket returned ok. Tray SIGTERM (the Quit path) exited in 2 s and printed "2 lane(s) and their forges keep running"; every container stayed up (vault, proxy, git mirror, inference, router, forge) with the forge StartedAt unchanged. With no tray the socket refused. A relaunched tray adopted the lane within 2 s; the same tool call returned ok, and the forge StartedAt was still 12:06:35.97.
+        SEPARATE FINDING (not this row): the opencode-web CLI exited 1 with "OpenCode Web app did not become reachable with a registered session in 30s" although the forge came up; worth its own row.

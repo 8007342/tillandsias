@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-06, from kumbia-forge reports; written for any project.
+packets:
+- packet_id: agent-worktrees-in-a-forge-start-on-the-session-branch
+  order: 2017-wtbr
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 3
+  title: Sub-agent worktrees in a forge start from the session branch, not main
+  context: 'A forge reported sub-agent worktrees starting on main: two agents said so and fixed it by hand, later ones appear to by their branch tips, and one could not resume after its worktree was removed. Generic forge capability.'
+  exit_criteria:
+  - 'A sub-agent worktree in a forge starts on the session branch, tested with a real worktree.'
+  verifiable_closure: 'The named test, in a real forge where stated.'
+  unscoreable: 'none.'
+  next_action: 'Find whether this is forge configuration or harness behaviour, and report before changing it.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T22:30:00Z', host: macuahuitl, summary: filed p2 ready}
+- packet_id: flutter-runs-from-a-worktree-under-the-project-cache
+  order: 2017-flwt
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 3
+  title: The flutter lane accepts a worktree under the persistent project cache
+  context: 'flutter refuses to run outside the checkout, so worktrees must live on the source tmpfs, which nearly filled in one forge. A project-cache worktree would avoid that. Generic forge capability.'
+  exit_criteria:
+  - 'flutter analyze and test run from a worktree under the project cache, and a path outside the project still gets a named refusal.'
+  verifiable_closure: 'The named test, in a real forge where stated.'
+  unscoreable: 'none.'
+  next_action: 'Read images/default/cli/flutter and why it refuses, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T22:30:00Z', host: macuahuitl, summary: filed p2 ready}
+- packet_id: the-studio-reports-its-queue-depth
+  order: 2017-stqd
+  status: ready
+  kind: bug
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 3
+  title: studio.status reports queue depth, so agents need not poll to learn the wait
+  context: 'With several agents queued, a forge saw 54 to 487 s waits with no way to see depth. Generic forge capability.'
+  exit_criteria:
+  - 'studio.status names running and pending counts, tested against a fixture queue.'
+  verifiable_closure: 'The named test, in a real forge where stated.'
+  unscoreable: 'none.'
+  next_action: 'Read studio.status and the ComfyUI queue endpoint.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T22:30:00Z', host: macuahuitl, summary: filed p3 ready}
+- packet_id: large-mcp-results-go-to-a-file-uniformly
+  order: 2017-mcpr
+  status: ready
+  kind: bug
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 3
+  title: A browser eval over the MCP line limit goes to a file rather than failing
+  context: 'A forge saw browser eval over 4 MiB per line fail with ResponseTooLarge, while smaller large results go to a file. Generic forge capability.'
+  exit_criteria:
+  - 'An eval result above the limit is delivered through the same file path, tested at the boundary.'
+  verifiable_closure: 'The named test, in a real forge where stated.'
+  unscoreable: 'none.'
+  next_action: 'Read the size handling in the host browser tool.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T22:30:00Z', host: macuahuitl, summary: filed p3 ready}
+- packet_id: a-visible-browser-window-animates-before-focus
+  order: 2017-rafc
+  status: ready
+  kind: bug
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 3
+  title: A forge browser window runs animation frames before it has focus
+  context: 'Before a visible window had focus, one forge saw 1 frame in 32 s while visibilityState said visible. A low-priority related note: Web Audio rendered 44.26 s in 45 s under one capture rig, while the clock tracked wall time in the game, so dropped frames and phones stay unmeasured. Generic forge capability.'
+  exit_criteria:
+  - 'A newly opened window reaches normal frame rate without a click, or the tool documents and applies the remedy.'
+  verifiable_closure: 'The named test, in a real forge where stated.'
+  unscoreable: 'none.'
+  next_action: 'Reproduce with a measured frame count first.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T22:30:00Z', host: macuahuitl, summary: filed p3 ready}

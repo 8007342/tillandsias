@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: slice-f-cargo-the-remaining-27-cargo-test-and-37-cargo-other-litmus-commands-share-the-tree-state-cache-so-one-crate-is-tested-or-built-once-per-gate
+    event:
+      type: note
+      ts: "2026-11-03T19:56:08Z"
+      agent_id: linux-lenovinha-opus5-20261103t195608z
+      host: lenovinha
+      summary: |
+        SLICE (f) PART 1, cargo-test=0 (lenovinha, 2026-11-03). The 27 piped cargo-test sites are converted to litmus-decide cargo-test: 26 real sites, plus 1 census false positive in observability-convergence-script-shape, which grepped the text "cargo test" and now drops its pipe. Steps that judge the full tillandsias-plan suite share one cached run. Single-test steps keep their --filter (cheap) and pin the test by name with --require-ok / --min-ok, replacing tail -3 / "test result: ok". plan-engine-invariants-shape step 1 could never fail before (| tail -5, no expected pattern).
+        MEASURED, run-litmus-test.sh <spec> --test litmus:<name> --compact, the 16 affected tests in sequence, same host and tree: BEFORE 504 s, AFTER 168 s. The saving is the tillandsias-plan full-suite steps: citation-frame 97 -> 45 s (the one cache miss), methodology-path 47 -> 4 s, plan-engine-invariants 70 -> 5 s, expert-groundtruth 140 -> 96 s (its other steps). The guest-metrics 58 -> 5 s and host-browser-mcp 62 -> 4 s drops are most likely a warm feature-set compile from the BEFORE pass, not this change.
+        Negative control: a misspelled --require-ok pin is refused:missing-test.
+        LEFT: cargo-other=37. Most are multi-stage fixture scripts where cargo run is one stage, not one cargo verdict, so each needs a per-site decision; next PR.

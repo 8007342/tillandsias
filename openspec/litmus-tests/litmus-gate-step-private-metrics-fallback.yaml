@@ -1,0 +1,36 @@
+# @trace spec:ci-release
+# @trace order:1966-ubsw, order:1204-3s2s, order:1916-tsel
+#
+# #831 (2026-11-01) and #840 (2026-11-02) were evicted on macuahuitl's gate by
+# one id-less record in /tmp/tillandsias-timing.jsonl during two different
+# steps with no other gate live: a host-side writer blamed on whichever step
+# ran. The gate now gives its own tree a private fallback and refuses on growth
+# there; an id-less record in the shared path only warns, quoting the line.
+# Red before 1966-ubsw: the FOREIGN arm is refused with unattributed=1.
+name: litmus:gate-step-private-metrics-fallback
+spec: ci-release
+phase: pre-build
+description: A record another host process writes into the shared timing fallback never evicts a gate step; a step whose children fall back is still refused
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, git; ./build.sh --gate-steps over scratch roots; never writes the host's /tmp timing log
+
+critical_path:
+  - step: "a foreign id-less record warns, a falling-back child refuses through the private fallback, a run-id record still refuses"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-step-private-metrics-fallback.lua 2>&1"
+    timeout_ms: 600000
+    expected_behavior: "ok:gate-step-private-metrics-fallback:6 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "six arms: two FOREIGN, two LEAK, one OURS, one CLEAN"
+  log_fields:
+    spec: "ci-release"
+    test: "gate-step-private-metrics-fallback"
+
+rollback:
+  on_failure: "read the FAIL lines; the private fallback is _gate_fallback_begin in build.sh, honoured by scripts/metrics-log-path.sh, the plan binary's metrics_default_log and cycle-metrics.sh"
+  command: "grep -n 'TILLANDSIAS_METRICS_FALLBACK_DIR' build.sh scripts/metrics-log-path.sh scripts/cycle-metrics.sh crates/tillandsias-plan/src/main.rs"

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli for macuahuitl-fedora, from the macbookair v56.11.3.1 smoke.
+packets:
+  - packet_id: a-release-is-published-only-after-every-platform-asset-is-attached
+    order: 1974-pb7q
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [release, workflow, ci]
+    estimated_hours: 1
+    title: A release is published only after every platform asset is attached
+    context: 'Seen in the macbookair smoke of v56.11.3.1 (run 41637934780): the release workflow created the release object at 13:13:33Z, but the macOS assets arrived at 13:40:06Z. So the prerelease was public for about 27 minutes with no macOS assets. A smoke or curl-install in that window finds a release missing its platform binary.'
+    exit_criteria:
+      - 'For a release cut after the fix, the release published_at is no earlier than its last asset upload (gh api repos/8007342/tillandsias/releases/tags/<tag>: published_at >= max(assets[].updated_at)). Pre-fix result: FAILS on v56.11.3.1 (published 13:13:33Z, the last macOS asset 13:40:06Z).'
+    verifiable_closure: 'gh api repos/8007342/tillandsias/releases/tags/<tag> --jq "[.published_at, ([.assets[].updated_at]|max)]" on the first release cut after the fix.'
+    unscoreable: 'the property is a fact about a published GitHub release (published_at vs last asset upload), observable only after a real cloud release run; no local litmus can score it.'
+    next_action: 'In the release workflow, create the release as a draft (or upload every asset to a draft), then publish it in a final job that needs all the platform jobs to succeed.'
+    provenance: macbookair v56.11.3.1 smoke, relayed by macuahuitl-fedora 2026-11-03.
+    events:
+      - type: filed
+        ts: '2026-11-03T13:50:00Z'
+        host: calmecacpilli
+        summary: filed p2 ready, not blocking

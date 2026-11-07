@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-studio-model-name-that-matches-two-different-pinned-files-is-refused-and-the-pin-table-carries-no-such-collision
+    field: status
+    value: completed
+    ts: "2026-11-06T00:14:40Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-studio-model-name-that-matches-two-different-pinned-files-is-refused-and-the-pin-table-carries-no-such-collision
+    event:
+      type: completed
+      ts: "2026-11-06T00:14:40Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: a3efe017a: land(931) of the work branch into linux-next; PR 931 merged after a green full gate
+  - packet_id: a-studio-model-name-that-matches-two-different-pinned-files-is-refused-and-the-pin-table-carries-no-such-collision
+    event:
+      type: note
+      ts: "2026-11-06T00:14:40Z"
+      host: lenovinha
+      summary: |-
+        PR 931 merged

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-studio-offers-a-pinned-audio-generation-model
+    field: next_action
+    value: 'Implemented (#956, 68872116e): ACE-Step 1.5 XL is pinned (four files, about 19.9 GB), audio node classes are admitted, outputs come back as kind audio with provenance, and tags, seed, bpm and keyscale are set per take with $node overrides. Left: one real studio run on a GPU host producing audio with a provenance record (macuahuitl-fedora, after the install there).'
+    ts: "2026-11-06T14:41:15Z"
+    host: lenovinha
+    replaces_sha256: "b34b2aeb988f9ca964f85ab556997864bbe3cbb9fcb4c1d504123665757452f1"
+
+events:
+  - packet_id: the-studio-offers-a-pinned-audio-generation-model
+    event:
+      type: note
+      ts: "2026-11-06T14:41:15Z"
+      host: lenovinha
+      summary: |-
+        state the live run left

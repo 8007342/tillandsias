@@ -73,7 +73,7 @@
       <summary>Finish by hand (older Tillandsias)</summary>
       <p>Paste this line into the terminal that is running <code>tillandsias --cloudflare-login</code>:</p>
       <output id="line"></output>
-      <button id="copy" type="button">Copy</button>
+      <button id="copy" type="button">Copy</button> <span id="copied" role="status" aria-live="polite"></span>
       <p class="muted">This is a one-time authorization code, not a password or a token. It only works in the terminal
         that started this sign-in, and only once.</p>
     </details>
@@ -105,10 +105,27 @@
   var line = "code=" + code + "&state=" + state;
   document.getElementById("line").textContent = line;
   show("manual");
+  var status = document.getElementById("copied");
+  function selectLine() {
+    var r = document.createRange();
+    r.selectNodeContents(document.getElementById("line"));
+    var sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  function byHand() {
+    selectLine();
+    status.textContent = "Could not copy. The line is selected: press Ctrl+C (Cmd+C on a Mac).";
+  }
   document.getElementById("copy").addEventListener("click", function () {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(line);
+    status.textContent = "";
+    if (!(navigator.clipboard && navigator.clipboard.writeText)) {
+      byHand();
+      return;
     }
+    navigator.clipboard.writeText(line).then(function () {
+      status.textContent = "Copied.";
+    }, byHand);
   });
 })();
 </script>

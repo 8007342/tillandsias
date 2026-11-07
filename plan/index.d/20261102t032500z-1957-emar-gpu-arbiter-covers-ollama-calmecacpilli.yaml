@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli (claude) from the demon_attack-forge image.generate run on macuahuitl, 2026-11-02 ~03:20Z.
+#
+# Evidence the row cites: ollama kept qwen2.5:14b resident at 22.2 GB of the A5000's
+# 24 GB (32k ctx); image.generate I1 failed "model manager memory on Vulkan0: reported
+# free 1179 MB ... need 1343.65 MB", then the engine died with exit 139
+# "corrupted double-linked list". VRAM was freed by hand with
+# POST /api/generate keep_alive=0. Code: crates/tillandsias-headless/src/gpu_queue.rs
+# (PR #806, work/1957-studio-e, 1955-rjv3 / 1956-x7xp), imagegen_tool.rs, imagegen_tiers.rs.
+packets:
+- packet_id: the-host-gpu-is-one-arbiter-owned-resource-the-per-host-gpu-queue-also-covers-the-inference-engine-ollama
+  order: 1957-emar
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: "linux mutable host with the NVIDIA A5000 and ollama resident — macuahuitl (compile and measure there)"
+  capability_tags: [imagegen, studio, gpu, ollama, arbiter, mcp, headless]
+  estimated_hours: 10
+  title: 'The host GPU is ONE arbiter-owned resource: the per-host GPU queue (gpu_queue.rs, PR #806) also covers the inference engine (ollama), so an image or studio job that needs N GB asks the LLM to unload (keep_alive 0) or waits for its expiry instead of OOMing into a segfault'
+  context: 'demon_attack-forge, macuahuitl 2026-11-02 ~03:20Z: ollama held qwen2.5:14b resident, 22.2 GB of the A5000''s 24 GB (32k ctx). image.generate I1 failed "model manager memory on Vulkan0: reported free 1179 MB ... need 1343.65 MB" and sd.cpp then exited 139 with "corrupted double-linked list" — an OOM that surfaced as a segfault, not a typed error. VRAM was recovered by hand with POST /api/generate keep_alive=0, after which the image ran. gpu_queue.rs (1955-rjv3, 1956-x7xp) is a ticket queue shared by image.generate and studio.run_workflow only; vram_holders() can already NAME the resident LLM for the failure text (explain_engine_failure) but nothing acts on it. The inference engine is a GPU holder like any engine and belongs under the same arbiter: before a job needing N GB the arbiter checks free VRAM, asks ollama to unload (keep_alive 0) or waits for its keep_alive expiry, runs the job, and reports which holder it evicted; inference reloads on demand afterwards. Two forge tools fall out of this: gpu.status (holders + free VRAM) and a model-unload request routed through the same arbiter so no caller bypasses it.'
+  exit_criteria:
+  - 'Before an image or studio job the arbiter compares the job''s declared VRAM need against free VRAM; when short, it asks ollama to unload (POST /api/generate keep_alive=0 on the resident model) or waits for the model''s keep_alive expiry, whichever the policy picks, then runs the job. The result carries evicted_holders[] naming what was unloaded (model, GB) and whether it waited or evicted.'
+  - 'Inference is not permanently displaced: after the job ollama reloads the model on its next request (no forge action needed, asserted by the test''s stub seeing a reload-on-demand).'
+  - 'New forge tools: gpu.status returns holders[] {name, kind: llm|image|studio, vram_gb} and free_vram_gb; gpu.unload_model (name TBD in the tool registry) requests an unload THROUGH the arbiter, never by calling ollama directly, so the ledger of who holds the device stays single.'
+  - 'An sd.cpp out-of-memory ("model manager memory ... reported free X MB ... need Y MB", or exit 139 after such a line) surfaces as a typed GpuOutOfMemory error carrying free/need MB and the holders at the time, never as a bare segfault in the MCP result.'
+  - 'RED TODAY, measured on macuahuitl: with a stub LLM holding VRAM an image job must evict it and run instead of segfaulting.'
+  verifiable_closure: 'cargo test -p tillandsias-headless gpu_queue -- an_image_job_evicts_a_resident_llm_and_runs passes on macuahuitl (stub LLM holder occupying VRAM, stubbed ollama endpoint recording the keep_alive=0 call, the job runs and the result names the evicted holder); a sibling test sd_cpp_oom_surfaces_as_a_typed_error_not_a_segfault asserts the typed GpuOutOfMemory error from the OOM transcript.'
+  next_action: 'On macuahuitl: in gpu_queue.rs add a Holder registry (llm via ollama /api/ps, image, studio) and a need_vram(gb) admission step inside wait_for_gpu; write the red test first with a stub ollama http server; thread evicted_holders into imagegen_tool.rs and studio results; map the sd.cpp OOM line and exit 139 to a typed error in the engine wrapper; register gpu.status and the unload tool in the headless MCP registry.'
+  provenance: demon_attack-forge image.generate run, macuahuitl 2026-11-02 ~03:20Z, filed by calmecacpilli.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:25:00Z'
+    host: calmecacpilli
+    agent: forge-forge-tillandsias-claude-20261102t032306z
+    summary: filed p1 ready for macuahuitl; ollama held 22.2 GB of the A5000, image.generate I1 OOMed then segfaulted (exit 139); freed by hand with keep_alive=0. The GPU queue must own the inference engine too.

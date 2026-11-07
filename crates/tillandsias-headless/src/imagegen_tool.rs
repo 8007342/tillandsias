@@ -317,6 +317,92 @@ pub enum Progress {
 pub struct EngineOut {
     pub backend: String,
     pub first_use: bool,
+    /// 1971-3erz: the engine's own split of the call.
+    pub timings: EngineTimings,
+}
+
+/// 1971-3erz: where one call's time went, from the engine's own lines.
+/// MEASURED on yoga 2026-11-03 (840M, I0 SDXS 512, 1 step): a cold call is
+/// ~0.1 s container start, ~3.3 s Vulkan probes + tensor load + buffer
+/// sizing, ~2.0 s sampling, ~1.2 s decode. A warm call pays only the last two.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct EngineTimings {
+    /// The call reused a resident engine (no container start, no load).
+    pub warm: bool,
+    pub container_start_ms: u64,
+    pub model_load_ms: u64,
+    pub sample_ms: u64,
+    pub decode_ms: u64,
+    pub total_ms: u64,
+}
+
+impl EngineTimings {
+    /// A one-shot sd-cli run: `rows` are stamped with the ms since `podman
+    /// run` was spawned. Start is the first engine line; load is everything
+    /// from there until sampling began.
+    pub fn from_cold(rows: &[(u64, String)], total_ms: u64) -> Self {
+        let container_start_ms = rows.first().map(|r| r.0).unwrap_or(0);
+        let (sample_ms, sample_end) = sum_taking(rows, "sampling completed");
+        let (decode_ms, _) = sum_taking(rows, "decode_first_stage completed");
+        let sample_start = sample_end
+            .map(|end| end.saturating_sub(sample_ms))
+            .unwrap_or(container_start_ms);
+        EngineTimings {
+            warm: false,
+            container_start_ms,
+            model_load_ms: sample_start.saturating_sub(container_start_ms),
+            sample_ms,
+            decode_ms,
+            total_ms,
+        }
+    }
+
+    /// A call served by the resident engine: `rows` are the server's lines
+    /// for this request only.
+    pub fn from_warm(rows: &[(u64, String)], total_ms: u64) -> Self {
+        EngineTimings {
+            warm: true,
+            container_start_ms: 0,
+            model_load_ms: 0,
+            sample_ms: sum_taking(rows, "sampling completed").0,
+            decode_ms: sum_taking(rows, "decode_first_stage completed").0,
+            total_ms,
+        }
+    }
+
+    pub fn to_json(&self, warm_ttl_s: u64) -> Value {
+        json!({
+            "warm": self.warm,
+            "container_start_ms": self.container_start_ms,
+            "model_load_ms": self.model_load_ms,
+            "sample_ms": self.sample_ms,
+            "decode_ms": self.decode_ms,
+            "total_ms": self.total_ms,
+            "warm_ttl_s": warm_ttl_s,
+        })
+    }
+}
+
+/// Sum of sd.cpp's `<marker>, taking 2.04s` durations across `rows`, and the
+/// stamp of the FIRST such row (where the first sampling pass ended).
+fn sum_taking(rows: &[(u64, String)], marker: &str) -> (u64, Option<u64>) {
+    let mut sum = 0u64;
+    let mut first = None;
+    for (at, row) in rows {
+        let Some(i) = row.find(marker) else { continue };
+        let Some(t) = row[i..].split("taking ").nth(1) else {
+            continue;
+        };
+        let secs: String = t
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        if let Ok(s) = secs.parse::<f64>() {
+            sum += (s * 1000.0).round() as u64;
+            first.get_or_insert(*at);
+        }
+    }
+    (sum, first)
 }
 
 /// The engine behind the tool. Production is [`PodmanSdCli`]; fixtures stub it.
@@ -432,6 +518,34 @@ pub fn png_facts(bytes: &[u8]) -> Option<(u32, u32, bool)> {
 }
 
 /// A ≤256 px thumbnail beside `png`; `None` when it cannot be made.
+/// 1971-3erz: the thumbnail's path now, the file a moment later. Decoding,
+/// resizing and re-encoding the PNG ran after `elapsed_s` and before the reply
+/// (measured: warm calls 2.9 s inside the tool, ~3.1 s at the client), so it
+/// moves off the agent's wait onto a background thread.
+fn thumbnail_later(png: &Path) -> PathBuf {
+    let out = png.with_extension("thumb.png");
+    let src = png.to_path_buf();
+    let h = std::thread::spawn(move || {
+        let _ = thumbnail(&src);
+    });
+    let mut pending = PENDING_THUMBNAILS.lock().unwrap_or_else(|e| e.into_inner());
+    pending.retain(|p| !p.is_finished());
+    pending.push(h);
+    out
+}
+
+static PENDING_THUMBNAILS: std::sync::Mutex<Vec<std::thread::JoinHandle<()>>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// Wait for every deferred thumbnail (tests read the file right after a call).
+#[cfg(test)]
+pub fn flush_thumbnails() {
+    let hs = std::mem::take(&mut *PENDING_THUMBNAILS.lock().unwrap_or_else(|e| e.into_inner()));
+    for h in hs {
+        let _ = h.join();
+    }
+}
+
 fn thumbnail(png: &Path) -> Option<PathBuf> {
     let img = image::open(png).ok()?;
     let thumb = img.thumbnail(256, 256);
@@ -589,7 +703,22 @@ pub fn call(
         job.aux.init = Some(s.engine.clone());
     }
     // D3 (1956-x7xp): one GPU queue per host, shared with the studio.
+    let q0 = Instant::now();
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
+    // 1957-emar: with the device ours, make room: the weights plus 1 GiB of
+    // activations, evicting a resident LLM when free VRAM is short.
+    let need: u64 = imagegen_models::files_for_tier(&imagegen_models::manifest(), &job.tier.tier)
+        .iter()
+        .chain(job.aux.files().iter())
+        .map(|m| m.bytes)
+        .sum::<u64>()
+        + (1 << 30);
+    let a0 = Instant::now();
+    let queue_ms = a0.duration_since(q0).as_millis() as u64;
+    let evicted = gpu_queue::arbiter().admit(need);
+    // 1971-3erz: the queue wait and the admit run before the engine; both are
+    // on the agent's wait, so the result names them too.
+    let admit_ms = a0.elapsed().as_millis() as u64;
     let t0 = Instant::now();
     let out = engine
         .generate(&job, &out_dir, &names, progress)
@@ -642,7 +771,18 @@ pub fn call(
             std::fs::read(&host).map_err(|e| format!("engine_failed: no output {name}: {e}"))?;
         let (w, h, alpha) =
             png_facts(&bytes).ok_or_else(|| format!("engine_failed: {name} is not a PNG"))?;
+        // 1996-pvpr: a control or init image made by an earlier stage links back.
+        let input_hosts: Vec<std::path::PathBuf> = job
+            .aux
+            .control
+            .iter()
+            .map(|(_, img)| img.as_str())
+            .chain(job.aux.init.iter().map(|(init, _, _)| init.as_str()))
+            .filter_map(|p| p.strip_prefix("/out/").map(|r| out_dir.join(r)))
+            .collect();
         let record = crate::provenance::Record {
+            tool: "image.generate",
+            parents: crate::provenance::parents_of(input_hosts.iter().map(|p| p.as_path())),
             engine: crate::provenance::Engine::SdCpp,
             workflow: None,
             models: models.clone(),
@@ -666,7 +806,8 @@ pub fn call(
             "width": w,
             "height": h,
             "has_alpha": alpha,
-            "thumbnail_path": thumbnail(&host).map(|t| forge_path(&t)),
+            // 1971-3erz: written after the reply, off the agent's wait.
+            "thumbnail_path": forge_path(&thumbnail_later(&host)),
             "provenance_path": format!("{}.provenance.json", forge_path(&host)),
             "provenance": prov,
         }));
@@ -687,7 +828,11 @@ pub fn call(
         };
     let grant = (granted_download || imagegen_consent::download_granted(&job.tier.tier))
         .then(|| imagegen_consent::grant_json(&job.tier.tier));
+    let mut timings_json = out.timings.to_json(crate::imagegen_warm::ttl().as_secs());
+    timings_json["queue_ms"] = json!(queue_ms);
+    timings_json["admit_ms"] = json!(admit_ms);
     Ok(json!({
+        "evicted_holders": evicted.iter().map(gpu_queue::Evicted::to_json).collect::<Vec<_>>(),
         "path": first["path"],
         "width": first["width"],
         "height": first["height"],
@@ -702,6 +847,7 @@ pub fn call(
         "steps": job.steps,
         "elapsed_s": (elapsed * 100.0).round() / 100.0,
         "first_use": out.first_use,
+        "timings": timings_json,
         "size_rounded": job.rounded.map(|(a, g)| json!({
             "asked": [a.0, a.1], "got": [g.0, g.1],
             "why": "the engine draws on a 64 px grid"
@@ -851,27 +997,8 @@ impl PodmanSdCli {
         names: &[String],
         model_bytes: u64,
     ) -> Vec<String> {
-        let mut a: Vec<String> = vec![
-            "run".into(),
-            "--rm".into(),
-            // No egress and no enclave: the weights are mounted, the output is a file.
-            "--network=none".into(),
-            "--userns=keep-id".into(),
-            "--cap-drop=ALL".into(),
-            "--security-opt=no-new-privileges".into(),
-            "--security-opt=label=disable".into(),
-        ];
-        a.extend(engine_budget_args(
-            &tillandsias_core::forge_budget::ForgeBudget::for_this_host(),
-            model_bytes,
-        ));
-        // 1913-ebv8: in the forge's slice, ranked before it.
-        a.extend(crate::oom_slice_args());
-        if crate::nvidia_cdi_available() {
-            a.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
-        } else if Path::new("/dev/dri").exists() {
-            a.extend(["--device".into(), "/dev/dri".into()]);
-        }
+        let mut a: Vec<String> = vec!["run".into(), "--rm".into()];
+        a.extend(self.sandbox_args(model_bytes));
         let shader = tillandsias_core::cache_root::cache_root().join("imagegen-shader-cache");
         let _ = std::fs::create_dir_all(&shader);
         a.extend([
@@ -894,8 +1021,41 @@ impl PodmanSdCli {
             "/usr/local/bin/sd-cli".into(),
             self.image.clone(),
         ]);
+        self.finish_run_args(a, job, files, names)
+    }
+
+    /// 1971-3erz: the engine's sandbox, shared by the one-shot sd-cli run and
+    /// the resident sd-server (imagegen_warm.rs), so the two cannot drift.
+    pub fn sandbox_args(&self, model_bytes: u64) -> Vec<String> {
+        let mut a: Vec<String> = vec![
+            // No egress and no enclave: the weights are mounted, the output is a file.
+            "--network=none".into(),
+            "--userns=keep-id".into(),
+            "--cap-drop=ALL".into(),
+            "--security-opt=no-new-privileges".into(),
+            "--security-opt=label=disable".into(),
+        ];
+        a.extend(engine_budget_args(
+            &tillandsias_core::forge_budget::ForgeBudget::for_this_host(),
+            model_bytes,
+        ));
+        // 1913-ebv8: in the forge's slice, ranked before it.
+        a.extend(crate::oom_slice_args());
+        if crate::nvidia_cdi_available() {
+            a.extend(["--device".into(), "nvidia.com/gpu=all".into()]);
+        } else if Path::new("/dev/dri").exists() {
+            a.extend(["--device".into(), "/dev/dri".into()]);
+        }
+        a
+    }
+
+    /// The model file flags (`--model /models/...`), shared with imagegen_warm.rs.
+    pub fn model_flags(&self, files: &[(String, PathBuf)]) -> Vec<String> {
+        let mut a: Vec<String> = Vec::new();
         for (role, path) in files {
-            if role == "controlnet" || role == "lora" {
+            // 1971-mcpu: a ControlNet's role is `controlnet:<name>`, never bare
+            // `controlnet`; both aux kinds get their own flags below.
+            if role.starts_with("controlnet:") || role == "controlnet" || role == "lora" {
                 continue;
             }
             let rel = path.strip_prefix(&self.models_dir).unwrap_or(path);
@@ -913,6 +1073,17 @@ impl PodmanSdCli {
             };
             a.extend([flag.into(), format!("/models/{}", rel.display())]);
         }
+        a
+    }
+
+    fn finish_run_args(
+        &self,
+        mut a: Vec<String>,
+        job: &Job,
+        files: &[(String, PathBuf)],
+        names: &[String],
+    ) -> Vec<String> {
+        a.extend(self.model_flags(files));
         if let Some((cn, image)) = &job.aux.control {
             a.extend([
                 "--control-net".into(),
@@ -987,7 +1158,14 @@ impl Engine for PodmanSdCli {
         names: &[String],
         progress: &mut dyn FnMut(Progress),
     ) -> Result<EngineOut, String> {
-        let built = self.ensure_image(progress)?;
+        // 1971-3erz: a resident engine already runs this image; skip the check.
+        let built = if crate::imagegen_warm::eligible(job)
+            && crate::imagegen_warm::serving_image(&self.image)
+        {
+            false
+        } else {
+            self.ensure_image(progress)?
+        };
         let pins = imagegen_models::files_for_tier(&imagegen_models::manifest(), &job.tier.tier);
         if pins.is_empty() {
             return Err(format!(
@@ -1008,10 +1186,33 @@ impl Engine for PodmanSdCli {
             },
         )?;
         let model_bytes: u64 = pins.iter().map(|p| p.bytes).sum();
+        // 1971-3erz: a plain txt2img job reuses the resident engine.
+        if crate::imagegen_warm::eligible(job) {
+            let (timings, backend) =
+                crate::imagegen_warm::generate(self, job, &files, out_dir, names, model_bytes)?;
+            // 1972-phye: after the reply, one /api/ps look; a crowding LLM wins
+            // the device. Off the critical path: the check is two podman calls
+            // (~120-150 ms, measured on yoga), and releasing BEFORE this call
+            // would only make the same GPU job cold.
+            let _ = std::thread::Builder::new()
+                .name("imagegen-warm-yield".into())
+                .spawn(|| {
+                    let arb = crate::gpu_queue::arbiter();
+                    arb.yield_image_engine(arb.llm.ps().as_deref());
+                });
+            return Ok(EngineOut {
+                backend,
+                first_use: built || fetched,
+                timings,
+            });
+        }
         let args = self.run_args(job, &files, out_dir, names, model_bytes);
         let mut log = String::new();
         let mut last = None;
+        let t0 = std::time::Instant::now();
+        let mut stamped: Vec<(u64, String)> = Vec::new();
         imagegen_models::run_streamed(&args, &mut |row| {
+            stamped.push((t0.elapsed().as_millis() as u64, row.to_string()));
             if let Some(s) = step_from_row(row)
                 && last != Some(s)
             {
@@ -1031,6 +1232,7 @@ impl Engine for PodmanSdCli {
         Ok(EngineOut {
             backend,
             first_use: built || fetched,
+            timings: EngineTimings::from_cold(&stamped, t0.elapsed().as_millis() as u64),
         })
     }
 }
@@ -1182,13 +1384,21 @@ mod tests {
             image: "img".into(),
             models_dir: PathBuf::from("/m"),
         };
-        let a = e.run_args(
-            &job,
-            &[("model".into(), PathBuf::from("/m/I0/sdxs09.safetensors"))],
-            Path::new("/o"),
-            &["img-1-2-0.png".into()],
-            1,
+        // 1971-mcpu: generate passes run_args EVERY fetched file, the
+        // ControlNet (role `controlnet:openpose`) and LoRAs included, as
+        // ensure_files returns them. Passing only the base model hid a panic
+        // that closed the Kumbia lane's MCP connection.
+        let mut files = vec![(
+            "model".to_string(),
+            PathBuf::from("/m/I0/sdxs09.safetensors"),
+        )];
+        files.extend(
+            job.aux
+                .files()
+                .iter()
+                .map(|p| (p.role.clone(), PathBuf::from("/m/I0").join(p.cache_name()))),
         );
+        let a = e.run_args(&job, &files, Path::new("/o"), &["img-1-2-0.png".into()], 1);
         let after = |flag: &str| {
             a.iter()
                 .position(|s| s == flag)
@@ -1326,6 +1536,7 @@ mod tests {
                     .map_err(|e| e.to_string())?;
             }
             Ok(EngineOut {
+                timings: Default::default(),
                 backend: "cuda".into(),
                 first_use: false,
             })
@@ -1357,6 +1568,7 @@ mod tests {
             }
             self.now.fetch_sub(1, SeqCst);
             Ok(EngineOut {
+                timings: Default::default(),
                 backend: "mixed".into(),
                 first_use: false,
             })
@@ -1551,6 +1763,77 @@ mod tests {
         // Declining grants nothing: the next call still asks.
         let r = call("dl-e", "a", &small("a demon", None), &mut sink).unwrap();
         assert_eq!(r["status"], "consent_required", "{r}");
+        install_seam(None);
+    }
+
+    /// 1971-3erz: the cold split from sd-cli's own lines, stamped as they
+    /// arrived. These are rows of the yoga run measured 2026-11-03.
+    #[test]
+    fn a_cold_runs_timings_come_from_the_engines_own_lines() {
+        let rows: Vec<(u64, String)> = [
+            (
+                102,
+                "[V] version: stable-diffusion.cpp version master-1015-e41fbcf",
+            ),
+            (
+                1775,
+                "[I] loading tensors completed, taking 0.20s (read: 0.03s)",
+            ),
+            (
+                3430,
+                "[I] loading tensors completed, taking 0.40s (read: 0.04s)",
+            ),
+            (
+                5764,
+                "[I] sampling completed, taking 2.04s --- image.cpp:953",
+            ),
+            (
+                6974,
+                "[I] decode_first_stage completed, taking 1.21s --- image.cpp:675",
+            ),
+            (7096, "[I] 1/1 images saved --- main.cpp:528"),
+        ]
+        .into_iter()
+        .map(|(t, s)| (t, s.to_string()))
+        .collect();
+        let t = EngineTimings::from_cold(&rows, 7149);
+        assert_eq!(
+            t,
+            EngineTimings {
+                warm: false,
+                container_start_ms: 102,
+                // sampling began at 5764 - 2040 = 3724
+                model_load_ms: 3724 - 102,
+                sample_ms: 2040,
+                decode_ms: 1210,
+                total_ms: 7149,
+            }
+        );
+        let w = EngineTimings::from_warm(&rows[3..5], 2867);
+        assert!(w.warm);
+        assert_eq!((w.container_start_ms, w.model_load_ms), (0, 0));
+        assert_eq!((w.sample_ms, w.decode_ms, w.total_ms), (2040, 1210, 2867));
+    }
+
+    /// 1971-3erz criterion 1: the result names the engine's split. Pre-fix:
+    /// FAILS (no timings key).
+    #[test]
+    fn the_result_carries_the_engines_timings_and_the_warm_ttl() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (_engine, _s) = seam_with(&["I0"]);
+        let mut sink = |_: Progress| {};
+        let r = call("dl-t", "a", &small("a demon", Some("I0")), &mut sink).unwrap();
+        for k in [
+            "container_start_ms",
+            "model_load_ms",
+            "sample_ms",
+            "decode_ms",
+            "total_ms",
+            "warm_ttl_s",
+        ] {
+            assert!(r["timings"][k].is_u64(), "{k} missing: {r}");
+        }
+        assert!(r["timings"]["warm"].is_boolean(), "{r}");
         install_seam(None);
     }
 }

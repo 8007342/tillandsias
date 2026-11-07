@@ -122,7 +122,7 @@
       ]
     },
     {
-      "brief": "Visual editor for Next.js and Tailwind that edits the code directly.",
+      "brief": "Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
       "entry": [
         "/usr/local/bin/studio-onlook"
       ],

@@ -1,0 +1,35 @@
+# @trace spec:methodology-accountability, order:1247-amcu, order:1162-qbrx
+name: litmus:gate-step-prefix-refusals-carry-affordance
+spec: methodology-accountability
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/allocate-gate-step-prefix.sh says WHY it refused and
+  WHAT would make it not a refusal (1247-amcu): labelled "  why:" / "  remedy:"
+  stderr lines beside its unchanged stdout verdict, or, where the script
+  already prints its own explanatory stderr line, an affordance-ok marker. The
+  fixture runs the four usage refusals (reached before any step is read or
+  moved) and pins no-gap / overflow statically: a verdict site added later
+  without an affordance fails.
+
+preconditions:
+  - workspace contains scripts/allocate-gate-step-prefix.sh
+  - workspace contains scripts/lua/test-gate-step-prefix-affordances.lua
+
+critical_path:
+  - step: "the usage refusals carry why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-step-prefix-affordances.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:gate-step-prefix-affordances:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "a gate-step-prefix refusal names its rule and how to clear it"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "gate-step-prefix-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in allocate-gate-step-prefix.sh ships without why/remedy"

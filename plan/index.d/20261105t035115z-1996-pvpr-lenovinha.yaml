@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-05, from kumbia-kombat's plan/forge-generic-services.md (work/1835-lvls), coordinator-assigned.
+packets:
+- packet_id: provenance-v1-records-name-their-tool-and-the-sidecars-of-the-inputs-they-were-made-from
+  order: 1996-pvpr
+  status: in_progress
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, imagegen, provenance]
+  estimated_hours: 2
+  title: provenance/v1 records name their tool and the sidecars of the inputs they were made from
+  context: 'Kumbia catalogue: a record says what made one output but not which earlier outputs it was made from, so a chain of stages (generate, pose, finish) cannot be walked back.'
+  exit_criteria:
+  - 'Every record (image.generate, studio.run_workflow, studio.key_footage, studio.finish_pixels) carries tool, parents, output_sha256 and at. Pre-fix: FAILS, none of them.'
+  - 'parents lists the sha256 of each input own sidecar (.provenance.json or .finish.json); a hand-made input adds none.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- an_output_record_links_to_the_sidecar_of_the_input_an_earlier_stage_made'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures with a stub engine (1136-n8sh).'
+  next_action: 'Land.'
+  provenance: kumbia-kombat plan/forge-generic-services.md, coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T03:51:15Z'
+    host: lenovinha
+    summary: filed p2 in_progress, claimed by opus5

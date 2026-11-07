@@ -1,0 +1,8 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: an-ollama-model-load-goes-through-the-gpu-arbiter-so-it-evicts-a-resident-image-engine-before-claiming-vram
+    event:
+      type: claimed
+      ts: '2026-11-03T10:00:00Z'
+      host: yoga
+      summary: claimed by yoga on the coordinator's suggestion (macuahuitl-fedora 2026-11-03); work ref work/1972-phye

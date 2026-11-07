@@ -104,6 +104,7 @@ run_queue() {
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
         TILLANDSIAS_LAND_QUEUE_LOGDIR="${LOGDIR_OVERRIDE:-$TMP/logs-$$}" \
         TILLANDSIAS_TRUNK_BRANCH=linux-next \
@@ -532,6 +533,7 @@ fi
 out9="$(timeout 120 env \
     TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
     TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
+    TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="" \
     TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
     TILLANDSIAS_TRUNK_BRANCH=linux-next \
     bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" </dev/null 2>&1)"
@@ -1164,6 +1166,116 @@ else
     bad "ARM 20c2: expected 1-2 run dirs after 5 runs with KEEP=2, found $n20c"
 fi
 unset LOGDIR_OVERRIDE
+
+# ──────────────────────────────────────────────────────────── ARM 21
+# THE QUEUE READS THE WHOLE QUEUE, NOT gh's FIRST PAGE (1959-tdn5).
+#
+# MEASURED ON macuahuitl 2026-11-02: `gh pr list` without --limit returns the
+# NEWEST 30 open PRs. With 30+ open (drafts count), the OLDEST non-draft PR —
+# #679 that day — never appeared in the capture, so the queue reported a
+# smaller queue than existed and the oldest ready work never landed. A fake gh
+# that honours --limit the way the real one does (default 30, newest first)
+# over 31 open PRs where only the OLDEST is ready must still land it.
+lq_gh_paged() {  # fake gh whose `pr list` honours --limit (default 30), newest first
+    cat > "$GH_BIN" <<GH
+#!/usr/bin/env bash
+case "\$1 \$2" in
+    "pr list")
+        lim=30
+        while [ \$# -gt 0 ]; do
+            case "\$1" in --limit) lim="\$2"; shift ;; --limit=*) lim="\${1#*=}" ;; esac
+            shift
+        done
+        # GH_PRS holds one PR object per line, newest first; gh pages from the top.
+        printf '['; head -n "\$lim" "$GH_PRS" | paste -sd, -; printf ']\n' ;;
+    "pr comment") shift 2; printf '%s\n' "\$*" >> "$GH_COMMENTS" ;;
+    "pr view")    printf '{"comments":[]}\n' ;;
+    *) exit 1 ;;
+esac
+GH
+    chmod +x "$GH_BIN"
+}
+scaffold arm21
+candidate arm21 2100-oldp old.txt OLD
+: > "$GH_PRS"
+for _i in $(seq 31 -1 2); do
+    printf '{"number":%d,"headRefName":"work/%d-drft","isDraft":true}\n' "$_i" "$((2100 + _i))" >> "$GH_PRS"
+done
+printf '{"number":1,"headRefName":"work/2100-oldp","isDraft":false}\n' >> "$GH_PRS"
+lq_gh_paged
+printf '#!/usr/bin/env bash\nexit 0\n' > "$GATE_BIN"
+out21="$(run_queue)"; rc21=$?
+if [ "$rc21" -eq 0 ] && grep -q '^land:1 ' <<<"$out21"; then
+    ok "ARM 21: the oldest non-draft PR among 31 open ones lands — the queue asked gh for more than its first page"
+else
+    bad "ARM 21: with 31 open PRs (30 newer drafts) the oldest ready PR #1 did not land (rc=$rc21) — gh's default page of 30 hid it
+$out21"
+fi
+
+# ARM 21b: WHEN THE CAPTURE IS EXACTLY AS LONG AS THE LIMIT, THE QUEUE MAY BE
+# TRUNCATED AND THE SCRIPT MUST REFUSE, not land a possibly-partial list. The
+# fake gh honours whatever --limit the script passes; the file holds 600 PRs,
+# so a capture equal to the limit means the page boundary was hit.
+scaffold arm21b
+: > "$GH_PRS"
+for _i in $(seq 600 -1 1); do
+    printf '{"number":%d,"headRefName":"work/%d-drft","isDraft":true}\n' "$_i" "$((3000 + _i))" >> "$GH_PRS"
+done
+lq_gh_paged
+printf '#!/usr/bin/env bash\nexit 0\n' > "$GATE_BIN"
+out21b="$(run_queue)"; rc21b=$?
+case "$out21b" in
+    *"fail:land-queue:queue-may-be-truncated"*)
+        if [ "$rc21b" -ne 0 ]; then
+            ok "ARM 21b: a capture as long as the list limit REFUSES (rc=$rc21b) instead of landing from a possibly truncated queue"
+        else
+            bad "ARM 21b: it named the truncation but exited 0, so a caller reads success"
+        fi ;;
+    *) bad "ARM 21b: a capture equal to the list limit was not refused (rc=$rc21b)
+$out21b" ;;
+esac
+
+# ──────────────────────────────────────────────────────────── ARM 22
+# ORDER 1992-lqpb: A STALE PLAN BINARY IS THIS HOST'S STATE, NOT THE
+# CANDIDATE'S. When the refresh cannot make it current, the run stops
+# (could-not-run) and evicts NOBODY; before, the gate's plan-lane fixture failed
+# on the stale binary and the innocent candidate was evicted.
+scaffold arm22
+candidate arm22 1022-aaaa a22.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":22,"headRefName":"work/1022-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out22="$(PLAN_REFRESH_CMD='echo stale-plan-binary >&2; exit 1' run_queue)"; rc22=$?
+if grep -q '^could-not-run:land-queue:stale-plan-binary' <<<"$out22" \
+    && ! grep -q '^evict:' <<<"$out22" && ! grep -q '^land:' <<<"$out22" \
+    && [ "$rc22" -eq 3 ] && [ ! -s "$GATE_LOG" ] && [ ! -s "$GH_COMMENTS" ]; then
+    ok "ARM 22: a plan binary that cannot be refreshed stops the run (rc=3) with no eviction, no gate and no PR comment"
+else
+    bad "ARM 22: wanted could-not-run, rc=3, no eviction, no gate, no comment; got rc=$rc22 gates=$(grep -c . "$GATE_LOG") comments=$(grep -c . "$GH_COMMENTS")
+$out22"
+fi
+# ...and a refresh that succeeds lets the candidate land as before.
+scaffold arm22b
+candidate arm22b 1023-bbbb b22.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":23,"headRefName":"work/1023-bbbb","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+exit 0
+GATE
+out22b="$(PLAN_REFRESH_CMD='true' run_queue)"
+if grep -q '^land:23 ' <<<"$out22b"; then
+    ok "ARM 22b: a refresh that succeeds lets the candidate land"
+else
+    bad "ARM 22b: wanted land:23 after a successful refresh
+$out22b"
+fi
 
 printf '\n'
 if [ "$fail" -eq 0 ]; then

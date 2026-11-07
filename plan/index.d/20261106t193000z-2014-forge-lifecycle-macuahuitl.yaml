@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-06, from the operator's first-hand direction.
+packets:
+- packet_id: a-forge-with-nothing-to-do-pushes-exits-and-is-woken-later
+  order: 2014-slpw
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [forge, tray, design]
+  estimated_hours: 8
+  title: DESIGN FIRST - an agent that cannot progress commits, pushes, exits gracefully and is woken by the tray in a resumed or fresh session
+  context: 'Operator 2026-11-06. For long waits, a forge commits and pushes to its work branch per discipline, exits gracefully and shuts down, and the tray wakes it later, from scratch and idempotently. The agent chooses on exit, or the waker chooses on wake, between resuming the session and a fresh one for unrelated tasks. A short wait may still block on what_next from 2011-amqd; state the boundary. Sessions are named <YYYYMMDD>-<project-name>, using each harness command line. The tray delegates a message to the right forge, and several forges may share a project or related projects. Cold starts stay user-initiated, except for a forge-requested shutdown-and-wake sequence. Local tiny models select work and wake: CPU is the baseline on the low tier; mid-tier hosts use NPU and iGPU.'
+  exit_criteria:
+  - 'A design covers each harness: launching with a name, resuming by name, a fresh session and graceful exit, each from documented flags with citations and a stated answer where a harness lacks one.'
+  - 'An agent refuses to shut down with unpushed work, and says what is unpushed; tested.'
+  - 'A woken forge reaches the same state whether resumed or fresh, and its volumes survive; shown on one real project.'
+  - 'With two forges on one project, a message reaches exactly one, by a stated rule; tested.'
+  verifiable_closure: 'A real shutdown-and-wake cycle on a Linux host with the agent continuing its task.'
+  unscoreable: 'none.'
+  next_action: 'Research harness command lines from current official docs, then write the design for operator review. Build nothing yet.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T19:30:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: a-running-tray-updates-itself-on-a-stable-release
+  order: 2014-auup
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [tray, release, design]
+  estimated_hours: 8
+  title: DESIGN FIRST - the tray updates itself on a new stable release, and forges learn of it and may restart
+  context: 'Operator 2026-11-06, extends the 2026-11-03 auto-upgrade direction: restarting forges for infra fixes is the important thing to fix now. Shutting the tray does not stop forges, so the tray can update beneath them. Forges are told of new facilities and may request a restart; a forge or the tray, per the update definition, may request or require recreating a set of containers, from scratch or from named snapshots, and their dnf upgrade steps. Live work is never lost: a required restart waits for or demands a push first. On 2026-11-05 lanes kept old binaries and mixed labels hid it; 2003-stbf reports that.'
+  exit_criteria:
+  - 'A design states the update flow with signature verification, rollback on failure, what each release declares about restarts, and what happens to a forge with unpushed work.'
+  - 'It states how an unrelated user opts out or delays, and what the tray shows.'
+  - 'A tray update with a forge running leaves the forge working, and the forge is told; shown on one real host from one stable to the next.'
+  verifiable_closure: 'A real update between two published releases on a Linux host; other platforms stated.'
+  unscoreable: 'none.'
+  next_action: 'Read the existing updater, the 2026-11-03 direction and 2003-stbf, then write the design for operator review. Build nothing yet.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T19:30:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: fedora-45-images-and-a-reliable-npu-runtime-for-local-models
+  order: 2014-f45n
+  status: ready
+  kind: research
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [images, inference, research]
+  estimated_hours: 4
+  title: RESEARCH - what Fedora 45 changes for AMD iGPU and NPU runtimes, and which images must move
+  context: 'Operator 2026-11-06: Fedora 45 is reported to bake AMD iGPU and NPU drivers into the kernel and images, which may need image recreation and should give local agents a more reliable NPU runtime. That claim is to be checked. Related: 1980-tkfj for the Fedora 45 image bump. Tiny and small models on NPU and iGPU select work and wake on the mid tier; CPU stays the low-tier baseline.'
+  exit_criteria:
+  - 'A research record with provenance states, per vendor, what Fedora 45 ships for NPU and iGPU, what a rootless container needs to reach it, and what remains unsupported.'
+  - 'It names which images change and which models run on which tier, with measured numbers where a host is available and marked as unmeasured otherwise.'
+  verifiable_closure: 'The research record, with one measurement on a real mid-tier host where available.'
+  unscoreable: 'none.'
+  next_action: 'Use find-research and official Fedora and kernel sources; read 1980-tkfj first.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T19:30:00Z', host: macuahuitl, summary: filed p2 ready}

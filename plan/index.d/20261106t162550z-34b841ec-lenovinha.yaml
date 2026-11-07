@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-rotation-scheduler-cannot-mint-a-ca-or-start-vault-needlessly
+    field: next_action
+    value: 'Implemented (#964, 423dc2418): with Vault stopped a Cloudflare rotation tick runs nothing and reports skip:cloudflare-token-rotation:vault-not-running; the scheduler store may not start Vault. Left: (1) the tray presence probe cloudflare_login_stored_live can still start Vault; (2) one live tick with Vault stopped on a real host, confirming the CA directory is byte-identical.'
+    ts: "2026-11-06T16:25:50Z"
+    host: lenovinha
+    replaces_sha256: "876144069f5b07b571be69213838a8558485ec8162bb4b3505e0fdce6632f30a"
+
+events:
+  - packet_id: a-rotation-scheduler-cannot-mint-a-ca-or-start-vault-needlessly
+    event:
+      type: note
+      ts: "2026-11-06T16:25:50Z"
+      host: lenovinha
+      summary: |-
+        state what remains

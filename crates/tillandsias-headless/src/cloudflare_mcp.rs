@@ -305,7 +305,7 @@ fn refusal(reason: &str, why: &str, remedy: &str) -> String {
     format!("refused:cloudflare-mcp:{reason}\n  why: {why}\n  remedy: {remedy}")
 }
 
-fn refuse_reason(reason: &str) -> String {
+pub(crate) fn refuse_reason(reason: &str) -> String {
     let (why, remedy): (&str, &str) = if let Some(scope) = reason.strip_prefix("scope-missing:") {
         return refusal(
             reason,
@@ -429,7 +429,7 @@ pub(crate) fn send(
 }
 
 /// Map a response to the tool's result, or a reason word.
-fn interpret(resp: &HttpResponse, scope: &str) -> Result<serde_json::Value, String> {
+pub(crate) fn interpret(resp: &HttpResponse, scope: &str) -> Result<serde_json::Value, String> {
     match resp.status {
         200..=299 => {}
         401 => return Err("unauthorized".into()),
@@ -543,7 +543,7 @@ pub(crate) struct Deps<'a> {
 }
 
 /// The stored token and the tray-bound account.
-fn signed_in(deps: &Deps) -> Result<(String, Option<String>, String), String> {
+pub(crate) fn signed_in(deps: &Deps) -> Result<(String, Option<String>, String), String> {
     if !crate::vault_bootstrap::cloudflare_token_endpoint_is_safe(deps.api_base) {
         return Err("api-base-not-https".into());
     }
@@ -727,7 +727,10 @@ pub(crate) fn call_live(
     debug: bool,
 ) -> Result<serde_json::Value, String> {
     let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
-    let store = crate::vault_bootstrap::VaultCloudflareTokenStore { debug };
+    let store = crate::vault_bootstrap::VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: true,
+    };
     let freshen = || crate::vault_bootstrap::cloudflare_token_due_check_live(debug).map(|_| ());
     let api_base = api_base_url();
     let deps = Deps {
@@ -812,6 +815,7 @@ mod tests {
 
     fn ok(result: serde_json::Value) -> Result<HttpResponse, String> {
         Ok(HttpResponse {
+            retry_after_s: None,
             status: 200,
             body:
                 serde_json::json!({"success": true, "errors": [], "messages": [], "result": result})
@@ -821,6 +825,7 @@ mod tests {
 
     fn status(code: u16, body: &str) -> Result<HttpResponse, String> {
         Ok(HttpResponse {
+            retry_after_s: None,
             status: code,
             body: body.into(),
         })

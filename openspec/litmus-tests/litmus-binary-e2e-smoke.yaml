@@ -24,7 +24,7 @@ critical_path:
     failure_pattern: "cannot access"
 
   - step: "run --status-check (init path, fake podman)"
-    command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --init --status-check /tmp/litmus-e2e-project 2>&1"
+    command: "mkdir -p -m 700 \"${TMPDIR:-/tmp}/litmus-e2e-smoke-home/run\" && HOME=\"${TMPDIR:-/tmp}/litmus-e2e-smoke-home\" XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/litmus-e2e-smoke-home/run\" LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --init --status-check /tmp/litmus-e2e-project 2>&1"
     timeout_ms: 120000
     success_pattern: "app.stopped|shutdown|completed"
     # Pattern narrowed 2026-07-24: WARNING lines legitimately contain the word

@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from kumbia-forge and a live diagnosis; written for any project.
+packets:
+- packet_id: a-forge-checkout-has-room-for-worktrees-and-builds
+  order: 2006-srcr
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 4
+  title: A forge checkout that outgrows its tmpfs stays usable, with room for worktrees and builds
+  context: '/home/forge/src is a 1.5 GB tmpfs. In one forge, several worktrees and builds filled it and git commits stopped. Projects with art or media pipelines need more. Generic forge capability. The checkout is ephemeral by design, and any disk backing must keep that, keep no credentials at rest, and be wiped with the forge.'
+  exit_criteria:
+  - 'A forge can hold a checkout plus several worktrees totalling more than 1.5 GB and still commit, on a host with the disk to spare.'
+  - 'Before the space runs out the agent gets a warning naming the path and what to remove, and when the host lacks the disk the limit is reported by name.'
+  verifiable_closure: 'A litmus in a real forge that fills past the old limit and commits; the replaced forge shows no leftover checkout.'
+  unscoreable: 'none.'
+  next_action: 'Choose between a larger memory-backed limit tied to host RAM and a per-forge disk volume wiped on exit; state the choice and why in the row.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-06T02:55:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: a-failing-token-rotation-reaches-the-operator-before-the-token-expires
+  order: 2006-rotw
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, credentials]
+  estimated_hours: 3
+  title: A GitHub token rotation that keeps failing tells the operator while the token still works
+  context: 'On 2026-11-05 macuahuitl logged blocked:github-token-rotation-failed:read:vault-unavailable repeatedly, Vault logged 556 client TLS rejections over 12 h, and the mirror verdict changed from authorized to denied at 17:10 PST, about 8 h after the 09:08 login. Pushes then failed with no earlier warning. The sequence is inferred from logs: the CA replaced under a running Vault is the likely reason the tray could not read it. #940, #942 and #945 address the replacement; this row is about being told in time. Generic for every forge.'
+  exit_criteria:
+  - 'With rotation failing and the token within a stated margin of expiry, the tray shows one plain action for the operator, naming the fix, before the token expires.'
+  - 'A rotation that recovers clears the message, and a healthy rotation shows nothing.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features with a stub for failing, recovering and healthy rotation, plus one real expiry on a Linux host.'
+  unscoreable: 'none.'
+  next_action: 'Read how the rotation records its last success and the token expiry, then write the failing three-outcome test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05, live diagnosis.
+  events:
+  - type: filed
+    ts: '2026-11-06T02:55:00Z'
+    host: macuahuitl
+    summary: filed p1 ready

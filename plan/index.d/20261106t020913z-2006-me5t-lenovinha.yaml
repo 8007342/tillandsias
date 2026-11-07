@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue (opus5), 2026-11-06, on the coordinator's request after the 2005-ccli waiver.
+packets:
+- packet_id: verify-image-usable-is-ported-to-lua-and-the-carried-waiver-grammar-names-cross-cutting-items
+  order: 2006-me5t
+  status: ready
+  kind: chore
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [shell-to-lua, image-build]
+  estimated_hours: 3
+  title: scripts/verify-image-usable.sh is ported to Lua, and the Carried-Waiver grammar has a token for a cross-cutting item
+  context: 'The shell-to-lua obligation offered scripts/verify-image-usable.sh (81 lines) to 2005-ccli (#947 and the impact slice). It was waived as too-big:scripts/verify-image-usable.sh:81. The coordinator accepted the waiver but called too-big inaccurate for 81 lines. The real reason is that the script is cross-cutting: it sits on the image-build path and its call string is pinned in several places. Call sites and pins on trunk 2026-11-06: scripts/build-image.sh:713 calls "$SCRIPT_DIR/verify-image-usable.sh" "$IMAGE_TAG"; scripts/with-nix-builder.sh:148 resolves it beside itself; crates/tillandsias-headless/src/main.rs ~39497-39538 is a Rust test that finds the exact string "\"$SCRIPT_DIR/verify-image-usable.sh\" \"$IMAGE_TAG\"" in build-image.sh; scripts/test-image-usability-check.sh:33 is its fixture; scripts/test-podman-mock-refusal.sh:212,244 and scripts/test-support/podman-mock.sh:199 cite its inspect form; scripts/portability/pipe-site-floor.txt:881 and shell-decider-floor.txt:593 hold its floors. Proposed waiver token: cross-cutting:<item>:<call-sites>, for an item small enough to port but whose callers or pins sit outside the change, so porting it would widen the change into another area. methodology/convergence.yaml:611 and the reason list in scripts/lua/check-carried-obligations.lua:494 name the accepted reasons today.'
+  exit_criteria:
+  - 'verify-image-usable is a Lua script on tillandsias-plan script run with the same one-line grammar (ok:image-usable, violation:image-not-usable, skip:image-usable). The .sh is deleted, both floors are lowered, and build-image.sh and with-nix-builder.sh call the Lua version. The Rust pin and the mocks follow, and test-image-usability-check passes red-first against an image whose layer dir is removed.'
+  - 'Carried-Waiver accepts cross-cutting:<item>:<call-sites>. The landing check validates it, and methodology/convergence.yaml documents when to use it instead of too-big. A fixture shows that a malformed token is refused and a well-formed one is accepted.'
+  verifiable_closure: 'The image-usability fixture plus the carried-obligations fixture, both in the full gate.'
+  unscoreable: 'none.'
+  next_action: 'Decide whether the build-image path may call tillandsias-plan script run on every host that builds images, including the Mac and Windows builders. If not, keep a shell front and port only the logic. Then write the failing waiver-grammar arm first.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06, from the 2005-ccli waiver review.
+  events:
+  - type: filed
+    ts: '2026-11-06T02:09:13Z'
+    host: lenovinha
+    summary: filed p3 ready

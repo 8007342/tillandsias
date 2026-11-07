@@ -39,8 +39,10 @@ const KEYRING_PREFIX: &str = "ca-key:";
 struct Store {
     /// The 0700 tmpfs directory holding this session's key bytes.
     home: PathBuf,
-    /// The keyring read: an entry's value, or `None` (absent or unreachable).
-    read: fn(&str) -> Option<String>,
+    /// The keyring read: `Ok(Some)` an entry, `Ok(None)` no entry, `Err` the
+    /// keyring could not answer (locked, no session bus, timed out). 2007-ckun:
+    /// the two are not the same: only a proven absence lets the CA be minted.
+    read: fn(&str) -> Result<Option<String>, String>,
     /// The keyring write.
     write: fn(&str, &str) -> Result<(), String>,
 }
@@ -76,6 +78,10 @@ pub(crate) enum Materialized {
     /// Plaintext was deleted, or the key could not be refilled; the caller's
     /// missing-key check re-mints.
     Gone,
+    /// 2007-ckun: the key is missing and the keyring could not be ASKED. The
+    /// key may well exist there, so the caller must not mint: it keeps a
+    /// valid certificate and refuses by name until the keyring answers.
+    Unavailable,
 }
 
 /// Reconcile one key path before the caller asks whether its key is usable.
@@ -103,7 +109,7 @@ pub(crate) fn materialize(persisted: &Path, cert: &Path, keyring: bool) -> Mater
 mod at_rest {
     use std::path::Path;
     use std::process::{Command, Stdio};
-    use std::sync::OnceLock;
+    use std::sync::Mutex;
 
     use super::Materialized;
 
@@ -114,9 +120,77 @@ mod at_rest {
     #[cfg(all(unix, feature = "vault", not(test)))]
     const KEYRING_USER: &str = "ca-key-pass:at-rest";
 
-    pub(super) fn pass() -> &'static str {
-        static PASS: OnceLock<String> = OnceLock::new();
-        PASS.get_or_init(|| durable().unwrap_or_else(fresh))
+    /// The at-rest passphrase, or `None` when it is UNAVAILABLE (2003-kypa).
+    ///
+    /// Unavailable means the durable store could not be read (a locked
+    /// keyring, no session bus, a guest runtime dir that is not tmpfs), or a
+    /// new passphrase could not be stored. Before 2003-kypa both fell back to
+    /// a fresh random value cached for the whole process: that process could
+    /// not decrypt the key at rest, `materialize` deleted it as "lost", and
+    /// the CA was minted again under a running Vault. Now nothing is
+    /// invented: a caller gets no passphrase, openssl fails closed, no key is
+    /// written or deleted, and the next call asks the store again. Only a
+    /// value that was read or stored is cached.
+    pub(super) fn pass() -> Option<String> {
+        #[cfg(test)]
+        if let Some(lookup) = *TEST_LOOKUP.lock().unwrap_or_else(|p| p.into_inner()) {
+            return pass_with(lookup, durable_store);
+        }
+        pass_with(durable_lookup, durable_store)
+    }
+
+    /// Test seam: a stub passphrase store in place of process memory.
+    #[cfg(test)]
+    pub(super) static TEST_LOOKUP: Mutex<Option<PassLookup>> = Mutex::new(None);
+
+    static CACHE: Mutex<Option<String>> = Mutex::new(None);
+
+    /// A passphrase store's read: `Ok(Some)` stored, `Ok(None)` no entry,
+    /// `Err` unreadable.
+    pub(super) type PassLookup = fn() -> Result<Option<String>, String>;
+
+    /// The store answers `Ok(Some)` for a stored passphrase, `Ok(None)` for
+    /// no entry yet (a first run, which creates one), `Err` when it could
+    /// not be read.
+    pub(super) fn pass_with(
+        lookup: PassLookup,
+        store: fn(&str) -> Result<(), String>,
+    ) -> Option<String> {
+        let mut cache = CACHE.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(v) = cache.as_ref() {
+            return Some(v.clone());
+        }
+        let value = match lookup() {
+            Ok(Some(v)) if !v.is_empty() => v,
+            Ok(_) => {
+                let v = fresh();
+                if let Err(e) = store(&v) {
+                    eprintln!(
+                        "[tillandsias] warn:ca-key-pass-unavailable:store-failed: {e}; no CA \
+                         key is written under a passphrase nobody keeps (2003-kypa)"
+                    );
+                    return None;
+                }
+                v
+            }
+            Err(e) => {
+                eprintln!(
+                    "[tillandsias] warn:ca-key-pass-unavailable:read-failed: {e}; the CA \
+                     key at rest is left as it is and asked for again next time (2003-kypa)"
+                );
+                return None;
+            }
+        };
+        *cache = Some(value.clone());
+        Some(value)
+    }
+
+    // Its callers are the linux-only tests below; the same allow as this
+    // file's other linux-test helpers keeps the darwin clippy gate green.
+    #[cfg(test)]
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub(super) fn reset_cache() {
+        *CACHE.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
 
     fn fresh() -> String {
@@ -126,42 +200,52 @@ mod at_rest {
     }
 
     #[cfg(all(unix, feature = "vault", not(test)))]
-    fn durable() -> Option<String> {
+    fn guest_pass_file() -> std::path::PathBuf {
+        crate::vault_bootstrap::runtime_dir_tillandsias().join("ca-key-pass")
+    }
+
+    #[cfg(all(unix, feature = "vault", not(test)))]
+    fn durable_lookup() -> Result<Option<String>, String> {
         if crate::vault_bootstrap::is_running_in_vm() {
             // A guest has no keyring; a pass file on its tmpfs runtime dir
             // lives exactly one boot.
-            let dir = crate::vault_bootstrap::runtime_dir_tillandsias();
-            let file = dir.join("ca-key-pass");
-            if let Ok(existing) = std::fs::read_to_string(&file) {
-                let existing = existing.trim().to_string();
-                if !existing.is_empty() {
-                    return Some(existing);
-                }
-            }
+            return match std::fs::read_to_string(guest_pass_file()) {
+                Ok(v) => Ok(Some(v.trim().to_string()).filter(|v| !v.is_empty())),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(format!("guest pass file: {e}")),
+            };
+        }
+        crate::vault_bootstrap::keyring_get_blocking(KEYRING_USER)
+    }
+
+    #[cfg(all(unix, feature = "vault", not(test)))]
+    fn durable_store(value: &str) -> Result<(), String> {
+        if crate::vault_bootstrap::is_running_in_vm() {
             use std::os::unix::fs::DirBuilderExt;
+            let dir = crate::vault_bootstrap::runtime_dir_tillandsias();
             std::fs::DirBuilder::new()
                 .recursive(true)
                 .mode(0o700)
                 .create(&dir)
-                .ok()?;
+                .map_err(|e| format!("guest runtime dir: {e}"))?;
             if !crate::vault_bootstrap::path_is_tmpfs(&dir) {
-                return None;
+                return Err("guest runtime dir is not tmpfs".into());
             }
-            let value = fresh();
-            super::write_key(&file, value.as_bytes()).ok()?;
-            return Some(value);
+            return super::write_key(&guest_pass_file(), value.as_bytes());
         }
-        if let Some(existing) = super::keyring_read(KEYRING_USER).filter(|v| !v.is_empty()) {
-            return Some(existing);
-        }
-        let value = fresh();
-        super::keyring_write(KEYRING_USER, &value).ok()?;
-        Some(value)
+        super::keyring_write(KEYRING_USER, value)
+    }
+
+    /// No durable store in this build (or under test): process memory only,
+    /// so the passphrase is minted once and kept for the process, as before.
+    #[cfg(not(all(unix, feature = "vault", not(test))))]
+    fn durable_lookup() -> Result<Option<String>, String> {
+        Ok(None)
     }
 
     #[cfg(not(all(unix, feature = "vault", not(test))))]
-    fn durable() -> Option<String> {
-        None
+    fn durable_store(_value: &str) -> Result<(), String> {
+        Ok(())
     }
 
     pub(super) fn is_encrypted(bytes: &[u8]) -> bool {
@@ -172,10 +256,16 @@ mod at_rest {
 
     /// Decrypt `path` in memory: the PEM on stdout, never a file.
     pub(super) fn decrypt(path: &Path) -> Result<Vec<u8>, String> {
+        let pass = pass().ok_or_else(|| {
+            format!(
+                "{}: unavailable:ca-key-pass: the passphrase store could not be read",
+                path.display()
+            )
+        })?;
         let out = Command::new("openssl")
             .args(["pkey", "-passin", &format!("env:{PASS_ENV}"), "-in"])
             .arg(path)
-            .env(PASS_ENV, pass())
+            .env(PASS_ENV, pass)
             .stdin(Stdio::null())
             .stderr(Stdio::null())
             .output()
@@ -198,7 +288,10 @@ mod at_rest {
         let Ok(bytes) = std::fs::read(persisted) else {
             return Materialized::Inactive;
         };
-        if is_encrypted(&bytes) && decrypt(persisted).is_err() {
+        // 2003-kypa: with no passphrase there is no proof the key is lost, so
+        // it is left exactly as it is; only a key that fails under the
+        // passphrase this host keeps is ciphertext nobody can open.
+        if is_encrypted(&bytes) && pass().is_some() && decrypt(persisted).is_err() {
             let _ = std::fs::remove_file(persisted);
             return Materialized::Gone;
         }
@@ -234,9 +327,14 @@ pub(crate) fn key_in_args() -> Vec<String> {
 
 /// The passphrase env for an openssl child that takes [`key_out_args`] or
 /// [`key_in_args`].
-pub(crate) fn pass_env() -> Vec<(&'static str, &'static str)> {
+/// 2003-kypa: with the passphrase unavailable the variable is left UNSET, so
+/// openssl's `env:` read fails and the child exits nonzero: a mint writes no
+/// key and a read reports unknown. No plaintext fallback.
+pub(crate) fn pass_env() -> Vec<(&'static str, String)> {
     if encrypts_at_rest() {
-        vec![(at_rest::PASS_ENV, at_rest::pass())]
+        at_rest::pass()
+            .map(|p| vec![(at_rest::PASS_ENV, p)])
+            .unwrap_or_default()
     } else {
         Vec::new()
     }
@@ -288,7 +386,7 @@ impl Store {
     #[cfg_attr(all(test, not(target_os = "linux")), allow(dead_code))]
     fn at(
         home: PathBuf,
-        read: fn(&str) -> Option<String>,
+        read: fn(&str) -> Result<Option<String>, String>,
         write: fn(&str, &str) -> Result<(), String>,
     ) -> Option<Self> {
         use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
@@ -332,9 +430,19 @@ impl Store {
         let Ok(cert_bytes) = std::fs::read(cert) else {
             return Materialized::Gone;
         };
-        let Some(pem) = (self.read)(&keyring_user(persisted))
-            .and_then(|entry| unseal_entry(&entry, &cert_bytes))
-        else {
+        let entry = match (self.read)(&keyring_user(persisted)) {
+            Ok(entry) => entry,
+            Err(e) => {
+                eprintln!(
+                    "[tillandsias] warn:ca-key-unavailable:{}: the key is not on tmpfs and \
+                     the keyring could not be read ({e}); the CA is kept, not minted again \
+                     (2007-ckun)",
+                    file_name(persisted)
+                );
+                return Materialized::Unavailable;
+            }
+        };
+        let Some(pem) = entry.and_then(|entry| unseal_entry(&entry, &cert_bytes)) else {
             return Materialized::Gone;
         };
         let staged = self.staging_path(persisted, &format!("refill.{}", std::process::id()));
@@ -411,6 +519,68 @@ fn file_name(path: &Path) -> &str {
         .expect("a key path ends in a UTF-8 file name")
 }
 
+/// ORDER 2007-ckun: remove staging files a dead process left: the mint's
+/// `<name>.<pid>.<nanos>.tmp`, the refill's `<name>.refill.<pid>.tmp` and the
+/// preview CA's `<name>.<pid>.tmp` (2008-pvck),
+/// beside `persisted` and in this session's key home. Each is a private key
+/// (or its certificate) from a mint that started and never published. Only
+/// these exact shapes are removed, and only when `<pid>` is not running, so a
+/// mint in progress elsewhere keeps its files and nothing unrecognised is
+/// touched. Returns the names removed, each logged ok:ca-staging-swept.
+pub(crate) fn sweep_stale_staging(persisted: &Path) -> Vec<String> {
+    let mut dirs: Vec<PathBuf> = persisted
+        .parent()
+        .map(Path::to_path_buf)
+        .into_iter()
+        .collect();
+    if let Some(store) = session() {
+        dirs.push(store.home.clone());
+    }
+    let alive = |pid: u32| Path::new(&format!("/proc/{pid}")).exists();
+    sweep_in(&dirs, file_name(persisted), &alive)
+}
+
+fn sweep_in(dirs: &[PathBuf], name: &str, alive: &dyn Fn(u32) -> bool) -> Vec<String> {
+    let mut swept = Vec::new();
+    let prefixes = [name.to_string(), name.replace(".key", ".crt")];
+    for dir in dirs {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            continue;
+        };
+        for e in entries.flatten() {
+            let file = e.file_name().to_string_lossy().into_owned();
+            let Some(pid) = prefixes.iter().find_map(|p| staged_pid(&file, p)) else {
+                continue;
+            };
+            if pid == std::process::id() || alive(pid) {
+                continue;
+            }
+            scrub(&e.path());
+            eprintln!(
+                "[tillandsias] ok:ca-staging-swept:{file}: left by pid {pid}, not running (2007-ckun)"
+            );
+            swept.push(file);
+        }
+    }
+    swept
+}
+
+/// The pid in `<prefix>.<pid>.<digits>.tmp` or `<prefix>.refill.<pid>.tmp`.
+fn staged_pid(file: &str, prefix: &str) -> Option<u32> {
+    let rest = file
+        .strip_prefix(prefix)?
+        .strip_prefix('.')?
+        .strip_suffix(".tmp")?;
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    match rest.split('.').collect::<Vec<_>>()[..] {
+        ["refill", pid] if digits(pid) => pid.parse().ok(),
+        // 2008-pvck: the preview CA stages its key as <name>.<pid>.tmp.
+        [pid] if digits(pid) => pid.parse().ok(),
+        [pid, nanos] if digits(pid) && digits(nanos) => pid.parse().ok(),
+        _ => None,
+    }
+}
+
 fn staged_name(persisted: &Path, unique: &str) -> String {
     format!("{}.{unique}.tmp", file_name(persisted))
 }
@@ -473,13 +643,12 @@ fn unseal_entry(entry: &str, cert_bytes: &[u8]) -> Option<String> {
         .then(|| pem.to_string())
 }
 
-/// A locked or unreachable keyring answers like an absent entry: either way
-/// there is no key to refill, and the CA is minted again.
+/// 2007-ckun: a locked or unreachable keyring is an ERROR, never "no entry".
+/// Before, both read as absent, the key was Gone and the CA was minted again
+/// under a running Vault and proxy.
 #[cfg(all(unix, feature = "vault", not(test)))]
-fn keyring_read(user: &str) -> Option<String> {
+fn keyring_read(user: &str) -> Result<Option<String>, String> {
     crate::vault_bootstrap::keyring_get_blocking(user)
-        .ok()
-        .flatten()
 }
 
 #[cfg(all(unix, feature = "vault", not(test)))]
@@ -499,9 +668,13 @@ mod tests {
     /// Tests share KEYRING, so they run one at a time.
     static SERIAL: Mutex<()> = Mutex::new(());
 
-    fn fake_read(user: &str) -> Option<String> {
+    fn fake_read(user: &str) -> Result<Option<String>, String> {
         let ring = KEYRING.lock().unwrap();
-        ring.iter().find(|(u, _)| u == user).map(|(_, v)| v.clone())
+        Ok(ring.iter().find(|(u, _)| u == user).map(|(_, v)| v.clone()))
+    }
+
+    fn locked_read(_user: &str) -> Result<Option<String>, String> {
+        Err("org.freedesktop.Secret.Error.IsLocked".into())
     }
 
     fn fake_write(user: &str, value: &str) -> Result<(), String> {
@@ -513,6 +686,118 @@ mod tests {
 
     fn refusing_write(user: &str, _value: &str) -> Result<(), String> {
         Err(format!("refused:keyring-unavailable:{user}"))
+    }
+
+    // 2003-kypa: a keyring that fails its first reads and then recovers.
+    // While it fails, the passphrase is unavailable, the encrypted key is
+    // neither decrypted nor deleted, and the dir is byte-identical; once it
+    // recovers, the same key decrypts. Red before 2003-kypa: the failed read
+    // became a fresh cached passphrase, decrypt failed, and materialize
+    // deleted the key (Gone), so the CA was minted again.
+    static FLAKY_READS: Mutex<u32> = Mutex::new(0);
+    fn flaky_lookup() -> Result<Option<String>, String> {
+        let mut n = FLAKY_READS.lock().unwrap();
+        *n += 1;
+        // Down for the three reads made while it is locked, then back.
+        if *n <= 3 {
+            Err("keyring locked".into())
+        } else {
+            Ok(Some("the-kept-passphrase".into()))
+        }
+    }
+
+    #[test]
+    fn a_failed_keyring_read_leaves_the_key_and_recovers_with_the_keyring() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("intermediate.key");
+        let made = std::process::Command::new("openssl")
+            .args([
+                "genpkey",
+                "-algorithm",
+                "EC",
+                "-pkeyopt",
+                "ec_paramgen_curve:P-256",
+            ])
+            .args(["-aes-256-cbc", "-pass", "env:KYPA_PASS", "-out"])
+            .arg(&key)
+            .env("KYPA_PASS", "the-kept-passphrase")
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let before = std::fs::read(&key).unwrap();
+        at_rest::reset_cache();
+        *FLAKY_READS.lock().unwrap() = 0;
+        *at_rest::TEST_LOOKUP.lock().unwrap() = Some(flaky_lookup);
+
+        let unavailable = at_rest::materialize(&key);
+        let env_while_down = pass_env_for_test();
+        let decrypt_while_down = at_rest::decrypt(&key);
+        let bytes_while_down = std::fs::read(&key).ok();
+        let recovered = at_rest::decrypt(&key);
+
+        *at_rest::TEST_LOOKUP.lock().unwrap() = None;
+        at_rest::reset_cache();
+        assert!(
+            matches!(unavailable, Materialized::Inactive),
+            "{unavailable:?}"
+        );
+        assert!(env_while_down.is_empty(), "no passphrase is invented");
+        assert!(
+            decrypt_while_down
+                .unwrap_err()
+                .contains("unavailable:ca-key-pass")
+        );
+        assert_eq!(
+            bytes_while_down.as_deref(),
+            Some(before.as_slice()),
+            "the key changed"
+        );
+        assert!(
+            String::from_utf8_lossy(&recovered.expect("decrypts once the keyring recovers"))
+                .contains("PRIVATE KEY")
+        );
+        assert_eq!(std::fs::read(&key).unwrap(), before);
+    }
+
+    /// pass_env as an at-rest caller sees it, independent of the tmpfs store.
+    fn pass_env_for_test() -> Vec<(&'static str, String)> {
+        at_rest::pass()
+            .map(|p| vec![(at_rest::PASS_ENV, p)])
+            .unwrap_or_default()
+    }
+
+    // 2003-kypa: a first run with a working, empty keyring still creates a
+    // passphrase and keeps it.
+    fn empty_lookup() -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    fn refusing_store(_v: &str) -> Result<(), String> {
+        Err("keyring write refused".into())
+    }
+    fn accepting_store(v: &str) -> Result<(), String> {
+        fake_write("ca-key-pass:at-rest", v)
+    }
+
+    #[test]
+    fn a_first_run_creates_and_stores_the_passphrase_and_a_failed_store_invents_none() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        KEYRING.lock().unwrap().clear();
+        at_rest::reset_cache();
+        assert_eq!(at_rest::pass_with(empty_lookup, refusing_store), None);
+        let made = at_rest::pass_with(empty_lookup, accepting_store).expect("created");
+        assert_eq!(
+            fake_read("ca-key-pass:at-rest").unwrap().as_deref(),
+            Some(made.as_str())
+        );
+        assert_eq!(
+            at_rest::pass_with(empty_lookup, refusing_store),
+            Some(made),
+            "cached"
+        );
+        at_rest::reset_cache();
+        KEYRING.lock().unwrap().clear();
     }
 
     /// (tmpfs home, durable state dir, store); /dev/shm is tmpfs on Linux.
@@ -649,6 +934,92 @@ mod tests {
             store2.materialize(&leaf, &state2.path().join("intermediate.crt"), false),
             Materialized::Gone
         );
+    }
+
+    /// 2007-ckun: a dangling key with a LOCKED keyring is Unavailable, not
+    /// Gone, so the caller keeps the CA instead of minting; a keyring that
+    /// answers "no entry" is still Gone. Pre-fix: FAILS, both were Gone.
+    #[test]
+    fn a_locked_keyring_is_unavailable_not_a_missing_key() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        KEYRING.lock().unwrap().clear();
+        let (_shm, state, store) = store(fake_write);
+        let persisted = mint(&store, state.path(), b"cert", true);
+        let crt = state.path().join("intermediate.crt");
+        std::fs::remove_file(store.home.join("intermediate.key")).unwrap();
+        let locked = Store {
+            home: store.home.clone(),
+            read: locked_read,
+            write: fake_write,
+        };
+        assert_eq!(
+            locked.materialize(&persisted, &crt, true),
+            Materialized::Unavailable
+        );
+        assert!(
+            std::fs::symlink_metadata(&persisted).is_ok(),
+            "the link is left for the next call to refill"
+        );
+        // The keyring unlocks: the same link refills.
+        assert_eq!(
+            store.materialize(&persisted, &crt, true),
+            Materialized::Refilled
+        );
+        // A keyring that answers with no entry is a proven absence.
+        std::fs::remove_file(store.home.join("intermediate.key")).unwrap();
+        KEYRING.lock().unwrap().clear();
+        assert_eq!(
+            store.materialize(&persisted, &crt, true),
+            Materialized::Gone
+        );
+    }
+
+    /// 2007-ckun: staging files of dead processes are swept, those of a live
+    /// one (and this process) are kept, and nothing of another shape is
+    /// touched. Pre-fix: FAILS, nothing swept them (five cleartext keys on
+    /// macuahuitl, Nov 4-5).
+    #[test]
+    fn stale_ca_staging_is_swept_and_live_or_unknown_files_are_kept() {
+        let dir = tempfile::tempdir_in("/dev/shm").unwrap();
+        let me = std::process::id();
+        let names = [
+            "intermediate.key.2781247.1793822354424113489.tmp",
+            "intermediate.crt.2781247.1793822354424113489.tmp",
+            "intermediate.key.refill.95528.tmp",
+            "intermediate.key.95529.tmp",
+            "intermediate.key.4242.1.tmp",
+            &format!("intermediate.key.{me}.7.tmp"),
+            "intermediate.key",
+            "intermediate.key.119",
+            "intermediate.key.abc.1.tmp",
+            "vault.key.2781247.1.tmp",
+        ]
+        .map(String::from);
+        for n in &names {
+            std::fs::write(dir.path().join(n), b"x").unwrap();
+        }
+        let alive = |pid: u32| pid == 4242;
+        let mut swept = sweep_in(&[dir.path().to_path_buf()], "intermediate.key", &alive);
+        swept.sort();
+        assert_eq!(
+            swept,
+            [
+                "intermediate.crt.2781247.1793822354424113489.tmp",
+                "intermediate.key.2781247.1793822354424113489.tmp",
+                "intermediate.key.95529.tmp",
+                "intermediate.key.refill.95528.tmp",
+            ]
+        );
+        for kept in [
+            "intermediate.key.4242.1.tmp",
+            &format!("intermediate.key.{me}.7.tmp"),
+            "intermediate.key",
+            "intermediate.key.119",
+            "intermediate.key.abc.1.tmp",
+            "vault.key.2781247.1.tmp",
+        ] {
+            assert!(dir.path().join(kept).exists(), "{kept} kept");
+        }
     }
 
     fn store_with_ring() -> (tempfile::TempDir, tempfile::TempDir, Store) {

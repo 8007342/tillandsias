@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned follow-up to 1969-scp2's recurrences.
+packets:
+- packet_id: socket-fixtures-wait-out-a-listener-a-parallel-fork-still-holds-before-asserting-it-refuses
+  order: 1980-lsrc
+  status: in_progress
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [test, fixture, mcp, socket]
+  estimated_hours: 1
+  title: Socket fixtures wait out a listener a parallel fork still holds before asserting it refuses
+  context: 'After 1969-scp2, two tests still flaked on lenovinha (recurrences on 1969-scp2, 2026-11-03): lane_socket_owner a_cli_lane_refuses_by_name_when_another_process_owns_its_socket ("a departed owner''s socket") and lane_adoption a_rejoin_serves_a_lane_whose_launcher_was_killed ("the fixture must reproduce the refusing socket"). The live-tray lead was falsified: both already use private socket roots. Cause: both drop a listener and assert the next connect is refused, but a parallel test that spawns a process holds a copy of every fd between fork and exec, so the socket still accepts. Demonstrated with a forked child: CONNECTED while it lives, refused after. PRODUCT PATH: not dependent on an immediate refusal. The only refusal decision is the lane socket stale check on a socket another, departed, process left, whose fds are closed. A transient fork window would read as a live owner, which refuses the launch and never unlinks: fail-closed. The only other non-test listener drop is the OAuth loopback close, which nothing checks for refusal.'
+  exit_criteria:
+  - 'A deterministic fixture forks a child holding the listener: right after the drop the socket still accepts (the old assert fails), and wait_until_refused sees the refusal. Pre-fix result: FAILS, the old fixtures asserted the refusal immediately.'
+  - '10 consecutive full bin-suite passes with a live tray on the host (lenovinha 2026-11-03: 10/10, tray PID 3452580).'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock, run 10 times with a tray running.'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures (1136-n8sh).'
+  related: [1969-scp2]
+  next_action: 'Land the wait helper and the fork fixture.'
+  provenance: 1969-scp2 recurrences recorded by lenovinha 2026-11-03.
+  events:
+  - type: filed
+    ts: '2026-11-03T19:01:38Z'
+    host: lenovinha
+    summary: filed p2 in_progress, claimed by opus5

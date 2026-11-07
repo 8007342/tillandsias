@@ -327,6 +327,10 @@ pub(crate) struct ExecRequest {
     pub toolchain: &'static str,
     pub argv: Vec<String>,
     pub cwd: String,
+    /// 2017-flwt: `cwd` is relative to the project checkout, or (cache) to the
+    /// forge's persistent project cache, where only `worktrees/<name>/...`
+    /// is accepted.
+    pub cwd_in_cache: bool,
     pub tty: bool,
     pub rows: u16,
     pub cols: u16,
@@ -371,6 +375,23 @@ pub(crate) fn parse_exec(params: &Value) -> Result<ExecRequest, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     let cwd = safe_cwd(params["cwd"].as_str().unwrap_or(""))?;
+    // 2017-flwt: a git worktree on the disk-backed project cache, so a forge
+    // need not put every worktree on the small source tmpfs. Only under
+    // `worktrees/`: the rest of the cache is tool state, not source.
+    let cwd_in_cache = match params["cwd_root"].as_str().unwrap_or("project") {
+        "project" => false,
+        "cache" => {
+            let mut parts = cwd.split('/');
+            if parts.next() != Some("worktrees") || parts.next().is_none() {
+                return Err(
+                    "invalid_cwd: a cache cwd must be under worktrees/<name> in the project cache"
+                        .into(),
+                );
+            }
+            true
+        }
+        _ => return Err("invalid_cwd_root: expected \"project\" or \"cache\"".into()),
+    };
     let dim = |key: &str, default: u16| {
         params[key]
             .as_u64()
@@ -382,6 +403,7 @@ pub(crate) fn parse_exec(params: &Value) -> Result<ExecRequest, String> {
         toolchain,
         argv,
         cwd,
+        cwd_in_cache,
         tty: params["tty"].as_bool().unwrap_or(false),
         rows: dim("rows", 24),
         cols: dim("cols", 80),
@@ -496,7 +518,9 @@ pub(crate) fn build_exec_args(
     proxy_env: &[String],
 ) -> Vec<String> {
     let guest_root = format!("/home/forge/src/{project}");
-    let workdir = if req.cwd.is_empty() {
+    let workdir = if req.cwd_in_cache {
+        format!("{FORGE_CACHE_DIR}/{}", req.cwd)
+    } else if req.cwd.is_empty() {
         guest_root.clone()
     } else {
         format!("{guest_root}/{}", req.cwd)
@@ -1082,6 +1106,46 @@ mod tests {
         assert!(err.starts_with("invalid_argv:"), "{err}");
     }
 
+    /// 2017-flwt: a worktree under the project cache is accepted and runs
+    /// there (the cache volume is mounted at the same path in the sibling);
+    /// anything else in the cache, or an unknown root, is refused by name.
+    #[test]
+    fn a_cache_worktree_cwd_runs_under_the_cache_mount_and_nothing_else_does() {
+        let mut v = req(&["analyze"], "worktrees/feature-x/app", false);
+        v["cwd_root"] = json!("cache");
+        let r = parse_exec(&v).unwrap();
+        assert!(r.cwd_in_cache);
+        let args = build_exec_args(&r, "demo", "n", "src-vol", "cache-vol", "f", &[]);
+        assert!(
+            args.join(" ").contains(
+                "--workdir /home/forge/.cache/tillandsias-project/worktrees/feature-x/app"
+            ),
+            "{args:?}"
+        );
+        for cwd in [
+            "",
+            "pub",
+            "worktrees",
+            "tmp/x",
+            "../src",
+            "worktrees/../pub",
+        ] {
+            let mut v = req(&["analyze"], cwd, false);
+            v["cwd_root"] = json!("cache");
+            let err = parse_exec(&v).unwrap_err();
+            assert!(err.starts_with("invalid_cwd:"), "{cwd}: {err}");
+        }
+        let mut v = req(&["analyze"], "app", false);
+        v["cwd_root"] = json!("/etc");
+        assert!(parse_exec(&v).unwrap_err().starts_with("invalid_cwd_root:"));
+        // The default is still the project checkout.
+        assert!(
+            !parse_exec(&req(&["analyze"], "app", false))
+                .unwrap()
+                .cwd_in_cache
+        );
+    }
+
     #[test]
     fn exec_args_confine_the_session_to_the_lane() {
         let r = parse_exec(&req(&["pub", "add", "flame"], "app", true)).unwrap();
@@ -1258,6 +1322,99 @@ mod tests {
             .env("TILLANDSIAS_PROJECT_ROOT", dir)
             .current_dir(dir);
         Some(cmd)
+    }
+
+    /// A lane host that records the first request line and refuses it.
+    fn recording_host(dir: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf) {
+        let sock = dir.join("rec.sock");
+        let log = dir.join("request.json");
+        let listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+        let log2 = log.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let mut writer = stream.try_clone().unwrap();
+                let mut reader = std::io::BufReader::new(stream);
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let req: Value = serde_json::from_str(line.trim()).unwrap();
+                if req["method"] == "tillandsias/exec" {
+                    std::fs::write(&log2, line.trim()).unwrap();
+                    let _ = writeln!(
+                        writer,
+                        "{}",
+                        json!({"jsonrpc": "2.0", "id": req["id"], "error": {"code": -1, "message": "recorded"}})
+                    );
+                } else {
+                    let _ = writeln!(
+                        writer,
+                        "{}",
+                        json!({"jsonrpc": "2.0", "id": req["id"], "result": tillandsias_browser_mcp::framing::tool_result_content(json!({"state": "ready"}))})
+                    );
+                }
+            }
+        });
+        (sock, log)
+    }
+
+    /// 2017-flwt: from a worktree under <cache>/worktrees the shim asks the
+    /// host to run there (cwd_root=cache); from a directory that is neither
+    /// the project nor a cache worktree it refuses by name and asks nothing.
+    #[test]
+    fn shim_sends_a_cache_worktree_cwd_and_refuses_other_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let project = dir.path().join("src");
+        let cache = dir.path().join("cache");
+        let wt = cache.join("worktrees/feature-x/app");
+        let elsewhere = cache.join("tmp");
+        for d in [&project, &wt, &elsewhere] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let (sock, log) = recording_host(dir.path());
+        let Some(mut cmd) = shim(&project, &sock, &["analyze"]) else {
+            eprintln!("skip: no python3");
+            return;
+        };
+        let out = cmd
+            .env("TILLANDSIAS_PROJECT_CACHE", &cache)
+            .current_dir(&wt)
+            .output()
+            .unwrap();
+        let sent: Value =
+            serde_json::from_str(&std::fs::read_to_string(&log).unwrap_or_else(|_| {
+                panic!("no exec request: {}", String::from_utf8_lossy(&out.stderr))
+            }))
+            .unwrap();
+        assert_eq!(sent["params"]["cwd_root"], "cache", "{sent}");
+        assert_eq!(sent["params"]["cwd"], "worktrees/feature-x/app", "{sent}");
+        std::fs::remove_file(&log).unwrap();
+
+        let Some(mut cmd) = shim(&project, &sock, &["analyze"]) else {
+            return;
+        };
+        let out = cmd
+            .env("TILLANDSIAS_PROJECT_CACHE", &cache)
+            .current_dir(&elsewhere)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_ne!(out.status.code(), Some(0), "{stderr}");
+        assert!(stderr.contains("worktrees/<name>"), "{stderr}");
+        assert!(!log.exists(), "a refused path still reached the host");
+
+        // The checkout itself is unchanged: cwd_root=project.
+        let Some(mut cmd) = shim(&project, &sock, &["analyze"]) else {
+            return;
+        };
+        let _ = cmd
+            .env("TILLANDSIAS_PROJECT_CACHE", &cache)
+            .output()
+            .unwrap();
+        let sent: Value = serde_json::from_str(&std::fs::read_to_string(&log).unwrap()).unwrap();
+        assert_eq!(sent["params"]["cwd_root"], "project", "{sent}");
+        assert_eq!(sent["params"]["cwd"], "", "{sent}");
     }
 
     #[test]

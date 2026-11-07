@@ -1,0 +1,35 @@
+# @trace spec:meta-orchestration, order:1247-amcu
+name: litmus:openspec-pin-refusals-carry-affordance
+spec: meta-orchestration
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/openspec-pin.sh (the project's one openspec CLI
+  pin) says WHY it refused and WHAT would make it not a refusal, as labelled
+  "  why:" / "  remedy:" stderr lines beside its unchanged stdout verdict
+  (1247-amcu). The fixture is hermetic (a scratch cache, npm replaced by
+  `false`, nothing downloaded): a non-version, an unknown bump argument, an
+  unwritable cache and a failing npm each refuse with why and remedy, and a
+  static arm fails any verdict site added later without an affordance.
+
+preconditions:
+  - workspace contains scripts/openspec-pin.sh
+  - workspace contains scripts/lua/test-openspec-pin-affordances.lua
+
+critical_path:
+  - step: "four hermetic refusals carry why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-openspec-pin-affordances.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:openspec-pin-affordances:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "an openspec pin refusal names its rule and how to clear it"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "openspec-pin-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in openspec-pin.sh ships without why/remedy"

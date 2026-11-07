@@ -42,6 +42,56 @@ pub enum VaultError {
 
 impl From<reqwest::Error> for VaultError {
     fn from(err: reqwest::Error) -> Self {
-        VaultError::Network(err.to_string())
+        VaultError::Network(error_chain(&err))
+    }
+}
+
+/// 2000-camv: reqwest's own message is only "error sending request for url
+/// (...)"; the cause (a TLS verify failure, a refused connect) is in the
+/// source chain. Every link is kept, so a caller can classify the failure.
+pub(crate) fn error_chain(err: &dyn std::error::Error) -> String {
+    let mut out = err.to_string();
+    let mut source = err.source();
+    while let Some(s) = source {
+        out.push_str(": ");
+        out.push_str(&s.to_string());
+        source = s.source();
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct E(&'static str, Option<Box<E>>);
+    impl std::fmt::Display for E {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.0)
+        }
+    }
+    impl std::error::Error for E {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.1.as_deref().map(|e| e as _)
+        }
+    }
+
+    /// ORDER 2000-camv: the network error keeps the cause. Pre-fix: FAILS, only
+    /// the top message survived, so a TLS failure could not be told apart.
+    #[test]
+    fn a_network_error_keeps_its_cause() {
+        let e = E(
+            "error sending request for url (https://127.0.0.1:8201/v1/sys/health)",
+            Some(Box::new(E(
+                "client error (Connect)",
+                Some(Box::new(E("invalid peer certificate: UnknownIssuer", None))),
+            ))),
+        );
+        let got = error_chain(&e);
+        assert!(
+            got.ends_with("invalid peer certificate: UnknownIssuer"),
+            "{got}"
+        );
     }
 }

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned (the Wan video output gap found staging 1982-kpin).
+packets:
+- packet_id: studio-run-workflow-returns-a-video-output-like-an-image-and-a-video-only-run-is-never-empty
+  order: 1983-svid
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, comfyui, video]
+  estimated_hours: 2
+  title: studio.run_workflow returns a video output like an image, and a video-only run is never empty
+  context: 'ComfyUI v0.40.0 reports SaveVideo/SaveWEBM outputs in the same history images list (animated=true). studio.run_workflow (1) refused any workflow without a SaveImage node (invalid_workflow), so a Wan video-only workflow could not run, (2) forced the studio/<job>/<i> prefix on SaveImage only, and (3) read every output as a PNG, so a video failed the run as "not a PNG".'
+  exit_criteria:
+  - 'A video-only workflow (SaveWEBM) succeeds and returns its video output (kind video, path under studio/, bytes, sidecar). Pre-fix result: FAILS, invalid_workflow no SaveImage node.'
+  - 'A workflow with an image and a video returns both.'
+  - 'An unexpected output type, an empty video or a non-PNG .png fails by name.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- studio_tool::'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures with a stub engine (1136-n8sh).'
+  related: [1982-kpin]
+  next_action: 'Land the save classes and the video output kind.'
+  provenance: coordinator macuahuitl-fedora 2026-11-03.
+  events:
+  - type: filed
+    ts: '2026-11-03T22:06:24Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

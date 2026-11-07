@@ -1,0 +1,33 @@
+# @trace spec:reverse-proxy-internal, order:2007-rtky
+name: litmus:router-key-home-absent
+spec: reverse-proxy-internal
+phase: runtime
+status: active
+description: >
+  Order 2007-rtky: the running tillandsias-router binds only the control
+  socket's own subdirectory ($XDG_RUNTIME_DIR/tillandsias/control), never the
+  runtime directory that holds keys/ (the CA private key on tmpfs) and the key
+  passphrase. Inside the router, /run/host/tillandsias lists control.sock and
+  no keys/, secrets/ or ca-key-pass. Reads names only, never file contents.
+severity: high
+size: small
+preconditions:
+  - a tillandsias-router container is running, started by this build
+critical_path:
+  - step: "Req: the real router's mounts and /run/host/tillandsias show no key home, and its control socket is present"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-router-key-home-absent.lua 2>&1"
+    timeout_ms: 200000
+    success_pattern: "ok:router-key-home-absent:3 arms"
+observability:
+  traces:
+    - "@trace order:2007-rtky"
+  expected_log: "ok:router-key-home-absent:3 arms"
+  log_fields:
+    spec: "reverse-proxy-internal"
+    test: "router-key-home-absent"
+rollback:
+  on_failure: >
+    The router was started by an older build (it binds the whole runtime dir),
+    or build_router_run_args binds something other than control_socket_dir().
+    Recreate the router with this build and re-run.
+  command: "podman inspect -f '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}' tillandsias-router"

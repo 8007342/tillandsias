@@ -99,7 +99,7 @@ fn forwarder_name(handle: &ContainerHandle) -> String {
 /// The router's address on its own (non-window) network: the enclave in
 /// production. The forwarder dials this IP; it does not resolve `router`,
 /// because on the window's network that name is the forwarder itself.
-fn router_upstream() -> Result<(String, String), String> {
+fn router_upstream(project: &str) -> Result<(String, String), String> {
     let rows = podman(
         &[
             "inspect",
@@ -115,12 +115,28 @@ fn router_upstream() -> Result<(String, String), String> {
         .filter(|(net, ip)| !net.starts_with("tillandsias-browser-net-") && !ip.is_empty())
         .map(|(net, ip)| (net.to_string(), ip.to_string()))
         .collect();
+    pick_router_network(&networks, &crate::imagegen_studio::network_name(project))
+        .ok_or_else(|| format!("{ROUTER_CONTAINER} has no network address"))
+}
+
+/// 1985-stdu: the router network a window's forwarder joins. The project's
+/// studio network when the router is on it (so the window reaches the
+/// project's studio route, which admits only that subnet), else the enclave,
+/// else any.
+pub(crate) fn pick_router_network(
+    networks: &[(String, String)],
+    studio_network: &str,
+) -> Option<(String, String)> {
     networks
         .iter()
-        .find(|(net, _)| net == tillandsias_podman::ENCLAVE_NETWORK)
+        .find(|(net, _)| net == studio_network)
+        .or_else(|| {
+            networks
+                .iter()
+                .find(|(net, _)| net == tillandsias_podman::ENCLAVE_NETWORK)
+        })
         .or_else(|| networks.first())
         .cloned()
-        .ok_or_else(|| format!("{ROUTER_CONTAINER} has no network address"))
 }
 
 /// The forwarder's spec: on the window's network as `router`. `start` then
@@ -282,7 +298,7 @@ impl TrayBrowserContainers {
                 ],
                 network_budget(),
             )?;
-            let (router_network, router_ip) = router_upstream()?;
+            let (router_network, router_ip) = router_upstream(request.project_label)?;
             let forwarder =
                 forwarder_spec(&handle, request.project_label, &router_ip, &[preview_port])
                     .build_run_argv()
@@ -934,7 +950,7 @@ impl BrowserContainers for TrayBrowserContainers {
                 ],
                 network_budget(),
             )?;
-            let (router_network, router_ip) = router_upstream()?;
+            let (router_network, router_ip) = router_upstream(request.project_label)?;
             let forwarder = forwarder_spec(&handle, request.project_label, &router_ip, &[])
                 .build_run_argv()
                 .map_err(|e| format!("forwarder argv refused: {e}"))?;
@@ -1002,6 +1018,30 @@ mod tests {
     /// plain rw from user_tmp_t and owned by root. A rootful window mounts its
     /// CDP dir and its profile relabelled (`Z`), so its own private label
     /// lets container_t create the socket (measured: LISTEN-OK).
+    #[test]
+    fn a_projects_window_joins_its_studio_network_when_the_router_is_on_it() {
+        let nets = |v: &[(&str, &str)]| -> Vec<(String, String)> {
+            v.iter()
+                .map(|(a, b)| (a.to_string(), b.to_string()))
+                .collect()
+        };
+        let both = nets(&[
+            ("tillandsias-enclave", "10.0.0.2"),
+            ("tillandsias-studio-kumbia", "10.89.7.2"),
+        ]);
+        // 1985-stdu: the project's studio network wins, so the window's
+        // traffic reaches the router from inside the subnet the route admits.
+        assert_eq!(
+            pick_router_network(&both, "tillandsias-studio-kumbia"),
+            Some(("tillandsias-studio-kumbia".into(), "10.89.7.2".into()))
+        );
+        // Another project's window stays on the enclave (outside the subnet).
+        assert_eq!(
+            pick_router_network(&both, "tillandsias-studio-other"),
+            Some(("tillandsias-enclave".into(), "10.0.0.2".into()))
+        );
+    }
+
     #[test]
     fn a_rootful_window_mounts_its_own_dirs_relabelled() {
         let handle = ContainerHandle {
@@ -1629,7 +1669,8 @@ mod tests {
             [
                 "--add-host=www.acme.localhost:10.89.1.2",
                 // 1725-wkfl: every dev service the router serves, from its list.
-                "--add-host=flutter.acme.localhost:10.89.1.2"
+                "--add-host=flutter.acme.localhost:10.89.1.2",
+                "--add-host=comfyui.acme.localhost:10.89.1.2"
             ]
         );
         assert!(

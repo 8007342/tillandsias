@@ -17,7 +17,7 @@ preconditions:
 
 critical_path:
   - step: "source-shape proof: shared containers unreachable from per-project cleanup"
-    command: "cargo test -p tillandsias-headless tests::per_project_cleanup_never_removes_shared_containers -- --exact 2>&1 | grep 'per_project_cleanup_never_removes_shared_containers ... ok' && echo SHARED-STACK-GUARDED"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter tests::per_project_cleanup_never_removes_shared_containers --require-ok tests::per_project_cleanup_never_removes_shared_containers --name per-project-cleanup-spares-shared && echo SHARED-STACK-GUARDED"
     timeout_ms: 120000
     success_pattern: "SHARED-STACK-GUARDED"
     failure_pattern: "FAILED|panicked"

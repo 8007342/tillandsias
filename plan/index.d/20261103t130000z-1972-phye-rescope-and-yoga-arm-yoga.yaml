@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: an-ollama-model-load-goes-through-the-gpu-arbiter-so-it-evicts-a-resident-image-engine-before-claiming-vram
+    field: next_action
+    value: |-
+      Find where the tray brokers an inference request to Ollama; take the GPU turn there and release the warm engine first; add the holder to gpu.status.
+      Criterion 1 is RE-SCOPED (see the 2026-11-03T13:00Z note): event-driven release, no broker, no poll. Implemented on work/1972-phye (stacked on #883). Remaining: criterion 3 live arm on a host whose ollama places the LLM on the GPU (yoga cannot: ollama drops the 840M iGPU); the tray proxy is a design question for the operator, do not build it.
+    ts: '2026-11-03T13:00:00Z'
+    host: yoga
+events:
+  - packet_id: an-ollama-model-load-goes-through-the-gpu-arbiter-so-it-evicts-a-resident-image-engine-before-claiming-vram
+    event:
+      type: note
+      ts: '2026-11-03T13:00:00Z'
+      host: yoga
+      summary: |-
+        CRITERION 1 RE-SCOPED (coordinator macuahuitl-fedora, 2026-11-03). As filed it named a mechanism that does not exist on Linux: forges call http://inference:11434 directly on the enclave network (crates/tillandsias-headless/src/main.rs:7163, :9556); the tray relays it only on the macOS/Windows vsock path (vsock_server.rs:3208), so nothing can take a GPU turn before an ollama load. A background /api/ps poll was ruled out: the operator's standing ruling polling-cadence-needs-operator-approval (events over polls; anything not real-time polls in minutes; a new cadence needs operator approval). Criterion 1 now reads: a short warm TTL plus event-driven release only. gpu.status and each warm image call look at /api/ps once and release the resident engine when an LLM holding VRAM is spilled (0 < size_vram < size) or measured free VRAM is under 1 GiB; no background loop.
+  - packet_id: an-ollama-model-load-goes-through-the-gpu-arbiter-so-it-evicts-a-resident-image-engine-before-claiming-vram
+    event:
+      type: question
+      ts: '2026-11-03T13:00:00Z'
+      host: yoga
+      summary: |-
+        DESIGN QUESTION FOR THE OPERATOR (recorded at the coordinator's direction, not to be built): should the tray own a proxy in front of inference:11434, so a load passes through the GPU arbiter BEFORE it claims VRAM (the only way to get "release before load" on Linux)? Cost: every forge inference request hops through the tray, and the enclave network changes. Today's event-driven release frees the device after the fact.
+  - packet_id: an-ollama-model-load-goes-through-the-gpu-arbiter-so-it-evicts-a-resident-image-engine-before-claiming-vram
+    event:
+      type: measurement
+      ts: '2026-11-03T13:00:00Z'
+      host: yoga
+      summary: |-
+        MEASURED on yoga (840M vulkan, work/1972-phye built into the tray, tools/call over the tillandsias-default lane socket, client clock):
+        (1) gpu.status with the engine warm and no LLM: holder {kind image, model sdxs09.safetensors, vram_gb null, model_files_gb 1.34, exits_after_idle_s 300}, released_image_engine null.
+        (2) Check placed BEFORE the warm call: two podman calls, ~120-150 ms (podman exec curl /api/ps alone 77-85 ms x3); warm calls became 3272 / 3119 ms against bounds 3120 / 3110 (0 of 2). Moved after the reply on a thread: 3114 / 2971 / 3015 ms against 3090 (2 of 3; the miss is 24 ms).
+        (3) NEGATIVE ARM: ollama logs "dropping integrated GPU; to enable, set OLLAMA_IGPU_ENABLE=1"; qwen2.5:0.5b loads with size_vram 0. The first cut released the engine anyway ("only partly on the GPU"); fixed to count only models holding VRAM. Re-run: released_image_engine null, tillandsias-imagegen-warm still running. Also: amdgpu mem_info_vram here is the 512 MiB carve-out (0.21 GB free), not what Vulkan uses, so the free-VRAM rule is meaningless on this iGPU unless an LLM holds VRAM.
+        Criterion 3's positive arm needs a host whose ollama places the LLM on the GPU.

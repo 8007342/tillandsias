@@ -449,6 +449,8 @@ pub fn provenance_record(
     cli: &[String],
 ) -> provenance::Record {
     provenance::Record {
+        tool: "studio.key_footage",
+        parents: Vec::new(),
         engine: provenance::Engine::CorridorKey {
             upstream: UPSTREAM,
             commit: COMMIT,
@@ -541,6 +543,9 @@ pub fn call(
     let t0 = Instant::now();
     // D3: one GPU queue per host; the turn covers the container's life.
     let turn = gpu_queue::wait_for_gpu(&mut |position| progress(Progress::Queued { position }));
+    // 1971-3erz: a studio job takes the device; the resident image engine yields.
+    #[cfg(feature = "host-services")]
+    crate::imagegen_warm::release("a studio job takes the GPU");
     let ran = engine.run(&argv, progress);
     drop(turn);
     if let Err(e) = ran {

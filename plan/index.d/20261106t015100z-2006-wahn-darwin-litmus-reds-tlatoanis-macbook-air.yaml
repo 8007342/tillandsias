@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-06 at the coordinator's direction (macuahuitl-fedora): the instant pre-build litmus reds on macOS, sorted.
+packets:
+- packet_id: instant-pre-build-litmus-is-green-on-the-macos-host-or-says-why-not
+  order: 2006-wahn
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [litmus, portability, darwin]
+  estimated_hours: 6
+  title: The instant pre-build litmus suite is green on the macOS host, or each red says why it cannot be
+  context: 'COMMAND: PATH="$PWD/target/release:$PATH" scripts/run-litmus-test.sh --size instant --phase pre-build --compact. REGIME: tlatoanis-macbook-air, Apple M5, 16 GiB, macOS 27.0.1 (Darwin 27.0.0), /bin/bash 3.2, BSD userland, no yq, trunk a09492481 (2026-11-06). Linux full gates were green at the same time, so every red here is a darwin parity gap or a test that does not belong on this host. Without target/release on PATH 10 more tests fail rc=127 (tillandsias-plan not found); that is environment, not a red. With it: 14 red.'
+  exit_criteria:
+  - 'FIXED (portability, work/2006-wahn; no assertion weakened): litmus:meta-orchestration-dirty-tree-safety step 4 (scripts/meta-orchestration-worktree-guard.sh compared a /var path with the /private/var path its stamp stores; it now also matches the canonical form); litmus:podman-mock-secret-lifecycle step 2 (BSD wc -l padding); litmus:check-log-survives-the-cache-sweep step 3 ARM 1 (macOS $TMPDIR ends in "/", so the fixture path held "//"); litmus:uninstall-confirms-before-destroying step 2 (the fixture seeds the Linux layout but ran the macOS arm, which also targets the real /usr/local/bin; it now pins TILLANDSIAS_UNINSTALL_FAKE_UNAME=Linux with the seams the uninstaller requires); litmus:inference-tier-table-migration step 1 and litmus:inference-engine-parity-shape step 1 (GNU sed -i and \t; the seeded negative controls never seeded, now sed -i.bak and perl -pi); litmus:expert-serve-endpoint-shape step 2 (BSD paste needs "-").'
+  - 'DARWIN PARITY, OPEN: litmus:fleet-msg-mcp step 1 — scripts/test-fleet-msg-mcp.sh uses coproc (bash 4+), a syntax error under bash 3.2; needs a FIFO rewrite or a declared bash 4 requirement.'
+  - 'NOT FOR THIS HOST: litmus:headless-least-privilege-delegation-shape step 3 is a LIVE systemd-run test ("FAIL: systemd-run unavailable"); it should declare a Linux host precondition rather than fail here.'
+  - 'ENVIRONMENT, OPEN: litmus:skills-canonical-and-mcp-first-shape step 6 rc=127 — yq is not installed on this host; the step could read methodology through the compiled tillandsias-plan reader instead.'
+  - 'DARWIN SLOW, OPEN: litmus:cycle-metrics-recurrence-shape step 1 TIMEOUT — scripts/test-cycle-metrics-recurrence.sh passes (39 arms) but takes 44 s here against a 30 s step budget; a darwin budget regime or a faster fixture, not a looser assertion.'
+  - 'UNDIAGNOSED, OPEN: litmus:plan-only-push-lane-shape step 8 (malformed first attestation: "FAIL: rc=1 before=<sha> after=<same sha>", the lane printed "check-mo-full-attestations refused (full gate required)"); litmus:forge-upstream-auth-gate step 7 ("blocked:upstream-auth-unpublished" where ok:forge-git-mirror is expected); litmus:tillandsias-doctor-names-every-fault step 1 arm 3 BRIDGE ("the host-browser MCP row ... got: no row"; the doctor check is unchanged here).'
+  verifiable_closure: 'The command above on this host reports every remaining red with a host precondition skip or a passing step, attached with its output.'
+  unscoreable: 'unpinnable-until-the-guard-exists: each red is its own existing litmus.'
+  next_action: 'Land the seven portability fixes, then diagnose the three undiagnosed reds and the coproc rewrite.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-06: rerun on trunk with PATH set, sort real versus environment, file one row with the command, the regime and each first failing step, fix the small portability bugs without weakening any test, leave the doctor check alone unless saying why.'
+  events:
+  - type: filed
+    ts: '2026-11-06T02:00:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed in_progress with seven fixes on work/2006-wahn

@@ -129,11 +129,27 @@ for _tr in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/remotes/or
     tracking_total=$((tracking_total + 1))
 done
 
-for _ref in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/heads 2>/dev/null); do
-    _short="${_ref#refs/heads/}"
+# 1977-xpus: both ref lists with their SHAs in two calls, joined here. A head
+# whose SHA equals its tracking twin is tracked and 0 behind with no git spawn;
+# only a differing pair takes the rev-list path below. The loop used to spawn
+# rev-parse and rev-list per head: ~3.5 s on the tillandsias mirror, ahead of
+# READY on every start (measured on yoga 2026-11-03).
+_pairs="$(
+    { git -C "$MIRROR" for-each-ref --format='T %(refname:lstrip=3) %(objectname)' refs/remotes/origin 2>/dev/null
+      git -C "$MIRROR" for-each-ref --format='H %(refname:lstrip=2) %(objectname)' refs/heads 2>/dev/null
+    } | awk '$1 == "T" { t[$2] = $3; next }
+             $1 == "H" && ($2 in t) { print $2, ($3 == t[$2] ? "same" : "differ") }'
+)"
+_old_ifs="$IFS"
+IFS='
+'
+for _pair in $_pairs; do
+    IFS="$_old_ifs"
+    _short="${_pair% *}"
+    _ref="refs/heads/${_short}"
     _track="refs/remotes/origin/${_short}"
-    git -C "$MIRROR" rev-parse --verify --quiet "$_track" >/dev/null 2>&1 || continue
     tracked_heads=$((tracked_heads + 1))
+    [ "${_pair##* }" = "differ" ] || continue
     _n="$(git -C "$MIRROR" rev-list --count "${_ref}..${_track}" 2>/dev/null)" || _n=0
     [ -n "$_n" ] || _n=0
     [ "$_n" -gt 0 ] || continue
@@ -153,6 +169,7 @@ for _ref in $(git -C "$MIRROR" for-each-ref --format='%(refname)' refs/heads 2>/
         behind_heads=$((behind_heads + 1))
     fi
 done
+IFS="$_old_ifs"
 
 # A named branch with no tracking twin cannot be answered: that is unknown,
 # never current. The scope was the whole question.

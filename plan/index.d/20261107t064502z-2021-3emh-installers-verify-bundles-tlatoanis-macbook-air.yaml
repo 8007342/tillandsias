@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-07, from the 2014-auup design (#979) at the coordinator's request.
+packets:
+- packet_id: every-installer-verifies-the-release-sigstore-bundles-before-it-runs-anything
+  order: 2021-3emh
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [release, security, installers]
+  estimated_hours: 4
+  title: The curl and irm installers verify each artifact's Sigstore bundle against the release workflow's identity, not only its SHA256
+  context: 'Found while designing 2014-auup (#979, openspec/changes/tray-self-update §2). release.yml signs every artifact with cosign keyless (GitHub OIDC) and the release gate verifies those bundles against the anchored SAN https://github.com/8007342/tillandsias/.github/workflows/release.yml@refs/heads/main (1407-6jr8, 1953-jmvb). The installers do not: scripts/install.sh, scripts/install-macos.sh and scripts/install-windows.ps1 check SHA256 only, against SHA256SUMS*, which the signing loop skips, so a first install trusts whoever can publish a release page. scripts/install.sh even proceeds when SHA256SUMS or sha256sum is missing. A first install should be checked as strictly as the 2014-auup self-update.'
+  exit_criteria:
+  - 'Each installer verifies the downloaded artifact''s .cosign.bundle with the exact identity (that SAN and issuer https://token.actions.githubusercontent.com), using cosign when present or a pinned, digest-checked cosign it fetches, and refuses with a named reason on a missing bundle, a signature failure or an identity mismatch; a fixture with a tampered artifact and with a bundle from another workflow refuses each.'
+  - 'SHA256SUMS* is signed by the release workflow like every other artifact, and the installers verify it before trusting its hashes.'
+  - 'scripts/install.sh no longer proceeds without SHA256SUMS or a hash tool.'
+  verifiable_closure: 'Installer fixtures refusing a tampered artifact and a foreign-workflow bundle, plus one real curl install of a published release that passes.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixtures land with the fix (1136-n8sh).'
+  next_action: 'Decide how an installer gets a trusted cosign (fetched pinned binary verified by digest, or a small verifier), then add the bundle check to install.sh first, with its fixture.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-07: "file the installer-verifies-bundles row you noted."'
+  events:
+  - type: filed
+    ts: '2026-11-07T06:45:02Z'
+    host: tlatoanis-macbook-air
+    summary: filed p1 ready from the 2014-auup design

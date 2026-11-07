@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-04. Operator approval first-hand in the lenovinha session.
+packets:
+- packet_id: a-dev-build-reads-a-studio-table-overlay-on-the-next-call-and-a-release-build-never-does
+  order: 1991-dovl
+  status: in_progress
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, dev-turnaround, overlay]
+  estimated_hours: 3
+  title: A dev build reads a studio-table overlay on the next call, and a release build never does
+  context: 'OPERATOR (first-hand, lenovinha session 2026-11-04), asked whether development builds should read ~/.tillandsias/dev-overlay/ over the compiled-in model list, node allowlist and folder map: answered "Yes, dev builds only (Recommended)". Built: dev_overlay (enabled = cfg!(debug_assertions)); node-classes.tsv and models.tsv rows are appended per call; extra_model_paths.yaml replaces the compiled map for the validator and the studio mount. The licence register is not overlaid, so an overlay pin still needs the compiled register; a class of an unpinned package still admits nothing; no run argument is read from it. The tray warns at start with every active file.'
+  exit_criteria:
+  - 'A node class added via the overlay takes effect on the next tool call with no restart. Pre-fix result: FAILS, node_not_pinned.'
+  - 'A release build ignores a present overlay.'
+  - 'An overlay model pin is still refused by the compiled licence register.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- dev_overlay a_dev_overlay'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures (1136-n8sh).'
+  related: [1987-smnt, 1986-snpx]
+  next_action: 'Land (stacked on 1987-smnt).'
+  provenance: coordinator macuahuitl-fedora 2026-11-03, confirmed first-hand by the operator 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-04T20:14:44Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5, operator-approved first-hand

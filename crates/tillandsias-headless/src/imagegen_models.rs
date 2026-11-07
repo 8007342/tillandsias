@@ -197,7 +197,28 @@ pub fn parse_manifest(body: &str) -> Result<Vec<ModelFile>, String> {
 }
 
 /// The shipped manifest.
+/// 1986-snpx: the sha256 (first 12) of the models.tsv compiled into THIS
+/// binary, so a stale tray reads as a stale table, not a licence refusal.
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
+pub fn manifest_digest() -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(MODELS_TSV.as_bytes())
+        .iter()
+        .take(6)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 pub fn manifest() -> Vec<ModelFile> {
+    // 1991-dovl: a dev build appends overlay pins (read per call). They still
+    // run only when the compiled-in licence register admits them. An overlay
+    // that does not parse is ignored, loudly, never half-applied.
+    if let Some(extra) = crate::dev_overlay::read(crate::dev_overlay::MODELS) {
+        match parse_manifest(&crate::dev_overlay::append(MODELS_TSV, Some(extra))) {
+            Ok(rows) => return rows,
+            Err(e) => eprintln!("[tillandsias] dev overlay models.tsv ignored: {e}"),
+        }
+    }
     parse_manifest(MODELS_TSV).expect("images/imagegen/models.tsv parses (fixture-checked)")
 }
 

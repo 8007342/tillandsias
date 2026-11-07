@@ -1,0 +1,39 @@
+# @trace spec:git-mirror-service, spec:tillandsias-vault, order:2018-cabd, order:1998-mvrs
+name: litmus:git-image-ca-bind-styles
+spec: git-mirror-service
+phase: pre-build
+status: active
+description: >
+  Order 2018-cabd: the git image, BUILT from images/git/Containerfile and run in
+  a real container, reads the bound CA at /etc/tillandsias/ca.crt under all
+  three bind styles the launcher uses: a single file by -v (remote_projects.rs
+  repo listing and clone), a single file by --mount, and the trust directory at
+  /etc/tillandsias/ca-trust (the mirror). A control build with the 1998-mvrs (b)
+  shape (ca.crt a symlink to a missing file) must fail the file binds; that is
+  the regression that made vault-cli refuse "CA bundle not readable" and the
+  tray loop on GitHub login on macuahuitl.
+severity: critical
+size: long
+inputs:
+  - images/git/**
+  - scripts/lua/test-git-image-ca-bind-styles.lua
+preconditions:
+  - rootless podman, openssl, and the git image's base layers pullable or cached
+critical_path:
+  - step: "Req: the built git image reads the bound CA under the file (-v, --mount) and directory binds; the pre-fix image fails the file binds"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-git-image-ca-bind-styles.lua"
+    timeout_ms: 2400000
+    success_pattern: "ok:git-image-ca-bind-styles:3 arms\\+control"
+observability:
+  traces:
+    - "@trace order:2018-cabd"
+  expected_log: "ok:git-image-ca-bind-styles:3 arms+control"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-image-ca-bind-styles"
+rollback:
+  on_failure: >
+    The git image's /etc/tillandsias/ca.crt is a symlink whose target does not
+    exist in the image, so a single-file bind is not readable; restore the
+    2018-cabd mount-point lines in images/git/Containerfile.
+  command: "grep -q 'touch /etc/tillandsias/ca-trust/intermediate.crt' images/git/Containerfile"

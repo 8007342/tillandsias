@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    field: next_action
+    value: 'Work on this row landed as #802 (work/1378-7w2p). What remains is the measured numbers: on a host with operator consent, run the cargo builds per jobs setting and the tmpfs spill benchmark (zram only vs zram plus disk), and record peak RSS, swap and pids into the tier budgets. Released by lenovinha to free WIP for the 2007-rtky and 2007-ckun p1s.'
+    ts: "2026-11-06T05:59:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: measure-a-forge-cargo-builds-peak-rss-swap-and-pids-per-jobs-setting-and-a-tmpfs-spill-benchmark-zram-only-vs-zram-plus-disk-so-the-tier-budgets-are-numbers-not-formulas
+    event:
+      type: note
+      ts: "2026-11-06T05:59:32Z"
+      host: lenovinha
+      summary: |-
+        released; state where it stands

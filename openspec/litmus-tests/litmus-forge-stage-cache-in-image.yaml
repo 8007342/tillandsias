@@ -1,0 +1,33 @@
+# @trace spec:forge-environment-discoverability, order:2005-ccli
+name: litmus:forge-stage-cache-in-image
+spec: forge-environment-discoverability
+phase: post-build
+status: active
+description: >
+  Order 2005-ccli exit criterion: in a freshly built forge image, with no host
+  checkout, tillandsias-cache answers its help and one real put and get for a
+  project that is not tillandsias (a "docs" stage). With no project cache it
+  refuses no_project_cache and exits nonzero instead of answering an empty
+  result. Nothing in the image needs a credential or privilege.
+severity: medium
+size: small
+preconditions:
+  - a localhost/tillandsias-forge image is built
+critical_path:
+  - step: "Req: the built forge image runs tillandsias-cache help, put and get on a scratch project cache, and refuses with no project cache"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tillandsias-cache-in-image.lua 2>&1"
+    timeout_ms: 400000
+    success_pattern: "ok:tillandsias-cache-in-image:3 arms"
+observability:
+  traces:
+    - "@trace order:2005-ccli"
+  expected_log: "ok:tillandsias-cache-in-image:3 arms"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-stage-cache-in-image"
+rollback:
+  on_failure: >
+    The built forge image lacks tillandsias-cache on PATH or it cannot run
+    without the host. Check the COPY and symlink in images/default/Containerfile
+    and that python3 is in the base image.
+  command: "podman run --rm --entrypoint /bin/sh localhost/tillandsias-forge -c 'command -v tillandsias-cache'"

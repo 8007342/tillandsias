@@ -355,6 +355,12 @@ pub const CLOUDFLARE_LOGIN_SCOPES: &[&str] = &[
 
 const RELAY_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const RELAY_POLL_MAX_TRANSPORT_FAILURES: u32 = 5;
+/// 2013-rlcd: the most relay polls one login makes (a stated request budget).
+/// With a 2 s start doubling to 16 s, 60 polls cover more than the 300 s
+/// login window.
+const RELAY_POLL_BUDGET: u32 = 60;
+/// The poll backs off from `RELAY_POLL_INTERVAL` to this many times it.
+const RELAY_POLL_BACKOFF_CAP_FACTOR: u32 = 8;
 /// Requests on the loopback port that are NOT the callback (a favicon, a
 /// stray local client) are answered 404 and counted; past this many the
 /// listener is treated as under attack and the login refuses.
@@ -825,12 +831,20 @@ fn poll_relay(
     http: &dyn HttpClient,
     poll_url: &str,
     expected_state: &str,
+    relay_secret: &str,
     deadline: Instant,
     interval: Duration,
 ) -> Result<AuthCode, Refusal> {
-    let sep = if poll_url.contains('?') { '&' } else { '?' };
-    let url = format!("{poll_url}{sep}state={expected_state}");
+    // 2013-rlcd: POST {nonce, s} to the bare poll URL. The state never goes in
+    // a URL, and the secret only in the body, where no access log records it.
+    let nonce = expected_state
+        .split_once('.')
+        .map_or(expected_state, |(n, _)| n);
+    let form = [("nonce", nonce), ("s", relay_secret)];
+    let cap = interval.saturating_mul(RELAY_POLL_BACKOFF_CAP_FACTOR);
+    let mut delay = interval;
     let mut failures = 0u32;
+    let mut requests = 0u32;
     loop {
         if Instant::now() >= deadline {
             return Err(Refusal::login(
@@ -839,7 +853,16 @@ fn poll_relay(
                 "scan the QR again after re-running `tillandsias --cloudflare-login --via qr`, or use `--via paste`",
             ));
         }
-        match http.get(&url) {
+        if requests >= RELAY_POLL_BUDGET {
+            return Err(Refusal::login(
+                "relay-poll-budget",
+                "the relay was asked the most times one login allows, without a code",
+                "start the sign-in again, or use `--via paste`",
+            ));
+        }
+        requests += 1;
+        let mut wait = delay;
+        match http.post_form(poll_url, &form) {
             Ok(r) if r.status == 200 => {
                 let v: serde_json::Value = serde_json::from_str(&r.body).map_err(|_| {
                     Refusal::login(
@@ -856,7 +879,18 @@ fn poll_relay(
                 }
                 return judge_callback(&params, expected_state);
             }
-            Ok(r) if matches!(r.status, 202 | 204 | 404) => {}
+            // Not yet, or not for us: a wrong or missing secret answers the
+            // same 404 as no result, so nothing is learnt from it.
+            Ok(r) if matches!(r.status, 202 | 204 | 404) => {
+                delay = (delay.saturating_mul(2)).min(cap);
+            }
+            Ok(r) if matches!(r.status, 429 | 503) => {
+                // Honour Retry-After when given, else back off.
+                if let Some(s) = r.retry_after_s {
+                    wait = Duration::from_secs(s).max(delay);
+                }
+                delay = (delay.saturating_mul(2)).min(cap);
+            }
             Ok(r) => {
                 return Err(Refusal::login(
                     format!("relay-poll-http-{}", r.status),
@@ -873,10 +907,22 @@ fn poll_relay(
                         "check TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL, or unset it and paste the code",
                     ));
                 }
+                delay = (delay.saturating_mul(2)).min(cap);
             }
         }
-        std::thread::sleep(interval);
+        std::thread::sleep(jittered(wait));
     }
+}
+
+/// ±20 % jitter, from the clock's sub-second nanoseconds (no randomness is
+/// needed for spreading polls, only variation).
+fn jittered(d: Duration) -> Duration {
+    let n = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|t| t.subsec_nanos())
+        .unwrap_or(0);
+    let pct = 80 + (n % 41); // 80..=120
+    d.saturating_mul(pct) / 100
 }
 
 /// The relay page must be https (the phone reaches it over the internet),
@@ -1155,6 +1201,7 @@ fn login_code_flow(
                     deps.http,
                     poll,
                     &pending.state,
+                    pending.relay_secret_for_poll(),
                     deadline,
                     deps.poll_interval,
                 )?
@@ -1751,7 +1798,10 @@ pub fn run_cli(args: &[String]) -> i32 {
     };
     let debug = args.iter().any(|a| a == "--debug");
     let http = cloudflare_oauth::ReqwestHttpClient::default();
-    let store = vault_bootstrap::VaultCloudflareTokenStore { debug };
+    let store = vault_bootstrap::VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: true,
+    };
     let host_is_forge = std::env::var("TILLANDSIAS_HOST_KIND").as_deref() == Ok("forge");
     let mut stdout = std::io::stdout();
     let result = match cmd {
@@ -2162,6 +2212,7 @@ mod tests {
             s.gets.borrow_mut().push((
                 format!("{BASE}/.well-known/openid-configuration"),
                 HttpResponse {
+                    retry_after_s: None,
                     status: 200,
                     body: serde_json::json!({
                         "authorization_endpoint": format!("{BASE}/oauth2/auth"),
@@ -2173,20 +2224,11 @@ mod tests {
             ));
             s
         }
-        fn get_then(self, prefix: &str, status: u16, body: &str) -> Self {
-            self.gets.borrow_mut().push((
-                prefix.to_string(),
-                HttpResponse {
-                    status,
-                    body: body.into(),
-                },
-            ));
-            self
-        }
         fn post_then(self, prefix: &str, status: u16, body: &str) -> Self {
             self.posts.borrow_mut().push((
                 prefix.to_string(),
                 HttpResponse {
+                    retry_after_s: None,
                     status,
                     body: body.into(),
                 },
@@ -2253,6 +2295,7 @@ mod tests {
         s.gets.borrow_mut().push((
             format!("{BASE}/.well-known/openid-configuration"),
             HttpResponse {
+                retry_after_s: None,
                 status: 200,
                 body: d.to_string(),
             },
@@ -2912,14 +2955,212 @@ mod tests {
         assert_eq!(store.snapshot(), before);
     }
 
+    /// 2013-rlcd: a relay implementing scheme A (design relay-security.md §3).
+    /// It stores a code under the state's nonce and releases it once, only to a
+    /// POST whose secret hashes to the H(s) the state carried. Anything else,
+    /// a wrong secret or no secret, gets the same 404 and deletes nothing.
+    struct FakeRelay {
+        stored: RefCell<Option<(String, String, String)>>, // (nonce, H(s), code)
+        reads: RefCell<u32>,
+        posts: RefCell<Vec<Vec<(String, String)>>>,
+        urls: RefCell<Vec<String>>,
+        answer_429_first: RefCell<u32>,
+    }
+    impl FakeRelay {
+        fn holding(state: &str, code: &str) -> Self {
+            let (nonce, h) = state.split_once('.').expect("state is nonce.H(s)");
+            FakeRelay {
+                stored: RefCell::new(Some((nonce.into(), h.into(), code.into()))),
+                reads: RefCell::new(0),
+                posts: RefCell::new(Vec::new()),
+                urls: RefCell::new(Vec::new()),
+                answer_429_first: RefCell::new(0),
+            }
+        }
+        fn hash(s: &str) -> String {
+            use base64::Engine as _;
+            use sha2::Digest as _;
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(sha2::Sha256::digest(s.as_bytes()))
+        }
+    }
+    impl HttpClient for FakeRelay {
+        fn get(&self, url: &str) -> Result<HttpResponse, String> {
+            self.urls.borrow_mut().push(url.to_string());
+            Ok(HttpResponse {
+                status: 404,
+                body: String::new(),
+                retry_after_s: None,
+            })
+        }
+        fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<HttpResponse, String> {
+            self.urls.borrow_mut().push(url.to_string());
+            *self.reads.borrow_mut() += 1;
+            self.posts.borrow_mut().push(
+                form.iter()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+            );
+            if *self.answer_429_first.borrow() > 0 {
+                *self.answer_429_first.borrow_mut() -= 1;
+                return Ok(HttpResponse {
+                    status: 429,
+                    body: String::new(),
+                    retry_after_s: Some(0),
+                });
+            }
+            let get = |k: &str| {
+                form.iter()
+                    .find(|(n, _)| *n == k)
+                    .map(|(_, v)| v.to_string())
+            };
+            let (Some(nonce), Some(secret)) = (get("nonce"), get("s")) else {
+                return Ok(HttpResponse {
+                    status: 404,
+                    body: String::new(),
+                    retry_after_s: None,
+                });
+            };
+            let mut st = self.stored.borrow_mut();
+            match st.as_ref() {
+                Some((n, h, code)) if *n == nonce && *h == Self::hash(&secret) => {
+                    let body =
+                        serde_json::json!({"state": format!("{n}.{h}"), "code": code}).to_string();
+                    *st = None; // released once
+                    Ok(HttpResponse {
+                        status: 200,
+                        body,
+                        retry_after_s: None,
+                    })
+                }
+                _ => Ok(HttpResponse {
+                    status: 404,
+                    body: String::new(),
+                    retry_after_s: None,
+                }),
+            }
+        }
+    }
+
+    /// 2013-rlcd: the terminal binds the relay result to a secret only it
+    /// holds. The state is nonce.H(s); the poll is a POST carrying (nonce, s),
+    /// never the state in a URL. A stranger who saw the QR (and so the state)
+    /// gets nothing and deletes nothing; the terminal then still gets the code
+    /// once. Pre-fix: FAILS, the poll was GET ?state= and the state carried no
+    /// hash.
+    #[test]
+    fn a_relay_result_reaches_only_the_terminal_holding_the_secret() {
+        let pending_secret = "terminal-only-secret-0123456789abcdefghijklmnop";
+        let state = format!("{}.{}", "N".repeat(43), FakeRelay::hash(pending_secret));
+        let relay = FakeRelay::holding(&state, "c0de");
+        let poll = "https://relay.example/poll";
+        // A stranger knows the state (it was in the QR), not the secret.
+        let stranger = relay
+            .post_form(poll, &[("nonce", &"N".repeat(43)), ("s", "guess")])
+            .unwrap();
+        assert_eq!(stranger.status, 404, "a wrong secret gets nothing");
+        let stranger = relay.post_form(poll, &[("state", &state)]).unwrap();
+        assert_eq!(stranger.status, 404, "the state alone gets nothing");
+        // The terminal polls with its secret and gets the code once.
+        let code = poll_relay(
+            &relay,
+            poll,
+            &state,
+            pending_secret,
+            Instant::now() + Duration::from_secs(5),
+            Duration::from_millis(1),
+        )
+        .unwrap();
+        assert_eq!(code.expose_to_token_endpoint(), "c0de");
+        // Every terminal request was a POST to the bare poll URL: nothing
+        // secret in a URL, and the secret only in the form body.
+        assert!(
+            relay.urls.borrow().iter().all(|u| u == poll),
+            "{:?}",
+            relay.urls.borrow()
+        );
+        let last = relay.posts.borrow().last().cloned().unwrap();
+        assert!(last.iter().any(|(k, v)| k == "s" && v == pending_secret));
+        assert!(
+            !last.iter().any(|(k, _)| k == "state"),
+            "the state is not re-sent"
+        );
+        // Released once: a replay gets nothing.
+        let replay = relay
+            .post_form(poll, &[("nonce", &"N".repeat(43)), ("s", pending_secret)])
+            .unwrap();
+        assert_eq!(replay.status, 404);
+    }
+
+    /// 2013-rlcd: the terminal honours 429 and Retry-After, backs off, and
+    /// stops at its request budget with a named refusal rather than polling
+    /// forever. Pre-fix: FAILS, a 429 was refused as an unexpected status and
+    /// there was no budget.
+    #[test]
+    fn the_relay_poll_honours_retry_after_and_stays_inside_its_budget() {
+        let secret = "terminal-only-secret-0123456789abcdefghijklmnop";
+        let state = format!("{}.{}", "M".repeat(43), FakeRelay::hash(secret));
+        let relay = FakeRelay::holding(&state, "c0de");
+        *relay.answer_429_first.borrow_mut() = 3;
+        let poll = "https://relay.example/poll";
+        let code = poll_relay(
+            &relay,
+            poll,
+            &state,
+            secret,
+            Instant::now() + Duration::from_secs(5),
+            Duration::from_millis(1),
+        )
+        .unwrap();
+        assert_eq!(code.expose_to_token_endpoint(), "c0de");
+        assert_eq!(*relay.reads.borrow(), 4, "three 429s, then the code");
+        // A relay that never has the code: the poll stops at its budget.
+        let empty = FakeRelay::holding(
+            &format!("{}.{}", "Q".repeat(43), FakeRelay::hash("other")),
+            "x",
+        );
+        let e = poll_relay(
+            &empty,
+            poll,
+            &format!("{}.{}", "Z".repeat(43), FakeRelay::hash(secret)),
+            secret,
+            Instant::now() + Duration::from_secs(30),
+            Duration::from_millis(1),
+        )
+        .unwrap_err();
+        assert_eq!(e.reason, "relay-poll-budget");
+        assert!(
+            *empty.reads.borrow() <= RELAY_POLL_BUDGET,
+            "{}",
+            empty.reads.borrow()
+        );
+    }
+
+    /// 2013-rlcd: `begin` makes the state nonce.H(s) for a fresh secret held
+    /// only in the pending login, never printed or put in the authorize URL.
+    #[test]
+    fn the_login_state_carries_only_a_hash_of_the_terminal_secret() {
+        let http = Scripted::with_discovery("");
+        let p =
+            cloudflare_oauth::begin(&http, BASE, "cid", "https://relay.example/cb", &[]).unwrap();
+        let (nonce, h) = p.state.split_once('.').expect("nonce.H(s)");
+        assert!(nonce.len() >= 43 && h.len() == 43, "{}", p.state);
+        assert_eq!(FakeRelay::hash(p.relay_secret_for_poll()), h);
+        assert!(!p.authorize_url.contains(p.relay_secret_for_poll()));
+        assert!(
+            !format!("{p:?}").contains(p.relay_secret_for_poll()),
+            "redacted from Debug"
+        );
+    }
+
     #[test]
     fn cloudflare_login_relay_poll_state_first_then_code() {
         let st = "P".repeat(43);
         let poll = "https://relay.example/poll";
         let http = Scripted::default()
-            .get_then(poll, 404, "")
-            .get_then(poll, 202, "")
-            .get_then(
+            .post_then(poll, 404, "")
+            .post_then(poll, 202, "")
+            .post_then(
                 poll,
                 200,
                 &serde_json::json!({"state": st, "code": "c0de"}).to_string(),
@@ -2928,14 +3169,22 @@ mod tests {
             &http,
             poll,
             &st,
+            "secret",
             Instant::now() + Duration::from_secs(5),
             Duration::from_millis(1),
         )
         .unwrap();
         assert_eq!(code.expose_to_token_endpoint(), "c0de");
         assert_eq!(http.calls.borrow().len(), 3);
+        // 2013-rlcd: every poll is a POST, with the state out of the URL.
+        assert!(
+            http.calls
+                .borrow()
+                .iter()
+                .all(|c| c == &format!("POST {poll}"))
+        );
         // A forged state in the relay's answer is refused.
-        let http = Scripted::default().get_then(
+        let http = Scripted::default().post_then(
             poll,
             200,
             &serde_json::json!({"state": "forged", "code": "c0de"}).to_string(),
@@ -2944,17 +3193,19 @@ mod tests {
             &http,
             poll,
             &st,
+            "secret",
             Instant::now() + Duration::from_secs(5),
             Duration::from_millis(1),
         )
         .unwrap_err();
         assert_eq!(e.reason, "state-mismatch");
         // A hostile body never reaches the refusal.
-        let http = Scripted::default().get_then(poll, 200, &format!("not json {LEAK_A}"));
+        let http = Scripted::default().post_then(poll, 200, &format!("not json {LEAK_A}"));
         let e = poll_relay(
             &http,
             poll,
             &st,
+            "secret",
             Instant::now() + Duration::from_secs(5),
             Duration::from_millis(1),
         )
@@ -3574,8 +3825,12 @@ mod tests {
     }
     impl HttpClient for PhoneRelay<'_> {
         fn get(&self, url: &str) -> Result<HttpResponse, String> {
-            if !url.starts_with(self.poll) {
-                return self.real.get(url);
+            assert!(!url.starts_with(self.poll), "the relay poll is a POST");
+            self.real.get(url)
+        }
+        fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<HttpResponse, String> {
+            if url != self.poll {
+                return self.real.post_form(url, form);
             }
             let text = String::from_utf8(self.out.borrow().clone()).unwrap();
             let authorize = text
@@ -3586,13 +3841,24 @@ mod tests {
             let loc = fake::consent(&authorize, "approve");
             let q = parse_query(loc.split_once('?').unwrap().1).unwrap();
             let get = |k: &str| q.iter().find(|(kk, _)| kk == k).unwrap().1.clone();
+            // Scheme A: release only to the holder of the secret whose hash is in state.
+            let field = |k: &str| form.iter().find(|(kk, _)| *kk == k).map(|(_, v)| *v);
+            let state = get("state");
+            let (nonce, hashed) = state.split_once('.').expect("state = nonce . H(s)");
+            let released = field("nonce") == Some(nonce)
+                && field("s").is_some_and(|s| FakeRelay::hash(s) == hashed);
+            if !released {
+                return Ok(HttpResponse {
+                    retry_after_s: None,
+                    status: 404,
+                    body: String::new(),
+                });
+            }
             Ok(HttpResponse {
+                retry_after_s: None,
                 status: 200,
-                body: serde_json::json!({"state": get("state"), "code": get("code")}).to_string(),
+                body: serde_json::json!({"state": state, "code": get("code")}).to_string(),
             })
-        }
-        fn post_form(&self, url: &str, form: &[(&str, &str)]) -> Result<HttpResponse, String> {
-            self.real.post_form(url, form)
         }
     }
 

@@ -1,0 +1,32 @@
+# @trace spec:forge-environment-discoverability, order:2005-ccli
+name: litmus:forge-impact-plan-in-image
+spec: forge-environment-discoverability
+phase: post-build
+status: active
+description: >
+  Order 2005-ccli exit criterion, slice 2: in a freshly built forge image, with
+  no host checkout, tillandsias-impact answers its help and one real plan for a
+  docs site (not tillandsias), writing only its report; an invalid graph is
+  refused by name and exits nonzero. No credential or privilege is needed.
+severity: medium
+size: small
+preconditions:
+  - a localhost/tillandsias-forge image is built
+critical_path:
+  - step: "Req: the built forge image runs tillandsias-impact help and one plan, and refuses an empty graph"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tillandsias-impact-in-image.lua 2>&1"
+    timeout_ms: 400000
+    success_pattern: "ok:tillandsias-impact-in-image:3 arms"
+observability:
+  traces:
+    - "@trace order:2005-ccli"
+  expected_log: "ok:tillandsias-impact-in-image:3 arms"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-impact-plan-in-image"
+rollback:
+  on_failure: >
+    The built forge image lacks tillandsias-impact on PATH or it cannot run
+    without the host. Check the COPY and symlink in images/default/Containerfile
+    and that python3 is in the base image.
+  command: "podman run --rm --entrypoint /bin/sh localhost/tillandsias-forge -c 'command -v tillandsias-impact'"

@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: launch-path-memoizes-digests-podman-lookups-and-probes
+    field: next_action
+    value: |-
+      Nothing is built yet. Left: start with the OnceLock digest and podman path, then the image stamp, then the per-launch memo.
+      CRITERION 2 RE-SCOPED (coordinator macuahuitl-fedora, 2026-11-03; see the 16:05Z note): closes on the measured counts in #891 (103 -> 79 podman calls per warm launch, pre-launch ~3.75 s -> ~3.2 s), not "<10 spawns". Shipped as #891 (work/1920-lnch).
+    ts: '2026-11-03T16:05:00Z'
+    host: yoga
+events:
+  - packet_id: launch-path-memoizes-digests-podman-lookups-and-probes
+    event:
+      type: note
+      ts: '2026-11-03T16:05:00Z'
+      host: yoga
+      summary: |-
+        CRITERION 2 RE-SCOPED (coordinator macuahuitl-fedora, 2026-11-03). As filed: "execsnoop of one warm forge launch shows fewer than 10 podman spawns; today 15-30". Its premise was wrong: the count was 103, not 15-30. And the target buys almost nothing: every pre-launch podman call together cost ~3.75 s, the cut to 79 saved ~0.55 s, and the launcher's seconds are in the mirror seed (6.7-12 s), tracked as 1977-xpus. Now reads: the warm-launch podman count and pre-launch wall time drop, with before and after measured on one host. MEASURED on yoga, 3 runs each (TILLANDSIAS_PODMAN_BIN wrapper): before (installed v56.11.3.1) 103 calls, pre-launch 3733-3772 ms; after (#891 @ ffee57689) 79 calls, 3201-3241 ms. Criterion 1 MET: `--debug --init` prints "embedded manifest digest computed (18 ms)" once; it was hashed 3 times.
+  - packet_id: a-warm-launch-does-not-reseed-a-current-mirror
+    event:
+      type: claimed
+      ts: '2026-11-03T16:05:00Z'
+      host: yoga
+      summary: claimed by yoga at the coordinator's direction (macuahuitl-fedora 2026-11-03); work ref work/1977-xpus. A fixture red on today's entrypoint comes first.

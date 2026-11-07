@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-02, coordinator-assigned (operator Kumbia trial).
+packets:
+- packet_id: studio-run-workflow-fetches-the-birefnet-loader-model-and-returns-every-save-image-node
+  order: 1972-stfx
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, comfyui]
+  estimated_hours: 2
+  title: studio.run_workflow fetches the BiRefNet loader's model and returns every SaveImage node's output
+  context: 'Kumbia trial: (1) LoadRembgByBiRefNetModel names its weights in input model, which MODEL_INPUTS does not read, so I1/birefnet model.safetensors was never admitted or fetched and ComfyUI refused value_not_in_list. (2) Two SaveImage nodes were both forced to prefix studio/<job>/<i>, so one overwrote or hid the other and only one output came back.'
+  exit_criteria:
+  - 'A workflow with LoadRembgByBiRefNetModel model=model.safetensors fetches that pinned file. Pre-fix result: FAILS, nothing fetched.'
+  - 'A workflow with two SaveImage nodes returns two outputs at distinct paths. Pre-fix result: FAILS, both share one prefix.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- studio_tool::'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures with a stub engine (1136-n8sh).'
+  next_action: 'Land with 1971-mcpu after the release cut.'
+  provenance: Kumbia trial relayed by macuahuitl-fedora 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-03T07:03:02Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5
