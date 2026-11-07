@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-plan-lane-fail-closed-fixture-blames-the-fix-when-the-ambient-plan-binary-is-stale
+    order: 2027-tvyy
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [fail-loud, testing, plan-binary, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
+    title: |
+      test-pre-push-plan-lane-fails-closed-without-binary arm2 reports "the fix would have destroyed the lane" when the plan binary it resolved from the host is STALE, so an environment fault reads as a code defect and evicts a good PR
+    context: |
+      MEASURED on macuahuitl 2026-11-07: #793 (1945-sthg) at 9684abc57 was evicted at
+      preflight by arm2, the negative control: "the fast lane no longer accepts a valid
+      fragment push (rc=1) — the fix would have destroyed the lane". The inner refusal
+      was the plan-only lane's own "the resolved plan binary is STALE": arm2 resolved
+      /home/tlatoani/.local/bin/tillandsias-plan, built from validator surface 429cc604,
+      while the checkout was at e2be3c0a (58588659c had moved the surface). Reinstalling
+      the binary from trunk cleared it. On lenovinha the same commit passed 6/6 on
+      trunk, at the PR head, in a fresh worktree and through ./build.sh --preflight.
+      Arm2 checks only `capabilities` before driving the lane, so a runnable but stale
+      binary passes its precondition and the lane's correct refusal is then reported as
+      the fix's fault.
+    exit_criteria:
+      - 'arm2 checks the resolved binary with `validator-surface-hash --check` before driving the lane. When the binary is stale it reports an ENVIRONMENT verdict that names the binary, both surfaces, and the remedy scripts/check-plan-binary-current.sh, and it does not claim that the fix destroyed the lane'
+      - 'a stale binary must never turn arm2 green: the arm reports could-not-run or env-fail, not ok'
+      - 'NEGATIVE CONTROL: with a current binary, a lane that really refuses a valid fragment push still fails arm2 with the existing message'
+    verifiable_closure: 'scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh, run with TILLANDSIAS_PLAN_BIN pointing at a stale-surface binary, prints an environment verdict naming that binary and never "would have destroyed the lane"; with a current binary it prints "6 passed, 0 failed" (litmus:pre-push-plan-lane-fails-closed-without-binary)'
+    provenance: macuahuitl-fedora (coordinator) 2026-11-07 from #793's eviction; filed by lenovinha.
+    depends_on: []
+    related: [1270-5mz8]
+    events:
+      - type: filed
+        ts: '2026-11-07T21:42:57Z'
+        host: lenovinha
+        summary: filed at the coordinator's request after #793's preflight eviction traced to a stale ~/.local/bin plan binary on macuahuitl

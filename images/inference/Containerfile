@@ -7,6 +7,11 @@
 #         User creation: useradd (NOT Alpine's adduser -D).
 #         CA bundle at /etc/pki/tls/certs/ca-bundle.crt (NOT Alpine's /etc/ssl/).
 FROM registry.fedoraproject.org/fedora-minimal:44
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # @trace spec:inference-container
 # Runtime deps for ollama, minimal deps for running ollama CPU-only

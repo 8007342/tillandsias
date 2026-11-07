@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls
+    event:
+      type: parked
+      ts: "2026-11-07T21:38:27Z"
+      agent_id: linux-yoga-opus5-20261107t213827z
+      host: yoga
+      summary: |
+        PARKED for the v56.11.7.1 stable smoke (macuahuitl priority). Implemented on work/2025-e6mi at c68f4f82f: fixture webstudio_open_launches_from_the_lane_once_and_returns_its_urls red before (operator-command error) and green after; ./build.sh --preflight ran=247 refused=0 (partial, 38 unexamined). NEXT: live check from a real forge (webstudio.open grapesjs opens the dev Chromium window), open the PR, file follow-ups (studio launch log not lane-visible; duplicate launch after a tray restart). 2026-ggu8 (studio affordances) goes on the same ref.
