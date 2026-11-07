@@ -224,3 +224,8 @@ comfyui-core	SaveAudio
 comfyui-core	SaveAudioMP3
 comfyui-core	SaveAudioOpus
 comfyui-core	SaveAudioAdvanced
+# 2018-auin: audio-to-audio inputs and edits (comfy_extras/nodes_audio.py at the pinned v0.40.0: node_id LoadAudio :366, VAEEncodeAudio :70, TrimAudioDuration :430, AudioConcat :597).
+comfyui-core	LoadAudio
+comfyui-core	VAEEncodeAudio
+comfyui-core	TrimAudioDuration
+comfyui-core	AudioConcat

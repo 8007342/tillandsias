@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-06, from a live incident and kumbia-forge; written for any project.
+packets:
+- packet_id: a-batch-job-cannot-freeze-the-agent-that-started-it
+  order: 2019-mfrz
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [forge, design]
+  estimated_hours: 5
+  title: A memory-hungry batch job in a forge cannot freeze the agent that launched it
+  context: 'On 2026-11-06 a project script with 8 parallel workers held about 11 of a forge 12 GB limit. No OOM kill fired, the forge stalled on memory about 90% of the time for 20 minutes, the agent looked hung with unpushed work, host swap filled and a land gate flaked. podman exec also timed out, so the agent could not be reached that way. Related: 1913-fh6l protects the forge from other work, not an agent from its own children.'
+  exit_criteria:
+  - 'With a child using memory past a stated threshold, the agent process stays responsive, shown by a measured response under a real pressure fixture in a forge.'
+  - 'The offending job is throttled or killed by a stated rule, the agent is told which and why, and the forge and its checkout survive.'
+  verifiable_closure: 'A real pressure run in a forge on a Linux host.'
+  unscoreable: 'none.'
+  next_action: 'Design first: compare a child sub-cgroup with its own memory.high, memory.oom.group and oomd pressure rules, in rootless podman, and state which the host allows.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06, live incident.
+  events:
+  - {type: filed, ts: '2026-11-07T03:40:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: a-forge-can-run-general-gpu-compute-through-a-capped-lane
+  order: 2019-gpuc
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, design]
+  estimated_hours: 4
+  title: DESIGN - a forge can run a pinned general GPU compute script with job and memory caps
+  context: 'Operator asked through kumbia-forge whether heavy numeric work can move to GPU or Rust. The studio and Ollama are the only GPU routes today. Measure first whether real workloads need a GPU at all.'
+  exit_criteria:
+  - 'A design covers a script route with GPU sharing against the studio, memory and time caps, provenance and refusal of unpinned code, with at least one measured workload to justify it.'
+  verifiable_closure: 'Design reviewed by the operator.'
+  unscoreable: 'none.'
+  next_action: 'Get measured timings from kumbia mix.py after its memory fix; recommend whether to proceed.'
+  provenance: operator via kumbia-forge 2026-11-06.
+  events:
+  - {type: filed, ts: '2026-11-07T03:40:00Z', host: macuahuitl, summary: filed p3 ready}
