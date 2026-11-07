@@ -3070,8 +3070,8 @@ mod host_tool_discovery_fixtures {
         );
         assert!(desc("image.generate").contains("locally on this computer"));
         assert!(desc("studio.run_workflow").contains("studio container"));
-        assert!(desc("webstudio.open").contains("starts nothing from the lane"));
-        assert!(desc("webstudio.options").contains("Not the ComfyUI image studio"));
+        assert!(desc("webstudio.open").contains("STARTS the studio through the tray"));
+        assert!(desc("webstudio.options").contains("Each option carries its affordances"));
         for n in [
             "preview.status",
             "preview.stop",
@@ -3086,6 +3086,106 @@ mod host_tool_discovery_fixtures {
                 desc(n)
             );
         }
+    }
+
+    /// Order 2025-e6mi: "open in a studio" from a forge launches the studio
+    /// through the tray and hands the agent its URLs, for any project. RED
+    /// before: webstudio.open answered an error naming `tillandsias --studio`
+    /// for the operator to run, and launched nothing.
+    #[test]
+    fn webstudio_open_launches_from_the_lane_once_and_returns_its_urls() {
+        use crate::studio::{LaneLauncher, with_test_launcher};
+        use std::sync::Mutex;
+
+        #[derive(Default)]
+        struct Stub {
+            launches: Mutex<Vec<(String, String, String)>>,
+        }
+        impl LaneLauncher for Stub {
+            fn project_remote(&self, project: &str) -> Result<String, String> {
+                Ok(format!("https://github.com/someone/{project}.git"))
+            }
+            fn launch(&self, project: &str, remote: &str, studio: &str) -> Result<bool, String> {
+                let mut l = self.launches.lock().unwrap();
+                let key = (project.to_string(), remote.to_string(), studio.to_string());
+                if l.contains(&key) {
+                    return Ok(false);
+                }
+                l.push(key);
+                Ok(true)
+            }
+            fn router_port(&self) -> Option<u16> {
+                Some(8080)
+            }
+        }
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let project = "e6mi-site";
+        let browser = lane_browser_server(project, "default", None, true);
+        let open = |studio: &str| {
+            handle_mcp_jsonrpc(
+                project,
+                "default",
+                &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                    "params":{"name":"webstudio.open","arguments":{"studio": studio}}}),
+                &browser,
+                &rt,
+            )
+            .unwrap()
+        };
+        let stub = std::sync::Arc::new(Stub::default());
+        let (first, second, unknown, unbuilt) = with_test_launcher(stub.clone(), || {
+            (
+                open("grapesjs"),
+                open("grapesjs"),
+                open("nope"),
+                open("onlook"),
+            )
+        });
+
+        let text = |r: &serde_json::Value| r.to_string();
+        assert!(first.get("error").is_none(), "{first}");
+        for needle in [
+            "\\\"started\\\":true",
+            "window_url",
+            "preview_url",
+            "studio.e6mi-site.localhost:8080",
+        ] {
+            assert!(text(&first).contains(needle), "{needle}: {first}");
+        }
+        assert!(!text(&first).contains("tillandsias --studio"), "{first}");
+        assert!(text(&second).contains("\\\"started\\\":false"), "{second}");
+        assert_eq!(
+            *stub.launches.lock().unwrap(),
+            [(
+                project.to_string(),
+                format!("https://github.com/someone/{project}.git"),
+                "grapesjs".to_string()
+            )],
+            "launched exactly once, with the lane's project identity"
+        );
+        assert!(unknown.get("error").is_some(), "{unknown}");
+        assert!(unbuilt.get("error").is_some(), "{unbuilt}");
+        assert!(text(&unbuilt).contains("CodeSandbox") || text(&unbuilt).contains("cloud account"));
+
+        // The descriptor and the agent guidance no longer send the agent to
+        // the operator with a command.
+        let tools = list(&browser, &rt);
+        let d = tools
+            .iter()
+            .find(|t| t["name"] == "webstudio.open")
+            .unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(!d.contains("starts nothing from the lane"), "{d}");
+        assert!(d.contains("STARTS"), "{d}");
+        let guidance =
+            include_str!("../../../images/default/config-overlay/mcp/forge-agent-guidance.md");
+        assert!(
+            !guidance.contains("`webstudio.open` starts nothing from the lane"),
+            "forge-agent-guidance.md still says webstudio.open starts nothing"
+        );
     }
 
     #[test]

@@ -38,6 +38,22 @@ for i, s in ipairs(reg.studios or {}) do
             verdict.emit("refused:studio-registry:studio-" .. i .. ":" .. k .. "-not-" .. t, 1)
         end
     end
+    -- 2026-ggu8: affordances are what an agent chooses by when no option is
+    -- [Recommended], so a studio without them cannot be chosen well. Each is
+    -- required and non-empty.
+    for _, k in ipairs({ "good_for", "not_for" }) do
+        if type(s[k]) ~= "table" or table.is_empty(s[k]) then
+            verdict.emit("refused:studio-registry:studio-" .. i .. ":" .. k .. "-missing-or-empty", 1)
+        end
+        for _, v in ipairs(s[k]) do
+            if type(v) ~= "string" or v == "" then
+                verdict.emit("refused:studio-registry:studio-" .. i .. ":" .. k .. "-not-strings", 1)
+            end
+        end
+    end
+    if type(s.edits) ~= "string" or s.edits == "" then
+        verdict.emit("refused:studio-registry:studio-" .. i .. ":edits-missing-or-empty", 1)
+    end
     if seen[s.id] then verdict.emit("refused:studio-registry:duplicate:" .. s.id, 1) end
     seen[s.id] = true
     if not s.id:match("^[a-z][a-z0-9-]*$") then verdict.emit("refused:studio-registry:bad-id:" .. s.id, 1) end
