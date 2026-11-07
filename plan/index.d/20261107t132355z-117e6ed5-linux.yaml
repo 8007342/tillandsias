@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-refusal-in-the-tree-must-say-why-it-refused-and-what-would-make-it-not-a-refusal-because-a-verdict-token-alone-tells-an-agent-it-is-stuck-without-telling-it-how-to-stop-being-stuck
+    field: status
+    value: implemented
+    ts: "2026-11-07T13:23:55Z"
+    host: linux
+
+events:
+  - packet_id: every-refusal-in-the-tree-must-say-why-it-refused-and-what-would-make-it-not-a-refusal-because-a-verdict-token-alone-tells-an-agent-it-is-stuck-without-telling-it-how-to-stop-being-stuck
+    event:
+      type: progress
+      ts: "2026-11-07T13:23:55Z"
+      host: linux
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: 12f43dace #993: 9 refusal scripts say why+what clears; 9 affordance fixtures green, red on prior scripts
