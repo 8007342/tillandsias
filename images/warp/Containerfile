@@ -18,6 +18,11 @@
 # install and the build refuses a different version instead of silently
 # taking it; bump WARP_VERSION deliberately when that refusal fires.
 FROM docker.io/library/debian:bookworm-slim
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 ARG WARP_VERSION=2026.7.1377.0
 

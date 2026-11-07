@@ -10,6 +10,10 @@
 # also carries the CC-BY-4.0 credit for caniuse-lite's data).
 ARG FORGE_IMAGE=localhost/tillandsias-forge
 FROM ${FORGE_IMAGE}
+# 1958-yfib: an image inherits its base layer's labels, so it states its own:
+# our recipe (GPL-3.0-or-later) AND what it mostly ships. tinacms 3.15.1 is Apache-2.0 (LICENSE in the npm tarball).
+# Every component's licence: docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND Apache-2.0"
 
 LABEL io.tillandsias.studio="tina" \
       io.tillandsias.studio.tinacms-version="3.15.1" \

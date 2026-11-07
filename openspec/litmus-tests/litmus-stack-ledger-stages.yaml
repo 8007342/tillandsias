@@ -1,0 +1,37 @@
+# @trace spec:ci-release
+# @trace order:1958-yfib
+#
+# yoga's review of #833: the ledger generator parsed a hard-coded list of two
+# npm lockfiles and called every npm package container-image, so the studio
+# images (Decap, Tina, Puck) would never enter the Powered By graph and a
+# builder-stage tool (esbuild) would read as shipped. The generator now
+# discovers every package-lock.json under an image directory and reads the
+# link kind from the Containerfile's stages (COPY --from), saying unknown when
+# no stage installs the lockfile. Red before the stage pass (4 arms).
+name: litmus:stack-ledger-stages
+spec: ci-release
+phase: pre-build
+description: The stack ledger discovers npm lockfiles from the Containerfiles and reads each package's link kind (container-image, bundled-file, build-stage-only, unknown) from the installing stage
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary) and git; offline, a scratch repository under target/plan-scratch
+
+critical_path:
+  - step: "builder-stage bundle is bundled-file and its dev tool build-stage-only; final-stage --omit=dev is container-image; an uninstalled lockfile is unknown; all discovered unnamed"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-stack-ledger-stages.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:stack-ledger-stages-fixture:4"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "four arms green; before the fix every arm reported <absent> because no lockfile outside the hand list was read"
+  log_fields:
+    spec: "ci-release"
+    test: "stack-ledger-stages"
+
+rollback:
+  on_failure: "read the arm lines; the stage reader lives in parse_containerfile (stages, LOCKFILE_ROLES) and the discovery loop above section 4 of scripts/lua/build-stack-ledger.lua"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/build-stack-ledger.lua -- --check"
