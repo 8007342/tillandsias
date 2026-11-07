@@ -359,6 +359,184 @@ fn git_in_lane(project: &str, instance: &str, args: &[String]) -> Result<String,
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Order 2025-e6mi: what `webstudio.open` needs from the host to launch a
+/// studio for the lane that asked. A seam, so the lane dispatch is tested
+/// without podman, a router or a window.
+#[cfg(feature = "host-services")]
+pub(crate) trait LaneLauncher: Send + Sync {
+    /// The cloud remote this project's lane was launched from (the same
+    /// `--cloud` value the operator would have typed).
+    fn project_remote(&self, project: &str) -> Result<String, String>;
+    /// Launch `studio` for `project` from `remote`, detached. `Ok(false)`
+    /// when one this tray launched is still running: nothing new starts.
+    fn launch(&self, project: &str, remote: &str, studio: &str) -> Result<bool, String>;
+    /// The router's published host port, when the router is up.
+    fn router_port(&self) -> Option<u16>;
+}
+
+#[cfg(all(feature = "host-services", test))]
+thread_local! {
+    static TEST_LAUNCHER: std::cell::RefCell<Option<std::sync::Arc<dyn LaneLauncher>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` with `launcher` standing in for the tray's (this thread only).
+#[cfg(all(feature = "host-services", test))]
+pub(crate) fn with_test_launcher<R>(
+    launcher: std::sync::Arc<dyn LaneLauncher>,
+    f: impl FnOnce() -> R,
+) -> R {
+    TEST_LAUNCHER.with(|l| *l.borrow_mut() = Some(launcher));
+    let out = f();
+    TEST_LAUNCHER.with(|l| *l.borrow_mut() = None);
+    out
+}
+
+#[cfg(feature = "host-services")]
+fn lane_launcher() -> std::sync::Arc<dyn LaneLauncher> {
+    #[cfg(test)]
+    if let Some(l) = TEST_LAUNCHER.with(|l| l.borrow().clone()) {
+        return l;
+    }
+    std::sync::Arc::new(TrayLauncher)
+}
+
+/// The production launcher: the tray spawns itself as
+/// `tillandsias --studio <id> --cloud <remote>` (the operator's own launch:
+/// same route, OTP session, authenticated probe and dev Chromium window,
+/// Wayland-only), detached, logging to the host log dir.
+#[cfg(feature = "host-services")]
+struct TrayLauncher;
+
+#[cfg(feature = "host-services")]
+fn launched()
+-> std::sync::MutexGuard<'static, std::collections::HashMap<String, std::process::Child>> {
+    static L: OnceLock<std::sync::Mutex<std::collections::HashMap<String, std::process::Child>>> =
+        OnceLock::new();
+    L.get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+#[cfg(feature = "host-services")]
+impl LaneLauncher for TrayLauncher {
+    fn project_remote(&self, project: &str) -> Result<String, String> {
+        // The project's git mirror carries the remote its lane was launched
+        // from (build_git_run_args sets it with --env).
+        let mirror = format!("tillandsias-git-{project}");
+        let mut cmd = tillandsias_podman::podman_cmd_sync();
+        cmd.args([
+            "inspect",
+            "--format",
+            "{{range .Config.Env}}{{println .}}{{end}}",
+            &mirror,
+        ]);
+        let out = cmd
+            .output_bounded(std::time::Duration::from_secs(15))
+            .map_err(|e| format!("webstudio.open: cannot inspect {mirror}: {e}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "webstudio.open: this project's git mirror {mirror} is not running, so the \
+                 tray cannot tell which repository to open: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ));
+        }
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .find_map(|l| l.strip_prefix("TILLANDSIAS_PROJECT_REMOTE_URL="))
+            .filter(|u| !u.is_empty())
+            .map(str::to_string)
+            .ok_or_else(|| {
+                format!("webstudio.open: {mirror} carries no project remote; was the lane launched with --cloud?")
+            })
+    }
+
+    fn launch(&self, project: &str, remote: &str, studio: &str) -> Result<bool, String> {
+        let key = format!("{project}\u{1f}{studio}");
+        let mut running = launched();
+        if let Some(child) = running.get_mut(&key)
+            && matches!(child.try_wait(), Ok(None))
+        {
+            return Ok(false);
+        }
+        let exe = crate::self_exe::for_spawn()
+            .map_err(|e| format!("webstudio.open: resolve current_exe: {e}"))?;
+        let log_dir = tillandsias_core::config::log_dir();
+        std::fs::create_dir_all(&log_dir)
+            .map_err(|e| format!("webstudio.open: create {}: {e}", log_dir.display()))?;
+        let log_path = log_dir.join(format!("studio-{project}-{studio}.log"));
+        let log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .map_err(|e| format!("webstudio.open: open {}: {e}", log_path.display()))?;
+        let log_err = log
+            .try_clone()
+            .map_err(|e| format!("webstudio.open: clone log handle: {e}"))?;
+        let mut cmd = std::process::Command::new(exe);
+        cmd.args(["--studio", studio, "--cloud", remote])
+            .stdin(std::process::Stdio::null())
+            .stdout(log)
+            .stderr(log_err);
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            // Its own session: the launch outlives this MCP connection.
+            cmd.process_group(0);
+        }
+        let child = cmd
+            .spawn()
+            .map_err(|e| format!("webstudio.open: spawn the studio launcher: {e}"))?;
+        running.insert(key, child);
+        Ok(true)
+    }
+
+    fn router_port(&self) -> Option<u16> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok()?;
+        let client = tillandsias_podman::PodmanClient::new();
+        rt.block_on(crate::existing_router_host_port(&client, false))
+            .ok()
+            .flatten()
+    }
+}
+
+/// Order 2025-e6mi: `webstudio.open` from a lane. Refuses an unknown or
+/// unbuilt studio before anything starts; otherwise has the tray launch it
+/// (once) and answers with the URLs the window opens at.
+#[cfg(feature = "host-services")]
+pub(crate) fn open_from_lane(
+    project: &str,
+    args: &serde_json::Value,
+    launcher: &dyn LaneLauncher,
+) -> Result<serde_json::Value, String> {
+    let id = args["studio"].as_str().unwrap_or("");
+    let lane = WebLane::studio(id)?;
+    let remote = launcher.project_remote(project)?;
+    let started = launcher.launch(project, &remote, lane.studio_id())?;
+    let url = launcher
+        .router_port()
+        .map(|port| crate::project_service_url(lane.service, project, port));
+    Ok(serde_json::json!({
+        "studio": lane.studio_id(),
+        "label": lane.label,
+        "started": started,
+        // The studio's canvas IS the live preview of the page being edited,
+        // so both name the same authenticated route.
+        "window_url": url,
+        "preview_url": url,
+        "window": if started {
+            "the tray is starting the studio; the operator's dev Chromium window opens on their desktop once it answers an authenticated request (first use builds its image and can take minutes)"
+        } else {
+            "already running: the operator's window is open; nothing new was started"
+        },
+        "next": "browser.open {url: window_url, dev: true} to work in the same page; webstudio.changes for the operator's saves (each save is a commit)",
+        "log": format!("studio-{project}-{}.log in the host log dir", lane.studio_id()),
+    }))
+}
+
 #[cfg(feature = "host-services")]
 pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
     vec![
@@ -369,7 +547,7 @@ pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
         }),
         serde_json::json!({
             "name": "webstudio.open",
-            "description": "Open this project in a visual web studio by id (from webstudio.options), so the user and you co-edit the same live page with every save committed. Today this starts nothing from the lane: the reply names the operator command that opens the studio window (opening it from a lane is order 1859-57mi).",
+            "description": "Open this project in a visual web studio by id (from webstudio.options), so the user and you co-edit the same live page with every save committed. Use it when the user asks to load or open the project in an authoring tool, a studio or a visual editor. STARTS the studio through the tray (a studio container for this project, built on first use) and opens it in the operator's dev Chromium window; a call while it runs starts nothing new. Returns window_url (also preview_url, the studio's live canvas): browser.open {url: window_url, dev: true} puts you in the same page, and webstudio.changes shows the operator's saves. Never ask the user to run a command for this.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "studio": { "type": "string" } },
@@ -415,16 +593,8 @@ pub(crate) fn call(
             let framework = detect_framework(&files, pkg.as_deref());
             Ok(serde_json::json!({ "framework": framework, "options": options(framework) }))
         })(),
-        "webstudio.open" => {
-            let id = args["studio"].as_str().unwrap_or("");
-            WebLane::studio(id).and_then(|lane| {
-                Err(format!(
-                    "{} is ready, but opening it from a lane is 1859-57mi; the operator opens it with: tillandsias --studio {} --cloud <owner>/{project}",
-                    lane.label,
-                    lane.studio_id()
-                ))
-            })
-        }
+        // 2025-e6mi: the tray launches it; the agent never relays a command.
+        "webstudio.open" => open_from_lane(project, args, &*lane_launcher()),
         "webstudio.changes" => changes_git_args(args["cursor"].as_str())
             .and_then(|a| git_in_lane(project, instance, &a))
             .map(|out| serde_json::json!({ "changes": parse_changes(&out) })),

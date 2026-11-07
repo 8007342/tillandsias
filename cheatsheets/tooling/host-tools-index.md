@@ -46,7 +46,7 @@ committed_for_project: false
 | `studio.validate_family`, `studio.finish_pixels`, `studio.contact_sheet` | family checks, pixel finish, review grid | nothing; no GPU |
 | `browser.open` (+12 `browser.*`) | browser windows ON THE HOST for project-local URLs | `browser.open` STARTS a window; `dev: true` adds CDP, eval and tails |
 | `cloudflare.scope_probe` (+11 reads) | the operator's Cloudflare account, GET only | nothing; probe first |
-| `webstudio.options` / `.open` / `.changes` / `.publish_request` | visual co-edit studios (GrapesJS, Decap, Tina, Puck) | nothing from the lane today; `.open` names the operator command |
+| `webstudio.options` / `.open` / `.changes` / `.publish_request` | visual co-edit studios (GrapesJS, Decap, Tina, Puck) | `.open` STARTS the studio through the tray and opens the dev Chromium window (2025-e6mi); the others start nothing |
 | `tillandsias.index` | this table | nothing |
 
 ## Deprecated aliases (one release)

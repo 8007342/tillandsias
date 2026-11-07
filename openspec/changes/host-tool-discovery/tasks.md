@@ -15,6 +15,6 @@ Packet orders in brackets.
 
 - [ ] 2.1 Register the socket under a name for the whole surface (e.g. `host-tools`) beside `host-browser` for one release, in the four harness configs, `register-experts.sh`, `test-codex-mcp-registration.sh`, the Lua guards that name `host-browser`, `forge-quick-intro`, `lib-common.sh` and `forge-welcome.sh`; then drop `host-browser`
 - [ ] 2.2 `studio.start {}` / `studio.status {}`: the forge agent starts the ComfyUI appliance on demand through the socket, sized by the forge budget, never at launch, no tray entry (order 1969-cfyt); `studio.run_workflow` refuses with `studio_unavailable` naming `studio.start`, and `imagegen_studio::ensure_if_enabled` leaves the launch path
-- [ ] 2.3 `webstudio.open` opens the studio window from the lane (order 1859-57mi) and `webstudio.publish_request` hands off to the deploy tool (order 1866-9696)
+- [ ] 2.3 `webstudio.open` opens the studio window from the lane (order 2025-e6mi) and `webstudio.publish_request` hands off to the deploy tool (order 1866-9696)
 - [ ] 2.4 Remove the ten deprecated aliases one release after 1969-7qm7 ships; update `cold-start-acceptance.lua`, `local_web_preview_e2e.rs` and the `flutter` shim to the canonical names first
 - [ ] 2.5 Mirror the grouped index in `tillandsias-doctor` (its per-server lines name the groups the socket serves)
