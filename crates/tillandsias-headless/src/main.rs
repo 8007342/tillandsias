@@ -31290,7 +31290,12 @@ mod tests {
             path
         };
         let marks = dir.path().join("marks");
-        let vault = write_stub("vault", "[ \"$1\" = digest ] && echo missing; exit 0");
+        // stale: exit 1 (no marker), as the real helper answers on a host
+        // whose last rotation reached Vault (1914-twan criterion 3).
+        let vault = write_stub(
+            "vault",
+            "case \"$1\" in digest) echo missing;; stale) exit 1;; esac; exit 0",
+        );
         let login = write_stub(
             "login",
             &format!("echo login >>'{}'; exit 0", marks.display()),
@@ -31333,6 +31338,127 @@ mod tests {
             "expected run, device login, relaunch"
         );
         assert!(out.status.success(), "the relaunched agent exited 0");
+    }
+
+    /// Order 1914-twan criterion 3: when the last session's rotation never
+    /// reached Vault (the stale marker), the wrapper offers sign-in BEFORE it
+    /// launches Codex, instead of waiting for a 401 at bootstrap.
+    #[cfg(unix)]
+    #[test]
+    fn a_stale_vaulted_codex_sign_in_is_offered_before_launch() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let wrapper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-session.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write_stub = |name: &str, body: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        let marks = dir.path().join("marks");
+        let m = marks.display();
+        let vault = write_stub(
+            "vault",
+            &format!(
+                "case \"$1\" in digest) echo missing;; stale) exit 0;; \
+                 clear-stale) echo clear >>'{m}';; esac; exit 0"
+            ),
+        );
+        let login = write_stub("login", &format!("echo login >>'{m}'; exit 0"));
+        let agent = write_stub("agent", &format!("echo run >>'{m}'; exit 0"));
+        let mut child = std::process::Command::new("bash")
+            .arg(&wrapper)
+            .arg("--")
+            .arg(&agent)
+            .env("TILLANDSIAS_CODEX_VAULT_HELPER", &vault)
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_RELOGIN_HELPER", &login)
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn wrapper");
+        child.stdin.take().unwrap().write_all(b"\n").unwrap();
+        let out = child.wait_with_output().expect("wrapper output");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("never reached Vault") && stderr.contains("Sign in again now?"),
+            "a stale vaulted sign-in must be offered before launch; stderr was: {stderr}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&marks)
+                .unwrap_or_default()
+                .lines()
+                .collect::<Vec<_>>(),
+            ["login", "clear", "run"],
+            "expected sign-in, marker cleared, then one launch"
+        );
+        assert!(out.status.success());
+    }
+
+    /// Order 1914-twan criterion 3: a copy Vault refuses writes the stale
+    /// marker on the project cache; a copy that lands removes it. Runs the
+    /// real helper's watcher with a dead child (its last-copy path) and a
+    /// stub vault-cli.sh.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let helper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-vault.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let cli = bin.join("vault-cli.sh");
+        let auth = dir.path().join("auth.json");
+        let marker = dir.path().join("cache/codex/vault-copy-stale");
+        std::fs::write(&auth, "{\"tokens\":{\"refresh_token\":\"shape-only\"}}\n").unwrap();
+        let run = |vault_ok: bool| {
+            std::fs::write(
+                &cli,
+                format!(
+                    "#!/usr/bin/env bash\ncat >/dev/null\nexit {}\n",
+                    if vault_ok { 0 } else { 1 }
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+            // pid 999999 is not running, so the watcher makes its last copy at once;
+            // "old" differs from the file's digest, so it copies.
+            std::process::Command::new("bash")
+                .arg(&helper)
+                .args(["watch", "999999", "old"])
+                .env(
+                    "PATH",
+                    format!(
+                        "{}:{}",
+                        bin.display(),
+                        std::env::var("PATH").unwrap_or_default()
+                    ),
+                )
+                .env("TILLANDSIAS_CODEX_AUTH_FILE", &auth)
+                .env("TILLANDSIAS_CODEX_STALE_MARKER", &marker)
+                .env("TILLANDSIAS_CODEX_HARVEST_ATTEMPTS", "1")
+                .env("TILLANDSIAS_OAUTH_POLL_SECS", "0")
+                .env(
+                    "TILLANDSIAS_LIFECYCLE_LOG",
+                    dir.path().join("lifecycle.log"),
+                )
+                .output()
+                .expect("run helper")
+        };
+        run(false);
+        assert!(
+            marker.exists(),
+            "a refused copy must mark the vaulted sign-in stale"
+        );
+        run(true);
+        assert!(!marker.exists(), "a copy that lands clears the marker");
     }
 
     #[test]
