@@ -625,6 +625,7 @@ mod tests {
     /// 2026-ggu8: every option carries the affordances an agent picks by,
     /// for a detected framework and for none, and the descriptor tells the
     /// agent to choose by them. RED before: the registry had no such fields.
+    #[cfg(feature = "host-services")]
     #[test]
     fn every_option_carries_its_affordances_and_the_descriptor_says_to_choose_by_them() {
         for fw in [
