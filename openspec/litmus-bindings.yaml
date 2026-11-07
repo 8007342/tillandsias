@@ -171,6 +171,7 @@ specs:
   litmus_tests:
   - litmus:release-is-one-cloud-build
   - litmus:gate-step-private-metrics-fallback
+  - litmus:promote-stable-refusals-carry-affordance
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
@@ -469,6 +470,7 @@ specs:
   - litmus:tillandsias-doctor-names-every-fault
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
+  - litmus:spec-index-ensure-refusals-carry-affordance
   - litmus:forge-entrypoints-source-agent-profile
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
@@ -666,7 +668,9 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:inference-readiness-probe-shape
+  - litmus:dev-inference-ensure-refusals-carry-affordance
   - litmus:inference-deferred-model-pulls
+  - litmus:configure-ollama-refusals-carry-affordance
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
   - litmus:inference-tier-probe-shape
@@ -788,6 +792,9 @@ specs:
   - litmus:claim-wip-limit-shape
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
+  - litmus:gate-step-prefix-refusals-carry-affordance
+  - litmus:skills-single-source-refusals-carry-affordance
+  - litmus:tracked-files-unwritten-refusals-carry-affordance
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
@@ -822,6 +829,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:claims-refusals-carry-affordance
+  - litmus:select-work-batch-refusals-carry-affordance
+  - litmus:openspec-pin-refusals-carry-affordance
   - litmus:forge-expert-base-guard-shape
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape
