@@ -5,18 +5,18 @@ phase: pre-build
 status: active
 description: >
   Order 2007-uvtl. A venv in $PROJECT_CACHE/venvs links bin/python into uv's
-  Python install dir. lib-common.sh puts that dir on the persistent project
+  interpreter install dir. lib-common.sh puts that dir on the persistent project
   cache (UV_PYTHON_INSTALL_DIR), so replacing the forge (a new HOME) leaves the
-  venv working. The fixture installs a uv-managed Python, makes a venv, wipes
-  HOME, and runs the venv's python; a control with the default install dir
+  venv working. The fixture installs a uv-managed interpreter, makes a venv, wipes
+  HOME, and runs the venv interpreter; a control with the default install dir
   under HOME shows the venv dangling.
 severity: medium
 size: long
 preconditions:
   - uv is available in PATH
-  - network for one uv Python download
+  - network for one uv interpreter download
 critical_path:
-  - step: "Req: a venv on the project cache keeps a working python across forge replacement (pre-fix: bin/python dangled)"
+  - step: "Req: a venv on the project cache keeps a working interpreter across forge replacement (pre-fix: the venv interpreter dangled)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-uv-venv-survives-forge-replacement.lua 2>&1"
     timeout_ms: 900000
     success_pattern: "ok:uv-venv-survives-forge-replacement:3 arms\\+control"
