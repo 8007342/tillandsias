@@ -79,6 +79,8 @@
 #
 # Usage:
 #   scripts/land-queue.sh [--limit N] [--dry-run] [--base <branch>]
+#   TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT=N  (default 500) rows asked of `gh pr list`;
+#       a capture that long is refused as possibly truncated (1959-tdn5)
 #
 # Exit: 0 the run completed (landed, evicted and re-queued counts on stdout)
 #       1 could not read the queue (gh missing, unauthenticated, bad JSON)
@@ -138,6 +140,14 @@ export TILLANDSIAS_CARGO_INCREMENTAL="${TILLANDSIAS_CARGO_INCREMENTAL:-0}"
 # ORDER 1765-q7rg: the ~1-min decider door run on the merge result BEFORE the
 # ~21-min gate. Set to the empty string to disable (the fixture's default).
 PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
+# ORDER 1992-lqpb: rebuild tillandsias-plan from the MERGE RESULT and let
+# check-plan-binary-current.sh install it, before the preflight and the gate.
+# A stale ~/.local/bin/tillandsias-plan otherwise failed fixtures inside the
+# gate (test-pre-push-plan-lane-fails-closed-without-binary, a plan-lane
+# refusal) and the queue evicted an innocent candidate; the fix was a hand
+# rebuild. A refresh that fails stops the run with no eviction. Set to the
+# empty string to disable (the fixture's default).
+PLAN_REFRESH="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH-cargo build -q --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh}"
 REMOTE="${TILLANDSIAS_LAND_QUEUE_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 LOCKDIR="${TILLANDSIAS_LAND_QUEUE_LOCK:-$ROOT/.git/tillandsias-land-queue.lock}"
@@ -314,8 +324,17 @@ mkdir -p "$_RUNDIR" 2>/dev/null || _RUNDIR="$(mktemp -d "${TMPDIR:-/tmp}/land-qu
 # work" is the silent-empty false negative this fleet keeps finding. So an
 # empty capture with a non-zero status REFUSES, and only a well-formed empty
 # list means the queue is empty.
+#
+# ORDER 1959-tdn5: `gh pr list` WITHOUT --limit RETURNS ITS NEWEST 30. Measured
+# on macuahuitl 2026-11-02 with 30+ open PRs (drafts count): the oldest ready
+# PR, #679, was simply not in the capture, so the queue it drained was a
+# smaller queue than existed and the oldest work never landed. So every list
+# call names its limit, and a capture EXACTLY as long as the limit is refused
+# as possibly truncated rather than landed from — a bigger constant is cheap;
+# a silently partial queue is the bug this script exists to remove.
+GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 _qjson="$(mktemp)"
-"$GH" pr list --base "$TRUNK" --state open \
+"$GH" pr list --base "$TRUNK" --state open --limit "$GH_LIST_LIMIT" \
       --json number,headRefName,isDraft > "$_qjson" 2>/dev/null
 _qrc=$?
 if [ "$_qrc" -ne 0 ]; then
@@ -325,6 +344,12 @@ if [ "$_qrc" -ne 0 ]; then
 fi
 if ! "$PLAN" json get -e 'type == "array"' < "$_qjson" >/dev/null 2>&1; then
     say "fail:land-queue:queue-not-an-array — gh exited 0 with output that is not a PR list"
+    rm -f "$_qjson"
+    exit 1
+fi
+_qlen="$("$PLAN" json get -r 'length' < "$_qjson" 2>/dev/null)"
+if [ -n "$_qlen" ] && [ "$_qlen" -ge "$GH_LIST_LIMIT" ] 2>/dev/null; then
+    say "fail:land-queue:queue-may-be-truncated:$_qlen-of-limit-$GH_LIST_LIMIT — gh returned as many PRs as asked for, so the oldest may be missing; raise TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT or close PRs (1959-tdn5)"
     rm -f "$_qjson"
     exit 1
 fi
@@ -624,6 +649,20 @@ $_nlwhy
     if [ "$DRY_RUN" -eq 1 ]; then
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"
         continue
+    fi
+    # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
+    # The binary's state is this HOST's, never the candidate's: a refresh that
+    # cannot make it current stops the run and evicts nobody.
+    if [ -n "$PLAN_REFRESH" ]; then
+        _rlog="$_RUNDIR/pr-$num-plan-refresh.log"
+        ( eval "$PLAN_REFRESH" ) < /dev/null > "$_rlog" 2>&1
+        _rrc=$?
+        if [ "$_rrc" -ne 0 ]; then
+            say "could-not-run:land-queue:stale-plan-binary:rc=$_rrc — the plan binary could not be refreshed from the merge of #$num; no candidate is evicted for this host's state (log: $_rlog)"
+            say "remedy: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then run the queue again"
+            exit 3
+        fi
+        rm -f "$_rlog"
     fi
     # ── ORDER 1765-q7rg: THE PREFLIGHT DOOR BEFORE THE FULL GATE ─────────────
     # The tree-only deciders answer in about a minute; a decider-level red

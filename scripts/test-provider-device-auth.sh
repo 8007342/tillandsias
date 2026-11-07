@@ -170,6 +170,33 @@ else
         || bad "target file created from decoy"
 fi
 
+echo "[7] the backgrounded agy reads the person's keystrokes, not /dev/null (1925-agin)"
+# agy's interactive sign-in is started in the background so the script can
+# watch for its token file. A non-interactive bash gives a background job
+# /dev/null as stdin unless it is redirected explicitly, so the sign-in screen
+# drew but ignored every key (operator, macOS, 2026-11-01). This fake agy
+# writes the token ONLY after it reads a keystroke line from stdin.
+rm -f "$TMP_AGY/home/.gemini/antigravity-cli/antigravity-oauth-token" "$TMP_AGY/home/vault-target-token"
+cat > "$TMP_AGY/bin/agy" <<'FAKE_AGY_KEYS'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    [[ "$arg" == "--help" ]] && { printf 'Usage of agy:\nAvailable subcommands:\n  update  Update CLI\n'; exit 0; }
+done
+IFS= read -r key || exit 1
+[[ "$key" == "select-sign-in" ]] || exit 1
+mkdir -p "$HOME/.gemini/antigravity-cli"
+echo "fixture-token-from-keys" > "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+sleep 30
+FAKE_AGY_KEYS
+chmod +x "$TMP_AGY/bin/agy"
+if printf 'select-sign-in\n' | PATH="$TMP_AGY/bin:$PATH" HOME="$TMP_AGY/home" \
+     TILLANDSIAS_LIB_COMMON="$TMP_AGY/lib-common.sh" \
+     bash "$IMG/provider-device-auth.sh" antigravity >/dev/null 2>&1; then
+    ok "the backgrounded agy receives stdin and its token reaches Vault"
+else
+    bad "the backgrounded agy never saw a keystroke (stdin was /dev/null)"
+fi
+
 echo
 echo "provider-device-auth fixture: $PASS ok, $FAIL fail"
 [ "$FAIL" -eq 0 ] && { echo "PASS: provider device-auth + oauth-vault contract shape"; exit 0; }

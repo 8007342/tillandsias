@@ -1709,7 +1709,7 @@ distributed_work:
     enforcement:
       - "1367-2sbc: set-field refuses a claim over the WIP limit and a new story while the previous one is open"
       - "1588-27v3: set-field refuses a claim whose host is not in fleet_hosts (refused:set-field:unknown-host:<host>), so the cap cannot be passed under a new string"
-      - "1367-emjg: scripts/check-landed-but-open.sh lists landed orders whose rows are still open"
+      - "1367-emjg: scripts/lua/check-landed-but-open.lua lists landed orders whose rows are still open"
     status: >
       Rules 1 and 2 are guidance until 1367-2sbc lands; rule 4's sweep until
       1367-emjg. The numbers above are one measurement. The cap started at 3
@@ -2569,8 +2569,11 @@ distributed_work:
       ledger: >
         macron.dev keeps a committed deploy ledger with Cloudflare's billed
         build minutes per deploy (branch builds too, while they still run).
-        The agent merging to main sums the month first and refuses past the
-        budget unless a fix is urgent.
+        The agent merging to main reads the month's used minutes from the
+        cloud.usage MCP tool (or `tillandsias --cloud-usage` on the host) —
+        the summing is done by the tool, not by hand — and refuses past the
+        budget unless a fix is urgent (order 1966-47vt).
+      usage_tool: cloud.usage
     consumers:
       - "macron.dev's own AGENTS.md / CLAUDE.md (the repo states the same ruling)"
       - "skills/smoke-curl-install-and-test-e2e (the macron.dev note step needs no extra approval)"

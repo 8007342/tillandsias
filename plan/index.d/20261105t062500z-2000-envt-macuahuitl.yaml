@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from the eviction of docs-only PR #935.
+packets:
+- packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+  order: 2000-envt
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tests, flake]
+  estimated_hours: 1
+  title: Tests that read TILLANDSIAS_FORGE_INSTANCE do not race on process environment
+  context: 'Docs-only PR #935 was evicted by tests::a_second_launch_of_a_project_takes_the_next_instance, "assertion failed: std::env::var(TILLANDSIAS_FORGE_INSTANCE).is_err()" at main.rs:27285, in a parallel run. A docs change cannot cause it. A concurrent test touching the same variable is the likely cause, not traced. Log: target/test-transcript-workspace-gate.log at the time.'
+  exit_criteria:
+  - 'Every test that sets or reads this variable holds one lock or stops using process environment; 50 parallel runs pass.'
+  verifiable_closure: 'cargo test --bin tillandsias repeated 50 times.'
+  unscoreable: 'unpinnable-until-the-guard-exists: a flake needs repetition.'
+  next_action: 'List the tests touching the variable and see which do not share a lock.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T06:25:00Z'
+    host: macuahuitl
+    summary: filed p2 ready

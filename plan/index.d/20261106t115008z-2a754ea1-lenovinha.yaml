@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-unavailable-keyring-never-replaces-the-preview-ca
+    field: status
+    value: implemented
+    ts: "2026-11-06T11:50:08Z"
+    host: lenovinha
+
+events:
+  - packet_id: an-unavailable-keyring-never-replaces-the-preview-ca
+    event:
+      type: progress
+      ts: "2026-11-06T11:50:08Z"
+      host: lenovinha
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: 201002219: land #959
+  - packet_id: an-unavailable-keyring-never-replaces-the-preview-ca
+    event:
+      type: note
+      ts: "2026-11-06T11:50:08Z"
+      host: lenovinha
+      summary: |-
+        landed #959; implemented

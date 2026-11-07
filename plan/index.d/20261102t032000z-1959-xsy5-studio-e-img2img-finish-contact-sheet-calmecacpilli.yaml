@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: studio-asset-pipeline E (design D11–D13), 2026-11-02.
+packets:
+- packet_id: img2img-inpaint-and-layout-mask-at-every-tier-plus-a-deterministic-pixel-finish-and-a-contact-sheet
+  order: 1959-xsy5
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [imagegen, studio, linux, rust]
+  estimated_hours: 14
+  related: [1956-x7xp, 1956-26qh, 1954-gdi6, 1935-k2ib]
+  title: "Studio E: image.generate and studio.run_workflow take init_image, mask, strength and a family layout mask (empty centre lane); studio.finish_pixels is a byte-reproducible GPU-free pixel finish to a tillandsias.palette/v1 file; studio.contact_sheet lays tiers x seeds on one labelled grid with provenance"
+  context: |
+    demon_attack needs an empty centre lane in every layered ship part and a near-black navy palette; kumbia-kombat finishes one accepted high-res frame once per room at native size. Both start from previous frames or rig renders. openspec/changes/studio-asset-pipeline design D11 (img2img, inpaint, layout: sd.cpp --init-img/--mask/--strength; studio $init_image/$mask/$layout_mask/$strength; kept pixels composited back), D12 (finish: alpha, nearest-neighbour grid snap, palette quantise, fixed encoder, integer arithmetic, .finish.json), D13 (contact sheet with embedded bitmap font and .contact.json). Spec: specs/imagegen-studio/spec.md, the three E requirements. Schema: contract/family-spec.v1.schema.json gains layout, finish, palette file format, reserved_regions_empty.
+  exit_criteria:
+  - image.generate on an sd.cpp tier passes --init-img, --mask and --strength, and every pixel under a black mask or inside a reserved region is byte-identical to the input
+  - studio.run_workflow binds the same keys and refuses workflow_has_no_input:<name> before queueing
+  - studio.finish_pixels writes the same sha256 twice and matches a committed golden; studio.validate_family refuses palette_contains_outline and reserved_regions_empty
+  - studio.contact_sheet writes a labelled grid and a .contact.json that resolves every cell to an output and a provenance path
+  verifiable_closure: |
+    cargo test -p tillandsias-headless pixel_finish contact_sheet imagegen_init_mask passes, including the twice-run sha256 equality and golden-sha256 tests of D12 and the kept-pixel identity test of D11.
+  next_action: Read design D11-D13 and tasks 4.1-4.5; start with 4.1 (image.generate keys and the sd-cli -h flag check at build), then 4.4 (finish) because the games can use it on existing outputs before the studio tool lands.
+  provenance: openspec/changes/studio-asset-pipeline design D11-D13, filed 2026-11-02 by calmecacpilli.
+  events:
+  - type: filed
+    ts: '2026-11-02T03:20:00Z'
+    host: calmecacpilli
+    summary: filed p1; design D11-D13 and the E spec requirements land in the same commit

@@ -1286,6 +1286,20 @@ _gate_run_id_begin() {
     export TILLANDSIAS_TIMING_RUN_ID
 }
 
+# ORDER 1966-ubsw: this gate's PRIVATE metrics fallback. Its children that
+# fall back (no checkout) write here, not the host's shared /tmp file, so a
+# host process writing /tmp (the operator's tray, an agent's out-of-tree call)
+# can no longer land in the file the step loop checks for leaks and evict
+# whichever step is running (#831 2026-11-01, #840 2026-11-02). Only this
+# gate's descendants know the path, so a record in it is this gate's. A gate
+# that inherits one (a fixture driving a nested gate) keeps it.
+_gate_fallback_begin() {
+    [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && return 0
+    TILLANDSIAS_METRICS_FALLBACK_DIR="$SCRIPT_DIR/target/gate-fallback/${TILLANDSIAS_TIMING_RUN_ID:-gate-$(_now_ms)-$$}"
+    mkdir -p "$TILLANDSIAS_METRICS_FALLBACK_DIR" 2>/dev/null || true
+    export TILLANDSIAS_METRICS_FALLBACK_DIR
+}
+
 # ---------------------------------------------------------------------------
 # Flag parsing
 # ---------------------------------------------------------------------------
@@ -2721,6 +2735,7 @@ _gs_verdict_token() {
 # both; both are literals (1063-nraf).
 _run_gate_steps() {  # $1 = root
     local _gs_root="$1" _gs_plan=""
+    _gate_fallback_begin
     _gs_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gs_plan=""
     case "$_gs_plan" in ./*) _gs_plan="$SCRIPT_DIR/${_gs_plan#./}" ;; esac
     for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
@@ -2796,6 +2811,13 @@ _run_gate_steps() {  # $1 = root
         if [ -f "$_metrics_shared" ]; then
             _metrics_shared_before="$(wc -l < "$_metrics_shared" 2>/dev/null || echo 0)"
         fi
+        # ORDER 1966-ubsw: the file that decides. Only this gate's tree falls
+        # back into it (_gate_fallback_begin), so ANY new record is this step's.
+        _metrics_private="${TILLANDSIAS_METRICS_FALLBACK_DIR:-}/tillandsias-timing.jsonl"
+        _metrics_private_before=0
+        if [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ]; then
+            _metrics_private_before="$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)"
+        fi
 
         # The output streams as before AND is kept, so a refusal can be named
         # by the one classifier the preflight door also reads (1384-bqhy).
@@ -2825,14 +2847,37 @@ _run_gate_steps() {  # $1 = root
         # wrote (two land-queue evictions, 2026-10-29). Only new records
         # stamped with THIS gate's run id are this step's; another gate's are
         # ignored, and id-less ones are reported, not refused.
+        #
+        # ORDER 1966-ubsw: on the SHARED path an id-less record no longer
+        # refuses. This gate's own fallback writes go to its private file
+        # (checked below), so an id-less record here was written by something
+        # outside the gate (#831, #840: two different steps, one id-less line
+        # each, no gate beside them). It is reported, with the line, and only
+        # a record carrying THIS gate's run id still refuses here.
         _metrics_ours=0
+        _metrics_leak=""
         if [ -f "$_metrics_shared" ]; then
             _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
             case "$_metrics_attr" in
+                ours=0\ *verdict=refuse*)
+                    _warn "the shared timing log gained id-less record(s) during ${_step_path##*/} ($_metrics_attr); this gate's own fallback is private (1966-ubsw), so they were written outside it and this step is not refused. The line(s):"
+                    tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+                    _metrics_attr="${_metrics_attr%verdict=refuse*}verdict=warn" ;;
                 *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
             esac
+            [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ] && _metrics_leak="$_metrics_shared"
+        fi
+        if [ -z "$_metrics_leak" ] && [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ] \
+           && [ "$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)" -gt "${_metrics_private_before:-0}" ]; then
+            _metrics_leak="$_metrics_private"
+            _metrics_attr="private-fallback:+$(( $(wc -l < "$_metrics_private") - ${_metrics_private_before:-0} )) verdict=refuse"
+            _metrics_shared_before="$_metrics_private_before"
+        fi
+        if [ -n "$_metrics_leak" ]; then
             if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
-                _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_shared — $_metrics_attr (1204-3s2s; id-less records refuse unless another gate is live, 1916-tsel)"
+                _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
+                _error "  The leaked line(s), kept so the next one is diagnosable:"
+                tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
                 _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
                 _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
                 _error "  refuse to publish any number, every arm driving it reads zero, and"
@@ -2893,7 +2938,26 @@ _run_lua_decider() {  # $1 = scripts/lua/<name>.lua, remaining args are explicit
     TILLANDSIAS_SCRIPT_RUNNER_BIN="$_ld_bin" _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
 }
 
+# ORDER 1270-5mz8: the litmus runtime shim routes every podman call through
+# scripts/tillandsias-podman, which runs a PREBUILT tillandsias-podman-cli. Build
+# it once, before the first phase mints the shim, and say so in the gate log, so
+# a release gate can never measure the forge lane on a binary older than the
+# tree (2026-09-19: two release gates did). The shim refuses a stale one too.
+_LITMUS_PODMAN_CLI_READY=0
+_ensure_litmus_podman_cli() {
+    [ "$_LITMUS_PODMAN_CLI_READY" = 1 ] && return 0
+    _LITMUS_PODMAN_CLI_READY=1
+    local _pc_rc=0
+    (cd "$SCRIPT_DIR" && cargo build -q -p tillandsias-podman-cli) || _pc_rc=$?
+    if [ "$_pc_rc" -eq 0 ]; then
+        echo "podman-cli: built-before-litmus-shim (cargo build -p tillandsias-podman-cli rc=0; 1270-5mz8)"
+    else
+        echo "podman-cli: build-failed-before-litmus-shim rc=$_pc_rc — the shim will refuse a stale prebuilt by name (1270-5mz8)"
+    fi
+}
+
 _run_litmus_phase() {
+    _ensure_litmus_podman_cli
     local phase="$1"
     local size="$2"
     local log_file="$3"
@@ -5085,6 +5149,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
         exit 1
     fi
+    # 2000-camv: the one host-services INTEGRATION test the gate runs. The
+    # --workspace pass builds integration tests with default features, where
+    # --cloud-usage is not compiled, so this fixture (a read must never mint
+    # the operator's CA) only blocks when it is run here, by name.
+    _step "Running --cloud-usage never-mints fixture (2000-camv)..."
+    _cu_rc=0
+    _run cargo test -p tillandsias-headless --test cloud_usage_never_mints \
+        --features tray,listen-vsock --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee -a "$_fg_transcript" || _cu_rc="${PIPESTATUS[0]}"
+    if [[ $_cu_rc -ne 0 ]]; then
+        _error "fail:cloud-usage-never-mints: --cloud-usage changed the CA directory or did not run (cargo rc=$_cu_rc) — transcript: $_fg_transcript"
+        _error "  why: a read-only command that mints replaces the host CA under a running Vault, and every tray read then fails TLS verification"
+        _error "  remedy: keep --cloud-usage read-only (set_read_only_process) and re-run: cargo test -p tillandsias-headless --test cloud_usage_never_mints --features tray,listen-vsock"
+        exit 1
+    fi
     # CRITERION 2: state how many actually RAN, so "ran 0 because the feature
     # was off" is distinguishable from "ran and passed". A pass that silently
     # executes nothing is the failure this packet exists to close, and it has
@@ -5856,6 +5935,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # (it drops the env-dep it set itself). Refuses a new site in test code
     # beyond its per-file floor and prints the count; the fixture shows the
     # defect on a real cargo (two copies, one target) and the guard's arms.
+    # ORDER 2007-vy3p — a grep pattern this host's grep cannot compile makes
+    # grep exit 2, and `if grep -q` reads exit 2 as a clean miss: the check
+    # passes without having run (2006-wahn: BSD grep rejected the attestation
+    # grammar's '^(|...' and the plan-only lane admitted every line). Compiles
+    # every literal pattern in scripts/ and the hooks under THIS grep; the
+    # fixture also proves the push and purge gates refuse on exit 2.
+    _step "Checking every literal grep pattern compiles under this grep (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/check-grep-patterns-compile.lua" 2>&1; then
+        _error "a grep pattern does not compile under this host's grep — a gate using it would pass without running (2007-vy3p)"
+        exit 1
+    fi
+    _step "Checking gate greps fail closed on exit 2 (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/test-grep-exit-two-fails-closed.lua" 2>&1; then
+        _error "a gate grep reads exit 2 as a pass — see the FAIL lines above (2007-vy3p)"
+        exit 1
+    fi
     _step "Checking for new compile-time CARGO_MANIFEST_DIR paths in tests (1590-j20f)..."
     if ! _run_lua_decider "scripts/lua/check-manifest-dir-env.lua" 2>&1; then
         _error "a test reads a fixture through compile-time env!(\"CARGO_MANIFEST_DIR\") — use std::env::var(\"CARGO_MANIFEST_DIR\") at runtime (1590-j20f)"

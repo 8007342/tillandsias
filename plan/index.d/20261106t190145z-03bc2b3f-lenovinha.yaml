@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-private-cloud-message-queue-carries-durable-instructions-between-agents
+    event:
+      type: note
+      ts: "2026-11-06T19:01:45Z"
+      agent_id: linux-lenovinha-claude-20261106t190144z
+      host: lenovinha
+      summary: |
+        Operator ruling on the 2011-amqd design, section 13 (revision 5), first-hand via macuahuitl-fedora, 2026-11-06: "I approve all the recommendations". Recorded here as the operator gave them:
+
+        1. The idle ceiling is 60 min, with a 5 min busy floor; local events wake at once.
+        2. A dedicated Cloudflare account is REQUIRED for the queue grant.
+        3. The TTL is 24 h on Free; longer work lives in the ledger and git.
+        4. The T0 local classifier is off by default (longest-idle lane) until measured.
+        5. Login defaults to loopback, with the relay opt-in. Exception, the operator's words: "the relay stays at cloudflare.tillandsias.org for now".
+        6. Per-host signing keys on a git roster (plan/fleet/peers/) are the trust root for who may send.
+
+        Real API use stays within the design's limits.
+
+        Unblocked: 2012-a3m9 (row j, the real-API measurement) moves to ready. 2012-dwx3 (l) and 2012-b2rl (o) depend on j and stay blocked until it passes.
+
+        Also from the operator, to be folded into the design (revision 6 in progress): the tray polls the queue; a local model decides whether there is targeted work; and a forge's "what's next for me?" call idles until the tray pushes over a local socket. Push options on the Free plan are being researched.

@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-06 at the coordinator's suggestion, from the 2000-envt find.
+packets:
+- packet_id: a-cfg-darwin-lint-is-caught-before-landing-not-by-the-next-mac-preflight
+  order: 2009-77rq
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [gates, portability, rust]
+  estimated_hours: 2
+  title: The landing gate type-checks the macOS target, so code that is dead or wrong only on darwin is refused before it lands
+  context: 'Found 2026-11-06 (2000-envt, PR #962): 2008-pvck added ca_key_store::at_rest::reset_cache as #[cfg(test)] with only linux-only callers. The Linux gate compiles it as used, so it landed; darwin clippy --all-targets -D warnings then refused it as dead code, and every macOS preflight touching tillandsias-headless failed until a mac lane fixed it. The same file already carried the cfg_attr allow for its other linux-test helpers, so this is a recurring shape, not a one-off. Cheap route: clippy only type-checks, so cargo clippy --target aarch64-apple-darwin --all-targets -p <pure-Rust crates> -- -D warnings needs the rust-std target and no Apple SDK or linker; crates whose build scripts or links need macOS frameworks (tillandsias-macos-tray, tillandsias-vm-layer) are out of scope for this line and stay the mac lanes'' job.'
+  exit_criteria:
+  - 'The Linux landing gate runs clippy for aarch64-apple-darwin on tillandsias-headless (and the other crates that type-check without macOS frameworks) with --all-targets -D warnings; a fixture or the gate run itself refuses the pre-#962 reset_cache (the cfg_attr removed) and passes with it.'
+  - 'The added gate time is measured and recorded on this row.'
+  verifiable_closure: 'A Linux gate log showing the darwin-target clippy line refusing the seeded dead code and passing the fixed tree.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the gate line lands with its fixture (1136-n8sh).'
+  next_action: 'rustup target add aarch64-apple-darwin in the builder toolbox, try the clippy line on tillandsias-headless from Linux, and list which crates type-check.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-06: the Linux gate can not see that, and a way for it to be found before landing is wanted, as a row if it is cheap.'
+  events:
+  - type: filed
+    ts: '2026-11-06T12:42:03Z'
+    host: tlatoanis-macbook-air
+    summary: filed p2 ready from the 2000-envt darwin dead-code find

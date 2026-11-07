@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-long-studio-job-does-not-block-other-mcp-calls-on-the-same-connection
+    event:
+      type: note
+      ts: "2026-11-04T20:58:00Z"
+      agent_id: linux-lenovinha-opus5-20261104t205800z
+      host: lenovinha
+      summary: |
+        PROVEN then FIXED on work/1990-mcpq (lenovinha, 2026-11-04). Fixture a_slow_tool_call_does_not_block_a_fast_one_on_the_same_connection: a 3 s image.generate (stub engine) and then a tools/list on ONE connection. Before the fix, the replies arrived in order [(1, 3.05 s), (2, 3.21 s)]: tools/list waited behind the slow call, so serve_mcp_connection dispatch was serial, as read. Fix: each tools/call runs on its own thread and replies through the one shared writer (matched by id); other methods (initialize, tools/list) stay inline and in order. The concurrency owes the limit 779-dqsv named: CallGate, MAX_CONCURRENT_CALLS = 8 per connection; the read loop waits for a slot (backpressure, never a refusal). After: tools/list answers at once, first.

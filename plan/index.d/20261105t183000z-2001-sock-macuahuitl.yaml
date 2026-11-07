@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from the eviction of PR #938.
+packets:
+- packet_id: stale-control-socket-test-does-not-flake-under-parallel-spawns
+  order: 2001-sock
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tests, flake]
+  estimated_hours: 1
+  title: The stale control socket test does not flake when other tests spawn processes
+  context: 'PR #938, unrelated to this code, was evicted by tray_presence::tests::a_stale_socket_file_is_replaced, at the second bind_control_socket assert. Unverified hypothesis: a child forked by a parallel test briefly holds the dropped listener before exec, so connect succeeds and the socket reads as served. If so, a real tray could also refuse a stale socket for that instant.'
+  exit_criteria:
+  - 'The cause is named, and 50 parallel runs of the crate tests pass this test.'
+  verifiable_closure: 'cargo test -p tillandsias-headless repeated 50 times.'
+  unscoreable: 'unpinnable-until-the-guard-exists: a flake needs repetition.'
+  next_action: 'Reproduce under parallel spawns and print the bind error; the assert hides it.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T18:30:00Z'
+    host: macuahuitl
+    summary: filed p2 ready

@@ -3,9 +3,9 @@
 //! Every visual web studio is declared once in `images/studio/registry.lua`
 //! (Lua owns the registry; `scripts/lua/build-studio-registry.lua` writes
 //! `data/studios.json`, embedded here). This module only consumes it:
-//! framework detection and the choice list (`studio_options`), the web lane a
+//! framework detection and the choice list (`webstudio.options`, 1969-7qm7; `studio_options` is its deprecated alias), the web lane a
 //! studio launches as (the OpenCode Web route, OTP and window, under
-//! `studio.<label>`), and the co-edit feed (`studio_changes`), read from the
+//! `studio.<label>`), and the co-edit feed (`webstudio.changes`), read from the
 //! forge's own checkout.
 //!
 //! The write-back guard is NOT here: saves land in the forge's checkout, so the
@@ -53,13 +53,26 @@ pub(crate) struct Studio {
     pub packet: String,
     #[serde(default)]
     pub needs_cloud_account: bool,
+    /// 1921-2krx: `"sibling"` runs in its own container next to the forge;
+    /// absent means `"forge"` (the studio runs in the forge).
+    #[serde(default)]
+    pub kind: Option<String>,
+    /// A sibling's image; a forge studio's image is derived from its id.
+    #[serde(default, rename = "image")]
+    pub sibling_image: Option<String>,
 }
 
 impl Studio {
     /// The studio's own image, stacked on the forge base and built on first
     /// use (never in a default prebuilt set).
     pub(crate) fn image(&self) -> String {
-        format!("studio-{}", self.id)
+        self.sibling_image
+            .clone()
+            .unwrap_or_else(|| format!("studio-{}", self.id))
+    }
+
+    pub(crate) fn is_sibling(&self) -> bool {
+        self.kind.as_deref() == Some("sibling")
     }
 }
 
@@ -165,6 +178,11 @@ pub(crate) struct WebLane {
     pub image: String,
     pub entrypoint: Option<String>,
     pub label: String,
+    /// The registry id ("" for OpenCode Web).
+    pub id: String,
+    /// 1921-2krx: the studio runs in its own container, routed to directly;
+    /// no forge is started for it.
+    pub sibling: bool,
 }
 
 impl WebLane {
@@ -175,6 +193,8 @@ impl WebLane {
             image: "forge".to_string(),
             entrypoint: None,
             label: "OpenCode Web".to_string(),
+            id: String::new(),
+            sibling: false,
         }
     }
 
@@ -187,6 +207,15 @@ impl WebLane {
                 ids.join(", ")
             )
         })?;
+        // 1865-dn5h: a studio that needs a cloud account cannot run in the
+        // offline forge, so it is refused for THAT reason, not as unbuilt.
+        if s.needs_cloud_account {
+            return Err(format!(
+                "studio {} needs a cloud account and cannot run offline in the forge ({}); \
+                 choose another studio from the list",
+                s.name, s.packet
+            ));
+        }
         if s.status != "ready" {
             return Err(format!(
                 "studio {} is listed but its lane is not built yet: order {} lands its image",
@@ -199,12 +228,14 @@ impl WebLane {
             image: s.image(),
             entrypoint: s.entry.first().cloned(),
             label: format!("{} studio", s.name),
+            id: s.id.clone(),
+            sibling: s.is_sibling(),
         })
     }
 
     /// The studio id this lane serves (empty for OpenCode Web).
     pub(crate) fn studio_id(&self) -> &str {
-        self.image.strip_prefix("studio-").unwrap_or("")
+        &self.id
     }
 
     /// The router host for this lane: `<service>.<project label>`.
@@ -332,13 +363,13 @@ fn git_in_lane(project: &str, instance: &str, args: &[String]) -> Result<String,
 pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({
-            "name": "studio_options",
-            "description": "List the visual web studios this project can be opened in, with a brief each and at most one marked [Recommended] for the project's detected framework. Studios whose lane is not built yet are listed with a note.",
+            "name": "webstudio.options",
+            "description": "List the visual web studios (GrapesJS, Decap, Tina, Puck, Onlook) this project can be opened in for co-editing, with a brief each and at most one marked [Recommended] for the project's detected framework. Studios whose lane is not built yet are listed with a note. Starts nothing. Not the ComfyUI image studio: that is studio.run_workflow.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
         serde_json::json!({
-            "name": "studio_open",
-            "description": "Open this project in a studio by id (from studio_options). The user and you then co-edit the same live page; every save is committed.",
+            "name": "webstudio.open",
+            "description": "Open this project in a visual web studio by id (from webstudio.options), so the user and you co-edit the same live page with every save committed. Today this starts nothing from the lane: the reply names the operator command that opens the studio window (opening it from a lane is order 1859-57mi).",
             "inputSchema": {
                 "type": "object",
                 "properties": { "studio": { "type": "string" } },
@@ -346,16 +377,16 @@ pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
             }
         }),
         serde_json::json!({
-            "name": "studio_changes",
-            "description": "Commits since a cursor (a commit id; omit it for the last 20), oldest first, each with its author, subject, saved paths and diff. Studio saves appear here as studio(<id>): save <paths>. Pass the last sha back as the next cursor.",
+            "name": "webstudio.changes",
+            "description": "Commits in this project since a cursor (a commit id; omit it for the last 20), oldest first, each with its author, subject, saved paths and diff. Web-studio saves appear here as studio(<id>): save <paths>. Pass the last sha back as the next cursor. Starts nothing.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "cursor": { "type": "string" } }
             }
         }),
         serde_json::json!({
-            "name": "studio_publish_request",
-            "description": "Ask the operator to publish the site (deploy branch only, on explicit request).",
+            "name": "webstudio.publish_request",
+            "description": "Ask the operator to publish the site to its Cloudflare domain (deploy branch only, on the user's explicit request). Starts nothing and deploys nothing itself; the handoff to the deploy tool is order 1866-9696.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
     ]
@@ -370,7 +401,7 @@ pub(crate) fn call(
     args: &serde_json::Value,
 ) -> Option<Result<serde_json::Value, String>> {
     Some(match name {
-        "studio_options" => (|| {
+        "webstudio.options" => (|| {
             let files: Vec<String> = git_in_lane(project, instance, &["ls-files".to_string()])?
                 .lines()
                 .map(str::to_string)
@@ -384,7 +415,7 @@ pub(crate) fn call(
             let framework = detect_framework(&files, pkg.as_deref());
             Ok(serde_json::json!({ "framework": framework, "options": options(framework) }))
         })(),
-        "studio_open" => {
+        "webstudio.open" => {
             let id = args["studio"].as_str().unwrap_or("");
             WebLane::studio(id).and_then(|lane| {
                 Err(format!(
@@ -394,10 +425,10 @@ pub(crate) fn call(
                 ))
             })
         }
-        "studio_changes" => changes_git_args(args["cursor"].as_str())
+        "webstudio.changes" => changes_git_args(args["cursor"].as_str())
             .and_then(|a| git_in_lane(project, instance, &a))
             .map(|out| serde_json::json!({ "changes": parse_changes(&out) })),
-        "studio_publish_request" => Err(
+        "webstudio.publish_request" => Err(
             "publish is not wired yet: the handoff to the deploy tool is order 1866-9696"
                 .to_string(),
         ),
@@ -410,10 +441,63 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_registry_lists_the_five_lanes_and_never_silex() {
+    fn the_registry_lists_the_five_lanes_and_comfyui_and_never_silex() {
         let ids: Vec<&str> = registry().studios.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, ["grapesjs", "decap", "tina", "puck", "onlook"]);
+        assert_eq!(
+            ids,
+            ["grapesjs", "decap", "tina", "puck", "onlook", "comfyui"]
+        );
         assert!(registry().studios.iter().all(|s| !s.brief.is_empty()));
+    }
+
+    /// 1865-dn5h: measured 2026-11-02 (plan/issues/onlook-offline-viability-
+    /// 2026-11-02-yoga.md), Onlook needs a CodeSandbox account and cannot run
+    /// offline. While degraded it is never [Recommended], for ANY detected
+    /// framework (Next.js + Tailwind included), it is listed with its reason,
+    /// and a launch is refused for that reason, not as an unbuilt lane.
+    #[test]
+    fn onlook_is_never_recommended_and_says_why_it_cannot_launch() {
+        let onlook = find("onlook").expect("onlook is listed");
+        assert!(onlook.needs_cloud_account, "the measurement says degraded");
+        assert!(
+            onlook.brief.contains("CodeSandbox"),
+            "the brief says why: {}",
+            onlook.brief
+        );
+        let mut frameworks: Vec<Option<&str>> = registry()
+            .frameworks
+            .iter()
+            .map(|f| Some(f.id.as_str()))
+            .collect();
+        frameworks.push(None);
+        for fw in frameworks {
+            let opts = options(fw);
+            let o = opts.iter().find(|o| o.id == "onlook").expect("listed");
+            assert!(!o.recommended, "Onlook recommended for {fw:?}");
+            assert!(!o.label.contains("[Recommended]"), "{fw:?}: {}", o.label);
+            assert_eq!(o.note.as_deref(), Some("needs cloud account"), "{fw:?}");
+        }
+        let refused = WebLane::studio("onlook").expect_err("degraded studio is refused");
+        assert!(refused.contains("needs a cloud account"), "{refused}");
+        assert!(!refused.contains("not built yet"), "{refused}");
+    }
+
+    /// 1862-wrx5: a Hugo site (hugo.toml, or the older config.toml) is a
+    /// markdown SSG, and the one recommended studio for it is Decap CMS.
+    #[test]
+    fn a_hugo_site_recommends_decap() {
+        for marker in ["hugo.toml", "config.toml"] {
+            let fw = detect_framework(&[marker.into(), "content".into()], None);
+            assert_eq!(fw, Some("markdown-ssg"), "{marker}");
+            let opts = options(fw);
+            let rec: Vec<&str> = opts
+                .iter()
+                .filter(|o| o.recommended)
+                .map(|o| o.id.as_str())
+                .collect();
+            assert_eq!(rec, ["decap"], "{marker}");
+            assert!(opts.iter().any(|o| o.label == "Decap CMS [Recommended]"));
+        }
     }
 
     #[test]
@@ -442,8 +526,14 @@ mod tests {
 
     #[test]
     fn a_studio_lane_routes_under_studio_and_a_planned_lane_is_refused_by_name() {
-        let err = WebLane::studio("grapesjs").unwrap_err();
-        assert!(err.contains("1861-nmpp"), "{err}");
+        // 1861-nmpp, 1862-wrx5, 1863-dmke and 1864-ay3x landed the GrapesJS,
+        // Decap, Tina and Puck lanes; Onlook is still planned.
+        let err = WebLane::studio("onlook").unwrap_err();
+        assert!(err.contains("1865-dn5h"), "{err}");
+        for id in ["grapesjs", "decap", "tina", "puck"] {
+            let lane = WebLane::studio(id).unwrap_or_else(|e| panic!("{id}: {e}"));
+            assert_eq!(lane.image, format!("studio-{id}"));
+        }
         assert!(
             WebLane::studio("silex")
                 .unwrap_err()
@@ -455,7 +545,11 @@ mod tests {
             image: "studio-grapesjs".into(),
             entrypoint: Some("/usr/local/bin/studio-grapesjs".into()),
             label: "GrapesJS studio".into(),
+            id: "grapesjs".into(),
+            sibling: false,
         };
+        assert_eq!(WebLane::studio("grapesjs").as_ref(), Ok(&lane));
+        assert_eq!(lane.studio_id(), "grapesjs");
         assert_eq!(lane.route_host("my-site"), "studio.my-site");
         assert_eq!(
             WebLane::opencode().route_host("my-site"),
@@ -465,6 +559,39 @@ mod tests {
             crate::launch_images::LaunchSite::OpencodeWeb,
         ));
         assert_eq!(images.last().map(String::as_str), Some("studio-grapesjs"));
+    }
+
+    /// 1921-2krx: ComfyUI is a SIBLING. It launches (status ready), runs its
+    /// own image (the 1874-zry8 one, not a studio-<id> forge stack), routes
+    /// under studio.<label> to its container port, and is never recommended
+    /// for a site, since it makes images, not pages.
+    #[test]
+    fn comfyui_is_a_ready_sibling_lane_on_its_own_image() {
+        let lane = WebLane::studio("comfyui").expect("comfyui is ready");
+        assert!(lane.sibling);
+        assert_eq!(lane.image, crate::imagegen_studio::STUDIO_IMAGE);
+        assert_eq!(lane.port, crate::imagegen_studio::STUDIO_PORT);
+        assert_eq!(lane.studio_id(), "comfyui");
+        assert_eq!(lane.entrypoint, None);
+        assert_eq!(lane.route_host("my-site"), "studio.my-site");
+        let s = find("comfyui").unwrap();
+        assert!(s.frameworks.is_empty());
+        for fw in [
+            Some("plain-html"),
+            Some("react"),
+            Some("next-tailwind"),
+            None,
+        ] {
+            assert!(
+                options(fw)
+                    .iter()
+                    .all(|o| !(o.id == "comfyui" && o.recommended)),
+                "{fw:?} recommends comfyui"
+            );
+        }
+        // NEGATIVE CONTROL: a forge studio is not a sibling.
+        assert!(!find("grapesjs").unwrap().is_sibling());
+        assert_eq!(find("grapesjs").unwrap().image(), "studio-grapesjs");
     }
 
     #[test]

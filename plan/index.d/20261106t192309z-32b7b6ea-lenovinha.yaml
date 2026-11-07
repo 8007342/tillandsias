@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-checkout-has-room-for-worktrees-and-builds
+    field: next_action
+    value: 'Implemented (#969, 7a1dc76d3): option (A) — the tmpfs budget follows the recorded high-water mark (+25%) or [forge] src_mb under the same 4096 ceiling; tillandsias-room warns at 85% naming the largest dirs and "build outputs, not secrets". Left: the real-forge litmus (fill past 1.5 GB, commit, relaunch with room). Residual: the project cache is unencrypted at rest (2010-r3y5).'
+    ts: "2026-11-06T19:23:09Z"
+    host: lenovinha
+    replaces_sha256: "7cb9dacd82ef91968cea2fa890b5947f77cb932f16b5e71cfb9c94b252a70708"
+
+events:
+  - packet_id: a-forge-checkout-has-room-for-worktrees-and-builds
+    event:
+      type: note
+      ts: "2026-11-06T19:23:09Z"
+      host: lenovinha
+      summary: |-
+        state what is left

@@ -32,18 +32,18 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "service-stop-documented"
 
-  - step: "tray handler advertises publish_local in tools/list"
-    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"publish_local\"' && echo 'handler-publish-local-present'"
+  - step: "tray handler advertises preview.publish (1969-7qm7 canonical name of publish_local) in tools/list"
+    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"preview.publish\"' && echo 'handler-publish-local-present'"
     timeout_ms: 5000
     expected_behavior: "handler-publish-local-present"
 
-  - step: "tray handler advertises service_status in tools/list"
-    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"service_status\"' && echo 'handler-service-status-present'"
+  - step: "tray handler advertises preview.status (1969-7qm7 canonical name of service_status) in tools/list"
+    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"preview.status\"' && echo 'handler-service-status-present'"
     timeout_ms: 5000
     expected_behavior: "handler-service-status-present"
 
-  - step: "tray handler advertises service_stop in tools/list"
-    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"service_stop\"' && echo 'handler-service-stop-present'"
+  - step: "tray handler advertises preview.stop (1969-7qm7 canonical name of service_stop) in tools/list"
+    command: "mf_literal crates/tillandsias-headless/src/tray/mod.rs '\"preview.stop\"' && echo 'handler-service-stop-present'"
     timeout_ms: 5000
     expected_behavior: "handler-service-stop-present"
 

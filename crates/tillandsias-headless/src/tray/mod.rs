@@ -536,7 +536,7 @@ type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>;
 fn control_socket_path() -> PathBuf {
     // 1944-trsp: the same directory the CLI probes and the lock lives in (an
     // empty XDG_RUNTIME_DIR used to resolve differently here).
-    crate::control_socket_host_dir().join("control.sock")
+    crate::control_socket_file()
 }
 
 // Env var that overrides the default Linux-native host project root.
@@ -1075,6 +1075,16 @@ pub fn start_mcp_socket_server() -> Result<(), String> {
 fn spawn_lane_adoption() {
     static STARTED: std::sync::Once = std::sync::Once::new();
     STARTED.call_once(|| {
+        // 1991-dovl: say which dev overlay files are active, so they get
+        // made durable (committed) and deleted. A release build has none.
+        let overlay = crate::dev_overlay::active_entries();
+        if !overlay.is_empty() {
+            eprintln!(
+                "[tillandsias] WARNING: dev overlay active ({}): {}. Commit these into the tree and delete the overlay.",
+                crate::dev_overlay::dir().map(|d| d.display().to_string()).unwrap_or_default(),
+                overlay.join(", ")
+            );
+        }
         crate::mcp_socket::adopt_marked_lanes();
         let _ = std::thread::Builder::new()
             .name("lane-adoption".into())
@@ -1142,7 +1152,7 @@ fn handle_control_connection(
                                 "IssueWebSession".to_string(),
                                 "EvictProject".to_string(),
                             ],
-                            build_version: Some(env!("CARGO_PKG_VERSION").to_string()),
+                            build_version: Some(crate::VERSION.trim().to_string()), // 1993-cver
                         },
                     };
                     if write_control_envelope(&mut stream, &ack).is_err() {
@@ -1404,6 +1414,8 @@ fn start_control_socket_server(shutdown: Arc<ShutdownLatch>) -> Result<(), Strin
     }
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod control socket: {err}"))?;
+    // ORDER 2007-rtky: older clients still dial the pre-2007 path.
+    crate::link_legacy_control_socket();
 
     let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
 
@@ -1491,6 +1503,11 @@ struct TrayService {
     /// 679-vdi6: wakes the idle wait when a burst is deferred, so the trailing
     /// flush needs no periodic tick.
     emit_pending_notify: tokio::sync::Notify,
+    /// 1954-btht: the cloud-project launch a menu click runs. It can block for
+    /// a whole forge image build (try_build_forge_image_on_demand), so it must
+    /// never run on the path that answers GetLayout. A field, not a call, so a
+    /// fixture can put a launch that blocks behind a real menu click.
+    cloud_launcher: fn(Arc<TrayService>, ProjectEntry, LaunchKind),
 }
 
 /// Minimum spacing between tray signal-emission groups (944-jaef).
@@ -1594,6 +1611,7 @@ impl TrayService {
             ),
             emit_pending: AtomicBool::new(false),
             emit_pending_notify: tokio::sync::Notify::new(),
+            cloud_launcher: handle_launch_cloud_project,
         }
     }
 
@@ -2186,7 +2204,8 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                     .unwrap_or_else(|| cloud.name.clone())
             };
 
-            let current_exe = match std::env::current_exe() {
+            // 1984-pexe: a terminal runs this argv: the installed path.
+            let current_exe = match crate::self_exe::for_other_process() {
                 Ok(exe) => exe,
                 Err(err) => {
                     eprintln!("error: failed to resolve Tillandsias executable: {err}");
@@ -3745,7 +3764,33 @@ impl DbusMenuIface {
                                 if let Some(cloud_entry) =
                                     self.0.cloud_project_by_name(&project_name)
                                 {
-                                    handle_launch_cloud_project(self.0.clone(), cloud_entry, kind);
+                                    // 1954-btht: off the method's own path. The
+                                    // launch can wait out a whole forge image
+                                    // build, and inline it held this Event
+                                    // reply for that long, so the desktop saw
+                                    // a frozen tray (macuahuitl 2026-11-01).
+                                    let launcher = self.0.cloud_launcher;
+                                    let service = self.0.clone();
+                                    let name = cloud_entry.name.clone();
+                                    if self
+                                        .0
+                                        .task_executor
+                                        .spawn_task(move || launcher(service, cloud_entry, kind))
+                                        .is_err()
+                                    {
+                                        let msg = format!(
+                                            "too many tray actions in flight; launch of '{name}' not started — try again"
+                                        );
+                                        eprintln!("error: {msg}");
+                                        let _ = self
+                                            .0
+                                            .set_status(
+                                                format!("🥀 {msg}"),
+                                                TrayIconState::Dried,
+                                                None,
+                                            )
+                                            .await;
+                                    }
                                 }
                             }
                         }
@@ -4225,15 +4270,31 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // exit anyway.
         //
         // @trace spec:graceful-shutdown, spec:app-lifecycle
-        match tokio::time::timeout(
-            std::time::Duration::from_secs(45),
-            crate::graceful_shutdown_async(),
-        )
-        .await
-        {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
-            Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+        // 1988-trkp: a plain exit keeps forges and hands their lanes on;
+        // only `tillandsias --stop-all` stops everything.
+        let plan = crate::shutdown_plan(crate::take_stop_all_request());
+        if plan.mark_lanes_for_adoption {
+            let lanes = crate::mcp_socket::mark_served_lanes_for_adoption();
+            info!(
+                lanes = lanes.len(),
+                "1988-trkp: tray exiting, forges left running; the next tray adopts their lanes (tillandsias --stop-all stops everything)"
+            );
+            eprintln!(
+                "[tillandsias] tray exiting; {} lane(s) and their forges keep running. `tillandsias --stop-all` stops everything.",
+                lanes.len()
+            );
+        }
+        if plan.stop_containers {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(45),
+                crate::graceful_shutdown_async(),
+            )
+            .await
+            {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
+                Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+            }
         }
         // Order 1859-v5iv: a clean exit leaves no run for the next start to reap.
         if let Some(run) = crate::dead_run::run_label_value() {
@@ -4243,8 +4304,9 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         // @trace spec:tillandsias-vault — revoke per-container AppRole
         // tokens before exit so vault audit reflects clean shutdown.
         // Time-bounded for the same reason as graceful shutdown.
+        // 1988-trkp: kept forges keep using their tokens.
         #[cfg(feature = "vault")]
-        {
+        if plan.revoke_container_tokens {
             match tokio::time::timeout(
                 std::time::Duration::from_secs(10),
                 crate::vault_bootstrap::revoke_pending_container_tokens(false),
@@ -4853,16 +4915,32 @@ mod tests {
         // Order 779-3trn: the host-services trio still leads (unchanged
         // ordering for existing consumers), and the browser family is now
         // advertised alongside it — the wiring gap this packet closed.
+        // 1969-7qm7: the lifecycle tools lead under their canonical preview.*
+        // names, and the flat names follow as deprecated aliases, LAST.
         assert_eq!(
             &tools[..4],
             &[
-                "publish_local",
-                "service_status",
-                "service_stop",
-                "service_reload"
+                "preview.publish",
+                "preview.status",
+                "preview.stop",
+                "preview.reload"
             ],
-            "the host-services lifecycle tools must keep their identity and order"
+            "the preview lifecycle tools lead the list, in order"
         );
+        for (canonical, alias) in crate::host_tools::RENAMED {
+            let c = tools.iter().position(|t| t == canonical);
+            let a = tools.iter().position(|t| t == alias);
+            assert!(
+                c.is_some() && a.is_some() && c < a,
+                "{alias} is listed after its canonical {canonical}: {tools:?}"
+            );
+        }
+        assert_eq!(
+            tools.last().copied(),
+            Some("studio_publish_request"),
+            "the deprecated aliases close the list: {tools:?}"
+        );
+        assert!(tools.contains(&crate::host_tools::INDEX_TOOL), "{tools:?}");
         let browser_tools: Vec<&&str> =
             tools.iter().filter(|t| t.starts_with("browser.")).collect();
         assert_eq!(
@@ -4893,8 +4971,8 @@ mod tests {
             );
         }
         assert!(
-            tools.contains(&"toolchain_prepare"),
-            "the opt-in toolchain tool is advertised (1637-5765): {tools:?}"
+            tools.contains(&"toolchain.prepare") && tools.contains(&"toolchain_prepare"),
+            "the opt-in toolchain tool is advertised (1637-5765) under both names: {tools:?}"
         );
         // 1772-irs3: the read-only Cloudflare family (the probe + the table).
         let cloudflare = tools
@@ -4912,8 +4990,22 @@ mod tests {
             tools.contains(&"image.generate"),
             "image.generate is advertised (1874-kkrc): {tools:?}"
         );
-        // 1860-auhm: the four studio co-edit tools, by name.
+        // The studio tools, by name: 1956-x7xp run_workflow, 1956-26qh
+        // validate_family, 1959-xsy5 (D12, D13) finish_pixels and contact_sheet.
+        for t in ["studio.run_workflow", "studio.validate_family"] {
+            assert!(tools.contains(&t), "{t} is advertised: {tools:?}");
+        }
+        assert!(
+            tools.contains(&"studio.finish_pixels") && tools.contains(&"studio.contact_sheet"),
+            "studio.finish_pixels and studio.contact_sheet are advertised (1959-xsy5): {tools:?}"
+        );
+        // 1860-auhm: the four web-studio co-edit tools, by name (webstudio.*
+        // since 1969-7qm7; the studio_* names are their deprecated aliases).
         for studio in [
+            "webstudio.options",
+            "webstudio.open",
+            "webstudio.changes",
+            "webstudio.publish_request",
             "studio_options",
             "studio_open",
             "studio_changes",
@@ -4921,10 +5013,16 @@ mod tests {
         ] {
             assert!(tools.contains(&studio), "{studio} (1860-auhm): {tools:?}");
         }
+        // 1957-emar: the GPU arbiter's two tools.
+        for gpu in ["gpu.status", "gpu.unload_model"] {
+            assert!(tools.contains(&gpu), "{gpu} (1957-emar): {tools:?}");
+        }
         assert_eq!(
             tools.len() - cloudflare,
-            24,
-            "lifecycle tools + service_logs + toolchain_prepare + image.generate + browser family + studio family + cloudflare family, nothing else"
+            // 1966-47vt: + cloud.usage when the store is built in.
+            // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status.
+            if cfg!(feature = "vault") { 49 } else { 48 },
+            "5 preview.* + toolchain.prepare + image.generate + 10 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart; 2002-stjb: + studio.queue_workflow, studio.job_status) + 13 browser.* + 4 webstudio.* + tillandsias.index + tillandsias.lane_version (2003-stbf) + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -4994,8 +5092,11 @@ mod tests {
                 .count();
             assert_eq!(
                 tools.len() - cloudflare,
-                24,
-                "over the transport (beside the 1772-irs3 cloudflare family): lifecycle tools, service_logs (1723-2fiq), toolchain_prepare (1637-5765), image.generate (1874-kkrc), thirteen browser tools + four studio tools (1860-auhm), got {tools:?}"
+                // 1966-47vt: + cloud.usage when the store is built in.
+                // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status.
+                // 2002-stjb: + studio.queue_workflow, studio.job_status.
+                if cfg!(feature = "vault") { 49 } else { 48 },
+                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart), 13 browser.*, 4 webstudio.*, tillandsias.index, the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5145,12 +5246,12 @@ mod tests {
         );
     }
 
-    /// Order 779-dqsv: pin what the lane transport ACTUALLY enforces, now
-    /// that the unreachable 16-call semaphore is gone. The loop reads one
-    /// line, handles it to completion, and only then reads the next — so a
-    /// second request cannot begin before the first response is written.
-    /// This is the guarantee a future concurrent transport would have to
-    /// deliberately break (and would then owe a real, bindable limit).
+    /// Order 779-dqsv, as amended by 1990-mcpq: requests OTHER than tools/call
+    /// (here tools/list) are still handled one at a time, in order. A
+    /// tools/call now runs on its own thread so a long one cannot hold back
+    /// the next; the bindable limit that concurrency owes is
+    /// mcp_socket::MAX_CONCURRENT_CALLS per connection (CallGate, tested in
+    /// call_gate_tests).
     #[test]
     fn mcp_lane_transport_serializes_one_call_at_a_time() {
         use std::io::{BufRead, BufReader, Write};
@@ -5423,6 +5524,83 @@ mod tests {
         });
     }
 
+    /// ORDER 1990-mcpq: a long tool call must not block another call on the
+    /// SAME connection (kumbia: browser.open waited >120 s behind a QwenImage
+    /// workflow). A 3 s image.generate is sent, then tools/list; the list must
+    /// answer at once, before the slow call. Pre-fix: FAILS, dispatch is serial.
+    #[test]
+    fn a_slow_tool_call_does_not_block_a_fast_one_on_the_same_connection() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        struct Slow;
+        impl crate::imagegen_tool::Engine for Slow {
+            fn generate(
+                &self,
+                job: &crate::imagegen_tool::Job,
+                out_dir: &std::path::Path,
+                names: &[String],
+                _p: &mut dyn FnMut(crate::imagegen_tool::Progress),
+            ) -> Result<crate::imagegen_tool::EngineOut, String> {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+                for n in names {
+                    image::RgbImage::new(job.width, job.height)
+                        .save(out_dir.join(n))
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(crate::imagegen_tool::EngineOut {
+                    backend: "vulkan".into(),
+                    first_use: false,
+                    timings: Default::default(),
+                })
+            }
+        }
+        let _g = crate::imagegen_tool::SEAM_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let scratch =
+            tempfile::tempdir_in(std::env::current_exe().unwrap().parent().unwrap()).unwrap();
+        crate::imagegen_tool::install_seam(Some(crate::imagegen_tool::Seam {
+            engine: std::sync::Arc::new(Slow),
+            scratch_root: scratch.path().to_path_buf(),
+            ceiling: "I0".into(),
+            present: Some(vec!["I0".into()]),
+        }));
+        let order = with_known_demo_project(|| {
+            let (server_side, client_side) = UnixStream::pair().expect("pair");
+            let identity = LaneIdentity::new("demo", "default");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+            let mut w = client_side.try_clone().unwrap();
+            let mut lines = BufReader::new(client_side).lines();
+            writeln!(w, r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"image.generate","arguments":{{"prompt":"x","seed":1}}}}}}"#).unwrap();
+            writeln!(
+                w,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{{}}}}"#
+            )
+            .unwrap();
+            let t0 = std::time::Instant::now();
+            let mut order = Vec::new();
+            while order.len() < 2 {
+                let v: serde_json::Value =
+                    serde_json::from_str(&lines.next().unwrap().unwrap()).unwrap();
+                if let Some(id) = v.get("id").and_then(|i| i.as_u64()) {
+                    order.push((id, t0.elapsed()));
+                }
+            }
+            drop(w);
+            drop(lines);
+            let _ = server.join();
+            order
+        });
+        crate::imagegen_tool::install_seam(None);
+        assert_eq!(order[0].0, 2, "tools/list answers first: {order:?}");
+        assert!(
+            order[0].1 < std::time::Duration::from_secs(1),
+            "and at once: {order:?}"
+        );
+    }
+
     /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
     /// lane peer — one JSON-RPC object per line, replies in order.
     ///
@@ -5483,7 +5661,17 @@ mod tests {
             // 1874-kkrc: image.generate, by name.
             assert!(tools.iter().any(|t| t["name"] == "image.generate"));
             // 1860-auhm: + the four studio co-edit tools.
-            assert_eq!(tools.len() - cloudflare, 24);
+            // 1956-x7xp + 1956-26qh: studio.run_workflow, studio.validate_family;
+            // 1959-xsy5: + studio.finish_pixels, studio.contact_sheet;
+            // 1966-47vt: + cloud.usage when the store is built in.
+            assert_eq!(
+                tools.len() - cloudflare,
+                // 1966-47vt: + cloud.usage when the store is built in.
+                // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status.
+                // 2002-stjb: + studio.queue_workflow, studio.job_status.
+                if cfg!(feature = "vault") { 49 } else { 48 },
+                "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
+            );
 
             drop(writer);
             drop(lines);
@@ -7924,6 +8112,120 @@ mod tests {
         assert_eq!(
             shared_id_to_int(ids::CLOUD_PROJECTS_OVERFLOW),
             CLOUD_OVERFLOW_ID
+        );
+    }
+
+    // 1954-btht FIXTURE. Operator, macuahuitl 2026-11-01: the tray icon stopped
+    // answering for the whole forge image build (10+ min). A cloud-project
+    // click runs a launch that can block for a build
+    // (try_build_forge_image_on_demand). This drives the REAL dbusmenu
+    // interface over a private peer-to-peer bus with a launch that blocks.
+    //
+    // MEASURED on yoga 2026-11-02 with the launch still inline: GetLayout from
+    // a second call DID answer (zbus serves calls concurrently), but the
+    // click's own Event reply was held for the whole launch. A desktop client
+    // that waits on that reply before its next request sees a frozen icon. So
+    // the property is the Event REPLY returning inside the budget, plus
+    // GetLayout answering, both while the launch is still blocked. The STARTED
+    // check proves the launch ran, so a dropped click cannot pass.
+    #[test]
+    fn a_cloud_click_replies_and_get_layout_answers_while_the_launch_blocks() {
+        use std::sync::atomic::AtomicBool;
+        static STARTED: AtomicBool = AtomicBool::new(false);
+        static RELEASE: AtomicBool = AtomicBool::new(false);
+        fn blocking_launch(_: Arc<TrayService>, _: ProjectEntry, _: LaunchKind) {
+            STARTED.store(true, Ordering::SeqCst);
+            let until = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            while !RELEASE.load(Ordering::SeqCst) && std::time::Instant::now() < until {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+
+        let state = TrayStateBuilder::new()
+            .forge_available(true)
+            .enclave_status(EnclaveStatus::AllHealthy)
+            .authenticated(true)
+            .cloud_projects(vec![ProjectEntry {
+                name: "tillandsias".to_string(),
+                path: PathBuf::from("/home/x/src/tillandsias"),
+                full_name: Some("owner/tillandsias".to_string()),
+            }])
+            .build();
+        let mut service = TrayService::new(state);
+        service.cloud_launcher = blocking_launch;
+        let service = Arc::new(service);
+        let leaf = cloud_project_base("tillandsias") + LeafAction::OpenCode.offset();
+
+        let rt = test_rt();
+        let budget = std::time::Duration::from_secs(2);
+        let outcome = rt.block_on(async move {
+            let (a, b) = tokio::net::UnixStream::pair().expect("socket pair");
+            let guid = zbus::Guid::generate();
+            let server = ConnectionBuilder::unix_stream(a)
+                .server(guid)
+                .expect("server guid")
+                .p2p()
+                .serve_at(MENU_PATH, DbusMenuIface(service.clone()))
+                .expect("serve menu")
+                .build();
+            let client = ConnectionBuilder::unix_stream(b).p2p().build();
+            let (server, client) = tokio::join!(server, client);
+            let (_server, client) = (server.expect("server"), client.expect("client"));
+
+            let t0 = std::time::Instant::now();
+            let click = tokio::time::timeout(
+                budget,
+                client.call_method(
+                    None::<&str>,
+                    MENU_PATH,
+                    Some("com.canonical.dbusmenu"),
+                    "Event",
+                    &(leaf, "clicked", zbus::zvariant::Value::from(0i32), 0u32),
+                ),
+            )
+            .await;
+            let click_replied = matches!(click, Ok(Ok(_)));
+            let click_took = t0.elapsed();
+            let started_by = std::time::Instant::now() + budget;
+            while !STARTED.load(Ordering::SeqCst) && std::time::Instant::now() < started_by {
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            let started = STARTED.load(Ordering::SeqCst);
+            let layout = tokio::time::timeout(
+                budget,
+                client.call_method(
+                    None::<&str>,
+                    MENU_PATH,
+                    Some("com.canonical.dbusmenu"),
+                    "GetLayout",
+                    &(0i32, -1i32, Vec::<String>::new()),
+                ),
+            )
+            .await;
+            let layout_answered = matches!(layout, Ok(Ok(_)));
+            let still_blocked = !RELEASE.load(Ordering::SeqCst);
+            RELEASE.store(true, Ordering::SeqCst);
+            (
+                started,
+                click_replied,
+                click_took,
+                layout_answered,
+                still_blocked,
+            )
+        });
+        let (started, click_replied, click_took, layout_answered, still_blocked) = outcome;
+        assert!(
+            started,
+            "the click never reached the launch, so nothing was measured"
+        );
+        assert!(
+            click_replied,
+            "the Event reply for a cloud-project click was held {click_took:?} (budget {budget:?}) \
+             by the launch: a client waiting on it sees a frozen tray"
+        );
+        assert!(
+            layout_answered && still_blocked,
+            "GetLayout did not answer within {budget:?} while the cloud launch blocked"
         );
     }
 }

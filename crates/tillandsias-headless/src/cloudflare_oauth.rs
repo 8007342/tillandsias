@@ -85,7 +85,11 @@ pub const CLOUDFLARE_APP_CLIENT_ID: &str = "d9d1303782dfe45c7e2d7bb9ce89c8a8";
 /// discovery URL answers 403 to Python's default `Python-urllib/3.9`
 /// User-Agent and 200 to reqwest's (none) and curl's. That this client
 /// sends none at all only works by luck.
-const USER_AGENT: &str = concat!("tillandsias/", env!("CARGO_PKG_VERSION"));
+/// 1993-cver: the release version comes from VERSION (the crate version is
+/// frozen so a release bump never moves Cargo.lock or the deps derivations).
+fn user_agent() -> String {
+    format!("tillandsias/{}", crate::VERSION.trim())
+}
 
 /// The device-code grant's URN (RFC 8628 §1's registered value). Cloudflare's
 /// discovery document LISTS it as of 2026-10-14 (measured, with a
@@ -131,6 +135,9 @@ pub fn client_id() -> String {
 pub struct HttpResponse {
     pub status: u16,
     pub body: String,
+    /// 2013-rlcd: the `Retry-After` header in seconds, when the server sent one
+    /// as an integer. A client honours it before asking again.
+    pub retry_after_s: Option<u64>,
 }
 
 impl std::fmt::Debug for HttpResponse {
@@ -220,7 +227,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
-                .user_agent(USER_AGENT)
+                .user_agent(user_agent())
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
@@ -229,8 +236,13 @@ impl HttpClient for ReqwestHttpClient {
                 .await
                 .map_err(|e| transport_error("get", &e))?;
             let status = resp.status().as_u16();
+            let retry_after_s = retry_after_secs(resp.headers());
             let body = resp.text().await.map_err(|e| transport_error("get", &e))?;
-            Ok(HttpResponse { status, body })
+            Ok(HttpResponse {
+                status,
+                body,
+                retry_after_s,
+            })
         })
     }
 
@@ -241,7 +253,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
-                .user_agent(USER_AGENT)
+                .user_agent(user_agent())
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
@@ -252,7 +264,11 @@ impl HttpClient for ReqwestHttpClient {
                 .map_err(|e| transport_error("get", &e))?;
             let status = resp.status().as_u16();
             let body = resp.text().await.map_err(|e| transport_error("get", &e))?;
-            Ok(HttpResponse { status, body })
+            Ok(HttpResponse {
+                retry_after_s: None,
+                status,
+                body,
+            })
         })
     }
 
@@ -266,7 +282,7 @@ impl HttpClient for ReqwestHttpClient {
         run_blocking(async move {
             let client = reqwest::Client::builder()
                 .timeout(timeout)
-                .user_agent(USER_AGENT)
+                .user_agent(user_agent())
                 .build()
                 .map_err(|_| "refused:cloudflare-login:transport-client".to_string())?;
             let resp = client
@@ -276,10 +292,28 @@ impl HttpClient for ReqwestHttpClient {
                 .await
                 .map_err(|e| transport_error("post", &e))?;
             let status = resp.status().as_u16();
+            let retry_after_s = retry_after_secs(resp.headers());
             let body = resp.text().await.map_err(|e| transport_error("post", &e))?;
-            Ok(HttpResponse { status, body })
+            Ok(HttpResponse {
+                status,
+                body,
+                retry_after_s,
+            })
         })
     }
+}
+
+/// 2013-rlcd: `Retry-After` as whole seconds. The HTTP-date form is ignored
+/// (the caller then uses its own backoff), and the value is capped at 10 min
+/// so a hostile header cannot park the client for hours.
+fn retry_after_secs(h: &reqwest::header::HeaderMap) -> Option<u64> {
+    h.get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()
+        .map(|s| s.min(600))
 }
 
 /// The OpenID discovery document, narrowed to what this module reads.
@@ -402,6 +436,18 @@ pub struct Pending {
     /// when this is `Some`.
     pub device_grant_note: Option<&'static str>,
     verifier: String,
+    /// 2013-rlcd: the relay secret `s`. The state carries only `H(s)`, and the
+    /// relay releases the code only to a poll presenting `s`. Like the
+    /// verifier it is not `pub` and is redacted from `Debug`.
+    relay_secret: String,
+}
+
+impl Pending {
+    /// 2013-rlcd: the secret the relay poll presents. Only the poll body ever
+    /// carries it: never a URL, argv, a log or a refusal.
+    pub fn relay_secret_for_poll(&self) -> &str {
+        &self.relay_secret
+    }
 }
 
 impl std::fmt::Debug for Pending {
@@ -415,6 +461,7 @@ impl std::fmt::Debug for Pending {
             .field("revocation_endpoint", &self.revocation_endpoint)
             .field("device_grant_note", &self.device_grant_note)
             .field("verifier", &"<redacted>")
+            .field("relay_secret", &"<redacted>")
             .finish()
     }
 }
@@ -534,7 +581,14 @@ pub fn begin(
         eprintln!("{note}");
     }
 
-    let state = random_urlsafe(STATE_RANDOM_BYTES);
+    // 2013-rlcd: state = nonce . H(s), so whoever sees the state (the QR, the
+    // URL, the browser history) cannot claim the relay's result.
+    let relay_secret = random_urlsafe(STATE_RANDOM_BYTES);
+    let state = format!(
+        "{}.{}",
+        random_urlsafe(STATE_RANDOM_BYTES),
+        s256_challenge(&relay_secret)
+    );
     let verifier = random_urlsafe(VERIFIER_RANDOM_BYTES);
     debug_assert!(
         (43..=128).contains(&verifier.len()),
@@ -570,6 +624,7 @@ pub fn begin(
         revocation_endpoint: discovery.revocation_endpoint,
         device_grant_note,
         verifier,
+        relay_secret,
     })
 }
 
@@ -877,6 +932,7 @@ mod tests {
             self.get_responses.insert(
                 url.to_string(),
                 HttpResponse {
+                    retry_after_s: None,
                     status,
                     body: body.to_string(),
                 },
@@ -888,6 +944,7 @@ mod tests {
             self.post_responses.insert(
                 url.to_string(),
                 HttpResponse {
+                    retry_after_s: None,
                     status,
                     body: body.to_string(),
                 },
@@ -1167,8 +1224,15 @@ mod tests {
         let a = begin(&mock, "https://fake.invalid", "c", REDIRECT_URI, &[]).unwrap();
         let b = begin(&mock, "https://fake.invalid", "c", REDIRECT_URI, &[]).unwrap();
         assert_ne!(a.state, b.state, "state must be freshly random each call");
-        // 32 bytes base64url-no-pad is 43 chars.
-        assert_eq!(a.state.len(), 43);
+        // 2013-rlcd: state = nonce . H(s); each half is 32 bytes base64url-no-pad,
+        // 43 chars, so the state is 87.
+        let (nonce, h) = a.state.split_once('.').expect("nonce.H(s)");
+        assert_eq!((nonce.len(), h.len()), (43, 43), "{}", a.state);
+        assert!(
+            a.state
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c))
+        );
     }
 
     #[test]
@@ -1472,6 +1536,7 @@ mod tests {
     #[test]
     fn http_response_debug_never_prints_the_body() {
         let r = HttpResponse {
+            retry_after_s: None,
             status: 200,
             body: format!(r#"{{"access_token":"{LEAK_ACCESS}","refresh_token":"{LEAK_REFRESH}"}}"#),
         };
@@ -1496,13 +1561,19 @@ mod tests {
             (200, format!("not json {LEAK_ACCESS}")),
         ];
         for (status, body) in cases {
-            let err = parse_token_response(&HttpResponse { status, body }).unwrap_err();
+            let err = parse_token_response(&HttpResponse {
+                retry_after_s: None,
+                status,
+                body,
+            })
+            .unwrap_err();
             assert_no_leak(&err, "token-response error");
             assert!(err.starts_with("refused:cloudflare-login:"), "{err}");
         }
         // A plain OAuth error code still survives (the 1505-iysn reduction
         // and the operator both need `invalid_grant`).
         let err = parse_token_response(&HttpResponse {
+            retry_after_s: None,
             status: 400,
             body: r#"{"error":"invalid_grant"}"#.into(),
         })

@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-02, coordinator-assigned P0 (operator Kumbia trial).
+packets:
+- packet_id: the-imagegen-studio-image-builds-with-its-pinned-custom-nodes-and-every-node-loads
+  order: 1970-pipc
+  status: in_progress
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, studio, image, pip]
+  estimated_hours: 2
+  title: The imagegen studio image builds with its pinned custom nodes and every node loads
+  context: 'On macuahuitl (v56.11.2.1) tillandsias --studio comfyui failed building imagegen-studio at the custom-nodes install: pip check exited 1 and custom-nodes.py dropped its output. Reproduced on lenovinha: opencv-python 4.12.0.88 (locks for layerdiffuse and BiRefNet_ll, 1956-bh6j) requires numpy<2.3 while ComfyUI brings numpy 2.5.4. Once built, ComfyUI_BiRefNet_ll also failed to import: it makedirs /opt/comfyui/models/BiRefNet at import, EACCES as the studio user.'
+  exit_criteria:
+  - 'podman build of images/imagegen-studio succeeds and ComfyUI --quick-test-for-ci imports all four custom nodes. Pre-fix result: FAILS at pip check (opencv numpy bound), then BiRefNet_ll IMPORT FAILED.'
+  - 'A failing pip check prints its conflict lines in the build log. Pre-fix result: FAILS, only pip notices are kept.'
+  verifiable_closure: 'podman build -f images/imagegen-studio/Containerfile images/imagegen-studio; podman run --entrypoint python -w /opt/comfyui IMAGE main.py --cpu --quick-test-for-ci with the studio user dirs.'
+  unscoreable: 'unpinnable-until-the-guard-exists: an image build with network pip installs, no litmus runs it yet (1136-n8sh).'
+  next_action: 'Land the opencv 4.13.0.92 pin, the pip check output and the BiRefNet dir.'
+  provenance: macuahuitl build failure relayed by macuahuitl-fedora 2026-11-02; reproduced on lenovinha.
+  events:
+  - type: filed
+    ts: '2026-11-02T22:20:18Z'
+    host: lenovinha
+    summary: filed p0 in_progress, claimed by opus5

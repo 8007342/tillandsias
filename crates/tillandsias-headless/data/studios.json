@@ -47,7 +47,7 @@
       "packet": "1861-nmpp",
       "port": 4096,
       "save_adapter": "endpoint",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         "*.html",
         "**/*.html",
@@ -70,7 +70,7 @@
       "packet": "1862-wrx5",
       "port": 4096,
       "save_adapter": "own-writer",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         "content/**",
         "_posts/**",
@@ -94,7 +94,7 @@
       "packet": "1863-dmke",
       "port": 4096,
       "save_adapter": "own-writer",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         "content/**",
         "tina/config.ts",
@@ -116,13 +116,13 @@
       "packet": "1864-ay3x",
       "port": 4096,
       "save_adapter": "endpoint",
-      "status": "planned",
+      "status": "ready",
       "write_allowlist": [
         ".tillandsias/studio/puck/**"
       ]
     },
     {
-      "brief": "Visual editor for Next.js and Tailwind that edits the code directly.",
+      "brief": "Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
       "entry": [
         "/usr/local/bin/studio-onlook"
       ],
@@ -141,6 +141,21 @@
         "components/**",
         "public/**"
       ]
+    },
+    {
+      "brief": "Node-based image generation on the local models, outputs to the lane's scratch volume.",
+      "entry": [],
+      "frameworks": [],
+      "id": "comfyui",
+      "image": "imagegen-studio",
+      "kind": "sibling",
+      "license": "GPL-3.0-only",
+      "name": "ComfyUI",
+      "packet": "1921-2krx",
+      "port": 8188,
+      "save_adapter": "own-writer",
+      "status": "ready",
+      "write_allowlist": []
     }
   ]
 }

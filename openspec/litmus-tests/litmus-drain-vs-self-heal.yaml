@@ -20,7 +20,7 @@ preconditions:
 
 critical_path:
   - step: "pure gate logic: Draining/Stopping refuse, all other phases and CLI-unset allow"
-    command: "cargo test -p tillandsias-headless runtime_phase::tests::phase_gate_truth_table -- --exact 2>&1 | grep 'phase_gate_truth_table ... ok' && echo PHASE-GATE-LOGIC-OK"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --filter runtime_phase::tests::phase_gate_truth_table --require-ok runtime_phase::tests::phase_gate_truth_table --name phase-gate-truth-table && echo PHASE-GATE-LOGIC-OK"
     timeout_ms: 120000
     success_pattern: "PHASE-GATE-LOGIC-OK"
     failure_pattern: "FAILED|panicked"

@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-python-environment-installs-through-the-proxy
+    field: next_action
+    value: 'Implemented (#960, 9f5f722c7); not verified. Remaining: the real-forge retry. In a forge started before a CA rotation, run tillandsias-trust check (expect ok:trust-refreshed or ok:trust-current), then uv python install on a GitHub release asset through the proxy, with no BadSignature. Not covered here: the proxy leaf (proxy_ca_check) and the mirror (1998-mvrs b, #961).'
+    ts: "2026-11-06T11:50:10Z"
+    host: lenovinha
+    replaces_sha256: "72b611b4f88dd930d37a8ab5c0ef7604cb7238acaf4aa86611dcaddb864e058e"
+
+events:
+  - packet_id: a-forge-python-environment-installs-through-the-proxy
+    event:
+      type: note
+      ts: "2026-11-06T11:50:10Z"
+      host: lenovinha
+      summary: |-
+        state what remains

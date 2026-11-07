@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: launch-path-memoizes-digests-podman-lookups-and-probes
+    event:
+      type: measurement
+      ts: '2026-11-03T16:00:00Z'
+      host: yoga
+      summary: |-
+        BASELINE MEASURED on yoga (v56.11.3.1 tree built into the tray, warm: a second launch after a warmup). Instrument: a podman wrapper set by TILLANDSIAS_PODMAN_BIN that logs each call with a ms stamp (execsnoop needs root, so it was not used).
+        `--cloud 8007342/tillandsias --opencode --prompt ping`: 104 podman calls (the row estimated 15-30), 29.8 s wall. Top repeats: image inspect 18 (3 tags x 6 images), images --format 11 (the downgrade guard, once per ensure in parent and helper), rm -f 11, inspect --format 8 (vault Running x4), image exists 6.
+        `--debug --init`: embedded_manifest_digest 3 times (the row said 4), 10-11 ms each; validate_runtime_assets once, 12 ms.
+        TIMELINE from the first podman call: pre-launch checks 0-2.4 s (about 70 calls); mirror and inference start 2.4-2.8 s; mirror seed + forge start 2.8-10.1 s (bringup step=mirror-seed ms=6666); agent turn 10.1-27.2 s (remote model, not launcher work); teardown 27.2-29 s. So the launcher's own work is about 10 s, the mirror seed is 2/3 of it, and every pre-launch podman call together is 2.4 s: this row can save about 1-1.5 s at most.
+        Row context correction: root_manifest_digest already reads manifest.json only (runtime_assets.rs:208); it does not walk the staged tree.
+  - packet_id: launch-path-memoizes-digests-podman-lookups-and-probes
+    event:
+      type: note
+      ts: '2026-11-03T16:00:00Z'
+      host: yoga
+      summary: |-
+        First cut on work/1920-lnch: a OnceLock digest and the downgrade guard asked in the parent only, giving 98 calls and images --format 11 -> 5. Next: observe_image_build does 4 calls per image (exists + 3 inspects); one `podman images --format json --filter reference=<repo>` returns the Id, every tag and the source-digest label in 29 ms, so 24 -> 6 calls. validate_runtime_assets is NOT memoized: materialized_assets_repair_corruption requires in-process repair of a corrupted asset.

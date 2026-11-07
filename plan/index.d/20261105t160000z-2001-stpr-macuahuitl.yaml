@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from kumbia-forge's report.
+packets:
+- packet_id: studio-prompt-override-reaches-every-encoder-or-refuses
+  order: 2001-stpr
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, provenance]
+  estimated_hours: 1
+  title: A studio prompt override reaches the encoder or is refused, and provenance never records one that did not run
+  context: 'kumbia-forge, job st-1793892694158-93: overrides.prompt on a node titled $prompt of class TextEncodeQwenImageEditPlus, whose input is named prompt. ComfyUI /history shows the baked text ran while provenance.json recorded the override. set_text in studio_tool only writes text, text_g and text_l and silently does nothing otherwise. A 64-pose wave carries false per-pose prompts in provenance.'
+  exit_criteria:
+  - 'An override on a node whose input is named prompt appears in the submitted workflow for that node.'
+  - 'An override on a titled node with no recognised text input is refused as invalid_arguments naming the node and class; no job is submitted and no provenance is written.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio_tool; the new tests fail on the pre-fix set_text.'
+  unscoreable: 'none: unit tests pin both arms.'
+  next_action: 'Land the fix, then tell kumbia-forge overrides are usable after a tray rebuild, and that the Gatekeeper wave provenance needs correcting on its side.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T16:00:00Z'
+    host: macuahuitl
+    summary: filed p1 ready

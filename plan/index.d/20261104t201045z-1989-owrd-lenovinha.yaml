@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-04, from the 1988-trkp live run (coordinator asked lenovinha to file it).
+packets:
+- packet_id: opencode-web-launch-waits-for-the-forges-real-readiness-instead-of-failing-after-a-fixed-30-s-while-the-forge-is-still-starting
+  order: 1989-owrd
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [opencode-web, launch, readiness]
+  estimated_hours: 2
+  title: An OpenCode Web launch waits for the forge's real readiness instead of failing after a fixed 30 s while the forge is still starting
+  context: 'Observed on lenovinha 2026-11-04 (1988-trkp live run): tillandsias --cloud 8007342/mcp-test --opencode-web exited 1 with "OpenCode Web app did not become reachable with a registered session in 30s" (URL http://opencode.mcp-test.localhost:8080/). Every attempt (1-19) saw status 502 (starting). The forge itself was healthy: container started 20:06:35Z, and its log shows "opencode server listening on http://127.0.0.1:4097" at 20:07:17Z, about 41 s after start, behind the sse-keepalive-proxy on 4096. So the fixed 30 s window is shorter than a cold forge start (the opencode binary first runs from ~/.cache/tillandsias-project/npm). The forge was left running and served its MCP lane normally.'
+  exit_criteria:
+  - 'The web launch waits on the forge''s own readiness signal (or a budget derived from measured cold starts) and does not fail while the forge reports starting. Pre-fix result: FAILS on a cold forge, 30 s fixed.'
+  - 'A real failure (the forge exited, or a refusal) still fails fast, naming it.'
+  verifiable_closure: 'a fixture with a stub that answers 502 starting for 45 s then 200; and a cold live launch on one host.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs a readiness fixture first (1136-n8sh).'
+  next_action: 'Find the 30 s constant in the opencode-web launch wait; replace it with a wait on the entrypoint readiness line or a cold-start budget, with a fast-fail on container exit.'
+  provenance: lenovinha 1988-trkp live run 2026-11-04, scratchpad lane-web.log and podman logs tillandsias-mcp-test-forge.
+  events:
+  - type: filed
+    ts: '2026-11-04T20:10:45Z'
+    host: lenovinha
+    summary: filed p2 ready

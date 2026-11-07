@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+# @trace order:2007-hear
+"""tillandsias-listen: a listening page for a folder of audio candidates.
+
+Usage: tillandsias-listen DIR [--allow-tracked]
+
+Writes DIR/index.html: one row per audio file in DIR (flac, mp3, opus, ogg,
+oga, wav, m4a), with an <audio controls> player, its size and, when a
+`<file>.provenance.json` sidecar sits beside it, the workflow and seed it
+records. Then publish the folder as a preview, which opens it in a visible host
+browser window where a person can listen:
+
+  publish_local with app_dir=DIR
+
+The folder stays out of git. This command never runs `git add`, and it REFUSES
+to write index.html into a folder that git tracks or does not ignore, because
+the page would then be one `git add .` away from a commit. Pass
+--allow-tracked to write it anyway.
+
+File names and sidecar text are project data: every one is HTML-escaped and
+every link is URL-quoted, so a file named `<script>...` is shown, not run.
+
+stdout: one JSON object {"index_path", "files"}. A refusal goes to stderr as
+`refused:tillandsias-listen:<reason>: <detail>` and exits 2.
+"""
+import html
+import json
+import os
+import subprocess
+import sys
+import urllib.parse
+
+TOOL = "tillandsias-listen"
+AUDIO = (".flac", ".mp3", ".opus", ".ogg", ".oga", ".wav", ".m4a")
+
+
+class Refusal(Exception):
+    def __init__(self, reason, detail):
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+
+
+def git(args, cwd):
+    try:
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def git_exposure(d):
+    """None when the folder is safely out of git, else why it is not."""
+    top = git(["rev-parse", "--show-toplevel"], d)
+    if top is None or top.returncode != 0:
+        return None
+    tracked = git(["ls-files", "--", "."], d)
+    if tracked is not None and tracked.stdout.strip():
+        return "git tracks files in this folder"
+    ignored = git(["check-ignore", "-q", "--", "index.html"], d)
+    if ignored is not None and ignored.returncode == 0:
+        return None
+    return "this folder is not ignored by git, so index.html would show up as a new file"
+
+
+def human(n):
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if n < 1024 or unit == "GiB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+
+
+def provenance(path):
+    try:
+        rec = json.load(open(path + ".provenance.json", encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(rec, dict):
+        return ""
+    parts = []
+    for key in ("workflow", "seed", "prompt"):
+        if key in rec and rec[key] not in ("", None):
+            parts.append(f"{key}: {rec[key]}")
+    return " · ".join(parts)
+
+
+def page(title, rows):
+    e = html.escape
+    body = []
+    for name, size, prov in rows:
+        href = urllib.parse.quote(name)
+        body.append(
+            "<li><div class=n>" + e(name) + "</div>"
+            + "<div class=m>" + e(size) + (" · " + e(prov) if prov else "") + "</div>"
+            + '<audio controls preload="metadata" src="' + e(href, quote=True) + '"></audio></li>'
+        )
+    return (
+        "<!doctype html>\n<meta charset=utf-8>\n"
+        '<meta name=viewport content="width=device-width,initial-scale=1">\n'
+        "<title>" + e(title) + "</title>\n"
+        "<style>body{font:15px system-ui,sans-serif;margin:16px;max-width:900px}"
+        "li{list-style:none;margin:0 0 18px}.n{font-weight:600;word-break:break-all}"
+        ".m{color:#666;font-size:13px;margin:2px 0 6px}audio{width:100%}</style>\n"
+        "<h1>" + e(title) + "</h1>\n<p>" + e(f"{len(rows)} candidate(s)") + "</p>\n<ul>\n"
+        + "\n".join(body) + "\n</ul>\n"
+    )
+
+
+def listen(d, allow_tracked):
+    d = os.path.abspath(d)
+    if not os.path.isdir(d):
+        raise Refusal("not_a_folder", f"{d} is not a directory")
+    exposure = git_exposure(d)
+    if exposure and not allow_tracked:
+        raise Refusal(
+            "folder_in_git",
+            f"{exposure}; put candidates in an ignored folder (or add it to .gitignore), "
+            "or pass --allow-tracked",
+        )
+    names = sorted(n for n in os.listdir(d) if n.lower().endswith(AUDIO)
+                   and os.path.isfile(os.path.join(d, n)))
+    rows = [(n, human(os.path.getsize(os.path.join(d, n))), provenance(os.path.join(d, n)))
+            for n in names]
+    target = os.path.join(d, "index.html")
+    tmp = os.path.join(d, f".index.html.{os.getpid()}.tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(page(os.path.basename(d) or d, rows))
+        os.replace(tmp, target)
+    except OSError as e:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise Refusal("index_unwritable", f"{target}: {e.strerror}")
+    sys.stdout.write(json.dumps({"index_path": target, "files": len(rows)}) + "\n")
+    return 0
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(__doc__)
+        return 0 if argv else 2
+    allow = "--allow-tracked" in argv
+    rest = [a for a in argv if a != "--allow-tracked"]
+    if len(rest) != 1 or rest[0].startswith("-"):
+        sys.stderr.write(f"refused:{TOOL}:usage: tillandsias-listen DIR [--allow-tracked]\n")
+        return 2
+    try:
+        return listen(rest[0], allow)
+    except Refusal as r:
+        sys.stderr.write(f"refused:{TOOL}:{r.reason}: {r.detail}\n")
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

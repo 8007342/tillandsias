@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+# @trace order:2006-srcr
+"""tillandsias-room: how full the forge's checkout tmpfs is, and what to move.
+
+Usage: tillandsias-room [--record] [--quiet]
+
+/home/forge/src is a RAM-backed tmpfs with a fixed size for this forge. It holds
+the checkout, its worktrees and their builds; when it fills, git commit fails.
+This prints its use, the largest directories under it, and the remedy. At 85%
+or more it says so by name (warn:forge-src-room) and exits 1.
+
+--record also writes the high-water mark (MB) into the project's persistent
+tool cache, ~/.cache/tillandsias-project/.tillandsias/src-highwater-mb, so the
+NEXT launch of this project sizes the tmpfs from it (up to the same ceiling;
+the RAM limit is not raised). --quiet prints only the warning, if any.
+
+Remedy: move BUILD OUTPUTS, NOT SECRETS, to ~/.cache/tillandsias-project. It
+persists across forges and is not encrypted, so a .env file or a token there
+would rest on the host disk. Or remove worktrees you no longer need
+(`git worktree remove <path>`), or declare the project's need in its committed
+.tillandsias/config.toml:
+
+  [forge]
+  src_mb = 3072
+"""
+import json
+import os
+import sys
+
+TOOL = "tillandsias-room"
+SRC = os.environ.get("TILLANDSIAS_ROOM_PATH", "/home/forge/src")
+CACHE = os.environ.get(
+    "TILLANDSIAS_ROOM_CACHE", os.path.expanduser("~/.cache/tillandsias-project")
+)
+RECORD = os.path.join(CACHE, ".tillandsias", "src-highwater-mb")
+WARN_AT = 85
+
+
+def mb(n):
+    return n // (1024 * 1024)
+
+
+def du(path):
+    total = 0
+    for root, dirs, files in os.walk(path, onerror=lambda e: None):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(root, f)).st_blocks * 512
+            except OSError:
+                pass
+    return total
+
+
+def biggest(path, depth=2, n=5):
+    """The largest directories up to `depth` below `path`, by apparent use."""
+    found = []
+    base = path.rstrip("/").count("/")
+    for root, dirs, _ in os.walk(path, onerror=lambda e: None):
+        level = root.rstrip("/").count("/") - base
+        if level >= depth:
+            dirs[:] = []
+        if 0 < level <= depth:
+            found.append((du(root), root))
+    found.sort(reverse=True)
+    out, seen = [], []
+    for size, d in found:
+        if any(d.startswith(s + "/") for s in seen):
+            continue
+        out.append((size, d))
+        seen.append(d)
+        if len(out) == n:
+            break
+    return out
+
+
+def record(used_mb):
+    prev = 0
+    try:
+        prev = int(open(RECORD).read().strip())
+    except (OSError, ValueError):
+        pass
+    if used_mb <= prev:
+        return prev
+    os.makedirs(os.path.dirname(RECORD), exist_ok=True)
+    tmp = f"{RECORD}.{os.getpid()}.tmp"
+    with open(tmp, "w") as fh:
+        fh.write(f"{used_mb}\n")
+    os.replace(tmp, RECORD)
+    return used_mb
+
+
+def main(argv):
+    if argv and argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(__doc__)
+        return 0
+    rec, quiet = "--record" in argv, "--quiet" in argv
+    try:
+        st = os.statvfs(SRC)
+    except OSError as e:
+        sys.stderr.write(f"refused:{TOOL}:no_source_mount: {SRC}: {e.strerror}\n")
+        return 2
+    size = st.f_blocks * st.f_frsize
+    free = st.f_bavail * st.f_frsize
+    used = size - st.f_bfree * st.f_frsize
+    pct = (100 * used // size) if size else 0
+    high = record(mb(used)) if rec else None
+    full = pct >= WARN_AT
+    if quiet and not full:
+        return 0
+    lines = []
+    if full:
+        lines.append(
+            f"warn:forge-src-room:{pct}%: {SRC} has {mb(free)} MB free of {mb(size)} MB; "
+            "git commit fails when it is full. Move BUILD OUTPUTS, NOT SECRETS, to "
+            "~/.cache/tillandsias-project, or remove unused worktrees; the next launch of this "
+            "project gets room from the recorded high-water mark."
+        )
+    if not quiet:
+        lines.append(json.dumps({
+            "path": SRC, "size_mb": mb(size), "used_mb": mb(used), "free_mb": mb(free),
+            "use_pct": pct, "high_water_mb": high,
+            "largest": [{"path": d, "mb": mb(s)} for s, d in biggest(SRC)],
+        }))
+    elif full:
+        lines.append("largest: " + ", ".join(f"{d} {mb(s)} MB" for s, d in biggest(SRC, n=3)))
+    sys.stdout.write("\n".join(lines) + "\n")
+    return 1 if full else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

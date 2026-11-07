@@ -16,7 +16,7 @@ pull_recipe: see-section-pull-on-demand
 
 # WSL2 disk elasticity
 
-@trace spec:windows-wsl-runtime, spec:disk-usage-detection
+@trace spec:wsl-runtime, spec:disk-usage-detection
 
 **Use when**: reasoning about WSL2 distro VHDX growth, sparse disk behavior, cleanup, and resize operations.
 

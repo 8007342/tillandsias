@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-warm-launch-does-not-reseed-a-current-mirror
+    order: 1977-xpus
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [git-mirror, launch, performance]
+    estimated_hours: 4
+    title: A warm launch does not reseed a current mirror (the mirror-seed step is under 1 s when the mirror already has the refs)
+    context: |-
+      Filed at the coordinator's direction (macuahuitl-fedora 2026-11-03) from the 1920-lnch timeline. MEASURED on yoga, warm `--cloud 8007342/tillandsias --opencode --prompt ping`: the launcher's own work is about 10 s and `bringup: step=mirror-seed` is 6666 ms (11-12 s in later runs the same day) of it. That step is gate_forge_launch waiting for the mirror to serve a cloneable HEAD (crates/tillandsias-headless/src/main.rs, the "mirror-seed" timed_async). Pre-launch podman checks are 2.4-3.7 s in total; the agent turn is not launcher work.
+      Mirror container log, one warm launch (podman logs -t): container start 15:11:54.08; Vault Agent ready 15:11:55.27; git daemon "Ready to rumble" 15:11:55.28; then a fetch from https://github.com/8007342/tillandsias printing EVERY branch as "[new branch] ... -> origin/..." at 15:12:02.20; the launcher saw service_ready mirror_seeded at 15:12:06.42.
+      LIKELY CAUSE (source, not yet proved by a fix): /srv/git is the persistent volume tillandsias-mirror-tillandsias, but images/git/entrypoint.sh:243 runs `git remote remove origin` then `remote add` on EVERY start. `git remote remove` deletes all refs/remotes/origin/* tracking refs, so every warm start re-lists every upstream branch as new and the gate waits on that fetch. `git remote set-url origin` keeps them. Whether the gate needs the fetch at all when the exported heads are already served is the second question.
+    exit_criteria:
+      - 'Warm launch: with the mirror volume current (a second launch within minutes, upstream unchanged), `bringup: step=mirror-seed` is at most 1000 ms. Red on today''s code: 6666-12043 ms on yoga, 2026-11-03.'
+      - 'A fixture runs the entrypoint''s origin setup twice on one bare repo and asserts refs/remotes/origin/* survive the second start (red today: `remote remove` deletes them).'
+    verifiable_closure: 'Before and after `bringup: step=mirror-seed` from three warm launches each on one host, plus the fixture red before and green after.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'Replace remove+add with set-url (add only when absent); then measure whether gate_forge_launch still waits on the startup fetch for a mirror whose exported heads are already served, and if so, gate on the served HEAD instead.'
+    provenance: macuahuitl-fedora 2026-11-03 (coordinator) asked yoga to file it from the 1920-lnch measurement; filed by yoga.
+    related: [1920-lnch, 1968-psy9]
+    events:
+      - type: filed
+        ts: '2026-11-03T15:30:00Z'
+        host: yoga
+        summary: filed from the 1920-lnch timeline at the coordinator's request; baseline mirror-seed 6666-12043 ms on yoga

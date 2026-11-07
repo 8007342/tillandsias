@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-06, from the operator's first-hand direction.
+packets:
+- packet_id: a-private-cloud-message-queue-carries-durable-instructions-between-agents
+  order: 2011-amqd
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, design]
+  estimated_hours: 16
+  title: DESIGN FIRST - a private message queue on Cloudflare's free tier lets agents read durable instructions and resume work
+  context: 'Operator 2026-11-06: a backbone component on metered cloud resources whose implementation must be flawless, with extra agents and extra careful design allowed. Run the whole methodology: research with provenance, cheatsheets, specs, then build. Extend the existing fleet messaging and durable-instructions direction; do not start anew. Lives as a subdirectory with its own deployment branch, like the observatorium; deploys are intentional only. Suits low-end forge-only hosts, since it needs no local GPU or heavy build.'
+  exit_criteria:
+  - 'A reviewed design and spec, with research records, compares the free-tier Cloudflare options by measured or documented limits, including Durable Objects with SQLite, D1, KV and Queues, and states which free-tier limits it stays under and what happens at each limit. Paid services are out.'
+  - 'Only the signed-in Cloudflare account can read or write, tested with an unauthenticated and a wrong-account request; the service is not public, and no credential sits in a forge or at rest in plaintext.'
+  - 'Messages have a TTL with eviction, delivery is at least once with a simple ack, and a redelivered message is detectably the same message; tested with duplicate delivery, expiry and a lost ack.'
+  - 'Clients cache reads for at least a few seconds, rate limit themselves, honour server limits and Retry-After, and back off exponentially with jitter; a fixture counts billable requests and fails above a stated budget for an idle hour and a busy hour.'
+  - 'A generic read-your-queue seed prompt lets a new agent of any harness read its project queue and resume, shown with two different harnesses.'
+  verifiable_closure: 'Fixture suite against a local emulator plus one real deploy on the free tier, with usage read from cloud.usage before and after.'
+  unscoreable: 'none.'
+  next_action: 'Research and design only. Read the fleet messaging and durable-instruction rows first, then produce the comparison and spec for adversarial review by a second agent. Build nothing and deploy nothing before the design is reviewed. No new cloud resource without operator approval.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T17:55:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: a-relaunched-forge-resumes-from-its-handoff-without-a-person
+  order: 2011-rsme
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge, tray]
+  estimated_hours: 3
+  title: A coordinator can relaunch a project forge in a visible window with a resume prompt, by one documented command
+  context: 'On 2026-11-06 the coordinator relaunched a forge by hand with ptyxis and --hold-window, and --prompt already exists for an interactive claude lane. Generic for any project. A later step replaces the prompt text with read-your-queue from 2011-amqd.'
+  exit_criteria:
+  - 'One command relaunches a named project forge in a visible window with a prompt, refuses while that forge is running, and keeps volumes.'
+  - 'The default prompt tells the new agent to read the handoff note the previous session left, and says so when none exists.'
+  verifiable_closure: 'A real relaunch of a forge with the agent acting on the prompt.'
+  unscoreable: 'none.'
+  next_action: 'Read how the tray opens a terminal and reuse it; write the failing test for the running-forge refusal.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T17:55:00Z', host: macuahuitl, summary: filed p2 ready}

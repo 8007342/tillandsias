@@ -57,6 +57,9 @@ RUN python /opt/tillandsias/custom-nodes.py install /opt/tillandsias/custom-node
     && python /opt/tillandsias/custom-nodes.py verify /opt/tillandsias/custom-nodes.toml /opt/comfyui/custom_nodes / \
     && useradd -u 1001 -m -s /usr/sbin/nologin studio \
     && mkdir -p /out /in /home/studio/.cache /home/studio/user /home/studio/tmp \
+    # 1970-pipc: BiRefNet_ll makedirs models/BiRefNet at import; as studio
+    # that failed (EACCES) and the node never loaded. Create it, still read-only.
+    && mkdir -p /opt/comfyui/models/BiRefNet \
     && chown -R studio:studio /out /in /home/studio \
     && chmod -R a-w /opt/comfyui/custom_nodes
 

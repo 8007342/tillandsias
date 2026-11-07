@@ -5,6 +5,9 @@
 #
 # @trace spec:forge-hot-cold-split
 
+# 2004-in3v: the start of the forge-entry-total span (bash 5 in the image).
+FORGE_ENTRY_T0_US="${EPOCHREALTIME//[.,]/}"
+
 source /usr/local/lib/tillandsias/lib-common.sh
 
 # @trace gap:ON-008
@@ -47,14 +50,18 @@ trap 'exit_pause' EXIT
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
+forge_step_mark
 populate_hot_paths
+forge_step_done hot-paths
 
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft.
 # Flaky-optional installs run in the background with status files and
 # first-use shims (order 1951-vv5m).
+forge_step_mark
 start_flaky_installs
+forge_step_done flaky-installs
 # Refresh every provider harness on each forge launch.  The updater is
 # idempotent and fail-soft; require_antigravity below remains the primary
 # lane's actionable gate when no cached binary exists.
@@ -63,23 +70,31 @@ ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "antigravity starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
+forge_step_mark
 clone_project_from_mirror
+forge_step_done clone
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
 export_ssh_env || true
 
 # ── Find project directory ──────────────────────────────────
+forge_step_mark
 find_project_dir
+forge_step_done find-project
 
 # ── Export project environment ───────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
+forge_step_mark
 export_project_env
+forge_step_done project-env
 
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+forge_step_mark
 configure_git_identity
+forge_step_done git-identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # @trace order:1447-nmq3
 # Trust the checked-out project in agy's settings.json (trustedWorkspaces), so
@@ -93,10 +108,14 @@ apply_antigravity_config_overlay || true
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme
+forge_step_mark
 inject_startup_context "$PROJECT_DIR"
+forge_step_done startup-context
 
 # ── Banner ──────────────────────────────────────────────────
+forge_step_mark
 show_banner "antigravity"
+forge_step_done banner
 
 # ── Ensure the Antigravity CLI (agy) — EVERY_LAUNCH, latest ─────
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
@@ -150,6 +169,7 @@ fi
 
 # ── Launch Antigravity ──────────────────────────────────────
 trace_lifecycle "entrypoint" "antigravity launching"
+forge_step_line total "$((($(_forge_now_us) - ${FORGE_ENTRY_T0_US:-$(_forge_now_us)}) / 1000))"
 trace_lifecycle "exec" "launching agy"
 export TILLANDSIAS_OAUTH_PROVIDER=antigravity
 export TILLANDSIAS_CODEX_VAULT_HELPER=/usr/local/bin/provider-oauth-vault

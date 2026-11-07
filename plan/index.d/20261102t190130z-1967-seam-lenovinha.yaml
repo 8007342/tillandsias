@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-02, coordinator-assigned (the 1955 owner cannot compile).
+packets:
+- packet_id: the-imagegen-concurrency-test-pins-its-model-presence-and-never-reads-the-hosts-real-model-cache
+  order: 1967-seam
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [imagegen, test, fixture]
+  estimated_hours: 1
+  title: The imagegen concurrency test pins its model presence and never reads the host's real model cache
+  context: 'imagegen_tool::tests::imagegen_concurrent_calls_never_overlap_on_the_device (1955-rjv3) installs its seam with present: None, so available() reads the real cache_root/models. On lenovinha (models/imagegen/I1 only) the I0 tier answers consent_required and the assert fails 5 of 5; it passes on hosts that already hold I0. It reddened the q7q3 gate (#794) on 2026-11-02.'
+  exit_criteria:
+  - 'The test passes on a host without the I0 model files. Pre-fix result: FAILS on lenovinha (consent_required).'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- imagegen_tool:: on lenovinha before and after.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix is the fixture itself (1136-n8sh).'
+  next_action: 'Set present: Some(vec!["I0".into()]) in the seam.'
+  provenance: q7q3 gate on lenovinha 2026-11-02.
+  events:
+  - type: filed
+    ts: '2026-11-02T19:01:30Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

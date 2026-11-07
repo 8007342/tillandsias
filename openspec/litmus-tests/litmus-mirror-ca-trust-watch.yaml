@@ -1,0 +1,33 @@
+# @trace spec:git-mirror-service, order:1998-mvrs
+name: litmus:mirror-ca-trust-watch
+spec: git-mirror-service
+phase: pre-build
+status: active
+description: >
+  Order 1998-mvrs (b): the git mirror's Vault Agent follows an enclave CA
+  rotation without a mirror restart. The entrypoint's watcher block, sourced
+  exactly as shipped, restarts the Agent once for a valid new CA, refuses a
+  non-CA, an expired CA and an unparsable file by name without restarting (and
+  without repeating the report), recovers on the next valid CA, and never polls
+  faster than once a minute.
+severity: high
+size: small
+preconditions:
+  - bash and openssl on the host
+critical_path:
+  - step: "Req: a valid rotated CA restarts the mirror's Vault Agent once; an invalid one is refused by name and never loops"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-mirror-ca-trust-watch.lua 2>&1"
+    timeout_ms: 300000
+    success_pattern: "ok:mirror-ca-trust-watch:5 arms"
+observability:
+  traces:
+    - "@trace order:1998-mvrs"
+  expected_log: "ok:mirror-ca-trust-watch:5 arms"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "mirror-ca-trust-watch"
+rollback:
+  on_failure: >
+    The 1998-mvrs (b) block in images/git/entrypoint.sh restarted on an
+    invalid certificate, missed a valid rotation, or polled under a minute.
+  command: "bash -n images/git/entrypoint.sh"

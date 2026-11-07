@@ -57,9 +57,58 @@
           filter = path: _type:
             !(builtins.elem (baseNameOf path) [ "target" "out-cache" "dist" "result" ]);
         };
-        crossPkgs = pkgs.pkgsCross.aarch64-multiplatform-musl;
-        aarch64Cc = "${crossPkgs.stdenv.cc}/bin/${crossPkgs.stdenv.cc.targetPrefix}cc";
-        aarch64Ar = "${crossPkgs.stdenv.cc.bintools.bintools}/bin/${crossPkgs.stdenv.cc.targetPrefix}ar";
+        # ORDER 1953-jmvb (operator ruling 2026-11-01: "let's drop the compiler
+        # build"). The aarch64 lane used pkgsCross.aarch64-multiplatform-musl,
+        # whose GCC is NOT in cache.nixos.org and was built from source on every
+        # release: two stages, 07:04->07:44 on v56.11.1.1, 41 of the Nix step's
+        # 67 min (run 41283100284). The only C in the tree is ring's, and the
+        # macOS lane has cross-built the same musl guests with cargo-zigbuild
+        # since the tray existed (scripts/build-macos-tray.sh). zig ships its own
+        # musl headers and CRT, so the whole cross toolchain is two substituted
+        # store paths: pkgs.zig and pkgs.cargo-zigbuild. cargo-zigbuild is the
+        # LINKER route (it filters the flags zig cc rejects and supplies the
+        # target); the plain `zig cc` wrapper below is for the `cc` crate in
+        # ring's build.rs, which reads CC_<target>/AR_<target>, and for crane's
+        # deps-only `cargo check` pass, which compiles that build script's C
+        # without ever linking.
+        # The `cc` crate detects zig as clang and appends the RUST triple as
+        # `--target=aarch64-unknown-linux-musl`; zig only knows its own
+        # spelling (measured locally: "unable to parse target query
+        # 'aarch64-unknown-linux-musl': UnknownOperatingSystem"). Drop that
+        # flag and pass zig's triple; everything else cc-rs emits is clang.
+        aarch64ZigCc = pkgs.writeShellScriptBin "aarch64-linux-musl-zig-cc" ''
+          args=()
+          for a in "$@"; do
+            case "$a" in
+              --target=*) ;;
+              *) args+=("$a") ;;
+            esac
+          done
+          exec ${pkgs.zig}/bin/zig cc -target aarch64-linux-musl "''${args[@]}"
+        '';
+        aarch64ZigAr = pkgs.writeShellScriptBin "aarch64-linux-musl-zig-ar" ''
+          exec ${pkgs.zig}/bin/zig ar "$@"
+        '';
+        # Shared by every aarch64 derivation (plan, sidecar, headless, and their
+        # deps-only derivations). Hooks only export env — nothing here reads
+        # the source, so crane's dummy-src deps stability (765-8hc3) holds.
+        # zig and cargo-zigbuild both want a writable cache; the sandbox's HOME
+        # is not writable, $TMPDIR is.
+        aarch64ZigArgs = {
+          CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+          nativeBuildInputs = [ pkgs.zig pkgs.cargo-zigbuild ];
+          cargoBuildCommand = "cargo zigbuild --profile release";
+          CC_aarch64_unknown_linux_musl = "${aarch64ZigCc}/bin/aarch64-linux-musl-zig-cc";
+          AR_aarch64_unknown_linux_musl = "${aarch64ZigAr}/bin/aarch64-linux-musl-zig-ar";
+          TARGET_CC = "${aarch64ZigCc}/bin/aarch64-linux-musl-zig-cc";
+          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
+          preConfigure = ''
+            export XDG_CACHE_HOME="$TMPDIR/xdg-cache"
+            export ZIG_GLOBAL_CACHE_DIR="$TMPDIR/zig-global-cache"
+            export ZIG_LOCAL_CACHE_DIR="$TMPDIR/zig-local-cache"
+            mkdir -p "$XDG_CACHE_HOME" "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
+          '';
+        };
 
         # Secure-channel key: SHA-256 of the running binary (computed at
         # runtime, not compile time). No build-time env injection needed,
@@ -152,15 +201,8 @@
           AR_x86_64_unknown_linux_musl = x86MuslAr;
           HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
         };
-        planAarch64Args = {
-          CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+        planAarch64Args = aarch64ZigArgs // {
           cargoExtraArgs = "-p tillandsias-plan --bin tillandsias-plan";
-          depsBuildBuild = [ crossPkgs.stdenv.cc ];
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
-          CC_aarch64_unknown_linux_musl = aarch64Cc;
-          AR_aarch64_unknown_linux_musl = aarch64Ar;
-          TARGET_CC = aarch64Cc;
-          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
         };
         tillandsias-plan-x86_64-musl = craneLib.buildPackage (commonCraneArgs // planX86Args // {
           cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // planX86Args);
@@ -210,32 +252,16 @@
 
         tillandsias-headless-aarch64-musl =
           let
-            cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
-              CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+            cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // aarch64ZigArgs // {
               cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-              # aarch64-musl cross toolchain (ring's build.rs + linker).
-              depsBuildBuild = [ crossPkgs.stdenv.cc ];
-              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
-              CC_aarch64_unknown_linux_musl = aarch64Cc;
-              AR_aarch64_unknown_linux_musl = aarch64Ar;
-              TARGET_CC = aarch64Cc;
-              HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
             });
           in
-          craneLib.buildPackage (commonCraneArgs // {
+          craneLib.buildPackage (commonCraneArgs // aarch64ZigArgs // {
             inherit cargoArtifacts;
             pname = "tillandsias-headless-aarch64";
             version = "0.0.0";
-            CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
             preBuild = stageRouterSidecar tillandsias-router-sidecar-aarch64-musl + stagePlanBin tillandsias-plan-aarch64-musl;
-            # aarch64-musl cross toolchain (ring's build.rs + linker).
-            depsBuildBuild = [ crossPkgs.stdenv.cc ];
-            CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
-            CC_aarch64_unknown_linux_musl = aarch64Cc;
-            AR_aarch64_unknown_linux_musl = aarch64Ar;
-            TARGET_CC = aarch64Cc;
-            HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
           });
 
         # Router sidecar (order 710-w9kc): the static-musl binary the router
@@ -260,16 +286,9 @@
 
         # ORDER 1756-z3kz: the aarch64 sidecar the aarch64 headless embeds and the
         # release publishes, built with the same cross toolchain as
-        # tillandsias-plan-aarch64-musl (pkgsCross.aarch64-multiplatform-musl).
-        sidecarAarch64Args = {
-          CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+        # tillandsias-plan-aarch64-musl (zig + cargo-zigbuild, 1953-jmvb).
+        sidecarAarch64Args = aarch64ZigArgs // {
           cargoExtraArgs = "-p tillandsias-router-sidecar --bin tillandsias-router-sidecar --features unix-only";
-          depsBuildBuild = [ crossPkgs.stdenv.cc ];
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
-          CC_aarch64_unknown_linux_musl = aarch64Cc;
-          AR_aarch64_unknown_linux_musl = aarch64Ar;
-          TARGET_CC = aarch64Cc;
-          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
         };
         tillandsias-router-sidecar-aarch64-musl = craneLib.buildPackage (commonCraneArgs // sidecarAarch64Args // {
           cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // sidecarAarch64Args);
@@ -299,6 +318,8 @@
         forgeCliCommands = ./images/default/cli;
         forgeShellHelpers = ./images/default/config-overlay/shell-helpers.sh;
         webEntrypoint = ./images/web/entrypoint.sh;
+        # 2007-hear: busybox httpd audio MIME types.
+        webHttpdConf = ./images/web/httpd.conf;
         forgeImageRoot = pkgs.buildEnv {
           name = "tillandsias-forge-root";
           paths = with pkgs; [
@@ -546,6 +567,8 @@
               chmod 1777 ./tmp
               cp ${webEntrypoint} ./entrypoint.sh
               chmod +x ./entrypoint.sh
+              mkdir -p ./etc
+              cp ${webHttpdConf} ./etc/httpd.conf
             '';
 
             config = {

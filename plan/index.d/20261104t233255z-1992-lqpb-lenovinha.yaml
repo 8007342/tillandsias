@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-04, coordinator-assigned.
+packets:
+- packet_id: the-land-queue-refreshes-a-stale-plan-binary-before-gating-and-never-evicts-a-candidate-for-the-hosts-binary
+  order: 1992-lqpb
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [land-queue, plan-binary, gate]
+  estimated_hours: 2
+  title: The land queue refreshes a stale plan binary before gating, and never evicts a candidate for the host's binary
+  context: 'Reported by macuahuitl-fedora 2026-11-04: a stale ~/.local/bin/tillandsias-plan made the gate fail innocent PRs (preflight refusal test-pre-push-plan-lane-fails-closed-without-binary arm 2 runs the installed binary; a plan-lane refusal), and the queue evicted them; the fix was a hand rebuild and install. The queue already exempted one exact preflight signature (refused:preflight:stale-plan-binary) but not a fixture failing on the stale binary.'
+  exit_criteria:
+  - 'With a plan binary that cannot be refreshed, the queue evicts no PR: the run stops could-not-run (rc 3) before any gate or comment. Pre-fix result: FAILS, the candidate is gated and (with a real stale binary) evicted.'
+  - 'A refresh that succeeds lets the candidate land as before.'
+  verifiable_closure: 'bash scripts/test-land-queue.sh (ARM 22, 22b)'
+  unscoreable: 'unpinnable-until-the-guard-exists: shell fixture arm (1136-n8sh).'
+  next_action: 'Land.'
+  provenance: coordinator macuahuitl-fedora 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-04T23:32:55Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

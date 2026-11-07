@@ -1,0 +1,37 @@
+# @trace spec:default-image
+# @trace order:1957-msjs
+#
+# The free tier's quota is shared by every fleet host (yoga hit it on
+# 2026-11-01 and every host had to stop by coordinator order), so a deadline
+# one host's forge records must hold all of them. The host relays it: on forge
+# exit it publishes a plan fragment on the plan-only lane (detached, bounded,
+# deferred on failure); at launch it folds the local plan offline and seeds the
+# forge. The fixture drives two simulated hosts sharing one plan dir. Red
+# before 1957-msjs: the record never left host A.
+name: litmus:provider-limit-relay
+spec: default-image
+phase: pre-build
+description: A provider usage limit recorded on one host holds the forges of every host until it lifts
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, git; offline, no provider traffic, no podman
+
+critical_path:
+  - step: "host A's recorded limit reaches host B, which refuses naming A; expired holds nothing"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-provider-limit-relay.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:provider-limit-relay:18 arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "eighteen arms: publish, refuse, dedupe, override, expired, control, deferred, bounded, wired"
+  log_fields:
+    spec: "default-image"
+    test: "provider-limit-relay"
+
+rollback:
+  on_failure: "read the FAIL lines; publish/seed live in scripts/provider-limit-relay.sh, the refusal in images/default/lib-provider-limit.sh, the tray hooks in crates/tillandsias-headless/src/provider_limit_relay.rs"
+  command: "grep -n 'provider_limit_relay\\|provider-limit-relay' crates/tillandsias-headless/src/main.rs scripts/check-fleet-membership.sh"

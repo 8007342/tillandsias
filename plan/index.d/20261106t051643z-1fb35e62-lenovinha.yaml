@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-agent-in-any-forge-can-inspect-the-cache-and-the-impact-of-a-change
+    field: next_action
+    value: 'Only the post-build litmus is left: run forge-stage-cache-in-image and forge-impact-plan-in-image on a REAL forge image build, scripts/run-litmus-test.sh forge-environment-discoverability --phase post-build. Both slices landed (#947, #950); so far these have passed only on probe images.'
+    ts: "2026-11-06T05:16:43Z"
+    host: lenovinha
+    replaces_sha256: "3bfb57e780d3090dc240cd53cb5335e9cd39f388e7e51796e30aca3be8badce0"
+
+events:
+  - packet_id: an-agent-in-any-forge-can-inspect-the-cache-and-the-impact-of-a-change
+    event:
+      type: note
+      ts: "2026-11-06T05:16:43Z"
+      host: lenovinha
+      summary: |-
+        only real-build litmus remains

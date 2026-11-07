@@ -1,0 +1,275 @@
+#!/usr/bin/env python3
+# @trace order:2005-ccli
+"""tillandsias-impact: the blast radius and cost of a change, as a dry run.
+
+Usage: tillandsias-impact plan --graph FILE --from SRC --to SRC --rules FILE --report FILE
+
+SRC is a JSON file path, or REV:PATH read with `git show` in the current
+repository. The command reads; it writes only --report and starts nothing.
+stdout is one JSON object: {"report_path", "totals", "estimate"}.
+
+The project supplies the meaning; the tool supplies the arithmetic:
+
+  graph  {"outputs": [{"id": "...", "depends_on": ["pattern", ...], "key": "..."?}]}
+         Each output lists the definition fields it can show. A pattern is a
+         dotted path; `*` matches one segment and `**` any number. Narrow
+         patterns are what keep a small edit from touching every output.
+
+  rules  {"modes": ["none", "cheap", ..., "full"],      # least to most costly
+          "classes": [{"match": "pattern", "mode": "cheap"}, ...],
+          "default": "full",                            # an unmatched change
+          "cost": {"cheap": {"units": 0, "gpu": false},
+                   "full":  {"units": 1, "gpu": true}},
+          "warn":  [{"match": "pattern", "message": "..."}]?}
+
+The definitions (--from, --to) are compared leaf by leaf. Each changed leaf is
+classed by the FIRST matching rule, else the default. An output's mode is the
+costliest mode among the changed leaves it depends on, else "none". Totals
+count outputs per mode; the estimate sums each output's mode cost.
+
+A refusal goes to stderr as `refused:tillandsias-impact:<reason>: <detail>`
+and exits 2; nothing is written then.
+"""
+import json
+import os
+import subprocess
+import sys
+
+TOOL = "tillandsias-impact"
+
+
+class Refusal(Exception):
+    def __init__(self, reason, detail):
+        super().__init__(detail)
+        self.reason = reason
+        self.detail = detail
+
+
+# ---- reading -------------------------------------------------------------
+
+def read_json(source, reason):
+    text = None
+    if os.path.isfile(source):
+        try:
+            text = open(source, encoding="utf-8").read()
+        except (OSError, UnicodeDecodeError) as e:
+            raise Refusal(reason, f"{source}: {e}")
+    elif ":" in source:
+        try:
+            r = subprocess.run(["git", "show", source], capture_output=True, text=True, timeout=60)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise Refusal(reason, f"git show {source}: {e}")
+        if r.returncode != 0:
+            raise Refusal(reason, f"git show {source}: {r.stderr.strip() or 'failed'}")
+        text = r.stdout
+    else:
+        raise Refusal(reason, f"{source} is neither a file nor REV:PATH")
+    try:
+        return json.loads(text)
+    except ValueError as e:
+        raise Refusal(reason, f"{source} is not JSON: {e}")
+
+
+# ---- patterns ------------------------------------------------------------
+
+def split(path):
+    return [p for p in path.split(".") if p != ""]
+
+
+def matches(pattern, path):
+    pat, segs = split(pattern), split(path)
+
+    def go(i, j):
+        if i == len(pat):
+            return j == len(segs)
+        if pat[i] == "**":
+            return any(go(i + 1, k) for k in range(j, len(segs) + 1))
+        if j == len(segs):
+            return False
+        return (pat[i] == "*" or pat[i] == segs[j]) and go(i + 1, j + 1)
+
+    return go(0, 0)
+
+
+# ---- the diff ------------------------------------------------------------
+
+MISSING = object()
+
+
+def leaves(value, prefix=""):
+    if isinstance(value, dict):
+        if not value and prefix:
+            yield prefix, value
+        for k in sorted(value):
+            if "." in k:
+                raise Refusal("impact_source_invalid", f"key {k!r} at {prefix or '<root>'} holds a '.'")
+            yield from leaves(value[k], f"{prefix}.{k}" if prefix else k)
+    elif isinstance(value, list):
+        if not value and prefix:
+            yield prefix, value
+        for i, x in enumerate(value):
+            yield from leaves(x, f"{prefix}.{i}" if prefix else str(i))
+    else:
+        yield prefix, value
+
+
+def diff(old, new):
+    a, b = dict(leaves(old)), dict(leaves(new))
+    out = []
+    for path in sorted(set(a) | set(b)):
+        x, y = a.get(path, MISSING), b.get(path, MISSING)
+        if x is MISSING or y is MISSING or x != y or type(x) is not type(y):
+            out.append({
+                "field": path,
+                "from": None if x is MISSING else x,
+                "to": None if y is MISSING else y,
+                "added": x is MISSING,
+                "removed": y is MISSING,
+            })
+    return out
+
+
+# ---- validation ----------------------------------------------------------
+
+def check_rules(rules):
+    if not isinstance(rules, dict):
+        raise Refusal("impact_rules_invalid", "rules must be one JSON object")
+    modes = rules.get("modes")
+    if not (isinstance(modes, list) and modes and all(isinstance(m, str) for m in modes)
+            and len(set(modes)) == len(modes)):
+        raise Refusal("impact_rules_invalid", "modes must be a list of distinct names, least costly first")
+    if modes[0] != "none":
+        raise Refusal("impact_rules_invalid", 'the first mode must be "none" (an untouched output)')
+    default = rules.get("default", modes[-1])
+    if default not in modes:
+        raise Refusal("impact_rules_invalid", f"default {default!r} is not a mode")
+    classes = rules.get("classes", [])
+    if not isinstance(classes, list):
+        raise Refusal("impact_rules_invalid", "classes must be a list")
+    for c in classes:
+        if not (isinstance(c, dict) and isinstance(c.get("match"), str) and c.get("mode") in modes):
+            raise Refusal("impact_rules_invalid", f"class {c!r} needs a match pattern and a known mode")
+    cost = rules.get("cost", {})
+    if not isinstance(cost, dict) or any(m not in modes for m in cost):
+        raise Refusal("impact_rules_invalid", "cost keys must be modes")
+    for m, c in cost.items():
+        if not (isinstance(c, dict) and isinstance(c.get("units", 0), (int, float))
+                and isinstance(c.get("gpu", False), bool)):
+            raise Refusal("impact_rules_invalid", f"cost of {m!r} needs numeric units and a boolean gpu")
+    warn = rules.get("warn", [])
+    if not isinstance(warn, list) or not all(
+        isinstance(w, dict) and isinstance(w.get("match"), str) and isinstance(w.get("message"), str) for w in warn
+    ):
+        raise Refusal("impact_rules_invalid", "warn must be a list of {match, message}")
+    return modes, default, classes, cost, warn
+
+
+def check_graph(graph):
+    outs = graph.get("outputs") if isinstance(graph, dict) else None
+    if not isinstance(outs, list) or not outs:
+        raise Refusal("impact_graph_invalid", "graph needs a non-empty outputs list")
+    seen = set()
+    for o in outs:
+        if not (isinstance(o, dict) and isinstance(o.get("id"), str) and o["id"]):
+            raise Refusal("impact_graph_invalid", f"output {o!r} needs an id")
+        if o["id"] in seen:
+            raise Refusal("impact_graph_invalid", f"output id {o['id']!r} appears twice")
+        seen.add(o["id"])
+        deps = o.get("depends_on")
+        if not (isinstance(deps, list) and deps and all(isinstance(d, str) and d for d in deps)):
+            raise Refusal(
+                "impact_graph_invalid",
+                f"output {o['id']!r} needs a non-empty depends_on list (an output that depends on "
+                "nothing would never be rebuilt)",
+            )
+    return outs
+
+
+# ---- plan ----------------------------------------------------------------
+
+def plan(a):
+    graph = read_json(a.graph, "impact_graph_unreadable")
+    rules = read_json(a.rules, "impact_rules_unreadable")
+    old = read_json(a.from_, "impact_source_unreadable")
+    new = read_json(a.to, "impact_source_unreadable")
+    modes, default, classes, cost, warn = check_rules(rules)
+    outs = check_graph(graph)
+    rank = {m: i for i, m in enumerate(modes)}
+
+    edits = diff(old, new)
+    for e in edits:
+        e["mode"] = next((c["mode"] for c in classes if matches(c["match"], e["field"])), default)
+
+    outputs, totals = {}, {m: 0 for m in modes}
+    units, gpu = 0, False
+    for o in outs:
+        mode, why = "none", []
+        for e in edits:
+            if any(matches(d, e["field"]) for d in o["depends_on"]):
+                why.append(e["field"])
+                if rank[e["mode"]] > rank[mode]:
+                    mode = e["mode"]
+        entry = {"mode": mode, "fields": why}
+        if "key" in o:
+            entry["key"] = o["key"]
+        outputs[o["id"]] = entry
+        totals[mode] += 1
+        c = cost.get(mode, {})
+        units += c.get("units", 0)
+        gpu = gpu or (mode != "none" and c.get("gpu", False))
+
+    warnings = []
+    for w in warn:
+        for e in edits:
+            if matches(w["match"], e["field"]):
+                warnings.append(f"{e['field']}: {w['message']}")
+    unreached = [e["field"] for e in edits
+                 if not any(matches(d, e["field"]) for o in outs for d in o["depends_on"])]
+    for f in unreached:
+        warnings.append(f"{f}: changed, but no output depends on it")
+
+    report = {
+        "edit": edits,
+        "outputs": outputs,
+        "totals": totals,
+        "estimate": {"units": units, "gpu": gpu},
+        "warnings": warnings,
+    }
+    target = os.path.abspath(a.report)
+    parent = os.path.dirname(target)
+    if not os.path.isdir(parent):
+        raise Refusal("report_dir_missing", f"{parent} does not exist")
+    tmp = f"{target}.tmp-{os.getpid()}"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(report, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+    os.replace(tmp, target)
+    sys.stdout.write(json.dumps(
+        {"report_path": target, "totals": totals, "estimate": report["estimate"]}, sort_keys=True) + "\n")
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        sys.stdout.write(__doc__)
+        return 0 if argv else 2
+    import argparse
+
+    p = argparse.ArgumentParser(prog=TOOL)
+    sub = p.add_subparsers(dest="cmd", required=True)
+    pl = sub.add_parser("plan", help="dry-run blast radius and cost")
+    pl.add_argument("--graph", required=True)
+    pl.add_argument("--from", dest="from_", required=True)
+    pl.add_argument("--to", required=True)
+    pl.add_argument("--rules", required=True)
+    pl.add_argument("--report", required=True)
+    a = p.parse_args(argv)
+    try:
+        plan(a)
+    except Refusal as r:
+        sys.stderr.write(f"refused:{TOOL}:{r.reason}: {r.detail}\n")
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

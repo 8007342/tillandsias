@@ -11,6 +11,8 @@ LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 # DISTRO: apk (Alpine), NOT microdnf/dnf (Fedora)
 RUN apk add --no-cache busybox-extras
 
+# 2007-hear: audio MIME types for the static preview.
+COPY httpd.conf /etc/httpd.conf
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

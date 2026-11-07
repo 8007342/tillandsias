@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-warm-forge-launch-has-its-git-mirror-ready-in-seconds-not-after-a-per-ref-startup-retry-push
+    event:
+      type: measurement
+      ts: '2026-11-03T19:00:00Z'
+      host: yoga
+      summary: |-
+        NEW WARM-LAUNCH BASELINE (coordinator macuahuitl-fedora, 2026-11-03), the seconds-on-warm-forge program. MEASURED on yoga (linux-immutable, rootless podman), scratch merge c02170aa4 = #877 + #891 (1920-lnch) + #892 (1977-xpus) + #893 (1978-n8c6), built into the tray. `--cloud 8007342/tillandsias --opencode --prompt ping`, 3 warm runs after a warmup, phases from a TILLANDSIAS_PODMAN_BIN wrapper's ms stamps:
+        pre-launch (process start -> git mirror run) 3106 / 3542 / 3230 ms; seed + forge start (-> forge run) 1608 / 1726 / 1960 ms (bringup mirror-seed 489 / 676 / 629 ms); agent turn 16608 / 15491 / 16381 ms (remote model, not launcher work); teardown 2051 / 1703 / 2164 ms; total 23373 / 22462 / 23735 ms; podman calls 78 / 79 / 78.
+        Morning baseline, same command: launcher work ~10 s (pre-launch 2.4-3.7 s, mirror-seed 6.7-12 s), 103 podman calls. Now ~6.7 s of launcher work, of which pre-launch is the largest.
+        LARGEST REMAINING NON-AGENT SECOND: pre-launch's per-image ensure. Each of the 5 ensures spends ~250-300 ms outside podman (detaching the image-ensure helper and hashing the image sources for its identity) before its `podman images` call, ~1.5 s in total, with every image current. That is 1920-lnch's deferred "image success stamp" item. Next: the Vault calls in pre-launch (~0.8 s: Running x4, an exec), and a 1.27 s gap in teardown before `rm -f tillandsias-browser-tillandsias`.
+packets:
+  - packet_id: a-ca-key-that-no-longer-matches-its-certificate-is-reissued-not-served-to-the-proxy
+    order: 1979-bm3u
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [headless, proxy, ca, tray]
+    estimated_hours: 3
+    title: A CA key that no longer matches its certificate is reissued, not handed to the proxy (squid refuses to start)
+    context: |-
+      MEASURED on yoga 2026-11-03: every launch failed with "readiness gate: a hard requirement is not ready (tillandsias-proxy: no READY=1 within 120s)". The proxy log: "WARNING: '/etc/squid/certs/intermediate.key' X509_check_private_key() failed", "FATAL: No valid signing certificate configured for HTTP_port [::]:3128". ~/.local/state/tillandsias/ca/intermediate.crt was dated 2026-10-30. The key it links to, /run/user/1000/tillandsias/keys/intermediate.key (tmpfs), was rewritten at 2026-11-03 08:37:33 -0800. vault.key in the same dir kept its 10-30 date. The public keys differ: sha256 of `openssl x509 -pubkey` 6c900505... against `openssl pkey -pubout` 64aacbdc....
+      SOURCE (crates/tillandsias-headless/src/main.rs): the CA ensure calls ca_key_store::materialize (which refills a dangling key link from the keyring) and then ca_bundle_needs_refresh, which returns true only when a file is missing or the cert is near expiry. It never checks that the key belongs to the certificate. So a refill from a keyring entry of another generation leaves a mismatched pair that is never reissued, and the proxy is dead until someone deletes the cert. Not found yet: what rewrote the RAM key at 08:37.
+      Worked around on yoga by moving intermediate.crt aside (copies kept); the next launch minted a fresh pair and all launches passed.
+    exit_criteria:
+      - 'A test plants a certificate and a key from two different generations and asserts the CA ensure reissues (or refuses loudly, naming the mismatch) instead of returning them. Red today: ca_bundle_needs_refresh answers false.'
+      - 'What rewrote the tmpfs key while keeping the old certificate is named from source or a repro, and fixed or filed.'
+    verifiable_closure: 'The test red before and green after, and the cause of the 08:37 rewrite named.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the test and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'Add a key/cert public-key match to ca_bundle_needs_refresh (or right after materialize); then read ca_key_store::materialize for the path that refills from a keyring entry newer or older than the cert.'
+    provenance: found by yoga 2026-11-03 while taking the warm-launch baseline for macuahuitl-fedora.
+    related: [1118-fqfk]
+    events:
+      - type: filed
+        ts: '2026-11-03T19:00:00Z'
+        host: yoga
+        summary: filed from a dead proxy on yoga; the pair check does not exist

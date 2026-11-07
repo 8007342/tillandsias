@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-python-environment-installs-through-the-proxy
+    event:
+      type: note
+      ts: "2026-11-06T05:27:54Z"
+      agent_id: linux-lenovinha-claude-20261106t052753z
+      host: lenovinha
+      summary: |
+        Live capture from the kumbia forge at 2026-11-06T05:26Z, relayed by macuahuitl-fedora. Regime: the forge had been up about 24 h on the old lane binary; --github-login recreated the proxy at about 03:07Z.
+
+        - uv 0.13.5. uv venv and uv pip install from PyPI work. Only uv python install fails, on a GitHub release asset: "invalid peer certificate: BadSignature". It fails the same way with UV_NATIVE_TLS=1. curl fails with error 19 on the same host.
+        - The forge's ca-chain.crt: serial 3F621953, notBefore Nov 5 05:09Z, SKI 73:94:02:D7.
+        - pypi.org and github.com pass through the proxy without re-signing. release-assets.githubusercontent.com is re-signed by CN=Tillandsias CA, AKI 9C:2F:25:AF; the issuer it serves has serial 573402A8 and notBefore Nov 6 03:07:31Z. Verifying against the forge's chain fails.
+        - The leaf's notBefore (Sep 30) is earlier than its issuer's (Nov 6). Either the key was reused or the leaf was cached or backdated. Unexplained.
+        - The host's intermediate is newer still: serial 6BEE09E5, notBefore 05:22:33Z. The proxy had not picked it up by 05:26Z.
+
+        Reading: a forge's trust is frozen when it starts, while the proxy's CA moves on. Same name, different key, hence BadSignature.
+
+        Requirement: after a proxy CA change, a running forge either gets the new CA or fails in a way that names the stale CA and the remedy.
+
+        Open design question: whether the forge should bind a directory rather than a single file. A single-file bind keeps the old inode when the host replaces the file by rename.
+
+        Also to fix: cheatsheets/build/uv.md claims SSL_CERT_FILE is set in the forge; the launcher forbids it.

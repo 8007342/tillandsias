@@ -1,0 +1,164 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from kumbia-forge's research; written for any project.
+packets:
+- packet_id: studio-jobs-are-tickets-that-survive-a-lane-restart
+  order: 2002-stjb
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 6
+  title: A studio workflow can queue as a job and return a ticket; status and results survive a lane restart
+  context: 'run_workflow blocks its caller, so a long batch needs an agent attending it, and a lane restart loses it. Generic forge capability; kumbia-kombat is the reporting example, and it must also serve projects such as demon_attack, cannonball and macron.dev. Evidence: plan/research/level3-art-pipeline-2026-11-05.md on kumbia-kombat work/1839-intg.'
+  exit_criteria:
+  - 'Queueing returns a ticket at once; a status call reports queued, running, done or failed with outputs.'
+  - 'After a lane restart, the same ticket still reports the status and outputs, tested with a fixture restart.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio plus a real studio run for hardware claims.'
+  unscoreable: 'none.'
+  next_action: 'Read the row context, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T19:30:00Z'
+    host: macuahuitl
+    summary: filed p1 ready
+- packet_id: studio-outputs-can-be-durable-in-the-project-cache
+  order: 2002-stdo
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 3
+  title: A studio run can write outputs and provenance to the project persistent cache
+  context: 'Scratch output is lost when a forge is replaced, so a project has to copy results by hand. Generic forge capability; kumbia-kombat is the reporting example, and it must also serve projects such as demon_attack, cannonball and macron.dev. Evidence: plan/research/level3-art-pipeline-2026-11-05.md on kumbia-kombat work/1839-intg.'
+  exit_criteria:
+  - 'An opt-in run_workflow argument writes outputs and sidecars under the persistent project cache, and the result names those paths.'
+  - 'A path outside that cache is refused; the default stays scratch.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio plus a real studio run for hardware claims.'
+  unscoreable: 'none.'
+  next_action: 'Read the row context, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T19:30:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: studio-history-shows-what-the-engine-really-ran
+  order: 2002-sthi
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 3
+  title: A read-only studio.history shows real node inputs, and provenance comes from the queued graph
+  context: 'Agents reach the engine through a hard-coded address to see what ran. Provenance was built from the request, so it recorded an override that never applied (see 2001-stpr). Generic forge capability; kumbia-kombat is the reporting example, and it must also serve projects such as demon_attack, cannonball and macron.dev. Evidence: plan/research/level3-art-pipeline-2026-11-05.md on kumbia-kombat work/1839-intg.'
+  exit_criteria:
+  - 'studio.history returns each node input as queued for a job, for that project only.'
+  - 'Provenance prompt and overrides are read from the graph submitted; a fixture where a request value does not reach the graph records the graph value.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio plus a real studio run for hardware claims.'
+  unscoreable: 'none.'
+  next_action: 'Read the row context, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T19:30:00Z'
+    host: macuahuitl
+    summary: filed p1 ready
+- packet_id: studio-overrides-address-any-input-by-title
+  order: 2002-stov
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 2
+  title: Studio overrides can set any node input by node title, including numbers, and refuse a match on nothing
+  context: '$node:<id>.<input> exists, but ids change between workflow copies. One probe needed 30 baked copies. Generic forge capability; kumbia-kombat is the reporting example, and it must also serve projects such as demon_attack, cannonball and macron.dev. Evidence: plan/research/level3-art-pipeline-2026-11-05.md on kumbia-kombat work/1839-intg.'
+  exit_criteria:
+  - 'An override by title and input name reaches a numeric and a string input.'
+  - 'An override matching no node or no input is refused before queueing, and a link input stays refused.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio plus a real studio run for hardware claims.'
+  unscoreable: 'none.'
+  next_action: 'Read the row context, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T19:30:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: studio-pins-a-lightning-lora-and-a-layered-image-model
+  order: 2002-stmd
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 2
+  title: Studio catalogue pins a Lightning LoRA for the 2511 edit base and a layered-image model
+  context: 'Both repos state apache-2.0 on Hugging Face at filing: lightx2v/Qwen-Image-Edit-2511-Lightning rev 107d238d, Qwen/Qwen-Image-Layered rev 8f0ca708. Confirm the licence file before pinning. The Layered repo is split diffusers files; find a ComfyUI-loadable single file first. Generic forge capability; kumbia-kombat is the reporting example, and it must also serve projects such as demon_attack, cannonball and macron.dev. Evidence: plan/research/level3-art-pipeline-2026-11-05.md on kumbia-kombat work/1839-intg.'
+  exit_criteria:
+  - 'models.tsv and licence-register rows exist with verified sha256 and licence.'
+  - 'A real run of each produces an output, with time and quality recorded in the closure note.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio plus a real studio run for hardware claims.'
+  unscoreable: 'none.'
+  next_action: 'Read the row context, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T19:30:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: finish-pixels-works-without-a-character-family
+  order: 2002-stfp
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 2
+  title: studio.finish_pixels accepts a plain palette and grid spec without a character family
+  context: 'Backgrounds, tiles and UI art have no character family, so they cannot use the finishing tool. Generic forge capability; kumbia-kombat is the reporting example, and it must also serve projects such as demon_attack, cannonball and macron.dev. Evidence: plan/research/level3-art-pipeline-2026-11-05.md on kumbia-kombat work/1839-intg.'
+  exit_criteria:
+  - 'A palette and grid spec without a family finishes an image, with provenance.'
+  - 'Family-based calls behave as before.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio plus a real studio run for hardware claims.'
+  unscoreable: 'none.'
+  next_action: 'Read the row context, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T19:30:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: a-folder-publishes-as-a-review-sheet-with-recorded-verdicts
+  order: 2002-strv
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 6
+  title: A folder publishes as a side-by-side review sheet at a chosen device size with recorded verdicts
+  context: 'Human review limits generation throughput in every art project. Extends the review.publish idea from the forge-generic catalogue. Generic forge capability; kumbia-kombat is the reporting example, and it must also serve projects such as demon_attack, cannonball and macron.dev. Evidence: plan/research/level3-art-pipeline-2026-11-05.md on kumbia-kombat work/1839-intg.'
+  exit_criteria:
+  - 'A forge tool publishes a folder over preview as a sheet at a named device size.'
+  - 'Verdicts per item are recorded in a file the agent can read back.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --all-features studio plus a real studio run for hardware claims.'
+  unscoreable: 'none.'
+  next_action: 'Read the row context, then write the failing test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - type: filed
+    ts: '2026-11-05T19:30:00Z'
+    host: macuahuitl
+    summary: filed p2 ready

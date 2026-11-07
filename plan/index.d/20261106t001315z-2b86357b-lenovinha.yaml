@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    field: context
+    value: |-
+      Reworded 2026-11-06 by lenovinha with what 1999-grot, 2000-camv and 2001-cakr learned. The 2026-11-04 outage was not a plain Vault restart.
+      - The trigger was a host CA re-mint. ensure_ca_bundle wiped and re-minted the CA while Vault kept serving its old leaf, so host reads failed TLS and GitHub rotation never ran; the 8 h token lapsed at 23:55:07Z. The re-mint came from ca_key_check reading an openssl failure as a key mismatch: a transient failure, or an at-rest passphrase this process could not recover. At 23:43:56 it ran under the pre-push --cloud-usage.
+      - 2000-camv (#940, landed) keeps the replaced CA trusted until Vault is relaunched and stops --cloud-usage from minting. 2001-cakr (#942) wipes only on a proven mismatch. 2003-kypa makes a failed keyring read leave the passphrase unavailable instead of fresh.
+      - Measured on lenovinha 2026-11-05. A plain `podman restart tillandsias-vault` cannot unseal, because only a launch provides the unseal key; a relaunch via --ensure-enclave works, and the running mirror re-authenticated on its own in about 80 s, over this row's 60 s. After a CA re-mint with Vault NOT relaunched, the mirror stayed authorized 10/10 over 20 min. A mirror holds its CA as a single-file bind of intermediate.crt: `podman restart` of the mirror re-resolves it to the new file, but if the lane that launched it is gone (its notify socket is dead) the start fails and podman removes the container. Recovery is then a lane relaunch.
+      - What is left for this row: (a) after a Vault relaunch under the SAME CA, mirrors re-authenticate on their own but take about 80 s, measured against the 60 s criterion; (b) after a relaunch with a NEW CA, running mirrors still trust the old CA file and need a recreate, which the tray does not do; (c) whether --github-login restarts Vault at all is still unconfirmed.
+    ts: "2026-11-06T00:13:15Z"
+    host: lenovinha
+    replaces_sha256: "92c53ee3b6148d3ffa85c3a43868f5e101f309b4c5682dde83eac5450ea03736"
+
+events:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    event:
+      type: note
+      ts: "2026-11-06T00:13:15Z"
+      host: lenovinha
+      summary: |-
+        reworded with what 1999-grot/2000-camv/2001-cakr learned (coordinator order)
