@@ -3288,7 +3288,9 @@ fn plan_binary_currency_complaint() -> Option<String> {
          checkout:   {current}\n\
          The plan-only lane will refuse the fragment this identifier is for. \
          Rebuild first:\n  \
-         cargo build --release -p tillandsias-plan\n\
+         cargo build --release -p tillandsias-plan\n  \
+         (or scripts/check-plan-binary-current.sh, which rebuilds and refreshes \
+         the installed copy; 1270-5mz8)\n\
          Refusing BEFORE minting on purpose: an identifier handed out by a binary \
          the lane will not accept costs a rebuild, a rebase and a re-push once the \
          row is written, instead of a rebuild now."
@@ -6330,6 +6332,9 @@ fn main() {
                         embedded
                     };
                     eprintln!("stale:validator-surface built-from={built} checkout={cur}");
+                    eprintln!(
+                        "  remedy: scripts/check-plan-binary-current.sh (rebuilds and refreshes the installed copy), or cargo build --release -p tillandsias-plan (1270-5mz8)"
+                    );
                     std::process::exit(3);
                 }
             }
