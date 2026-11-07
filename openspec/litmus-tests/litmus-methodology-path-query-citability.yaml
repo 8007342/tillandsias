@@ -233,9 +233,9 @@ critical_path:
     # adds test N+1, and a bare '0 failed' passes on an empty run. The named
     # pin is the corpus-wide index self-check — the substrate every methodology
     # citation's resolvability rests on.
-    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && exit 1; n=$(printf '%s' \"$out\" | grep -c '^test methodology::tests::.* ok$'); test \"$n\" -ge 10 || exit 1; printf '%s' \"$out\" | grep -q 'every_indexed_entry_starts_at_its_own_key_line_and_ends_in_bounds ... ok' && printf '%s' \"$out\" | grep -q 'all_ten_canonical_questions_answer_with_an_exact_path_and_a_resolvable_file_line ... ok' && echo \"ok: methodology-unit-pins-green n=$n\""
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-plan --min-ok 'methodology::tests::' 10 --require-ok every_indexed_entry_starts_at_its_own_key_line_and_ends_in_bounds --require-ok all_ten_canonical_questions_answer_with_an_exact_path_and_a_resolvable_file_line --name methodology-unit-pins-green"
     timeout_ms: 300000
-    expected_behavior: "ok: methodology-unit-pins-green"
+    expected_behavior: "ok:methodology-unit-pins-green"
 
 observability:
   traces:

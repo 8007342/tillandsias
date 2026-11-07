@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-warm-forge-launch-has-its-git-mirror-ready-in-seconds-not-after-a-per-ref-startup-retry-push
+    event:
+      type: measurement
+      ts: '2026-11-03T20:15:00Z'
+      host: yoga
+      summary: |-
+        AFTER #898 (1975-istp, the per-image success stamp), same regime as the 19:00Z baseline, except the host is now Fedora 45 (kernel 7.2.15-300.fc45, after today's upgrade). Trunk 4da5ffc63 built into the tray, `--cloud 8007342/tillandsias --opencode --prompt ping`, 3 warm runs after a warmup:
+        pre-launch 1682 / 1701 / 1734 ms (baseline 3106 / 3542 / 3230): about -1.5 s, as predicted.
+        seed + forge start 3741 / 4366 / 2332 ms; bringup mirror-seed 2978 / 3624 / 1639 ms. NOT comparable with the baseline's 489-676 ms: that was the scratch merge carrying #893, and trunk does not have #893 yet (it queues after #899). So the 1 s Vault sleep and the pre-READY discipline publish are still in, which explains ~1.8 s; the 3.6 s run is above that, not yet explained (first measurement after the reboot).
+        agent 15068 / 15554 / 15495 ms; teardown 1543 / 1523 / 1521 ms; total 22034 / 23144 / 21082 ms; podman calls 93 / 93 / 93 (baseline 78-79: up 14-15, not yet attributed).
+  - packet_id: a-ca-key-that-no-longer-matches-its-certificate-is-reissued-not-served-to-the-proxy
+    event:
+      type: note
+      ts: '2026-11-03T20:15:00Z'
+      host: yoga
+      summary: |-
+        Root-cause leads, read and measured on yoga after the reboot; not yet a cause:
+        (1) ca_key_store.rs is unchanged between v56.11.3.1 and trunk, and Store::refill only returns an entry sealed against the exact certificate bytes on disk (unseal_entry). So a refill alone cannot have produced the pair.
+        (2) The CA dir and key changed at 11:26-11:27, before any tray this session started (~11:29): the journal shows a `tillandsias` process (pid 143641) connecting to oo7-daemon at 11:26:50, and a localhost tillandsias-git container started at 11:26:44. The boot-time launcher is not identified yet.
+        (3) Fedora 45 serves the Secret Service through oo7-daemon, replacing the backend the 09:01 seal wrote to. A keyring that did not take the seal leaves an older entry behind (see memory two-credential-channels-on-yoga: the yoga keyring was dead before the upgrade).
+        (4) In the CA mint, seal() publishes the key BEFORE `rename(tmp_crt, crt)`. A mint that dies between the two leaves exactly a new key under the old certificate. That fits the 11:27 key with the 09:01 cert and is the next thing to prove red-first.

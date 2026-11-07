@@ -1,0 +1,63 @@
+# @trace spec:local-web-preview
+# @trace order:1864-ay3x (spec: openspec/changes/web-studio-lanes, not yet archived)
+#
+# Order 1864-ay3x: the Puck studio LANE (studio-puck on the forge image, behind
+# the studio front). Puck and React 19 are bundled by
+# esbuild in a DISCARDED builder stage (operator ruling 2026-11-02); the final
+# image carries only the bundle, its CSS, the editor page and the studio
+# server. Licences: the operator rulings in the Containerfile header; the
+# stack ledger's source is puck/build/package-lock.json (#833; not read yet).
+#
+# The fixture builds images/studio/Containerfile.puck on the local forge image
+# and runs it with its registry entry and --network none on
+# a throwaway React checkout. It asserts:
+#   - Puck's onPublish page data, POSTed to /__studio/save through the front,
+#     lands under .tillandsias/studio/puck/ as a `studio(puck): save` commit,
+#     the only change to the checkout's history;
+#   - writes to src/, a .json outside the allowlist, a ../ escape and an
+#     absolute path are each refused with 403 and the rule;
+#   - the editor page is self-contained, and the bundle carries Puck and React;
+#   - the final image has no esbuild, no node_modules under /opt and no
+#     react-dom package
+#     (the same probe finds 6 entries in the builder stage);
+#   - egress is blocked.
+name: litmus:studio-puck-commits-page-data-through-the-front
+spec: local-web-preview
+phase: post-build
+description: >
+  Pin 1864-ay3x: the Puck studio lane commits onPublish page data through the
+  shared studio front under the lane
+  allowlist only, refuses writes elsewhere, and its final image carries no
+  build-time-only esbuild or React package.
+severity: high
+size: long
+
+preconditions:
+  - workspace contains images/studio/Containerfile.puck and scripts/test-studio-puck.sh
+  - a local localhost/tillandsias-forge image
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-studio-puck.sh && test -x scripts/test-studio-puck.sh && echo 'ok: studio-puck-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: studio-puck-suite-parses"
+
+  - step: "page data committed through the front under the allowlist only, no build-time leftovers, no egress"
+    command: "bash scripts/test-studio-puck.sh"
+    timeout_ms: 900000
+    expected_behavior: "PASS: the Puck lane commits page data through the front under its allowlist only, refused elsewhere, no esbuild in the final image, no egress"
+
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "PASS: the Puck lane commits page data through the front under its allowlist only, refused elsewhere, no esbuild in the final image, no egress"
+  log_fields:
+    spec: local-web-preview
+    test: studio-puck-commits-page-data-through-the-front
+    artifact: images/studio/Containerfile.puck
+
+rollback:
+  on_failure: >
+    The front wrote outside the allowlist, the bundle lost Puck or React, or
+    a build-time-only file reached the final image.
+  command: "grep -n 'FROM\\|esbuild' images/studio/Containerfile.puck"

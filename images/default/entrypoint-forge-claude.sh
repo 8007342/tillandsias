@@ -6,6 +6,9 @@
 #
 # Secrets: git identity env plus Claude auth; GitHub token stays in git service.
 
+# 2004-in3v: the start of the forge-entry-total span (bash 5 in the image).
+FORGE_ENTRY_T0_US="${EPOCHREALTIME//[.,]/}"
+
 source /usr/local/lib/tillandsias/lib-common.sh
 
 # @trace gap:ON-008
@@ -50,7 +53,9 @@ trap 'exit_pause' EXIT
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
+forge_step_mark
 populate_hot_paths
+forge_step_done hot-paths
 
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
@@ -64,16 +69,22 @@ ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "claude-code starting"
 
-# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:windows-wsl-runtime
+# @trace spec:git-mirror-service, spec:forge-offline, spec:cross-platform, spec:wsl-runtime
 # Shared dual-transport clone — supports filesystem (Windows/WSL) and git
 # daemon (Linux/podman). See lib-common.sh::clone_project_from_mirror.
+forge_step_mark
 clone_project_from_mirror
+forge_step_done clone
 
 # ── Claude Code + OpenSpec (hard-installed) ────────────────
 # @trace spec:default-image, spec:forge-shell-tools
+forge_step_mark
 require_claude
+forge_step_done require-harness
 [ -x "$CC_BIN" ] || harness_missing_fatal claude-code
+forge_step_mark
 require_openspec
+forge_step_done require-openspec
 
 # @trace spec:forge-offline, spec:podman-secrets-integration, spec:tillandsias-vault
 # API-key launches need no OAuth state. Otherwise restore the complete opaque
@@ -90,19 +101,27 @@ fi
 # @trace spec:forge-environment-discoverability, order:568
 # Run after OAuth restore because Claude keeps credentials and MCP registration
 # in the same document. The overlay merge preserves every non-MCP field.
+forge_step_mark
 apply_claude_config_overlay
+forge_step_done config-overlay
+forge_step_mark
 seed_claude_first_run_defaults
+forge_step_done first-run-defaults
 # @trace spec:default-image, order:1437-y2wu
 # Pre-accept the bypass-permissions dialog (forge-gated inside the function
 # itself). Must run BEFORE the approvals restore below so the live config
 # already carries the consent and a stale/absent vault doc can never bring
 # the dialog back.
+forge_step_mark
 seed_claude_bypass_consent
+forge_step_done bypass-consent
 # @trace order:1443-we89
 # The Bash-tool bridge: merge the image's PreToolUse hook into
 # ~/.claude/settings.json (additive, idempotent, forge-gated). The approvals
 # restore below only touches ~/.claude.json, so it cannot undo this.
 seed_claude_pretooluse_hook || true
+# order:2017-wtbr: sub-agent worktrees start from the session's HEAD.
+seed_claude_worktree_base_head || true
 # Operator-approved interactive dialogs, restored from vault (2026-08-31):
 # first-ever launch prompts once — those are valid prompts — the watcher
 # below harvests the approval, and every later forge launch restores it.
@@ -115,9 +134,13 @@ seed_claude_pretooluse_hook || true
 export_ssh_env || true
 
 # ── Find project directory ──────────────────────────────────
+forge_step_mark
 find_project_dir
+forge_step_done find-project
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+forge_step_mark
 configure_git_identity
+forge_step_done git-identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # @trace order:1447-nmq3
 # Trust the checked-out project so Claude does not ask (forge-gated inside the
@@ -129,28 +152,41 @@ seed_claude_project_trust "$PROJECT_DIR" || true
 # ── Export project environment ───────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
+forge_step_mark
 export_project_env
+forge_step_done project-env
 
 # ── OpenSpec init (only when absent, silent) ────────────────
 # Never rewrites a committed /opsx set: a launch must not modify tracked
 # files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
 # The CLI is the project's pinned version when openspec/cli-version exists
 # (order 1441-myz3; see ensure_openspec_pinned).
+forge_step_mark
 ensure_openspec_pinned "$PROJECT_DIR"
+forge_step_done openspec-pin
 # Flaky-optional installs (dev tools, prebuilt tools) run in
 # the background with status files and first-use shims (order 1951-vv5m).
+forge_step_mark
 start_flaky_installs
+forge_step_done flaky-installs
+forge_step_mark
 openspec_init_if_absent "$PROJECT_DIR" claude
+forge_step_done openspec-init
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme
+forge_step_mark
 inject_startup_context "$PROJECT_DIR"
+forge_step_done startup-context
 
 # ── Banner ──────────────────────────────────────────────────
+forge_step_mark
 show_banner "claude"
+forge_step_done banner
 
 # ── Launch Claude Code ──────────────────────────────────────
 trace_lifecycle "entrypoint" "claude launching"
+forge_step_line total "$((($(_forge_now_us) - ${FORGE_ENTRY_T0_US:-$(_forge_now_us)}) / 1000))"
 trace_lifecycle "exec" "launching claude-code ($CC_BIN)"
 # Rotation harvest (Codex order-340 pattern): the session wrapper watches the
 # credential file and persists refresh-token rotations back to Vault before

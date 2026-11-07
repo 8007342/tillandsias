@@ -55,9 +55,21 @@ def install(manifest, custom_nodes):
         run("rm", "-rf", os.path.join(dest, ".git"))
         with open(os.path.join(dest, STAMP), "w") as f:
             f.write(n["commit"] + "\n")
-        run(sys.executable, "-m", "pip", "install", "--no-cache-dir", "--require-hashes",
-            "--no-deps", "-r", os.path.join(base, n["lock"]))
-    run(sys.executable, "-m", "pip", "check")
+        lock = os.path.join(base, n["lock"])
+        with open(lock) as f:
+            pinned = [l for l in f if l.strip() and not l.lstrip().startswith("#")]
+        # A node with no requirements has a comment-only lock (1956-bh6j:
+        # IPAdapter_plus); pip refuses an empty requirement set, so skip it.
+        if pinned:
+            run(sys.executable, "-m", "pip", "install", "--no-cache-dir", "--require-hashes",
+                "--no-deps", "-r", lock)
+    # 1970-pipc: pip check prints the conflict on stdout; a bare check=True
+    # dropped it from the build log, leaving only pip's notices.
+    chk = subprocess.run([sys.executable, "-m", "pip", "check"],
+                         capture_output=True, text=True)
+    if chk.returncode != 0:
+        sys.stderr.write(chk.stdout + chk.stderr)
+        sys.exit(f"violation:custom-nodes:pip-check-failed:{chk.returncode}")
     print("ok:custom-nodes:installed")
 
 

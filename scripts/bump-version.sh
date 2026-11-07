@@ -131,39 +131,16 @@ esac
 # Write VERSION
 printf '%s\n' "$FULL_VERSION" > "$VERSION_FILE"
 
-# Derive 3-part semver for Cargo package versions: the first three fields
-# verbatim (years.month.day) — numerically monotonic, and > every legacy
-# 0.x.* crate version at the major field.
-IFS='.' read -r V1 V2 V3 _ <<< "$FULL_VERSION"
-SEMVER="${V1}.${V2}.${V3}"
-
-# Update all Cargo.toml files (workspace members)
-for cargo_toml in \
-    "$ROOT/crates/tillandsias-core/Cargo.toml" \
-    "$ROOT/crates/tillandsias-scanner/Cargo.toml" \
-    "$ROOT/crates/tillandsias-podman/Cargo.toml" \
-    "$ROOT/crates/tillandsias-headless/Cargo.toml"; do
-    if [[ -f "$cargo_toml" ]]; then
-        # 765-uti9 quick win (audit F6.4): same-day bumps leave SEMVER unchanged,
-        # and an unconditional rewrite still touches the mtime — which feeds the
-        # find -newer staleness probes and forces needless sidecar/workspace
-        # rebuilds. Skip byte-identical rewrites; a real SEMVER change fails
-        # this grep and rewrites exactly as before.
-        if grep -q "^version = \"${SEMVER}\"" "$cargo_toml"; then
-            continue
-        fi
-        # Replace version = "x.y.z" in [package] section (first occurrence)
-        # BSD sed (macOS) requires '' after -i; GNU sed does not.
-        if sed --version 2>/dev/null | grep -q GNU; then
-            sed -i "0,/^version = \"[0-9]*\.[0-9]*\.[0-9]*\"/s//version = \"${SEMVER}\"/" "$cargo_toml"  # sed-i: ok (GNU branch only: guarded by sed --version | grep GNU; BSD takes the awk branch below)
-        else
-            # BSD sed: can't use 0,/pat/ address — use awk for first-occurrence replace
-            awk -v ver="$SEMVER" '!done && /^version = "[0-9]+\.[0-9]+\.[0-9]+"/ { sub(/version = "[0-9]+\.[0-9]+\.[0-9]+"/, "version = \""ver"\""); done=1 } 1' "$cargo_toml" > "${cargo_toml}.tmp" && mv "${cargo_toml}.tmp" "$cargo_toml"
-        fi
-    fi
-done
-
-echo "All version locations updated to $SEMVER (full: $FULL_VERSION)"
+# ORDER 1993-cver: the workspace crate versions are FROZEN (0.0.0) and no
+# longer follow the release. Rewriting them moved Cargo.lock on every bump, and
+# a Cargo.lock edit moves every crane deps derivation, so each release
+# recompiled every dependency crate (measured: ~15 of 29 build minutes, run
+# 41788810048; the deps drv hashes moved under a local --bump-build). Code that
+# needs the release version reads VERSION (crate::VERSION, or a build.rs that
+# reads it), never CARGO_PKG_VERSION. check-nix-deps-stability.sh's
+# version-bump arm guards it.
+SEMVER="${FULL_VERSION%.*}"
+echo "VERSION updated to $FULL_VERSION (crate versions are frozen, order 1993-cver)"
 echo ""
 echo "  VERSION file:    $FULL_VERSION"
-echo "  Cargo.toml:      $SEMVER"
+echo "  Cargo.toml:      unchanged (frozen)"

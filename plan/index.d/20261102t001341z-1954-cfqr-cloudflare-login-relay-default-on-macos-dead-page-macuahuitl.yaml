@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl, 2026-11-01, on the operator's report: "The current callback for cloudflare doesn't work at all on macos, I had to copy the url from the dead page on safari".
+packets:
+  - packet_id: the-cloudflare-login-turns-the-registered-relay-on-by-default-so-the-macos-tray-guest-shows-a-phone-scannable-qr-instead-of-a-dead-127-0-0-1-redirect
+    order: 1954-cfqr
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [cloudflare, oauth, qr, macos, tray, credentials]
+    estimated_hours: 3
+    related: [1757-n45b, 1719-83po, 1758-wdvf, 1713-3v3f, 1505-kc5f]
+    owned_files:
+      - crates/tillandsias-headless/src/cloudflare_login.rs
+    title: |
+      tillandsias --cloudflare-login turns the registered relay (https://cloudflare.tillandsias.org/cloudflare/callback) on by default, so the macOS tray's login, which runs in the Linux VM guest with no desktop, shows a QR whose redirect a phone or the host browser can reach, instead of a paste-only URL whose redirect is 127.0.0.1 in the guest with nothing listening
+    context: |
+      ROOT CAUSE (read from code 2026-11-01, operator report on Safari). The macOS tray's "Cloudflare Login" is PtyIntent::CloudflareLogin (crates/tillandsias-host-shell/src/pty/mod.rs), i.e. `tillandsias-headless --cloudflare-login` with NO --via, inside the Linux guest. In the guest has_graphical_session() (main.rs) is false (no DISPLAY/WAYLAND_DISPLAY). run_cli resolved the relay with RELAY_DEFAULT_ON=false and no env, so relay_url was None, and default_via(false, false) chose Via::Paste. The Paste receiver with no relay builds redirect_uri http://127.0.0.1:48631/tillandsias/cloudflare/callback and BINDS NO LISTENER (login_code_flow, Via::Paste arm); even with a listener it would be the GUEST's loopback. The operator opened the printed URL in Safari on the host, approved, and Cloudflare redirected Safari to the HOST's 127.0.0.1:48631 where nothing listens: the dead page. The only way through was copying the address bar into the terminal, and the login never said so. No QR was printed because a QR without a relay is refused by design (a phone cannot reach a loopback).
+      WHY THE DEFAULT CAN GO ON NOW. 1757-n45b landed the default GATED OFF until registration was confirmed. The ledger event of 2026-10-17 (fragment 20261017t023522z-26816fe8) records: "The relay page is live and registered (coordinator). The default stays OFF until the coordinator picks between this fallback and the device grant (1758-wdvf)." The device grant is already tried FIRST at runtime whenever discovery offers it (login_device), so the two do not compete: the relay is the fallback that the code flow takes. Live probe 2026-11-01: GET https://cloudflare.tillandsias.org/cloudflare/callback answers 200.
+      DESIGN CHOSEN. Flip RELAY_DEFAULT_ON to true (host side only; one constant and its pinned arm inverted). Default receiver in the guest becomes Qr: the terminal shows the existing QR (render_terminal_qr_in, the GitHub device-login renderer) of the authorize URL whose redirect_uri is the https relay page; the phone approves and the relay page shows `code=…&state=…` to paste (Universal Clipboard carries it phone→Mac). The relay sees only code+state; PKCE verifier and tokens never leave the headless process (unchanged). An empty TILLANDSIAS_CLOUDFLARE_RELAY_URL turns the default off per host. The Paste receiver, when it still has only a dead loopback redirect, now prints note:cloudflare-login:redirect-lands-on-a-dead-page up front.
+      NOT CHOSEN. (a) A loopback listener in the guest with a host port-forward: Safari would still need the host to forward 48631-48633 into the VM, and a phone could never reach it. (b) A URL shortener: the authorize URL carries state and code_challenge, and a shortener is another party in the auth path. (c) A hands-free poll Worker in the sibling repo 8007342/cloudflare.tillandsias.org (Workers Builds push-to-deploy): the host side already polls TILLANDSIAS_CLOUDFLARE_RELAY_POLL_URL when set (poll_relay), but the sibling is static-only by its privacy policy ("no storage of any kind"), a Worker with a 5-minute state->code store changes that policy, and any push there is a cloud deploy, which is operator-intentional only (cloud-builds-are-intentional-only) and today's one build is spent. Left as the follow-up below.
+      FOLLOW-UP (not this packet): a one-shot state->code poll endpoint (KV with ~300 s TTL, delete on read, no logs) in the sibling repo, plus an operator ruling amending the relay privacy text; then set the poll URL default. Until then the phone shows the paste line.
+    exit_criteria:
+      - "RELAY_DEFAULT_ON is true; resolve_relay(None, None, RELAY_DEFAULT_ON) is (Some(DEFAULT_RELAY_URL), None); default_via(false, true) is Qr (arm relay_default_is_on_since_registration_was_confirmed, RED on the pre-fix constant)"
+      - "a login with the production default and no desktop session (the guest) prints the QR and an 'Or open:' URL whose redirect_uri is the percent-encoded https relay and never contains 127.0.0.1, with zero Vault touches before the litmus stop (arm cloudflare_login_in_a_guest_without_a_desktop_shows_a_qr_whose_redirect_is_reachable, RED pre-fix: no QR, redirect 127.0.0.1:48631)"
+      - "with the relay turned off by an empty env and no desktop, the paste receiver prints note:cloudflare-login:redirect-lands-on-a-dead-page before any input; CONTROL: with a relay the same receiver prints no such note (arm cloudflare_login_paste_without_relay_warns_that_the_redirect_is_dead, RED pre-fix)"
+      - "the existing QR-is-only-the-authorize-URL arms and the no-secret-in-output arms stay green; ./build.sh --preflight refused=0"
+    unscoreable: "the live phone scan through the macOS tray needs the operator's phone and account on a stable release; the arms above are the pre-merge evidence"
+    next_action: >
+      Land the PR into linux-next; then an operator live check on the next stable: macOS tray -> Cloudflare Login -> scan the QR with a phone, approve, paste the line the relay page shows; the tray reads stored. If Cloudflare refuses the authorize request with a redirect_uri mismatch, the registration of https://cloudflare.tillandsias.org/cloudflare/callback on the Tillandsias app is the one dashboard step, and TILLANDSIAS_CLOUDFLARE_RELAY_URL= (empty) is the per-host retreat.
+    events:
+      - type: filed
+        ts: "2026-11-01T23:59:00Z"
+        host: macuahuitl
+        summary: |-
+          Filed and claimed on the operator's 2026-11-01 report of the dead Safari callback page on macOS. Root cause read from code: a guest without a desktop and no relay takes the paste receiver with a listener-less 127.0.0.1 redirect. Work ref: work/1954-cfqr.

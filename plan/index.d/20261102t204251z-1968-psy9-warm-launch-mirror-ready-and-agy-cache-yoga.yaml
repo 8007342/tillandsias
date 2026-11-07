@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-warm-forge-launch-has-its-git-mirror-ready-in-seconds-not-after-a-per-ref-startup-retry-push
+    order: 1968-psy9
+    status: in_progress
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, git-mirror, build-time, launch]
+    estimated_hours: 4
+    title: A warm forge launch has its git mirror READY in seconds, not after a per-ref startup retry-push
+    context: 'MEASURED on yoga 2026-11-02 (linux-next f5bc8b9ca, trunk tray up, images cached, `--cloud 8007342/tillandsias --opencode`, 3 runs): launch to agent prompt 78.0 / 77.0 s steady state, the forge created at 61 s. The OpenCode lane re-creates the git mirror and inference containers on every launch (+3-5 s). The mirror''s GitHub fetch completes in 4 s, but images/git/entrypoint.sh sends READY only after the startup retry-push walks all 1489 refs one push each; with no upstream credential every push fails ("HTTPS upstream credential is unavailable"), 12:38:11.52 -> 12:39:00.87 = 49.3 s, then 2.3 s of probes. The opencode lane''s readiness gate is also not wrapped in bringup_timer, so mirror-seed never prints.'
+    exit_criteria:
+      - 'The git mirror sends READY right after its seed fetch; the startup retry-push runs after it, in the background.'
+      - 'With no upstream credential the startup retry-push is skipped with ONE log line, not one failed push per ref.'
+      - 'A launch reuses a healthy running git mirror and inference container instead of re-creating them (the 1956-4pxj bring-up lock still serialises it).'
+      - 'The OpenCode lane''s mirror gate prints its bringup: step=mirror-seed line.'
+      - 'MEASURED: a warm launch on yoga reaches mirror READY in <= 10 s, 3 runs, regime recorded.'
+    verifiable_closure: 'A fixture drives the git entrypoint''s startup with N stranded refs and no credential: READY is sent before any retry-push and no per-ref push is attempted (red on today''s tree); plus the 3-run yoga measurement as an event.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'yoga: reorder images/git/entrypoint.sh (notify after the fetch, retry-push backgrounded, skipped without a credential), reuse healthy mirror/inference on the opencode lane, wrap its gate in bringup_timer, re-measure.'
+    provenance: macuahuitl-fedora 2026-11-02 (coordinator) from yoga's warm-launch measurement; filed and claimed by yoga.
+    depends_on: []
+    related: [1922-rann, 1956-4pxj, 1915-brst]
+    events:
+      - type: filed
+        ts: '2026-11-02T20:42:51Z'
+        host: yoga
+        summary: filed p1 at the coordinator's request and claimed by yoga
+  - packet_id: the-forge-installs-the-agy-cli-once-into-a-persistent-cache-instead-of-downloading-it-every-launch
+    order: 1968-2wpe
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, build-time, launch, images]
+    estimated_hours: 2
+    title: The forge installs the agy CLI once into a persistent cache instead of downloading it every launch
+    context: 'MEASURED on yoga 2026-11-02 (same 3 runs as 1968-psy9): the forge entrypoint takes 15.7 / 16.8 s from container start to the opencode exec; the largest piece is "tools | agy install attempt 1/3", which downloads agy 1.4.12 fresh on every launch, 5.7 / 6.2 s.'
+    exit_criteria:
+      - 'A second warm launch does not download the agy CLI: it is installed once into the persistent per-project tool cache (or baked into the forge image) and only re-fetched when the pinned version changes.'
+      - 'MEASURED: the forge entrypoint''s agy step is < 1 s on a warm yoga launch, 3 runs.'
+    verifiable_closure: 'The yoga lifecycle-log timing of the agy step before and after, 3 runs each, recorded as an event; plus a fixture that a present, current agy install is not re-fetched.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'Find the agy install in the forge entrypoint/lib-common and gate it on the cached version.'
+    provenance: macuahuitl-fedora 2026-11-02 (coordinator) from yoga's warm-launch measurement; filed by yoga.
+    depends_on: []
+    related: [1951-vv5m]
+    events:
+      - type: filed
+        ts: '2026-11-02T20:42:51Z'
+        host: yoga
+        summary: filed p2 at the coordinator's request

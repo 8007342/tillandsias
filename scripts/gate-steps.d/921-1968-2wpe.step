@@ -1,0 +1,14 @@
+# Gate step 1968-2wpe — the forge installs the agy CLI once, onto the
+# persistent tool-cache volume, and a warm launch neither downloads it nor
+# runs `agy update` inside the refresh window. Measured on yoga 2026-11-02:
+# every warm launch re-downloaded agy (5.7 / 6.2 s) because it was installed
+# into the --rm container's /usr/local/bin. The arms execute the real
+# require_antigravity cut out of images/default/lib-common.sh with stub curl
+# and agy; no network, no podman.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a warm forge launch reuses its cached agy CLI (1968-2wpe)"
+STEP_LUA="scripts/lua/test-agy-install-cached.lua"
+STEP_ERROR="a warm forge launch again downloads or updates the agy CLI, or installs it off the persistent tool cache (1968-2wpe) — see the FAIL lines above"
+STEP_OK="agy install-cached fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin macOS 27.0.1 ok:agy-install-cached:4 arms (work/1968-2wpe @ 5724e0736)"

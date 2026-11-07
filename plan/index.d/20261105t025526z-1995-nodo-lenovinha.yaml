@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-05, from kumbia-kombat's plan/forge-generic-services.md (work/1835-lvls), coordinator-assigned.
+packets:
+- packet_id: studio-run-workflow-takes-node-id-overrides-that-reach-any-node-input-and-are-validated-like-the-workflow
+  order: 1995-nodo
+  status: in_progress
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, comfyui, overrides]
+  estimated_hours: 2
+  title: studio.run_workflow takes node-id overrides that reach any node input and are validated like the workflow
+  context: 'Kumbia catalogue: "Title limit: overrides reach only nodes titled $seed, $prompt, $negative_prompt, and $strength sets a KSampler denoise. A node has one title, so a KSampler cannot be both $seed and $strength. We bake denoise per workflow until node-id overrides arrive."'
+  exit_criteria:
+  - 'overrides "$node:<id>.<input>": <scalar> sets that input, beside the title overrides. Pre-fix result: FAILS, ignored.'
+  - 'It is applied before validation: a model input set this way is pin- and licence-checked (model_refused for an unpinned file).'
+  - 'A link input, a missing node, a missing input or a malformed key is refused by name.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- studio_tool::'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures with a stub engine (1136-n8sh).'
+  next_action: 'Land.'
+  provenance: kumbia-kombat plan/forge-generic-services.md, coordinator macuahuitl-fedora 2026-11-05.
+  events:
+  - type: filed
+    ts: '2026-11-05T02:55:26Z'
+    host: lenovinha
+    summary: filed p2 in_progress, claimed by opus5

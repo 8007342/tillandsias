@@ -24,6 +24,8 @@ if REG == "" then REG = "images/models/licence-register.tsv" end
 local ALLOWED = {
     ["apache-2.0"] = true, ["mit"] = true, ["bsd-3-clause"] = true, ["unlicense"] = true,
     ["openrail++"] = true, ["creativeml-openrail-m"] = true,
+    -- Operator ruling 2026-11-01 (order 1957-pins): plain OpenRAIL and OpenRAIL-M.
+    ["openrail"] = true, ["openrail-m"] = true,
 }
 -- Licence ids read on the cards of the 2026-10-28 deny list, by class.
 local DENIED = {

@@ -1,0 +1,44 @@
+# @trace spec:git-mirror-service
+# @trace order:1827-3rj4
+#
+# Milestone 1824-58bm (coordinator.tillandsias.org warm cache): after a push
+# the git mirror's post-receive hook (which runs only once the pre-receive
+# relay to GitHub succeeded) sends the coordinator ONE bump, POST /v1/op
+# {op: bump, ns: owner/repo, head_sha}, the request tillandsias-plan's client
+# builds, with the Access service token read from vault at hook time. The
+# call is detached and bounded: a down or unconfigured coordinator never
+# delays or fails the push, and the token never reaches a log.
+#
+# The fixture runs THIS checkout's hook inside the git-mirror image against a
+# bare repo, a stub vault-cli and a socat stub coordinator (--network none):
+# one bump with both Access headers when up; push rc 0 and one unreachable
+# line when down; one not-configured line and no request when vault has no
+# token; the token in no log. Red on the hook before 1827-3rj4 (6 failed).
+name: litmus:mirror-coordinator-bump
+spec: git-mirror-service
+phase: post-build
+description: A push to the git mirror bumps the coordinator once, and a down or unconfigured coordinator never affects the push
+severity: medium
+size: quick
+
+preconditions:
+  - podman, and the git-mirror image (scripts/build-image.sh git); offline
+
+critical_path:
+  - step: "one bump per push, never blocks the push, token never logged"
+    command: "bash scripts/test-mirror-coordinator-bump.sh"
+    timeout_ms: 300000
+    expected_behavior: "PASS: one coordinator bump per push, never blocks it, token never logged"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "PASS: one coordinator bump per push, never blocks it, token never logged"
+  log_fields:
+    spec: git-mirror-service
+    test: mirror-coordinator-bump
+    artifact: images/git/post-receive-hook.sh
+
+rollback:
+  on_failure: "read the FAIL lines; the bump is coordinator_bump in post-receive-hook.sh, detached after the ref loop"
+  command: "grep -n 'coordinator' images/git/post-receive-hook.sh"

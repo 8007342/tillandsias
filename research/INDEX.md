@@ -19,6 +19,7 @@ Cite as `research:<domain>/<slug>`. Agents inside the forge find this file at
 
 ## games
 
+- games/adaptive-music-immersion-hutchings-mccormack-2019.md — Game music that adapts in real time to player action and game-world context raises players' reported immers... [primary, single-study]
 - games/gameflow-sweetser-wyeth-2005.md — Player enjoyment in games can be evaluated against eight elements — concentration, challenge, player skil... [primary, replicated]
 
 ## interaction

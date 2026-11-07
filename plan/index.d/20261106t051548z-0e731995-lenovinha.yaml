@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-agent-in-any-forge-can-inspect-the-cache-and-the-impact-of-a-change
+    event:
+      type: note
+      ts: "2026-11-06T05:15:48Z"
+      agent_id: linux-lenovinha-claude-20261106t051547z
+      host: lenovinha
+      summary: |
+        Slice 2 (tillandsias-impact) landed as #950 at 9dbff3505, after slice 1 (#947, 56a0a56dd). Both CLIs are in the image. The row stays in_progress because one exit criterion is open: the post-build litmus tests forge-stage-cache-in-image and forge-impact-plan-in-image must pass on a real forge image build. So far they have passed only on probe images.

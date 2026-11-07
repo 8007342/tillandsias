@@ -63,6 +63,9 @@ export TILLANDSIAS_CYCLE_START_TS=""
 export TILLANDSIAS_RECUR_WINDOW_DAYS=7
 export TILLANDSIAS_SKIP_MIN_RUNS=5
 export TILLANDSIAS_SKIP_FLOOR_MS=2000
+# The ghost-trace gate is a repository scan unrelated to these lines (1.75 s a
+# call on the macOS M5 tier, 23 calls here); skip it, as SKIP_GRADE does (2006-wahn).
+export TILLANDSIAS_CYCLE_METRICS_SKIP_TRACES=1
 
 pass=0; fail=0
 ok()   { pass=$((pass+1)); echo "ok: $1"; }

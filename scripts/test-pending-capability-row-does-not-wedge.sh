@@ -64,8 +64,10 @@ PLAN_BIN="$(
     exit 2
 }
 
-pass=0; fail=0
+pass=0; fail=0; cnr=0
 ok()  { echo "ok:   $*"; pass=$((pass + 1)); }
+# 2015-wba3: an arm whose premise never formed learned nothing: named, never a pass or a FAIL.
+could_not_run() { echo "could-not-run: $*"; cnr=$((cnr + 1)); }
 bad() { echo "FAIL: $*" >&2; fail=$((fail + 1)); }
 
 SCRATCH_BASE="$ROOT/target/plan-scratch"
@@ -135,7 +137,8 @@ esac
 write_pending
 # ARMS 7-8 kill a child run HERE, with a probe planted: announce, then wait in
 # the background so a TERM runs its trap at once (a foreground sleep defers it).
-if [ -n "${TILLANDSIAS_1320_HOLD_FILE:-}" ]; then
+# 2015-wba3: a parent that gave up waiting leaves "<hold>.abandon"; then do not hold.
+if [ -n "${TILLANDSIAS_1320_HOLD_FILE:-}" ] && [ ! -e "$TILLANDSIAS_1320_HOLD_FILE.abandon" ]; then
     : > "$TILLANDSIAS_1320_HOLD_FILE"
     sleep 60 </dev/null >/dev/null 2>&1 & hold_pid=$!
     wait "$hold_pid"
@@ -204,26 +207,41 @@ fi
 
 # ── 7-8. KILLED MID-RUN, with a probe planted. A child run holds in arm 1. ──
 if [ -z "${TILLANDSIAS_1320_CHILD:-}" ]; then
-    killed_run() { # killed_run <signal> -> "rc scaffolds-before scaffolds-after held|never-held"
+    # 2015-wba3: signal ONLY once the hold exists. Under load the child may not
+    # reach it within the wait; a signal then tests nothing, so send none, let
+    # the child run out untouched, and report never-held with the time waited.
+    killed_run() { # killed_run <signal> -> "rc scaffolds-before scaffolds-after held|never-held waited-ds"
         local hold="$S/hold.$1" child rc i=0 n_before n_after
         n_before="$(find "$SCRATCH_BASE" -maxdepth 1 -name 'pending-cap.*' | grep -c .)"
         TILLANDSIAS_1320_CHILD=1 TILLANDSIAS_1320_HOLD_FILE="$hold" \
             bash "$ROOT/scripts/test-pending-capability-row-does-not-wedge.sh" >/dev/null 2>&1 &
         child=$!
-        while [ ! -e "$hold" ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i + 1)); done
-        kill "-$1" "$child" 2>/dev/null
+        while [ ! -e "$hold" ] && [ "$i" -lt "${TILLANDSIAS_1320_HOLD_WAIT_DS:-300}" ]; do sleep 0.1; i=$((i + 1)); done
+        local held=held
+        if [ -e "$hold" ]; then
+            kill "-$1" "$child" 2>/dev/null
+        else
+            held=never-held; : > "$hold.abandon"
+        fi
         wait "$child"; rc=$?
+        [ "$held" = never-held ] && [ -e "$hold" ] && held=late-held
         n_after="$(find "$SCRATCH_BASE" -maxdepth 1 -name 'pending-cap.*' | grep -c .)"
-        printf '%s %s %s %s\n' "$rc" "$n_before" "$n_after" "$([ -e "$hold" ] && echo held || echo never-held)"
+        printf '%s %s %s %s %s\n' "$rc" "$n_before" "$n_after" "$held" "$i"
     }
     set -- $(killed_run TERM)
-    if [ "$1" = 143 ] && [ "$4" = held ] && [ "$3" = "$2" ] && [ "$(live_state)" = "$LIVE_BEFORE" ]; then
+    echo "  TERM arm: $([ "$4" = held ] && echo "hold after" || echo "no hold in") $(( $5 / 10 )).$(( $5 % 10 )) s (wait ${TILLANDSIAS_1320_HOLD_WAIT_DS:-300} ds)"
+    if [ "$4" != held ]; then
+        could_not_run "TERM mid-run: the child did not reach its hold within the wait ($4), so no signal was sent and the trap was not exercised (a slow host, not a broken trap)"
+    elif [ "$1" = 143 ] && [ "$4" = held ] && [ "$3" = "$2" ] && [ "$(live_state)" = "$LIVE_BEFORE" ]; then
         ok "TERM mid-run with a probe planted: rc 143, its scaffold removed, the live plan/ unchanged"
     else
         bad "TERM mid-run: rc=$1 scaffolds before=$2 after=$3 ($4); live changed=$([ "$(live_state)" = "$LIVE_BEFORE" ] && echo no || echo yes)"
     fi
     set -- $(killed_run KILL)
-    if [ "$1" = 137 ] && [ "$4" = held ] && [ "$(live_state)" = "$LIVE_BEFORE" ]; then
+    echo "  KILL arm: $([ "$4" = held ] && echo "hold after" || echo "no hold in") $(( $5 / 10 )).$(( $5 % 10 )) s (wait ${TILLANDSIAS_1320_HOLD_WAIT_DS:-300} ds)"
+    if [ "$4" != held ]; then
+        could_not_run "SIGKILL mid-run: the child did not reach its hold within the wait ($4), so no signal was sent"
+    elif [ "$1" = 137 ] && [ "$4" = held ] && [ "$(live_state)" = "$LIVE_BEFORE" ]; then
         ok "SIGKILL mid-run (no trap runs): rc 137 and the live plan/ STILL unchanged; the only residue is an ignored scaffold ($2 -> $3), swept below"
     else
         bad "SIGKILL mid-run: rc=$1 ($4); live changed=$([ "$(live_state)" = "$LIVE_BEFORE" ] && echo no || echo yes)"
@@ -231,5 +249,6 @@ if [ -z "${TILLANDSIAS_1320_CHILD:-}" ]; then
     sweep_dead_scaffolds
 fi
 
-echo "pending-capability-row-does-not-wedge: $pass passed, $fail failed"
-[ "$fail" -eq 0 ]
+echo "pending-capability-row-does-not-wedge: $pass passed, $fail failed${cnr:+$([ "$cnr" -gt 0 ] && echo ", $cnr could-not-run")}"
+[ "$fail" -eq 0 ] || exit 1
+[ "$cnr" -eq 0 ] || exit 3

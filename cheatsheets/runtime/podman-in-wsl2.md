@@ -17,7 +17,7 @@ pull_recipe: see-section-pull-on-demand
 
 # Podman in WSL2
 
-@trace spec:windows-wsl-runtime, spec:podman-orchestration, spec:forge-as-only-runtime
+@trace spec:wsl-runtime, spec:podman-orchestration, spec:forge-as-only-runtime
 
 **Use when**: running rootless Podman inside a WSL2 distro, especially for Tillandsias' Windows runtime planning and diagnostics.
 

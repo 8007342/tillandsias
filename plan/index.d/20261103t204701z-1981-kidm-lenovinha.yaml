@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned P1 (a regression from 1969-cfyt, #896).
+packets:
+- packet_id: the-launch-policy-accepts-keep-id-with-a-uid-gid-mapping-as-the-keep-id-control-and-the-studio-argv-is-tested-through-it
+  order: 1981-kidm
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [podman, security, policy, studio]
+  estimated_hours: 1
+  title: The launch policy accepts keep-id with a uid/gid mapping as the keep-id control, and the studio argv is tested through it
+  context: '#896 (1969-cfyt) made the studio run --userns=keep-id:uid=1001,gid=1001, but tillandsias-podman policy.rs matched only the exact --userns=keep-id, so studio.start on the live tray was refused: "launch argv is missing mandatory hardening flags: --userns=keep-id". No test drove the real studio argv through the policy.'
+  exit_criteria:
+  - 'keep-id and keep-id:<uid|gid|size=digits,...> satisfy the keep-id control. Pre-fix result: FAILS, keep-id:uid=1001,gid=1001 was refused.'
+  - 'host, auto, keep-id: with no options, an unknown option, a non-numeric value, keep-idx, and a second non-keep-id --userns are still refused.'
+  - 'The real studio launch argv (run_args + OOM slice + image) passes validate_launch_argv. Pre-fix result: FAILS, MissingMandatoryHardening(["--userns=keep-id"]).'
+  verifiable_closure: 'cargo test -p tillandsias-podman policy::tests; cargo test --bin tillandsias --features tray,listen-vsock the_real_studio_launch_argv'
+  unscoreable: 'unpinnable-until-the-guard-exists: Rust unit fixtures (1136-n8sh).'
+  related: [1969-cfyt]
+  next_action: 'Land the matcher fix.'
+  provenance: live tray refusal relayed by macuahuitl-fedora 2026-11-03.
+  events:
+  - type: filed
+    ts: '2026-11-03T20:47:01Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

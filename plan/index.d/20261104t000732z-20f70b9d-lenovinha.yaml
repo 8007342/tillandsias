@@ -1,0 +1,20 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-projects-forge-and-the-operator-share-its-comfyui-studio-in-a-visible-window-on-a-per-project-network-and-another-projects-forge-is-refused
+    event:
+      type: note
+      ts: "2026-11-04T00:07:32Z"
+      agent_id: linux-lenovinha-opus5-20261104t000732z
+      host: lenovinha
+      summary: |
+        BUILT on work/1985-stdu (lenovinha, 2026-11-03). The studio runs only on tillandsias-studio-<project> (--internal), never the enclave. studio.start creates it, then connects the router and this project's running forges, and adds the network-limited preview route comfyui.<label> (allow_cidr = that subnet; a 403 on the :8443 AND the host-published :8080 listener for every other caller). A call while it runs reattaches later forges. The project's window forwarders prefer the router's address on that network. stop removes the route and the network. comfyui joins DEV_SERVICES, so the leaf certifies it.
+        LIVE PROBE with real podman networks and the router image's Caddy, with throwaway names, no tray touched: project A's forge via the router got the studio; project B's forge via the router got 403; A direct reached the studio; B direct got "bad address" (the name does not resolve off the network). Real Caddy also confirmed the guard order (respond @outside before reverse_proxy).
+        NOT YET: the end-to-end through a rebuilt tray (kumbia forge browser.open showing ComfyUI). That is a live run on a host with the new build.

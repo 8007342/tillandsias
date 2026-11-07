@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora), from operator direction, 2026-11-01.
+packets:
+- packet_id: licence-acknowledgement-flow-user-accepts-quoted-restrictions-durably-before-any-non-permissive-model-or-tool-is-fetched
+  order: 1954-dvz9
+  status: ready
+  kind: design
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [licences, image-generation, consent, ux]
+  estimated_hours: 8
+  related: [1954-gdi6, 1935-k2ib, 1921-h4gv, 1874-p8w7, 1954-xy5m]
+  title: "Licence acknowledgement: before fetching a model or tool whose licence is outside the permissive allowlist, the user reads the licence id and its restrictions quoted verbatim and accepts; the acceptance is stored durably and the licence-register gate checks it"
+  context: |
+    OPERATOR DIRECTION, verbatim, relayed by the coordinator on 2026-11-01: "As per the licenses we'll have you review how those align with our user approval process, we can prompt the user to approve the usage of certain licenses, and their restrictions. Users might be ok with them, we just need to make sure they're acknowledged durably."
+    Today images/models/licence-register.tsv admits only PERMISSIVE_LICENCES, and NEVER_SHIPPABLE refuses outright. Under this design a restricted licence is not refused. The user acknowledges it, and the user's own machine fetches the weights. Tillandsias never bundles or redistributes restricted weights.
+  exit_criteria:
+  - before any fetch of a non-permissive artefact, the user sees the licence id and its restrictions quoted verbatim, and accepts or declines
+  - the acceptance is stored durably with the licence id, the licence version or hash, the artefact (repo, revision, file, sha256), who accepted, when, the scope, and the expiry under the standing-approvals ruling (session or TTL; held until expiry is enforced)
+  - the licence-register gate (imagegen_models::register_admits and check-model-licence-register.lua) admits a non-permissive row only when a matching acknowledgement exists
+  - NEVER_SHIPPABLE becomes "needs acknowledgement", except where the terms forbid the use outright
+  - FIXTURE red on today's tree: a row under a non-commercial licence is fetchable after a recorded acknowledgement and refused without one
+  unscoreable: unpinnable-until-the-guard-exists — the deliverable includes a cargo test in tillandsias-headless (name it register_admits_nc_row_only_with_recorded_acknowledgement) written red first, in the same commit as the gate change.
+  next_action: Design the acknowledgement record and its store, then reconcile it with the standing-approvals ruling on 1935-k2ib. The first record is the operator's standing approval noted on this row.
+  provenance: operator direction relayed by the coordinator, 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:45:24Z'
+    host: calmecacpilli
+    summary: filed p1 design packet
+- packet_id: corridorkey-2-studio-tool-ml-green-blue-screen-keyer-user-fetched-behind-the-licence-acknowledgement-flow
+  order: 1954-xy5m
+  status: blocked
+  kind: design
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [studio, image-generation, video, licences, cuda]
+  estimated_hours: 6
+  related: [1954-dvz9, 1935-k2ib]
+  blocked_by: [1954-dvz9]
+  title: "CorridorKey 2.0 as a studio tool: wrap infer.py (video or frames in; alpha, fg and cutout out, with provenance); user-fetched only, behind the licence acknowledgement flow"
+  context: |
+    The operator names it the current reference ML green- and blue-screen keyer: github.com/nikopueringer/CorridorKey2.0.
+    How it runs:
+      - CLI: infer.py --input <video|frame dir> --outputs alpha,fg,checker,cutout [--output_format exr] [--low_vram]
+      - NVIDIA CUDA only: RTX 30 series or newer, 4-6 GB VRAM, torch 2.9.1 cu128.
+      - About 5 GB of weights from huggingface.co/nikopueringer/CorridorKey2.0, plus three foundation models: C-RADIOv4 (NVIDIA Open Model License), MoGe (MIT), RVM (CC-BY-4.0).
+    Licence: "CORRIDOR KEY LICENCE v2.0", a CC BY-NC-SA 4.0 variant.
+      - Allowed: commercial PROJECT use; the outputs belong to the user.
+      - Forbidden: redistribution or repackaging as a product; a paid inference API.
+      - Integration into commercial software needs Corridor's written agreement.
+      - Conditions: share-alike on modifications; the attribution "CorridorKey"; organisations with over $20M revenue need seats.
+    There is no upstream ComfyUI node.
+  exit_criteria:
+  - a studio job wraps infer.py and records provenance (input hashes, weight hashes, licence ids, CLI arguments)
+  - the weights and the three foundation models are fetched on the user's machine only after the 1954-dvz9 acknowledgement, and are never bundled
+  - OPERATOR RULING recorded on whether Tillandsias wrapping it counts as "integration into commercial software" (clause 2d), and if so, Corridor's written agreement is on file before any automatic wiring ships
+  unscoreable: design-packet — blocked on 1954-dvz9 and on an operator ruling about clause 2d; the implementation row it files carries its own closure.
+  next_action: OPERATOR rules on clause 2d (likely to need Corridor's written OK). After that and 1954-dvz9, design the studio job.
+  provenance: operator direction relayed by the coordinator, 2026-11-01.
+  events:
+  - type: filed
+    ts: '2026-11-01T23:45:24Z'
+    host: calmecacpilli
+    summary: filed p3 design packet, blocked on 1954-dvz9 and the operator's clause 2d ruling

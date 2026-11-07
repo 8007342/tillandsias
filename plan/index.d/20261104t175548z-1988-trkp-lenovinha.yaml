@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-04. Operator approval first-hand in the lenovinha session (answers below).
+packets:
+- packet_id: a-tray-quit-or-restart-keeps-forges-running-and-the-next-tray-adopts-their-lanes-and-stop-all-is-the-explicit-full-stop
+  order: 1988-trkp
+  status: in_progress
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, lifecycle, lanes, dev-turnaround]
+  estimated_hours: 4
+  title: A tray quit or restart keeps forges running, the next tray adopts their lanes, and --stop-all is the explicit full stop
+  context: 'OPERATOR (first-hand, lenovinha session 2026-11-04): asked whether a tray restart should leave forges up with the new tray taking their tools over, answered "Yes, keep forges (Recommended)"; asked where the explicit stop-everything lives, answered "CLI verb only (Recommended)" (the shared menu stays as it is). Before: every tray exit ran graceful_shutdown_async (all managed containers stopped) and revoked the forges vault tokens. Now a plain Quit, SIGTERM or upgrade restart marks every served lane (mark_lane_tray_owned) and exits; the next tray adoption tick binds them. tillandsias --stop-all leaves a marker and SIGTERMs the tray, or tears down itself when no tray runs.'
+  exit_criteria:
+  - 'A plain tray exit stops no container and revokes no forge token, and marks every served lane for adoption. Pre-fix result: FAILS, every exit stopped all containers.'
+  - 'tillandsias --stop-all stops every forge and service.'
+  - 'LIVE: tray quit and relaunch; the forge container start time is unchanged and its next tool call works.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- tray_keeps_forges; the live quit-relaunch on one host.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the end-to-end is a live tray run (1136-n8sh).'
+  next_action: 'Land; then the live quit-relaunch proof (a live tray run on lenovinha needs the operator consent per run).'
+  provenance: coordinator macuahuitl-fedora 2026-11-03, confirmed first-hand by the operator 2026-11-04.
+  events:
+  - type: filed
+    ts: '2026-11-04T17:55:48Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5, operator-approved first-hand

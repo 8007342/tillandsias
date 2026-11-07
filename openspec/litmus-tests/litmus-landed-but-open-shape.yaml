@@ -3,7 +3,7 @@ name: litmus:landed-but-open-shape
 spec: meta-orchestration
 phase: pre-build
 description: >
-  Order 1367-emjg. scripts/check-landed-but-open.sh lists every order a CODE
+  Order 1367-emjg. scripts/lua/check-landed-but-open.lua (a Lua port of the .sh, 1270-5mz8) lists every order a CODE
   landing on trunk cites in its subject whose ledger row is still ready,
   pending, in_progress or implemented, so "implemented but never closed" is a
   count. Plan-only commits are not landings; a body-only mention is not a
@@ -33,7 +33,7 @@ observability:
   log_fields:
     spec: "meta-orchestration"
     test: "landed-but-open-shape"
-    artifact: "scripts/check-landed-but-open.sh"
+    artifact: "scripts/lua/check-landed-but-open.lua"
 
 rollback:
   on_failure: >

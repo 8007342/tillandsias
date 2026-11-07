@@ -1,0 +1,103 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-05, from kumbia-forge's request; written for any game or media project.
+packets:
+- packet_id: the-studio-offers-a-pinned-audio-generation-model
+  order: 2007-acst
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio]
+  estimated_hours: 3
+  title: ACE-Step 1.5 XL is a pinned studio model and an audio workflow runs through the studio lane
+  context: 'Projects need local music generation. ACE-Step 1.5 XL (MIT) is approved by the operator. ComfyUI 0.40.0 is reported to carry native nodes. Pin the DiT, text encoder and VAE with revision, sha256 and licence rows; the size is an estimate of 25 GB. Generic forge capability.'
+  exit_criteria:
+  - 'run_workflow accepts an audio workflow and returns SaveAudio output paths with provenance, and outputs can reach the project cache as image outputs can.'
+  - 'Tags, seed, bpm and keyscale can be overridden per run without baking a workflow per take, and an override that reaches no node is refused by name rather than ignored.'
+  verifiable_closure: 'A real studio run on a GPU host producing audio with a provenance record.'
+  unscoreable: 'none.'
+  next_action: 'Confirm the upstream files and licence, add pins, then extend the override binding test to the audio encoder node.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T05:30:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: a-forge-python-environment-installs-through-the-proxy
+  order: 2007-uvtl
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge]
+  estimated_hours: 3
+  title: uv can create a Python environment in a forge without a certificate failure
+  context: 'A forge reported uv failing with invalid peer certificate BadSignature, which blocked Python tool installs. The cause is unknown; a CA replaced under a running proxy is one candidate to test and not yet evidence. Audio tooling also wants a time-stretch CLI, but rubberband is GPL and any bundling needs an operator licence decision, so this row does not bundle it.'
+  exit_criteria:
+  - 'In a fresh forge, uv creates a venv, downloads a managed Python and installs a package with native wheels, through the enclave proxy.'
+  - 'After a proxy CA change, the failure either does not occur or names the stale CA and the remedy.'
+  verifiable_closure: 'A litmus in a real forge running the uv install.'
+  unscoreable: 'none.'
+  next_action: 'Reproduce in a forge on a current build first, and record which CA bundle uv read.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T05:30:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: a-forge-can-play-audio-candidates-for-the-operator
+  order: 2007-hear
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge, browser]
+  estimated_hours: 4
+  title: A person can listen to audio candidates from a forge in a visible host browser without committing them
+  context: 'Forge windows report no audio, and a person has to judge generated audio. Candidates can be large and must stay out of git. Generic forge capability.'
+  exit_criteria:
+  - 'From a forge, an untracked folder of audio files is served to a visible host window where a person hears them play.'
+  - 'Nothing is added to git, and the page is reachable only as other forge previews are.'
+  verifiable_closure: 'A person confirms hearing playback; a litmus checks the page serves untracked files with the right media types.'
+  unscoreable: 'Whether audio is audible needs a person.'
+  next_action: 'Check whether the review sheet row 2002-strv can carry audio before adding a new surface.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T05:30:00Z', host: macuahuitl, summary: filed p2 ready}
+- packet_id: a-forge-preview-opens-on-a-real-phone
+  order: 2007-phon
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [forge, browser]
+  estimated_hours: 8
+  title: A forge preview opens on a real iPhone or Android phone over trusted TLS
+  context: 'Emulation cannot answer codec, seam and latency questions, and Web Audio on iOS is reported as the largest unknown for one project. Must extend the open-it device direction rather than start anew. Exposure beyond the host is an outward change and the design needs operator review before it ships.'
+  exit_criteria:
+  - 'A person opens a forge preview on a real iPhone and a real Android phone with no certificate warning.'
+  - 'Exposure is opt-in per preview, ends with the forge, and is off by default.'
+  verifiable_closure: 'A real-device run on both platforms.'
+  unscoreable: 'none.'
+  next_action: 'Write a short design comparing LAN with a local CA and a Cloudflare tunnel, and send it to the operator.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T05:30:00Z', host: macuahuitl, summary: filed p2 ready}
+- packet_id: a-forge-can-keep-large-private-masters-in-object-storage
+  order: 2007-objs
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge, credentials]
+  estimated_hours: 6
+  title: A project can keep large private files in object storage through a scoped credential route
+  context: 'Large media masters must stay out of git and outlive a forge. R2 is the suggested store. This carries cost and a new credential scope, so it needs the operator approval flow before any bucket exists. No plaintext credentials at rest.'
+  exit_criteria:
+  - 'A forge stores and fetches a private object through the proxy with no credential visible to the forge.'
+  - 'A request outside the project scope is refused.'
+  verifiable_closure: 'A real round trip after operator approval.'
+  unscoreable: 'none.'
+  next_action: 'Ask the operator whether to approve the store and its cost; build nothing before that.'
+  provenance: coordinator macuahuitl-fedora 2026-11-05 from kumbia-forge.
+  events:
+  - {type: filed, ts: '2026-11-06T05:30:00Z', host: macuahuitl, summary: filed p3 ready}

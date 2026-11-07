@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: studio-run-workflow-wall-time-outside-elapsed-s-is-measured-and-explained
+    field: status
+    value: completed
+    ts: "2026-11-05T05:39:25Z"
+    host: lenovinha
+
+events:
+  - packet_id: studio-run-workflow-wall-time-outside-elapsed-s-is-measured-and-explained
+    event:
+      type: completed
+      ts: "2026-11-05T05:39:25Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 86f53eaae: macuahuitl QwenImage run, stages_ms run_0 342865 of total 344712; wall minus elapsed_s about 4 s
+  - packet_id: studio-run-workflow-wall-time-outside-elapsed-s-is-measured-and-explained
+    event:
+      type: note
+      ts: "2026-11-05T05:39:25Z"
+      host: lenovinha
+      summary: |-
+        exit criteria met by the macuahuitl measurement

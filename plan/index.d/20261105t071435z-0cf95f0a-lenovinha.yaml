@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-web-launch-waits-for-the-forges-real-readiness-instead-of-failing-after-a-fixed-30-s-while-the-forge-is-still-starting
+    field: status
+    value: completed
+    ts: "2026-11-05T07:14:35Z"
+    host: lenovinha
+
+events:
+  - packet_id: opencode-web-launch-waits-for-the-forges-real-readiness-instead-of-failing-after-a-fixed-30-s-while-the-forge-is-still-starting
+    event:
+      type: completed
+      ts: "2026-11-05T07:14:35Z"
+      host: lenovinha
+      summary: |-
+        status 'completed' with evidence_refs: 2ddd9bcc7: land(926), full gate rc=0 on the PR head
+  - packet_id: opencode-web-launch-waits-for-the-forges-real-readiness-instead-of-failing-after-a-fixed-30-s-while-the-forge-is-still-starting
+    event:
+      type: note
+      ts: "2026-11-05T07:14:35Z"
+      host: lenovinha
+      summary: |-
+        landed in #926

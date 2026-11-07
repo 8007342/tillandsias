@@ -1,0 +1,14 @@
+# Gate step 1971-rikj — a harness-refresh lock left on the persistent tool
+# cache by a stopped forge (another container, or a dead pid) is reclaimed at
+# once, a live holder is respected with one "skipped" line, and the refresh is
+# never skipped silently. Measured on yoga 2026-11-02: a leaked lock disabled
+# the refresh for an hour with no lifecycle line. The arms execute the real
+# ensure_forge_harnesses cut out of images/default/lib-common.sh; no npm, no
+# podman, no network.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a leaked harness-refresh lock is reclaimed at once (1971-rikj)"
+STEP_LUA="scripts/lua/test-harness-refresh-lock-owner.lua"
+STEP_ERROR="a harness-refresh lock from a stopped forge again disables the refresh, or a skip is silent (1971-rikj) — see the FAIL lines above"
+STEP_OK="harness refresh lock-owner fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin macOS 27.0.1 ok:harness-refresh-lock-owner:5 arms (work/1971-rikj @ b98993eeb)"

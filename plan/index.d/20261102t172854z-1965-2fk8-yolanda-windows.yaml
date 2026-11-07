@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows from the v56.11.1.1 cold Windows smoke (plan/issues/smoke-e2e-findings-v56.11.1.1-windows-cold-2026-11-02-yolanda.md).
+packets:
+- packet_id: the-windows-tray-collects-a-fresh-vault-handover-under-a-healthy-push-subscription
+  order: 1965-2fk8
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags: [vault, windows-tray, control-wire]
+  estimated_hours: 3
+  title: The Windows tray collects a fresh Vault handover under a healthy push subscription, without a poll
+  context: 'Cold smoke v56.11.1.1 on yolanda 2026-11-02: the guest wiped a share-less store and initialised Vault at 17:14:37Z; the running tray (push subscription up at 17:13:13Z, polls suppressed SC-07) never stored the new share or root token, Credential Manager read NONE until 17:20:45Z, and one --status-once stored both. deliver_credentials_and_check_handover runs only when a request connection opens. Same shape as macOS 1925-tdlv (#797).'
+  exit_criteria:
+  - 'run_vm_status_push_listener delivers credentials on every (re)connect before Subscribe and collects the handover over its own short connection on the transition to Ready. A test pins both, and a fake-guest test shows the handover-only collect writes the share and token. Pre-fix result: FAILS.'
+  - 'A cold Windows smoke stores both credentials with no poll or manual status call.'
+  verifiable_closure: 'cargo test -p tillandsias-windows-tray push_subscription_delivers_and_collects; cold smoke cmdkey transcript.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the cargo test push_subscription_delivers_and_collects lands with the fix (1136-n8sh).'
+  next_action: 'Mirror 1925-tdlv in notify_icon.rs run_vm_status_push_listener.'
+  provenance: cold smoke 2026-11-02 on yolanda; coordinator routed it as top item.
+  events:
+  - type: filed
+    ts: '2026-11-02T17:28:54Z'
+    host: yolanda-windows
+    summary: filed p1 and claimed in_progress
+- packet_id: a-cold-windows-provision-once-keeps-its-first-vault-handover
+  order: 1965-zrjq
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: windows
+  capability_tags: [vault, windows-tray, provisioning]
+  estimated_hours: 3
+  title: A cold Windows --provision-once keeps its first Vault handover instead of losing it when the guest stops
+  context: 'Cold smoke v56.11.1.1: --provision-once exited at phase=Starting; the first boot initialised Vault at 17:11:11Z; the wire closed during GetVaultHandover ("VM is draining/stopping (order 234 phase gate)") and the guest stopped. The next boot wiped that store after the 1658-6ca6 90 s wait. Every cold provision pays an extra init and 90 s, and the SKILL 3 Windows 60 s status poll cannot reach Ready.'
+  exit_criteria:
+  - 'On a cold host --provision-once collects the first handover before it exits (or holds the guest until it does); the SKILL 3 Windows status poll reaches Ready. Pre-fix result: FAILS (cold smoke 2026-11-02).'
+  verifiable_closure: 'Cold Windows smoke transcript: no WIPING line, credentials stored at provision exit.'
+  unscoreable: 'live-only: needs a cold Windows guest; closure is a cold smoke transcript.'
+  next_action: 'Hold the guest in --provision-once until the handover is collected after Ready.'
+  provenance: cold smoke 2026-11-02 on yolanda.
+  events:
+  - type: filed
+    ts: '2026-11-02T17:28:54Z'
+    host: yolanda-windows
+    summary: filed p2 ready

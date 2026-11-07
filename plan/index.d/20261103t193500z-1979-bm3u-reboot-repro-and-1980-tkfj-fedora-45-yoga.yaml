@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: a-ca-key-that-no-longer-matches-its-certificate-is-reissued-not-served-to-the-proxy
+    event:
+      type: measurement
+      ts: '2026-11-03T19:35:00Z'
+      host: yoga
+      summary: |-
+        CRITERION 2 CAUSE, REPRODUCED by a reboot on yoga (operator system upgrade to Fedora 45, kernel 7.2.15-300.fc45). Before the reboot, #894's build had recreated the CA at 09:01 -0800, a matched pair (public keys equal). After the reboot the tmpfs /run/user/1000/tillandsias/keys was empty, and the installed v56.11.3.1 tray refilled intermediate.key from the keyring at 11:27 under that 09:01 certificate. squid then logged "FATAL: No valid signing certificate configured" again. So the keyring refill (ca_key_store::materialize, keyring=true) returns a key that is not the published certificate's, even after a mint whose seal() wrote the keyring copy. The refill path, or what seal writes, is the defect; #894 only recovers from it.
+        RECOVERY on the same state: trunk 7993f2e62 (with #894) as the tray printed "[tillandsias] CA key and certificate were not a pair; wiped the CA state and recreating it from scratch", and tillandsias-proxy came up healthy with no manual step.
+        LEFT for criterion 2: read Store::materialize and Store::seal for why a refill does not return the key sealed with the current certificate (the 08:37 rewrite this morning is the same path).
+packets:
+  - packet_id: images-the-vm-cloud-image-and-toolboxes-move-from-fedora-44-to-fedora-45
+    order: 1980-tkfj
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [images, vm, windows, toolbox, cross-platform]
+    estimated_hours: 8
+    title: Forge, service and builder images, the macOS VM cloud image and the WSL distro move from Fedora 44 to Fedora 45
+    context: |-
+      Operator, 2026-11-03, after upgrading yoga to Fedora 45 Silverblue: "our cloud image for the vms and the forges might now benefit from being migrated to fedora 45".
+      MEASURED on yoga: kernel 7.2.15-300.fc45.x86_64 ships the in-tree amdxdna driver (/lib/modules/7.2.15-300.fc45.x86_64/kernel/drivers/accel/amdxdna/amdxdna.ko.xz), and /dev/accel/accel0 exists. The operator's ~/agy/configure-silverblue.sh also installed CDI specs amd.com/gpu, amd.com/npu and amd.com/ai (/etc/cdi/amdxdna.json maps /dev/accel/accel0).
+      SCOPE (grep of fedora:44, fedora-minimal:44, fedora-toolbox:44, fc44 and the Fedora 44 cloud image, 2026-11-03): 53 sites in 31 files, among them images/default/Containerfile.base, images/inference/Containerfile, images/imagegen/Containerfile (2), images/chromium/Containerfile.core, images/builder/Containerfile, crates/tillandsias-vm-layer/src/recipe/mod.rs (8), materialize/ (5) and vz.rs (2), crates/tillandsias-windows-tray (wsl_lifecycle.rs 2, provisioning-manifest.json 1), crates/tillandsias-headless (main.rs 4, image_build_progress.rs 2, accel_probe.rs 1), scripts/check-container-bases.sh (4), check-credential-channel.sh (3), and the nix toolbox scripts. Re-run the grep before editing; this list is from one pass.
+      Hosts that are not Fedora 45 (macOS VM, Windows WSL) need their own runs, so this is not a yoga-only change.
+    exit_criteria:
+      - 'Every Fedora 44 pin found by the grep above names 45, or is listed on this row with the reason it stays; check-container-bases.sh agrees.'
+      - 'The forge, inference, imagegen and builder images build and their litmus pass on a Fedora 45 Linux host; the macOS VM cloud image provisions on darwin; the WSL distro provisions on Windows. Each is recorded as an event with its regime.'
+      - 'Whether accel_probe and the NPU lane should consume the CDI device (amd.com/npu=all) instead of a raw /dev/accel bind is answered on this row.'
+    verifiable_closure: 'The grep empty or justified, plus one recorded build or provision per platform.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer names the litmus that pins the base release in the same commit (1136-n8sh).'
+    next_action: 'Coordinator to schedule: needs a darwin and a Windows regime as well as Linux. Start by re-running the grep and reading check-container-bases.sh, which encodes the base policy.'
+    provenance: operator 2026-11-03 to yoga's session, after the Fedora 45 upgrade of yoga; filed by yoga.
+    events:
+      - type: filed
+        ts: '2026-11-03T19:35:00Z'
+        host: yoga
+        summary: filed from the operator's upgrade note; 53 Fedora 44 pins in 31 files

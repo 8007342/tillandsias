@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: a-warm-launch-does-not-reseed-a-current-mirror
+    field: next_action
+    value: |-
+      Replace remove+add with set-url (add only when absent); then measure whether gate_forge_launch still waits on the startup fetch for a mirror whose exported heads are already served, and if so, gate on the served HEAD instead.
+      CRITERION 1 RE-SCOPED (coordinator macuahuitl-fedora, 2026-11-03; see the 17:30Z note): closes at the measured warm mirror-seed of at most 2100 ms (1685-2091 ms in #892), not 1000 ms. The startup fetch stays before READY. The Vault Agent wait and the discipline publish moved to 1978-n8c6.
+    ts: '2026-11-03T17:30:00Z'
+    host: yoga
+packets:
+  - packet_id: the-git-mirror-waits-for-the-vault-agent-sink-without-a-one-second-poll
+    order: 1978-n8c6
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [git-mirror, launch, performance, vault]
+    estimated_hours: 2
+    title: The git mirror waits for the Vault Agent token sink without a one-second poll, and publishes its discipline ref after READY
+    context: |-
+      Follow-up to 1977-xpus (coordinator macuahuitl-fedora, 2026-11-03). After #892, a warm mirror-seed is 1685-2091 ms on yoga, and about 1 s of it is the Vault Agent readiness wait.
+      SOURCE: start_vault_agent in images/git/entrypoint.sh loops `while [ "$waited" -lt "$VAULT_AGENT_START_TIMEOUT" ]`, testing `[ -s "$VAULT_TOKEN_FILE" ]` and then `sleep 1`.
+      MEASURED (mirror log, a warm start on yoga): "agent.sink.file: token written" at 15:11:54.391; "[git-service] Vault Agent auto-auth ready" at 15:11:55.273. So ~0.9 s of every start is the sleep, not the agent.
+      The git image's busybox has `inotifyd`, checked by `podman run --rm --entrypoint sh localhost/tillandsias-git:latest -c 'busybox --list'`. So the wait can be an event on the sink file appearing, not a poll; no new poll cadence (operator ruling polling-cadence-needs-operator-approval).
+      DISCIPLINE PUBLISH (0.3 s ahead of READY), read in source on 2026-11-03: nothing a forge does at start reads the MIRROR's refs/tillandsias/discipline/*. At start the forge runs `tillandsias-plan discipline install-hooks` (images/default/lib-common.sh:485, install_project_discipline_hooks); its published_level (crates/tillandsias-plan/src/branch_discipline.rs:395) reads the LOCAL clone's git dir, and a clone does not fetch refs/tillandsias/*. The forge's startup reads of mirror state refs are upstream-auth (images/default/lib-push-capability.sh:44; lib-common.sh:1185, the empty-project check) and relay-state (lib-common.sh:743), both by ls-remote. No forge-start ls-remote or fetch of refs/tillandsias/discipline/* was found. So the discipline publish may move after READY; upstream-auth must stay before it (49 ms).
+    exit_criteria:
+      - 'The Vault Agent wait returns when the sink file appears, with no sleep-and-poll: a fixture with a stub agent that writes its sink after 100 ms sees the wait end within 300 ms of that write. Red today: the 1 s sleep makes it at least ~900 ms.'
+      - 'The discipline publish runs after READY, and upstream-auth stays before it. MEASURED on a host: warm mirror-seed before and after, 3 runs each.'
+    verifiable_closure: 'The fixture red before and green after, plus three warm mirror-seed times on one host.'
+    unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+    next_action: 'Replace the sleep loop in start_vault_agent with a wait on the sink file appearing (busybox inotifyd on its dir, bounded by VAULT_AGENT_START_TIMEOUT), keeping the timeout message; then move run_publish_discipline after notify_ready; measure.'
+    provenance: macuahuitl-fedora 2026-11-03 (coordinator) asked yoga to file it after #892; filed by yoga.
+    related: [1977-xpus]
+    events:
+      - type: filed
+        ts: '2026-11-03T17:30:00Z'
+        host: yoga
+        summary: filed after #892 at the coordinator's request; the sleep is ~0.9 s per start, and the discipline publish has no forge-start reader by source reading
+events:
+  - packet_id: a-warm-launch-does-not-reseed-a-current-mirror
+    event:
+      type: note
+      ts: '2026-11-03T17:30:00Z'
+      host: yoga
+      summary: |-
+        CRITERION 1 RE-SCOPED (coordinator macuahuitl-fedora, 2026-11-03). As filed: warm mirror-seed at most 1000 ms. Now: at most 2100 ms, the measured 1685-2091 ms in #892. Why: what is left ahead of READY is the one upstream fetch (~0.7 s), which stays there because a forge must start on current refs, and correctness beats 0.7 s; plus the ~1 s Vault Agent sleep and the 0.3 s discipline publish, which are 1978-n8c6.

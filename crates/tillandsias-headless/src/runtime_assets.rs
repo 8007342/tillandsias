@@ -229,12 +229,7 @@ pub(crate) fn image_identity(
         ));
     }
 
-    let containerfile = match image_name {
-        "forge-base" => context.join("Containerfile.base"),
-        "chromium-core" => context.join("Containerfile.core"),
-        "chromium-framework" => context.join("Containerfile.framework"),
-        _ => context.join("Containerfile"),
-    };
+    let containerfile = context.join(containerfile_name(image_name));
     let spec = ImageBuildSpec {
         image_name: image_name.to_string(),
         context_root: context,
@@ -244,6 +239,27 @@ pub(crate) fn image_identity(
         version: version.to_string(),
     };
     compute_image_build_identity(&spec).map_err(|e| e.to_string())
+}
+
+/// The Containerfile of `image_name`, inside its context dir.
+pub(crate) fn containerfile_name(image_name: &str) -> String {
+    match image_name {
+        "forge-base" => "Containerfile.base".to_string(),
+        "chromium-core" => "Containerfile.core".to_string(),
+        "chromium-framework" => "Containerfile.framework".to_string(),
+        // 1861-nmpp: every studio lane image shares images/studio (the front
+        // and the registry copy), one Containerfile per studio.
+        name => match studio_image_id(name) {
+            Some(id) => format!("Containerfile.{id}"),
+            None => "Containerfile".to_string(),
+        },
+    }
+}
+
+/// 1861-nmpp: the registry id of a studio lane image `studio-<id>`.
+pub(crate) fn studio_image_id(image_name: &str) -> Option<&str> {
+    let id = image_name.strip_prefix("studio-")?;
+    crate::studio::find(id).map(|_| id)
 }
 
 pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
@@ -264,12 +280,35 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
         "imagegen" => Ok("images/imagegen"),
         // 1874-zry8: the opt-in ComfyUI studio, built only when a project enables it.
         "imagegen-studio" => Ok("images/imagegen-studio"),
+        // 1956-ucix: the CorridorKey 2.0 proof of concept, built on first use.
+        "imagegen-corridorkey" => Ok("images/imagegen-corridorkey"),
         "vault" => Ok("images/vault"),
+        name if studio_image_id(name).is_some() => Ok("images/studio"),
         other => Err(format!("Unknown image type: {other}")),
     }
 }
 
+/// The embedded assets are compiled in, so their digest is a constant of the
+/// process: 1920-lnch computes it once (it was 3 hashes of ~20 MB per
+/// `--init`, ~10 ms each, measured on yoga 2026-11-03).
 pub(crate) fn embedded_manifest_digest() -> String {
+    static DIGEST: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    DIGEST
+        .get_or_init(|| {
+            let t = std::time::Instant::now();
+            let d = compute_embedded_manifest_digest();
+            if std::env::var_os("TILLANDSIAS_DEBUG").is_some() {
+                eprintln!(
+                    "[tillandsias] embedded manifest digest computed ({} ms)",
+                    t.elapsed().as_millis()
+                );
+            }
+            d
+        })
+        .clone()
+}
+
+fn compute_embedded_manifest_digest() -> String {
     let mut hasher = Sha256::new();
     for asset in embedded_assets() {
         hasher.update(asset.path.as_bytes());
@@ -441,6 +480,10 @@ mod tests {
                 "images/imagegen-studio/Containerfile",
                 "images/imagegen-studio",
             ),
+            (
+                "images/imagegen-corridorkey/Containerfile",
+                "images/imagegen-corridorkey",
+            ),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {
@@ -504,6 +547,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// 1920-lnch: the cached digest is the computed one, and stays put.
+    #[test]
+    fn the_embedded_digest_is_computed_once_and_matches_a_fresh_hash() {
+        let first = embedded_manifest_digest();
+        assert_eq!(first, compute_embedded_manifest_digest());
+        assert_eq!(embedded_manifest_digest(), first);
+        assert_eq!(first.len(), 64);
     }
 
     #[test]

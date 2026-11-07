@@ -1,0 +1,61 @@
+# @trace spec:local-web-preview
+# @trace order:1863-dmke (spec: openspec/changes/web-studio-lanes, not yet archived)
+#
+# Order 1863-dmke: the TinaCMS studio LANE (studio-tina on the forge image,
+# behind the studio front) in LOCAL mode (tinacms dev, no Tina
+# Cloud account, --noTelemetry). Every package pinned by package-lock.json
+# integrity; licences approved by the operator 2026-11-01 (NOTICE in the image,
+# with the CC-BY-4.0 credit for caniuse-lite). Bound under local-web-preview
+# beside the GrapesJS and Decap studio litmus tests.
+#
+# The fixture builds images/studio/Containerfile.tina on the local forge image
+# and runs it with its registry entry and --network none on
+# a throwaway Next.js markdown checkout. It asserts:
+#   - the studio becomes healthy and Tina lists the post;
+#   - updateDocument through the front rewrites
+#     content/posts/hello.md as a `studio(tina): save` commit touching nothing
+#     else, and the files tinacms dev writes at startup are left alone;
+#   - Tina's GraphQL and data-layer servers listen on loopback only (read
+#     from /proc/net), so the studio front is the one way in;
+#   - egress (content.tinajs.io, or anywhere) is blocked.
+#
+# REGIME: post-build. A build that cannot reach the npm registry exits 3.
+name: litmus:studio-tina-commits-a-document-through-the-front
+spec: local-web-preview
+phase: post-build
+description: >
+  Pin 1863-dmke: the TinaCMS studio lane in local mode commits a document saved
+  through its local GraphQL via the shared studio front, loopback only, with
+  zero egress to tina.io.
+severity: high
+size: long
+
+preconditions:
+  - workspace contains images/studio/Containerfile.tina and scripts/test-studio-tina.sh
+  - a local localhost/tillandsias-forge image
+
+critical_path:
+  - step: "the suite parses and carries its exec bit"
+    command: "bash -n scripts/test-studio-tina.sh && test -x scripts/test-studio-tina.sh && echo 'ok: studio-tina-suite-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: studio-tina-suite-parses"
+
+  - step: "a document saved through local GraphQL is committed by the front, loopback only, no egress"
+    command: "bash scripts/test-studio-tina.sh"
+    timeout_ms: 900000
+    expected_behavior: "PASS: the Tina lane commits a document saved through local GraphQL via the front, loopback only, no egress"
+
+observability:
+  traces:
+    - "@trace spec:local-web-preview"
+  expected_log: "PASS: the Tina lane commits a document saved through local GraphQL via the front, loopback only, no egress"
+  log_fields:
+    spec: local-web-preview
+    test: studio-tina-commits-a-document-through-the-front
+    artifact: images/studio/tina/server.mjs
+
+rollback:
+  on_failure: >
+    The image no longer runs tinacms dev in local mode with telemetry off, the
+    front stopped forwarding to it, or a Tina server listens beyond loopback.
+  command: "grep -n 'noTelemetry' images/studio/tina/server.mjs"

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: studio-run-workflow-mcp-tool-headless-comfyui-with-provenance-shared-gpu-queue
+    field: status
+    value: completed
+    ts: "2026-11-07T10:30:00Z"
+    host: linux
+
+events:
+  - packet_id: studio-run-workflow-mcp-tool-headless-comfyui-with-provenance-shared-gpu-queue
+    event:
+      type: completed
+      ts: "2026-11-07T10:30:00Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: 1b0350944 test:studio_tool::tests::studio_run_workflow_refuses_unpinned_node_and_returns_provenance passed

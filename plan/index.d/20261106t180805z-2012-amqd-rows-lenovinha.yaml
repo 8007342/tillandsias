@@ -1,0 +1,271 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (opus5), 2026-11-06: the implementation rows of 2011-amqd (design: openspec/changes/fleet-durable-instructions/free-tier-queue.md section 10).
+packets:
+- packet_id: the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime
+  order: 2012-qzeq
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: []
+  title: 'The coordinator budget fixture measures Worker requests, DO requests, alarms and rows from the runtime'
+  context: 'First of the 2011-amqd rows: every later row is measured by it. Run the coordinator Worker and client under wrangler dev with a fake clock, and count Worker requests, DO requests, alarm invocations and cursor.rowsWritten/rowsRead per statement from the runtime, never by hand. Row a of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'An idle hour for 15 clients and a busy hour are run, and the counted numbers are printed per kind.'
+  - 'It fails naming the kind exceeded when a run exceeds the stated budget (an idle hour over 200 Worker requests; a busy hour over 900 Worker requests or 1 200 rows written).'
+  - 'A crash-loop client (coord started 1 000 times) is run, and its counted requests are reported.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-coordinator-store-drops-autoincrement-trims-by-indexed-range-and-coalesces-sweeps
+  order: 2012-hmdf
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'The coordinator store drops AUTOINCREMENT, trims by indexed range and coalesces sweeps'
+  context: 'Rows written per send are 3 to 6 today (table, messages_exp index, sqlite_sequence, trim deletes, setAlarm), and the trim reads about 1 000 rows per send. See the design, section 2. Row b of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'The fixture shows a send writes at most 2 rows and the trim reads no more rows than it deletes.'
+  - 'At most one TTL sweep runs per namespace per 15 minutes, and a renewed claim does not fire a useless alarm.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p2 ready
+- packet_id: the-coordinator-enforces-a-per-identity-daily-cap-and-an-account-guard-on-the-server
+  order: 2012-ukic
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'The coordinator enforces a per-identity daily cap and an account guard on the server'
+  context: 'Today the only server limit is 120/min per identity (172 800/day, 1.7x the account), and the client limiter is per process. Move the bucket into the namespace object in memory, add a per-identity daily cap persisted every 100 requests and a per-account guard. See the design, section 3c. Row c of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'A read writes 0 rows for rate limiting.'
+  - 'The crash-loop client is held at its daily cap with 429 and Retry-After at the next 00:00 UTC.'
+  - 'Past the account guard, only the operator identity is served.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: a-coordinator-at-a-durable-object-limit-answers-json-503-with-retry-after
+  order: 2012-u3ln
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 1.5
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'A coordinator at a Durable Object limit answers JSON 503 with Retry-After, and its CPU fits the Free plan'
+  context: 'run() has no try/catch around DO calls, so a DO limit surfaces as an HTML 5xx. Free Worker CPU is 10 ms per request. See the design, section 4. Row d of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'A stubbed DO limit error answers JSON 503 with Retry-After at 00:00 UTC.'
+  - 'The body cap is 64 KiB, and the fixture reports CPU per request on a cold isolate.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p2 ready
+- packet_id: the-coordinator-refuses-identities-outside-the-fleet-and-pins-its-urls-off
+  order: 2012-q4j0
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'The coordinator refuses identities outside the fleet and pins its preview URLs off'
+  context: 'A valid JWT from the right team but an unknown identity is accepted today. A failed certificate refetch keeps a stale set without limit. See the design, section 6. Row e of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'A valid JWT whose identity is not on the vars allowlist is refused with 403 before any DO call.'
+  - 'Stale certificates are used at most 24 h after a failed refetch.'
+  - 'wrangler.toml sets preview_urls = false.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: instructions-are-put-taken-with-a-lease-token-and-settled-only-by-the-holder
+  order: 2012-ogq4
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'Instructions are put, taken with a lease token and a deliveries count, and settled only by the holder'
+  context: 'The durable-instructions model does not exist in code yet. take is one synchronous UPDATE ... RETURNING; settle and release require the lease token, as release already does for claims. See the design, section 5. Row f of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'Tests cover duplicate delivery (same id, deliveries = 2), expiry at TTL, a lost settle taken again, a late settle by a former holder refused as not-holder, and a settle after TTL answered expired.'
+  - 'The fixture shows a take writes 1 row.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: the-coordinator-client-keeps-an-idle-floor-persisted-state-and-out-of-budget-handling
+  order: 2012-rng2
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 3
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'The coordinator client keeps a 300 s idle floor, persisted state and out-of-budget handling'
+  context: 'The idle heartbeat is 20 x RTT clamped to 15-120 s, so a fast link idles at 15 s. classify maps an HTML body to Refused, so Error 1027 looks like a 400. See the design, sections 3b and 4. Row g of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'Idle never polls faster than 300 s, whatever the RTT.'
+  - 'Cache, daily count and backoff persist per host across processes.'
+  - 'An HTML or 1027 body stops calls until the server Date passes 00:00 UTC plus a jitter; 429 honours Retry-After; 5xx backs off with full jitter (base 2 s, cap 300 s); reads are cached for 5 s.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: only-the-host-proxy-holds-the-coordinator-token-read-from-vault-per-call
+  order: 2012-2jrp
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2.5
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'Only the host proxy holds the coordinator token, read from Vault per call, and no forge carries it'
+  context: 'Config::from_env reads TILLANDSIAS_COORD_CLIENT_SECRET and TILLANDSIAS_COORD_JWT from the environment today, visible in /proc/<pid>/environ and inherited by children. See the design, section 6. Row h of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'The host proxy reads the token from Vault per call and keeps it in memory only.'
+  - 'A litmus test refuses those variables in any forge environment.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p1 ready
+- packet_id: a-read-your-queue-seed-prompt-lets-any-harness-resume-its-project-queue
+  order: 2012-qel7
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 1.5
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'A read-your-queue seed prompt lets any harness resume its project queue'
+  context: 'One harness-neutral prompt, delivered like the resume slot. It names the coord call, the rule that a body is input and not consent, and the ledger and git check when deliveries > 1. See the design, section 7. Row i of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'A static test shows both the Claude Code and OpenCode configs carry the same prompt.'
+  - 'A real two-harness run stays open until a deploy exists.'
+  verifiable_closure: 'Fixture against wrangler dev with a fake clock; no cloud resource.'
+  unscoreable: 'none.'
+  next_action: 'Write the failing test first, against openspec/changes/fleet-durable-instructions/free-tier-queue.md.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p2 ready
+- packet_id: cloud-usage-reads-durable-object-requests-and-rows-written
+  order: 2012-2c0a
+  status: blocked
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'cloud.usage reads Durable Object requests and rows written'
+  context: 'cloud.usage measures neither today, so a deploy cannot show its before and after usage. Reading them needs an analytics scope the Cloudflare login does not request. Blocked on the operator answers in the design, section 9. Row j of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'cloud.usage reports DO requests and rows written for the coordinator, read with the signed-in account.'
+  verifiable_closure: 'Operator-gated; recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Waits for the operator answers in openspec/changes/fleet-durable-instructions/free-tier-queue.md section 9; then extend the row with them.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p2 blocked
+- packet_id: the-coordinator-deploys-on-a-fail-closed-custom-domain-behind-access
+  order: 2012-kjp8
+  status: blocked
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, fleet, forge]
+  estimated_hours: 2
+  depends_on: [the-coordinator-budget-fixture-measures-worker-requests-do-requests-alarms-and-rows-from-the-runtime]
+  title: 'The coordinator deploys, operator-gated, on a fail-closed Custom Domain behind Access'
+  context: 'Extends 1830-hzsc. A fail-open route bypasses the Worker and its JWT check once the quota runs out. Blocked on the operator answers in the design, section 9 (the domain, the caps, the Zero Trust payment-details step). Row k of 2011-amqd; build only, no deploy and no cloud resource.'
+  exit_criteria:
+  - 'The route is set to fail closed and the deploy refuses otherwise.'
+  - 'After deploy, workers.dev and preview URLs are asserted off.'
+  - 'Usage is read with cloud.usage before and after.'
+  verifiable_closure: 'Operator-gated; recorded in the row.'
+  unscoreable: 'none.'
+  next_action: 'Waits for the operator answers in openspec/changes/fleet-durable-instructions/free-tier-queue.md section 9; then extend the row with them.'
+  provenance: lenovinha opus5 2026-11-06 from the reviewed 2011-amqd design, on coordinator macuahuitl-fedora's request.
+  events:
+  - type: filed
+    ts: '2026-11-06T18:08:05Z'
+    host: lenovinha
+    summary: filed p1 blocked

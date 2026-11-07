@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda-windows from the v56.11.3.1 cold Windows smoke, step 4.
+packets:
+- packet_id: a-cloud-forge-without-a-github-token-fails-once-with-the-sign-in-remedy
+  order: 1978-zd9g
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge, vault, github-login, headless]
+  estimated_hours: 3
+  title: A cloud forge with no GitHub token fails once with a typed sign-in remedy instead of looping on the Vault 404
+  context: 'Cold smoke v56.11.3.1 on yolanda 2026-11-03, GitHub signed out by the reset: tray --forge smoke-e2e --opencode returned ok:forge-launch and logged spawning in-VM PTY, then guest tillandsias-headless --cloud smoke-e2e --opencode started tillandsias-git containers that each failed "vault-cli: HTTP error reading secret/data/github/token: curl: (22) ... 404". 13 such failures 08:02:35-08:05:40 guest time, after which the process stayed alive with no further output and no user-facing message.'
+  exit_criteria:
+  - 'With secret/data/github/token absent, a cloud forge launch exits non-zero within a bounded deadline and prints a typed remedy naming the tray GitHub sign-in; it starts at most one git container. A test pins the bound and the message. Pre-fix result: FAILS (loops, then hangs silently).'
+  verifiable_closure: 'cargo test for the token-absent cloud forge path; a signed-out Windows or Linux forge transcript showing the single remedy and the exit code.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the token-absent forge test lands with the fix (1136-n8sh).'
+  next_action: 'Find the headless --cloud clone retry around the tillandsias-git vault-cli token read; short-circuit on 404 into a typed SignInRequired error.'
+  provenance: cold smoke 2026-11-03 on yolanda; coordinator asked for the row.
+  events:
+  - type: filed
+    ts: '2026-11-03T16:15:00Z'
+    host: yolanda-windows
+    summary: filed p2 ready from the v56.11.3.1 cold smoke step 4

@@ -17,6 +17,9 @@
 
 set -uo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+# 1966-ubsw: the gate exports a PRIVATE fallback dir; this fixture pins the
+# DEFAULT (/tmp) fallback and the real /tmp split, so it runs without it.
+unset TILLANDSIAS_METRICS_FALLBACK_DIR
 
 # ORDER 1209-hkcq — THIS FIXTURE MUST NOT WRITE THE HOST'S OWN METRICS.
 #
@@ -411,6 +414,16 @@ else
 fi
 rm -rf "$MD"
 
+# 2006-wahn: between creating the real /tmp/tillandsias-timing.jsonl and
+# removing it, every reporter call runs as `( ... ) & wait`. Bash defers a
+# trap while a FOREGROUND child runs, so the preflight door's TERM waited
+# behind a multi-second reporter call and its KILL (1 s later) landed first,
+# stranding the file; every later report on the host then refused with
+# metrics-log-split. `wait` is interrupted by TERM, so the EXIT trap removes
+# the file at once. The reporter also skips the unrelated repository-wide
+# trace gate (1.75 s a call), which shortens the window.
+export TILLANDSIAS_CYCLE_METRICS_SKIP_TRACES=1
+
 # ── arm 9: ORDER 1096-p3tn — a SECOND live timing log must be REFUSED ────────
 # The reader half. On a host carrying both files, runs= and skippable: are
 # computed from one and published as totals, and the cross-host recurrence
@@ -440,8 +453,11 @@ else
     # REFUSAL on a split TIMING log, not where usage records land, and the split
     # it needs is still real.
     _u9="$SD/forge-expert-usage.jsonl"
-    split_out="$(cd "$ROOT" && TILLANDSIAS_EXPERT_USAGE_LOG="$_u9" bash scripts/cycle-metrics.sh 2>&1 >/dev/null | head -1)"
-    split_rc=0; (cd "$ROOT" && TILLANDSIAS_EXPERT_USAGE_LOG="$_u9" bash scripts/cycle-metrics.sh >/dev/null 2>&1) || split_rc=$?
+    (cd "$ROOT" && TILLANDSIAS_EXPERT_USAGE_LOG="$_u9" bash scripts/cycle-metrics.sh 2>&1 >/dev/null | head -1) > "$SD/split.out" &
+    wait "$!"
+    split_out="$(cat "$SD/split.out")"
+    split_rc=0; (cd "$ROOT" && TILLANDSIAS_EXPERT_USAGE_LOG="$_u9" bash scripts/cycle-metrics.sh >/dev/null 2>&1) &
+    wait "$!" || split_rc=$?
     case "$split_out" in
         violation:metrics-log-split:*)
             if [ "$split_rc" -ne 0 ]; then
@@ -455,7 +471,8 @@ else
     # ── arm 9b: CONTROL — naming the log explicitly stands the guard down ────
     named_rc=0
     (cd "$ROOT" && TILLANDSIAS_TIMING_LOG="$ROOT/.cache/metrics/tillandsias-timing.jsonl" \
-        bash scripts/cycle-metrics.sh >/dev/null 2>&1) || named_rc=$?
+        bash scripts/cycle-metrics.sh >/dev/null 2>&1) &
+    wait "$!" || named_rc=$?
     if [ "$named_rc" -eq 0 ]; then
         ok "CONTROL: an explicitly named timing log is read without complaint, split or no split"
     else
@@ -480,14 +497,16 @@ else
         > /tmp/tillandsias-timing.jsonl
     emit_rc=0
     (cd "$ROOT" && bash scripts/cycle-metrics.sh --emit-timing step=arm9c phase=f duration_ms=1 \
-        >/dev/null 2>&1) || emit_rc=$?
+        >/dev/null 2>&1) &
+    wait "$!" || emit_rc=$?
     if [ "$emit_rc" -eq 0 ]; then
         ok "CONTROL: --emit-* is unaffected by a split — an append never takes down the step it measures"
     else
         bad "--emit-timing refused (rc=$emit_rc) over a timing-log split — the guard is coupling an append to a reader's problem"
     fi
     rep_rc=0
-    (cd "$ROOT" && bash scripts/cycle-metrics.sh >/dev/null 2>&1) || rep_rc=$?
+    (cd "$ROOT" && bash scripts/cycle-metrics.sh >/dev/null 2>&1) &
+    wait "$!" || rep_rc=$?
     if [ "$rep_rc" -ne 0 ]; then
         ok "CONTROL: the REPORTING path still refuses the same split (rc=$rep_rc) — the scoping did not disarm the guard"
     else

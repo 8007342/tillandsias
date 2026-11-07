@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-warm-launch-skips-the-ensure-helper-for-an-image-its-success-stamp-says-is-current
+    field: next_action
+    value: 'Landed at 4fb0ec221. Left: the 3+3 warm-launch pre-launch measurement on yoga in the 1968-psy9 regime (coordinator ruling 2026-11-03); then complete.'
+    ts: "2026-11-03T19:39:03Z"
+    host: lenovinha
+    replaces_sha256: "7e6f239c0d3bef5f180bef36fa9105f480e8407fc4cc91a0e0885938ffe80dc7"
+
+events:
+  - packet_id: a-warm-launch-skips-the-ensure-helper-for-an-image-its-success-stamp-says-is-current
+    event:
+      type: note
+      ts: "2026-11-03T19:39:03Z"
+      host: lenovinha
+      summary: |-
+        stamp landed; measurement pending on yoga

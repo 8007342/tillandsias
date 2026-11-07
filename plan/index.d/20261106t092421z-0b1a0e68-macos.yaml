@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: macos-status-poll-stops-reading-the-keychain-twice-per-tick-and-root-token-memo-is-memory-only
+    event:
+      type: progress
+      ts: "2026-11-06T09:24:21Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        Correction to the in_progress claim filed at 09:23Z: the implementation already LANDED in #703 (024a7fff5, ce73ca259, 2026-10-28), and the row was never updated. ce73ca259 adds the per-VM-boot DeliveryMemo (status ticks after one accepted delivery send only GetVaultHandover, no security find-generic-password) and the headless OnceLock<Mutex<Option<Zeroizing<String>>>> root-token memo cleared on heal_stale_root_token / persist_healed_root_token, with status_ticks_deliver_once_per_vm_boot and root_token_memo_is_memory_only_and_zeroized_on_drop (exit criterion 3). LEFT for verified: the live counts (0 security spawns from the status poll after the first delivery over a 10-minute idle tray; at most one "recovered root token" line per process) from a published release. fs_usage/execsnoop need root, so the spawn count will be taken another way (the tray log or a non-root process sampler) rather than by a prompt the operator must approve.

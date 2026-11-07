@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: host-side-ensure-github-connected-cloudflare-worker-service-tool-so-agents-never-hold-cloudflare-credentials
+    event:
+      type: progress
+      ts: "2026-11-06T12:41:22Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        Checked against trunk 2026-11-06 at the coordinator's request (WIP audit). Both exit criteria are met in tree: crates/tillandsias-headless/src/cloudflare_worker_deploy.rs (da5f98327, 8884e43c5) with a fake-Cloudflare fixture, 6/6 passing on macOS today: ensure_connects_once_and_no_push_outside_the_deploy_branch_builds (worker and trigger created then found, one connection, api.builds()==0 for create+connect and for pushes to main and work branches), one_deploy_moves_the_deploy_branch_and_yields_exactly_one_build (exactly one build for an explicit named revision; status and logs returned), no_credential_reaches_any_result_or_refusal, plus the throttle, foreign-trigger and invalid-name arms. NOT verified live: external_script_id and build_token_uuid still want a live probe with the operator present (event 2026-10-25), which is not an exit criterion here.

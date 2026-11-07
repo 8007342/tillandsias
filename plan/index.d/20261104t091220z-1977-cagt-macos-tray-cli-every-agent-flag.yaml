@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (Claude) at macuahuitl-fedora's request,
+# 2026-11-04: a follow-up of #751 (1925-mcld).
+packets:
+- packet_id: macos-tray-cli-launches-every-agent-from-the-cloud
+  order: 1977-cagt
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags:
+  - macos
+  - tray
+  - forge
+  title: The macOS tray CLI launches only OpenCode; --claude, --codex and --antigravity need the same --cloud form
+  context: 'Measured on v56.11.4.1 (d55a07b5f), 2026-11-04: tillandsias-tray --help offers only "--cloud <owner>/<repo> --opencode [--prompt <text>]", and main.rs dispatches only when "--opencode" is present (#751 built that one form). Retrying the smoke prompt with Claude needed --exec-guest running the guest''s own tillandsias-headless --cloud … --claude --prompt …, which works but bypasses the tray CLI. The guest already accepts every agent flag; only the host CLI parser and opencode_guest_command are OpenCode-only.'
+  exit_criteria:
+  - 'tillandsias-tray --cloud <owner>/<repo> {--opencode|--claude|--codex|--antigravity} [--prompt <text>] forwards the chosen agent flag to the guest, and a test pins each mapping (it fails on today''s OpenCode-only parser).'
+  - 'An unknown or missing agent flag is refused before the VM boots, naming the accepted flags.'
+  verifiable_closure: 'cargo test -p tillandsias-macos-tray cli_cloud_launch_forwards_every_agent_flag'
+  next_action: 'Generalise opencode_cloud_target and opencode_guest_command over the agent flag, and update the help text.'
+  provenance: 'macuahuitl-fedora request 2026-11-04; follow-up of #751.'
+  events:
+  - type: filed
+    ts: '2026-11-04T09:12:20Z'
+    host: tlatoanis-macbook-air
+    summary: filed; the macOS tray CLI accepts only --opencode

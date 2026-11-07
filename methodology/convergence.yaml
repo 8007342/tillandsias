@@ -134,6 +134,25 @@ drift_control:
           before this checker existed, guarding a defect that cannot occur on
           Linux and about to enter the gate on a Linux attestation.
 
+    - a_resolver_that_prefers_a_prebuilt_binary_MUST_compare_it_to_its_sources:
+        reason: >
+          ORDER 1270-5mz8. A prebuilt chosen because it EXISTS runs stale until
+          something refuses it. Six instances on 2026-09-18/19 across four
+          hosts, one shape; the costliest was scripts/tillandsias-podman, which
+          picked a four-day-old debug tillandsias-podman-cli by its executable
+          bit alone, so release gates #3 and #4 of the v56.9.19.1 cut ran the
+          forge lane through code the tree no longer held. Every resolver that
+          prefers a prebuilt over building MUST compare it to what it was built
+          from (an mtime against the newest source file, or a validator-surface
+          hash where one exists, as the plan binary does) and, when it is
+          older, REFUSE by name with the rebuild command instead of running it
+          silently. A floor host whose binary goes stale MUST find a refresh
+          path named in that refusal (scripts/check-plan-binary-current.sh for
+          the plan binary), or the refusal strands it. Enforced for the podman
+          shim by scripts/lua/test-prebuilt-resolver-refuses-stale.lua
+          (litmus:prebuilt-resolver-refuses-stale), whose negative control keeps
+          a FRESH prebuilt running, so the fix cannot be "always cargo run".
+
   detection:
     - compare_previous_and_current_spec: "Diff old and new spec versions"
     - flag_if_uncertainty_increases: "Fail if ambiguity_score rises"

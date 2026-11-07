@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-06, from the operator's first-hand direction.
+packets:
+- packet_id: a-terminal-login-completes-through-the-relay-without-copying-a-code
+  order: 2013-rlcd
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, credentials]
+  estimated_hours: 8
+  title: Cloudflare login through the relay finishes by itself, including from a phone QR code
+  context: 'Operator 2026-11-06: the relay page shows a code and a Copy button that does not copy, the code is pasted by hand, and on a phone QR flow it cannot be pasted at all. The terminal should fetch the result itself and the page should confirm. Only the terminal that started the login may ever receive that result: bind it to a secret the terminal generates and PKCE; a poller guessing or observing a session id must get nothing.'
+  exit_criteria:
+  - 'From a terminal or a phone QR scan, sign-in completes with nothing pasted; the terminal polls conservatively with backoff, and the page then replaces the code with a you-can-close-this-page message after the terminal acknowledges.'
+  - 'A manual code fallback remains, with a Copy button that works, for when polling cannot reach the relay.'
+  - 'A second client polling without the session secret, a replayed result and an expired session each get a refusal and no token; results are single-use, short-lived and hold no token at rest in plaintext.'
+  - 'Terminal and page both honour rate limits and Retry-After, back off with jitter, and stay within a stated request budget.'
+  verifiable_closure: 'Fixtures against a local relay plus a real login from terminal and phone, after an intentional deploy.'
+  unscoreable: 'none.'
+  next_action: 'Read the relay and cloudflare_login.rs, then write the threat model before code.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T19:00:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: the-public-login-relay-is-hardened-and-fails-gracefully
+  order: 2013-rlsc
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [cloudflare, security, design]
+  estimated_hours: 5
+  title: The public login relay follows researched security practice and treats wanderers and attackers gracefully
+  context: 'Operator 2026-11-06: the endpoint is public, so protect it against curious visitors and known attacks. Research and recommend with provenance before changing it: OAuth redirect and state handling, CSRF, open redirects, clickjacking, security headers and CSP, rate limiting and Cloudflare free-tier configuration, log hygiene. Paid features are out.'
+  exit_criteria:
+  - 'A research-backed recommendation lists each threat, its control and the Cloudflare configuration, for operator review before deploy.'
+  - 'A visitor with no session, a malformed callback or an expired link sees a friendly explanation that reveals nothing and offers a next step; a test covers each bad input.'
+  - 'No token, code or secret appears in a URL after the callback, in a log or in an error page.'
+  verifiable_closure: 'A fixture of hostile requests against a local relay, plus a header check after an intentional deploy.'
+  unscoreable: 'none.'
+  next_action: 'Research first with find-research and record it; change nothing yet.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T19:00:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: the-login-relay-pages-carry-macron-art
+  order: 2013-rlar
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, design]
+  estimated_hours: 4
+  title: The login relay landing pages carry Mācron art made with the local image pipeline
+  context: 'Operator 2026-11-06. macron.dev holds the Mācron guidelines; kumbia-kombat is the example of a project producing assets through the studio. Report how hard this is. Pages must stay small and work without the art.'
+  exit_criteria:
+  - 'Art for the landing, success and error states follows the Mācron guidelines, with provenance, and the operator accepts it.'
+  - 'Pages stay under a stated size and read correctly if an image fails to load.'
+  verifiable_closure: 'A person reviews the pages at phone and desktop widths.'
+  unscoreable: 'Acceptance of art needs a person.'
+  next_action: 'Read the guidelines on macron.dev, then estimate effort and report before generating.'
+  provenance: operator first-hand 2026-11-06 via coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T19:00:00Z', host: macuahuitl, summary: filed p3 ready}

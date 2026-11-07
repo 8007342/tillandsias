@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-checkout-has-room-for-worktrees-and-builds
+    event:
+      type: note
+      ts: "2026-11-06T14:40:18Z"
+      agent_id: linux-lenovinha-claude-20261106t144018z
+      host: lenovinha
+      summary: |
+        Ruling (coordinator, 2026-11-06), which replaces the disk-volume choice in the earlier note:
+        - Build (A) only. The tmpfs stays the default and the RAM cap is not raised past today's 4096 MB ceiling.
+        - The disk volume is NOT built. Without encryption at rest, with the key held only in memory, it cannot meet the operator's plaintext-at-rest rule: an agent can write .env files or credential configs into a checkout, and a crash leaves them on disk. A rootless host offers no such encryption here (dm-crypt and loop devices need root, fscrypt is not usable on btrfs, and FUSE would weaken forge isolation).
+        - (B), a volume only for declared non-secret output dirs, and (C), a rootful encryption helper, go to the operator.
+
+        (A), as built:
+        - Record the project's /home/forge/src high-water mark.
+        - Choose the tmpfs budget from that mark, or from a declared need, up to the existing ceiling.
+        - Near the limit, warn by name with the biggest directories and the remedy, and record the high-water mark for the next launch.
+        - Keep the 85% warning.
+
+        Residual, stated plainly. (A)'s remedy sends build outputs to ~/.cache/tillandsias-project, which is already a persistent unencrypted volume. An agent that writes a secret there has the same residual as (B). That exists today and this row does not make it worse, but (A) is not free of it. The remedy text says "build outputs, not secrets". The cache's own at-rest problem is filed as 2010-r3y5 and is not fixed here.

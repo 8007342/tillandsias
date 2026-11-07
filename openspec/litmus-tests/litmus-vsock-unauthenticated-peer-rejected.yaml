@@ -23,19 +23,19 @@ preconditions:
 
 critical_path:
   - step: "primitive: a plaintext peer fails the version-bound handshake"
-    command: "cargo test -q -p tillandsias-secure-channel secure_stream::tests::plaintext_peer_is_rejected -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-secure-channel --filter secure_stream::tests::plaintext_peer_is_rejected --require-ok secure_stream::tests::plaintext_peer_is_rejected --name plaintext-peer-rejected"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:plaintext-peer-rejected"
 
   - step: "primitive: a forged/mismatched PSK fails the handshake (closed, not downgraded)"
-    command: "cargo test -q -p tillandsias-secure-channel secure_stream::tests::mismatched_psk_handshake_fails -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-secure-channel --filter secure_stream::tests::mismatched_psk_handshake_fails --require-ok secure_stream::tests::mismatched_psk_handshake_fails --name mismatched-psk-fails"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:mismatched-psk-fails"
 
   - step: "responder: gated-ON plaintext Hello gets Error{Unauthorized}, never HelloAck, then close"
-    command: "cargo test -q -p tillandsias-headless --features listen-vsock --bin tillandsias vsock_server::tests::gated_on_plaintext_peer_gets_unauthorized_error_not_helloack -- --exact 2>&1 | tail -3"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/litmus-decide.lua -- cargo-test --package tillandsias-headless --cargo-arg --features --cargo-arg listen-vsock --cargo-arg --bin --cargo-arg tillandsias --filter vsock_server::tests::gated_on_plaintext_peer_gets_unauthorized_error_not_helloack --require-ok vsock_server::tests::gated_on_plaintext_peer_gets_unauthorized_error_not_helloack --name gated-plaintext-unauthorized"
     timeout_ms: 300000
-    success_pattern: "test result: ok. 1 passed"
+    success_pattern: "ok:gated-plaintext-unauthorized"
 
   - step: "Req: the Unauthorized emission exists on the responder's handshake-failure path"
     command: "grep -q 'ErrorCode::Unauthorized' crates/tillandsias-headless/src/vsock_server.rs && grep -q 'server_handshake_or_reclaim' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: rejection notice wired on the reclaimed stream'"

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-failed-keyring-read-makes-the-ca-key-unavailable-not-fresh
+    field: status
+    value: in_progress
+    ts: "2026-11-06T00:14:49Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-failed-keyring-read-makes-the-ca-key-unavailable-not-fresh
+    event:
+      type: note
+      ts: "2026-11-06T00:14:49Z"
+      host: lenovinha
+      summary: |-
+        claimed by lenovinha opus5 (coordinator order, after 2001-cakr)

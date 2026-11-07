@@ -68,8 +68,13 @@ for _, f in ipairs(files) do
                     piped = piped + 1
                     if n >= 3 then three_plus = three_plus + 1 end
                     local fam = "other"
+                    -- 1800-h7rt: the cargo families match the command with its
+                    -- single-quoted TEXT removed, so `grep -F '# 1 = cargo test'`
+                    -- is not a cargo invocation (it was the one cargo-test left).
+                    local unquoted = c:gsub("'[^']*'", "")
                     for _, r in ipairs(RULES) do
-                        if text.is_match(c, r[2]) then fam = r[1]; break end
+                        local subject = r[1]:sub(1, 6) == "cargo-" and unquoted or c
+                        if text.is_match(subject, r[2]) then fam = r[1]; break end
                     end
                     counts[fam] = counts[fam] + 1
                     if list_family == fam then log.raw(f .. ":" .. ln .. ": " .. c:sub(1, 160)) end

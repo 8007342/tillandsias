@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-failing-token-rotation-reaches-the-operator-before-the-token-expires
+    field: next_action
+    value: 'Implemented (#953, b648c8092): a failing rotation within 2 h of the last seen expiry raises one desktop alert naming the fix, and recovery clears it. Left: one real token expiry on a Linux host with rotation failing, which needs operator consent. The Vault-case alert keeps its "restart the project''s git mirror" step until 1998-mvrs (b) is proven by a live CA rotation under a running mirror.'
+    ts: "2026-11-06T14:41:13Z"
+    host: lenovinha
+    replaces_sha256: "22eb3237da0dcbfd097126a1dff255209171b892bd356d054a43e0f658a71946"
+
+events:
+  - packet_id: a-failing-token-rotation-reaches-the-operator-before-the-token-expires
+    event:
+      type: note
+      ts: "2026-11-06T14:41:13Z"
+      host: lenovinha
+      summary: |-
+        state the live run left
