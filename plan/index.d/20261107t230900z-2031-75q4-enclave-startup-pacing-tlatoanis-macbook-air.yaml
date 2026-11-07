@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-07 from the startup-orchestration research the operator requested.
+packets:
+- packet_id: heavy-enclave-startup-steps-share-one-lane-and-wait-for-pressure-to-settle
+  order: 2031-75q4
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [headless, podman, performance]
+  estimated_hours: 8
+  title: "Heavy enclave startup steps share one lane across projects and wait on PSI for I/O and memory pressure to settle"
+  context: "ensure_enclave_for_project is already sequential, but nothing paces it: the next image build or container start begins while the previous step's GBs are still being written (page cache, QLC SLC cache, btrfs 30 s commit), and two projects' bringups have no shared lock."
+  exit_criteria:
+  - "One enclave-wide lane serialises image builds, pulls, volume seeds and model fetches across projects; a test opens two projects at once and sees the builds never overlap."
+  - "Before each heavy step it waits on a PSI trigger (poll, no polling loop) for io some avg10<10%/full<2% and memory full<2%, with a per-step deadline and a logged settle-timeout; it falls back to a bounded settle without PSI."
+  - "Each step logs bringup: step=<n> ms=<n> settle_ms=<n>."
+  verifiable_closure: "A cold bringup on macuahuitl and on the macOS guest that completes with the step log, compared with a pre-change cold bringup."
+  unscoreable: 'none.'
+  next_action: "One enclave-wide lane serialises image builds, pulls, volume seeds and model fetches across projects; a test opens two projects at once and sees the builds never overlap."
+  provenance: "Operator request 2026-11-07: \"We definitely need beter orchestration of the messy startup\" (and: \"Macuahuitl used to crash all the time on their cheap nvme because of this\"). Research: cheatsheets/runtime/container-startup-orchestration.md, cheatsheets/runtime/startup-io-memory-pressure.md. Spec: openspec/changes/enclave-startup-pacing."
+  spec: openspec/changes/enclave-startup-pacing
+  events:
+  - type: filed
+    ts: '2026-11-07T23:09:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the 2026-11-07 startup-orchestration research
+- packet_id: enclave-services-start-on-readiness-checks-not-sleeps
+  order: 2031-wqbe
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [headless, podman]
+  estimated_hours: 4
+  title: "Enclave services start on readiness checks, not fixed sleeps; shutdown reverses start order and failed starts back off"
+  context: "container_deps waits a fixed 3 s after the proxy; the router's container start is never confirmed and has no status line (\"Routing Traffic\" missing)."
+  exit_criteria:
+  - "The proxy's 3 s sleep is replaced by a port-3128 readiness check with a deadline; the router start is confirmed and gets its own status line."
+  - "Shutdown stops services in reverse start order; a failed start is retried with an increasing delay."
+  verifiable_closure: "A fixture with a slow-listening proxy shim, plus a live bringup log showing each readiness step."
+  unscoreable: 'none.'
+  next_action: "The proxy's 3 s sleep is replaced by a port-3128 readiness check with a deadline; the router start is confirmed and gets its own status line."
+  provenance: "Operator request 2026-11-07: \"We definitely need beter orchestration of the messy startup\" (and: \"Macuahuitl used to crash all the time on their cheap nvme because of this\"). Research: cheatsheets/runtime/container-startup-orchestration.md, cheatsheets/runtime/startup-io-memory-pressure.md. Spec: openspec/changes/enclave-startup-pacing."
+  spec: openspec/changes/enclave-startup-pacing
+  events:
+  - type: filed
+    ts: '2026-11-07T23:09:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the 2026-11-07 startup-orchestration research
+- packet_id: local-inference-starts-after-the-forge-is-ready
+  order: 2031-pd7g
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [headless, inference]
+  estimated_hours: 3
+  title: "Local inference and its model fetch start after the forge is Ready, as a soft dependency"
+  context: "The operator observed forges \"usually hang around creating the inference container\" on the macOS guest: inference is built and started before the forge, and its model download overlaps the forge start."
+  exit_criteria:
+  - "Inference image ensure, start and model fetch run after the forge reports Ready, in the heavy-step lane; their failure is reported and never fails the forge."
+  - "A test launches a forge on a host without the inference image and sees the forge Ready first."
+  verifiable_closure: "A cold forge launch on the macOS guest where the forge reaches Ready before the inference build starts."
+  unscoreable: 'none.'
+  next_action: "Inference image ensure, start and model fetch run after the forge reports Ready, in the heavy-step lane; their failure is reported and never fails the forge."
+  provenance: "Operator request 2026-11-07: \"We definitely need beter orchestration of the messy startup\" (and: \"Macuahuitl used to crash all the time on their cheap nvme because of this\"). Research: cheatsheets/runtime/container-startup-orchestration.md, cheatsheets/runtime/startup-io-memory-pressure.md. Spec: openspec/changes/enclave-startup-pacing."
+  spec: openspec/changes/enclave-startup-pacing
+  events:
+  - type: filed
+    ts: '2026-11-07T23:09:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the 2026-11-07 startup-orchestration research
+- packet_id: provisioned-containers-conf-bounds-image-parallel-copies
+  order: 2031-yu46
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [podman, provisioning, windows, macos]
+  estimated_hours: 2
+  title: "The containers.conf Tillandsias provisions bounds image_parallel_copies to 2"
+  context: "containers/image copies up to 6 layers at once by default, which multiplies write bursts during cold bringup."
+  exit_criteria:
+  - "The Linux user runtime, macOS guest and Windows distro containers.conf set image_parallel_copies = 2; a test reads the effective config."
+  verifiable_closure: "podman info / containers.conf read on a freshly provisioned host of each platform."
+  unscoreable: 'none.'
+  next_action: "The Linux user runtime, macOS guest and Windows distro containers.conf set image_parallel_copies = 2; a test reads the effective config."
+  provenance: "Operator request 2026-11-07: \"We definitely need beter orchestration of the messy startup\" (and: \"Macuahuitl used to crash all the time on their cheap nvme because of this\"). Research: cheatsheets/runtime/container-startup-orchestration.md, cheatsheets/runtime/startup-io-memory-pressure.md. Spec: openspec/changes/enclave-startup-pacing."
+  spec: openspec/changes/enclave-startup-pacing
+  events:
+  - type: filed
+    ts: '2026-11-07T23:09:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the 2026-11-07 startup-orchestration research
+- packet_id: macos-guest-bounds-dirty-writeback-in-bytes
+  order: 2031-v8si
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, vm, kernel]
+  estimated_hours: 2
+  title: "The macOS VZ guest bounds dirty writeback in bytes (dirty_background_bytes=64M, dirty_bytes=256M)"
+  context: "On an 8 GiB guest the default dirty ratios allow GBs of unflushed writes, which flush in bursts during the 4 GiB forge build. Measured context: 2029-b87w, where a clean-wipe cold build did not segfault at 4.1G peak."
+  exit_criteria:
+  - "The guest provisioning sets vm.dirty_background_bytes and vm.dirty_bytes; the values are measured against a cold bringup before and after (step timings, PSI io)."
+  verifiable_closure: "A published-release macOS cold bringup with the before/after step timings recorded on this row."
+  unscoreable: 'none.'
+  next_action: "The guest provisioning sets vm.dirty_background_bytes and vm.dirty_bytes; the values are measured against a cold bringup before and after (step timings, PSI io)."
+  provenance: "Operator request 2026-11-07: \"We definitely need beter orchestration of the messy startup\" (and: \"Macuahuitl used to crash all the time on their cheap nvme because of this\"). Research: cheatsheets/runtime/container-startup-orchestration.md, cheatsheets/runtime/startup-io-memory-pressure.md. Spec: openspec/changes/enclave-startup-pacing."
+  spec: openspec/changes/enclave-startup-pacing
+  events:
+  - type: filed
+    ts: '2026-11-07T23:09:00Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the 2026-11-07 startup-orchestration research
