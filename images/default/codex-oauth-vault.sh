@@ -7,6 +7,12 @@ set -euo pipefail
 # reads. Hardcoding $HOME/.codex here would silently place the credential in a
 # directory codex never consults — the same class of defect as order 430.
 AUTH_FILE="${TILLANDSIAS_CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}"
+# Order 1914-twan criterion 3: a rotation Vault never took leaves a used-up
+# token in Vault, and the NEXT launch only finds out when Codex 401s at
+# bootstrap. This marker, on the persistent project cache (it outlives the
+# container), says so before the next launch. Written on a failed copy,
+# removed by any copy that lands and by a fresh sign-in.
+STALE_MARKER="${TILLANDSIAS_CODEX_STALE_MARKER:-${PROJECT_CACHE:-$HOME/.cache/tillandsias-project}/codex/vault-copy-stale}"
 
 restore_auth() {
     local auth_dir tmp
@@ -52,10 +58,14 @@ auth_digest() {
 # copy is retried and reported on the lifecycle log, never only warned about.
 harvest_with_retry() {
     local attempt
-    for attempt in 1 2 3 4 5; do
-        harvest_auth 2>/dev/null && return 0
+    for attempt in $(seq 1 "${TILLANDSIAS_CODEX_HARVEST_ATTEMPTS:-5}"); do
+        if harvest_auth 2>/dev/null; then
+            rm -f "$STALE_MARKER" 2>/dev/null
+            return 0
+        fi
         sleep "$attempt"
     done
+    mkdir -p "$(dirname "$STALE_MARKER")" 2>/dev/null && date -u +%Y-%m-%dT%H:%M:%SZ >"$STALE_MARKER" 2>/dev/null
     printf '%s\n' "[codex-oauth] blocked:codex-credential-copy-failed: Vault did not take the rotated Codex sign-in after 5 attempts; the next launch may need 'tillandsias --codex-login'" \
         | tee -a "${TILLANDSIAS_LIFECYCLE_LOG:-/tmp/forge-lifecycle.log}" >&2
     return 1
@@ -106,9 +116,12 @@ case "${1:-}" in
     restore) restore_auth ;;
     harvest) harvest_auth ;;
     digest) auth_digest ;;
+    # Exit 0 when the last session's rotation never reached Vault.
+    stale) [[ -e "$STALE_MARKER" ]] ;;
+    clear-stale) rm -f "$STALE_MARKER" ;;
     watch)
         [[ "${2:-}" =~ ^[0-9]+$ ]] || { echo "Usage: codex-oauth-vault watch CHILD_PID" >&2; exit 64; }
         watch_auth "$2" "${3:-}"
         ;;
-    *) echo "Usage: codex-oauth-vault {restore|harvest|digest|watch CHILD_PID [INITIAL_DIGEST]}" >&2; exit 64 ;;
+    *) echo "Usage: codex-oauth-vault {restore|harvest|digest|stale|clear-stale|watch CHILD_PID [INITIAL_DIGEST]}" >&2; exit 64 ;;
 esac

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-lane-exits-on-a-401-account-read-without-offering-re-login
+    event:
+      type: progress
+      ts: "2026-11-07T08:59:28Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        Landed in #985 (merged 2026-11-07T07:43:56Z): criterion 3, the pre-launch offer from the stale marker. With 2f6a11f63 and 9571f3bcb (criterion 1) and 328d27581 (criterion 2, land 695), all three criteria are in tree. Residual, named: a rotation lost to a whole-container kill leaves no marker; that case surfaces through the bootstrap 401 offer. Live check on a published release still to come.
