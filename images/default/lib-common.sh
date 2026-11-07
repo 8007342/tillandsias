@@ -2403,6 +2403,12 @@ export PNPM_HOME="$PROJECT_CACHE/pnpm"
 
 # uv (Astral's pip replacement)
 export UV_CACHE_DIR="$PROJECT_CACHE/uv"
+# Order 2007-uvtl: uv-managed Pythons live on the persistent project cache too.
+# A venv's bin/python is a symlink into the install dir; under the default
+# ($HOME/.local/share/uv/python, container state) every forge replacement left
+# the venvs in $PROJECT_CACHE/venvs pointing at nothing. Interpreters hold no
+# secrets, so this dir is safe to keep (2010-r3y5 allowlist).
+export UV_PYTHON_INSTALL_DIR="$PROJECT_CACHE/uv-python"
 
 # pip (per-project; pipx tools live in /opt/pipx, image-state)
 export PIP_CACHE_DIR="$PROJECT_CACHE/pip"
