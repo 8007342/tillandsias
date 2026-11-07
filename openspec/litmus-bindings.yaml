@@ -1120,6 +1120,7 @@ specs:
   - litmus:web-audio-serving
   - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
+  - litmus:a-studio-launch-fails-by-stage-within-a-bound
   - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
