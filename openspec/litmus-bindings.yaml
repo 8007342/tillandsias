@@ -340,6 +340,7 @@ specs:
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:provider-usage-limit
+  - litmus:provider-limit-relay
   - litmus:image-build-network-is-explicit
   - litmus:flaky-installs-background
   coverage_ratio: 80

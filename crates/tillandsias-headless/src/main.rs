@@ -147,6 +147,8 @@ mod launch_images;
 mod local_projects;
 // 1847-5xv3: headless one-shot of a non-Claude lane on a --cloud project.
 mod one_shot;
+// 1957-msjs: a provider usage limit recorded on one host holds every host's forges.
+mod provider_limit_relay;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
 mod runtime_assets;
@@ -11205,6 +11207,10 @@ fn build_opencode_forge_args(
             ca_trust_dir_for(certs_dir).display()
         ),
     ]);
+    // 1957-msjs: another host's live provider usage limit, folded offline.
+    if let Some((name, value)) = provider_limit_relay::launch_env() {
+        args.extend(["--env".into(), format!("{name}={value}")]);
+    }
     // Project source routing. Both branches mount under
     // `/home/forge/src/…` conventions (not flat at `/home/forge/src`) so the
     // in-container tree matches the entrypoint clone path and
@@ -18487,6 +18493,8 @@ fn run_opencode_mode(
             delegated.as_ref(),
         )
         .await;
+        // 1957-msjs: share any provider usage limit this forge recorded.
+        provider_limit_relay::relay_on_exit(&forge_tool_cache_volume(project_name));
         cleanup_forge_ram_workspace(project_name, debug)?;
         cleanup_shared_stack_if_no_running_forge(
             &client,
@@ -21974,6 +21982,10 @@ fn build_forge_agent_run_args_with_vault(
     // the branch read. report_seed_staleness runs its own `git -C`, so in cloud
     // mode it was a second live read against the bare name with the same
     // CWD-capture hazard.
+    // 1957-msjs: another host's live provider usage limit, folded offline.
+    if let Some((name, value)) = provider_limit_relay::launch_env() {
+        spec = spec.env(name, value);
+    }
     if let Some(checkout) = host_checkout {
         if let Some(seed) = read_host_project_current_branch(checkout) {
             spec = spec.env("TILLANDSIAS_FORGE_SEED_BRANCH", seed);
@@ -22589,6 +22601,8 @@ fn run_forge_agent_cli_mode(
             delegated.as_ref(),
         )
         .await;
+        // 1957-msjs: share any provider usage limit this forge recorded.
+        provider_limit_relay::relay_on_exit(&forge_tool_cache_volume(project_name));
         push_udp_event(session_ended);
         cleanup_forge_ram_workspace(project_name, debug)?;
         cleanup_shared_stack_if_no_running_forge(
