@@ -21,7 +21,7 @@ C="$ROOT/scripts/lua/check-landed-but-open.lua"
 . "$ROOT/scripts/plan-binary-probe.sh"
 # Resolve from the CHECKOUT and absolutise before any cd (1401-x76w, 84f37ff24).
 PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" &&
-    case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || PLAN=""
+    case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || PLAN=""
 [ -n "$PLAN" ] || { echo "FAIL: landed-but-open 0/1 (1367-emjg): no plan binary resolves"; exit 1; }
 W="$(mktemp -d "${TMPDIR:-/tmp}/landed-but-open-test.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
