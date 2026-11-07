@@ -1,0 +1,33 @@
+# @trace spec:forge-hot-cold-split, order:2006-srcr
+name: litmus:forge-src-room
+spec: forge-hot-cold-split
+phase: pre-build
+status: active
+description: >
+  Order 2006-srcr: on a real tmpfs, tillandsias-room reports how full the
+  forge checkout is, names the largest directory, and at 85% or more warns by
+  name with the remedy (move build outputs, not secrets, to the project
+  cache), exiting 1. --record writes the high-water mark into the project
+  cache, never lowering it, so the next launch sizes the tmpfs from it up to
+  the same ceiling.
+severity: medium
+size: small
+preconditions:
+  - python3 and unshare on the host
+critical_path:
+  - step: "Req: a near-full checkout tmpfs is warned by name with the largest dir and the remedy, and its high-water mark is recorded for the next launch"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tillandsias-room.lua 2>&1"
+    timeout_ms: 300000
+    success_pattern: "ok:tillandsias-room:5 arms"
+observability:
+  traces:
+    - "@trace order:2006-srcr"
+  expected_log: "ok:tillandsias-room:5 arms"
+  log_fields:
+    spec: "forge-hot-cold-split"
+    test: "forge-src-room"
+rollback:
+  on_failure: >
+    images/default/cli/tillandsias-room missed the threshold, named the wrong
+    directory, or lowered or failed to write the recorded high-water mark.
+  command: "python3 images/default/cli/tillandsias-room --help"

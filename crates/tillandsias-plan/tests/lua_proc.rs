@@ -296,6 +296,64 @@ mod managed_script {
         }
     }
 
+    // ORDER 2020-ffzn. Closing the scope on TERM kills the child, which wakes
+    // the script's p:wait(); the script then finished and the runner exited
+    // with the SCRIPT's code (Some(1), measured under load) before the signal
+    // thread's exit(143). The seam holds the signal thread after cleanup, so
+    // the main thread always wins the race the load only sometimes gave it.
+    #[test]
+    fn a_terminated_runner_exits_with_the_signal_even_when_its_script_finishes_first() {
+        let f = ScriptFixture::new();
+        let pidfile = f.dir.path().join("child.pid");
+        let child = fixture_child();
+        let script = f.write(
+            "probe.lua",
+            &format!(
+                r#"local p = proc.spawn{{argv={{"{child}","pid-sleep","child.pid"}}, timeout_ms=0}}; pcall(function() p:wait() end); verdict.ok("script-finished")"#
+            ),
+        );
+        let mut runner = f
+            .runner(&script)
+            .env("TILLANDSIAS_SCRIPT_SIGNAL_EXIT_DELAY_MS", "1500")
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let end = Instant::now() + Duration::from_secs(10);
+        let pid: libc::pid_t = loop {
+            if let Some(pid) = std::fs::read_to_string(&pidfile)
+                .ok()
+                .and_then(|s| s.trim().parse().ok())
+            {
+                break pid;
+            }
+            assert!(Instant::now() < end, "the script-owned child never started");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(unsafe { libc::kill(pid, 0) }, 0, "premise: child alive");
+        assert_eq!(
+            unsafe { libc::kill(runner.id() as libc::pid_t, libc::SIGTERM) },
+            0
+        );
+        let end = Instant::now() + Duration::from_secs(15);
+        let status = loop {
+            if let Some(status) = runner.try_wait().unwrap() {
+                break status;
+            }
+            assert!(Instant::now() < end, "the runner ignored SIGTERM");
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(128 + libc::SIGTERM), "{status:?}");
+        let end = Instant::now() + Duration::from_secs(5);
+        while unsafe { libc::kill(pid, 0) } == 0 {
+            assert!(
+                Instant::now() < end,
+                "script-owned child {pid} survived its runner"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
     #[test]
     fn live_spawn_delivers_10000_ordered_lines_per_fd_before_wait_and_preserves_cr() {
         let f = ScriptFixture::new();

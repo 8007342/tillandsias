@@ -459,6 +459,7 @@ specs:
   - litmus:forge-cache-dual-shape
   - litmus:forge-cache-dual-tmpfs-caps
   - litmus:forge-persistent-tool-cache-mount-shape
+  - litmus:uv-venv-survives-forge-replacement
   coverage_ratio: 75
   last_verified: '2026-07-04'
 - spec_id: forge-environment-discoverability
@@ -509,6 +510,7 @@ specs:
 - spec_id: forge-hot-cold-split
   status: active
   litmus_tests:
+  - litmus:forge-src-room
   - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
@@ -572,6 +574,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:mirror-ca-trust-watch
+  - litmus:git-image-ca-bind-styles
   - litmus:mirror-coordinator-bump
   - litmus:forge-seed-branch-resolution-shape
   - litmus:initialize-bare-metal-host-idempotent

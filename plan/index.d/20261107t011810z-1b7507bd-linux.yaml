@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-git-image-serves-a-readable-ca-under-a-single-file-bind-as-well-as-the-trust-directory-bind
+    field: status
+    value: implemented
+    ts: "2026-11-07T01:18:10Z"
+    host: linux
+
+events:
+  - packet_id: the-git-image-serves-a-readable-ca-under-a-single-file-bind-as-well-as-the-trust-directory-bind
+    event:
+      type: progress
+      ts: "2026-11-07T01:18:10Z"
+      host: linux
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: 928a3f09d: #980 landed with a green full gate; litmus:git-image-ca-bind-styles reads the CA under -v file, --mount file and directory binds, control fails the file binds

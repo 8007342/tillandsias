@@ -174,7 +174,8 @@ fn config_models<'a>(
 }
 
 /// Inputs that carry a `$name` placeholder bound from `inputs`.
-const BINDABLE_INPUTS: &[&str] = &["image", "mask"];
+/// 2018-auin: `audio` is LoadAudio's file (ComfyUI resolves it as an annotated path, as LoadImage's).
+const BINDABLE_INPUTS: &[&str] = &["image", "mask", "audio"];
 
 pub fn descriptor() -> Value {
     json!({
@@ -185,7 +186,7 @@ pub fn descriptor() -> Value {
              record beside each, never image bytes. Before anything is queued every node class must \
              be pinned (node_not_pinned otherwise) and every model file licence-admitted \
              (model_refused otherwise; nothing is fetched). `inputs` binds names to files under \
-             {FORGE_SCRATCH}/ for LoadImage nodes whose image is \"$name\"; `overrides` reach only \
+             {FORGE_SCRATCH}/ for LoadImage nodes whose image (or LoadAudio nodes whose audio) is \"$name\"; `overrides` reach only \
              nodes titled $seed, $prompt or $negative_prompt. Shares the host's GPU queue with \
              image.generate; progress arrives as MCP progress notifications. {EPHEMERAL_NOTE}"
         ),
@@ -194,7 +195,7 @@ pub fn descriptor() -> Value {
             "properties": {
                 "workflow": { "type": "string", "description": "Path in the project checkout of an API-format ComfyUI workflow JSON." },
                 "inputs": { "type": "object", "additionalProperties": { "type": "string" },
-                            "description": format!("name -> file path under {FORGE_SCRATCH}/, bound to LoadImage nodes whose image is \"$name\".") },
+                            "description": format!("name -> file path under {FORGE_SCRATCH}/, bound to LoadImage nodes whose image, or LoadAudio nodes whose audio, is \"$name\".") },
                 "overrides": { "type": "object",
                     "description": "seed, prompt and negative_prompt reach the nodes titled $seed, $prompt and $negative_prompt. Any node input is reachable as \"$node:<node id>.<input>\": <string|number|boolean> (1995-nodo), e.g. {\"$node:5.denoise\": 0.6}; set before validation, so a model input set this way is pin- and licence-checked, and a link input is refused.",
                     "properties": {
@@ -2419,6 +2420,68 @@ mod tests {
         assert!(
             kinds.contains(&"image") && kinds.contains(&"video"),
             "{kinds:?}"
+        );
+    }
+
+    /// 2018-auin: an audio-to-audio join. Two takes load through LoadAudio
+    /// `$name` placeholders bound from `inputs` (the LoadImage mechanism, as
+    /// ComfyUI v0.40.0's LoadAudio resolves annotated paths), and the core
+    /// audio classes at the pinned ComfyUI are admitted. CONTROL: an audio
+    /// class not in the pinned ComfyUI stays refused by name.
+    #[test]
+    fn an_audio_join_binds_load_audio_inputs_and_admits_the_core_audio_nodes() {
+        let _g = SEAM_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let fx = fixture("auin-proj", "a");
+        std::fs::write(fx.lane_dir.join("in/gk/take_a.wav"), b"RIFF a").unwrap();
+        std::fs::write(fx.lane_dir.join("in/gk/take_b.wav"), b"RIFF b").unwrap();
+        let join = json!({
+            "1": {"class_type":"LoadAudio","inputs":{"audio":"$take_a"}},
+            "2": {"class_type":"LoadAudio","inputs":{"audio":"$take_b"}},
+            "3": {"class_type":"TrimAudioDuration","inputs":{"audio":["1",0],"start_index":0.0,"duration":4.0}},
+            "4": {"class_type":"AudioConcat","inputs":{"audio1":["3",0],"audio2":["2",0],"direction":"after"}},
+            "5": {"class_type":"VAELoader","inputs":{"vae_name":"ace_1.5_vae.safetensors"}},
+            "6": {"class_type":"VAEEncodeAudio","inputs":{"audio":["4",0],"vae":["5",0]}},
+            "7": {"class_type":"SetLatentNoiseMask","inputs":{"samples":["6",0],"mask":["6",0]}},
+            "8": {"class_type":"SaveAudio","inputs":{"audio":["4",0],"filename_prefix":"audio/join"}}
+        });
+        let wf = fx.project.path().join("tool/art/workflows");
+        std::fs::write(wf.join("join.api.json"), join.to_string()).unwrap();
+        let mut foreign = join.clone();
+        foreign["9"] = json!({"class_type":"LoadAudioFromTheInternet","inputs":{}});
+        std::fs::write(wf.join("join_foreign.api.json"), foreign.to_string()).unwrap();
+        let engine = Arc::new(Stub::default());
+        install(&fx, engine.clone());
+        let takes = json!({
+            "take_a": format!("{FORGE_SCRATCH}/in/gk/take_a.wav"),
+            "take_b": format!("{FORGE_SCRATCH}/in/gk/take_b.wav"),
+        });
+        let ok = call(
+            "auin-proj",
+            "a",
+            &json!({"workflow":"tool/art/workflows/join.api.json","inputs":takes}),
+            &mut |_| {},
+        );
+        let refused = call(
+            "auin-proj",
+            "a",
+            &json!({"workflow":"tool/art/workflows/join_foreign.api.json","inputs":takes}),
+            &mut |_| {},
+        );
+        let prompts = engine.prompts.lock().unwrap().clone();
+        install_seam(None);
+        ok.unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            prompts[0]["1"]["inputs"]["audio"],
+            "in/gk/take_a.wav [output]"
+        );
+        assert_eq!(
+            prompts[0]["2"]["inputs"]["audio"],
+            "in/gk/take_b.wav [output]"
+        );
+        let e = refused.unwrap_err();
+        assert!(
+            e.starts_with("node_not_pinned: LoadAudioFromTheInternet"),
+            "{e}"
         );
     }
 

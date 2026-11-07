@@ -130,3 +130,148 @@ beyond the coordinator's existing heartbeat, and SHALL NOT shorten it.
 
 - **WHEN** a host has no running forge and no pushes
 - **THEN** it makes no instruction calls beyond the existing heartbeat
+
+### Requirement: messages travel through a named Cloudflare queue over the account API, with no public endpoint
+
+Fleet messages SHALL be pushed to, pulled from and acked on a Cloudflare Queue
+named in the project's committed `.tillandsias/config.toml`, through the
+Cloudflare REST API with the user's token, held on the host. There SHALL be no
+Worker, route or public URL on this path, and no name, domain or account of the
+Tillandsias project SHALL be hard-coded. (order 2011-amqd)
+
+#### Scenario: another account's token
+
+- **WHEN** a pull or push is made with a token of another Cloudflare account,
+  or with no token
+- **THEN** Cloudflare refuses it, and nothing is read or written
+
+### Requirement: each addressee host has its own queue, routed by the sender, with a dead-letter queue
+
+Messages SHALL be pushed to the addressee host's own queue, one per host for
+all of its projects, routed by the envelope's project. The
+sender SHALL resolve a role to one host from the fleet roster, and there SHALL
+be no queue shared by several consuming hosts. Each consumer SHALL be created
+with `max_retries` at the documented maximum and a dead-letter queue, verified
+after creation. The client SHALL refuse to push a message whose `ttl_s` exceeds
+the queue's retention (86 400 s on the Free plan) or that has no `sent_at`.
+Correctness SHALL NOT depend on the lease, because the queue accepts a late ack.
+(order 2011-amqd)
+
+#### Scenario: a late ack after a redelivery
+
+- **WHEN** a message's lease expires on host A, it is redelivered to A, and A's
+  late ack for the first lease also arrives
+- **THEN** the lane inbox holds one copy by `id`, and the agent sees it once
+
+### Requirement: every envelope is signed by its sending host and verified before the inbox
+
+Each host SHALL sign every envelope it sends with its own key, held in Vault,
+whose public half is on the fleet roster in git. The receiving host SHALL
+verify the signature and that `from` matches the signing key before writing
+to any lane inbox. A message that fails SHALL be acked, quarantined and
+reported once by name, and SHALL never reach an agent. (order 2011-amqd)
+
+#### Scenario: a forged instruction from a leaked token
+
+- **WHEN** a holder of the account token pushes an instruction with a forged
+  `from` and no valid signature
+- **THEN** the receiving host refuses it as `bad-signature`, quarantines it, and
+  no lane inbox receives it
+
+### Requirement: the pull handler acks every final outcome and verifies the ack
+
+The host SHALL ack a pulled message when it is accepted into the lane inbox,
+already seen, expired, or invalid, and SHALL leave it un-acked only on an I/O
+error writing the inbox. An ack SHALL count only when the response reports one
+acknowledged message and no warning. A lane's dedupe record SHALL be kept until
+the later of the envelope's expiry and its arrival plus 24 hours.
+(order 2011-amqd)
+
+#### Scenario: an expired message is not redelivered forever
+
+- **WHEN** a pulled message is already past its TTL
+- **THEN** nothing is written to the inbox, the message is acked, and it is not
+  pulled again
+
+### Requirement: a message the sender expects is receipted, and a missing receipt is reported
+
+For instructions, the sending host SHALL keep an
+outbox record (a ledger event for an instruction), and the receiving host SHALL
+send a signed receipt when it accepts the message. With no receipt after 20
+hours the sender SHALL re-push once with the same `id`, and with none by 24
+hours it SHALL report `undelivered` once. (order 2011-amqd)
+
+#### Scenario: an addressee host down past 24 hours
+
+- **WHEN** a host is down for 30 hours and its queued instruction expires
+- **THEN** the sender reports `undelivered` for it, and the instruction's row
+  carries the event
+
+### Requirement: only the host polls, with backoff, and an agent never polls on a timer
+
+Only one poller per host SHALL pull its own queues, and only while it has a
+live lane of that project. Polling SHALL start no faster than
+every 5 minutes, with a per-host random stagger, and empty pulls SHALL back off
+quickly (×4) to a 120-minute ceiling, and a
+delivered message, a local send or a lane start SHALL reset it. Every request
+type SHALL be counted against a per-user budget, and the host SHALL honour 429
+and `retry-after`. An agent SHALL NOT poll its queue or inbox on a timer.
+(order 2011-amqd)
+
+#### Scenario: an idle day
+
+- **WHEN** a host with one live lane sees no messages for 24 hours
+- **THEN** it makes about 14 pulls plus 4 dead-letter pulls, and the fixture's counted
+  requests stay under the stated budget
+
+### Requirement: a sleeping agent waits on a held call, and the tray wakes it
+
+The tray SHALL poll the queue, write accepted messages into the lane inbox, and
+decide which lane has targeted work: by queue and address first, and with the
+local classifier only for judgement among several lanes. A launching forge's
+agent SHALL start with a `what_next` call that the local MCP server holds open,
+with a progress notification at least every 10 minutes, until the tray signals
+work over a local socket. The agent SHALL re-arm the call when the harness ends
+it. The forge SHALL set each harness's launch settings so that the call is held
+rather than backgrounded. No agent SHALL poll on a timer. Whether a held call
+costs tokens, and each harness's real timeout, reconnect and expiry behaviour,
+SHALL be measured before this is relied on. (order 2011-amqd)
+
+#### Scenario: work arrives for a waiting agent
+
+- **WHEN** an agent is waiting on `what_next` and the tray accepts a message
+  addressed to its lane
+- **THEN** the held call returns with the inbox item and its refs, and no model
+  turn ran while the agent waited
+
+#### Scenario: the harness ends a held call
+
+- **WHEN** the harness's tool timeout ends a held `what_next` call
+- **THEN** the agent calls `what_next` again, costing one short turn
+
+### Requirement: a plan warm cache is a rebuildable hint, never the record
+
+The host SHALL keep a compact project overview (at most 64 KiB) in a named KV
+namespace, written at most once per 10 minutes after a successful push. Each
+overview SHALL carry its git `synced_sha`. A reader SHALL mark it possibly
+outdated when the mirror's head differs, and SHALL be able to rebuild it from
+the ledger at any time. (order 2011-amqd)
+
+#### Scenario: a lost cache
+
+- **WHEN** the overview key is missing or older than the mirror's head
+- **THEN** the forge starts from the ledger, and the next push rewrites the
+  overview
+
+### Requirement: a planning day stays under a stated budget, and the fixture fails above it
+
+The host SHALL take as many messages as a batch allows in one pull and ack a
+batch in one request. For the planning fleet (15 hosts, 400 messages and 100
+instructions a day, 2 busy hours), a day SHALL cost at most 2 500 queue
+operations (25 % of the Free 10 000) and 2 000 API requests. The budget fixture
+SHALL fail above either. (order 2011-amqd)
+
+#### Scenario: several messages for one host
+
+- **WHEN** five messages wait in one host's queue
+- **THEN** the host fetches them with one pull and acks them with one request

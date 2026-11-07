@@ -61,6 +61,28 @@ init_runtime_ca_trust() {
 init_runtime_ca_trust
 unset -f init_runtime_ca_trust
 
+# 2006-srcr: record /home/forge/src's high-water mark once a minute (operator
+# policy: non-real-time checks at minutes), so the next launch of this project
+# sizes its tmpfs from it, and keep the latest near-limit warning where an
+# agent or tillandsias-doctor can read it. One recorder per forge.
+start_src_room_recorder() {
+    command -v tillandsias-room >/dev/null 2>&1 || return 0
+    [ -d /home/forge/src ] || return 0
+    local pidfile=/tmp/tillandsias-room-recorder.pid
+    if [ -r "$pidfile" ] && kill -0 "$(cat "$pidfile" 2>/dev/null)" 2>/dev/null; then
+        return 0
+    fi
+    (
+        while :; do
+            tillandsias-room --record --quiet >/tmp/tillandsias-room.warn 2>/dev/null || true
+            sleep 60
+        done
+    ) </dev/null >/dev/null 2>&1 &
+    echo $! >"$pidfile"
+}
+start_src_room_recorder
+unset -f start_src_room_recorder
+
 # Ensure all files created by this script and any process it execs are
 # user-writable. Without this, tools running inside the container may
 # create files on bind-mounted directories with restrictive modes.
@@ -2381,6 +2403,12 @@ export PNPM_HOME="$PROJECT_CACHE/pnpm"
 
 # uv (Astral's pip replacement)
 export UV_CACHE_DIR="$PROJECT_CACHE/uv"
+# Order 2007-uvtl: uv-managed Pythons live on the persistent project cache too.
+# A venv's bin/python is a symlink into the install dir; under the default
+# ($HOME/.local/share/uv/python, container state) every forge replacement left
+# the venvs in $PROJECT_CACHE/venvs pointing at nothing. Interpreters hold no
+# secrets, so this dir is safe to keep (2010-r3y5 allowlist).
+export UV_PYTHON_INSTALL_DIR="$PROJECT_CACHE/uv-python"
 
 # pip (per-project; pipx tools live in /opt/pipx, image-state)
 export PIP_CACHE_DIR="$PROJECT_CACHE/pip"

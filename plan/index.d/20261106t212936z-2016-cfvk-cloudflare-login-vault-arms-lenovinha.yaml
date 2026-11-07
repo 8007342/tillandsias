@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-06T21:29:36Z, at the coordinator's request (2013-rlcd review).
+packets:
+- packet_id: the-cloudflare-login-vault-arms-refuse-in-seconds-instead-of-hanging-on-the-keyring-path
+  order: 2016-cfvk
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [vault, cloudflare, tests, linux]
+  estimated_hours: 3
+  title: The NOVAULT and DEVICE binary arms of test-cloudflare-login.sh time out (rc=143) on the keyring path, so the gate cannot vouch for them
+  context: 'MEASURED on lenovinha 2026-11-06, trunk 9b8cd3f98 with no change applied, and the same with 2013-rlcd (PR 976): three arms fail. NOVAULT bin expects refused:cloudflare-login:vault:vault-start-failed and gets rc=143. NOVAULT remedy check sees "remedy: unlock the OS keyring (the login keyring), then relaunch tillandsias" instead of the light step (start the tray). DEVICE bin, after /.well-known/openid-configuration and /oauth2/device/auth, also ends rc=143. The host login keyring was unlocked at the time (Secret.Collection Locked=false), so the run inside the arm reaches the keyring-locked branch of vault_bootstrap.rs (unseal_key_source, remedy at :4190 and :5667) and then waits until the arm timeout kills it. Also seen: RELAY CONTROL fetch never reached on trunk, because its anchor show("ok") is gone from the page since ae5c28e3f; 2013-rlcd re-anchors it.'
+  exit_criteria:
+  - 'With the host keyring unlocked, the three arms either pass or refuse within seconds with a named reason; none ends by the arm timeout. Shown red on trunk 9b8cd3f98 first.'
+  - 'Whatever the arm environment gives the keyring (real, isolated or absent) is stated in the script, and a locked-keyring control arm shows the locked remedy is reached only when the keyring is locked.'
+  - 'The tests never reach the real keyring (see the session seam rule).'
+  verifiable_closure: 'scripts/test-cloudflare-login.sh green on a Linux host with an unlocked keyring.'
+  unscoreable: 'none.'
+  next_action: 'Run the NOVAULT arm alone with its environment printed, find which keyring answer the vault start receives, then decide whether the arm or the code is wrong.'
+  provenance: lenovinha-silverblue 2026-11-06, measured on trunk, at the request of coordinator macuahuitl-fedora.
+  events:
+  - {type: filed, ts: '2026-11-06T21:29:36Z', host: lenovinha, summary: filed p2 ready}

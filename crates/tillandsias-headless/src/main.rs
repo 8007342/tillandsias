@@ -81,6 +81,7 @@ mod device_poll_view;
 mod flow_sink;
 mod image_build_progress;
 mod image_build_scope;
+mod memory_protection;
 mod self_exe;
 // @trace order:1874-b9tg: where an sd.cpp run placed the model.
 #[cfg(feature = "host-services")]
@@ -101,6 +102,9 @@ mod gpu_queue;
 mod provenance;
 #[cfg(feature = "host-services")]
 mod studio_tool;
+// 2002-stjb: studio runs queued as tickets; uses studio_tool.
+#[cfg(feature = "host-services")]
+mod studio_jobs;
 // 1959-xsy5 (D12): the GPU-free, byte-reproducible pixel finish.
 #[cfg(feature = "host-services")]
 mod pixel_finish;
@@ -445,6 +449,18 @@ fn main() {
             eprintln!("  remedy: use the installed tray build of tillandsias");
             std::process::exit(2);
         }
+    }
+
+    // Order 1913-fh6l: `--memory-protection <container>`, a read-only probe of
+    // whether the container's memory.low protects anything: it walks the
+    // cgroup chain up to the root and reports the effective protection. Also
+    // listed in known_flags (five sites).
+    if let Some(idx) = user_args.iter().position(|a| a == "--memory-protection") {
+        let Some(container) = user_args.get(idx + 1).filter(|c| !c.starts_with("--")) else {
+            eprintln!("usage: tillandsias --memory-protection <container>");
+            std::process::exit(2);
+        };
+        std::process::exit(memory_protection::run_cli(container));
     }
 
     // Order 1506-q7ab: `--msg-serve [--once]`, the same-host mover. Dispatched
@@ -1019,6 +1035,8 @@ fn main() {
         "--via",
         // Order 1966-47vt: dispatched early (cloud_usage::call_live).
         "--cloud-usage",
+        // Order 1913-fh6l: dispatched early (memory_protection::run_cli).
+        "--memory-protection",
         // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
         // too so no reorder can make it `Unsupported option`.
         "--msg-serve",
@@ -1997,6 +2015,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --cloud-usage [--debug]");
+    println!("       tillandsias --memory-protection <container>");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -2075,6 +2094,9 @@ fn print_usage(version: &str) {
     );
     println!(
         "  --cloud-usage  Read-only: used vs free-tier cap this month per provider (Cloudflare Workers Builds minutes, GitHub Actions cache/run minutes/billing), as JSON; the same numbers as the cloud.usage MCP tool"
+    );
+    println!(
+        "  --memory-protection <container>  Read-only: does the container's memory.low protect anything? Walks its cgroup chain to the root and prints each level's memory.low and the effective protection; exits 1 when an ancestor caps it below the reservation"
     );
     println!(
         "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
@@ -4838,6 +4860,176 @@ mod ca_refresh_margin_tests {
         assert!(!ca_bundle_needs_refresh(&crt, &key));
         let (crt, key) = mint(tmp.path(), 61);
         assert!(!ca_bundle_needs_refresh(&crt, &key));
+    }
+
+    /// 2003-stbf: --status-check names every lane's build against the
+    /// installed one: stale (both named), current, or unknown when either
+    /// cannot be read. Pre-fix: FAILS, it listed no lanes.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn status_check_names_each_lane_current_stale_or_unknown() {
+        let lanes = vec![
+            ("game-a".to_string(), PathBuf::from("/x/game-a/mcp.sock")),
+            ("game-b".to_string(), PathBuf::from("/x/game-b/mcp.sock")),
+            (
+                "site-default".to_string(),
+                PathBuf::from("/x/site-default/mcp.sock"),
+            ),
+        ];
+        let ask = |p: &Path| match p.to_str().unwrap() {
+            "/x/game-a/mcp.sock" => "56.11.6.1+aaaa".to_string(),
+            "/x/game-b/mcp.sock" => "56.11.4.1+bbbb".to_string(),
+            _ => "unanswered (refused)".to_string(),
+        };
+        let lines = lane_freshness_lines(&lanes, Some("56.11.6.1+aaaa"), &ask);
+        assert_eq!(lines[0], "ok:lane-current:game-a: 56.11.6.1+aaaa");
+        assert!(
+            lines[1].starts_with(
+                "warn:lane-stale:game-b: runs 56.11.4.1+bbbb, installed 56.11.6.1+aaaa"
+            ),
+            "{}",
+            lines[1]
+        );
+        assert!(
+            lines[2].starts_with("note:lane-unknown:site-default"),
+            "{}",
+            lines[2]
+        );
+        let none = lane_freshness_lines(&lanes, None, &ask);
+        assert!(
+            none.iter().all(|l| l.starts_with("note:lane-unknown:")),
+            "{none:?}"
+        );
+    }
+
+    /// 2006-srcs: kumbia-kombat's real seed (main) names `integration.forge:
+    /// game`; the candidates follow the forge's order.
+    #[test]
+    fn the_discipline_seed_names_the_forge_branch_first() {
+        let seed = "version: 1\nlevel: 2\nwork_ref: 'work/[0-9]{3,4}-[a-z0-9]{4}'\n\
+                    default_branch: main\nintegration:\n  linux: game\n  forge: game\n  windows: game\n";
+        assert_eq!(
+            discipline_seed_branch_candidates(seed),
+            ["game", "game", "main"]
+        );
+        assert_eq!(
+            discipline_seed_branch_candidates("default_branch: \"trunk\"\n"),
+            ["trunk"]
+        );
+        assert!(discipline_seed_branch_candidates("").is_empty());
+    }
+
+    /// 2006-srcs, against a REAL bare repository shaped like kumbia-kombat's
+    /// mirror: HEAD and main carry the seed but no config; `game` carries
+    /// `src_mb = 4096`. Reading HEAD (the 2006-srcr code) finds nothing; the
+    /// seed branch finds 4096. CONTROL: with no seed, main (no config) is read.
+    #[test]
+    fn the_declared_src_mb_is_read_on_the_branch_the_forge_checks_out() {
+        let tmp = tempfile::tempdir().unwrap();
+        let work = tmp.path().join("work");
+        let bare = tmp.path().join("mirror.git");
+        let sh = |dir: &std::path::Path, args: &[&str]| {
+            let out = std::process::Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args([
+                    "-c",
+                    "user.name=t",
+                    "-c",
+                    "user.email=t@t",
+                    "-c",
+                    "commit.gpgsign=false",
+                ])
+                .args(args)
+                .env_remove("GIT_DIR")
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "git {args:?}: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        };
+        std::fs::create_dir_all(work.join(".tillandsias")).unwrap();
+        sh(&work, &["init", "-q", "-b", "main"]);
+        std::fs::write(
+            work.join(".tillandsias/branch-discipline.yaml"),
+            "default_branch: main\nintegration:\n  forge: game\n",
+        )
+        .unwrap();
+        sh(&work, &["add", "."]);
+        sh(&work, &["commit", "-q", "-m", "seed"]);
+        sh(&work, &["switch", "-q", "-c", "game"]);
+        std::fs::write(
+            work.join(".tillandsias/config.toml"),
+            "[forge]\nsrc_mb = 4096\n",
+        )
+        .unwrap();
+        sh(&work, &["add", "."]);
+        sh(&work, &["commit", "-q", "-m", "config"]);
+        sh(&work, &["switch", "-q", "main"]);
+        sh(
+            tmp.path(),
+            &[
+                "clone",
+                "-q",
+                "--bare",
+                work.to_str().unwrap(),
+                bare.to_str().unwrap(),
+            ],
+        );
+        let git_in = |repo: std::path::PathBuf| {
+            move |args: &[&str]| -> Option<String> {
+                let out = std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&repo)
+                    .args(args)
+                    .env_remove("GIT_DIR")
+                    .output()
+                    .ok()?;
+                out.status
+                    .success()
+                    .then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+            }
+        };
+        let git = git_in(bare.clone());
+        assert!(
+            git(&["show", "HEAD:.tillandsias/config.toml"]).is_none(),
+            "HEAD has no config"
+        );
+        assert_eq!(
+            declared_src_mb_on_seed_branch(&git),
+            Some(("game".into(), 4096))
+        );
+        // CONTROL: drop the seed's integration branch; the forge would check out
+        // main, which declares nothing, so nothing is read.
+        sh(&work, &["switch", "-q", "main"]);
+        std::fs::write(
+            work.join(".tillandsias/branch-discipline.yaml"),
+            "default_branch: main\n",
+        )
+        .unwrap();
+        sh(&work, &["commit", "-q", "-am", "no integration"]);
+        sh(&bare, &["fetch", "-q", work.to_str().unwrap(), "main:main"]);
+        assert_eq!(declared_src_mb_on_seed_branch(&git), None);
+    }
+
+    /// 2006-srcr: the recorded high-water mark parses as one positive MB
+    /// value (anything else is no record), and the project's declared need is
+    /// read from `[forge] src_mb`. Pre-fix: FAILS, neither existed.
+    #[test]
+    fn the_src_high_water_record_and_the_declared_need_parse() {
+        assert_eq!(parse_src_high_water("1843\n"), Some(1843));
+        assert_eq!(parse_src_high_water(" 7 "), Some(7));
+        for bad in ["", "0", "-5", "12.5", "lots", "1843 MB"] {
+            assert_eq!(parse_src_high_water(bad), None, "{bad:?}");
+        }
+        let cfg: tillandsias_core::config::ProjectConfig =
+            toml::from_str("[forge]\nsrc_mb = 3072\n").unwrap();
+        assert_eq!(cfg.forge.and_then(|f| f.src_mb), Some(3072));
+        let none: tillandsias_core::config::ProjectConfig = toml::from_str("").unwrap();
+        assert!(none.forge.is_none());
+        assert_eq!(FORGE_SRC_HIGH_WATER_FILE, ".tillandsias/src-highwater-mb");
     }
 
     /// 2007-uvtl: the trust directory holds the CA certificate and nothing
@@ -13937,9 +14129,47 @@ fn print_status_check_verdict() {
     println!("{}", status_check_verdict_line(&reasons));
 }
 
+/// ORDER 2003-stbf: one line per running lane: `lane:<name> <status> ...`,
+/// with both builds named. `ask` reads what a lane socket answers.
+#[cfg(feature = "host-services")]
+pub(crate) fn lane_freshness_lines(
+    lanes: &[(String, PathBuf)],
+    installed: Option<&str>,
+    ask: &dyn Fn(&Path) -> String,
+) -> Vec<String> {
+    lanes
+        .iter()
+        .map(|(name, sock)| {
+            let f = crate::mcp_socket::lane_freshness(&ask(sock), installed);
+            let status = f["status"].as_str().unwrap_or("unknown");
+            let lane = f["lane"].as_str().unwrap_or("?");
+            let inst = f["installed"].as_str().unwrap_or("unreadable");
+            match status {
+                "stale" => format!(
+                    "warn:lane-stale:{name}: runs {lane}, installed {inst}; relaunch that forge to use the installed build"
+                ),
+                "current" => format!("ok:lane-current:{name}: {lane}"),
+                _ => format!("note:lane-unknown:{name}: lane {lane}, installed {inst}"),
+            }
+        })
+        .collect()
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
+    // 2003-stbf: which running forge lanes still run an older build.
+    #[cfg(feature = "host-services")]
+    for line in lane_freshness_lines(
+        &crate::mcp_socket::lane_sockets(),
+        crate::mcp_socket::installed_build_identity().as_deref(),
+        &|sock| {
+            crate::mcp_socket::lane_server_build(sock)
+                .unwrap_or_else(|e| format!("unanswered ({e})"))
+        },
+    ) {
+        eprintln!("[tillandsias] {line}");
+    }
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -20903,10 +21133,14 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
 fn forge_hot_src_tmpfs(project_name: &str) -> String {
     // Order 1729-kg5q: the floor fits a build, clamped to half the forge's
     // memory.max (the size is a cap counted in that cgroup, not a reservation).
-    let budget = tillandsias_core::config::compute_source_budget(
+    // 2006-srcr: the last forge's recorded high-water mark and the project's
+    // declared need raise it, never past the same ceiling.
+    let budget = tillandsias_core::config::compute_source_budget_with(
         forge_mirror_pack_size_kb(project_name),
         &tillandsias_core::config::ForgeConfig::default(),
         tillandsias_core::forge_budget::ForgeBudget::for_this_host().memory_max_mib,
+        forge_src_high_water_mb(project_name),
+        forge_declared_src_mb(project_name),
     );
     format!("/home/forge/src:size={budget}m,mode=0777")
 }
@@ -21282,6 +21516,145 @@ fn forge_mirror_pack_size_kb(project_name: &str) -> u64 {
             0
         }
     }
+}
+
+/// ORDER 2006-srcr: where a forge records its `/home/forge/src` high-water
+/// mark, inside the project's persistent tool cache (a number, never a
+/// secret). `tillandsias-room --record` writes it; the next launch reads it.
+pub(crate) const FORGE_SRC_HIGH_WATER_FILE: &str = ".tillandsias/src-highwater-mb";
+
+/// The high-water mark a file holds: one positive integer of MB.
+pub(crate) fn parse_src_high_water(text: &str) -> Option<u32> {
+    text.trim().parse::<u32>().ok().filter(|mb| *mb > 0)
+}
+
+/// The project's recorded high-water mark, read from its tool-cache volume on
+/// the host. None when there is no volume, no record, or it cannot be read.
+fn forge_src_high_water_mb(project_name: &str) -> Option<u32> {
+    let mut probe = podman_command();
+    probe.args([
+        "volume",
+        "inspect",
+        "--format",
+        "{{.Mountpoint}}",
+        &forge_tool_cache_volume(project_name),
+    ]);
+    let mountpoint = podman_command_output(probe, false).ok()?;
+    let path = std::path::Path::new(mountpoint.trim()).join(FORGE_SRC_HIGH_WATER_FILE);
+    parse_src_high_water(&std::fs::read_to_string(path).ok()?)
+}
+
+/// The project's declared need, `[forge] src_mb` in the committed
+/// `.tillandsias/config.toml`, read from the mirror (a clone-only forge has no
+/// host checkout to read it from).
+///
+/// 2006-srcs: read on the branch the forge will CHECK OUT, never the mirror's
+/// HEAD. A cloud forge resolves its own seed (lib-common
+/// `resolve_forge_seed_branch`): kumbia-kombat's seed names `integration.forge:
+/// game`, its config lives only on `game`, and HEAD is `main`, so reading HEAD
+/// sized the tmpfs at the floor.
+fn forge_declared_src_mb(project_name: &str) -> Option<u32> {
+    let container = format!("tillandsias-git-{project_name}");
+    let repo = format!("/srv/git/{project_name}");
+    let git = |args: &[&str]| -> Option<String> {
+        let mut probe = podman_command();
+        let mut argv: Vec<String> = vec![
+            "exec".into(),
+            container.clone(),
+            "git".into(),
+            "-C".into(),
+            repo.clone(),
+        ];
+        argv.extend(args.iter().map(|a| a.to_string()));
+        probe.args(argv);
+        podman_command_output(probe, false).ok()
+    };
+    let (branch, mb) = declared_src_mb_on_seed_branch(&git)?;
+    eprintln!(
+        "[tillandsias] [forge-launch] [forge] src_mb = {mb} read from the mirror's '{branch}'"
+    );
+    Some(mb)
+}
+
+/// The integration and default branches named by a discipline seed, in the
+/// forge's order: `integration.forge`, `integration.linux`, `default_branch`.
+fn discipline_seed_branch_candidates(seed: &str) -> Vec<String> {
+    let clean = |v: &str| v.trim().trim_matches(|c| c == '"' || c == '\'').to_string();
+    let mut integration: Vec<(String, String)> = Vec::new();
+    let mut default_branch = None;
+    let mut in_integration = false;
+    for line in seed.lines() {
+        if line.starts_with("integration:") {
+            in_integration = true;
+            continue;
+        }
+        if in_integration
+            && !line.starts_with(char::is_whitespace)
+            && !line.trim().is_empty()
+            && !line.starts_with('#')
+        {
+            in_integration = false;
+        }
+        if in_integration {
+            if let Some((k, v)) = line.trim().split_once(':') {
+                integration.push((k.trim().to_string(), clean(v)));
+            }
+        } else if let Some(v) = line.strip_prefix("default_branch:") {
+            default_branch.get_or_insert_with(|| clean(v));
+        }
+    }
+    let mut out = Vec::new();
+    for key in ["forge", "linux"] {
+        if let Some((_, v)) = integration.iter().find(|(k, _)| k == key)
+            && !v.is_empty()
+        {
+            out.push(v.clone());
+        }
+    }
+    if let Some(v) = default_branch.filter(|v| !v.is_empty()) {
+        out.push(v);
+    }
+    out
+}
+
+/// The branch a cloud forge checks out, by the rule of lib-common
+/// `resolve_forge_seed_branch` in a bare mirror (branches are `refs/heads/*`):
+/// the discipline seed read from main, master, then HEAD (first readable);
+/// its candidates, first existing; else main or master; else HEAD. Then
+/// `[forge] src_mb` from THAT branch's config. `git` runs one git command in
+/// the mirror and returns stdout on success.
+fn declared_src_mb_on_seed_branch(
+    git: &dyn Fn(&[&str]) -> Option<String>,
+) -> Option<(String, u32)> {
+    let exists =
+        |b: &str| git(&["rev-parse", "--verify", "-q", &format!("refs/heads/{b}")]).is_some();
+    let mut chosen = None;
+    for r in ["main", "master", "HEAD"] {
+        let Some(seed) = git(&["show", &format!("{r}:.tillandsias/branch-discipline.yaml")]) else {
+            continue;
+        };
+        if seed.trim().is_empty() {
+            continue;
+        }
+        chosen = discipline_seed_branch_candidates(&seed)
+            .into_iter()
+            .find(|b| exists(b));
+        break;
+    }
+    let branch = chosen
+        .or_else(|| {
+            ["main", "master"]
+                .into_iter()
+                .find(|b| exists(b))
+                .map(String::from)
+        })
+        .unwrap_or_else(|| "HEAD".into());
+    let text = git(&["show", &format!("{branch}:.tillandsias/config.toml")])?;
+    let mb = toml::from_str::<tillandsias_core::config::ProjectConfig>(&text)
+        .ok()?
+        .forge?
+        .src_mb?;
+    Some((branch, mb))
 }
 
 /// The podman argv for [`forge_mirror_pack_size_kb`]: `count-objects -v`
@@ -30917,7 +31290,12 @@ mod tests {
             path
         };
         let marks = dir.path().join("marks");
-        let vault = write_stub("vault", "[ \"$1\" = digest ] && echo missing; exit 0");
+        // stale: exit 1 (no marker), as the real helper answers on a host
+        // whose last rotation reached Vault (1914-twan criterion 3).
+        let vault = write_stub(
+            "vault",
+            "case \"$1\" in digest) echo missing;; stale) exit 1;; esac; exit 0",
+        );
         let login = write_stub(
             "login",
             &format!("echo login >>'{}'; exit 0", marks.display()),
@@ -30960,6 +31338,127 @@ mod tests {
             "expected run, device login, relaunch"
         );
         assert!(out.status.success(), "the relaunched agent exited 0");
+    }
+
+    /// Order 1914-twan criterion 3: when the last session's rotation never
+    /// reached Vault (the stale marker), the wrapper offers sign-in BEFORE it
+    /// launches Codex, instead of waiting for a 401 at bootstrap.
+    #[cfg(unix)]
+    #[test]
+    fn a_stale_vaulted_codex_sign_in_is_offered_before_launch() {
+        use std::io::Write as _;
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let wrapper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-session.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let write_stub = |name: &str, body: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("#!/usr/bin/env bash\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+            path
+        };
+        let marks = dir.path().join("marks");
+        let m = marks.display();
+        let vault = write_stub(
+            "vault",
+            &format!(
+                "case \"$1\" in digest) echo missing;; stale) exit 0;; \
+                 clear-stale) echo clear >>'{m}';; esac; exit 0"
+            ),
+        );
+        let login = write_stub("login", &format!("echo login >>'{m}'; exit 0"));
+        let agent = write_stub("agent", &format!("echo run >>'{m}'; exit 0"));
+        let mut child = std::process::Command::new("bash")
+            .arg(&wrapper)
+            .arg("--")
+            .arg(&agent)
+            .env("TILLANDSIAS_CODEX_VAULT_HELPER", &vault)
+            .env("TILLANDSIAS_CODEX_STATE_HELPER", dir.path().join("absent"))
+            .env("TILLANDSIAS_CODEX_RELOGIN_HELPER", &login)
+            .env("TMPDIR", dir.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn wrapper");
+        child.stdin.take().unwrap().write_all(b"\n").unwrap();
+        let out = child.wait_with_output().expect("wrapper output");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("never reached Vault") && stderr.contains("Sign in again now?"),
+            "a stale vaulted sign-in must be offered before launch; stderr was: {stderr}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&marks)
+                .unwrap_or_default()
+                .lines()
+                .collect::<Vec<_>>(),
+            ["login", "clear", "run"],
+            "expected sign-in, marker cleared, then one launch"
+        );
+        assert!(out.status.success());
+    }
+
+    /// Order 1914-twan criterion 3: a copy Vault refuses writes the stale
+    /// marker on the project cache; a copy that lands removes it. Runs the
+    /// real helper's watcher with a dead child (its last-copy path) and a
+    /// stub vault-cli.sh.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let helper =
+            std::path::Path::new(&manifest).join("../../images/default/codex-oauth-vault.sh");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let cli = bin.join("vault-cli.sh");
+        let auth = dir.path().join("auth.json");
+        let marker = dir.path().join("cache/codex/vault-copy-stale");
+        std::fs::write(&auth, "{\"tokens\":{\"refresh_token\":\"shape-only\"}}\n").unwrap();
+        let run = |vault_ok: bool| {
+            std::fs::write(
+                &cli,
+                format!(
+                    "#!/usr/bin/env bash\ncat >/dev/null\nexit {}\n",
+                    if vault_ok { 0 } else { 1 }
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+            // pid 999999 is not running, so the watcher makes its last copy at once;
+            // "old" differs from the file's digest, so it copies.
+            std::process::Command::new("bash")
+                .arg(&helper)
+                .args(["watch", "999999", "old"])
+                .env(
+                    "PATH",
+                    format!(
+                        "{}:{}",
+                        bin.display(),
+                        std::env::var("PATH").unwrap_or_default()
+                    ),
+                )
+                .env("TILLANDSIAS_CODEX_AUTH_FILE", &auth)
+                .env("TILLANDSIAS_CODEX_STALE_MARKER", &marker)
+                .env("TILLANDSIAS_CODEX_HARVEST_ATTEMPTS", "1")
+                .env("TILLANDSIAS_OAUTH_POLL_SECS", "0")
+                .env(
+                    "TILLANDSIAS_LIFECYCLE_LOG",
+                    dir.path().join("lifecycle.log"),
+                )
+                .output()
+                .expect("run helper")
+        };
+        run(false);
+        assert!(
+            marker.exists(),
+            "a refused copy must mark the vaulted sign-in stale"
+        );
+        run(true);
+        assert!(!marker.exists(), "a copy that lands clears the marker");
     }
 
     #[test]
