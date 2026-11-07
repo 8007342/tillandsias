@@ -4,13 +4,15 @@ Design first. Nothing is built until the operator answers design §9. Each task
 becomes one packet with a test that fails today.
 
 ## 1. Release side
-- [ ] 1.1 The release workflow writes and signs `update-manifest.json` (Ed25519,
-      minisign format); the public key is a build constant.
+- [ ] 1.1 The release workflow writes `update-manifest.json`; the existing cosign
+      keyless step signs it like every other artifact (and SHA256SUMS too).
 - [ ] 1.2 Each release's component declarations (restart, recreate, upgrade).
 
 ## 2. Verify and fetch
-- [ ] 2.1 Event-driven check (start, menu open, 6 h cache), signature then digest,
-      the three refusals; macOS code-signing requirement check.
+- [ ] 2.1 Event-driven check (start, menu open, 6 h cache); Sigstore bundle
+      verification with the compiled-in identity and a TUF-refreshed trusted root
+      (measure the verifier's size first), then digests; the three refusals;
+      macOS code-signing requirement check.
 
 ## 3. Apply
 - [ ] 3.1 Linux: atomic swap, `tillandsias.previous`, `--upgrade-handoff` (1490-gttj).

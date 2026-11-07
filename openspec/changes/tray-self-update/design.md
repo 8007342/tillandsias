@@ -18,28 +18,57 @@ keeps installing by hand.
 
 ## 2. Verify: a signature, then the hashes
 
-Today's SHA256 check proves the bytes match the checksum file from the same
-release, not who published it. Added:
+**What already exists.** `release.yml` signs every published artifact with
+Sigstore cosign, keyless, through GitHub Actions OIDC, and uploads a
+`<artifact>.cosign.bundle` beside each. The release gate already runs
+`cosign verify-blob` against an anchored identity: SAN
+`https://github.com/8007342/tillandsias/.github/workflows/release.yml@refs/heads/main`,
+issuer `https://token.actions.githubusercontent.com` (1407-6jr8, 1953-jmvb). What
+is missing is a CLIENT that checks: the installers check SHA256 only, and
+`SHA256SUMS` itself is not signed (the signing loop skips it). So the gap is
+verification on the user's machine, not signing.
 
-- The release workflow signs `update-manifest.json` with an Ed25519 key held as a
-  GitHub Actions secret, producing `update-manifest.json.sig` (minisign format).
-- The **public key is compiled into every tray build**. A tray verifies the
-  manifest's signature with the key it already carries, so a compromised release
-  page cannot swap the key. Key rotation ships the next key in the previous
-  release (`next_public_key` in the manifest), signed by the current one.
-- The manifest lists every artifact's SHA256. The tray downloads, hashes, and
-  refuses on any mismatch: `refused:update:signature` / `refused:update:digest`.
-  Nothing is replaced until every check passes.
-- A manifest whose version is not newer than the running one is refused
-  (`refused:update:not-newer`); the existing downgrade guard stays.
-- **macOS adds** the platform's own check: the new `.app` must satisfy the running
-  bundle's code-signing designated requirement (same Team ID), checked with
-  `SecStaticCodeCheckValidity`. No user prompt is involved. If the build is not
-  notarized, the tray clears `com.apple.quarantine` itself (as the installer does
-  now), only after the Ed25519 and code-signing checks pass.
-- **Windows adds** an Authenticode check when the binaries are signed (today they
-  are not; then the Ed25519 check is the only authenticity check, and the design
-  says so in the tray's details pane).
+**Recommendation: verify the existing Sigstore signatures; add no new key.**
+`update-manifest.json` is one more release artifact, so the same signing step
+gives it a `.cosign.bundle`. The tray verifies that bundle before anything else.
+
+Comparison against a new Ed25519 (minisign) key:
+
+| | Sigstore keyless (recommended) | New Ed25519 key |
+|---|---|---|
+| Key custody | None: no long-lived key exists. A signature means "release.yml ran on main of 8007342/tillandsias", issued per run by Fulcio and logged in Rekor. | A long-lived secret in Actions; its theft lets anyone sign updates until rotated. |
+| Who can forge an update | Whoever can make release.yml run on main (repo write plus a workflow change), and it is publicly logged in Rekor. | Whoever holds the secret, with no public record. |
+| Compiled into the tray | The expected identity (the SAN and issuer above, EXACT, not the docs' loose `.*/tillandsias/` regexp) and Sigstore's trusted root (Fulcio and Rekor public keys). | The public key, and rotation via a `next_public_key` chain. |
+| Offline verification | Yes. A bundle carries the certificate, the signature and Rekor's inclusion proof and signed timestamp, so it verifies against the compiled-in trusted root with no Rekor lookup. | Yes, trivially. |
+| What can go stale | The trusted root rotates (rarely). The tray refreshes it through Sigstore's TUF repository when it checks for an update (it is online then); a refresh that fails falls back to the compiled-in root and is reported, never skipped. | Nothing, until the key must rotate. |
+| Client cost | A Rust Sigstore verifier (the `sigstore` crate's bundle verification); larger dependency tree, to be measured against the tray's size. | A few hundred lines and one small crate. |
+| Same check as the gate | Yes: the tray and the release gate check one identity. | No: two trust paths to keep in step. |
+
+So the tray: (1) verifies `update-manifest.json.cosign.bundle` with the
+compiled-in identity and trusted root (TUF-refreshed); (2) reads each artifact's
+SHA256 from the verified manifest; (3) downloads and hashes each artifact, and may
+also verify that artifact's own bundle the same way (defence in depth, same code).
+Refusals: `refused:update:signature` (bundle fails, identity mismatch, or the
+certificate's workflow ref is not `refs/heads/main`), `refused:update:digest`, and
+`refused:update:not-newer`. Nothing is replaced until every check passes; the
+downgrade guard stays.
+
+Fallback if the dependency cost is unacceptable: shell out to a bundled `cosign`
+binary (also signed, verified by digest from the manifest of the release that
+shipped it). An Ed25519 key is the last resort, not the plan.
+
+Per platform, on top:
+
+- **macOS** also requires the new `.app` to satisfy the running bundle's
+  code-signing designated requirement (same Team ID), checked with
+  `SecStaticCodeCheckValidity`; no user prompt. If the build is not notarized,
+  the tray clears `com.apple.quarantine` itself (as the installer does now), only
+  after the Sigstore and code-signing checks pass.
+- **Windows** adds an Authenticode check once the binaries are Authenticode-signed
+  (today they are not; then the Sigstore check is the only authenticity check, and
+  the tray's details pane says so).
+- **The installers** should verify the same bundles (out of scope here; filed
+  separately so a first install is checked as strictly as an update).
 
 ## 3. What a release declares
 
@@ -58,7 +87,7 @@ release, not who published it. Added:
      "upgrade": ["dnf -y upgrade --refresh"], "reboot": true},
     {"name": "vault", "restart": "none"}
   ],
-  "next_public_key": null
+  "min_tray": "56.11.0.0"
 }
 ```
 
@@ -193,6 +222,7 @@ Windows are stated by this design and measured on their own hosts afterwards.
    or stop accepting new prompts after a time?
 3. macOS: path A (freeze across the swap) now and B (VM in its own process) later,
    or go straight to B?
-4. Signing key custody: the Actions secret alone, or also an offline second key
-   for rotation?
+4. Trust: verify the existing Sigstore keyless signatures (recommended: no key to
+   keep, one identity shared with the release gate, publicly logged), accepting a
+   Sigstore verifier's dependency size in the tray; or a dedicated Ed25519 key?
 5. Default `update.mode` for an existing install: `auto` or `notify`?

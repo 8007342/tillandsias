@@ -23,9 +23,11 @@ What exists today (surveyed 2026-11-06, trunk):
 - **No self-updater on any platform.** A release reaches a host only when someone
   re-runs the curl or irm installer. `openspec/specs/update-system` is `obsolete`;
   the only live requirement is artifact selection per platform.
-- **Integrity, not authenticity.** The installers check SHA256 against
-  `SHA256SUMS*` from the same release. Nothing checks a signature: whoever can
-  publish a release can publish its checksums.
+- **Signed, but nobody checks on the client.** `release.yml` signs every
+  artifact with Sigstore cosign (keyless, GitHub OIDC) and the release gate
+  verifies those bundles against an anchored workflow identity. The installers,
+  though, check SHA256 only against `SHA256SUMS*`, which is itself unsigned, so
+  on a user's machine nothing checks who published a release.
 - **Forge lifetime differs by platform.** On Linux a tray quit leaves forges
   running and the next tray adopts their lanes (1988-trkp). On macOS the VM runs
   inside the tray process (Virtualization.framework), so quitting the tray stops
@@ -39,8 +41,9 @@ What exists today (surveyed 2026-11-06, trunk):
 
 1. The tray discovers a new **stable** release on events (start, menu open),
    rate-limited, with no new timer unless the operator approves one.
-2. It verifies a **signature** over the release manifest with a key compiled into
-   the running binary, then the SHA256 of each artifact, and refuses on any miss.
+2. It verifies the release manifest's existing **Sigstore** bundle against a
+   workflow identity compiled into the running binary (no new key), then the
+   SHA256 of each artifact, and refuses on any miss.
 3. The release carries a **signed update manifest**: per component, the restart it
    needs (`none` | `optional` | `recommended` | `required`), containers to
    recreate (from scratch or from a named image snapshot) and dnf upgrade steps.

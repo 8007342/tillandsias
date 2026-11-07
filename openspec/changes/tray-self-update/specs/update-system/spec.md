@@ -2,14 +2,16 @@
 
 ### Requirement: a stable update is verified by signature before anything is replaced
 
-The tray SHALL verify the release's `update-manifest.json` against an Ed25519
-public key compiled into the running binary, then each artifact's SHA256 from that
+The tray SHALL verify the Sigstore bundle of the release's `update-manifest.json`
+against an identity compiled into the running binary (the release workflow on the
+default branch of the project's repository, issued by GitHub Actions OIDC) and a
+trusted root it carries and refreshes, then each artifact's SHA256 from that
 manifest, and SHALL replace nothing unless every check passes. A version not newer
 than the running one SHALL be refused.
 
 #### Scenario: a tampered manifest
 
-- **WHEN** the manifest's signature does not verify with the compiled-in key
+- **WHEN** the manifest's bundle does not verify, or its certificate names another workflow, ref or repository
 - **THEN** the tray reports `refused:update:signature` and keeps running the current version
 
 #### Scenario: a tampered artifact
