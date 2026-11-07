@@ -18,9 +18,12 @@ run with a larger model.
 
 Operator rulings (2026-10-25): output goes to a shared scratch directory
 destroyed on forge teardown; images are generated exactly as the agent
-asks; only permissive/open model licences with no revenue caps; always
-start with the smallest model and offer one tier larger at a time with a
-curated, honest sentence and no raw sizes; only free Cloudflare and free
+asks; only permissive/open model licences with no revenue caps; consent is
+asked only for downloading a tier's model files the first time on a host
+(ruling 2026-11-01, superseding the 2026-10-25 "smallest first, one tier
+up" shape): a tierless call runs the biggest model already on the computer,
+any tier up to the ceiling may be named directly, and the ask states the
+one-time download in GB and minutes; only free Cloudflare and free
 GitHub are acceptable metered services. Claude, OpenCode and Codex must see the same tool
 with the same result contract.
 
@@ -51,8 +54,9 @@ SOURCE READ (2026-10-25, trunk `054751d4e`):
 - A new `imagegen` image built on first use from a pinned
   stable-diffusion.cpp tag (MIT), running `sd-server` with Vulkan + CPU
   backends (CUDA variant on NVIDIA hosts), on the enclave network, no egress.
-- A declarative imagegen tier ladder (I0–I3), permissive licences only,
-  smallest first; the accel envelope sets only the ceiling.
+- A declarative imagegen tier table (I0–I3), permissive licences only; the
+  accel envelope sets only the ceiling, and a call runs the highest tier
+  within it that is present or granted (I0 is fetched unasked).
 - Models fetched on first use into `cache_root()/models/imagegen/` by pinned
   URL + sha256, never into an image or a ramdisk.
 - One MCP tool, `image.generate`, on the host socket; results follow the
