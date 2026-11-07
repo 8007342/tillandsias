@@ -15,18 +15,39 @@ if ! command -v podman >/dev/null 2>&1; then
     exit 1
 fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ORDER 1270-5mz8: a prebuilt is chosen because it is FRESH, not because it
+# EXISTS. The first candidate newer than every source under the two crates it
+# is built from wins. If only stale ones exist, refuse by name with the rebuild
+# command and never run one: on 2026-09-19 this loop picked a four-day-old
+# debug build by `-x` alone and two release gates ran the forge lane on code
+# the tree no longer held.
 PODMAN_CLI_BIN=""
+STALE_BINS=()
 for profile in release debug; do
     for base in "${CARGO_TARGET_DIR:+$CARGO_TARGET_DIR}" "${CARGO_TARGET_DIR:+$ROOT/$CARGO_TARGET_DIR}" "$ROOT/target"; do
         [[ -n "$base" ]] || continue
         [[ "$base" = /* ]] || continue
-        if [[ -x "$base/$profile/tillandsias-podman-cli" ]]; then
-            PODMAN_CLI_BIN="$base/$profile/tillandsias-podman-cli"
+        cand="$base/$profile/tillandsias-podman-cli"
+        [[ -x "$cand" ]] || continue
+        newer="$(find "$ROOT/crates/tillandsias-podman-cli" "$ROOT/crates/tillandsias-podman" \
+            -type f -newer "$cand" -print -quit 2>/dev/null || true)"
+        if [[ -z "$newer" ]]; then
+            PODMAN_CLI_BIN="$cand"
             break 2
         fi
+        STALE_BINS+=("$cand (older than ${newer#"$ROOT"/})")
     done
 done
 if [[ -n "$PODMAN_CLI_BIN" ]]; then
     exec "$PODMAN_CLI_BIN" "$@"
+fi
+if [[ ${#STALE_BINS[@]} -gt 0 ]]; then
+    for stale in "${STALE_BINS[@]}"; do
+        echo "refused:podman-cli-stale:${stale%% (*}:rebuild=cargo build -p tillandsias-podman-cli" >&2
+        why="${stale#* (}"
+        echo "  why: this prebuilt is ${why%)}; running it would test code the tree no longer holds (1270-5mz8)" >&2
+    done
+    echo "  remedy: rebuild it (add --release for the release profile), or remove the stale binary so the shim falls back to cargo run" >&2
+    exit 1
 fi
 exec cargo run --quiet -p tillandsias-podman-cli -- "$@"
