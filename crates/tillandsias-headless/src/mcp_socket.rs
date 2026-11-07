@@ -3071,7 +3071,7 @@ mod host_tool_discovery_fixtures {
         assert!(desc("image.generate").contains("locally on this computer"));
         assert!(desc("studio.run_workflow").contains("studio container"));
         assert!(desc("webstudio.open").contains("STARTS the studio through the tray"));
-        assert!(desc("webstudio.options").contains("Not the ComfyUI image studio"));
+        assert!(desc("webstudio.options").contains("Each option carries its affordances"));
         for n in [
             "preview.status",
             "preview.stop",

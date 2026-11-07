@@ -45,6 +45,11 @@ pub(crate) struct Studio {
     pub id: String,
     pub name: String,
     pub brief: String,
+    /// 2026-ggu8: the content this studio is better and worse at, and what a
+    /// save edits; build-studio-registry.lua refuses a studio without them.
+    pub good_for: Vec<String>,
+    pub not_for: Vec<String>,
+    pub edits: String,
     pub license: String,
     pub frameworks: Vec<String>,
     pub entry: Vec<String>,
@@ -123,6 +128,10 @@ pub(crate) struct StudioOption {
     pub id: String,
     pub label: String,
     pub brief: String,
+    /// 2026-ggu8: what the agent chooses by when no option is [Recommended].
+    pub good_for: Vec<String>,
+    pub not_for: Vec<String>,
+    pub edits: String,
     pub license: String,
     pub recommended: bool,
     pub available: bool,
@@ -159,6 +168,9 @@ pub(crate) fn options(framework: Option<&str>) -> Vec<StudioOption> {
                     s.name.clone()
                 },
                 brief: s.brief.clone(),
+                good_for: s.good_for.clone(),
+                not_for: s.not_for.clone(),
+                edits: s.edits.clone(),
                 license: s.license.clone(),
                 recommended: rec,
                 available: s.status == "ready",
@@ -542,7 +554,7 @@ pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
     vec![
         serde_json::json!({
             "name": "webstudio.options",
-            "description": "List the visual web studios (GrapesJS, Decap, Tina, Puck, Onlook) this project can be opened in for co-editing, with a brief each and at most one marked [Recommended] for the project's detected framework. Studios whose lane is not built yet are listed with a note. Starts nothing. Not the ComfyUI image studio: that is studio.run_workflow.",
+            "description": "List the studios this project can be opened in for co-editing (GrapesJS, Decap, Tina, Puck, Onlook, and the ComfyUI image studio), with at most one marked [Recommended] for the project's detected framework. Each option carries its affordances: good_for (the content and work it is best at), not_for, and edits (what a save changes in the project). Choose by matching the user's request and the project's content against good_for and not_for: open the [Recommended] one unless the request contradicts its not_for; when none is recommended, pick the one whose good_for fits and say why, or offer the two best fits. Studios whose lane is not built yet, or that need a cloud account, are listed with a note and cannot be opened. Starts nothing.",
             "inputSchema": { "type": "object", "properties": {} }
         }),
         serde_json::json!({
@@ -609,6 +621,42 @@ pub(crate) fn call(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 2026-ggu8: every option carries the affordances an agent picks by,
+    /// for a detected framework and for none, and the descriptor tells the
+    /// agent to choose by them. RED before: the registry had no such fields.
+    #[test]
+    fn every_option_carries_its_affordances_and_the_descriptor_says_to_choose_by_them() {
+        for fw in [
+            None,
+            Some("plain-html"),
+            Some("markdown-ssg"),
+            Some("react"),
+        ] {
+            let opts = options(fw);
+            assert_eq!(opts.len(), registry().studios.len());
+            for o in &opts {
+                assert!(!o.good_for.is_empty(), "{}: good_for", o.id);
+                assert!(!o.not_for.is_empty(), "{}: not_for", o.id);
+                assert!(!o.edits.is_empty(), "{}: edits", o.id);
+                assert!(o.good_for.iter().chain(&o.not_for).all(|s| !s.is_empty()));
+            }
+            let json = serde_json::to_value(&opts).unwrap();
+            for key in ["good_for", "not_for", "edits"] {
+                assert!(json[0].get(key).is_some(), "{key} reaches the MCP reply");
+            }
+        }
+        let desc = tool_descriptors()
+            .into_iter()
+            .find(|t| t["name"] == "webstudio.options")
+            .unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        for needle in ["good_for", "not_for", "edits", "when none is recommended"] {
+            assert!(desc.contains(needle), "{needle}: {desc}");
+        }
+    }
 
     #[test]
     fn the_registry_lists_the_five_lanes_and_comfyui_and_never_silex() {
