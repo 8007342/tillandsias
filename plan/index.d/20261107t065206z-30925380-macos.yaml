@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: codex-lane-exits-on-a-401-account-read-without-offering-re-login
+    event:
+      type: progress
+      ts: "2026-11-07T06:52:06Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        1914-twan, mapped to its exit criteria against trunk (this row's status had stayed "ready" while its work landed on 2026-10-28):
+        (1) LIFECYCLE NAMED, with source evidence: 2f6a11f63. Codex refresh tokens are single-use (codex-rs login/src/auth/manager.rs REFRESH_TOKEN_REUSED_MESSAGE; persist_tokens replaces the stored refresh token with each refresh's); tillandsias does not refresh, Codex does, and the wrapper copies each rotation to Vault. The vaulted copy went stale because an oomd/podman kill takes the whole container (the EXIT-trap harvest never runs) and the watcher polled every 2 s, so a rotation inside that window never reached Vault (lenovinha: token-expiry text minutes before the 11:41 oomd kill). Then 9571f3bcb copies on an inotify event, and a failed copy is retried and reported as blocked:codex-credential-copy-failed.
+        (2) DONE: 328d27581 (land 695), codex_lane_offers_relogin_on_unauthorized.
+        (3) NOW on work/1914-twan: a copy Vault refuses after its retries writes a stale marker on the persistent project cache (it outlives the container), any copy that lands or a fresh sign-in clears it, and codex-oauth-session offers the device sign-in BEFORE launching Codex when it is set. Tests a_stale_vaulted_codex_sign_in_is_offered_before_launch and a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale, both FAIL with the shell change removed. NOT covered, and named: a rotation lost to a whole-container kill inside the inotify window leaves no marker (nothing in-container survives to write it); that case still surfaces at bootstrap, through criterion 2's offer.
