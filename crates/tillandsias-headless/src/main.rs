@@ -21605,10 +21605,10 @@ fn discipline_seed_branch_candidates(seed: &str) -> Vec<String> {
     }
     let mut out = Vec::new();
     for key in ["forge", "linux"] {
-        if let Some((_, v)) = integration.iter().find(|(k, _)| k == key) {
-            if !v.is_empty() {
-                out.push(v.clone());
-            }
+        if let Some((_, v)) = integration.iter().find(|(k, _)| k == key)
+            && !v.is_empty()
+        {
+            out.push(v.clone());
         }
     }
     if let Some(v) = default_branch.filter(|v| !v.is_empty()) {
