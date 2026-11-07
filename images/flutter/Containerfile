@@ -14,6 +14,11 @@
 # qemu binfmt, measured on tlatoanis-macbook-air 2026-10-14. The assertion at
 # the end of the SDK step refuses that case.
 FROM docker.io/library/debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # Flutter 3.47.7 stable, Dart 3.13.5. The release hash and the x64 archive's
 # sha256 are copied from releases_linux.json; a bump changes all three.

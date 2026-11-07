@@ -10,6 +10,10 @@
 # also carries the CC-BY-4.0 credit for caniuse-lite's data).
 ARG FORGE_IMAGE=localhost/tillandsias-forge
 FROM ${FORGE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours. The label is Tillandsias's own recipe; every base image and
+# package it carries is credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 LABEL io.tillandsias.studio="tina" \
       io.tillandsias.studio.tinacms-version="3.15.1" \

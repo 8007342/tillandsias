@@ -32,6 +32,10 @@ RUN mkdir -p /build/public \
     && test -s public/editor.js && test -s public/editor.css
 
 FROM ${FORGE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours. The label is Tillandsias's own recipe; every base image and
+# package it carries is credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 LABEL io.tillandsias.studio="puck" \
       io.tillandsias.studio.puck-version="0.20.2" \
       io.tillandsias.studio.react-version="19.2.0 (bundled)" \

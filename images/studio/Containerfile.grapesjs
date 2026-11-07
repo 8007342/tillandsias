@@ -10,6 +10,10 @@
 # fetched at run time. Its LICENSE ships in /opt/studio/grapesjs/vendor/LICENSE.
 ARG FORGE_IMAGE=localhost/tillandsias-forge
 FROM ${FORGE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours. The label is Tillandsias's own recipe; every base image and
+# package it carries is credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 ARG GRAPESJS_VERSION=0.23.8
 ARG GRAPESJS_INTEGRITY=sha512-4+HvGRnWK0IbFva2FUxu6GXA3/BFGq0vRaeJ8MhhFR5O42wq9T7rKxChYLKgEmplHb2ea9HsfIzJtsEibeYv7w==
