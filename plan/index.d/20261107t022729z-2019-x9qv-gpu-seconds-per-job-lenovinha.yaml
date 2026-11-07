@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-07T02:27:29Z, at coordinator macuahuitl-fedora's request.
+packets:
+- packet_id: every-gpu-job-records-its-gpu-seconds-across-projects-and-a-forge-can-read-them-for-cloud-versus-local-cost
+  order: 2019-x9qv
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [studio, inference, metrics, forge]
+  estimated_hours: 6
+  title: Per-job GPU seconds are recorded across projects and readable from a forge, so cloud and local cost can be compared
+  context: 'Coordinator 2026-11-06, generic. To decide whether a workload belongs on a cloud GPU or a local host, each GPU job (studio run_workflow, imagegen, inference) needs its measured GPU time recorded where every project can read it. Today a run returns provenance and outputs but no duration ledger across projects.'
+  exit_criteria:
+  - 'Each GPU job appends one record: project, lane, tool, workflow or model, host, device, wall seconds, and GPU-busy seconds where the device exposes them (stated as unavailable otherwise, never guessed). It is append-only and holds no prompts or secrets.'
+  - 'A forge reads the records through an MCP verb, with filters by project, tool and time, and per-group totals; a forge reads every project only if the operator allows, otherwise its own.'
+  - 'A test shows a recorded job read back from a second project lane, and a refused read when cross-project reading is off.'
+  verifiable_closure: 'One real studio job on a GPU host read back from another project forge, with its GPU seconds.'
+  unscoreable: 'none.'
+  next_action: 'Read how studio_tool and imagegen_tool record provenance today, choose the store (host state, not a forge volume), then write the design and the red test.'
+  provenance: coordinator macuahuitl-fedora 2026-11-06.
+  events:
+  - {type: filed, ts: '2026-11-07T02:27:29Z', host: lenovinha, summary: filed p2 ready}
