@@ -15,7 +15,12 @@
 --   Cargo.toml            `license = "<x>"`           x must be GPL-3.0-or-later (or .workspace)
 --   package.json          `"license": "<x>"`          x must be GPL-3.0-or-later
 --   any tracked text      an SPDX licence header   its identifier must start with GPL-3.0
---   Containerfile*        LABEL org.opencontainers.image.licenses  present AND starts with GPL-3.0-or-later
+--   Containerfile*        LABEL org.opencontainers.image.licenses  present AND starts with GPL-3.0-or-later,
+--                         OR the final FROM is one of OUR OWN labelled images (localhost/tillandsias-<name>,
+--                         named directly or through an ARG default): the label is inherited from a layer
+--                         we label. The name resolves to its Containerfile through image_build_paths in
+--                         crates/tillandsias-core/src/image_builder.rs, then images/<name>/Containerfile or
+--                         images/<dir>/Containerfile.<suffix>. A third-party base still needs its own label.
 --                         (an image that is mostly third-party software carries a COMPOUND label naming
 --                         ours AND theirs, operator ruling 2026-11-01: vault "GPL-3.0-or-later AND BUSL-1.1",
 --                         CUDA "… AND LicenseRef-NVIDIA-CUDA-EULA", ComfyUI "… AND GPL-3.0-only")
@@ -62,6 +67,58 @@ local function read(path)
     local ok, body = pcall(fs.read, path)
     if ok and body then return body end
     return nil
+end
+
+-- Our image names -> Containerfiles, read from the Rust builder's own table.
+local OWN = {}
+do
+    local rs = read("crates/tillandsias-core/src/image_builder.rs")
+    if rs then
+        for name, path in rs:gmatch('"([%w%-]+)"%s*=>%s*format!%("{root_dir}/([^"]+)"%)') do OWN[name] = path end
+    end
+end
+local function own_containerfile(name)
+    if OWN[name] then return OWN[name] end
+    local direct = "images/" .. name .. "/Containerfile"
+    if read(direct) then return direct end
+    for i = 1, #name do
+        if name:sub(i, i) == "-" then
+            local q = "images/" .. name:sub(1, i - 1) .. "/Containerfile." .. name:sub(i + 1)
+            if read(q) then return q end
+        end
+    end
+    return nil
+end
+local function label_in(src)
+    return src:match('org%.opencontainers%.image%.licenses%s*=%s*"([^"]*)"')
+        or src:match("org%.opencontainers%.image%.licenses%s*=%s*([^%s\\]+)")
+end
+-- The label a Containerfile declares or inherits: (label, how) or (nil, reason).
+local function effective_label(src, depth)
+    local own = label_in(src)
+    if own then return own, "declared" end
+    if depth > 4 then return nil, "image-base-chain-too-deep" end
+    local args, final = {}, nil
+    for _, l in ipairs(text.lines(src:gsub("\\\r?\n", " "))) do
+        local a, v = l:match("^%s*ARG%s+([%w_]+)=(.*)$")
+        if a then args[a] = text.trim(v):gsub('^"(.*)"$', "%1") end
+        local f = l:match("^%s*FROM%s+(%S+)")
+        if f then final = f end
+    end
+    if not final then return nil, "image-has-no-from" end
+    final = final:gsub("%${([%w_]+)}", function(k) return args[k] or ("${" .. k .. "}") end)
+                 :gsub("%$([%w_]+)", function(k) return args[k] or ("$" .. k) end)
+    if final:match("%$") then return nil, "image-base-unresolved:" .. final end
+    local name = final:match("^localhost/tillandsias%-([%w%-]+)")
+    if not name then return nil, "image-inherits-base-licence-label" end
+    name = name:gsub("[:@].*$", "")
+    local cf = own_containerfile(name)
+    if not cf then return nil, "image-base-is-ours-but-unresolved:" .. name end
+    local base_src = read(cf)
+    if not base_src then return nil, "image-base-is-ours-but-unreadable:" .. cf end
+    local lbl, how = effective_label(base_src, depth + 1)
+    if lbl then return lbl, "inherited-from:" .. cf end
+    return nil, how
 end
 
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 10000 })
@@ -126,10 +183,9 @@ for _, p in ipairs(tracked) do
                 -- 4. an image must declare its own licence label, and it must be ours
                 if base:match("^Containerfile") and (p:match("^images/[^/]+/Containerfile") or p == "observatorium/Containerfile") then
                     containerfiles = containerfiles + 1
-                    local label = src:match('org%.opencontainers%.image%.licenses%s*=%s*"([^"]*)"')
-                        or src:match("org%.opencontainers%.image%.licenses%s*=%s*([^%s\\]+)")
+                    local label, how = effective_label(src, 0)
                     if not label then
-                        refuse(p, "image-inherits-base-licence-label")
+                        refuse(p, how)
                     elseif label:sub(1, #OURS) ~= OURS then
                         refuse(p, "image-licence-label-not-gpl:" .. label)
                     end

@@ -9,12 +9,16 @@
 --   ARM 2  a crate's Cargo.toml declaring license = "MIT"                   -> violation, by line
 --   ARM 3  a vendored upstream LICENSE under a listed path + labelled image -> ok
 --   ARM 4  a repository with no Containerfile and no Cargo.toml             -> could-not-run, never ok
+--   ARM 6  an image FROM one of OUR labelled images (named directly, or through
+--          an ARG default, as the studio images name the forge) with no label
+--          of its own inherits GPL-3.0-or-later -> ok; the same file FROM a
+--          third-party base stays refused (ARM 1)
 -- and ARM 5 runs the guard over the live checkout as it stands.
 -- Red on the tree before 1958-yfib: ARM 5 refused 20 images (every
 -- images/*/Containerfile* and observatorium/Containerfile inherited a label).
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-own-licence-declarations.lua [-- --plan <bin>]
--- Verdict: ok:own-licence-declarations-fixture:5 | violation:own-licence-declarations-fixture:<arms failed>
+-- Verdict: ok:own-licence-declarations-fixture:6 | violation:own-licence-declarations-fixture:<arms failed>
 
 local CHECK_REL = "scripts/lua/check-own-licence-declarations.lua"
 local PLAN
@@ -111,6 +115,20 @@ end
 do
     local last = guard(ROOT)
     arm(5, "live checkout passes", last:match("^ok:own%-licence%-declarations:checked=%d+$") ~= nil, "got `" .. last .. "`")
+end
+
+-- ARM 6: inheritance from our own labelled image, direct and through an ARG default.
+do
+    local abs = scratch("arm6", {
+        ["images/forge/Containerfile"] = LABELLED,
+        ["images/studio/Containerfile.decap"] = "ARG FORGE_IMAGE=localhost/tillandsias-forge\nFROM ${FORGE_IMAGE}\nRUN true\n",
+        ["images/studio/Containerfile.puck"] = "ARG FORGE_IMAGE=localhost/tillandsias-forge\nFROM docker.io/library/node:22-bookworm-slim AS builder\nRUN true\nFROM ${FORGE_IMAGE}\nRUN true\n",
+        ["images/tool/Containerfile"] = "FROM localhost/tillandsias-forge:v56.11.2.1\nRUN true\n",
+        ["crates/x/Cargo.toml"] = WS_CRATE,
+    })
+    local last, out = guard(abs)
+    arm(6, "an image built FROM our own labelled image inherits the label (direct, ARG default, multi-stage)",
+        last:match("^ok:own%-licence%-declarations:checked=%d+$") ~= nil, "got `" .. last .. "` " .. (out:match("refused:[^\n]*") or ""))
 end
 
 run({ "rm", "-rf", ROOT .. "/" .. REL })

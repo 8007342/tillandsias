@@ -582,8 +582,12 @@ for _, f in ipairs(containerfiles) do
         local imgname = dir .. (suffix and ("-" .. suffix) or "")
         if dir == "default" and suffix == "base" then imgname = "default-base" end
         local comp = component("image:" .. imgname, "tillandsias-" .. imgname .. " image", "container-image", "built from " .. f)
-        components[comp].optional = IMAGE_OPTIONAL[imgname]
-        components[comp].optional_source = "generator-table"
+        local opt = IMAGE_OPTIONAL[imgname]
+        -- a studio image (images/studio/Containerfile.<studio>, images/web-studio-*) is
+        -- always a user's choice; an image the table does not know is reported as such.
+        if opt == nil and imgname:match("studio") then opt = true end
+        components[comp].optional = opt
+        components[comp].optional_source = (IMAGE_OPTIONAL[imgname] ~= nil) and "generator-table" or (opt ~= nil and "studio-by-name" or "unknown")
         parse_containerfile(f, comp, imgname)
     end
 end
@@ -670,8 +674,17 @@ do
                 local roles = LOCKFILE_ROLES[comp] or {}
                 local locks = {}
                 for lf in pairs(roles) do locks[#locks + 1] = lf end
-                for _, f in ipairs(fs.walk(dir, { suffix = "package-lock.json" })) do
-                    if not f:match("node_modules/") and not roles[f] then locks[#locks + 1] = f end
+                -- a directory holding SEVERAL Containerfiles (images/studio/Containerfile.*)
+                -- shares its tree between images: there only the lockfiles a Containerfile
+                -- COPYs belong to it. A single-Containerfile directory owns every lockfile under it.
+                local siblings = 0
+                for _, f in ipairs(fs.walk(dir, { suffix = "" })) do
+                    if f:match("^" .. dir:gsub("%p", "%%%0") .. "/Containerfile[^/]*$") then siblings = siblings + 1 end
+                end
+                if siblings <= 1 then
+                    for _, f in ipairs(fs.walk(dir, { suffix = "package-lock.json" })) do
+                        if not f:match("node_modules/") and not roles[f] then locks[#locks + 1] = f end
+                    end
                 end
                 table.sort(locks)
                 for _, lf in ipairs(locks) do
