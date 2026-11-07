@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-smoke-forge-lane-has-no-detection-for-its-own-central-failure-mode-opencode-idles-after-an-agent-error-never-writes-opencode-exit-and-every-section-4a-instrument-reports-health
+    event:
+      type: progress
+      ts: "2026-11-07T14:34:08Z"
+      agent_id: linux-lenovinha-opus5-20261107t143408z
+      host: lenovinha
+      summary: |-
+        stale ready: fix landed 9bd7909f5 then claim expired unclosed. Re-verified fixture 5/5 on 2bc14cbd3. Open check: one live curl-install smoke where the agent errors (needs operator consent)
