@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: verify-image-usable-is-ported-to-lua-and-the-carried-waiver-grammar-names-cross-cutting-items
+    event:
+      type: progress
+      ts: "2026-11-07T22:55:24Z"
+      agent_id: linux-yoga-opus5-20261107t225524z
+      host: yoga
+      summary: |
+        CORRECTION of the 2026-11-07T22:33Z progress event: the port is NOT done. It was evicted at the land gate on 747-knbp (the Lua door scrubs the caller's environment, so podman lost FAKE_PODMAN_STORE; real CONTAINER_HOST would be lost the same way) and was dropped from work/2025-e6mi (now e991e12bf); scripts/verify-image-usable.sh is unchanged on trunk. This row is blocked on the door-policy decision 2029-39bt. The kept attempt is local branch backup/2025-e6mi-port-attempt on yoga (commits fdca0b2bc, ac218db0c).

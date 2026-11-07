@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-07 after the verify-image-usable port (2006-me5t) was evicted at the land gate. Code is cited by symbol, never by line.
+packets:
+  - packet_id: a-lua-door-child-cannot-run-in-the-callers-environment-so-a-shell-script-that-runs-the-callers-podman-cannot-be-ported
+    order: 2029-39bt
+    status: ready
+    kind: design
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, security, podman, methodology]
+    estimated_hours: 3
+    depends_on: [verify-image-usable-is-ported-to-lua-and-the-carried-waiver-grammar-names-cross-cutting-items]
+    title: "DESIGN FIRST - a Lua door child cannot inherit the caller's environment, so a shell script whose job is to run the caller's own podman cannot be ported byte-identically"
+    context: |
+      Measured 2026-11-07 on PR #996 (work/2025-e6mi): scripts/verify-image-usable.sh was ported to scripts/lua/verify-image-usable.lua and was byte-identical on four side-by-side arms, but the land gate evicted it on 747-knbp (test-build-image-installed-version-alias.sh). That fixture's fake podman reads FAKE_PODMAN_STORE, and the Lua child got `FAKE_PODMAN_STORE: unbound variable`. Cause, by symbol: lua_predicate::base_env_command starts EVERY Lua door child (proc.run, proc.spawn, proc.chain, sh.run) from env_clear plus PROC_RUN_BASE_ENV_PASSTHROUGH (PATH, HOME, TMPDIR, XDG_RUNTIME_DIR, DBUS_SESSION_BUS_ADDRESS, CARGO_TARGET_DIR, Windows basics) plus TILLANDSIAS_*, deliberately (1551-nyzb: sh.run used to leak a secret into a child's printenv). The only way in is proc.run's explicit `env` table, and a script reads only the variables it declares with @env. So a Lua port cannot hand podman the caller's environment; it also drops real podman inputs, e.g. CONTAINER_HOST (scripts/common.sh drives podman-remote with it), CONTAINERS_CONF and CONTAINERS_STORAGE_CONF. The same blocks porting any shell script whose contract is "run this tool as my caller would". A local run of the build-image fixtures passed only because the fixture's fake tree had no runnable plan binary, so build-image.sh took its shell fallback; the Lua path was never exercised there.
+    exit_criteria:
+      - "A written decision in methodology (or openspec) says which of these holds, with its security reasoning against 1551-nyzb: (a) a declared, per-script inherited-environment allowlist (e.g. an @env-inherit header listing names or prefixes such as CONTAINER_HOST, CONTAINERS_*) that base_env_command honours for that script only, with a fixture showing an undeclared variable still does not reach the child; or (b) scripts that run a caller's tool in the caller's environment are out of scope for the shell-to-lua backlog, and the carried-obligation counter excludes them by a named rule. Pre-fix result: FAILS, neither exists and verify-image-usable.sh cannot be ported."
+    verifiable_closure: "A written decision in methodology (or openspec) says which of these holds, with its security reasoning against 1551-nyzb: (a) a declared, per-script inherited-environment allowlist (e.g. an @env-inherit header listing names or prefixes such as CONTAINER_HOST, CONTAINERS_*) that base_env_command honours for that script only, with a fixture showing an undeclared variable still does not reach the child; or (b) scripts that run a caller's tool in the caller's environment are out of scope for the shell-to-lua backlog, and the carried-obligation counter excludes them by a named rule. Pre-fix result: FAILS, neither exists and verify-image-usable.sh cannot be ported."
+    unscoreable: |
+      design-first: the closure is a decision record plus, for (a), its fixture.
+    next_action: >
+      Decide (a) or (b) with the coordinator; this is a door-policy change, not a port. Until then waive shell-to-lua with `blocked-by:2029-39bt` when the offered item is a script that runs the caller's tool (verify-image-usable.sh is one).
+    provenance: |
+      PR #996 eviction on 747-knbp, 2026-11-07; macuahuitl relay; lua_predicate::base_env_command.
+    events:
+      - type: filed
+        ts: "2026-11-07T23:00:00Z"
+        host: yoga
+        summary: "filed after the verify-image-usable Lua port was evicted for dropping the caller's environment"

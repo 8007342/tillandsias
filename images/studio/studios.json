@@ -35,15 +35,26 @@
   "studios": [
     {
       "brief": "Drag-and-drop page builder for plain HTML and CSS sites.",
+      "edits": "The page's .html and .css files directly; every save is a commit.",
       "entry": [
         "/usr/local/bin/studio-grapesjs"
       ],
       "frameworks": [
         "plain-html"
       ],
+      "good_for": [
+        "landing pages and one-page marketing sites",
+        "laying out sections, columns and blocks by drag and drop",
+        "restyling an existing static page (colours, spacing, fonts) without touching code"
+      ],
       "id": "grapesjs",
       "license": "BSD-3-Clause",
       "name": "GrapesJS",
+      "not_for": [
+        "blog posts or other long-form markdown content",
+        "React, Vue or other component-based apps",
+        "pages produced by a build step (it edits the HTML it is given, not a template)"
+      ],
       "packet": "1861-nmpp",
       "port": 4096,
       "save_adapter": "endpoint",
@@ -58,15 +69,26 @@
     },
     {
       "brief": "Content editor for markdown sites (Hugo, Jekyll, Astro, 11ty).",
+      "edits": "Markdown files and their frontmatter under the content folders, plus uploads under static/; scaffolds admin/config.yml when it is missing.",
       "entry": [
         "/usr/local/bin/studio-decap"
       ],
       "frameworks": [
         "markdown-ssg"
       ],
+      "good_for": [
+        "writing and editing blog posts, docs pages and other markdown entries",
+        "frontmatter fields (title, date, tags, images) through forms",
+        "collections of similar entries, and uploading images to the site's media folder"
+      ],
       "id": "decap",
       "license": "MIT",
       "name": "Decap CMS",
+      "not_for": [
+        "page layout or visual design",
+        "composing pages from components",
+        "plain HTML sites with no static site generator"
+      ],
       "packet": "1862-wrx5",
       "port": 4096,
       "save_adapter": "own-writer",
@@ -82,15 +104,26 @@
     },
     {
       "brief": "Visual content editing for Next.js, Astro and Hugo, in local mode.",
+      "edits": "Content files under content/ (markdown, MDX or JSON) and the tina/config schema.",
       "entry": [
         "/usr/local/bin/studio-tina"
       ],
       "frameworks": [
         "next-tailwind"
       ],
+      "good_for": [
+        "editing page text and structured content inline, on a live preview of the running site",
+        "Next.js, Astro or Hugo sites whose content lives in markdown, MDX or JSON",
+        "people who would rather click on the page than fill in a form"
+      ],
       "id": "tina",
       "license": "Apache-2.0",
       "name": "TinaCMS",
+      "not_for": [
+        "building a layout from scratch",
+        "plain HTML sites with no build",
+        "changing component code or styles"
+      ],
       "packet": "1863-dmke",
       "port": 4096,
       "save_adapter": "own-writer",
@@ -104,15 +137,26 @@
     },
     {
       "brief": "Visual editor for React sites, built from the site's own components.",
+      "edits": "Only the page layout data (which components, in what order, with what props) under .tillandsias/studio/puck/; never component source.",
       "entry": [
         "/usr/local/bin/studio-puck"
       ],
       "frameworks": [
         "react"
       ],
+      "good_for": [
+        "composing pages from the React components the site already has, by drag and drop",
+        "landing and marketing pages inside a React app",
+        "letting non-developers rearrange sections without writing JSX"
+      ],
       "id": "puck",
       "license": "MIT",
       "name": "Puck",
+      "not_for": [
+        "markdown or blog content",
+        "creating or changing the components themselves",
+        "sites that are not React"
+      ],
       "packet": "1864-ay3x",
       "port": 4096,
       "save_adapter": "endpoint",
@@ -123,14 +167,23 @@
     },
     {
       "brief": "Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
+      "edits": "The app's own source under app/, src/ and components/ (not available offline in the forge).",
       "entry": [
         "/usr/local/bin/studio-onlook"
       ],
       "frameworks": [],
+      "good_for": [
+        "visually editing the layout and Tailwind styles of a Next.js app, written back to code"
+      ],
       "id": "onlook",
       "license": "Apache-2.0",
       "name": "Onlook",
       "needs_cloud_account": true,
+      "not_for": [
+        "offline use: it needs a CodeSandbox account and runs projects in a cloud sandbox",
+        "markdown content",
+        "sites that are not Next.js"
+      ],
       "packet": "1865-dn5h",
       "port": 4096,
       "save_adapter": "own-writer",
@@ -144,13 +197,23 @@
     },
     {
       "brief": "Node-based image generation on the local models, outputs to the lane's scratch volume.",
+      "edits": "Nothing in the checkout: outputs land in the lane's scratch volume (/work/tmp/imagegen), and the agent commits the ones the user keeps.",
       "entry": [],
       "frameworks": [],
+      "good_for": [
+        "generating or editing images: hero art, illustrations, icons, sprites, textures",
+        "image-to-image and inpainting with the local models",
+        "building a repeatable image workflow the agent can rerun with studio.run_workflow"
+      ],
       "id": "comfyui",
       "image": "imagegen-studio",
       "kind": "sibling",
       "license": "GPL-3.0-only",
       "name": "ComfyUI",
+      "not_for": [
+        "editing site pages, text or code",
+        "anything that must change files in the checkout directly"
+      ],
       "packet": "1921-2krx",
       "port": 8188,
       "save_adapter": "own-writer",
