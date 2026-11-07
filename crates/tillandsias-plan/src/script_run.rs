@@ -910,6 +910,26 @@ fn emit_timing(name: &str, line: &str, code: i32, elapsed: Duration) {
 /// signal. It is installed BEFORE any script code runs and the caller waits
 /// for that, so there is no window in which a child exists and the default
 /// disposition still applies. Unix only: on Windows the job object owns this.
+/// ORDER 2020-ffzn. The signal a TERMINATING runner received, 0 while none.
+/// The signal thread stores it BEFORE closing the scope: closing it kills the
+/// script's child, which wakes the script's `p:wait()`, and the main thread
+/// could then finish the script and exit with ITS code (1 was measured under
+/// load) before the signal thread reached `exit(128 + signo)`.
+static TERMINATING: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+/// Every exit of `cli_run` after the handler is installed goes through here.
+/// While a termination is in progress the main thread parks: the signal
+/// thread finishes the cleanup and exits 128+signal, so the caller reads the
+/// signal's status, never the script's.
+fn exit_unless_terminating(code: i32) -> ! {
+    if TERMINATING.load(std::sync::atomic::Ordering::SeqCst) != 0 {
+        loop {
+            std::thread::park();
+        }
+    }
+    std::process::exit(code);
+}
+
 #[cfg(unix)]
 fn reap_on_termination(host: crate::lua_predicate::script_process::Host) {
     use tokio::signal::unix::{SignalKind, signal};
@@ -941,8 +961,17 @@ fn reap_on_termination(host: crate::lua_predicate::script_process::Host) {
             let Some(signo) = signo else {
                 return;
             };
+            TERMINATING.store(signo, std::sync::atomic::Ordering::SeqCst);
             if let Err(e) = host.scope.cleanup() {
                 eprintln!("{e}");
+            }
+            // Test seam (2020-ffzn): widen the window in which the main thread
+            // races this exit, so the fixture can show the race deterministically.
+            if let Some(ms) = std::env::var("TILLANDSIAS_SCRIPT_SIGNAL_EXIT_DELAY_MS")
+                .ok()
+                .and_then(|v| v.parse::<u64>().ok())
+            {
+                std::thread::sleep(Duration::from_millis(ms));
             }
             std::process::exit(128 + signo);
         });
@@ -1063,7 +1092,7 @@ pub fn cli_run(args: &[String]) -> ! {
                         "  remedy: find what it waits on (run it with --trace), or raise --timeout if the work is genuinely that long"
                     );
                     emit_timing(&name, "status=timed_out", 124, t0.elapsed());
-                    std::process::exit(124);
+                    exit_unless_terminating(124);
                 }
             }
         }
@@ -1081,7 +1110,7 @@ pub fn cli_run(args: &[String]) -> ! {
                 "  remedy: this is a runner defect, not slowness and not the script's verdict — report it with the script and this message"
             );
             emit_timing(&name, &line, 1, t0.elapsed());
-            std::process::exit(1);
+            exit_unless_terminating(1);
         }
     };
     if trace {
@@ -1098,7 +1127,7 @@ pub fn cli_run(args: &[String]) -> ! {
         eprintln!("{d}");
     }
     emit_timing(&name, &line, code, t0.elapsed());
-    std::process::exit(code);
+    exit_unless_terminating(code);
 }
 
 /// `script classify --rc <n> [--status <s>] [--file <path>]` prints one kind.
