@@ -2938,7 +2938,26 @@ _run_lua_decider() {  # $1 = scripts/lua/<name>.lua, remaining args are explicit
     TILLANDSIAS_SCRIPT_RUNNER_BIN="$_ld_bin" _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
 }
 
+# ORDER 1270-5mz8: the litmus runtime shim routes every podman call through
+# scripts/tillandsias-podman, which runs a PREBUILT tillandsias-podman-cli. Build
+# it once, before the first phase mints the shim, and say so in the gate log, so
+# a release gate can never measure the forge lane on a binary older than the
+# tree (2026-09-19: two release gates did). The shim refuses a stale one too.
+_LITMUS_PODMAN_CLI_READY=0
+_ensure_litmus_podman_cli() {
+    [ "$_LITMUS_PODMAN_CLI_READY" = 1 ] && return 0
+    _LITMUS_PODMAN_CLI_READY=1
+    local _pc_rc=0
+    (cd "$SCRIPT_DIR" && cargo build -q -p tillandsias-podman-cli) || _pc_rc=$?
+    if [ "$_pc_rc" -eq 0 ]; then
+        echo "podman-cli: built-before-litmus-shim (cargo build -p tillandsias-podman-cli rc=0; 1270-5mz8)"
+    else
+        echo "podman-cli: build-failed-before-litmus-shim rc=$_pc_rc — the shim will refuse a stale prebuilt by name (1270-5mz8)"
+    fi
+}
+
 _run_litmus_phase() {
+    _ensure_litmus_podman_cli
     local phase="$1"
     local size="$2"
     local log_file="$3"
