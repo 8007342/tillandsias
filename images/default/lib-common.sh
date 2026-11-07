@@ -4230,6 +4230,37 @@ seed_claude_pretooluse_hook() {
     trace_lifecycle "config" "claude PreToolUse Bash bridge seeded (forge)"
 }
 
+# @trace order:2017-wtbr
+# Sub-agent worktrees start from the session's HEAD, not the remote default.
+# Claude Code's default worktree.baseRef ("fresh") branches from origin/HEAD,
+# which in a forge clone names the mirror's default branch (usually main), so
+# a sub-agent's isolated worktree started there instead of on the branch the
+# session works on. "head" is the documented setting for exactly this
+# (code.claude.com/docs/en/worktrees, "Choose the base branch"); it changes
+# nothing else. An explicit worktree.baseRef already in settings is kept.
+seed_claude_worktree_base_head() {
+    [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ] || return 0
+    local settings_cfg="${CLAUDE_SETTINGS_FILE:-$HOME/.claude/settings.json}"
+    local tmp
+    mkdir -p "$(dirname "$settings_cfg")"
+    if [ -s "$settings_cfg" ]; then
+        if ! jq -e 'type == "object"' "$settings_cfg" >/dev/null 2>&1; then
+            trace_lifecycle "config" "claude settings.json is not a JSON object; worktree.baseRef NOT seeded"
+            return 1
+        fi
+        jq -e '.worktree.baseRef? // empty' "$settings_cfg" >/dev/null 2>&1 && return 0
+    fi
+    tmp="$(mktemp "${settings_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$settings_cfg" ]; then
+        jq '.worktree = ((.worktree // {}) + {baseRef: "head"})' "$settings_cfg" >"$tmp" || { rm -f "$tmp"; return 1; }
+    else
+        printf '%s\n' '{"worktree":{"baseRef":"head"}}' >"$tmp" || { rm -f "$tmp"; return 1; }
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$settings_cfg"
+    trace_lifecycle "config" "claude worktree.baseRef=head seeded (forge)"
+}
+
 # Pre-trust the forge project folder (2026-08-31, minted-session blocker #2:
 # after the theme picker was seeded away, claude's workspace-trust dialog —
 # "Yes, I trust this folder / Enter to confirm" — blocked the prompt next).
