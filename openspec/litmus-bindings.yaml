@@ -317,6 +317,7 @@ specs:
   - litmus:agy-install-cached
   - litmus:opencode-render-probe-shape
   - litmus:forge-project-trust-seeds-shape
+  - litmus:forge-subagent-worktree-base-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
