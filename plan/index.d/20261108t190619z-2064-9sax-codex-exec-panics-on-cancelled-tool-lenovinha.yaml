@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-codex-forge-in-prompt-mode-panics-with-status-101-after-a-cancelled-tool-call-instead-of-recovering
+    order: 2064-9sax
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, codex, harness, lane]
+    estimated_hours: 3
+    title: |
+      A codex forge in non-interactive --prompt mode exited with status 101 (a Rust panic) right after "codex_core::tools::router: error=tool call cancelled", following a tool call that printed about 130 KB of jsonl from a grep; the forge reported "attached command exited with status 101"
+    context: |
+      Reported by coordinator macuahuitl-fedora, 2026-11-08 (no fix yet). The preceding tool call had printed about 130 KB of jsonl from a grep. HYPOTHESIS, not yet measured: an oversized tool output or a timeout cancels the tool, and codex exec panics instead of recovering. Repro to try: any codex forge whose tool output is huge.
+    exit_criteria:
+      - 'REPRODUCED first: a codex forge in --prompt mode whose tool prints a large output (start near 130 KB) reproduces the cancel then status 101, or the hypothesis is refuted with the measured cause'
+      - 'a fixture pins the reproduction and fails before the fix'
+      - 'the fix keeps the lane alive across a cancelled tool call: cap or trim tool output in the forge codex config, or retry; the chosen remedy and its limit are stated'
+    verifiable_closure: 'the reproduction fixture red before and green after, plus one live codex --prompt run whose large tool output no longer ends in status 101'
+    unscoreable: 'unreproduced: the trigger is a hypothesis until the repro step measures it.'
+    next_action: 'Reproduce in a codex forge with a tool call that prints about 130 KB; record the codex version and whether size or time triggers the cancel.'
+    provenance: coordinator macuahuitl-fedora 2026-11-08; filed by lenovinha; queued after 2063-nfag.
+    depends_on: []
+    related: [2063-nfag]
+    events:
+      - {type: filed, ts: '2026-11-08T19:06:19Z', host: lenovinha, summary: filed p2 ready; hypothesis only, no repro yet}
