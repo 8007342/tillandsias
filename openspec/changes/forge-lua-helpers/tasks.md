@@ -42,11 +42,18 @@ record the pre/post `strace -f -e execve` count in the packet.
 
 - [ ] 2.1 `Containerfile` copies `images/default/lua/` to
       `/usr/local/lib/tillandsias/lua/`. `[mint on claim]`
-- [ ] 2.2 Land `2047-ci2k`: the three omitted libs are copied and
-      `check-image-ships-sourced-libs` is red before / green after. `[2047-ci2k]`
-- [ ] 2.3 `scripts/lua/check-helper-shell-population.lua`: counts shell-outs
-      in `images/default/lib-*.sh`, baseline may only decrease, names each
-      migrated file; wired as a gate step. `[mint on claim]`
+- [ ] 2.2 Land `2047-ci2k` (PR #1015): the four omitted libs are copied and
+      `check-forge-lib-copies.lua` is red before / green after; extend it to
+      every `lua/*.lua` module a wrapper names. `[2047-ci2k]`
+- [ ] 2.3 Register the shell-outs in `images/default/lib-*.sh` as a counter
+      of the shell-to-lua backlog in `check-carried-obligations.lua` (not a
+      separate gate step): floor may only decrease, names each migrated file,
+      waives with the existing grammar (`blocked-by:2006-me5t` until its
+      `cross-cutting` token lands). `[mint on claim]`
+- [ ] 2.4 Helper environment arm (2029-39bt): a helper spawning `printenv`
+      with `HTTPS_PROXY` and `TILLANDSIAS_X_SECRET` set in the caller sees
+      neither; `inference-state` records whether today's shell curl went via
+      the proxy. `[mint on claim]`
 
 ## 3. Wave 2 (separate change)
 

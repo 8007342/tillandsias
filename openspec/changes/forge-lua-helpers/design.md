@@ -54,6 +54,27 @@ Add `tillandsias-plan script run --helper <file.lua> [-- args...]`.
   empty line (an empty line would read as a missing value). A one-value helper
   prints one line. The shell wrapper reads with `IFS= read -r`; no `eval`, no
   `sed`.
+- **Environment (2029-39bt, 1551-nyzb, 2031-h5ru).** A `--helper` child
+  gets exactly what a decider child gets: `base_env_command`'s cleared
+  environment, the fixed passthrough (PATH, HOME, TMPDIR, …), `TILLANDSIAS_*`
+  minus the SECRET/PASS/PASSWORD names, and the fixed LC_ALL/TZ/
+  GIT_TERMINAL_PROMPT values. `--helper` MUST NOT widen it: no
+  caller-environment inheritance, no `@env-inherit`, until 2029-39bt decides
+  that question for every door at once. Each helper takes its inputs as
+  arguments or through `proc.run`'s explicit `env` table, each name declared
+  with `@env`; none passes a credential, a token or a `*_SECRET` name to a
+  child. What that means for the five, checked against the sources:
+  - `inference-state`: `curl` runs with no `HTTP(S)_PROXY`/`NO_PROXY`. The
+    endpoint is an enclave sibling and must be reached directly, so this is
+    the intended route; the fixture records whether today's shell `curl`
+    reached it through the proxy, and a difference is a finding, not a
+    silent behaviour change.
+  - `experts-probe`: the binary reads only `TILLANDSIAS_*` inputs, which pass.
+  - `ledger-freshness`: `git` gets HOME (for `safe.directory`) and
+    `GIT_TERMINAL_PROMPT=0`; the checkout is an argument, not `GIT_DIR`.
+  - `mcp-build-id`, `mcp-usage-log`: no child at all (`hash`, `time`, `fs`).
+  So none of the five needs caller inheritance. A helper that would is out of
+  scope here, which is 2029-39bt's option (b) applied to this change.
 - **Class.** All five helpers are `-- @class observing`: they take runtime
   arguments (a directory, an endpoint, a binary path) and the `Cacheable`
   cache is keyed on script content and reads, not arguments, so memoising them
@@ -86,7 +107,7 @@ recommended.
 ### D3.1 `lib-inference-state.sh` → `lua/inference-state.lua`
 
 - `proc.run{argv={"curl","-fsS","--max-time","1", endpoint.."/api/tags"}}`.
-- `json.decode`; count and byte-sort `models[].name` (the shell used
+- `json.parse` (the runtime has no `json.decode`); count and byte-sort `models[].name` (the shell used
   `sort -u`). Replace `tr ',' '\n' | sed -n 's/.*"name":"\([^"]*\)".*/\1/p'`.
 - Preserve the closed reason vocabulary exactly: `probe-tool-missing`,
   `endpoint-unreachable` (with the engine-refused suffix), `endpoint-timeout`,
@@ -135,14 +156,23 @@ recommended.
 
 ## D4 — Hardening
 
-- **Ratchet.** `scripts/lua/check-helper-shell-population.lua` counts
-  `lib-*.sh` functions in `images/default/` that shell out, with a baseline
-  that may only decrease; it names each migrated file and refuses a new
-  shell-out. Wire it as a gate step beside `check-carried-obligations.lua`.
-- **Shipped-libs guard (prerequisite `2047-ci2k`).** Every `lib-*.sh` sourced
-  by `lib-common.sh` or the two MCP wrappers, and every `lua/*.lua` module the
-  wrappers name, must appear in the Containerfile. This is the defect this
-  survey found; the guard is what stops the next one.
+- **Ratchet, as a carried-obligation backlog (2006-me5t).** Not a second,
+  free-standing gate step: `check-carried-obligations.lua` already owns the
+  shell-to-lua backlog, the `Carried-Waiver:` grammar and the land-queue
+  eviction, and a parallel ratchet would let a change pay one and owe the
+  other. So the count of shell-outs in `images/default/lib-*.sh` (helper
+  bodies, not the kept wrapper lines) is registered there as a counter of the
+  shell-to-lua backlog, with a floor that may only fall, and each port pays
+  against it. The kept `.sh` wrappers are exactly 2006-me5t's
+  `cross-cutting` case (small, but their callers and pins live outside the
+  change); until that token lands, a commit that cannot pay waives with
+  `blocked-by:2006-me5t`.
+- **Shipped-libs guard: exists (2047-ci2k, PR #1015).**
+  `scripts/lua/check-forge-lib-copies.lua` (litmus `forge-lib-copies`)
+  refuses any `images/default/lib-*.sh` named in the image's shell with no
+  COPY into `/usr/local/lib/tillandsias/`. It found four omitted libs, not
+  three (`lib-embed-endpoint.sh` as well). This change EXTENDS it to every
+  `lua/*.lua` module a wrapper names; it does not add a second guard.
 - **Determinism.** `observing` for all five; fixed-order lines; byte-sorted
   model names; `os.setlocale` already withheld by `lua_std`.
 - **MCP stdout safety.** A test runs each wrapper with the binary present and
@@ -191,7 +221,7 @@ own packet so the five easy helpers can land first.
 - **`--helper` is a runtime change.** Mitigated by the decider-capture
   fallback for value helpers; the side-effect helper needs `--helper` to keep
   MCP stdout clean.
-- **`json.decode` assumes Ollama's `/api/tags` shape** where `sed` was
+- **`json.parse` assumes Ollama's `/api/tags` shape** where `sed` was
   tolerant. The fixture pins the real shape and a malformed body keeps today's
   reason tokens.
 - **`hash.sha256` reads whole files.** Fine for the 111 KB server script;
@@ -199,5 +229,6 @@ own packet so the five easy helpers can land first.
 - **One extra process per call.** ~2 ms, offset by 4–9 removed forks; the MCP
   servers pay it once per session, not per tool call (the usage-log writer is
   the exception and is best-effort).
-- **The image is currently missing three of the libs.** `2047-ci2k` must land
-  (or land with this change) or the ports are invisible in the image.
+- **The image was missing four of the libs.** `2047-ci2k` (PR #1015) copies
+  them and guards it; it must land first or the ports are invisible in the
+  image.

@@ -46,8 +46,8 @@ Two facts make this the right moment:
    (measured 1–6 ms over 10 runs). The win is not runner startup; it is
    removing 4–9 forks and the shell parse chain per helper.
 
-A live defect sharpens the need: three of the helpers are **not copied into the
-image at all** (`2047-ci2k`), so today the startup context drops ledger
+A live defect sharpens the need: four sourced libs, three of them
+these helpers, are **not copied into the image at all** (`2047-ci2k`), so today the startup context drops ledger
 freshness and both MCP servers report the tier probe and build id as `unknown`.
 
 ## What changes
@@ -63,11 +63,12 @@ freshness and both MCP servers report the tier probe and build id as `unknown`.
   helpers (usage log) write nothing to stdout, so an MCP server's JSON-RPC
   stream is never touched.
 - **Image packaging**: `Containerfile` copies `lua/` to
-  `/usr/local/lib/tillandsias/lua/` and copies the three currently-omitted
-  libs (`2047-ci2k`). A guard proves every sourced lib and every named Lua
-  module is shipped.
-- **A ratchet** (`check-helper-shell-population.lua`) counts shell-outs in
-  `images/default/lib-*.sh` and refuses growth, so the migration is monotone.
+  `/usr/local/lib/tillandsias/lua/` and relies on `2047-ci2k`, which copies
+  the four omitted libs and adds the guard; this change extends that guard to
+  every named Lua module.
+- **A ratchet**: the shell-outs in `images/default/lib-*.sh` become a counter
+  of the existing shell-to-lua carried-obligation backlog (2006-me5t), so the
+  migration is monotone under the one waiver grammar the land queue enforces.
 - **Explicitly stays shell**: `lib-sigpipe-verdict.sh` (measures the OS pipe
   race), `lib-env-forward.sh` (emits shell source), `lib-ca-path.sh` and
   `lib-cargo-sites.sh` (host-side, before a host binary exists),

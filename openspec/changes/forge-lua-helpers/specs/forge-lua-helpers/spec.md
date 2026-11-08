@@ -1,9 +1,5 @@
 # forge-lua-helpers Specification
 
-## Status
-
-status: proposed
-
 ## Purpose
 
 Define the first `lib-*.sh` migration from shell to the Rust-hosted Lua runner:
@@ -105,9 +101,12 @@ missing file, when one is absent.
 ### Requirement: The shell-to-Lua migration is monotone
 <!-- req-id: 046144a7 -->
 
-A guard MUST count shell-outs in `images/default/lib-*.sh` and MUST refuse a
-count above its baseline. The baseline MAY only decrease, and the guard MUST
-name each migrated helper.
+The shell-outs in `images/default/lib-*.sh` MUST be counted as a counter of
+the shell-to-lua carried-obligation backlog judged by
+`scripts/lua/check-carried-obligations.lua`, not by a separate gate step. A
+count above its floor MUST be refused, the floor MAY only decrease, and the
+check MUST name each migrated helper. A change that cannot pay MUST carry a
+`Carried-Waiver: shell-to-lua` trailer in the accepted grammar.
 
 #### Scenario: A new shell-out is refused
 - **WHEN** a helper adds a new external command or a new `.sh` helper outside
@@ -131,6 +130,18 @@ write to stdout when it is a side-effect helper sourced by an MCP server.
 - **WHEN** a helper is invoked from `forge-plan.sh` or `project-info.sh`
 - **THEN** the JSON-RPC stdout MUST receive no helper output
 - **AND** a fixture MUST assert the wrapper writes only its documented lines
+
+### Requirement: Helper children get the base environment only
+
+A helper child MUST start from the same base environment as a decider child
+(cleared, fixed passthrough, `TILLANDSIAS_*` minus secret-named variables).
+`--helper` MUST NOT add caller-environment inheritance, and no helper MUST pass
+a credential or a secret-named variable to a child (2029-39bt, 1551-nyzb).
+
+#### Scenario: A helper child does not inherit the caller's environment
+- **WHEN** the caller sets `HTTPS_PROXY` and `TILLANDSIAS_X_SECRET` and runs a
+  helper that spawns `printenv`
+- **THEN** neither variable MUST appear in the child's output
 
 ### Requirement: What stays shell is named, not implied
 <!-- req-id: 16e05218 -->
