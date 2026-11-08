@@ -22,7 +22,7 @@ const PROBE: &str = "TILLANDSIAS_TEST_STUB_PROBE";
 
 /// Write `script` (which must start with a `#!` line) to `path` as an
 /// executable, returning only once it can be executed without ETXTBSY.
-/// Panics naming ETXTBSY if the window never closes (about 1.1 s).
+/// Panics naming ETXTBSY if the window never closes within 2 s.
 pub(crate) fn install_ready_stub(path: &Path, script: &str) {
     use std::os::unix::fs::PermissionsExt;
     let (shebang, body) = script
@@ -32,13 +32,13 @@ pub(crate) fn install_ready_stub(path: &Path, script: &str) {
     let probed = format!("{shebang}\n[ -n \"${{{PROBE}:-}}\" ] && exit 0\n{body}");
     std::fs::write(path, probed).expect("write stub");
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).expect("chmod stub");
-    let mut wait = std::time::Duration::from_millis(1);
-    for _ in 0..40 {
+    // No sleep (714-4r6w forbids sleep-polls in this crate): each probe is a
+    // fork and exec, which paces the loop, and the window closes in
+    // microseconds. The deadline bounds it.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    while std::time::Instant::now() < deadline {
         match std::process::Command::new(path).env(PROBE, "1").output() {
-            Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) => {
-                std::thread::sleep(wait);
-                wait = (wait * 2).min(std::time::Duration::from_millis(32));
-            }
+            Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) => continue,
             Ok(o) if o.status.success() => return,
             Ok(o) => panic!("stub {} probe exited {:?}", path.display(), o.status.code()),
             Err(e) => panic!("stub {} probe: {e}", path.display()),
