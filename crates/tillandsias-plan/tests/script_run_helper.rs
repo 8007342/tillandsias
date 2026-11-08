@@ -1,4 +1,4 @@
-// @trace order:2049-w2q6, order:2049-r4fx, spec:forge-lua-helpers
+// @trace order:2049-w2q6, order:2049-r4fx
 //! `script run --helper`: a sourced-function helper, not a decider. Its
 //! stdout is the script's alone, `verdict.*` is refused, a Lua error exits 1,
 //! and its children get the base environment only.
