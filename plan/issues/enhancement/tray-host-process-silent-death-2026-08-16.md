@@ -75,3 +75,66 @@ PID around the two death windows above, and add tray exit-path logging
 (reason + timestamp) so the NEXT silent death leaves a trace. Detection/
 supervision (the host-side analog of 594-u6zy) can be scoped once a death is
 attributable. Tracked as packet 783-eeii.
+
+## Event Log / WER search — 2026-11-08 (yolanda, 783-eeii)
+
+Retention made this answerable: on 2026-11-08 the System log's oldest record
+was 2026-08-14 12:54:58 and Application's 2026-07-12, both 20 MB logs. Times
+below are LOCAL (UTC-7), as above.
+
+Queries run (PowerShell, verbatim shapes):
+
+```powershell
+# window 04:30 -> 23:15 local, 2026-08-16
+Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=$s; EndTime=$e; Id=1000,1001,1002,1026} |
+  Where-Object { $_.Message -match 'tillandsias' }                    # -> nothing
+Get-WinEvent -FilterHashtable @{LogName='Application'; StartTime=$s; EndTime=$e; ProviderName='Tillandsias'}
+Get-WinEvent -FilterHashtable @{LogName='System'; StartTime=$s; EndTime=$e; Id=41,42,107,1074,6005,6006,6008,2004,26,1,12,13}
+Get-ChildItem $env:ProgramData\Microsoft\Windows\WER\ReportArchive, $env:LOCALAPPDATA\Microsoft\Windows\WER\ReportArchive, $env:LOCALAPPDATA\CrashDumps
+auditpol /get /subcategory:"Process Termination"                      # -> No Auditing
+```
+
+**Death 2 — ATTRIBUTED: it was Quit.** The tray's own Event Log relay has
+
+```
+16/08/2026 14:04:46  tray menu click {menu_id=quit, action=Quit}
+16/08/2026 14:04:57  VM drained on Quit (wsl --terminate)
+```
+
+and nothing from source Tillandsias between 14:05 and 23:10. The Quit route
+drains the VM by design, which is exactly the observed blast radius (runtime
+distro Stopped, vault/proxy/router/git-java gone). It was not silent; it was
+logged as a menu click and nobody read a menu click as an exit. Who or what
+clicked Quit is not recorded.
+
+**Death 1 — NOT ATTRIBUTABLE, recorded with the queries above.** Two
+instances, neither with an exit trace:
+
+```
+04:40:59  tillandsias tray starting      (instance A; last event 04:42:30)
+04:52:19  tillandsias tray starting      (instance B — A was already gone: on
+                                          Windows SingletonGuard::acquire never
+                                          kills an owner, a live A would have
+                                          made B refuse after 5s)
+04:52:46  cloud projects resolved        (B's LAST event)
+13:27:33  tillandsias tray starting      (the manual relaunch)
+```
+
+No Application Error/WER/hang event for the tray, no WER archive or dump, no
+System power/sleep/shutdown/resource-exhaustion event in the window (the one
+System hit, 14:57:49 IsolatedUserMode id=1, is outside it), and process-exit
+auditing is off. No panic and no Quit were logged. That is the signature of an
+EXTERNAL termination — TerminateProcess, or a job object reaping the process
+tree that launched it (the 04:52 start was a "post-e2e relaunch" by an agent
+lane) — which nothing inside the process can observe. Unproven: the evidence
+that would decide it (a 4689 audit record) was never collected.
+
+**What 783-eeii changed so this cannot recur silently:** the tray writes
+`%LOCALAPPDATA%\tillandsias\state\tray-lifecycle.state` (start, a 60s
+heartbeat, and the exit route: quit-menu, session-end, message-loop-error,
+panic, startup-failure, message-loop-ended). A record with no exit line IS an
+unrecorded death; the next tray start reports it at WARN (Event Log) with the
+heartbeat window that bounds it, `--diagnose` prints a `Tray process:` line,
+and `--forge` refuses with exit 3 naming the dead tray. To decide the next
+death-1 for certain, enable `auditpol /set /subcategory:"Process Termination"
+/success:enable` on the host: event 4689 names the terminating process.

@@ -44,6 +44,10 @@ mod tray_registry;
 // and phase mapping are portable and tested everywhere; only enabling VT on
 // the console is Win32, inside.
 mod provision_console;
+// ORDER 783-eeii: the host tray's start / heartbeat / exit record and the
+// `Tray process:` verdict. Portable and tested everywhere; the IO and the call
+// sites are in notify_icon.rs.
+mod tray_lifecycle;
 // ORDER 1335-jz8c: VmPhase -> tray glyph. Mapping is platform-independent
 // (and unit-tested everywhere); the HICON construction inside is cfg-gated.
 mod tray_phase_icon;
@@ -297,7 +301,16 @@ fn main() {
     // anything of ours is running inside it. Logs to tray.log; never fails.
     wslconfig_ensure::ensure_at_startup();
 
-    notify_icon::run();
+    // 783-eeii: a panic that ENDS the tray records its exit route. Not in the
+    // hook above: a panic inside a tokio task fires the hook too, and tokio
+    // catches it while the tray keeps running, so recording there would mark
+    // a live tray exited. Only a panic that unwinds out of `run` arrives here.
+    // `run` never returns, so `Ok` is uninhabited and the pattern irrefutable.
+    let Err(payload) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        notify_icon::run();
+    }));
+    notify_icon::tray_lifecycle_exit(tray_lifecycle::ExitReason::Panic);
+    std::panic::resume_unwind(payload);
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -317,6 +330,8 @@ fn main() {
 ///   0  the PTY was spawned
 ///   2  usage error (no project, or two agent flags)
 ///   1  the launch itself was refused or failed
+///   3  no tray is running (the singleton is free), so the guest would have
+///      no VM pin — refused, naming the dead tray (783-eeii)
 ///
 /// The agent flag is OPTIONAL and defaults to `--shell`, the maintenance
 /// intent, because that launch needs no agent installed in the guest and is
@@ -389,6 +404,20 @@ fn forge_launch_once() -> i32 {
         }
     }
     let intent = intent.unwrap_or(PtyIntent::Shell);
+
+    // ORDER 783-eeii: fail loud on a DEAD TRAY, naming it. The tray's control
+    // wire is the guest's VM pin: launched without one, the PTY opens and the
+    // guest idles out under it ~20s later, which reads as a generic
+    // guest/enclave failure. Refused only when the singleton is FREE — a held
+    // one (any version) or an unprobeable one proceeds.
+    let tray = notify_icon::tray_process_verdict();
+    if tray.running == Some(false) {
+        eprintln!(
+            "refused:forge-launch:{project}:tray-not-running\n  {}",
+            tray.line
+        );
+        return 3;
+    }
 
     match notify_icon::launch_pty(&intent, Some(project.as_str())) {
         Ok(()) => {
