@@ -459,3 +459,211 @@ fn child_environment_has_one_builder() {
         "child_env.rs is missing or no longer builds the environment (premise)"
     );
 }
+
+// ---------------------------------------------------------------------------
+// ORDER 2031-dwwy (tasks 1.2): the Rust credential shape
+// (child_env::credential_shape) and the namespace-hygiene guard's shape
+// (scripts/lua/check-env-namespace-hygiene.lua) are ONE rule. The guard itself
+// is RUN — not a replica of it — over a scratch tree holding every
+// TILLANDSIAS_ name in the checkout's code plus one probe per arm of the rule,
+// and the names it refuses must be exactly the names the Rust rule calls
+// credential-shaped, minus the guard's own listed credentials and retired
+// spellings. PRE-FIX (the guard of 2031-z4rm): it passed PASSWD, PASSPHRASE,
+// CREDENTIAL(S), COOKIE, SESSION terminals and ACCESS_KEY / SIGNING_KEY /
+// CREDENTIAL infixes that the Rust rule (design §4.2 A2) blocks.
+// ---------------------------------------------------------------------------
+
+fn tillandsias_names_in(text: &str, into: &mut std::collections::BTreeSet<String>) {
+    let re = regex::Regex::new(r"TILLANDSIAS_[A-Z0-9_]*[A-Z0-9]").unwrap();
+    for m in re.find_iter(text) {
+        into.insert(m.as_str().to_string());
+    }
+}
+
+fn code_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in rd.flatten() {
+        let p = e.path();
+        let Ok(ft) = e.file_type() else { continue };
+        if ft.is_dir() {
+            if p.file_name().is_some_and(|n| n == "target" || n == ".git") {
+                continue;
+            }
+            code_files(&p, out);
+        } else if ft.is_file()
+            && p.extension()
+                .and_then(|x| x.to_str())
+                .is_some_and(|x| matches!(x, "sh" | "lua" | "rs"))
+        {
+            out.push(p);
+        }
+    }
+}
+
+/// The names a Lua table literal `local <table> = { NAME = ..., }` lists.
+fn lua_table_names(src: &str, table: &str) -> Vec<String> {
+    let open = format!("local {table} = {{");
+    let start = src
+        .find(&open)
+        .unwrap_or_else(|| panic!("{table} in the guard"));
+    let body = &src[start + open.len()..];
+    let body = &body[..body.find("\n}").expect("table end")];
+    let re = regex::Regex::new(r"(?m)^\s*(TILLANDSIAS_[A-Z0-9_]+)\s*=").unwrap();
+    re.captures_iter(body).map(|c| c[1].to_string()).collect()
+}
+
+#[test]
+fn rust_and_lua_credential_shapes_agree() {
+    use tillandsias_plan::child_env::{
+        CREDENTIAL_CONTAINS, CREDENTIAL_TERMINAL, LOCATOR_SUFFIXES, PROJECT_CREDENTIAL_NAMES,
+        credential_shape,
+    };
+    let root = repo_root().canonicalize().expect("repo root");
+    let guard_path = root.join("scripts/lua/check-env-namespace-hygiene.lua");
+    let guard = std::fs::read_to_string(&guard_path).expect("read the guard");
+    let listed_credentials = lua_table_names(&guard, "CREDENTIAL_NAMES");
+    let retired = lua_table_names(&guard, "RETIRED_NAMES");
+
+    // The two credential lists are one list.
+    let mut rust_list: Vec<String> = PROJECT_CREDENTIAL_NAMES
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let mut lua_list = listed_credentials.clone();
+    rust_list.sort();
+    lua_list.sort();
+    assert_eq!(
+        rust_list, lua_list,
+        "child_env::PROJECT_CREDENTIAL_NAMES and the guard's CREDENTIAL_NAMES differ"
+    );
+    // A listed or retired name the Rust rule would pass would be a dead entry.
+    for n in listed_credentials.iter().chain(retired.iter()) {
+        assert!(
+            credential_shape(n).is_some(),
+            "{n} is listed but not shaped"
+        );
+    }
+
+    // The sample: the checkout's names, plus one probe per arm of the rule.
+    let mut names = std::collections::BTreeSet::new();
+    let mut files = Vec::new();
+    for d in ["scripts", "crates", "images"] {
+        code_files(&root.join(d), &mut files);
+    }
+    files.push(root.join("build.sh"));
+    for f in &files {
+        if let Ok(t) = std::fs::read_to_string(f) {
+            tillandsias_names_in(&t, &mut names);
+        }
+    }
+    assert!(names.len() > 100, "premise: the census found the namespace");
+    for t in CREDENTIAL_TERMINAL {
+        names.insert(format!("TILLANDSIAS_DWWY_PROBE_{t}"));
+        for l in LOCATOR_SUFFIXES {
+            names.insert(format!("TILLANDSIAS_DWWY_PROBE_{t}{l}"));
+        }
+    }
+    for c in CREDENTIAL_CONTAINS {
+        names.insert(format!("TILLANDSIAS_DWWY_PROBE_{c}_MODE"));
+    }
+    for not in ["SESSION_MODE", "AUTH_MODE", "KEYS_MODE", "PASS_OUT"] {
+        names.insert(format!("TILLANDSIAS_DWWY_PROBE_{not}"));
+    }
+
+    // A scratch tree the guard scans: ONE file holding every name. Repo-
+    // relative (the guard skips any path containing /target/ when absolute).
+    let rel = format!(
+        "target/plan-scratch/dwwy-shape-agreement-{}",
+        std::process::id()
+    );
+    let scratch = root.join(&rel);
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(scratch.join("scripts")).unwrap();
+    let body: String = names.iter().map(|n| format!("export {n}\n")).collect();
+    std::fs::write(scratch.join("scripts/probe.sh"), body).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_tillandsias-plan"))
+        .current_dir(&root)
+        .env("TILLANDSIAS_REPO_ROOT", &root)
+        .env("TILLANDSIAS_ENV_HYGIENE_SCAN_ROOT", &rel)
+        .args([
+            "script",
+            "run",
+            "scripts/lua/check-env-namespace-hygiene.lua",
+        ])
+        .output()
+        .expect("run the guard");
+    let _ = std::fs::remove_dir_all(&scratch);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let refused: std::collections::BTreeSet<String> = stdout
+        .lines()
+        .filter_map(|l| l.strip_prefix("violation:env-namespace:credential-shape:"))
+        .map(|rest| rest.split(':').next().unwrap_or("").to_string())
+        .collect();
+    let expected: std::collections::BTreeSet<String> = names
+        .iter()
+        .filter(|n| credential_shape(n).is_some())
+        .filter(|n| !listed_credentials.contains(n) && !retired.contains(n))
+        .cloned()
+        .collect();
+    assert!(
+        !expected.is_empty() && output.status.code() == Some(1),
+        "premise: the probes must make the guard refuse (exit {:?})",
+        output.status.code()
+    );
+    let only_lua: Vec<_> = refused.difference(&expected).collect();
+    let only_rust: Vec<_> = expected.difference(&refused).collect();
+    assert!(
+        only_lua.is_empty() && only_rust.is_empty(),
+        "the shapes disagree\n  refused by the guard only: {only_lua:?}\n  shaped by Rust only: {only_rust:?}"
+    );
+}
+
+// ORDER 2031-dwwy (tasks 1.4): every profile and every name a profile passes
+// appears in design 2029-39bt §5.3 (the proxy names' lower-case twins are
+// named there in prose: "and lower-case twins"). The design lives in the
+// openspec change lua-door-environment-inheritance (PR #1000) or its archived
+// copy; on a tree carrying neither this SKIPS BY NAME, and becomes live when
+// the change lands.
+#[test]
+fn every_profile_name_appears_in_the_design_classification() {
+    let root = repo_root();
+    let mut candidates =
+        vec![root.join("openspec/changes/lua-door-environment-inheritance/design.md")];
+    if let Ok(rd) = std::fs::read_dir(root.join("openspec/changes/archive")) {
+        for e in rd.flatten() {
+            if e.file_name()
+                .to_string_lossy()
+                .ends_with("lua-door-environment-inheritance")
+            {
+                candidates.push(e.path().join("design.md"));
+            }
+        }
+    }
+    let Some(design) = candidates
+        .iter()
+        .find_map(|p| std::fs::read_to_string(p).ok())
+    else {
+        eprintln!("skip:profile-design-agreement:design-2029-39bt-not-in-this-tree");
+        return;
+    };
+    let start = design.find("### 5.3 Classification").expect("design §5.3");
+    let section = &design[start..];
+    let section = &section[..section.find("### 5.4").unwrap_or(section.len())];
+    for (profile, vars) in tillandsias_plan::child_env::ENV_INHERIT_PROFILES {
+        assert!(
+            section.contains(&format!("`{profile}`")),
+            "profile {profile}"
+        );
+        for (var, _, _) in *vars {
+            let twin = var.to_ascii_uppercase();
+            let named = section.contains(&format!("`{var}`"))
+                || (twin != *var
+                    && section.contains(&format!("`{twin}`"))
+                    && section.contains("lower-case twins"));
+            assert!(named, "{profile}: {var} is not in design §5.3");
+        }
+    }
+}
