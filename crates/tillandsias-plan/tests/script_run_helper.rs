@@ -93,7 +93,7 @@ fn a_helper_child_gets_the_base_environment_only() {
         &[],
         &[
             ("HTTPS_PROXY", "http://leak.example:3128"),
-            ("TILLANDSIAS_X_SECRET", "s3cr3t-control"),
+            ("TILLANDSIAS_COORD_CLIENT_SECRET", "s3cr3t-control"),
             ("TILLANDSIAS_X_VISIBLE", "passes"),
         ],
     );
