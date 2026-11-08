@@ -40,7 +40,7 @@ Baked into `tillandsias-forge:v<VERSION>` (`images/default/Containerfile`):
 |------------|---------------------------------------------------|-----------------------------------------------------|----------------------------|
 | `claude`   | `npm i -g @anthropic-ai/claude-code` (line 29)    | `/usr/local/bin/entrypoint-forge-claude.sh`         | `ForgeAgentMode::Claude`   |
 | `codex`    | baked agent CLI                                   | `/usr/local/bin/entrypoint-forge-codex.sh`          | `ForgeAgentMode::Codex`    |
-| `opencode` | release tarball `anomalyco/opencode` v`<harness_release_pin>`, sha256-pinned (2027-e2cf) | `/usr/local/bin/entrypoint-forge-opencode.sh`       | `ForgeAgentMode::OpenCode` |
+| `opencode` | latest `anomalyco/opencode` release tarball, verified against its published sha256, last-good rollback (2027-e2cf) | `/usr/local/bin/entrypoint-forge-opencode.sh`       | `ForgeAgentMode::OpenCode` |
 | `opencode serve` | same package, web mode                      | `/usr/local/bin/entrypoint-forge-opencode-web.sh`   | `run_opencode_web_mode`    |
 | `bash`     | Fedora minimal base                               | `/usr/local/bin/entrypoint-terminal.sh`             | `ForgeAgentMode::Maintenance` |
 

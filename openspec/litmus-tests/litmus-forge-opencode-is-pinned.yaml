@@ -6,32 +6,34 @@
 # network path had changed. The forge installed opencode-ai@latest from npm, so
 # the client moved with no commit. npm's opencode-ai also stopped at 1.19.5
 # (2026-10-28), while upstream shipped 2.x as GitHub release tarballs. The
-# operator asked for the latest opencode, off npm (2026-11-08). Red before
-# 2027-e2cf: no release installer, no pinned digest, and npm @latest.
+# operator ruled (2026-11-08): off npm; LATEST on every launch, verified against
+# the release's published digest; last-good rollback; each lane refreshes only
+# its own harness (a claude lane installed agy and codex). Red before 2027-e2cf:
+# all 11 arms fail on trunk.
 name: litmus:forge-opencode-is-pinned
 spec: default-image
 phase: pre-build
-description: The forge installs opencode at its pinned release version from the upstream tarball. It verifies the tarball against a sha256 pinned in the tree and fails closed on a mismatch. It picks the baseline asset on a CPU without AVX2 and replaces a cached copy at another version. An unpinned npm @latest install is named as unpinned.
+description: The forge resolves the latest opencode release from the GitHub API and verifies its tarball against the release's published sha256, failing closed on a mismatch or a missing digest. It records a version that passes the health probe as last-good and rolls back to last-good when a fresh version fails. It picks the baseline asset on a CPU without AVX2, does no network within the check TTL, and falls back to last-good when offline. Each lane refreshes only its own harness.
 severity: high
 size: instant
 
 preconditions:
-  - the plan binary (resolve_plan_binary), bash, sed, tar and sha256sum (or shasum); stub curl, uname and npm on a scratch PATH (no network)
+  - the plan binary (resolve_plan_binary), bash, sed, tar, jq and sha256sum (or shasum); stub curl, uname and npm on a scratch PATH (no network)
 
 critical_path:
-  - step: "pinned release install, baseline on no-avx2, a tampered tarball refused, a pinned cache kept, a drifted cache reinstalled, no digest refused, both digests pinned, unpinned npm named, require_opencode wired"
+  - step: "latest resolved, verified and recorded; baseline on no-avx2; digest mismatch refused; no digest refused; failed probe rolls back; current does not download; TTL does no network; offline uses last-good; lanes refresh only their own harness; unpinned npm named; require_opencode wired"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-opencode-is-pinned.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:forge-opencode-is-pinned:9 arms"
+    expected_behavior: "ok:forge-opencode-is-pinned:11 arms"
 
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "nine arms: FRESH, BASELINE, TAMPER, KEEP, DRIFT, NODIGEST, PINS, UNPINNED, WIRED"
+  expected_log: "eleven arms: LATEST, BASELINE, TAMPER, NODIGEST, ROLLBACK, CURRENT, TTL, OFFLINE, LANE, UNPINNED, WIRED"
   log_fields:
     spec: "default-image"
     test: "forge-opencode-is-pinned"
 
 rollback:
-  on_failure: "read the FAIL lines; the pin is harness_release_pin plus harness_release_sha256 in images/default/lib-common.sh, applied by _require_release_harness"
-  command: "grep -n 'harness_release_' images/default/lib-common.sh"
+  on_failure: "read the FAIL lines; the installer is _require_release_harness and the lane scoping is ensure_forge_harnesses <lane>, both in images/default/lib-common.sh"
+  command: "grep -nE '_require_release_harness|ensure_forge_harnesses' images/default/lib-common.sh"
