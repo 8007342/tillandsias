@@ -1014,6 +1014,7 @@ specs:
   - litmus:proxy-permissive-port-not-silently-unrouted
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
+  - litmus:proxy-allowlist-from-tiers
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
