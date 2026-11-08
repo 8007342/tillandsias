@@ -47,7 +47,7 @@ All output fits on a single screen; next prompt lands on real work.
    - Else if "git ls-files | wc -l" ≤ 5: ROUTE → /bootstrap-readme-and-project (new, few files)
    
 2. If README.md exists:
-   - Run `check-readme-discipline.sh README.md`
+   - Run `tillandsias-plan script run scripts/lua/check-readme-discipline.lua` (from the project root)
    - If exit code 0 (valid): ROUTE → /status (ready for work)
    - If exit code >0 (invalid): ROUTE → /bootstrap-readme (repair flow)
    
@@ -115,7 +115,7 @@ What would you like to build?
 **Algorithm**:
 1. If README missing: print "README.md not found"
 2. Run `regenerate-readme.sh` to auto-derive from manifests
-3. Run `check-readme-discipline.sh` on the newly generated README
+3. Run `tillandsias-plan script run scripts/lua/check-readme-discipline.lua` on the newly generated README
 4. If validation passes: print "README regenerated and validated ✓"
 5. If validation fails: print each failure line, offer to run regen again
 6. Preserve any agent-curated sections (Security, Architecture, Privacy) if they existed

@@ -457,3 +457,21 @@ credentials_at_rest:
     - "Use a podman secret on the file driver for credentials (it is plaintext on disk, and so is every container's copy)."
     - "Weaken a fail-closed credential gate to make a test pass."
   tracked_by: "1118-fqfk"
+
+# ── Agents never start or relay a sign-in flow (2026-11-07) ───────────────────
+agents_never_sign_in:
+  decided_by: "The Tlatoāni, 2026-11-07, after an agent started a GitHub device sign-in and relayed its code (2028-j4a7)"
+  rule: >
+    Every credential sign-in is the operator's own act, done from the tray. An
+    agent never starts a sign-in flow (tillandsias or a tray with any
+    --*-login or --*-logout flag, gh auth login, refresh, logout or token, vault
+    login). It never reads a device code or sign-in URL from a log, and it never
+    relays one to the operator. This holds even when a sanctioned reset has
+    just wiped the Vault and the run cannot continue without credentials.
+  instead: >
+    Launch or leave the published tray running, tell the operator the
+    credential step is waiting for them, and report that step blocked or
+    UNMEASURED until they have signed in. Read-only checks (gh auth status)
+    are allowed.
+  enforced_by: "tillandsias-plan command policy floor rule no-credential-mutation (crates/tillandsias-plan/src/command_policy.rs), reached by the Bash-tool hook scripts/hooks/claude-pretooluse-command-policy.sh"
+  tracked_by: "2028-j4a7"

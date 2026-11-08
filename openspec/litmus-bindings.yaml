@@ -592,6 +592,7 @@ specs:
   - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:git-mirror-ready-before-retry-push
   - litmus:git-mirror-warm-start-keeps-tracking-refs
+  - litmus:git-mirror-vault-sink-wait-is-an-event
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
   - litmus:mirror-relay-state
@@ -1013,6 +1014,7 @@ specs:
   - litmus:proxy-permissive-port-not-silently-unrouted
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
+  - litmus:proxy-allowlist-from-tiers
   - litmus:egress-declarations
   coverage_ratio: 75
   last_verified: '2026-07-23'
