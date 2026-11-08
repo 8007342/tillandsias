@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-toolchains-run-in-a-supported-worktree-location-under-the-project-source-root
+    event:
+      type: progress
+      ts: "2026-11-08T02:14:18Z"
+      agent_id: linux-lenovinha-opus5-20261108t021418z
+      host: lenovinha
+      summary: |
+        MEASURED 2026-11-08T02:13Z (forge field report via coordinator macuahuitl-fedora): the forge's 1.5 GB /home/forge/src tmpfs hit 100%, and git failed in EVERY worktree, because each worktree's index lives under the main checkout's .git on the same mount. The space went to toolchain test outputs (about 160 MB per run), to copies of the project made only because toolchains refuse to run outside src (this row's defect), and to 146 MB of tmp_pack left behind by failed git writes. So this row is also a capacity problem: a supported worktree location must not put every worktree and its outputs on the 1.5 GB src tmpfs, or the size must account for them (see 2006-srcs). Related: the tmp_pack and low-space row filed alongside.
