@@ -3400,7 +3400,7 @@ _require_release_harness() {
             return 0
         fi
     fi
-    if ! printf '%s' "$want" | grep -qE '^[0-9a-f]{64}$'; then
+    if ! grep -qE '^[0-9a-f]{64}$' <<<"$want"; then
         trace_lifecycle "harness" "refused:harness-release:$name:no-published-digest:$asset@$ver (fail closed: nothing installed)"
         _rel_fallback "latest $ver is unverifiable"
         return 0
