@@ -16,26 +16,30 @@ description: >
   opencode-curl-install-never-populates-its-cache): its vendor installer's
   check_version() exits 0 on any PATH-visible opencode without consulting
   OPENCODE_INSTALL_DIR, so with the npm binary first on PATH the curl lane
-  could structurally never populate its cache — opencode is npm ON-DEMAND via
-  _require_harness (install only-when-missing; NOT the npm@latest background
-  loop, which is the order-284 breakage class). codex/openspec remain
-  npm-managed.
+  could structurally never populate its cache. Since 2027-e2cf (operator
+  2026-11-08) opencode installs from its upstream GitHub release via
+  _require_release_harness: upstream's releases/latest marker held to v1,
+  verified against the published digest, with last-good rollback. That is
+  our own fetch and verify, NOT the vendor curl installer. It is also not
+  the npm@latest background loop, which is the order-284 breakage class.
+  codex/openspec remain npm-managed.
 preconditions:
   - workspace contains images/default/lib-common.sh
 
 critical_path:
-  - step: "lib-common wires claude through curl and opencode through npm on-demand ONLY"
+  - step: "lib-common wires claude through curl and opencode through its verified release installer ONLY"
     # Both directions pinned: claude's curl channel present and routed, AND
     # the opencode curl lane fully absent (a resurrection would reintroduce
     # the never-populates-its-cache defect plus the 805-yzhw double-extraction
     # class). require_opencode's body must reach _require_harness and must
-    # not name any curl installer.
-    command: "grep -q 'curl_install_claude()' images/default/lib-common.sh && awk '/^require_claude\\(\\)/,/^}/' images/default/lib-common.sh | grep -q curl_install_claude && ! grep -q 'curl_install_opencode' images/default/lib-common.sh && awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q _require_harness && ! awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'curl_install' && echo 'ok: channels-wired'"
+    # not name any curl installer. Since 2027-e2cf it reaches
+    # _require_release_harness (our verified release fetch), not npm.
+    command: "grep -q 'curl_install_claude()' images/default/lib-common.sh && awk '/^require_claude\\(\\)/,/^}/' images/default/lib-common.sh | grep -q curl_install_claude && ! grep -q 'curl_install_opencode' images/default/lib-common.sh && awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q '_require_release_harness opencode' && ! awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'curl_install' && echo 'ok: channels-wired'"
     timeout_ms: 5000
     expected_behavior: "ok: channels-wired"
 
   - step: "the npm background updater manages neither claude nor opencode"
-    # claude is curl-managed; opencode is _require_harness on-demand. Adding
+    # claude is curl-managed; opencode is its verified release installer. Adding
     # either to the @latest loop reintroduces the order-284 breakage class.
     command: "! grep -E 'for pkg in' images/default/lib-common.sh | grep -E 'opencode-ai|claude-code' >/dev/null && echo 'ok: npm-loop-shrunk'"
     timeout_ms: 5000
