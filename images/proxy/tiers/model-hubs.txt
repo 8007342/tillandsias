@@ -1,0 +1,19 @@
+# @trace spec:proxy-container, order:2041-i3nk
+# Egress tier `model-hubs`: model weights (Hugging Face, Ollama).
+# Source of truth for this tier. images/proxy/allowlist.txt is GENERATED from
+# the tier files by scripts/lua/build-proxy-allowlist.lua; edit here, then run it.
+
+# --- AI/ML ---
+.ollama.com
+.ollama.ai
+.r2.cloudflarestorage.com
+.huggingface.co
+# Hugging Face serves a pinned file by redirect to its CDN (order 1874-h9ns,
+# 1921-xt97). Measured 2026-10-29 on macuahuitl through this proxy: the
+# akleine/sdxs-09 resolve URL redirects to us.aws.cdn.hf.co and squid reset
+# the CONNECT. Only the CDN hosts, never the whole of .hf.co.
+.cdn.hf.co
+cas-bridge.xethub.hf.co
+cdn-lfs.hf.co
+cdn-lfs-us-1.hf.co
+cdn-lfs-eu-1.hf.co
