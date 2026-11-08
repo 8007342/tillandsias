@@ -90,6 +90,8 @@ mod imagegen_models;
 mod imagegen_placement;
 mod imagegen_studio;
 mod imagegen_tiers;
+// @trace order:2055-grzz: the audio studio appliance (audio.* tools).
+mod audio_studio;
 #[cfg(feature = "host-services")]
 mod imagegen_tool;
 // 1971-3erz: the resident image engine (sd-server) behind image.generate.
@@ -2808,6 +2810,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // image; built on the first studio.key_footage of a project with
         // `[imagegen] corridorkey = true`.
         "imagegen-corridorkey" => "images/imagegen-corridorkey",
+        // 2055-grzz: the audio studio appliance. Never an INIT image; built on
+        // the first audio.transform or audio.detect_glitches.
+        "audio-studio" => "images/audio-studio",
         "vault" => "images/vault",
         // 1861-nmpp: a studio lane image, built on first use on the forge.
         name if runtime_assets::studio_image_id(name).is_some() => "images/studio",
@@ -11387,6 +11392,20 @@ fn build_opencode_forge_args(
                 format!(
                     "type=volume,source={volume},target={}",
                     imagegen_tool::FORGE_SCRATCH
+                ),
+            ]);
+        }
+        // 2055-grzz: the audio studio's scratch VOLUME, the same shape.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = audio_studio::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=volume,source={volume},target={}",
+                    audio_studio::FORGE_AUDIO
                 ),
             ]);
         }
@@ -21512,6 +21531,9 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     // 1874-kkrc: image.generate's scratch volume goes with the forge.
     #[cfg(feature = "host-services")]
     imagegen_tool::remove_lane_volume(project, instance);
+    // 2055-grzz: and the audio studio's.
+    #[cfg(feature = "host-services")]
+    audio_studio::remove_lane_volume(project, instance);
     remove_source_volume_if_present(&volume, debug)
 }
 
@@ -22183,6 +22205,14 @@ fn build_forge_agent_run_args_with_vault(
             raw_instance.as_deref().unwrap_or("default"),
         ) {
             spec = spec.volume(volume, imagegen_tool::FORGE_SCRATCH, MountMode::ReadWrite);
+        }
+        // 2055-grzz: the audio studio's scratch VOLUME, the same shape.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = audio_studio::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            spec = spec.volume(volume, audio_studio::FORGE_AUDIO, MountMode::ReadWrite);
         }
     }
     // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).

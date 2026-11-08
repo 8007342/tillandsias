@@ -79,6 +79,24 @@ for i, s in ipairs(reg.studios or {}) do
     elseif s.image ~= nil then
         verdict.emit("refused:studio-registry:image-on-a-forge-studio:" .. s.id, 1)
     end
+    -- 2055-grzz: port 0 means TOOLS-ONLY (no window), which only a sibling can
+    -- be, and only with the MCP tools that drive it; a windowed studio lists none.
+    if s.tools ~= nil and type(s.tools) ~= "table" then
+        verdict.emit("refused:studio-registry:studio-" .. i .. ":tools-not-table", 1)
+    end
+    local tools = s.tools or {}
+    for _, t in ipairs(tools) do
+        if type(t) ~= "string" or not t:match("^[a-z]+%.[a-z_]+$") then
+            verdict.emit("refused:studio-registry:bad-tool-name:" .. s.id, 1)
+        end
+    end
+    if s.port == 0 then
+        if kind ~= "sibling" then verdict.emit("refused:studio-registry:windowless-forge-studio:" .. s.id, 1) end
+        if table.is_empty(tools) then verdict.emit("refused:studio-registry:windowless-without-tools:" .. s.id, 1) end
+        if not table.is_empty(s.entry) then verdict.emit("refused:studio-registry:windowless-with-entry:" .. s.id, 1) end
+    elseif not table.is_empty(tools) then
+        verdict.emit("refused:studio-registry:tools-on-a-windowed-studio:" .. s.id, 1)
+    end
 end
 if seen.silex then verdict.emit("refused:studio-registry:silex-is-not-offered", 1) end
 if #(reg.studios or {}) == 0 then verdict.emit("refused:studio-registry:empty", 1) end

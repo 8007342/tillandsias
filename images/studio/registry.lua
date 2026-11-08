@@ -37,6 +37,10 @@
 --                   be empty), and is reached only through the router's OTP
 --                   route studio.<label> -> tillandsias-<project>-studio:<port>.
 --   image           sibling only: the image the sibling runs (built on first use)
+--   tools           2055-grzz: a TOOLS-ONLY sibling (port 0): the MCP tools an
+--                   agent drives it with. It has no window, so webstudio.open
+--                   refuses it and names these tools instead. A sibling with
+--                   port 0 must list at least one; a windowed studio lists none.
 --
 -- Silex is deliberately absent (operator ruling 2026-10-25).
 
@@ -149,6 +153,27 @@ return {
       save_adapter = "own-writer",
       write_allowlist = {},
       status = "ready", packet = "1921-2krx",
+    },
+    {
+      -- 2055-grzz: a TOOLS-ONLY sibling. It has no window (port 0, no entry):
+      -- the agent drives it through the listed MCP tools, one container per
+      -- call with no network, and reads the results under /work/tmp/audio.
+      id = "audio", name = "Audio Studio", license = "GPL-3.0-or-later",
+      brief = "Audio analysis and transforms (ffmpeg, sox, rubberband, a glitch detector) on the lane's audio scratch volume, with provenance.",
+      good_for = { "finding clicks, dropouts, spectral holes, clipping and loop seams in audio, with their time ranges",
+                   "loudness-normalising, time-stretching (rubberband) and resampling (sox) audio",
+                   "converting audio to Opus or AAC for the web or a game build" },
+      not_for = { "composing or generating new music (generative tools are order 2055-dihg)",
+                  "separating a mix into stems (order 2055-d9sa)",
+                  "editing audio by hand on a timeline: it has no window" },
+      edits = "Nothing in the checkout: outputs land in the lane's audio scratch volume (/work/tmp/audio), each with a provenance record, and the agent commits the ones the user keeps.",
+      frameworks = {},
+      kind = "sibling", image = "audio-studio",
+      entry = {}, port = 0,
+      tools = { "audio.transform", "audio.detect_glitches" },
+      save_adapter = "own-writer",
+      write_allowlist = {},
+      status = "ready", packet = "2055-grzz",
     },
   },
 }

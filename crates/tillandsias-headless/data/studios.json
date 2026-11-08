@@ -219,6 +219,36 @@
       "save_adapter": "own-writer",
       "status": "ready",
       "write_allowlist": []
+    },
+    {
+      "brief": "Audio analysis and transforms (ffmpeg, sox, rubberband, a glitch detector) on the lane's audio scratch volume, with provenance.",
+      "edits": "Nothing in the checkout: outputs land in the lane's audio scratch volume (/work/tmp/audio), each with a provenance record, and the agent commits the ones the user keeps.",
+      "entry": [],
+      "frameworks": [],
+      "good_for": [
+        "finding clicks, dropouts, spectral holes, clipping and loop seams in audio, with their time ranges",
+        "loudness-normalising, time-stretching (rubberband) and resampling (sox) audio",
+        "converting audio to Opus or AAC for the web or a game build"
+      ],
+      "id": "audio",
+      "image": "audio-studio",
+      "kind": "sibling",
+      "license": "GPL-3.0-or-later",
+      "name": "Audio Studio",
+      "not_for": [
+        "composing or generating new music (generative tools are order 2055-dihg)",
+        "separating a mix into stems (order 2055-d9sa)",
+        "editing audio by hand on a timeline: it has no window"
+      ],
+      "packet": "2055-grzz",
+      "port": 0,
+      "save_adapter": "own-writer",
+      "status": "ready",
+      "tools": [
+        "audio.transform",
+        "audio.detect_glitches"
+      ],
+      "write_allowlist": []
     }
   ]
 }

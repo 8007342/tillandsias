@@ -1,0 +1,58 @@
+# @trace order:2055-grzz
+# The AUDIO STUDIO: a sibling appliance beside the forge (the ComfyUI studio's
+# shape, order 1921-2krx), for analysis and transforms on audio. Generic: any
+# project; kumbia is the first client. Never built unless a forge agent calls an
+# audio.* tool (or the fixture builds it).
+#
+# Operator-approved contents (macuahuitl-fedora relay, 2026-11-08):
+# - ffmpeg with libopus and the NATIVE AAC encoder. Debian's ffmpeg has no
+#   libfdk-aac (non-free, never redistributable); the build step below fails
+#   the image if that ever changes.
+# - rubberband and sox: GPL tools, INSIDE THIS CONTAINER ONLY. They are never
+#   shipped in a release artefact: like imagegen-studio, this image is built
+#   on the host from this recipe, and no tray bundle carries these binaries
+#   (scripts/lua/check-audio-studio-bundle.lua lists the bundle to prove it).
+# - Python with numpy, scipy, librosa, soundfile and pyloudnorm, for the glitch
+#   detector and for the agent's own analysis. The Python lives in this image
+#   for users; the repo's scripts and tests never run it on the host
+#   (scripts/lua/test-audio-studio-glitches.lua runs it in here).
+#
+# Run time: --network=none, --cap-drop=ALL, no-new-privileges, uid 1001, one
+# container per call (audio_studio.rs). No model weights: stem separation
+# (2055-d9sa) and generative tools (2055-dihg) bring theirs through the
+# model-hubs egress tier.
+FROM docker.io/library/python:3.12.16-slim-bookworm
+# 1958-yfib: our own label, never the base's. The recipe is Tillandsias's
+# (GPL-3.0-or-later); the compound label names the GPL-2.0-or-later tools it is
+# mostly made of (sox, rubberband, Debian's GPL build of ffmpeg; operator ruling
+# 2026-11-01 on compound labels). Every package it carries is credited with its upstream
+# licence in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND GPL-2.0-or-later"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg sox rubberband-cli libsndfile1 ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && ffmpeg -hide_banner -encoders 2>/dev/null | grep -q ' libopus ' \
+    && ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE '^ A[A-Z.]+ aac ' \
+    && ! ffmpeg -hide_banner -buildconf 2>/dev/null | grep -q fdk \
+    && sox --version && rubberband --version
+
+# Every Python package at an exact version, the transitive set included.
+COPY requirements.lock /opt/tillandsias/requirements.lock
+RUN pip install --no-cache-dir --no-deps -r /opt/tillandsias/requirements.lock \
+    && pip check \
+    && python -c "import numpy, scipy, librosa, soundfile, pyloudnorm; print('audio stack ok')"
+
+COPY audio-tool.py /opt/tillandsias/audio-tool.py
+RUN useradd -u 1001 -m -s /usr/sbin/nologin studio \
+    && mkdir -p /work/tmp/audio /home/studio/.cache \
+    && chown -R studio:studio /work/tmp/audio /home/studio \
+    && python /opt/tillandsias/audio-tool.py versions
+
+USER studio
+# numba (librosa's JIT) caches next to the code by default; the code is
+# read-only, so it caches under the studio's home.
+ENV NUMBA_CACHE_DIR=/home/studio/.cache/numba \
+    HOME=/home/studio
+WORKDIR /work/tmp/audio
+ENTRYPOINT ["python", "/opt/tillandsias/audio-tool.py"]

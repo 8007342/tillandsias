@@ -171,6 +171,14 @@
       "title": "bundled reference cheatsheets"
     },
     {
+      "description": "built from images/audio-studio/Containerfile",
+      "id": "image:audio-studio",
+      "kind": "container-image",
+      "optional": true,
+      "optional_source": "generator-table",
+      "title": "tillandsias-audio-studio image"
+    },
+    {
       "description": "built from images/builder/Containerfile",
       "id": "image:builder",
       "kind": "container-image",
@@ -231,6 +239,13 @@
       "optional": true,
       "optional_source": "generator-table",
       "title": "tillandsias-imagegen image"
+    },
+    {
+      "description": "built from images/imagegen-corridorkey/Containerfile",
+      "id": "image:imagegen-corridorkey",
+      "kind": "container-image",
+      "optional_source": "unknown",
+      "title": "tillandsias-imagegen-corridorkey image"
     },
     {
       "description": "built from images/imagegen/Containerfile.cuda",
@@ -8236,6 +8251,12 @@
       "from": "crate:tillandsias-macos-tray",
       "kind": "direct",
       "optional": false,
+      "to": "cargo:chrono@0.4.44"
+    },
+    {
+      "from": "crate:tillandsias-macos-tray",
+      "kind": "direct",
+      "optional": false,
       "to": "cargo:futures-util@0.3.32"
     },
     {
@@ -8968,6 +8989,12 @@
       "from": "crate:tillandsias-vm-layer",
       "kind": "direct",
       "optional": false,
+      "to": "cargo:getrandom@0.4.2"
+    },
+    {
+      "from": "crate:tillandsias-vm-layer",
+      "kind": "direct",
+      "optional": false,
       "to": "cargo:objc2-foundation@0.2.2"
     },
     {
@@ -9431,6 +9458,48 @@
       "kind": "bundled",
       "optional": false,
       "to": "docs:www.w3.org"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "base-image",
+      "optional": false,
+      "to": "oci:docker.io/library/python:3.12.16-slim-bookworm"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:ca-certificates"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:ffmpeg"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:libsndfile1"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:rubberband-cli"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:sox"
+    },
+    {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pypi:requirements:audio-studio"
     },
     {
       "from": "image:builder",
@@ -10234,6 +10303,12 @@
       "from": "image:git",
       "kind": "package",
       "optional": false,
+      "to": "pkg:alpine:openssl"
+    },
+    {
+      "from": "image:git",
+      "kind": "package",
+      "optional": false,
       "to": "pkg:alpine:ruby"
     },
     {
@@ -10357,6 +10432,66 @@
       "to": "src:https://github.com/leejet/stable-diffusion.cpp"
     },
     {
+      "from": "image:imagegen-corridorkey",
+      "kind": "base-image",
+      "optional": false,
+      "to": "oci:docker.io/library/python:3.12.16-slim-bookworm"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:ca-certificates"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:ffmpeg"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:git"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:libgl1"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pkg:debian:libglib2.0-0"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pypi:requirements:imagegen-corridorkey"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pypi:torch"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "package",
+      "optional": false,
+      "to": "pypi:torchvision"
+    },
+    {
+      "from": "image:imagegen-corridorkey",
+      "kind": "source-build",
+      "optional": false,
+      "to": "src:https://github.com/nikopueringer/CorridorKey2.0"
+    },
+    {
       "from": "image:imagegen-cuda",
       "kind": "base-image",
       "optional": false,
@@ -10463,6 +10598,24 @@
       "kind": "source-build",
       "optional": false,
       "to": "src:https://github.com/comfyanonymous/ComfyUI"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "plugin",
+      "optional": true,
+      "to": "src:https://github.com/cubiq/ComfyUI_IPAdapter_plus"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "plugin",
+      "optional": true,
+      "to": "src:https://github.com/huchenlei/ComfyUI-layerdiffuse"
+    },
+    {
+      "from": "image:imagegen-studio",
+      "kind": "plugin",
+      "optional": true,
+      "to": "src:https://github.com/lldacing/ComfyUI_BiRefNet_ll"
     },
     {
       "from": "image:inference",
@@ -19138,7 +19291,49 @@
       "from": "media:imagegen-models",
       "kind": "runtime-download",
       "optional": true,
+      "to": "model:Comfy-Org/ACE-Step-1.5"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:Comfy-Org/Flux-2-Klein-4B"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:Comfy-Org/Qwen-Image"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:Comfy-Org/Qwen-Image-Edit"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:Comfy-Org/Wan-2.2"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
       "to": "model:IDKiro/sdxs-512-0.9"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:LayerDiffusion/layerdiffusion-v1"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:ZhengPeng7/BiRefNet"
     },
     {
       "from": "media:imagegen-models",
@@ -19150,7 +19345,61 @@
       "from": "media:imagegen-models",
       "kind": "runtime-download",
       "optional": true,
+      "to": "model:cagliostrolab/animagine-xl-4.0"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:h94/IP-Adapter"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:lightx2v/Qwen-Image-Edit-2511-Lightning"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:lightx2v/Qwen-Image-Lightning"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:madebyollin/sdxl-vae-fp16-fix"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:nerijs/pixel-art-xl"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
       "to": "model:second-state/FLUX.1-schnell-GGUF"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:stabilityai/stable-diffusion-xl-base-1.0"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:xinsir/controlnet-openpose-sdxl-1.0"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:xinsir/controlnet-union-sdxl-1.0"
     },
     {
       "from": "services:external",
@@ -19241,6 +19490,18 @@
       "kind": "service",
       "optional": true,
       "to": "service:storage.googleapis.com"
+    },
+    {
+      "from": "studio:web-studios",
+      "kind": "runtime-image",
+      "optional": true,
+      "to": "studio:audio"
+    },
+    {
+      "from": "studio:web-studios",
+      "kind": "runtime-image",
+      "optional": true,
+      "to": "studio:comfyui"
     },
     {
       "from": "studio:web-studios",
@@ -33216,6 +33477,113 @@
     },
     {
       "gated": false,
+      "homepage": "https://huggingface.co/Comfy-Org/ACE-Step-1.5",
+      "homepage_kind": "model-card",
+      "id": "model:Comfy-Org/ACE-Step-1.5",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "ACE-Step-1.5-XL-turbo",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/ace-dit",
+        "I1/ace-te",
+        "I1/ace-vae"
+      ],
+      "version": "371bb1680f8c88d8c1083f6ffb6330d3d55bff76"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/Comfy-Org/Flux-2-Klein-4B",
+      "homepage_kind": "model-card",
+      "id": "model:Comfy-Org/Flux-2-Klein-4B",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "FLUX.2-klein-4B",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/flux2-klein",
+        "I1/flux2-klein-te",
+        "I1/flux2-klein-vae"
+      ],
+      "version": "5b3abca5c0dc1ecd4eaf3340868d09063fc1c965"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/Comfy-Org/Qwen-Image",
+      "homepage_kind": "model-card",
+      "id": "model:Comfy-Org/Qwen-Image",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Qwen-Image-Edit-2511",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/qwen-image-te",
+        "I1/qwen-image-vae"
+      ],
+      "version": "1f12b17be14c89b026c51a91d67c32f84bb047bc"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/Comfy-Org/Qwen-Image-Edit",
+      "homepage_kind": "model-card",
+      "id": "model:Comfy-Org/Qwen-Image-Edit",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Qwen-Image-Edit-2511",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/qwen-image-edit"
+      ],
+      "version": "f68ace85e60b4a02a323e394253731947657b7d2"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/Comfy-Org/Wan-2.2",
+      "homepage_kind": "model-card",
+      "id": "model:Comfy-Org/Wan-2.2",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Wan2.2-VACE-Fun-A14B",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/wan-te",
+        "I1/wan-vace",
+        "I1/wan-vae"
+      ],
+      "version": "ee6f4a40737a995bf5818954cfce6d59443b0f04"
+    },
+    {
+      "gated": false,
       "homepage": "https://huggingface.co/IDKiro/sdxs-512-0.9",
       "homepage_kind": "model-card",
       "id": "model:IDKiro/sdxs-512-0.9",
@@ -33231,6 +33599,46 @@
       "source": "images/models/licence-register.tsv",
       "tiers": [],
       "version": "c332f05f60eb4b453de513be52c2a18c48d8cfe6"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/LayerDiffusion/layerdiffusion-v1",
+      "homepage_kind": "model-card",
+      "id": "model:LayerDiffusion/layerdiffusion-v1",
+      "license": "creativeml-openrail-m",
+      "license_family": "model",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "LayerDiffuse-XL-transparent-attn",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/layer_model"
+      ],
+      "version": "e337e9d7a0f2a6fee6c3580374327380f88d065b"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/ZhengPeng7/BiRefNet",
+      "homepage_kind": "model-card",
+      "id": "model:ZhengPeng7/BiRefNet",
+      "license": "mit",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "BiRefNet",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/birefnet"
+      ],
+      "version": "e2bf8e4460fc8fa32bba5ea4d94b3233d367b0e4"
     },
     {
       "gated": false,
@@ -33254,6 +33662,127 @@
     },
     {
       "gated": false,
+      "homepage": "https://huggingface.co/cagliostrolab/animagine-xl-4.0",
+      "homepage_kind": "model-card",
+      "id": "model:cagliostrolab/animagine-xl-4.0",
+      "license": "openrail++",
+      "license_family": "model",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Animagine-XL-4.0",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/sdxl-full"
+      ],
+      "version": "2b7c1b397761bf5bd3cc42e5b39ec99314a75a96"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/h94/IP-Adapter",
+      "homepage_kind": "model-card",
+      "id": "model:h94/IP-Adapter",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "IP-Adapter-Plus-SDXL-ViT-H",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/clip_vision",
+        "I1/ipadapter"
+      ],
+      "version": "018e402774aeeddd60609b4ecdb7e298259dc729"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/lightx2v/Qwen-Image-Edit-2511-Lightning",
+      "homepage_kind": "model-card",
+      "id": "model:lightx2v/Qwen-Image-Edit-2511-Lightning",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Qwen-Image-Edit-2511-Lightning",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/lora"
+      ],
+      "version": "107d238d68b8387e32843d0b4a2e24ceb0d3ad86"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/lightx2v/Qwen-Image-Lightning",
+      "homepage_kind": "model-card",
+      "id": "model:lightx2v/Qwen-Image-Lightning",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Qwen-Image-Lightning",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/lora"
+      ],
+      "version": "d468c534b360e0754c6bf9e38ed49e1e09cd2e2a"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix",
+      "homepage_kind": "model-card",
+      "id": "model:madebyollin/sdxl-vae-fp16-fix",
+      "license": "mit",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "SDXL-VAE-fp16-fix",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/sdxl-vae"
+      ],
+      "version": "207b116dae70ace3637169f1ddd2434b91b3a8cd"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/nerijs/pixel-art-xl",
+      "homepage_kind": "model-card",
+      "id": "model:nerijs/pixel-art-xl",
+      "license": "creativeml-openrail-m",
+      "license_family": "model",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "pixel-art-xl",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/lora"
+      ],
+      "version": "8bf4a4d9ea283e00a51fafda8e0539f8248ea037"
+    },
+    {
+      "gated": false,
       "homepage": "https://huggingface.co/second-state/FLUX.1-schnell-GGUF",
       "homepage_kind": "model-card",
       "id": "model:second-state/FLUX.1-schnell-GGUF",
@@ -33272,6 +33801,66 @@
         "I3"
       ],
       "version": "8c45a2ba25e2d02bd34230989fb54983f39e44ec"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0",
+      "homepage_kind": "model-card",
+      "id": "model:stabilityai/stable-diffusion-xl-base-1.0",
+      "license": "openrail++",
+      "license_family": "model",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "SDXL-base-1.0",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/sdxl-full"
+      ],
+      "version": "462165984030d82259a11f4367a4eed129e94a7b"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/xinsir/controlnet-openpose-sdxl-1.0",
+      "homepage_kind": "model-card",
+      "id": "model:xinsir/controlnet-openpose-sdxl-1.0",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "ControlNet-OpenPose-SDXL",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/controlnet-openpose"
+      ],
+      "version": "23f966cd5cfdd3f7729c903e243d87152162d2b7"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/xinsir/controlnet-union-sdxl-1.0",
+      "homepage_kind": "model-card",
+      "id": "model:xinsir/controlnet-union-sdxl-1.0",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "ControlNet-Union-SDXL-promax",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/controlnet-union"
+      ],
+      "version": "801a4a3fa3d4c936f4feea95b98607bc6726f80c"
     },
     {
       "homepage": "https://www.npmjs.com/package/@alloc/quick-lru",
@@ -58161,9 +58750,11 @@
       "name": "docker.io/library/python:3.12.16-slim-bookworm",
       "optional": false,
       "pulled_by": [
+        "image:audio-studio",
+        "image:imagegen-corridorkey",
         "image:imagegen-studio"
       ],
-      "source": "images/imagegen-studio/Containerfile",
+      "source": "images/audio-studio/Containerfile",
       "version": "3.12.16-slim-bookworm"
     },
     {
@@ -58487,9 +59078,10 @@
       "name": "openssl",
       "optional": false,
       "pulled_by": [
+        "image:git",
         "image:proxy"
       ],
-      "source": "images/proxy/Containerfile",
+      "source": "images/git/Containerfile",
       "version": "3.5.9-r0"
     },
     {
@@ -58557,12 +59149,14 @@
       "name": "ca-certificates",
       "optional": true,
       "pulled_by": [
+        "image:audio-studio",
         "image:flutter",
+        "image:imagegen-corridorkey",
         "image:imagegen-cuda",
         "image:imagegen-studio",
         "image:webkit"
       ],
-      "source": "images/flutter/Containerfile",
+      "source": "images/audio-studio/Containerfile",
       "version": "20250419~deb12u2"
     },
     {
@@ -58599,6 +59193,24 @@
       ],
       "source": "images/flutter/Containerfile",
       "version": "7.88.1-10+deb12u15"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=ffmpeg",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:ffmpeg",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "name": "ffmpeg",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio",
+        "image:imagegen-corridorkey"
+      ],
+      "source": "images/audio-studio/Containerfile",
+      "version": "unknown"
     },
     {
       "homepage": "https://packages.debian.org/search?keywords=fonts-liberation",
@@ -58681,6 +59293,7 @@
       "optional": true,
       "pulled_by": [
         "image:flutter",
+        "image:imagegen-corridorkey",
         "image:imagegen-cuda",
         "image:imagegen-studio"
       ],
@@ -58699,9 +59312,10 @@
       "name": "libgl1",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-corridorkey",
         "image:imagegen-studio"
       ],
-      "source": "images/imagegen-studio/Containerfile",
+      "source": "images/imagegen-corridorkey/Containerfile",
       "version": "unknown"
     },
     {
@@ -58716,9 +59330,10 @@
       "name": "libglib2.0-0",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-corridorkey",
         "image:imagegen-studio"
       ],
-      "source": "images/imagegen-studio/Containerfile",
+      "source": "images/imagegen-corridorkey/Containerfile",
       "version": "unknown"
     },
     {
@@ -58736,6 +59351,23 @@
         "image:imagegen-cuda"
       ],
       "source": "images/imagegen/Containerfile.cuda",
+      "version": "unknown"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=libsndfile1",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:libsndfile1",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "name": "libsndfile1",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio"
+      ],
+      "source": "images/audio-studio/Containerfile",
       "version": "unknown"
     },
     {
@@ -58787,6 +59419,40 @@
         "image:webkit"
       ],
       "source": "images/webkit/Containerfile",
+      "version": "unknown"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=rubberband-cli",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:rubberband-cli",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "name": "rubberband-cli",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio"
+      ],
+      "source": "images/audio-studio/Containerfile",
+      "version": "unknown"
+    },
+    {
+      "homepage": "https://packages.debian.org/search?keywords=sox",
+      "homepage_kind": "package-index",
+      "id": "pkg:debian:sox",
+      "license": "unknown",
+      "license_family": "unknown",
+      "license_source": "none",
+      "link": "container-image",
+      "link_note": "distro package installed into the image by apt-get; no built image was asked, so no licence is recorded",
+      "name": "sox",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio"
+      ],
+      "source": "images/audio-studio/Containerfile",
       "version": "unknown"
     },
     {
@@ -60950,6 +61616,36 @@
     },
     {
       "homepage_kind": "none",
+      "id": "pypi:requirements:audio-studio",
+      "license": "unknown",
+      "license_family": "unknown",
+      "link": "container-image",
+      "link_note": "a requirements file resolved at image build; its members are not enumerated in this tree",
+      "name": "python requirements (/opt/tillandsias/requirements.lock)",
+      "optional": true,
+      "pulled_by": [
+        "image:audio-studio"
+      ],
+      "source": "images/audio-studio/Containerfile",
+      "version": "unknown"
+    },
+    {
+      "homepage_kind": "none",
+      "id": "pypi:requirements:imagegen-corridorkey",
+      "license": "unknown",
+      "license_family": "unknown",
+      "link": "container-image",
+      "link_note": "a requirements file resolved at image build; its members are not enumerated in this tree",
+      "name": "python requirements (/opt/corridorkey/requirements.txt)",
+      "optional": true,
+      "pulled_by": [
+        "image:imagegen-corridorkey"
+      ],
+      "source": "images/imagegen-corridorkey/Containerfile",
+      "version": "unknown"
+    },
+    {
+      "homepage_kind": "none",
       "id": "pypi:requirements:imagegen-studio",
       "license": "unknown",
       "license_family": "unknown",
@@ -60973,10 +61669,11 @@
       "name": "torch",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-corridorkey",
         "image:imagegen-studio"
       ],
-      "source": "images/imagegen-studio/Containerfile",
-      "version": "2.10.0+cu128"
+      "source": "images/imagegen-corridorkey/Containerfile",
+      "version": "2.9.1+cu128"
     },
     {
       "homepage": "https://pypi.org/project/torchvision/",
@@ -60988,10 +61685,11 @@
       "name": "torchvision",
       "optional": true,
       "pulled_by": [
+        "image:imagegen-corridorkey",
         "image:imagegen-studio"
       ],
-      "source": "images/imagegen-studio/Containerfile",
-      "version": "0.25.0+cu128"
+      "source": "images/imagegen-corridorkey/Containerfile",
+      "version": "0.24.1+cu128"
     },
     {
       "homepage": "https://docs.anthropic.com",
@@ -61266,6 +61964,38 @@
       "version": "v0.40.0"
     },
     {
+      "homepage": "https://github.com/cubiq/ComfyUI_IPAdapter_plus",
+      "homepage_kind": "repository",
+      "id": "src:https://github.com/cubiq/ComfyUI_IPAdapter_plus",
+      "license": "GPL-3.0",
+      "license_family": "strong-copyleft",
+      "link": "container-image",
+      "link_note": "ComfyUI custom node cloned at a pinned commit into the studio image",
+      "name": "ComfyUI_IPAdapter_plus",
+      "optional": true,
+      "pulled_by": [
+        "image:imagegen-studio"
+      ],
+      "source": "images/imagegen-studio/custom-nodes.toml",
+      "version": "a0f451a5113cf9becb0847b92884cb10cbdec0ef"
+    },
+    {
+      "homepage": "https://github.com/huchenlei/ComfyUI-layerdiffuse",
+      "homepage_kind": "repository",
+      "id": "src:https://github.com/huchenlei/ComfyUI-layerdiffuse",
+      "license": "Apache-2.0",
+      "license_family": "permissive",
+      "link": "container-image",
+      "link_note": "ComfyUI custom node cloned at a pinned commit into the studio image",
+      "name": "ComfyUI-layerdiffuse",
+      "optional": true,
+      "pulled_by": [
+        "image:imagegen-studio"
+      ],
+      "source": "images/imagegen-studio/custom-nodes.toml",
+      "version": "b4f6a9e024064a4489f774a8b91049ce0b606ea3"
+    },
+    {
       "homepage": "https://github.com/leejet/stable-diffusion.cpp",
       "homepage_kind": "repository",
       "id": "src:https://github.com/leejet/stable-diffusion.cpp",
@@ -61281,6 +62011,70 @@
       ],
       "source": "images/imagegen/Containerfile",
       "version": "master-1015-e41fbcf"
+    },
+    {
+      "homepage": "https://github.com/lldacing/ComfyUI_BiRefNet_ll",
+      "homepage_kind": "repository",
+      "id": "src:https://github.com/lldacing/ComfyUI_BiRefNet_ll",
+      "license": "MIT",
+      "license_family": "permissive",
+      "link": "container-image",
+      "link_note": "ComfyUI custom node cloned at a pinned commit into the studio image",
+      "name": "ComfyUI_BiRefNet_ll",
+      "optional": true,
+      "pulled_by": [
+        "image:imagegen-studio"
+      ],
+      "source": "images/imagegen-studio/custom-nodes.toml",
+      "version": "5443a2aa16cfbd98bb2f7dcc8bdcb70439e08529"
+    },
+    {
+      "homepage": "https://github.com/nikopueringer/CorridorKey2.0",
+      "homepage_kind": "repository",
+      "id": "src:https://github.com/nikopueringer/CorridorKey2.0",
+      "license": "unknown",
+      "license_family": "unknown",
+      "link": "container-image",
+      "link_note": "source cloned and built inside the image",
+      "name": "github.com/nikopueringer/CorridorKey2.0",
+      "optional": true,
+      "pulled_by": [
+        "image:imagegen-corridorkey"
+      ],
+      "source": "images/imagegen-corridorkey/Containerfile",
+      "version": "unknown"
+    },
+    {
+      "homepage_kind": "none",
+      "id": "studio:audio",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "link": "separate-process",
+      "link_note": "runs unmodified in its own container; Audio analysis and transforms (ffmpeg, sox, rubberband, a glitch detector) on the lane's audio scratch volume, with provenance.",
+      "name": "Audio Studio",
+      "optional": true,
+      "pulled_by": [
+        "studio:web-studios"
+      ],
+      "source": "crates/tillandsias-headless/data/studios.json",
+      "status": "ready",
+      "version": "unknown"
+    },
+    {
+      "homepage_kind": "none",
+      "id": "studio:comfyui",
+      "license": "GPL-3.0-only",
+      "license_family": "strong-copyleft",
+      "link": "separate-process",
+      "link_note": "runs unmodified in its own container; Node-based image generation on the local models, outputs to the lane's scratch volume.",
+      "name": "ComfyUI",
+      "optional": true,
+      "pulled_by": [
+        "studio:web-studios"
+      ],
+      "source": "crates/tillandsias-headless/data/studios.json",
+      "status": "ready",
+      "version": "unknown"
     },
     {
       "homepage_kind": "none",
@@ -61320,7 +62114,7 @@
       "license": "Apache-2.0",
       "license_family": "permissive",
       "link": "separate-process",
-      "link_note": "runs unmodified in its own container; Visual editor for Next.js and Tailwind that edits the code directly.",
+      "link_note": "runs unmodified in its own container; Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
       "name": "Onlook",
       "optional": true,
       "pulled_by": [
@@ -61405,16 +62199,16 @@
   },
   "schema": "tillandsias-stack/v1",
   "summary": {
-    "components": 54,
-    "edges": 3149,
+    "components": 56,
+    "edges": 3190,
     "license_families": {
-      "model": 3,
-      "permissive": 1719,
+      "model": 7,
+      "permissive": 1733,
       "service": 15,
-      "strong-copyleft": 21,
-      "unknown": 156,
+      "strong-copyleft": 24,
+      "unknown": 163,
       "weak-copyleft": 34
     },
-    "nodes": 1948
+    "nodes": 1976
   }
 }
