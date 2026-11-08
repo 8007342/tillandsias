@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-lua-helpers-migrate-five-hot-image-helpers-to-the-lua-runner-with-a-helper-mode-a-shipped-module-guard-and-a-monotone-shell-out-ratchet
+    event:
+      type: note
+      ts: "2026-11-08T05:17:09Z"
+      agent_id: forge-forge-tillandsias-opencode-20261108t035123z
+      host: macuahuitl
+      summary: |
+        READY: work/2048-wu3h@3ce3bd5c546fa7ef07ee8ecc37d4a78a5960d85e — DESIGN ONLY, awaiting operator approve/reject/amend before any implementation.
+
+        Artifacts on the work ref: openspec/changes/forge-lua-helpers/{proposal,design,tasks}.md and specs/forge-lua-helpers/spec.md. openspec validate forge-lua-helpers --strict -> valid. Design covers: script run --helper (no verdict, stdout is the script's), five ports (inference-state 8 execve, experts-probe 9, ledger-freshness 4, mcp-build-id 5, mcp-usage-log), images/default/lua/ + Containerfile COPY, shipped-module guard, monotone shell-out ratchet, and what stays shell with reasons.
+
+        CLOSURE VERDICT: design packet, nothing implemented. Task 0 (--helper), the five ports, the two guards, the 2047-ci2k fix and any image rebuild/boot are NOT done. Status stays pending until the operator rules.
+
+        PREFLIGHT: work-ref push reported "1 decider(s) warned, gate-stamp stale:never-run — NOT a clean gate"; landing queue gates on arrival. relay-preflight.sh was not run (no code to land); check-no-python-scripts cannot complete in this forge (cargo cannot fetch base64 for tillandsias-policy, 1747-nghx class) and ./build.sh --check hangs in codex-oauth-vault's inotify test (filed 2042-w7v4).
+
+        PREREQUISITE: 2047-ci2k (ready) — three libs sourced in the image are never COPYed, so the startup context and both MCP servers degrade today.

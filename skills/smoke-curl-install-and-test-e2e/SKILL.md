@@ -129,6 +129,19 @@ On macOS, the destructive substrate is the Tillandsias Virtualization.framework
 state and cache directories. On Windows, it is the `tillandsias` WSL2 distro and
 download cache.
 
+## Credentials: the operator signs in, never you (2028-j4a7)
+
+A reset in this run wipes the Vault, and the run needs credentials again
+afterwards. **Never start a sign-in yourself.** That means no `tillandsias` or
+tray with any `--*-login`/`--*-logout` flag, and no `gh auth login|refresh`. Never
+read a device code or a sign-in URL from a log, and never relay one to the
+operator. Instead, launch the published tray (or leave it running) and tell the
+operator that the credential step is waiting for them. Record that step as
+blocked/UNMEASURED until they have signed in from the tray. Read-only
+`gh auth status` is fine. The Bash-tool hook refuses these flows
+(`refused:bash-policy:no-credential-mutation`), and the rule is
+`methodology/philosophy.yaml` `agents_never_sign_in`.
+
 ## 0 — Pre-flight
 
 0. **Shell: every fenced `bash` block in this runbook runs under bash, and the

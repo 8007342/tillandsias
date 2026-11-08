@@ -3824,7 +3824,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # ORDER 1221-vkbj: it now SAYS WHICH SILENCE, and this caller reads the code.
     #
-    # The context is decided on TILLANDSIAS_WRAPPER_TOKEN, not on container
+    # The context is decided on TILLANDSIAS_WRAPPER_MARK (2031-z4rm; the retired
+    # TILLANDSIAS_WRAPPER_TOKEN is still read), not on container
     # markers. The markers are the enumeration this check already inverted away
     # from — yolanda measured a WSL distro with TOOLBOX_PATH, container,
     # /run/.toolboxenv, /run/.containerenv and /.dockerenv ALL absent while
@@ -3837,7 +3838,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Still advisory, still no --host-side from here: see the long note in
     # check-no-competing-gate.sh about why asserting from an undispatched gate
     # would manufacture a vacuous clean.
-    if [ -n "${TILLANDSIAS_WRAPPER_TOKEN:-}" ]; then
+    if [ -n "${TILLANDSIAS_WRAPPER_MARK:-${TILLANDSIAS_WRAPPER_TOKEN:-}}" ]; then
         _cg_ctx=dispatched
     else
         _cg_ctx=undispatched
