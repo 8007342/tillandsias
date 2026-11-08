@@ -712,12 +712,37 @@ fn register(
     Ok(())
 }
 
+/// ORDER 2049-w2q6. Marker carried by the error a helper's `verdict` access raises.
+const HELPER_VERDICT_TRAP: &str = "helper-called-verdict";
+
+/// Replace `verdict` with a table whose every field access raises, so a
+/// helper cannot print a verdict line or end as a decider would.
+fn install_helper_verdict_trap(lua: &Lua) -> LuaResult<()> {
+    let trap = lua.create_table()?;
+    let meta = lua.create_table()?;
+    meta.set(
+        "__index",
+        lua.create_function(|_, (_t, k): (LuaValue, LuaValue)| -> LuaResult<LuaValue> {
+            let key = match k {
+                LuaValue::String(s) => s.to_string_lossy().to_string(),
+                _ => "?".into(),
+            };
+            Err(LuaError::RuntimeError(format!(
+                "{HELPER_VERDICT_TRAP}: verdict.{key} is not available to a --helper script"
+            )))
+        })?,
+    )?;
+    trap.set_metatable(Some(meta));
+    lua.globals().set("verdict", trap)
+}
+
 /// Run one script to its verdict. Returns (stdout line, stderr detail, exit).
 fn run_to_verdict(
     path: &str,
     src: &str,
     args: &[String],
     host: crate::lua_predicate::script_process::Host,
+    helper: bool,
 ) -> (String, Option<String>, i32) {
     let name = script_name(path);
     let header = parse_header(src);
@@ -744,6 +769,17 @@ fn run_to_verdict(
         return (
             format!("could-not-run:{name}"),
             Some(format!("the runner's tables could not be registered: {e}")),
+            3,
+        );
+    }
+    // ORDER 2049-w2q6. A helper is not a decider: any use of `verdict` is an
+    // error that ends the script, reported as refused:helper-called-verdict.
+    if helper && let Err(e) = install_helper_verdict_trap(&lua) {
+        return (
+            format!("could-not-run:{name}"),
+            Some(format!(
+                "the helper verdict trap could not be installed: {e}"
+            )),
             3,
         );
     }
@@ -826,6 +862,24 @@ fn run_to_verdict(
     if let Err(e) = cleanup {
         return (format!("refused:cleanup-incomplete:{name}"), Some(e), 1);
     }
+    if helper {
+        return match res {
+            Ok(()) => (String::new(), None, 0),
+            Err(e) if format!("{e}").contains(HELPER_VERDICT_TRAP) => (
+                format!("refused:helper-called-verdict:{name}"),
+                Some(format!(
+                    "{path} is run with --helper, and a helper must not call verdict.* \
+                     (it is not a decider; run it without --helper to judge)"
+                )),
+                1,
+            ),
+            Err(e) => (
+                format!("refused:script-error:{name}"),
+                Some(format!("{e}")),
+                1,
+            ),
+        };
+    }
     if let Some(v) = slot.lock().unwrap().clone() {
         return (v.line, v.detail, v.code);
     }
@@ -854,9 +908,10 @@ fn run_guarded(
     src: &str,
     args: &[String],
     host: crate::lua_predicate::script_process::Host,
+    helper: bool,
 ) -> Result<(String, Option<String>, i32), String> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run_to_verdict(path, src, args, host)
+        run_to_verdict(path, src, args, host, helper)
     }))
     .map_err(|payload| {
         payload
@@ -987,6 +1042,7 @@ pub fn cli_run(args: &[String]) -> ! {
     let mut file: Option<String> = None;
     let mut timeout: Option<Duration> = None;
     let mut trace = false;
+    let mut helper = false;
     let mut rest: Vec<String> = Vec::new();
     let mut i = 0;
     while i < args.len() {
@@ -1001,6 +1057,11 @@ pub fn cli_run(args: &[String]) -> ! {
             }
             "--trace" => {
                 trace = true;
+                i += 1;
+            }
+            // ORDER 2049-w2q6: run a sourced-function helper, not a decider.
+            "--helper" => {
+                helper = true;
                 i += 1;
             }
             "--" => {
@@ -1019,7 +1080,7 @@ pub fn cli_run(args: &[String]) -> ! {
     }
     let Some(path) = file else {
         eprintln!(
-            "usage: tillandsias-plan script run <file.lua> [--timeout <dur>] [--trace] [-- args...]"
+            "usage: tillandsias-plan script run <file.lua> [--helper] [--timeout <dur>] [--trace] [-- args...]"
         );
         std::process::exit(2);
     };
@@ -1027,7 +1088,11 @@ pub fn cli_run(args: &[String]) -> ! {
     let src = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) => {
-            println!("could-not-run:{name}");
+            if helper {
+                eprintln!("could-not-run:{name}");
+            } else {
+                println!("could-not-run:{name}");
+            }
             eprintln!("  why: {path} could not be read: {e}");
             eprintln!(
                 "  remedy: check the path the step or caller names (a missing .lua refuses, never skips)"
@@ -1049,13 +1114,13 @@ pub fn cli_run(args: &[String]) -> ! {
     // cleanup. A verdict the script recorded before the crash is NOT reported:
     // the runner did not finish, so nothing it says can be green.
     let outcome = match timeout {
-        None => run_guarded(&path, &src, &rest, host.clone()),
+        None => run_guarded(&path, &src, &rest, host.clone(), helper),
         Some(d) => {
             let (tx, rx) = std::sync::mpsc::channel();
             let (p2, s2, r2) = (path.clone(), src.clone(), rest.clone());
             let worker_host = host.clone();
             std::thread::spawn(move || {
-                let _ = tx.send(run_guarded(&p2, &s2, &r2, worker_host));
+                let _ = tx.send(run_guarded(&p2, &s2, &r2, worker_host, helper));
             });
             match rx.recv_timeout(deadline.unwrap().saturating_duration_since(Instant::now())) {
                 Ok(Err(died)) => Err(died),
@@ -1082,8 +1147,13 @@ pub fn cli_run(args: &[String]) -> ! {
                             t0.elapsed().as_millis()
                         );
                     }
-                    println!("status=timed_out");
-                    println!("refused:timed-out:{name}");
+                    if helper {
+                        eprintln!("status=timed_out");
+                        eprintln!("refused:timed-out:{name}");
+                    } else {
+                        println!("status=timed_out");
+                        println!("refused:timed-out:{name}");
+                    }
                     eprintln!(
                         "  why: {path} did not reach a verdict within {}ms",
                         d.as_millis()
@@ -1104,7 +1174,11 @@ pub fn cli_run(args: &[String]) -> ! {
                 eprintln!("{e}");
             }
             let line = format!("refused:script-worker-died:{name}");
-            println!("{line}");
+            if helper {
+                eprintln!("{line}");
+            } else {
+                println!("{line}");
+            }
             eprintln!("  why: the runner's script worker ended without a verdict: {died}");
             eprintln!(
                 "  remedy: this is a runner defect, not slowness and not the script's verdict — report it with the script and this message"
@@ -1122,7 +1196,15 @@ pub fn cli_run(args: &[String]) -> ! {
             t0.elapsed().as_millis()
         );
     }
-    println!("{line}");
+    // ORDER 2049-w2q6: a helper's stdout is the script's alone; the runner's
+    // own line (only ever a refusal) goes to stderr.
+    if helper {
+        if !line.is_empty() {
+            eprintln!("{line}");
+        }
+    } else {
+        println!("{line}");
+    }
     if let Some(d) = detail {
         eprintln!("{d}");
     }
