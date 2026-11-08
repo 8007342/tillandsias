@@ -194,6 +194,94 @@ mod managed_script {
         );
     }
 
+    // ORDER 2031-h5ru (p1). The TILLANDSIAS_* passthrough carried two secrets
+    // to every child: the coordinator's Access client secret and the CA key
+    // passphrase. A name whose last segment is SECRET, PASS or PASSWORD no
+    // longer passes, through proc.run or through the `run` verb. NEGATIVE
+    // CONTROL: a non-secret TILLANDSIAS_* marker still does. Only exit codes
+    // are read and no assertion message carries captured output, so a value
+    // can never reach a log, red or green.
+    const H5RU_PLANTED: &str = "planted-h5ru-6f1c9e";
+    const H5RU_SECRETS: [&str; 2] = ["TILLANDSIAS_COORD_CLIENT_SECRET", "TILLANDSIAS_KEY_PASS"];
+    const H5RU_MARKER: &str = "TILLANDSIAS_H5RU_MARKER";
+
+    fn h5ru_planted(mut c: std::process::Command) -> std::process::Command {
+        for name in H5RU_SECRETS {
+            c.env(name, H5RU_PLANTED);
+        }
+        c.env(H5RU_MARKER, "1");
+        c
+    }
+
+    #[test]
+    fn project_secrets_do_not_reach_a_lua_door_child_and_other_project_names_do() {
+        let f = ScriptFixture::new();
+        let script = f.write(
+            "probe.lua",
+            r#"
+            for _, name in ipairs({'TILLANDSIAS_COORD_CLIENT_SECRET', 'TILLANDSIAS_KEY_PASS'}) do
+                local r = proc.run{argv={'printenv', name}}
+                assert(r.status == 'exited' and r.code ~= 0, name .. ' reached the child')
+            end
+            local m = proc.run{argv={'printenv', 'TILLANDSIAS_H5RU_MARKER'}}
+            assert(m.status == 'exited' and m.code == 0, 'control: a non-secret TILLANDSIAS_ name did not reach the child')
+            verdict.ok('h5ru')
+        "#,
+        );
+        let mut c = f.runner(&script);
+        c.args(["--timeout", "20s"]);
+        let out = h5ru_planted(c).output().unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stdout.contains(H5RU_PLANTED) && !stderr.contains(H5RU_PLANTED),
+            "the planted secret value appeared in the runner's output"
+        );
+        // The Lua assertion messages name the variable, never the value.
+        assert!(out.status.success(), "{stdout}{stderr}");
+    }
+
+    #[test]
+    fn project_secrets_do_not_reach_a_run_verb_child_and_other_project_names_do() {
+        let f = ScriptFixture::new();
+        let probe = |name: &str| {
+            // Same binary and policy environment as `runner`, other verb.
+            let binary = std::env::var_os("TILLANDSIAS_LUA_PROC_TEST_BIN")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_tillandsias-plan").into());
+            let mut c = std::process::Command::new(binary);
+            c.args(["run", "--", "printenv", name])
+                .env("TILLANDSIAS_REPO_ROOT", f.dir.path())
+                .env_remove("TILLANDSIAS_POLICY_SEED")
+                .env_remove("TILLANDSIAS_CONSENT_TOKEN")
+                .env_remove("CI")
+                .env("TILLANDSIAS_POLICY_REGIME", "interactive")
+                .env("TILLANDSIAS_CONSENT_DIR", f.dir.path().join("consent"))
+                .current_dir(f.dir.path());
+            let out = h5ru_planted(c).output().unwrap();
+            assert!(
+                !String::from_utf8_lossy(&out.stderr).contains(H5RU_PLANTED),
+                "the planted secret value appeared on stderr for {name}"
+            );
+            (
+                out.status.code(),
+                String::from_utf8_lossy(&out.stdout).contains(H5RU_PLANTED),
+            )
+        };
+        for name in H5RU_SECRETS {
+            let (code, leaked) = probe(name);
+            assert!(
+                !leaked && code != Some(0),
+                "{name} reached the run verb's child (exit {code:?})"
+            );
+        }
+        let (code, _) = probe(H5RU_MARKER);
+        assert_eq!(
+            code,
+            Some(0),
+            "control: a non-secret TILLANDSIAS_ name did not reach the run verb's child"
+        );
+    }
+
     // ORDER 1551-pemw, 1551-8gkg. What the instruction hook cannot follow, and
     // what no restriction survives, is not in the environment at all.
     #[test]

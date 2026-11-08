@@ -97,7 +97,8 @@ pub fn base_env(additions: &[(String, String)]) -> Vec<(String, String)> {
         }
     }
     for (k, v) in std::env::vars() {
-        if k.starts_with("TILLANDSIAS_") {
+        // 2031-h5ru: the same rule as lua_predicate::base_env_command.
+        if k.starts_with("TILLANDSIAS_") && crate::lua_predicate::project_variable_passes(&k) {
             env.push((k, v));
         }
     }
