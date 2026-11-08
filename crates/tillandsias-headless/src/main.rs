@@ -73,6 +73,7 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod egress;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
@@ -2403,6 +2404,27 @@ fn proxy_env_args() -> Vec<String> {
         "--env".into(),
         "NODE_USE_ENV_PROXY=1".into(),
     ]
+}
+
+// The proxy env for `image`, or nothing when its egress declaration names no
+// proxied tier (order 2041-jb57: undeclared means none).
+// @trace spec:proxy-container, order:2041-jb57
+fn proxy_env_args_for(image: &str) -> Vec<String> {
+    if egress::wants_proxy(image) {
+        proxy_env_args()
+    } else {
+        Vec::new()
+    }
+}
+
+// apply_proxy_env, gated on `image`'s egress declaration like
+// proxy_env_args_for.
+fn apply_proxy_env_for(spec: ContainerSpec, image: &str) -> ContainerSpec {
+    if egress::wants_proxy(image) {
+        apply_proxy_env(spec)
+    } else {
+        spec
+    }
 }
 
 // Applies the canonical proxy env vars to a ContainerSpec builder.
@@ -7180,7 +7202,7 @@ fn build_git_run_args(
     // the enclave proxy. Uses enclave_no_proxy() — the canonical full NO_PROXY
     // list — not a shorter hand-rolled one.
     // See cheatsheets/runtime/enclave-proxy-patterns.md for justification.
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("git"));
     if let Some(url) = project_remote_url.and_then(sanitize_forge_origin_url)
         && !url.is_empty()
     {
@@ -8544,7 +8566,7 @@ fn build_inference_run_args(
         effective_tier,
         &usable_nodes,
     ));
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("inference"));
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
     // ..)` calls — but the tail ended `[.., image, "/usr/bin/ollama", "serve"]`,
@@ -11132,7 +11154,7 @@ fn build_opencode_forge_args(
             args.push("--detach".into());
         }
     }
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("default"));
     args.extend([
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
@@ -21954,7 +21976,7 @@ fn build_forge_agent_run_args_with_vault(
             FORGE_SPEC_INDEX_MOUNT.to_string(),
             MountMode::ReadOnly,
         );
-    let mut spec = apply_proxy_env(spec)
+    let mut spec = apply_proxy_env_for(spec, "default")
         // Order 801-a2by: name the durable root explicitly so the in-forge
         // readers resolve it without probing for podman (which the enclave does
         // not have) and without an existence heuristic that would silently
