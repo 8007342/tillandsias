@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: mcp-usage-log-sh-s-body-runs-lua-mcp-usage-log-lua-best-effort-and-silent-on-stdout
+    event:
+      type: note
+      ts: "2026-11-08T07:59:15Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        NOT PORTED, by measurement. D3.5 as designed cannot work. (1) The writer appends to TILLANDSIAS_EXPERT_USAGE_LOG (default /tmp/forge-expert-usage.jsonl) and the transport trace to /tmp/forge-expert-health.jsonl. The Lua fs door is confined to the repository root: fs.exists refused /tmp/... (measured on 2049-ndde), so a Lua append would be refused and the best-effort wrapper would silently drop every record. (2) Unlike the other four, it runs per tool call. Replacing each date exec with a tillandsias-plan exec (1-6 ms against about 1 ms) removes no forks and costs latency on every call. The only shell-outs are 4 date calls (counter items). Options for the operator or coordinator: (a) leave it shell and note it in the forge-lua-helpers design D5; (b) a separate change gives the Lua door a declared write root for the telemetry log, which is a 2029-39bt-style door decision; (c) swap date for 'tillandsias-plan time now --ms/--iso', which kills the %3N hazard class but not the forks. Recommend (a).
