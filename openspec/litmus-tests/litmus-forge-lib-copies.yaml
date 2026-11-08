@@ -1,0 +1,31 @@
+# @trace spec:default-image, order:2047-ci2k
+#
+# Every images/default/lib-*.sh that the image's shell sources is COPYed into
+# /usr/local/lib/tillandsias/. A lib that exists in the tree but is never
+# copied works from a checkout and silently degrades in a built forge (four
+# were missing until 2047-ci2k). The decider is
+# scripts/lua/check-forge-lib-copies.lua; the control proves it refuses a
+# sourced lib whose COPY line is gone.
+name: litmus:forge-lib-copies
+spec: default-image
+phase: pre-build
+description: >
+  Every lib-*.sh named in code by the default image's shell has a COPY into
+  /usr/local/lib/tillandsias/ in images/default/Containerfile.
+severity: high
+size: instant
+
+critical_path:
+  - step: "2047-ci2k: every sourced forge lib is copied into the image"
+    command: "out=$(tillandsias-plan script run scripts/lua/check-forge-lib-copies.lua); rc=$?; case \"$out\" in ok:forge-lib-copies:*) [ \"$rc\" -eq 0 ] && echo 'ok: every sourced lib is copied' ;; *) echo \"FAIL rc=$rc out=[$out]\"; exit 1 ;; esac"
+    timeout_ms: 20000
+    expected_behavior: "ok: every sourced lib is copied"
+
+  - step: "2047-ci2k NEGATIVE CONTROL: a sourced lib without its COPY line is refused"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-flc.XXXXXX); cp images/default/lib-common.sh images/default/lib-mcp-build-id.sh \"$T/\"; grep -v 'COPY lib-mcp-build-id.sh ' images/default/Containerfile > \"$T/Containerfile\"; printf '. /usr/local/lib/tillandsias/lib-mcp-build-id.sh\\n' > \"$T/wrapper.sh\"; out=$(TILLANDSIAS_FORGE_IMAGE_DIR=\"$T\" tillandsias-plan script run scripts/lua/check-forge-lib-copies.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:forge-lib-copies:lib-mcp-build-id.sh' ] && echo 'ok: missing COPY refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: missing COPY refused"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
