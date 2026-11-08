@@ -40,31 +40,26 @@ tillandsias_ledger_freshness() {
     TILLANDSIAS_LEDGER_NEWEST="unknown"
     [[ -n "$project_dir" && -d "$project_dir" ]] || return 0
 
-    local head_sha head_ts newest_line newest_ref newest_ts
-    head_sha="$(git -C "$project_dir" rev-parse --short HEAD 2>/dev/null || true)"
-    [[ -n "$head_sha" ]] && TILLANDSIAS_BASE_HEAD="$head_sha"
-
-    head_ts="$(git -C "$project_dir" log -1 --format=%ct 2>/dev/null || true)"
-    # origin/HEAD is a symref clone creates (short name: bare `origin`); it
-    # duplicates whichever branch it points at and must not shadow the real
-    # newest branch's NAME in the report.
-    newest_line="$(git -C "$project_dir" for-each-ref refs/remotes/origin \
-        --sort=-committerdate \
-        --format='%(refname:short) %(committerdate:unix)' 2>/dev/null \
-        | while read -r _ref _ts; do
-            case "$_ref" in (origin | origin/HEAD) continue ;; esac
-            printf '%s %s\n' "$_ref" "$_ts"
-            break
-        done)"
-    newest_ref="${newest_line% *}"
-    newest_ts="${newest_line##* }"
-
-    if [[ -n "$newest_ref" && "$newest_ref" != "$newest_line" ]]; then
-        TILLANDSIAS_LEDGER_NEWEST="${newest_ref#origin/}"
-    fi
-    if [[ "$head_ts" =~ ^[0-9]+$ && "$newest_ts" =~ ^[0-9]+$ ]] \
-        && [[ "$newest_ts" -gt "$head_ts" ]]; then
-        TILLANDSIAS_LEDGER_LAG_H=$(( (newest_ts - head_ts) / 3600 ))
-    fi
+    # ORDER 2049-ndde (openspec forge-lua-helpers D3.3): the three git reads
+    # are lua/ledger-freshness.lua on `tillandsias-plan script run --helper`.
+    # The module sits beside this file (images/default/lua/ in a checkout,
+    # /usr/local/lib/tillandsias/lua/ in the image). Without the runner or the
+    # module the values stay unknown / 0 / unknown, which this contract already
+    # defines as "unknowable": never a guessed lag. No second implementation.
+    local lua="" c vals head lag newest
+    for c in "${BASH_SOURCE[0]%/*}/lua/ledger-freshness.lua" /usr/local/lib/tillandsias/lua/ledger-freshness.lua; do
+        if [[ -r "$c" ]]; then lua="$c"; break; fi
+    done
+    [[ -n "$lua" ]] && command -v "${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}" >/dev/null 2>&1 || return 0
+    vals="$("${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}" script run --helper "$lua" -- "$project_dir" 2>/dev/null)" || return 0
+    # Three lines in a fixed order (the module's header): head, lag_h, newest.
+    {
+        IFS= read -r head
+        IFS= read -r lag
+        IFS= read -r newest
+    } <<<"$vals"
+    [[ -n "$head" ]] && TILLANDSIAS_BASE_HEAD="$head"
+    [[ "$lag" =~ ^[0-9]+$ ]] && TILLANDSIAS_LEDGER_LAG_H="$lag"
+    [[ -n "$newest" ]] && TILLANDSIAS_LEDGER_NEWEST="$newest"
     return 0
 }
