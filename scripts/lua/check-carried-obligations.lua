@@ -380,7 +380,14 @@ local function taken_items()
         local merged = git({ "merge-base", "--is-ancestor", ref, BASE })
         local mine = (ref == "origin/" .. own) or git({ "merge-base", "--is-ancestor", ref, HEAD })
         if not merged and not mine then
-            local _, mbr = git({ "merge-base", BASE, ref })
+            -- ORDER 2044-kx7e. Diff from merge-base(HEAD, ref), not (BASE,
+            -- ref): a ref STACKED ON this change contains this change's own
+            -- deletions, and from BASE it reported them as taking the item
+            -- this change pays (#1002 evicted 2026-11-08). From its merge-base
+            -- with HEAD a descendant contributes only what it deletes after
+            -- HEAD, and an unrelated ref, whose merge-base with HEAD is at or
+            -- before BASE, is judged exactly as before.
+            local _, mbr = git({ "merge-base", HEAD, ref })
             mbr = text.trim(mbr)
             if mbr ~= "" then
                 local _, del = git({ "diff", "--name-only", "--diff-filter=D", mbr, ref })
