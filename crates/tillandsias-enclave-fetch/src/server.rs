@@ -74,6 +74,13 @@ async fn fetch_md(f: &Fetcher, url: &str, page: usize) -> Result<(String, usize)
 
 /// Run one tool. Returns the MCP result and writes the audit record.
 pub async fn call(f: &Fetcher, sink: &Audit, client: &str, name: &str, arg: &Value) -> Value {
+    if !f.limiter.allow(client) {
+        audit(sink, client, name, "", 0, "rate-limited");
+        return text_result(
+            "rate limited: too many enclave-fetch calls from this client; wait and retry".into(),
+            true,
+        );
+    }
     let s = |k: &str| arg.get(k).and_then(Value::as_str).unwrap_or("").to_string();
     let (url, outcome): (String, Result<(String, usize), Refusal>) = match name {
         "catalog" => {
@@ -395,5 +402,54 @@ mod tests {
         s.read_to_string(&mut out).await.unwrap();
         assert!(out.starts_with("HTTP/1.1 200 OK"), "{out}");
         assert!(out.contains("rust-std"), "{out}");
+    }
+}
+
+#[cfg(test)]
+mod rate_tests {
+    use super::*;
+    use crate::catalog::Catalog;
+
+    #[tokio::test]
+    async fn over_limit_is_a_tool_error_and_audited() {
+        let cat =
+            Catalog::parse(include_str!("../../../images/enclave-fetch/catalog.yaml")).unwrap();
+        let mut f = Fetcher::new(cat, None);
+        f.limiter = crate::ratelimit::Limiter::new(1, 2);
+        let log = Arc::new(Mutex::new(Vec::<u8>::new()));
+        struct W(Arc<Mutex<Vec<u8>>>);
+        impl Write for W {
+            fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(b);
+                Ok(b.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let sink: Audit = Arc::new(Mutex::new(Box::new(W(log.clone()))));
+        for _ in 0..2 {
+            assert_eq!(
+                call(&f, &sink, "c1", "catalog", &json!({})).await["isError"],
+                false
+            );
+        }
+        let r = call(&f, &sink, "c1", "catalog", &json!({})).await;
+        assert_eq!(r["isError"], true);
+        assert_eq!(
+            call(&f, &sink, "c2", "catalog", &json!({})).await["isError"],
+            false
+        );
+        let text = String::from_utf8(log.lock().unwrap().clone()).unwrap();
+        let verdicts: Vec<String> = text
+            .lines()
+            .map(|l| {
+                serde_json::from_str::<Value>(l).unwrap()["verdict"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(verdicts, ["ok", "ok", "rate-limited", "ok"]);
     }
 }

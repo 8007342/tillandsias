@@ -5,6 +5,7 @@
 //!   TILLANDSIAS_FETCH_CATALOG  catalog path (default /etc/tillandsias/fetch-catalog.yaml)
 //!   TILLANDSIAS_FETCH_PROXY    upstream proxy URL (the proxy's research port); unset = direct, pinned
 //!   TILLANDSIAS_FETCH_AUDIT    JSONL audit path (default: stderr)
+//!   TILLANDSIAS_FETCH_RATE_PER_MIN / _BURST  per-client call limit (default 60/min, burst 20)
 //!
 //! @trace spec:proxy-container, order:2041-csm4
 
@@ -35,6 +36,20 @@ async fn main() {
             std::process::exit(2);
         }
     };
+    let num = |k: &str, d: u32| {
+        std::env::var(k)
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(d)
+    };
+    let per_minute = num(
+        "TILLANDSIAS_FETCH_RATE_PER_MIN",
+        tillandsias_enclave_fetch::fetch::DEFAULT_PER_MINUTE,
+    );
+    let burst = num(
+        "TILLANDSIAS_FETCH_RATE_BURST",
+        tillandsias_enclave_fetch::fetch::DEFAULT_BURST,
+    );
     let proxy = std::env::var("TILLANDSIAS_FETCH_PROXY")
         .ok()
         .filter(|p| !p.is_empty());
@@ -64,7 +79,9 @@ async fn main() {
         catalog.sources.len(),
         proxy.as_deref().unwrap_or("direct (pinned)")
     );
-    if let Err(e) = server::serve(listener, Arc::new(Fetcher::new(catalog, proxy)), sink).await {
+    let mut fetcher = Fetcher::new(catalog, proxy);
+    fetcher.limiter = tillandsias_enclave_fetch::ratelimit::Limiter::new(per_minute, burst);
+    if let Err(e) = server::serve(listener, Arc::new(fetcher), sink).await {
         eprintln!("enclave-fetch: {e}");
         std::process::exit(1);
     }
