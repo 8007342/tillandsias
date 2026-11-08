@@ -22,14 +22,14 @@ CHECK="$ROOT/scripts/check-no-competing-gate.sh"
 pass=0; fail=0
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 
-# mkproc <root> <pid> <token|-> <cmdline>
+# mkproc <root> <pid> <token|-> <cmdline> [marker-name]  (2031-z4rm: default TILLANDSIAS_WRAPPER_MARK)
 mkproc() {
-    local r="$1" pid="$2" tok="$3" cmd="$4"
+    local r="$1" pid="$2" tok="$3" cmd="$4" name="${5:-TILLANDSIAS_WRAPPER_MARK}"
     mkdir -p "$r/$pid"
     if [ "$tok" = "-" ]; then
         printf 'PATH=/usr/bin\0' > "$r/$pid/environ"
     else
-        printf 'PATH=/usr/bin\0TILLANDSIAS_WRAPPER_TOKEN=%s\0' "$tok" > "$r/$pid/environ"
+        printf 'PATH=/usr/bin\0%s=%s\0' "$name" "$tok" > "$r/$pid/environ"
     fi
     printf '%s\0' "$cmd" > "$r/$pid/cmdline"
 }
@@ -40,7 +40,7 @@ newroot() {
     local r="$tmp/$1"; mkdir -p "$r/1" "$r/self"
     printf 'x\0' > "$r/1/cmdline"; printf 'PATH=/x\0' > "$r/1/environ"
     printf 'x\0' > "$r/self/cmdline"
-    printf 'PATH=/x\0TILLANDSIAS_WRAPPER_TOKEN=self-tok\0' > "$r/self/environ"
+    printf 'PATH=/x\0TILLANDSIAS_WRAPPER_MARK=self-tok\0' > "$r/self/environ"
     echo "$r"
 }
 
@@ -84,6 +84,21 @@ mkproc "$r" 101 tok-a "/usr/bin/conmon --api-version 1 -c abc"
 mkproc "$r" 102 tok-a "bash /repo/./build.sh --check"
 out="$(run_check "$r")"; rc=$?
 check "a build.sh with no live wrapper is reported" 0 "competing-gate:" "$rc" "$out"
+
+# 2b. ORDER 2031-z4rm: the same stray, started by a wrapper from an OLDER
+#     checkout that still exports the retired TILLANDSIAS_WRAPPER_TOKEN. It is
+#     still a competitor for the transition window; a detector that read only
+#     the new name would call this host clean while two gates race.
+r="$(newroot stray-retired-name)"
+mkproc "$r" 101 tok-r "/usr/bin/conmon --api-version 1 -c abc" TILLANDSIAS_WRAPPER_TOKEN
+mkproc "$r" 102 tok-r "bash /repo/./build.sh --check" TILLANDSIAS_WRAPPER_TOKEN
+out="$(run_check "$r")"; rc=$?
+check "a stray gate carrying only the retired marker name is reported" 0 "competing-gate:" "$rc" "$out"
+r="$(newroot healthy-retired-name)"
+mkproc "$r" 100 tok-r "toolbox run --container tillandsias-builder bash -l -c x" TILLANDSIAS_WRAPPER_TOKEN
+mkproc "$r" 102 tok-r "bash /repo/./build.sh --check" TILLANDSIAS_WRAPPER_TOKEN
+out="$(run_check "$r")"; rc=$?
+check "a healthy gate carrying only the retired marker name is not a competitor" 0 "ok:no-competing-gate" "$rc" "$out"
 
 # 3. THE idle CLASS, and the arm that stops this refusing on an idle host. A
 #    finished exec session leaves a conmon behind carrying the token; seven such
@@ -315,8 +330,8 @@ r="$(newroot tokenless-remedy)"
 printf 'PATH=/x\0' > "$r/self/environ"
 out="$(run_args "$r" --host-side 999)"; rc=$?
 check "a tokenless host-side caller is refused (2)" 2 "refused:competing-gate:caller-contract" "$rc" "$out"
-afford "no token exported" "$out" "export TILLANDSIAS_WRAPPER_TOKEN"
-printf 'PATH=/x\0TILLANDSIAS_WRAPPER_TOKEN=self-tok\0' > "$r/self/environ"   # the export, done
+afford "no token exported" "$out" "export TILLANDSIAS_WRAPPER_MARK"
+printf 'PATH=/x\0TILLANDSIAS_WRAPPER_MARK=self-tok\0' > "$r/self/environ"   # the export, done
 out="$(run_args "$r" --host-side 999)"
 clears "exporting the token clears the refusal" "$out"
 

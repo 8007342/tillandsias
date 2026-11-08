@@ -240,8 +240,10 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## security
 
+- agent-web-access-patterns.md     — and web research, or why "let the shell curl anything" is not the pattern. [pull-on-demand: stub]
 - oauth-callback-relay.md          — Use this cheatsheet when a native or CLI app signs in with OAuth through a [pull-on-demand: stub]
 - owasp-top-10-2021.md             — You're writing or reviewing any web-facing software, APIs, or services that tou… [bundled, partial-verify]
+- per-workload-egress-tiers.md     — siblings only, host, curated internet), keeping TLS end to end, and keeping [pull-on-demand: stub]
 
 ## test
 

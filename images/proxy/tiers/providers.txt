@@ -1,0 +1,50 @@
+# @trace spec:proxy-container, order:2041-i3nk
+# Egress tier `providers`: model APIs and agent services the coding harnesses call.
+# Source of truth for this tier. images/proxy/allowlist.txt is GENERATED from
+# the tier files by scripts/lua/build-proxy-allowlist.lua; edit here, then run it.
+
+# --- AI/ML (model providers) ---
+.openai.com
+.anthropic.com
+.chatgpt.com
+.claude.com
+# claude.ai serves the official Claude Code native installer
+# (curl -fsSL https://claude.ai/install.sh) — the order-459 launch-time
+# curl-install channel; the dist bucket itself is .googleapis.com (above).
+.claude.ai
+# Antigravity CLI product surface (not a subdomain of google.com; uses .google gTLD).
+.antigravity.google
+# Antigravity CLI binary updater (exact observed Cloud Run service, order 307).
+antigravity-cli-auto-updater-974169037036.us-central1.run.app
+.together.ai
+.groq.com
+.fireworks.ai
+.deepseek.com
+.mistral.ai
+.cerebras.ai
+.sambanova.ai
+# OpenCode's canonical model registry (required for any OpenCode session).
+# @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
+.models.dev
+# OpenRouter + Helicone are in OpenCode's default provider set; users who pick
+# these without the allowlist entry see stuck prompts (TCP_DENIED CONNECT).
+.openrouter.ai
+.helicone.ai
+
+# --- AI search/tools (used by coding agents) ---
+.exa.ai
+.tavily.com
+.serper.dev
+.brave.com
+.perplexity.ai
+.searchapi.io
+
+# --- Code analysis services (used by Codex) ---
+# @trace spec:enclave-network, spec:proxy-egress-allowlist
+# Codex requires external access for code inspection and analysis.
+# api.github.com is covered by .github.com
+# PyPI and files.pythonhosted.org covered by .pypi.org and .pythonhosted.org
+.codeclimate.com
+.sonarcloud.io
+.codacy.com
+.deepsource.io
