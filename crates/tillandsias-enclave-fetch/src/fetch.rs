@@ -17,6 +17,8 @@ use url::Url;
 
 pub const MAX_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_REDIRECTS: usize = 5;
+pub const DEFAULT_PER_MINUTE: u32 = 60;
+pub const DEFAULT_BURST: u32 = 20;
 const TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Why a fetch did not happen. `kind()` is the audit verdict.
@@ -97,6 +99,8 @@ pub struct Fetcher {
     /// that with the SNI/destination check).
     pub proxy: Option<String>,
     pub resolve_override: ResolveOverride,
+    /// Per-client call limit (order 2041-9aiq).
+    pub limiter: crate::ratelimit::Limiter,
     robots: Mutex<HashMap<String, Robots>>,
 }
 
@@ -106,6 +110,7 @@ impl Fetcher {
             catalog,
             proxy,
             resolve_override: HashMap::new(),
+            limiter: crate::ratelimit::Limiter::new(DEFAULT_PER_MINUTE, DEFAULT_BURST),
             robots: Mutex::new(HashMap::new()),
         }
     }

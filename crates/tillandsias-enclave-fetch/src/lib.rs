@@ -12,5 +12,6 @@ pub mod catalog;
 pub mod fetch;
 pub mod ipguard;
 pub mod markdown;
+pub mod ratelimit;
 pub mod robots;
 pub mod server;
