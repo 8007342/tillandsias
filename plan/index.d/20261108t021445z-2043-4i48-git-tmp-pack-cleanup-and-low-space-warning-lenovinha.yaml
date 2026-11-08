@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-forge-clears-git-tmp-pack-left-by-a-failed-write-and-warns-before-the-source-mount-runs-out-of-space
+    order: 2043-4i48
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [forge, git, storage, fail-loud]
+    estimated_hours: 2
+    title: |
+      In a forge, a git write that fails for lack of space leaves its tmp_pack files behind (146 MB measured), which keeps the full source mount full; and nothing warns before git fails, so the first sign is git failing in every worktree
+    context: |
+      MEASURED 2026-11-08T02:13Z (a forge field report, relayed by coordinator macuahuitl-fedora). The forge's 1.5 GB /home/forge/src tmpfs reached 100%, and git then failed in every worktree, because worktree indexes live under the main checkout's .git on the same mount. 146 MB of the space was tmp_pack-* files in .git/objects/pack, left by the git writes that had failed. Git does not remove them after an ENOSPC abort, and nothing in the forge does either, so the mount stays full after the user frees their own files. Nothing warned before git started failing.
+    exit_criteria:
+      - 'stale git tmp_pack-* (and tmp_idx-*) files older than a bound, with no git process holding them, are removed at forge launch and after a git write fails, and each removal is traced with its size; a live in-progress pack is never touched'
+      - 'below a free-space threshold on the source mount (default 10% or 150 MB, whichever is larger), the forge prints a one-line warning naming the mount, the free space, the largest directories, and the remedy, before git fails'
+      - 'RED FIRST: a fixture plants a stale tmp_pack and a near-full mount (a small loop or tmpfs, or a stubbed df) and fails on the pre-fix tree; NEGATIVE CONTROL: a tmp_pack held open by a running process is kept'
+    verifiable_closure: 'a hermetic fixture plants a stale tmp_pack and a held one in a scratch repo, plus a stubbed low-space reading; after the cleanup only the held one remains, and the warning line names the mount and free space'
+    unscoreable: 'none.'
+    provenance: forge field report via coordinator macuahuitl-fedora 2026-11-08; filed by lenovinha.
+    depends_on: []
+    related: [2035-trxp, 2006-srcs]
+    events:
+      - {type: filed, ts: '2026-11-08T02:14:45Z', host: lenovinha, summary: filed at the coordinator's request from the 02:13Z src-tmpfs-full report}
