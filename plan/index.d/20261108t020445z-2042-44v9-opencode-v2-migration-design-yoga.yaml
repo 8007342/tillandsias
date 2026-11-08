@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 at the operator's ruling (stay on opencode v1 now, plan v2). Code is cited by symbol, never by line.
+packets:
+  - packet_id: forges-move-to-opencode-v2-without-losing-credentials-off-disk-the-config-or-the-web-lane
+    order: 2042-44v9
+    status: ready
+    kind: design
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, opencode, security, design]
+    estimated_hours: 8
+    title: "DESIGN FIRST - forges move to opencode v2 without putting credentials on disk, losing the config overlay, or breaking the web lane"
+    context: |
+      Operator ruling 2026-11-08: forges stay on opencode v1 (the opencode-ai npm name; upstream's GitHub releases/latest marker, v1.19.5 today), and v2 is planned here. Measured on yoga the same day with sha256-verified binaries of v1.19.5 and v2.2.6 side by side (anomalyco/opencode; v2 ships on npm as @opencode/cli and as homebrew-core opencode; upstream keeps v1 and v2 as parallel products and has not marked v2 latest). What v2.2.6 breaks for a forge:
+        1. CREDENTIALS. OPENCODE_AUTH_CONTENT is gone: the binary's string count is 0 (2 in v1.19.5), `auth list` with it set reports no integrations, and scripts/test-opencode-vault-auth-content.sh fails on v2.2.6 and passes on v1.19.5. That env channel is how the forge hands opencode its credentials without writing auth.json (orders 431, 1787-i2ir). v2 documents only {env:VAR} substitution in config.
+        2. CONFIG. ~/.config/opencode/config.json is not loaded (`debug config`); only opencode.json is. Without the rename the forge silently loses permission: allow, the MCP servers, providers and the model. Keys were renamed: permission→permissions[], autoupdate→update, provider→providers, mcp→mcp.servers, agent→agents (prompt→system), small_model→agents.title. They migrate faithfully once the file is found.
+        3. WEB LANE. `serve --hostname --port` keeps its flags, but the API moved under /api/* behind an auto-generated password that is PRINTED TO THE LOG. /event and /global/event fall through to the web app, which breaks images/default/sse-keepalive-proxy.js (the OpenCode Web lane, entrypoint-forge-opencode-web.sh). `opencode web` is gone.
+        4. PROBES. `--pure`, which the render probe uses, is removed (and OPENCODE_PURE). harness_contract_ok (run --help has --auto and --format) still PASSES on v2.2.6, so the flag probe alone certifies a broken binary; only the auth and render probes catch it.
+        5. PROCESS MODEL. The CLI auto-spawns a detached `opencode serve --service` that outlives the command unless run with --standalone. On the measuring host one leaked from a single `auth list` and was killed by PID.
+        6. FLAGS. v2 refuses unknown flags (v1's parser ignored them); `run --file` takes a single string; update control is DISABLE_AUTOUPDATER / DISABLE_UPDATES (OPENCODE_DISABLE_AUTOUPDATE exists in both).
+      NEEDS-OPERATOR-DECISION: the credential channel. Options, the one that keeps credentials off disk first:
+        (a) opencode's own process env only: the forge injects the secret into the env of the opencode process alone (not the forge shell or its other children), referenced from opencode.json as {env:NAME}, with a fixture proving it never lands in a file, a log or another process's environ. Keeps credentials off disk; puts them in one process's env.
+        (b) a tmpfs-backed auth.json inside the forge's RAM-only workspace, written at launch and removed at exit. It is a file, so it is "on disk" in name though not on persistent storage; it needs the operator to rule whether that counts.
+        (c) a per-call credential helper or broker, if upstream v2 offers one (to be researched; none found on 2026-11-08).
+    exit_criteria:
+      - "A written decision in openspec (a change) or methodology names the v2 credential channel the operator chose, with a fixture design proving the credential reaches opencode v2 yet appears in no file under the forge's persistent paths, no log, and no other process's environ; plus a migration plan covering items 2-6 of the context (opencode.json and key renames, serve under /api with the password kept out of logs, the SSE keepalive rework, a render probe without --pure that passes --standalone, and no leaked detached service). Each item names the red fixture it starts from. Pre-fix result: FAILS, no decision or plan exists, and scripts/test-opencode-vault-auth-content.sh fails on v2.2.6."
+    verifiable_closure: "A written decision in openspec (a change) or methodology names the v2 credential channel the operator chose, with a fixture design proving the credential reaches opencode v2 yet appears in no file under the forge's persistent paths, no log, and no other process's environ; plus a migration plan covering items 2-6 of the context (opencode.json and key renames, serve under /api with the password kept out of logs, the SSE keepalive rework, a render probe without --pure that passes --standalone, and no leaked detached service). Each item names the red fixture it starts from. Pre-fix result: FAILS, no decision or plan exists, and scripts/test-opencode-vault-auth-content.sh fails on v2.2.6."
+    unscoreable: |
+      design-first: closure is a decision record plus a plan, then implementation rows.
+    next_action: >
+      Ask the operator to choose the credential channel ((a) is offered first because it keeps credentials off disk). Until then the forge must refuse a v2 opencode even if upstream marks it latest (lenovinha's #999, work/2027-e2cf).
+    provenance: |
+      yoga measurement 2026-11-08 (research agent, binaries in tl-opencode/target/oc-ab, both sha256-verified); operator ruling 2026-11-08 relayed by macuahuitl and answered directly to yoga.
+    events:
+      - type: filed
+        ts: "2026-11-08T02:04:45Z"
+        host: yoga
+        summary: "filed at the operator's ruling: stay on v1, plan v2"
