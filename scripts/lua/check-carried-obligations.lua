@@ -211,7 +211,75 @@ local function shell_population(ref, b)
     table.sort(pop)
     return pop
 end
-local COUNTERS = { ["shell-to-lua"] = shell_population }
+-- ── the forge-helper-shell counter, at a ref (order 2049-w2q6 / 2049-74tx) ──
+-- openspec change forge-lua-helpers D4: the shell-outs in the forge image's
+-- sourced helpers, images/default/lib-*.sh, are a carried-obligation backlog
+-- judged here, not by a second gate step. An ITEM is one external command at
+-- a command position on a code line (start of line, or after |, ;, &&, ||,
+-- $( or a backtick), named `<file>:<cmd>:<k>` for its k-th occurrence in that
+-- file. Porting a helper body to images/default/lua/ removes its sites, so the
+-- count falls and the change is paid. The command list is the census's:
+-- the text tools and the fetch/hash/clock tools the five helpers spend their
+-- forks on. A builtin (echo, printf, read, test, [) is not a shell-out.
+local HELPER_SHELL_CMDS = {
+    "sed", "awk", "grep", "cut", "tr", "sort", "uniq", "head", "tail", "wc",
+    "curl", "jq", "date", "sha256sum", "shasum", "cksum", "git", "python3", "node", "cat",
+}
+local HELPER_SHELL_SET = {}
+for _, c in ipairs(HELPER_SHELL_CMDS) do HELPER_SHELL_SET[c] = true end
+local HELPER_DEFAULT_POPULATION = { "images/default/lib-*.sh", "images/default/config-overlay/mcp/mcp-usage-log.sh" }
+
+-- The external commands at command positions on one code line, in order.
+local function helper_shell_outs(line)
+    if line:match("^%s*#") then return {} end
+    local found = {}
+    -- Normalise every command separator to a newline, then read each segment's
+    -- first word.
+    local l = line:gsub("%$%(", "\n"):gsub("`", "\n"):gsub("&&", "\n"):gsub("||", "\n")
+        :gsub("|", "\n"):gsub(";", "\n")
+    for seg in (l .. "\n"):gmatch("([^\n]*)\n") do
+        -- skip leading assignments, `command`, `exec`, `!`, `(`, `{`
+        local rest = seg
+        while true do
+            local nxt = rest:match("^%s*[%(%{!]%s*(.*)$")
+                or rest:match("^%s*[%a_][%w_]*=%S*%s+(.*)$")
+                or rest:match("^%s*command%s+(.*)$")
+                or rest:match("^%s*exec%s+(.*)$")
+            if not nxt or nxt == rest then break end
+            rest = nxt
+        end
+        local w = rest:match("^%s*([%w%._%-]+)")
+        if w and HELPER_SHELL_SET[w] then found[#found + 1] = w end
+    end
+    return found
+end
+
+local function helper_shell_population(ref, b)
+    local globs = (type(b) == "table" and type(b.population) == "table" and #b.population > 0) and b.population
+        or HELPER_DEFAULT_POPULATION
+    local pats = {}
+    for _, g in ipairs(globs) do pats[#pats + 1] = glob_to_pattern(g) end
+    local _, tree = git({ "ls-tree", "-r", "--name-only", ref, "images/default/" })
+    local pop = {}
+    for _, f in ipairs(lines(tree)) do
+        local hit = false
+        for _, pat in ipairs(pats) do if f:match(pat) then hit = true; break end end
+        if hit then
+            local _, c = git({ "show", ref .. ":" .. f })
+            local seen = {}
+            for _, l in ipairs(text.lines(c or "")) do
+                for _, cmd in ipairs(helper_shell_outs(l)) do
+                    seen[cmd] = (seen[cmd] or 0) + 1
+                    pop[#pop + 1] = f .. ":" .. cmd .. ":" .. seen[cmd]
+                end
+            end
+        end
+    end
+    table.sort(pop)
+    return pop
+end
+
+local COUNTERS = { ["shell-to-lua"] = shell_population, ["forge-helper-shell"] = helper_shell_population }
 
 -- ── --burndown: has the stall trigger fired? (1577-57u3) ──────────────────
 -- Per backlog, the last `window_size` DUE integrations on BASE's first-parent
@@ -424,7 +492,7 @@ local function candidates(pop, ceiling)
     local items = {}
     local taken = taken_items()
     for _, f in ipairs(pop) do
-        local n = line_count(f)
+        local n = line_count(f:match("^([^:]+)") or f)
         local callee = n and n <= ceiling and wrapper_callee(f) or nil
         if callee then
             local cn = line_count(callee) or 0
@@ -459,7 +527,7 @@ for _, b in ipairs(backlogs) do
         out.line("carried:" .. name .. ":not-due")
     elseif not counter then
         out.line("carried:" .. name .. ":unsupported-counter")
-        log.raw("  " .. name .. ": this guard has no counter for it; it judges only " .. table.concat({ "shell-to-lua" }, ","))
+        log.raw("  " .. name .. ": this guard has no counter for it; it judges only " .. table.concat({ "shell-to-lua", "forge-helper-shell" }, ","))
     else
         n_due = n_due + 1
         -- At the MERGE BASE, never the base ref's tip: the diff (BASE...HEAD)
