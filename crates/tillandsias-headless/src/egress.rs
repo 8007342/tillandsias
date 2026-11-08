@@ -12,6 +12,11 @@
 
 /// The image directories' declarations, embedded at build time.
 const DECLARATIONS: &[(&str, &str)] = &[
+    // 2055-grzz: the audio studio appliance (one --network=none container per call).
+    (
+        "audio-studio",
+        include_str!("../../../images/audio-studio/egress.yaml"),
+    ),
     (
         "builder",
         include_str!("../../../images/builder/egress.yaml"),

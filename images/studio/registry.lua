@@ -183,6 +183,8 @@ return {
       kind = "sibling", image = "audio-studio",
       entry = {}, port = 0,
       tools = { "audio.transform", "audio.detect_glitches" },
+      -- 2041-jb57: egress tiers (curated-egress-tiers); each call runs with --network=none.
+      egress = { "none" },
       save_adapter = "own-writer",
       write_allowlist = {},
       status = "ready", packet = "2055-grzz",

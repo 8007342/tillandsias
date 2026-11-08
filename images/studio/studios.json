@@ -263,6 +263,9 @@
     {
       "brief": "Audio analysis and transforms (ffmpeg, sox, rubberband, a glitch detector) on the lane's audio scratch volume, with provenance.",
       "edits": "Nothing in the checkout: outputs land in the lane's audio scratch volume (/work/tmp/audio), each with a provenance record, and the agent commits the ones the user keeps.",
+      "egress": [
+        "none"
+      ],
       "entry": [],
       "frameworks": [],
       "good_for": [

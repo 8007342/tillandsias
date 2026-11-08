@@ -587,6 +587,9 @@ mod tests {
             lane_volume("kumbia", ""),
             "tillandsias-audio-kumbia-default"
         );
+        // 2041-jb57: the image declares the egress its argv enforces.
+        assert_eq!(crate::egress::declared(IMAGE), Some(vec!["none"]));
+        assert!(!crate::egress::wants_proxy(IMAGE));
     }
 
     #[test]

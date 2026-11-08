@@ -25,6 +25,12 @@
       "title": "tillandsias-embed"
     },
     {
+      "description": "Enclave MCP service: fetch, feed and docs from a curated catalog, outside the forge's shell egress",
+      "id": "crate:tillandsias-enclave-fetch",
+      "kind": "rust-crate",
+      "title": "tillandsias-enclave-fetch"
+    },
+    {
       "description": "Argv-only command execution for Tillandsias: separate fds, concurrent draining, exit status as a value, run identity on every Result",
       "id": "crate:tillandsias-exec",
       "kind": "rust-crate",
@@ -215,6 +221,13 @@
       "optional": false,
       "optional_source": "generator-table",
       "title": "tillandsias-default-base image"
+    },
+    {
+      "description": "built from images/enclave-fetch/Containerfile",
+      "id": "image:enclave-fetch",
+      "kind": "container-image",
+      "optional_source": "unknown",
+      "title": "tillandsias-enclave-fetch image"
     },
     {
       "description": "built from images/flutter/Containerfile",
@@ -7720,6 +7733,42 @@
       "to": "vendored:playwright-device-descriptors"
     },
     {
+      "from": "crate:tillandsias-enclave-fetch",
+      "kind": "direct",
+      "optional": false,
+      "to": "cargo:reqwest@0.11.27"
+    },
+    {
+      "from": "crate:tillandsias-enclave-fetch",
+      "kind": "direct",
+      "optional": false,
+      "to": "cargo:serde@1.0.228"
+    },
+    {
+      "from": "crate:tillandsias-enclave-fetch",
+      "kind": "direct",
+      "optional": false,
+      "to": "cargo:serde_json@1.0.149"
+    },
+    {
+      "from": "crate:tillandsias-enclave-fetch",
+      "kind": "direct",
+      "optional": false,
+      "to": "cargo:serde_yaml@0.9.34+deprecated"
+    },
+    {
+      "from": "crate:tillandsias-enclave-fetch",
+      "kind": "direct",
+      "optional": false,
+      "to": "cargo:tokio@1.52.2"
+    },
+    {
+      "from": "crate:tillandsias-enclave-fetch",
+      "kind": "direct",
+      "optional": false,
+      "to": "cargo:url@2.5.8"
+    },
+    {
       "from": "crate:tillandsias-exec",
       "kind": "direct",
       "optional": false,
@@ -10202,6 +10251,12 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:fedora:zsh"
+    },
+    {
+      "from": "image:enclave-fetch",
+      "kind": "base-image",
+      "optional": false,
+      "to": "oci:docker.io/library/alpine:3.22"
     },
     {
       "from": "image:flutter",
@@ -20247,6 +20302,7 @@
       "name": "base64",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -20333,6 +20389,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -20363,6 +20420,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -20546,6 +20604,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -20668,6 +20727,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -20731,6 +20791,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-litmus-rust",
@@ -20764,6 +20825,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -21039,6 +21101,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-logging",
@@ -21099,6 +21162,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -21642,6 +21706,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -21775,6 +21840,7 @@
       "name": "encoding_rs",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -21903,6 +21969,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -21956,6 +22023,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22181,6 +22249,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-litmus-rust",
@@ -22269,6 +22338,7 @@
       "name": "fnv",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -22383,6 +22453,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -22459,6 +22530,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22493,6 +22565,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22544,6 +22617,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22607,6 +22681,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22641,6 +22716,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22675,6 +22751,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22709,6 +22786,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -22791,6 +22869,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-logging",
@@ -22923,6 +23002,7 @@
       "name": "h2",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23028,6 +23108,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -23260,6 +23341,7 @@
       "name": "http-body",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23299,6 +23381,7 @@
       "name": "http",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23338,6 +23421,7 @@
       "name": "httparse",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23360,6 +23444,7 @@
       "name": "httpdate",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23382,6 +23467,7 @@
       "name": "hyper-rustls",
       "optional": true,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23421,6 +23507,7 @@
       "name": "hyper",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23523,6 +23610,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23546,6 +23634,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23569,6 +23658,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23592,6 +23682,7 @@
       "optional": true,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23615,6 +23706,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23638,6 +23730,7 @@
       "optional": true,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23661,6 +23754,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23717,6 +23811,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23740,6 +23835,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23823,6 +23919,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -23948,6 +24045,7 @@
       "name": "ipnet",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -23973,6 +24071,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -24009,6 +24108,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -24206,6 +24306,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -24363,6 +24464,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -24388,6 +24490,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -24423,6 +24526,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -24541,6 +24645,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -24634,6 +24739,7 @@
       "name": "mime",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -24688,6 +24794,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -25345,6 +25452,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -25506,6 +25614,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -25541,6 +25650,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -25574,6 +25684,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -25628,6 +25739,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -25868,6 +25980,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -26015,6 +26128,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -26132,6 +26246,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -26403,6 +26518,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -26561,6 +26677,7 @@
       "name": "reqwest",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -26641,6 +26758,7 @@
       "name": "ring",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -26772,6 +26890,7 @@
       "name": "rustls-pemfile",
       "optional": true,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -26794,6 +26913,7 @@
       "name": "rustls-webpki",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -26816,6 +26936,7 @@
       "name": "rustls",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -26840,6 +26961,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -26916,6 +27038,7 @@
       "name": "ryu",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -26967,6 +27090,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -26999,6 +27123,7 @@
       "name": "sct",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -27190,6 +27315,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -27227,6 +27353,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -27264,6 +27391,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -27301,6 +27429,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -27408,6 +27537,7 @@
       "name": "serde_urlencoded",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -27430,6 +27560,7 @@
       "name": "serde_yaml",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
         "crate:tillandsias-litmus-rust",
@@ -27545,6 +27676,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-litmus-rust",
@@ -27578,6 +27710,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -27716,6 +27849,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -27779,6 +27913,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -27831,6 +27966,7 @@
       "name": "socket2",
       "optional": true,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -27856,6 +27992,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -27921,6 +28058,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28117,6 +28255,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -28154,6 +28293,7 @@
       "name": "sync_wrapper",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28177,6 +28317,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28216,6 +28357,7 @@
       "name": "system-configuration-sys",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28238,6 +28380,7 @@
       "name": "system-configuration",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28556,6 +28699,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28639,6 +28783,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -28671,6 +28816,7 @@
       "name": "tokio-rustls",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28695,6 +28841,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -28721,6 +28868,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -28959,6 +29107,7 @@
       "name": "tower-service",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -29014,6 +29163,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -29049,6 +29199,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -29144,6 +29295,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -29240,6 +29392,7 @@
       "name": "try-lock",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -29474,6 +29627,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
@@ -29670,6 +29824,7 @@
       "name": "unsafe-libyaml",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-fleet-core",
         "crate:tillandsias-headless",
         "crate:tillandsias-litmus-rust",
@@ -29692,6 +29847,7 @@
       "name": "untrusted",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -29715,6 +29871,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -29767,6 +29924,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -29823,6 +29981,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -29961,6 +30120,7 @@
       "name": "want",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -29986,6 +30146,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -30087,6 +30248,7 @@
       "name": "wasm-bindgen-futures",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -30111,6 +30273,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -30144,6 +30307,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -30177,6 +30341,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -30210,6 +30375,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -30340,6 +30506,7 @@
       "name": "web-sys",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -30381,6 +30548,7 @@
       "name": "webpki-roots",
       "optional": true,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -30738,6 +30906,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -30877,6 +31046,7 @@
       "name": "windows-sys",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -30901,6 +31071,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -30991,6 +31162,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31024,6 +31196,7 @@
       "name": "windows-targets",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31048,6 +31221,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31146,6 +31320,7 @@
       "name": "windows_aarch64_gnullvm",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31170,6 +31345,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31229,6 +31405,7 @@
       "name": "windows_aarch64_msvc",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31253,6 +31430,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31312,6 +31490,7 @@
       "name": "windows_i686_gnu",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31336,6 +31515,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31397,6 +31577,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31456,6 +31637,7 @@
       "name": "windows_i686_msvc",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31480,6 +31662,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31539,6 +31722,7 @@
       "name": "windows_x86_64_gnu",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31563,6 +31747,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31622,6 +31807,7 @@
       "name": "windows_x86_64_gnullvm",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31646,6 +31832,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31705,6 +31892,7 @@
       "name": "windows_x86_64_msvc",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -31729,6 +31917,7 @@
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -31846,6 +32035,7 @@
       "name": "winreg",
       "optional": false,
       "pulled_by": [
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32150,6 +32340,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32271,6 +32462,7 @@
       "optional": true,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32294,6 +32486,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32464,6 +32657,7 @@
       "optional": true,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32487,6 +32681,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32572,6 +32767,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32595,6 +32791,7 @@
       "optional": true,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32618,6 +32815,7 @@
       "optional": false,
       "pulled_by": [
         "crate:tillandsias-browser-mcp",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
         "crate:tillandsias-macos-tray",
@@ -32643,6 +32841,7 @@
         "crate:tillandsias-browser-mcp",
         "crate:tillandsias-control-wire",
         "crate:tillandsias-core",
+        "crate:tillandsias-enclave-fetch",
         "crate:tillandsias-exec",
         "crate:tillandsias-headless",
         "crate:tillandsias-host-shell",
@@ -58668,9 +58867,10 @@
       "name": "docker.io/library/alpine:3.22",
       "optional": false,
       "pulled_by": [
+        "image:enclave-fetch",
         "image:proxy"
       ],
-      "source": "images/proxy/Containerfile",
+      "source": "images/enclave-fetch/Containerfile",
       "version": "3.22"
     },
     {
@@ -62199,8 +62399,8 @@
   },
   "schema": "tillandsias-stack/v1",
   "summary": {
-    "components": 56,
-    "edges": 3190,
+    "components": 58,
+    "edges": 3197,
     "license_families": {
       "model": 7,
       "permissive": 1733,
