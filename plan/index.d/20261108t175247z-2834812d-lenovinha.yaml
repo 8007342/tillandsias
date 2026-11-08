@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-image-omits-lib-ledger-freshness-lib-experts-probe-and-lib-mcp-build-id-so-the-startup-context-and-both-mcp-servers-silently-degrade
+    event:
+      type: progress
+      ts: "2026-11-08T17:52:47Z"
+      agent_id: linux-lenovinha-opus5-20261108t175247z
+      host: lenovinha
+      summary: |
+        LIVE CHECK on lenovinha, 2026-11-08. The forge layer was built from trunk 45aebe109 (contains land 46f9dca23 of #1015) on the local forge-base:latest, under the throwaway tag localhost/tillandsias-ci2k-check:45aebe109, with the build context staged as build-image.sh stages it (cheatsheets verified in sync, cheatsheet-sources, skills, research). In a running container (--network=none), all four libs are present under /usr/local/lib/tillandsias/ and parse under bash -n: lib-experts-probe 3c90b85a0cbc, lib-mcp-build-id 7d31c8a81b4b, lib-ledger-freshness 243d313643a0, lib-embed-endpoint 6d46e385bbe6 (sha256 prefixes, each byte-identical to the trunk tree), 13 lib-*.sh in all. The guard on that tree reads ok:forge-lib-copies:12 libs. The container was removed by ID and the tag by exact name; no leftovers.
