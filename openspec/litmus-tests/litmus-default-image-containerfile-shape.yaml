@@ -89,7 +89,7 @@ critical_path:
     # fail-soft refactor), so pin the names and the idiom separately.
     # opencode left npm (2027-e2cf): it is the latest GitHub release, verified
     # against the release digest, through _require_release_harness.
-    command: "for package in '@fission-ai/openspec' '@anthropic-ai/claude-code' '@openai/codex'; do grep -Fq \"$package\" images/default/lib-common.sh || { echo \"FAIL: EVERY_LAUNCH agent '$package' missing\"; exit 1; }; done && grep -Fq '_require_release_harness opencode opencode anomalyco/opencode' images/default/lib-common.sh || { echo 'FAIL: opencode is not installed from its release'; exit 1; }; grep -Fq '@latest' images/default/lib-common.sh && echo 'ok: agents install at EVERY_LAUNCH (npm @latest; opencode from its latest release)'"
+    command: "for package in '@fission-ai/openspec' '@anthropic-ai/claude-code' '@openai/codex'; do grep -Fq \"$package\" images/default/lib-common.sh || { echo \"FAIL: EVERY_LAUNCH agent '$package' missing\"; exit 1; }; done && grep -Fq '_require_release_harness opencode opencode anomalyco/opencode 1' images/default/lib-common.sh || { echo 'FAIL: opencode is not installed from its release'; exit 1; }; grep -Fq '@latest' images/default/lib-common.sh && echo 'ok: agents install at EVERY_LAUNCH (npm @latest; opencode from its latest release)'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

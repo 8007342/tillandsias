@@ -9,12 +9,12 @@
 # operator ruled (2026-11-08): off npm; LATEST on every launch, verified against
 # the release's published digest; last-good rollback; each lane refreshes only
 # its own harness (a claude lane installed agy and codex). Red before 2027-e2cf:
-# all 11 behaviour arms fail on trunk; PICK (operator ruling (B)) fails on the
-# upstream-latest-marker version.
+# all 11 behaviour arms fail on trunk; PICK and V2 (operator ruling B1: stay on
+# the v1 line, v2 is a separate migration) fail on the unrestricted resolver.
 name: litmus:forge-opencode-is-pinned
 spec: default-image
 phase: pre-build
-description: The forge resolves the latest opencode release (the highest v<semver> full release; never another tag family, a prerelease, a draft or an -rc tag) from the GitHub API and verifies its tarball against the release's published sha256, failing closed on a mismatch or a missing digest. It records a version that passes the health probe as last-good and rolls back to last-good when a fresh version fails. It picks the baseline asset on a CPU without AVX2, does no network within the check TTL, and falls back to last-good when offline. Each lane refreshes only its own harness.
+description: The forge resolves the latest opencode release (the highest v1.x full release per ruling B1, and never a v2, another tag family, a prerelease, a draft or an -rc tag) from the GitHub API and verifies its tarball against the release's published sha256, failing closed on a mismatch or a missing digest. It records a version that passes the health probe as last-good and rolls back to last-good when a fresh version fails. It picks the baseline asset on a CPU without AVX2, does no network within the check TTL, and falls back to last-good when offline. Each lane refreshes only its own harness.
 severity: high
 size: instant
 
@@ -22,15 +22,15 @@ preconditions:
   - the plan binary (resolve_plan_binary), bash, sed, tar, jq and sha256sum (or shasum); stub curl, uname and npm on a scratch PATH (no network)
 
 critical_path:
-  - step: "latest resolved, verified and recorded; baseline on no-avx2; digest mismatch refused; no digest refused; failed probe rolls back; current does not download; TTL does no network; offline uses last-good; lanes refresh only their own harness; unpinned npm named; require_opencode wired; the highest v<semver> full release is picked"
+  - step: "latest resolved, verified and recorded; baseline on no-avx2; digest mismatch refused; no digest refused; failed probe rolls back; current does not download; TTL does no network; offline uses last-good; lanes refresh only their own harness; unpinned npm named; require_opencode wired; the highest v1 full release is picked; a v2 is never chosen"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-opencode-is-pinned.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:forge-opencode-is-pinned:12 arms"
+    expected_behavior: "ok:forge-opencode-is-pinned:13 arms"
 
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "twelve arms: LATEST, BASELINE, TAMPER, NODIGEST, ROLLBACK, CURRENT, TTL, OFFLINE, LANE, UNPINNED, WIRED, PICK"
+  expected_log: "thirteen arms: LATEST, BASELINE, TAMPER, NODIGEST, ROLLBACK, CURRENT, TTL, OFFLINE, LANE, UNPINNED, WIRED, PICK, V2"
   log_fields:
     spec: "default-image"
     test: "forge-opencode-is-pinned"

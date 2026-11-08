@@ -3304,10 +3304,13 @@ harness_pin() {
 # opencode installs from its upstream GitHub release, at LATEST, on every launch
 # like the other harnesses (operator ruling 2026-11-08). npm's opencode-ai
 # stopped at 1.19.5 while upstream shipped 2.x. The safety rules:
-#   - "latest" is the HIGHEST v<semver> full release (operator ruling (B),
-#     2026-11-08), not upstream's "latest" marker, which still points at
-#     1.19.5 while 2.x ships. Drafts, prereleases and other tag families (the
-#     repo also publishes process-daemon-v*) are never chosen;
+#   - "latest" is the HIGHEST full release of ONE MAJOR LINE (operator ruling
+#     B1, 2026-11-08): for opencode, the highest v1.x.y. Upstream ships v1 and
+#     v2 as parallel products. v2 removed OPENCODE_AUTH_CONTENT, stopped
+#     reading config.json, renamed config keys and moved serve under /api, so
+#     moving to v2 is a migration row, never an automatic upgrade. Drafts,
+#     prereleases, -rc tags and other tag families (process-daemon-v*) are
+#     never chosen;
 #   - the downloaded asset must match the release's PUBLISHED sha256 digest. A
 #     missing digest or a mismatch FAILS CLOSED: nothing is installed;
 #   - a fresh version must pass harness_probe (liveness plus our contracts)
@@ -3337,10 +3340,10 @@ harness_release_asset() {
     esac
 }
 
-# $1=friendly-name $2=bin $3=owner/repo → echoes the binary path to run. The
-# path does not exist when nothing verified is available.
+# $1=friendly-name $2=bin $3=owner/repo $4=major line → echoes the binary
+# path to run. The path does not exist when nothing verified is available.
 _require_release_harness() {
-    local name="$1" bin="$2" repo="$3"
+    local name="$1" bin="$2" repo="$3" major="${4:?_require_release_harness needs a major line}"
     local root lg_file lg="" lg_path="" stamp asset json tag ver want dir path tmp got have
     root="${TILLANDSIAS_HARNESS_RELEASE_DIR:-$HOME/.cache/tillandsias-project/harness-release}/$bin"
     lg_file="$root/last-good"
@@ -3366,17 +3369,17 @@ _require_release_harness() {
         return 0
     fi
     asset="$(harness_release_asset "$bin")" || { _rel_fallback "no release asset for $(uname -m)"; return 0; }
-    # The highest v<semver> full release among the recent ones (operator (B)).
+    # The highest v<major>.y.z full release among the recent ones (ruling B1).
     json="$(curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' \
         "https://api.github.com/repos/$repo/releases?per_page=50" 2>/dev/null \
-        | jq -c '[ .[] | select((.draft | not) and (.prerelease | not)
-                     and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) ]
+        | jq -c --arg m "$major" '[ .[] | select((.draft | not) and (.prerelease | not)
+                     and (.tag_name | test("^v" + $m + "\\.[0-9]+\\.[0-9]+$"))) ]
                  | sort_by(.tag_name | ltrimstr("v") | split(".") | map(tonumber))
                  | last // empty' 2>/dev/null)" || json=""
     tag="$(printf '%s' "$json" | jq -r '.tag_name // empty' 2>/dev/null)" || tag=""
     ver="${tag#v}"
     if [ -z "$ver" ]; then
-        _rel_fallback "could not resolve the latest $repo release (offline or rate-limited)"
+        _rel_fallback "could not resolve the latest v$major.x $repo release (offline, rate-limited, or none listed)"
         return 0
     fi
     want="$(printf '%s' "$json" | jq -r --arg a "$asset" \
@@ -3867,7 +3870,8 @@ require_opencode() {
     # 2027-e2cf: opencode is a release harness (pinned version and sha256);
     # npm's opencode-ai stopped at 1.19.5. Its directory goes first on PATH so
     # a bare `opencode` in a shell is the verified pin, not a stale npm copy.
-    OC_BIN="$(_require_release_harness opencode opencode anomalyco/opencode)"
+    # Major line 1 (ruling B1): v2 is a separate product with other contracts.
+    OC_BIN="$(_require_release_harness opencode opencode anomalyco/opencode 1)"
     if [ -x "$OC_BIN" ]; then
         export PATH="$(dirname "$OC_BIN"):$PATH"
     fi
