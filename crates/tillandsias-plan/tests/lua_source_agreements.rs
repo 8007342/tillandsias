@@ -419,3 +419,43 @@ fn production_script_run_preserves_pinned_exit_stdout_and_stderr_bytes() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// ORDER 2031-dwwy (R1 of design 2029-39bt §4.1, risk "Two builders drift
+// again"): the child environment has ONE builder, child_env.rs. No other file
+// of the plan crate clears a child's environment or walks the runner's
+// TILLANDSIAS_* names. PRE-FIX: two of each (lua_predicate::base_env_command
+// and run_verb::base_env/execute).
+// ---------------------------------------------------------------------------
+#[test]
+fn child_environment_has_one_builder() {
+    let src = repo_root().join("crates/tillandsias-plan/src");
+    let mut offenders = Vec::new();
+    let mut builder_seen = false;
+    for entry in std::fs::read_dir(&src).expect("read the plan crate's src") {
+        let path = entry.expect("dir entry").path();
+        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
+            continue;
+        }
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        let body = std::fs::read_to_string(&path).expect("read a source file");
+        if name == "child_env.rs" {
+            builder_seen = body.contains("env_clear()") && body.contains("\"TILLANDSIAS_\"");
+            continue;
+        }
+        for (i, line) in body.lines().enumerate() {
+            if line.contains("starts_with(\"TILLANDSIAS_\")") || line.contains(".env_clear()") {
+                offenders.push(format!("{name}:{}: {}", i + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "a second child-environment builder exists outside child_env.rs:\n{}",
+        offenders.join("\n")
+    );
+    assert!(
+        builder_seen,
+        "child_env.rs is missing or no longer builds the environment (premise)"
+    );
+}
