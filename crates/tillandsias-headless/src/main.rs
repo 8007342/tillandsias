@@ -40465,8 +40465,14 @@ mod keep_id_warm_tests {
         let root = podman_cmd_sync()
             .args(["info", "--format", "{{.Store.GraphRoot}}"])
             .output_bounded(OperationKind::Inspect.default_budget())
+            .ok()
+            .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
+        if let Some(why) = keep_id_graph_root_unusable(&root) {
+            eprintln!("skip: {why}");
+            return;
+        }
         // 1960-kidw: podman may run on the HOST (the builder toolbox's podman
         // is a flatpak-spawn shim), so the GraphRoot it reports is a host
         // path. A store under $HOME is visible here at the same path; one
@@ -40546,11 +40552,9 @@ mod keep_id_warm_tests {
             .args(["rmi", "-f", &tag])
             .output_bounded(OperationKind::Image.default_budget());
         assert!(!layer.is_empty(), "the image's layer digest");
-        assert!(
-            seen >= 1,
-            "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
-            layers_json.display()
-        );
+        if let Some(fault) = keep_id_store_fault(&root, &layers_json, seen, &layer) {
+            panic!("{fault}");
+        }
         assert_eq!(
             after_build, 0,
             "a fresh image starts with no mapped copy (the premise)"
@@ -40559,6 +40563,70 @@ mod keep_id_warm_tests {
         assert_eq!(
             after_start, 1,
             "the first keep-id start made no copy of its own"
+        );
+    }
+
+    /// ORDER 2054-kiwm: why the GraphRoot podman answered cannot name a store,
+    /// or None when it can. Under load the `podman info` query can time out
+    /// or fail, which used to leave an EMPTY root: the store path became the
+    /// relative `overlay-layers/layers.json` and the test blamed the store.
+    fn keep_id_graph_root_unusable(root: &str) -> Option<String> {
+        if root.is_empty() {
+            return Some(
+                "podman answered no GraphRoot (empty; the info query failed or timed out)".into(),
+            );
+        }
+        (!Path::new(root).is_absolute())
+            .then(|| format!("podman answered a relative GraphRoot {root:?}, which names no store"))
+    }
+
+    /// The store fault the warm test reports when the built image's own
+    /// layer is missing from a store that podman did name.
+    fn keep_id_store_fault(
+        root: &str,
+        layers_json: &Path,
+        seen: usize,
+        layer: &str,
+    ) -> Option<String> {
+        (seen == 0).then(|| {
+            format!(
+                "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
+                layers_json.display()
+            )
+        })
+    }
+
+    /// 2054-kiwm: an empty or relative GraphRoot is a named SKIP, never a
+    /// store fault. Pre-fix: FAILS, the empty root fell through to the
+    /// store-not-readable assertion.
+    #[test]
+    fn an_empty_or_relative_graph_root_is_a_named_skip_not_a_store_fault() {
+        for root in ["", "  ", "overlay", "relative/storage"] {
+            let why = keep_id_graph_root_unusable(root.trim());
+            assert!(
+                why.as_deref().is_some_and(|w| w.contains("GraphRoot")),
+                "root {root:?} must skip naming the GraphRoot, got {why:?}; else: {:?}",
+                keep_id_store_fault(root, &keep_id_layers_json(root), 0, "sha256:x")
+            );
+        }
+    }
+
+    /// 2054-kiwm NEGATIVE CONTROL: a real GraphRoot is not skipped, and a
+    /// layers.json there that truly lacks the layer is still a failure.
+    #[test]
+    fn a_real_graph_root_missing_the_layer_still_fails() {
+        let root = "/var/home/u/.local/share/containers/storage";
+        assert_eq!(keep_id_graph_root_unusable(root), None);
+        let fault = keep_id_store_fault(root, &keep_id_layers_json(root), 0, "sha256:x");
+        assert!(
+            fault
+                .as_deref()
+                .is_some_and(|f| f.contains("the store is not readable from here")),
+            "{fault:?}"
+        );
+        assert_eq!(
+            keep_id_store_fault(root, &keep_id_layers_json(root), 1, "sha256:x"),
+            None
         );
     }
 
