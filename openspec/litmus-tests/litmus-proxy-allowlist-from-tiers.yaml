@@ -9,12 +9,14 @@ spec: proxy-container
 phase: pre-build
 description: >
   The proxy allowlist is exactly the generated union of the egress tier files,
-  and no tier adds an entry another entry already covers.
+  and no tier adds an entry another entry already covers. The per-tier port
+  include (images/proxy/tier-ports.conf, part 2) is generated from the same
+  files and is current, and no entry is covered inside its own tier.
 severity: high
 size: instant
 
 critical_path:
-  - step: "2041-i3nk: the committed allowlist equals the union of the tier files"
+  - step: "2041-i3nk: the committed allowlist equals the union of the tier files, and tier-ports.conf is current"
     command: "out=$(tillandsias-plan script run scripts/lua/build-proxy-allowlist.lua -- --check); rc=$?; case \"$out\" in ok:proxy-allowlist:*) [ \"$rc\" -eq 0 ] && echo 'ok: allowlist is the tier union' ;; *) echo \"FAIL rc=$rc out=[$out]\"; exit 1 ;; esac"
     timeout_ms: 20000
     expected_behavior: "ok: allowlist is the tier union"
@@ -28,6 +30,16 @@ critical_path:
     command: "mkdir -p target; T=$(mktemp -d target/litmus-pat.XXXXXX); cp -R images/proxy/tiers \"$T/tiers\"; echo '.storage.googleapis.com' >> \"$T/tiers/research.txt\"; out=$(TILLANDSIAS_PROXY_TIERS_DIR=\"$T/tiers\" TILLANDSIAS_PROXY_ALLOWLIST=\"$T/allowlist.txt\" tillandsias-plan script run scripts/lua/build-proxy-allowlist.lua -- --check 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:proxy-allowlist:covered:.storage.googleapis.com<.googleapis.com' ] && echo 'ok: covered entry refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
     timeout_ms: 20000
     expected_behavior: "ok: covered entry refused"
+
+  - step: "2041-i3nk part 2 NEGATIVE CONTROL: a hand-edited tier-ports.conf is refused as stale"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-pat.XXXXXX); cp images/proxy/allowlist.txt \"$T/allowlist.txt\"; cp images/proxy/tier-ports.conf \"$T/tier-ports.conf\"; sed -i 's/^http_port 3131 /http_port 3999 /' \"$T/tier-ports.conf\"; out=$(TILLANDSIAS_PROXY_ALLOWLIST=\"$T/allowlist.txt\" TILLANDSIAS_PROXY_TIER_PORTS=\"$T/tier-ports.conf\" tillandsias-plan script run scripts/lua/build-proxy-allowlist.lua -- --check 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:proxy-allowlist:stale' ] && echo 'ok: stale tier ports refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: stale tier ports refused"
+
+  - step: "2041-i3nk part 2 NEGATIVE CONTROL: an entry covered inside ONE tier is refused (its port loads the tier as its own ACL)"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-pat.XXXXXX); cp -R images/proxy/tiers \"$T/tiers\"; echo 'cdn.jsdelivr.net' >> \"$T/tiers/assets.txt\"; out=$(TILLANDSIAS_PROXY_TIERS_DIR=\"$T/tiers\" TILLANDSIAS_PROXY_ALLOWLIST=\"$T/allowlist.txt\" TILLANDSIAS_PROXY_TIER_PORTS=\"$T/tier-ports.conf\" tillandsias-plan script run scripts/lua/build-proxy-allowlist.lua -- --check 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:proxy-allowlist:tier-covered:assets:cdn.jsdelivr.net<.jsdelivr.net' ] && echo 'ok: in-tier covered entry refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: in-tier covered entry refused"
 
 observability:
   traces:
