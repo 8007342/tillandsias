@@ -20,7 +20,9 @@
 --   - http_access: the CONNECT target (dstdomain) must be in the tier;
 --   - ssl_bump, after the step-1 peek: the client's SNI
 --     (ssl::server_name --client-requested) must be in the tier, or the
---     connection is terminated. A missing SNI is terminated too.
+--     connection is terminated. With NO SNI, squid's --client-requested
+--     name falls back to the CONNECT target (measured live), so a no-SNI
+--     client is judged by its target alone, still held to the tier.
 -- So an allowed target with an off-tier SNI is refused, and so is the
 -- reverse. Checking that the SNI RESOLVES to the CONNECT address is not done
 -- here; that is 2041-8azp. Port 3128 keeps serving the union; 3129 is the
@@ -56,7 +58,9 @@ local PORTS_HEADER = [[
 # ssl_bump rule, because Squid applies rules in order.
 # A client on a tier port is held to its tier by NAME:
 #   http_access  the CONNECT target must be in the tier;
-#   ssl_bump     the client's SNI must be in the tier (none: terminated).
+#   ssl_bump     the client's SNI must be in the tier, else terminated
+#                (no SNI: squid falls back to the CONNECT target).
+# A refusal is a TCP reset, as on 3128 (deny_info TCP_RESET).
 # SNI-to-address matching is 2041-8azp, not this file.
 ]]
 
@@ -83,6 +87,10 @@ local function tier_ports_conf()
             "http_access allow CONNECT SSL_ports on_tier_" .. id .. " dst_tier_" .. id,
             "http_access allow !CONNECT on_tier_" .. id .. " dst_tier_" .. id,
             "http_access deny on_tier_" .. id,
+            -- A refusal is a reset, as on 3128: without it squid bumps the
+            -- denied CONNECT to serve an error page under the proxy's own CA,
+            -- which a client sees as a completed handshake (measured live).
+            "deny_info TCP_RESET on_tier_" .. id,
             "ssl_bump terminate on_tier_" .. id .. " !sni_tier_" .. id,
             "",
         }, "\n")

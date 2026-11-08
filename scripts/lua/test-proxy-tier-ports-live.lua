@@ -15,7 +15,9 @@
 --              pypi.org is refused: the SNI is not in the tier
 --   4 DST-OFF  on the assets port, CONNECT pypi.org carrying SNI
 --              fonts.googleapis.com is refused: the target is not in the tier
---   5 NOSNI    on the assets port, a ClientHello with no SNI is refused
+--   5 NOSNI    on the assets port, with NO SNI squid judges the CONNECT target:
+--              no-SNI to fonts.googleapis.com passes, no-SNI to pypi.org is
+--              refused (measured: --client-requested falls back to the target)
 --   6 TIER2    on the registries port (3130), CONNECT pypi.org completes
 --   7 UNION    port 3128 still serves the union: pypi.org and
 --              fonts.googleapis.com both complete
@@ -116,16 +118,30 @@ if not up then
     bail("squid never listened on 3131: " .. ((lg.stdout or "") .. (lg.stderr or "")):sub(-600))
 end
 
--- one handshake through the proxy; true when a server certificate came back
+-- one handshake through the proxy. It counts as OK only when a certificate
+-- came back that the PROXY did not mint: a refusal must never look like a
+-- handshake, and a bumped error page is signed by the run's own test CA.
 local function hs(port, target, sni)
     local argv = { "openssl", "s_client", "-proxy", "127.0.0.1:" .. HOSTPORT[port],
         "-connect", target .. ":443", "-brief" }
     if sni then argv[#argv + 1] = "-servername"; argv[#argv + 1] = sni else argv[#argv + 1] = "-noservername" end
     local s = proc.run({ argv = argv, stdin = "", timeout_ms = 30000 })
     local txt = (s.stdout or "") .. (s.stderr or "")
-    local ok = txt:find("Peer certificate:", 1, true) ~= nil or txt:find("CONNECTION ESTABLISHED", 1, true) ~= nil
+    local ok = (txt:find("Peer certificate:", 1, true) ~= nil or txt:find("CONNECTION ESTABLISHED", 1, true) ~= nil)
+        and txt:find("tillandsias-tier-ports-test-ca", 1, true) == nil
     return ok, txt:gsub("\n", " | "):sub(1, 300)
 end
+
+-- Readiness: squid logs its listening sockets before the first bumped
+-- connection can be served (measured: the very first handshake came back
+-- empty). Probe the UNION port, not the arm under test, up to 20s, so no arm
+-- is retried and a real refusal cannot be hidden by a retry.
+local ready = false
+for _ = 1, 10 do
+    if hs(3128, "fonts.googleapis.com", "fonts.googleapis.com") then ready = true; break end
+    proc.run({ argv = { "sleep", "2" } })
+end
+if not ready then bail("the proxy never served a handshake on 3128 within 20s") end
 
 local ok, txt = hs(3131, "fonts.googleapis.com", "fonts.googleapis.com")
 arm("1 ALLOW assets port: CONNECT fonts.googleapis.com with its own SNI completes", ok, txt)
@@ -135,8 +151,10 @@ ok, txt = hs(3131, "fonts.googleapis.com", "pypi.org")
 arm("3 SNI-OFF assets port: an allowed target carrying off-tier SNI pypi.org is refused", not ok, txt)
 ok, txt = hs(3131, "pypi.org", "fonts.googleapis.com")
 arm("4 DST-OFF assets port: off-tier target pypi.org carrying an allowed SNI is refused", not ok, txt)
-ok, txt = hs(3131, "fonts.googleapis.com", nil)
-arm("5 NOSNI assets port: a ClientHello with no SNI is refused", not ok, txt)
+local okn1, tn1 = hs(3131, "fonts.googleapis.com", nil)
+local okn2, tn2 = hs(3131, "pypi.org", nil)
+arm("5 NOSNI assets port, no SNI: an in-tier target passes and an off-tier target is refused",
+    okn1 and not okn2, tn1 .. " || " .. tn2)
 ok, txt = hs(3130, "pypi.org", "pypi.org")
 arm("6 TIER2 registries port: CONNECT pypi.org completes", ok, txt)
 local ok1, t1 = hs(3128, "pypi.org", "pypi.org")
