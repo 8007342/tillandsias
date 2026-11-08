@@ -1,0 +1,146 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Six generic forge rows from one forge field report (provenance: the kumbia-kombat forge, relayed by coordinator macuahuitl-fedora 2026-11-07). Filed by lenovinha.
+packets:
+  - packet_id: a-forge-hook-refusal-always-returns-and-never-blocks-a-background-agent-call
+    order: 2034-ip5t
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, hooks, fail-loud, agents]
+    estimated_hours: 3
+    title: |
+      In a forge, a background agent's shell calls hang instead of erroring; a hook refusal (for example the rm guard on a home-relative path) appears to block silently in background mode when it must return a refusal
+    context: |
+      FIELD REPORT (one forge project, 2026-11-07). Background-agent Bash calls hung and never errored in four shapes:
+      (a) pgrep -f matching the agent's own command line and killing it (exit 144);
+      (b) an rm aimed at a home-relative (~) path, where the rm guard hook most likely waited for an interactive answer that never comes in background mode;
+      (c) a uv run whose process had already exited;
+      (d) cat > file with no stdin.
+      Our part is the hooks. Every refusal path must print its refusal and exit non-zero at once, whether or not a tty or an approver is attached.
+      The agent harness's own hang on (a), (c) and (d) is upstream. It is noted here, not fixed here.
+    exit_criteria:
+      - 'every forge hook that can refuse returns within a bounded time with a refusal line and non-zero exit when run with no tty and stdin closed, including the rm guard on a ~ path'
+      - 'NEGATIVE CONTROL: an allowed command still passes the same hooks unchanged'
+      - 'RED FIRST: a fixture runs the rm guard on a ~ path with stdin at /dev/null and no tty, under a timeout, and fails (times out) on the pre-fix tree'
+      - 'the upstream harness hangs (self-kill via pgrep -f, exited uv run, stdin-less cat) are recorded in a cheatsheet as known agent pitfalls, citing this row'
+    verifiable_closure: 'a new hermetic fixture drives each forge refusal hook with stdin closed and no tty under a timeout and prints ok only when every refusal returns non-zero within the bound'
+    unscoreable: 'none.'
+    provenance: forge field report from the kumbia-kombat project via coordinator macuahuitl-fedora 2026-11-07; filed by lenovinha.
+    depends_on: []
+    events:
+      - {type: filed, ts: '2026-11-08T01:05:39Z', host: lenovinha, summary: filed from a forge field report (issue 1 of 8)}
+  - packet_id: forge-toolchains-run-in-a-supported-worktree-location-under-the-project-source-root
+    order: 2035-trxp
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, worktrees, toolchains]
+    estimated_hours: 3
+    title: |
+      Toolchains in the forge (flutter first) refuse to run outside /home/forge/src/<project>, so an agent's cache-located git worktree cannot run the project's tests; the forge has no supported worktree location
+    context: |
+      FIELD REPORT (one forge project, 2026-11-07). An agent created git worktrees in a cache directory to work on several rows at once. flutter (and toolchains like it) refused to run its tests there, because the forge allows them only under /home/forge/src/<project>. The forge declares no place where a worktree may live and still run the toolchains, so parallel-row work inside a forge breaks.
+    exit_criteria:
+      - 'the forge declares one supported worktree location (for example under /home/forge/src/<project>/.worktrees or a sibling of the project root) that is on the source mount and inside every toolchain allow-list, and the forge cheatsheet names it'
+      - 'a forge test creates a worktree at that location and runs a toolchain command there successfully; the same command from a cache path is refused with a message naming the supported location'
+    verifiable_closure: 'a forge-image litmus creates a git worktree at the declared location and runs a toolchain version and test command in it, and checks that a cache-path worktree is refused with the supported location named'
+    unscoreable: 'none.'
+    provenance: forge field report from the kumbia-kombat project via coordinator macuahuitl-fedora 2026-11-07; filed by lenovinha.
+    depends_on: []
+    events:
+      - {type: filed, ts: '2026-11-08T01:05:39Z', host: lenovinha, summary: filed from a forge field report (issue 2 of 8)}
+  - packet_id: the-forge-preview-server-follows-a-symlinked-build-directory-and-serves-current-files
+    order: 2036-qkz7
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, preview, web]
+    estimated_hours: 2
+    title: |
+      The forge preview server cannot follow a symlinked build/ directory: it serves 404, then stale files
+    context: |
+      FIELD REPORT (one forge project, 2026-11-07). The project's build/ output directory was a symlink. The managed static preview first served 404 for it, and later served stale files that did not match the current build. A preview must resolve the directory it serves at request time (or refuse a symlink loudly, naming it); silently serving stale content is the worst outcome.
+    exit_criteria:
+      - 'the preview serves the current contents of an app directory reached through a symlink, and serves the new files after the symlink target is rebuilt or repointed'
+      - 'if a symlink must be refused (for example it escapes the project root), the preview says so with the path and target, never 404 or stale content'
+      - 'RED FIRST: a fixture with build/ as a symlink fails on the pre-fix tree'
+    verifiable_closure: 'a preview fixture serves an app directory through a symlink, rebuilds the target, and asserts the served bytes are the new ones; an escaping symlink yields a named refusal'
+    unscoreable: 'none.'
+    provenance: forge field report from the kumbia-kombat project via coordinator macuahuitl-fedora 2026-11-07; filed by lenovinha.
+    depends_on: []
+    events:
+      - {type: filed, ts: '2026-11-08T01:05:39Z', host: lenovinha, summary: filed from a forge field report (issue 4 of 8)}
+  - packet_id: operator-decides-whether-the-forge-gets-any-arbitrary-web-egress
+    order: 2037-4ptq
+    status: ready
+    kind: decision
+    priority: p2
+    desired_release: v0.5
+    pickup_role: operator
+    capability_tags: [forge, proxy, egress, needs-operator, security]
+    estimated_hours: 1
+    title: |
+      NEEDS OPERATOR DECISION: the forge has no arbitrary web egress (connections are reset); decide whether that stays absolute or gains a governed path
+    context: |
+      FIELD REPORT (one forge project, 2026-11-07). An agent's fetch to an arbitrary web host got a connection reset. That is the enclave's egress policy working as designed, not a defect. The report is filed as a decision because agents keep meeting it. The options for the operator: keep it absolute and document it in the forge cheatsheet; or add a governed path, such as a per-project allowlist, a proxied fetch tool that returns content, or a per-request approval. Any path must keep TLS and fail-closed behaviour intact. No code changes before the operator decides.
+    exit_criteria:
+      - 'the operator records a decision (keep absolute, or the specific governed path) as an event on this row'
+      - 'the forge cheatsheet states the egress policy and what an agent should do instead of retrying'
+    verifiable_closure: 'unscoreable until the operator decides; closure is the recorded decision event plus the cheatsheet line'
+    unscoreable: 'needs-operator: an egress policy decision, not a fixture.'
+    provenance: forge field report from the kumbia-kombat project via coordinator macuahuitl-fedora 2026-11-07; filed by lenovinha.
+    depends_on: []
+    events:
+      - {type: filed, ts: '2026-11-08T01:05:39Z', host: lenovinha, summary: filed as a needs-operator decision from a forge field report (issue 5 of 8)}
+  - packet_id: studio-run-workflow-and-finish-pixels-read-the-calling-worktree-not-only-the-main-checkout
+    order: 2038-manf
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, mcp, worktrees, imagegen]
+    estimated_hours: 3
+    title: |
+      studio.run_workflow and studio.finish_pixels read only the project's main checkout, so an agent working in a git worktree runs against the wrong files
+    context: |
+      FIELD REPORT (one forge project, 2026-11-07). An agent working in a git worktree called studio.run_workflow and studio.finish_pixels. Both resolved their inputs against the main checkout, not the worktree the agent was in, so they ran against the main checkout's files. The tools need a way to name the tree they act on (an explicit worktree or path argument confined to the project, or the caller's cwd), and they must say which tree they used.
+    exit_criteria:
+      - 'both tools accept a worktree (or project-relative root) of the same project and read inputs and write outputs there; a path outside the project is refused'
+      - 'each result names the tree it read'
+      - 'RED FIRST: a test calls each tool with a worktree whose input differs from the main checkout and fails on the pre-fix tree'
+    verifiable_closure: 'a test calls studio.run_workflow and studio.finish_pixels against a worktree with distinct inputs and asserts the worktree inputs were used and named in the result'
+    unscoreable: 'none.'
+    provenance: forge field report from the kumbia-kombat project via coordinator macuahuitl-fedora 2026-11-07; filed by lenovinha.
+    depends_on: []
+    related: [1959-xsy5, 2002-studio]
+    events:
+      - {type: filed, ts: '2026-11-08T01:05:39Z', host: lenovinha, summary: filed from a forge field report (issue 6 of 8)}
+  - packet_id: the-forge-can-read-github-branch-state-through-a-mirror-side-read-tool
+    order: 2039-c7x3
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, git-mirror, github, mcp]
+    estimated_hours: 4
+    title: |
+      The forge cannot verify GitHub branch state (it has no gh and no credentials); consider a read-only mirror-side tool that reports remote branch heads
+    context: |
+      FIELD REPORT (one forge project, 2026-11-07). An agent could not check whether its push had reached GitHub, or what a remote branch's head was, because the forge has no gh and holds no credentials, by design. The mirror already talks to GitHub with the host's credentials. A read-only, mirror-side tool (for example ls-remote heads, and optionally PR state for the project's own repo) would answer this without putting credentials in the forge. Scope is a design question: read-only, project-confined, no token ever reaches the forge.
+    exit_criteria:
+      - 'a mirror-side tool returns the GitHub head sha of a named branch of the project repo (and says when the mirror cannot reach GitHub), read-only and confined to that project'
+      - 'no credential or token crosses into the forge; a test asserts the forge side sees only the sha and status'
+    verifiable_closure: 'a test drives the tool against a fake upstream and asserts it returns the branch head, refuses another repo, and returns no credential material'
+    unscoreable: 'none.'
+    provenance: forge field report from the kumbia-kombat project via coordinator macuahuitl-fedora 2026-11-07; filed by lenovinha.
+    depends_on: []
+    events:
+      - {type: filed, ts: '2026-11-08T01:05:39Z', host: lenovinha, summary: filed from a forge field report (issue 7 of 8)}

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-trays-guest-health-line-prints-the-bare-crashloop-verdict-with-no-source-and-no-age
+    field: status
+    value: completed
+    ts: "2026-11-08T00:43:33Z"
+    host: yolanda
+
+events:
+  - packet_id: windows-trays-guest-health-line-prints-the-bare-crashloop-verdict-with-no-source-and-no-age
+    event:
+      type: completed
+      ts: "2026-11-08T00:43:33Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: c8b416be6 notify_icon::tests 3/3 + parity 2/2 ok
+  - packet_id: windows-trays-guest-health-line-prints-the-bare-crashloop-verdict-with-no-source-and-no-age
+    event:
+      type: note
+      ts: "2026-11-08T00:43:33Z"
+      host: yolanda
+      summary: |-
+        closure audit: fix landed c8b416be6, re-verified 5/5 named tests on trunk b7ed781a7

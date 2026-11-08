@@ -1,0 +1,243 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08: the 2029-39bt follow-up rows R1-R9, at the coordinator's request. Code is cited by symbol, never by line.
+packets:
+  - packet_id: one-child-environment-builder-with-a-hard-block-and-per-script-declared-inherit
+    order: 2031-dwwy
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, rust, security]
+    estimated_hours: 8
+    title: "One child-environment builder with a hard block and per-script declared inherit (design 2029-39bt §4)"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R1 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "cargo test -p tillandsias-plan --test lua_proc a_credential_shaped_project_variable_does_not_reach_a_child a_declared_caller_variable_reaches_the_child a_hard_blocked_name_is_refused_when_declared a_misspelt_env_directive_is_refused_not_ignored per_call_env_beats_inherit green on the fixed tree, the first two RED before; tests/lua_source_agreements.rs::child_environment_has_one_builder green; a Windows host run of windows_folds_case_for_the_hard_block. Pre-fix result: FAILS, no builder, header directives or hard block exist."
+    verifiable_closure: "cargo test -p tillandsias-plan --test lua_proc a_credential_shaped_project_variable_does_not_reach_a_child a_declared_caller_variable_reaches_the_child a_hard_blocked_name_is_refused_when_declared a_misspelt_env_directive_is_refused_not_ignored per_call_env_beats_inherit green on the fixed tree, the first two RED before; tests/lua_source_agreements.rs::child_environment_has_one_builder green; a Windows host run of windows_folds_case_for_the_hard_block. Pre-fix result: FAILS, no builder, header directives or hard block exist."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Start after 2031-z4rm renames the two non-secret names; tasks.md 1.1-1.8.
+    depends_on: [tillandsias-names-that-are-not-credentials-are-not-spelled-like-one]
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: litmus-helper-nix-cache-size-stops-reading-gh-token-through-env-get
+    order: 2031-ajf2
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, security]
+    estimated_hours: 1
+    title: "litmus-helper-nix-cache-size.lua stops reading GH_TOKEN through env.get"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R2 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "env_get_refuses_a_credential_shaped_name green; the helper's litmus arms byte-identical before and after on a host with and without GH_TOKEN set. Pre-fix result: FAILS, env.get returns a declared credential."
+    verifiable_closure: "env_get_refuses_a_credential_shaped_name green; the helper's litmus arms byte-identical before and after on a host with and without GH_TOKEN set. Pre-fix result: FAILS, env.get returns a declared credential."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      After 2031-dwwy; operator ruled env.get refuses credential shapes (design §9 Q2).
+    depends_on: [one-child-environment-builder-with-a-hard-block-and-per-script-declared-inherit]
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: the-script-run-record-and-a-script-env-dry-run-name-inherited-variables-never-values
+    order: 2031-tjwz
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, observability]
+    estimated_hours: 3
+    title: "The script-run record and a script env dry run name inherited variables, never values"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R3 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "the_timing_record_names_inherited_variables_and_holds_no_value and script_env_dry_run_attributes_every_name_to_one_layer green; tillandsias-plan script env scripts/lua/verify-image-usable.lua prints no FAKE_PODMAN_STORE line with it set. Pre-fix result: FAILS, neither exists."
+    verifiable_closure: "the_timing_record_names_inherited_variables_and_holds_no_value and script_env_dry_run_attributes_every_name_to_one_layer green; tillandsias-plan script env scripts/lua/verify-image-usable.lua prints no FAKE_PODMAN_STORE line with it set. Pre-fix result: FAILS, neither exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      After 2031-dwwy; tasks.md 1.6.
+    depends_on: [one-child-environment-builder-with-a-hard-block-and-per-script-declared-inherit]
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: tillandsias-names-that-are-not-credentials-are-not-spelled-like-one
+    order: 2031-z4rm
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, security, methodology]
+    estimated_hours: 3
+    title: "TILLANDSIAS_ names that are not credentials are not spelled like one (two renames, the credential-name list, the hygiene guard)"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R4 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "tillandsias-plan script run scripts/lua/test-env-namespace-hygiene.lua 3/3 including the planted-name mutation arm; bash scripts/test-dispatch-reap.sh green with a Lua-door child arm; /usr/bin/grep -rn 'TILLANDSIAS_WRAPPER_TOKEN\\|TILLANDSIAS_NOTARY_KEY\\b' scripts crates prints nothing. Pre-fix result: FAILS, both names are spelled like credentials."
+    verifiable_closure: "tillandsias-plan script run scripts/lua/test-env-namespace-hygiene.lua 3/3 including the planted-name mutation arm; bash scripts/test-dispatch-reap.sh green with a Lua-door child arm; /usr/bin/grep -rn 'TILLANDSIAS_WRAPPER_TOKEN\\|TILLANDSIAS_NOTARY_KEY\\b' scripts crates prints nothing. Pre-fix result: FAILS, both names are spelled like credentials."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      yoga takes this first after 2031-h5ru: rename TILLANDSIAS_WRAPPER_TOKEN to _WRAPPER_MARK and TILLANDSIAS_NOTARY_KEY to _KEY_FILE.
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: verify-image-usable-is-ported-to-lua-with-the-podman-profile-and-survives-the-747-knbp-fixture
+    order: 2031-zq68
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, podman, testing]
+    estimated_hours: 4
+    title: "verify-image-usable.sh is ported to Lua with the podman profile and survives the 747-knbp fixture (re-does 2006-me5t)"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R5 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "seven side-by-side arms (tasks.md 3.1 a-g) byte-identical on stdout, stderr and rc on two platforms; bash scripts/test-build-image-installed-version-alias.sh green with a runnable plan binary on the fake tree (the Lua path proven to run); the Carried-Waiver blocked-by:2029-39bt reason absent from the landing's trailers; floors shrink by two lines. Pre-fix result: FAILS, the Lua child loses the caller's podman environment."
+    verifiable_closure: "seven side-by-side arms (tasks.md 3.1 a-g) byte-identical on stdout, stderr and rc on two platforms; bash scripts/test-build-image-installed-version-alias.sh green with a runnable plan binary on the fake tree (the Lua path proven to run); the Carried-Waiver blocked-by:2029-39bt reason absent from the landing's trailers; floors shrink by two lines. Pre-fix result: FAILS, the Lua child loses the caller's podman environment."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      After 2031-dwwy.
+    depends_on: [one-child-environment-builder-with-a-hard-block-and-per-script-declared-inherit]
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: methodology-fixture-double-rule-and-obligations-hint-for-the-environment-model
+    order: 2031-9w3r
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [methodology, lua]
+    estimated_hours: 2
+    title: "Methodology, fixture-double rule and the obligations hint for the environment model"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R6 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "methodology_ask lua door environment answers with the six steps; check-carried-obligations.lua's fixture shows profile-hint:podman for an offered .sh reading CONTAINER_HOST; the 16 fixture doubles are listed on the row. Pre-fix result: FAILS, none exist."
+    verifiable_closure: "methodology_ask lua door environment answers with the six steps; check-carried-obligations.lua's fixture shows profile-hint:podman for an offered .sh reading CONTAINER_HOST; the 16 fixture doubles are listed on the row. Pre-fix result: FAILS, none exist."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      After 2031-zq68 for the retirement arm.
+    depends_on: [verify-image-usable-is-ported-to-lua-with-the-podman-profile-and-survives-the-747-knbp-fixture]
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: decide-the-fixed-layer-additions-term-dumb-and-git-config-nosystem
+    order: 2031-4p5h
+    status: ready
+    kind: design
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, testing]
+    estimated_hours: 1
+    title: "DECISION: fixed-layer additions TERM=dumb and GIT_CONFIG_NOSYSTEM=1 (design §9 Q4)"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R7 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "a measurement of how many floor fixtures' output changes under each name, recorded with its command, then a yes or no per name written into the design. Pre-fix result: FAILS, unmeasured."
+    verifiable_closure: "a measurement of how many floor fixtures' output changes under each name, recorded with its command, then a yes or no per name written into the design. Pre-fix result: FAILS, unmeasured."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Independent.
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: kernel-enforcement-of-the-class-a-loader-block-on-linux-is-measured-and-decided
+    order: 2031-rtgk
+    status: ready
+    kind: design
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, selinux, linux]
+    estimated_hours: 4
+    title: "RESEARCH then DECISION: kernel enforcement of the class-A loader block on Linux, an SELinux domain without noatsecure vs container_t (design §4.14)"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R8 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "on yoga (Silverblue, SELinux enforcing) a probe child started through each candidate reports AT_SECURE from its auxv and is run with LD_PRELOAD of a marker shared object; a candidate passes when AT_SECURE=1 and the marker never loads, and the control (no candidate) loads it; the install path is recorded without sudo or layering, or as an explicit operator decision; the per-call latency is measured; the §4.14 sources are verified against the pages. Pre-fix result: FAILS, unmeasured."
+    verifiable_closure: "on yoga (Silverblue, SELinux enforcing) a probe child started through each candidate reports AT_SECURE from its auxv and is run with LD_PRELOAD of a marker shared object; a candidate passes when AT_SECURE=1 and the marker never loads, and the control (no candidate) loads it; the install path is recorded without sudo or layering, or as an explicit operator decision; the per-call latency is measured; the §4.14 sources are verified against the pages. Pre-fix result: FAILS, unmeasured."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Independent; operator ruling 2026-11-07 asked for SELinux enforcement.
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
+  - packet_id: a-hard-block-refusal-is-a-recorded-classified-violation
+    order: 2031-t4xw
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, security, observability]
+    estimated_hours: 4
+    title: "A hard-block refusal is a recorded, classified violation (spec requirement 7120e541)"
+    context: |
+      Design: openspec/changes/lua-door-environment-inheritance (2029-39bt, PR #1000), follow-up row R9 of tasks.md. The coordinator binds: an explicit per-script allowlist, never a blanket pass-through; credentials never inherit.
+    exit_criteria:
+      - "cargo test -p tillandsias-plan --test lua_proc a_per_call_loader_literal_is_recorded_suspicious a_declared_credential_is_recorded_innocent an_inherited_caller_name_is_not_refused green; a planted unique value is absent from the violation log (/usr/bin/grep -c gives 0); violation:env-block:suspicious reaches the gate summary. Pre-fix result: FAILS, no violation log exists."
+    verifiable_closure: "cargo test -p tillandsias-plan --test lua_proc a_per_call_loader_literal_is_recorded_suspicious a_declared_credential_is_recorded_innocent an_inherited_caller_name_is_not_refused green; a planted unique value is absent from the violation log (/usr/bin/grep -c gives 0); violation:env-block:suspicious reaches the gate summary. Pre-fix result: FAILS, no violation log exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      After 2031-dwwy; the kernel-enforcement arm after 2031-rtgk.
+    depends_on: [one-child-environment-builder-with-a-hard-block-and-per-script-declared-inherit, kernel-enforcement-of-the-class-a-loader-block-on-linux-is-measured-and-decided]
+    provenance: |
+      2029-39bt tasks.md follow-up table; filed by yoga at the coordinator's request 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:32:03Z"
+        host: yoga
+        summary: "filed from the 2029-39bt follow-up table"
