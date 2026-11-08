@@ -1019,6 +1019,42 @@ mod tests {
         assert_eq!(classify("git status", &c).verdict, Verdict::Allow);
     }
 
+    /// ORDER 2028-j4a7. The Bash-tool hook refuses an agent-run sign-in flow, in
+    /// the shapes the incident used (backgrounded, with its log redirected), and
+    /// the refusal names the rule; read-only gh still runs.
+    #[test]
+    fn the_hook_refuses_agent_run_sign_in_flows() {
+        let c = ctx();
+        for cmd in [
+            "tillandsias-tray --github-login > /tmp/login.log 2>&1 &",
+            "nohup tillandsias --github-login &",
+            "./target/release/tillandsias --codex-login",
+            "tillandsias --claude-login",
+            "tillandsias --cloudflare-login",
+            "gh auth login --web",
+            "gh auth refresh -s repo",
+            "cd /x && tillandsias-tray --github-login",
+        ] {
+            let k = classify(cmd, &c);
+            assert_eq!(k.verdict, Verdict::Deny, "{cmd}");
+            assert_eq!(
+                k.token, "refused:bash-policy:no-credential-mutation",
+                "{cmd}"
+            );
+            assert!(
+                k.remedy
+                    .as_deref()
+                    .unwrap_or("")
+                    .contains("OPERATOR signs in from the tray"),
+                "{cmd}: {:?}",
+                k.remedy
+            );
+        }
+        for cmd in ["gh auth status", "gh pr view 999", "tillandsias --version"] {
+            assert_eq!(classify(cmd, &c).verdict, Verdict::Allow, "{cmd}");
+        }
+    }
+
     /// ORDER 1621-bvb2, with the roots named rather than inherited: beneath the
     /// darwin per-user temp dir is scratch (both spellings), and the dir itself
     /// and /var/folders still ask. Without the root (the pre-fix context), the
