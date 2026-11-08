@@ -16,6 +16,8 @@ pub mod policy;
 pub mod readiness;
 pub mod runtime;
 pub mod terminal_handoff;
+#[cfg(all(test, unix))]
+pub(crate) mod test_stub;
 pub mod wedge_capture;
 
 use std::env;
@@ -1432,9 +1434,6 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         (tokio::sync::MutexGuard<'static, ()>, impl Drop),
         std::path::PathBuf,
     ) {
-        use std::io::Write;
-        use std::os::unix::fs::PermissionsExt;
-
         let lock = env_lock();
 
         struct Restore;
@@ -1451,10 +1450,7 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         ));
         std::fs::create_dir_all(&dir).expect("stub dir");
         let stub = dir.join("podman");
-        let mut f = std::fs::File::create(&stub).expect("stub file");
-        f.write_all(script.as_bytes()).expect("write stub");
-        drop(f);
-        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        crate::test_stub::install_ready_stub(&stub, script);
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
         ((lock, Restore), dir)
     }
