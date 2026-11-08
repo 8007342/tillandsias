@@ -3304,7 +3304,10 @@ harness_pin() {
 # opencode installs from its upstream GitHub release, at LATEST, on every launch
 # like the other harnesses (operator ruling 2026-11-08). npm's opencode-ai
 # stopped at 1.19.5 while upstream shipped 2.x. The safety rules:
-#   - the latest release and its asset digest are resolved from the GitHub API;
+#   - "latest" is the HIGHEST v<semver> full release (operator ruling (B),
+#     2026-11-08), not upstream's "latest" marker, which still points at
+#     1.19.5 while 2.x ships. Drafts, prereleases and other tag families (the
+#     repo also publishes process-daemon-v*) are never chosen;
 #   - the downloaded asset must match the release's PUBLISHED sha256 digest. A
 #     missing digest or a mismatch FAILS CLOSED: nothing is installed;
 #   - a fresh version must pass harness_probe (liveness plus our contracts)
@@ -3363,8 +3366,13 @@ _require_release_harness() {
         return 0
     fi
     asset="$(harness_release_asset "$bin")" || { _rel_fallback "no release asset for $(uname -m)"; return 0; }
+    # The highest v<semver> full release among the recent ones (operator (B)).
     json="$(curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' \
-        "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)" || json=""
+        "https://api.github.com/repos/$repo/releases?per_page=50" 2>/dev/null \
+        | jq -c '[ .[] | select((.draft | not) and (.prerelease | not)
+                     and (.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$"))) ]
+                 | sort_by(.tag_name | ltrimstr("v") | split(".") | map(tonumber))
+                 | last // empty' 2>/dev/null)" || json=""
     tag="$(printf '%s' "$json" | jq -r '.tag_name // empty' 2>/dev/null)" || tag=""
     ver="${tag#v}"
     if [ -z "$ver" ]; then
