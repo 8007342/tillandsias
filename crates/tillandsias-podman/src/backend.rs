@@ -452,21 +452,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn a_stalled_podman_fails_within_its_budget_and_names_the_operation() {
-        use std::io::Write;
-        use std::os::unix::fs::PermissionsExt;
-
         let _env_guard = crate::PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-stalled-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");
         let stub = dir.join("podman");
-        {
-            let mut f = std::fs::File::create(&stub).expect("stub");
-            // Sleeps regardless of argv: a podman that accepted the command and
-            // then never returned, which is what a storage lock looks like.
-            writeln!(f, "#!/bin/sh\nsleep 600").expect("write stub");
-        }
-        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        // Sleeps regardless of argv: a podman that accepted the command and
+        // then never returned, which is what a storage lock looks like.
+        crate::test_stub::install_ready_stub(&stub, "#!/bin/sh\nsleep 600\n");
         // SAFETY: the env mutation is serialized by podman_bin_env_lock above.
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
 
@@ -516,19 +509,12 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn a_prompt_podman_still_succeeds_under_the_same_budget() {
-        use std::io::Write;
-        use std::os::unix::fs::PermissionsExt;
-
         let _env_guard = crate::PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-prompt-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");
         let stub = dir.join("podman");
-        {
-            let mut f = std::fs::File::create(&stub).expect("stub");
-            writeln!(f, "#!/bin/sh\necho ok").expect("write stub");
-        }
-        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        crate::test_stub::install_ready_stub(&stub, "#!/bin/sh\necho ok\n");
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
 
         let output = RealBackend
