@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: image-and-screenshot-tool-results-flood-the-context-with-inline-base64
+    event:
+      type: progress
+      ts: "2026-11-08T01:05:55Z"
+      agent_id: linux-lenovinha-opus5-20261108t010555z
+      host: lenovinha
+      summary: |
+        FURTHER EVIDENCE 2026-11-07 (forge field report via coordinator macuahuitl-fedora): browser.screenshot returns inline base64 for a small image and a saved file for a large one, so the result shape depends on size. That is the inconsistency this row's single image-result schema removes. The contract test should include both a small and a large screenshot and assert the same schema (saved path, no base64 run over 256) for each.
