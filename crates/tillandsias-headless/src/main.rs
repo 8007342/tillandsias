@@ -73,6 +73,7 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod egress;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
@@ -2403,6 +2404,27 @@ fn proxy_env_args() -> Vec<String> {
         "--env".into(),
         "NODE_USE_ENV_PROXY=1".into(),
     ]
+}
+
+// The proxy env for `image`, or nothing when its egress declaration names no
+// proxied tier (order 2041-jb57: undeclared means none).
+// @trace spec:proxy-container, order:2041-jb57
+fn proxy_env_args_for(image: &str) -> Vec<String> {
+    if egress::wants_proxy(image) {
+        proxy_env_args()
+    } else {
+        Vec::new()
+    }
+}
+
+// apply_proxy_env, gated on `image`'s egress declaration like
+// proxy_env_args_for.
+fn apply_proxy_env_for(spec: ContainerSpec, image: &str) -> ContainerSpec {
+    if egress::wants_proxy(image) {
+        apply_proxy_env(spec)
+    } else {
+        spec
+    }
 }
 
 // Applies the canonical proxy env vars to a ContainerSpec builder.
@@ -7180,7 +7202,7 @@ fn build_git_run_args(
     // the enclave proxy. Uses enclave_no_proxy() — the canonical full NO_PROXY
     // list — not a shorter hand-rolled one.
     // See cheatsheets/runtime/enclave-proxy-patterns.md for justification.
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("git"));
     if let Some(url) = project_remote_url.and_then(sanitize_forge_origin_url)
         && !url.is_empty()
     {
@@ -8544,7 +8566,7 @@ fn build_inference_run_args(
         effective_tier,
         &usable_nodes,
     ));
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("inference"));
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
     // ..)` calls — but the tail ended `[.., image, "/usr/bin/ollama", "serve"]`,
@@ -11132,7 +11154,7 @@ fn build_opencode_forge_args(
             args.push("--detach".into());
         }
     }
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("default"));
     args.extend([
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
@@ -21954,7 +21976,7 @@ fn build_forge_agent_run_args_with_vault(
             FORGE_SPEC_INDEX_MOUNT.to_string(),
             MountMode::ReadOnly,
         );
-    let mut spec = apply_proxy_env(spec)
+    let mut spec = apply_proxy_env_for(spec, "default")
         // Order 801-a2by: name the durable root explicitly so the in-forge
         // readers resolve it without probing for podman (which the enclave does
         // not have) and without an existence heuristic that would silently
@@ -36269,6 +36291,51 @@ esac
             !args.iter().any(|a| a.starts_with("DISPLAY=")),
             "no X11 display is handed to the browser: {args:?}"
         );
+    }
+
+    /// The OpenCode Web / studio window's run argv carries the login data URL,
+    /// whose form holds the session OTP (also the session cookie). The argv
+    /// the shared podman layer redacts for failure messages (stderr and the
+    /// `launch_failed` OpenCode Web event) must hold neither the OTP nor the
+    /// data URL. Built from the production inputs: a real OTP, the real
+    /// login URL builder and the real window spec.
+    #[test]
+    fn opencode_web_window_argv_redacts_the_login_otp() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-0"), b"").expect("socket stand-in");
+        let display = BrowserDisplayContext {
+            wayland_display: Some("wayland-0".to_string()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+            audio_socket: None,
+        };
+        let url = "http://opencode.visual-chess.localhost:8080/";
+        let otp = tillandsias_otp::issue_session("visual-chess");
+        let otp_text = tillandsias_otp::format_cookie_value(&otp);
+        let login_url = tillandsias_otp::build_login_data_url(url, &otp);
+        let spec = build_opencode_web_browser_spec(
+            &login_url,
+            "1.2.3",
+            Path::new("/tmp/tillandsias/browser/test-profile"),
+            Path::new("/tmp/tillandsias/ca"),
+            &display,
+            "visual-chess",
+        )
+        .expect("a Wayland session builds a browser spec");
+        let mut full = vec!["run".to_string()];
+        full.extend(spec.build_run_args());
+        // Premise: the secret really is in the argv, base64-encoded in --app.
+        let payload = login_url
+            .strip_prefix("data:text/html;base64,")
+            .expect("login URL is a base64 data URL");
+        assert!(
+            full.iter().any(|a| a.contains(payload)),
+            "premise: the window argv carries the login data URL"
+        );
+        let redacted = tillandsias_podman::backend::redact_argv(&full).join(" ");
+        assert!(!redacted.contains(payload), "login data URL leaked");
+        assert!(!redacted.contains(&otp_text), "OTP leaked");
+        assert!(redacted.contains("--app=data:<redacted>"), "{redacted}");
+        assert!(redacted.contains("--ozone-platform=wayland"), "{redacted}");
     }
 
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {

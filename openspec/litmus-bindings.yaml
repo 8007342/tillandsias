@@ -326,6 +326,7 @@ specs:
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
+  - litmus:forge-lib-copies
   - litmus:forge-lua-tooling
   - litmus:claude-launch-stability-shape
   - litmus:harness-curl-install-shape
@@ -340,6 +341,7 @@ specs:
   - litmus:forge-policy-binary-discoverability
   - litmus:forge-plan-binary-on-path
   - litmus:npm-harness-install-idempotent-shape
+  - litmus:forge-opencode-is-pinned
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:provider-usage-limit
@@ -1015,6 +1017,7 @@ specs:
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
   - litmus:proxy-allowlist-from-tiers
+  - litmus:egress-declarations
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching

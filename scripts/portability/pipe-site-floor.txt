@@ -417,7 +417,6 @@ scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
 scripts scripts/check-spec-index-resolution-agreement.sh 4
 scripts scripts/check-spec-script-paths.sh 7
-scripts scripts/check-stale-ready-rows.sh 3
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
@@ -837,7 +836,6 @@ scripts scripts/test-spawn-failure-names-program.sh 3
 scripts scripts/test-spec-index-repo-relative-rung.sh 3
 scripts scripts/test-spec-index-staging-capacity.sh 4
 scripts scripts/test-ssh-lane-sidecar.sh 6
-scripts scripts/test-stale-ready-rows.sh 10
 scripts scripts/test-status-channel-absent-is-first-class.sh 10
 scripts scripts/test-summarize-pubspec.sh 3
 scripts scripts/test-support/github-login-fake.sh 2

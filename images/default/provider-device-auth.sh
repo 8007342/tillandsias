@@ -19,7 +19,7 @@ case "$PROVIDER" in
     claude)
         AUTH_FILE="${TILLANDSIAS_CLAUDE_AUTH_FILE:-$HOME/.claude/.credentials.json}"
         VAULT_PATH="secret/claude/oauth"
-        ensure_forge_harnesses
+        ensure_forge_harnesses claude
         require_claude
         BIN="$CC_BIN"
         # Operator-prescribed command (2026-07-15): claude auth login --claudeai

@@ -2105,6 +2105,748 @@ printf '%s' "$id"
             String::from_utf8_lossy(&out.stderr)
         );
     }
+
+    // ---------------------------------------------------------------------
+    // ORDER 2031-dwwy (R1 of design 2029-39bt, openspec change
+    // lua-door-environment-inheritance §4): ONE child-environment builder,
+    // the hard block, and per-script declared inherit. Every planted value is
+    // a dummy; a credential-shaped one is asserted ABSENT from the runner's
+    // output and never placed in an assertion message. RED evidence: run with
+    // TILLANDSIAS_LUA_PROC_TEST_BIN pointing at a binary built before the
+    // change.
+    // ---------------------------------------------------------------------
+
+    const DWWY_PLANTED: &str = "planted-dwwy-4b7e21";
+    /// A planted credential-shaped PROJECT name, spelled in two halves (here
+    /// and in the Lua bodies) so the namespace-hygiene guard, which reads
+    /// source text, does not take the probe for a real variable of the tree.
+    const DWWY_PROBE_TOKEN: &str = concat!("TILLANDSIAS_", "PROBE_TOKEN");
+
+    fn dwwy_text(out: &std::process::Output) -> (String, String) {
+        (
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    }
+
+    /// The script runner on `header` + `body`, with `envs` planted on it and
+    /// `unset` removed from it.
+    fn dwwy_script(
+        f: &ScriptFixture,
+        header: &str,
+        body: &str,
+        envs: &[(&str, &str)],
+        unset: &[&str],
+    ) -> std::process::Output {
+        let script = f.write("probe.lua", &format!("{header}\n{body}\n"));
+        let mut c = f.runner(&script);
+        c.args(["--timeout", "20s"]);
+        for (k, v) in envs {
+            c.env(k, v);
+        }
+        for k in unset {
+            c.env_remove(k);
+        }
+        c.output().unwrap()
+    }
+
+    /// The `run` verb with the same binary and policy environment as `runner`.
+    fn dwwy_run_verb(
+        f: &ScriptFixture,
+        args: &[&str],
+        envs: &[(&str, &str)],
+        unset: &[&str],
+    ) -> std::process::Output {
+        let binary = std::env::var_os("TILLANDSIAS_LUA_PROC_TEST_BIN")
+            .unwrap_or_else(|| env!("CARGO_BIN_EXE_tillandsias-plan").into());
+        let mut c = std::process::Command::new(binary);
+        c.arg("run")
+            .args(args)
+            .env("TILLANDSIAS_REPO_ROOT", f.dir.path())
+            .env_remove("TILLANDSIAS_POLICY_SEED")
+            .env_remove("TILLANDSIAS_CONSENT_TOKEN")
+            .env_remove("CI")
+            .env("TILLANDSIAS_POLICY_REGIME", "interactive")
+            .env("TILLANDSIAS_CONSENT_DIR", f.dir.path().join("consent"))
+            .current_dir(f.dir.path());
+        for (k, v) in envs {
+            c.env(k, v);
+        }
+        for k in unset {
+            c.env_remove(k);
+        }
+        c.output().unwrap()
+    }
+
+    fn assert_ok(out: &std::process::Output, what: &str) {
+        let (so, se) = dwwy_text(out);
+        assert!(out.status.success(), "{what}: {so}{se}");
+    }
+
+    fn assert_refused(out: &std::process::Output, token: &str, what: &str) {
+        let (so, se) = dwwy_text(out);
+        assert!(
+            !out.status.success() && so.lines().any(|l| l == token),
+            "{what}: expected the line {token} and a non-zero exit, got {:?}: {so}{se}",
+            out.status.code()
+        );
+        assert!(
+            !so.contains("body-ran"),
+            "{what}: script code ran before the header was refused"
+        );
+    }
+
+    // tasks 1.3. RED before: the runner ignored the directive (child: unset).
+    #[test]
+    fn a_declared_caller_variable_reaches_the_child() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-profile podman\n-- @env-inherit TOOLBOX_PATH",
+            r#"
+            local a = proc.run{argv={'printenv','CONTAINER_HOST'}}
+            assert(a.code == 0 and a.stdout == 'unix:///tmp/p-2031.sock\n', 'CONTAINER_HOST (profile podman) did not reach the child')
+            local b = proc.run{argv={'printenv','TOOLBOX_PATH'}}
+            assert(b.code == 0 and b.stdout == '/tmp/toolbox-2031\n', 'TOOLBOX_PATH (@env-inherit) did not reach the child')
+            local c = sh.run{'printenv','CONTAINER_HOST'}
+            assert(c.code == 0, 'CONTAINER_HOST did not reach the sh.run child')
+            local p = proc.spawn{argv={'printenv','CONTAINER_HOST'}}
+            assert(p:wait().code == 0, 'CONTAINER_HOST did not reach the proc.spawn child')
+            verdict.ok('declared')
+            "#,
+            &[
+                ("CONTAINER_HOST", "unix:///tmp/p-2031.sock"),
+                ("TOOLBOX_PATH", "/tmp/toolbox-2031"),
+            ],
+            &[],
+        );
+        assert_ok(&out, "a declared caller variable");
+    }
+
+    // tasks 1.3, the CONTROL: green before and after, through every arm.
+    #[test]
+    fn an_undeclared_caller_variable_stays_absent() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-profile podman",
+            r#"
+            for _, n in ipairs({'FAKE_PODMAN_STORE', 'UNRELATED_2029', 'LD_LIBRARY_PATH'}) do
+                assert(proc.run{argv={'printenv', n}}.code ~= 0, n .. ' reached the child undeclared')
+                assert(sh.run{'printenv', n}.code ~= 0, n .. ' reached the sh.run child undeclared')
+            end
+            verdict.ok('undeclared')
+            "#,
+            &[
+                ("CONTAINER_HOST", "unix:///tmp/p-2031.sock"),
+                ("FAKE_PODMAN_STORE", "/tmp/s-2031"),
+                ("UNRELATED_2029", "y"),
+                ("LD_LIBRARY_PATH", "/tmp/ld-2031"),
+            ],
+            &[],
+        );
+        assert_ok(&out, "an undeclared caller variable");
+    }
+
+    // tasks 1.2/1.3. RED before: the header was ignored and the body ran.
+    #[test]
+    fn a_hard_blocked_name_is_refused_when_declared() {
+        let f = ScriptFixture::new();
+        let body = "out.line('body-ran'); verdict.ok('x')";
+        let out = dwwy_script(&f, "-- @env-inherit LD_PRELOAD", body, &[], &[]);
+        assert_refused(
+            &out,
+            "refused:env-inherit:never:LD_PRELOAD:loader",
+            "LD_PRELOAD",
+        );
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherit MY_SERVICE_TOKEN",
+            body,
+            &[("MY_SERVICE_TOKEN", DWWY_PLANTED)],
+            &[],
+        );
+        assert_refused(
+            &out,
+            "refused:env-inherit:never:MY_SERVICE_TOKEN:credential-shape",
+            "MY_SERVICE_TOKEN",
+        );
+        let (so, se) = dwwy_text(&out);
+        assert!(
+            !so.contains(DWWY_PLANTED) && !se.contains(DWWY_PLANTED),
+            "the declared credential's value appeared in the runner's output"
+        );
+        // In a profile line as well as an inherit line, and among other names.
+        let out = dwwy_script(&f, "-- @env-inherit TOOLBOX_PATH GH_TOKEN", body, &[], &[]);
+        assert_refused(
+            &out,
+            "refused:env-inherit:never:GH_TOKEN:credential-shape",
+            "GH_TOKEN",
+        );
+    }
+
+    // tasks 1.3: class B and fixed names are refused when declared, with the
+    // remedy pointing at the per-call literal.
+    #[test]
+    fn an_inherit_blocked_or_fixed_name_is_refused_when_declared() {
+        let f = ScriptFixture::new();
+        let body = "out.line('body-ran'); verdict.ok('x')";
+        let out = dwwy_script(&f, "-- @env-inherit GIT_CONFIG_GLOBAL", body, &[], &[]);
+        assert_refused(
+            &out,
+            "refused:env-inherit:inherit-blocked:GIT_CONFIG_GLOBAL:redirection",
+            "GIT_CONFIG_GLOBAL",
+        );
+        assert!(
+            dwwy_text(&out).1.contains("per call"),
+            "the inherit-blocked remedy does not name the per-call literal"
+        );
+        let out = dwwy_script(&f, "-- @env-inherit TZ", body, &[], &[]);
+        assert_refused(&out, "refused:env-inherit:fixed:TZ", "TZ");
+    }
+
+    // tasks 1.3. RED before: an unknown directive was ignored.
+    #[test]
+    fn a_misspelt_env_directive_is_refused_not_ignored() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherits CONTAINER_HOST",
+            "out.line('body-ran'); verdict.ok('x')",
+            &[("CONTAINER_HOST", "unix:///tmp/p-2031.sock")],
+            &[],
+        );
+        assert_refused(
+            &out,
+            "refused:script-header:unknown-directive:env-inherits",
+            "@env-inherits",
+        );
+    }
+
+    #[test]
+    fn a_glob_is_refused() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherit CONTAINERS_*",
+            "out.line('body-ran'); verdict.ok('x')",
+            &[],
+            &[],
+        );
+        assert_refused(
+            &out,
+            "refused:env-inherit:glob-not-supported:CONTAINERS_*",
+            "a glob",
+        );
+    }
+
+    #[test]
+    fn an_unknown_profile_is_refused_by_name() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-profile podmann",
+            "out.line('body-ran'); verdict.ok('x')",
+            &[],
+            &[],
+        );
+        assert_refused(
+            &out,
+            "refused:env-inherit:unknown-profile:podmann",
+            "podmann",
+        );
+        let se = dwwy_text(&out).1;
+        for known in ["podman", "net-egress", "macos-toolchain"] {
+            assert!(
+                se.contains(known),
+                "the refusal does not list {known}: {se}"
+            );
+        }
+    }
+
+    // A declared base name is accepted as a no-op with one note: line.
+    #[test]
+    fn a_declared_base_name_is_a_note() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherit PATH",
+            "assert(proc.run{argv={'printenv','PATH'}}.code == 0); verdict.ok('base')",
+            &[],
+            &[],
+        );
+        assert_ok(&out, "a declared base name");
+        let se = dwwy_text(&out).1;
+        assert_eq!(
+            se.lines()
+                .filter(|l| *l == "note:env-inherit:base:PATH")
+                .count(),
+            1,
+            "{se}"
+        );
+    }
+
+    // spec c3d80b67 "A locator suffix is not a credential".
+    #[test]
+    fn a_locator_suffix_is_not_a_credential() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherit VAULT_TOKEN_FILE",
+            r#"
+            local r = proc.run{argv={'printenv','VAULT_TOKEN_FILE'}}
+            assert(r.code == 0 and r.stdout == '/run/secrets/vault-2031\n', 'VAULT_TOKEN_FILE did not reach the child')
+            verdict.ok('locator')
+            "#,
+            &[("VAULT_TOKEN_FILE", "/run/secrets/vault-2031")],
+            &[],
+        );
+        assert_ok(&out, "a locator");
+    }
+
+    // spec ae550c5d "Per-call env beats inherit". RED before (no profile).
+    #[test]
+    fn per_call_env_beats_inherit() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-profile podman",
+            r#"
+            local r = proc.run{argv={'printenv','CONTAINER_HOST'}, env={CONTAINER_HOST='unix:///b-2031.sock'}}
+            assert(r.code == 0 and r.stdout == 'unix:///b-2031.sock\n', 'the per-call literal did not win')
+            local s = proc.run{argv={'printenv','CONTAINERS_CONF'}}
+            assert(s.code == 0 and s.stdout == '/tmp/c-2031.conf\n', 'the inherited name next to it was lost')
+            verdict.ok('per-call')
+            "#,
+            &[
+                ("CONTAINER_HOST", "unix:///a-2031.sock"),
+                ("CONTAINERS_CONF", "/tmp/c-2031.conf"),
+            ],
+            &[],
+        );
+        assert_ok(&out, "per-call beats inherit");
+    }
+
+    // spec ae550c5d "A fixed override beats the caller" — green before and
+    // after, now also under a declared profile. The child is a shell FILE.
+    #[test]
+    fn a_fixed_override_beats_the_caller() {
+        if !bash_available() {
+            eprintln!("skip:lua_proc:fixed-override:no-bash");
+            return;
+        }
+        let f = ScriptFixture::new();
+        let show = f.write("show.sh", "printf '%s|%s' \"$LC_ALL\" \"$TZ\"\n");
+        let out = dwwy_script(
+            &f,
+            "-- @env-profile session",
+            &format!(
+                r#"
+            local r = proc.run{{argv={{'bash','{show}'}}}}
+            assert(r.code == 0 and r.stdout == 'C|UTC', 'the caller locale or zone won: ' .. r.stdout)
+            verdict.ok('fixed')
+            "#
+            ),
+            &[("LC_ALL", "fr_FR.UTF-8"), ("TZ", "Europe/Berlin")],
+            &[],
+        );
+        assert_ok(&out, "a fixed override");
+    }
+
+    // tasks 1.2 / spec c3d80b67 "A per-call literal cannot set a class-A
+    // name". RED before: the child spawned with LD_PRELOAD set.
+    #[test]
+    fn a_per_call_literal_cannot_set_a_loader_variable() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "",
+            r#"
+            for _, door in ipairs({'run', 'spawn'}) do
+                for _, case in ipairs({{'LD_PRELOAD', 'loader'}, {'GH_TOKEN', 'credential-shape'}}) do
+                    local ok, e = pcall(proc[door], {argv={'touch','spawned-' .. door}, env={[case[1]]='/tmp/x-2031.so'}})
+                    assert(not ok, 'proc.' .. door .. ' accepted a per-call ' .. case[1])
+                    e = tostring(e)
+                    assert(e:find('refused:env-inherit:never:' .. case[1] .. ':' .. case[2], 1, true), 'proc.' .. door .. ' raised without naming ' .. case[1] .. ' and its class: ' .. e)
+                end
+            end
+            assert(not fs.exists('spawned-run') and not fs.exists('spawned-spawn'), 'a child was spawned')
+            verdict.ok('per-call-never')
+            "#,
+            &[],
+            &[],
+        );
+        assert_ok(&out, "a per-call class-A literal");
+        assert!(!f.dir.path().join("spawned-run").exists());
+        assert!(!f.dir.path().join("spawned-spawn").exists());
+    }
+
+    // spec c3d80b67 "A per-call literal may set a class-B name" (green before).
+    #[test]
+    fn a_per_call_literal_may_set_an_inherit_blocked_name() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "",
+            r#"
+            local r = proc.run{argv={'printenv','GIT_CONFIG_GLOBAL'}, env={GIT_CONFIG_GLOBAL='/dev/null'}}
+            assert(r.code == 0 and r.stdout == '/dev/null\n', 'a per-call class-B literal did not reach the child')
+            verdict.ok('per-call-b')
+            "#,
+            &[],
+            &[],
+        );
+        assert_ok(&out, "a per-call class-B literal");
+    }
+
+    // tasks 1.5. RED before: the declared-inherit name never reached the child.
+    #[test]
+    fn a_declared_inherit_name_is_passed_not_readable() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherit TOOLBOX_PATH",
+            r#"
+            local ok, e = pcall(env.get, 'TOOLBOX_PATH')
+            assert(not ok and tostring(e):find("'TOOLBOX_PATH' is not declared; add it to the header: -- @env TOOLBOX_PATH", 1, true), 'env.get read a passed-only name')
+            assert(proc.run{argv={'printenv','TOOLBOX_PATH'}}.code == 0, 'the child did not see TOOLBOX_PATH')
+            verdict.ok('passed-not-readable')
+            "#,
+            &[("TOOLBOX_PATH", "/tmp/toolbox-2031")],
+            &[],
+        );
+        assert_ok(&out, "passed, not readable");
+    }
+
+    // tasks 1.5 / operator ruling Q2. RED before: env.get returned the value.
+    #[test]
+    fn env_get_refuses_a_credential_shaped_name() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env GH_TOKEN LD_PRELOAD",
+            r#"
+            for _, case in ipairs({{'GH_TOKEN', 'credential-shape'}, {'LD_PRELOAD', 'loader'}}) do
+                local ok, e = pcall(env.get, case[1])
+                assert(not ok, 'env.get returned a class-A name: ' .. case[1])
+                assert(tostring(e):find(case[1], 1, true) and tostring(e):find(case[2], 1, true), 'the refusal does not name ' .. case[1] .. ' and ' .. case[2])
+            end
+            verdict.ok('env-get-never')
+            "#,
+            // LD_PRELOAD is NOT planted on the runner: the runner's own loader would
+            // read it. env.get refuses the name whether or not it is set.
+            &[("GH_TOKEN", DWWY_PLANTED)],
+            &[],
+        );
+        let (so, se) = dwwy_text(&out);
+        assert!(
+            !so.contains(DWWY_PLANTED) && !se.contains(DWWY_PLANTED),
+            "a planted class-A value appeared in the runner's output"
+        );
+        assert!(out.status.success(), "env.get class A: {so}{se}");
+    }
+
+    fn dwwy_records(log: &std::path::Path) -> Vec<serde_json::Value> {
+        std::fs::read_to_string(log)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .filter(|v| v["kind"] == "script-run")
+            .collect()
+    }
+
+    fn dwwy_names(v: &serde_json::Value) -> Vec<String> {
+        v.as_array()
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    // tasks 1.6 / spec 42690226. RED before: the record had no such fields.
+    #[test]
+    fn the_timing_record_names_inherited_variables_and_holds_no_value() {
+        let f = ScriptFixture::new();
+        let log = f.dir.path().join("timing.jsonl");
+        let log_s = lua_path(&log);
+        let out = dwwy_script(
+            &f,
+            "-- @env-profile podman",
+            "verdict.ok('record')",
+            &[
+                ("CONTAINER_HOST", "unix:///tmp/p-2031.sock"),
+                ("TILLANDSIAS_TIMING_LOG", &log_s),
+            ],
+            &["CONTAINERS_CONF"],
+        );
+        assert_ok(&out, "the timing record");
+        let recs = dwwy_records(&log);
+        assert_eq!(recs.len(), 1, "one script-run record");
+        let r = &recs[0];
+        assert_eq!(dwwy_names(&r["env_profiles"]), vec!["podman".to_string()]);
+        assert!(dwwy_names(&r["env_inherited"]).contains(&"CONTAINER_HOST".to_string()));
+        assert!(dwwy_names(&r["env_absent"]).contains(&"CONTAINERS_CONF".to_string()));
+        // Names only: no base or namespace name, and never the value.
+        assert!(!dwwy_names(&r["env_inherited"]).contains(&"PATH".to_string()));
+        let body = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            body.matches("p-2031.sock").count(),
+            0,
+            "a value reached the record"
+        );
+    }
+
+    // tasks 1.8, FIRST HALF (the census). The wider class-A filter on the
+    // TILLANDSIAS_* layer is WARN-ONLY until the census lands the flip: a
+    // credential-shaped project name still reaches the child, and under
+    // TILLANDSIAS_ENV_BLOCK_WARN=1 the would-be drop is NAMED in the record.
+    // 2031-h5ru's narrow SECRET/PASS/PASSWORD filter stays enforced. RED
+    // before: no env_block_would_drop field. (The spec's post-flip name,
+    // a_credential_shaped_project_variable_does_not_reach_a_child, belongs to
+    // the landing that deletes the warn mode.)
+    #[test]
+    fn the_warn_census_names_a_credential_shaped_project_variable_without_dropping_it() {
+        let f = ScriptFixture::new();
+        let log = f.dir.path().join("timing.jsonl");
+        let log_s = lua_path(&log);
+        let body = r#"
+            assert(proc.run{argv={'printenv','TILLANDSIAS_' .. 'PROBE_TOKEN'}}.code == 0, 'census period: the shaped project name was dropped')
+            assert(proc.run{argv={'printenv','TILLANDSIAS_PROBE_TOKEN_FILE'}}.code == 0, 'a locator project name was dropped')
+            assert(proc.run{argv={'printenv','TILLANDSIAS_COORD_CLIENT_SECRET'}}.code ~= 0, '2031-h5ru: the narrow filter is no longer enforced')
+            verdict.ok('census')
+        "#;
+        let planted = [
+            (DWWY_PROBE_TOKEN, DWWY_PLANTED),
+            ("TILLANDSIAS_PROBE_TOKEN_FILE", "/tmp/t-2031"),
+            ("TILLANDSIAS_COORD_CLIENT_SECRET", DWWY_PLANTED),
+            ("TILLANDSIAS_TIMING_LOG", log_s.as_str()),
+        ];
+        // Warn off (the default): the same pass-through, nothing named.
+        let out = dwwy_script(&f, "", body, &planted, &["TILLANDSIAS_ENV_BLOCK_WARN"]);
+        assert_ok(&out, "warn off");
+        let mut with_warn = planted.to_vec();
+        with_warn.push(("TILLANDSIAS_ENV_BLOCK_WARN", "1"));
+        let out = dwwy_script(&f, "", body, &with_warn, &[]);
+        assert_ok(&out, "warn on");
+        let (so, se) = dwwy_text(&out);
+        assert!(!so.contains(DWWY_PLANTED) && !se.contains(DWWY_PLANTED));
+        let recs = dwwy_records(&log);
+        assert_eq!(recs.len(), 2, "two script-run records");
+        assert!(
+            dwwy_names(&recs[0]["env_block_would_drop"]).is_empty(),
+            "warn off named would-be drops"
+        );
+        let named = dwwy_names(&recs[1]["env_block_would_drop"]);
+        assert!(
+            named.contains(&format!("{DWWY_PROBE_TOKEN}:credential-shape")),
+            "the census did not name the shaped project variable: {named:?}"
+        );
+        assert!(
+            !named
+                .iter()
+                .any(|n| n.starts_with("TILLANDSIAS_PROBE_TOKEN_FILE")
+                    || n.starts_with("TILLANDSIAS_COORD_CLIENT_SECRET")),
+            "the census named a locator or an enforced drop: {named:?}"
+        );
+        let body = std::fs::read_to_string(&log).unwrap();
+        assert_eq!(
+            body.matches(DWWY_PLANTED).count(),
+            0,
+            "a value reached the record"
+        );
+    }
+
+    fn sorted_lines(s: &str) -> Vec<String> {
+        let mut v: Vec<String> = s.lines().map(str::to_string).collect();
+        v.sort();
+        v
+    }
+
+    // tasks 1.1 / spec ae550c5d "Two doors, one answer". The profile half is
+    // RED before (the run verb had no --env-profile).
+    #[test]
+    fn two_doors_one_answer() {
+        let f = ScriptFixture::new();
+        let envs = [
+            ("TILLANDSIAS_TWO_DOORS_2031", "1"),
+            ("UNRELATED_2029", "y"),
+            ("CONTAINER_HOST", "unix:///tmp/p-2031.sock"),
+        ];
+        let script_body = r#"
+            local r = proc.run{argv={'env'}, env={ADDED_2031='yes'}}
+            assert(r.code == 0)
+            fs.write('doors-env.txt', r.stdout)
+            verdict.ok('doors')
+        "#;
+        for (header, flags) in [
+            ("", vec![]),
+            ("-- @env-profile podman", vec!["--env-profile", "podman"]),
+        ] {
+            let out = dwwy_script(&f, header, script_body, &envs, &[]);
+            assert_ok(&out, "the proc.run door");
+            let lua_env = std::fs::read_to_string(f.dir.path().join("doors-env.txt")).unwrap();
+            let mut args = flags.clone();
+            args.extend(["--env", "ADDED_2031=yes", "--", "env"]);
+            let out = dwwy_run_verb(&f, &args, &envs, &[]);
+            assert_ok(&out, "the run verb");
+            let verb_env = String::from_utf8_lossy(&out.stdout).into_owned();
+            assert_eq!(
+                sorted_lines(&lua_env),
+                sorted_lines(&verb_env),
+                "the two doors built different environments (header {header:?})"
+            );
+            assert!(!verb_env.contains("UNRELATED_2029"));
+            assert_eq!(
+                verb_env.contains("CONTAINER_HOST="),
+                !header.is_empty(),
+                "the profile decided CONTAINER_HOST"
+            );
+        }
+    }
+
+    // spec 48b22c5d: the run verb's declared-inherit layer. RED before: the
+    // verb had no --env-inherit flag (usage, exit 2) and no refusal grammar.
+    #[test]
+    fn the_run_verb_refuses_a_credential_even_when_named() {
+        let f = ScriptFixture::new();
+        for args in [
+            vec!["--env-inherit", "GH_TOKEN", "--", "env"],
+            vec!["--env", "GH_TOKEN=x-2031", "--", "env"],
+        ] {
+            let out = dwwy_run_verb(&f, &args, &[("GH_TOKEN", DWWY_PLANTED)], &[]);
+            let (so, se) = dwwy_text(&out);
+            assert!(
+                !out.status.success()
+                    && se
+                        .lines()
+                        .any(|l| l == "refused:env-inherit:never:GH_TOKEN:credential-shape"),
+                "{args:?}: expected the refusal, got {:?}: {se}",
+                out.status.code()
+            );
+            assert!(!so.contains(DWWY_PLANTED) && !se.contains(DWWY_PLANTED));
+            assert!(!so.contains("GH_TOKEN="), "{args:?}: a child ran");
+        }
+        // The plain door still scrubs it.
+        let out = dwwy_run_verb(&f, &["--", "env"], &[("GH_TOKEN", DWWY_PLANTED)], &[]);
+        assert_ok(&out, "run -- env");
+        assert!(!dwwy_text(&out).0.contains("GH_TOKEN="));
+    }
+
+    // spec 48b22c5d "A profile on the run verb passes the same names as in a
+    // script", and the --json arrays (spec 42690226).
+    #[test]
+    fn the_run_verb_profile_passes_the_same_names_and_reports_them() {
+        let f = ScriptFixture::new();
+        let envs = [
+            ("CONTAINER_HOST", "unix:///tmp/p-2031.sock"),
+            ("UNRELATED_2029", "y"),
+        ];
+        let out = dwwy_run_verb(&f, &["--env-profile", "podman", "--", "env"], &envs, &[]);
+        assert_ok(&out, "run --env-profile podman");
+        let so = dwwy_text(&out).0;
+        assert!(
+            so.lines()
+                .any(|l| l == "CONTAINER_HOST=unix:///tmp/p-2031.sock")
+        );
+        assert!(!so.contains("UNRELATED_2029"));
+        let out = dwwy_run_verb(
+            &f,
+            &["--json", "--env-profile", "podman", "--", "true"],
+            &envs,
+            &["CONTAINERS_CONF"],
+        );
+        assert_ok(&out, "run --json --env-profile podman");
+        let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+        assert_eq!(dwwy_names(&v["env_profiles"]), vec!["podman".to_string()]);
+        assert!(dwwy_names(&v["env_inherited"]).contains(&"CONTAINER_HOST".to_string()));
+        assert!(dwwy_names(&v["env_absent"]).contains(&"CONTAINERS_CONF".to_string()));
+        assert!(!out.stdout.windows(11).any(|w| w == b"p-2031.sock"));
+    }
+
+    // tasks 1.7, the case-sensitive side: on Linux `ld_preload` is not the
+    // loader's variable, so it is an ordinary name; the credential SHAPE is
+    // upper-cased on every platform (design §4.2 A2), so `gh_token` is refused
+    // here too. The Windows side is windows_folds_case_for_the_hard_block.
+    #[test]
+    fn linux_keeps_case_for_the_loader_block_and_folds_the_credential_shape() {
+        let f = ScriptFixture::new();
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherit ld_preload",
+            "assert(proc.run{argv={'printenv','ld_preload'}}.code == 0, 'ld_preload did not reach the child'); verdict.ok('case')",
+            &[("ld_preload", "/tmp/lower-2031")],
+            &[],
+        );
+        assert_ok(&out, "ld_preload on linux");
+        let out = dwwy_script(
+            &f,
+            "-- @env-inherit gh_token",
+            "out.line('body-ran'); verdict.ok('x')",
+            &[],
+            &[],
+        );
+        assert_refused(
+            &out,
+            "refused:env-inherit:never:gh_token:credential-shape",
+            "gh_token",
+        );
+    }
+}
+
+// ORDER 2031-dwwy, tasks 1.7: on Windows environment names are
+// case-insensitive, so the hard block and the fixed set fold case. This runs
+// ONLY on a Windows host (yolanda-windows is the second regime); on Linux the
+// case-sensitive side is
+// managed_script::linux_keeps_case_for_the_loader_block_and_folds_the_credential_shape.
+#[cfg(windows)]
+mod windows_env_case {
+    #[test]
+    fn windows_folds_case_for_the_hard_block() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".git")).unwrap();
+        let run = |header: &str, envs: &[(&str, &str)]| {
+            let script = dir.path().join("probe.lua");
+            std::fs::write(
+                &script,
+                format!("{header}\nout.line('body-ran'); verdict.ok('x')\n"),
+            )
+            .unwrap();
+            let binary = std::env::var_os("TILLANDSIAS_LUA_PROC_TEST_BIN")
+                .unwrap_or_else(|| env!("CARGO_BIN_EXE_tillandsias-plan").into());
+            let mut c = std::process::Command::new(binary);
+            c.args(["script", "run"])
+                .arg(&script)
+                .env("TILLANDSIAS_REPO_ROOT", dir.path())
+                .env("TILLANDSIAS_POLICY_REGIME", "interactive")
+                .current_dir(dir.path());
+            for (k, v) in envs {
+                c.env(k, v);
+            }
+            c.output().unwrap()
+        };
+        for (header, token) in [
+            (
+                "-- @env-inherit GH_TOKEN",
+                "refused:env-inherit:never:GH_TOKEN:credential-shape",
+            ),
+            (
+                "-- @env-inherit ld_preload",
+                "refused:env-inherit:never:ld_preload:loader",
+            ),
+            ("-- @env-inherit tz", "refused:env-inherit:fixed:tz"),
+        ] {
+            let out = run(header, &[("gh_token", "planted-dwwy-win")]);
+            let so = String::from_utf8_lossy(&out.stdout);
+            let se = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                !out.status.success() && so.lines().any(|l| l.trim_end() == token),
+                "{header}: expected {token}, got {so}{se}"
+            );
+            assert!(!so.contains("body-ran") && !so.contains("planted-dwwy-win"));
+        }
+    }
 }
 
 /// ARM 1: a non-zero exit is DATA, not a Lua error; and argv is argv.
