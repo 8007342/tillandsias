@@ -315,3 +315,69 @@ header would earn, if any.
   with `FAKE_PODMAN_STORE` set
 - **THEN** the output has no line for `FAKE_PODMAN_STORE`, has a line
   `CONTAINER_HOST layer=profile:podman present=<yes|no>`, and the verb exits 0
+
+### Requirement: A hard-block refusal is a recorded violation, classified, and enforced below the runtime where the platform can
+<!-- req-id: 7120e541 -->
+
+Operator ruling 2026-11-07 (design §4.14): a per-call literal or declaration
+naming a class-A variable SHALL refuse the call, AND SHALL append one
+violation record to the runtime's violation log, AND, on a platform with a
+kernel mechanism for it, SHALL also be enforced below the runtime so that a
+bypass of the runtime's own check cannot deliver the variable to a loader.
+
+The violation record SHALL carry: the UTC time, the host, the script path and
+its content hash, the door (`proc.run`, `proc.spawn`, `proc.chain`, `sh.run`,
+`run`), the call site (script line), the variable NAME, its class and
+sub-class (`loader`, `shell-init`, `program-naming`, `credential-shape`),
+the source of the attempt (`header-declare`, `per-call-literal`,
+`inherited-from-caller`), the policy regime, and a `value_shape` descriptor
+(empty / path-to-existing-file / path-to-shared-object / url / opaque, plus
+its length). It SHALL NEVER carry the value or any reversible digest of it.
+
+Each record SHALL be classified by a deterministic rule into exactly one of
+`innocent` (the attempt is explained by an existing need the model has not
+yet granted: a header declaration, an inherited-from-caller name the script
+never mentioned, or an empty value under the fixture regime), `suspicious`
+(a per-call literal of a `loader` or `shell-init` name with a non-empty value,
+a value shaped as a path to a shared object, a credential-shaped name whose
+value also appears in the child's argv, or a repeat of the same refused
+attempt by the same script after a refusal in the same run), or
+`unclassified`. The classification and the rule that produced it SHALL be in
+the record.
+
+An `innocent` record SHALL name the remedy it implies (a profile entry, an
+override, or an isolation such as a wrapper file); a `suspicious` record SHALL
+be surfaced as a `violation:env-block:suspicious:<script>:<NAME>` line on the
+run's own output and in the next gate's summary, never folded into a count.
+
+#### Scenario: a per-call loader literal is refused, recorded and classified suspicious
+- **WHEN** a script calls `proc.run{argv={"true"}, env={LD_PRELOAD="/tmp/x.so"}}`
+  and `/tmp/x.so` exists
+- **THEN** the call raises `refused:env-inherit:never:LD_PRELOAD:loader`,
+  the child is not spawned, one violation record is appended with
+  `source=per-call-literal`, `value_shape=path-to-shared-object`,
+  `class=suspicious`, and the value `/tmp/x.so` appears nowhere in the record
+
+#### Scenario: a declared credential name is refused and classified innocent
+- **WHEN** a script header declares `-- @env-inherit GH_TOKEN`
+- **THEN** the script is refused before it runs with
+  `refused:env-inherit:never:GH_TOKEN:credential-shape`, one record is
+  appended with `source=header-declare`, `class=innocent`, and a remedy
+  naming the sanctioned credential route (design §4.6)
+
+#### Scenario: a caller variable that was simply present is not an attack
+- **WHEN** the runner's own environment holds `LD_LIBRARY_PATH` and a script
+  that never mentions it calls `proc.run`
+- **THEN** the child does not receive it, the call is NOT refused (the block
+  is a filter on inherited layers), and at most one `innocent`
+  `source=inherited-from-caller` record per run names it
+
+#### Scenario: on Linux with SELinux enforcing, a loader variable cannot take effect even past the runtime
+- **WHEN** a Lua door child is spawned on a Linux host whose SELinux mode is
+  `Enforcing` and the kernel-side mechanism selected by follow-up R8 is
+  installed
+- **THEN** the child runs in secure-execution mode (`AT_SECURE=1`), so the
+  dynamic loader ignores `LD_PRELOAD` / `LD_LIBRARY_PATH` even if one were
+  present, and the run records `kernel-enforcement=selinux`; on a host
+  without it the run records `kernel-enforcement=none:<reason>` and the
+  runtime check alone applies, never silently

@@ -487,6 +487,71 @@ in the fake's `STORE=` line and the arm's `env -i` line. Two lines.
   reads a profile name (`profile-hint:podman`), so the porter knows which
   header line to write (tasks.md 4.2, optional).
 
+### 4.14 Violations are recorded, classified and enforced below the runtime (operator ruling 2026-11-07)
+
+The operator's answer to §9 Q3 was: refuse the call, enforce it with
+SELinux, and log it as a violation, "we'll want to detect those, and
+distinguish innocent reads that we might need to better override or isolate,
+from actual malicious code attacks". That turns a refusal from a dead end
+into evidence. Spec requirement `7120e541`.
+
+**Record, never the value.** Each refusal appends one line to a violation
+log beside the timing log. The resolution goes through `metrics-log-path`,
+the same rule as the timing record, so that the gate, the land queue and a
+human all read one file. The record holds the time, host, script path and
+content hash, door, call site, NAME, class and sub-class, source
+(`header-declare`, `per-call-literal` or `inherited-from-caller`), regime
+and a `value_shape` (empty, path-to-existing-file, path-to-shared-object,
+url, opaque; plus length). No value and no reversible digest of one: a hash
+of a short secret is a lookup table.
+
+**Classify, deterministically.** The classifier is a pure function of the
+record, so two hosts agree:
+
+| class | rule (first match) | what it means | what happens |
+|---|---|---|---|
+| suspicious | `per-call-literal` of a `loader`/`shell-init` name with a non-empty value; any `value_shape=path-to-shared-object`; a credential-shaped value that also appears in the child's argv; the same refused attempt repeated in one run | code is trying to get a loader, an init file or a secret into a child | `violation:env-block:suspicious:<script>:<NAME>` on the run's output and in the next gate summary; never only counted |
+| innocent | `header-declare` (the author asked for it in the open); `inherited-from-caller` (the runner happened to hold it); an empty value under `TILLANDSIAS_POLICY_REGIME=fixture` | a real need the model has not granted, or noise from the caller | the record names the remedy: a profile entry, a fixed override, or an isolation (a wrapper file, a fixture double's side file per §4.11) |
+| unclassified | anything else | a shape nobody predicted | listed for a human; a recurring one becomes a rule |
+
+`inherited-from-caller` is never a refusal. The block is a filter on
+inherited layers (§4.1), so a caller that merely has `LD_LIBRARY_PATH` set
+does not fail checks; it gets at most one innocent record per run, so the
+operator can see what the host carries.
+
+**Enforced below the runtime, where the platform can.** The runtime check is
+the policy; a kernel mechanism is what makes it hold if the runtime is ever
+bypassed (a door added without the builder, a bug in the filter). There is
+one relevant mechanism, and it is narrower than "SELinux blocks env
+variables":
+
+- **Linux with SELinux enforcing.** SELinux does not inspect environment
+  variables. What it controls is the domain transition on `execve`. When a
+  transition occurs and the policy withholds `noatsecure`, the kernel sets
+  `AT_SECURE=1`, and glibc's dynamic loader then runs in secure-execution
+  mode (ld.so(8)). In that mode it ignores `LD_PRELOAD`, `LD_LIBRARY_PATH`
+  and the other unsafe `LD_*` names, and glibc strips them from the
+  environment of further children (`UNSECURE_ENVVARS`). So a confined
+  domain for Lua door children enforces the loader part of class A at the
+  kernel. Credential-shaped names have no kernel analogue. For those, the
+  runtime filter plus the violation log is the enforcement, and the design
+  says so rather than claiming more. Two placements are candidates: a
+  small policy module giving door children their own type, or running
+  untrusted door children inside a podman container, already `container_t`
+  under the fleet's SELinux policy. Either needs a policy install or a
+  container per call. This host is an immutable Fedora Silverblue host with
+  a no-sudo rule, and the project bans layering, so the install path is
+  itself a decision. Follow-up row R8 measures both and picks one.
+- **macOS.** No SELinux. SIP strips `DYLD_*` only for protected binaries,
+  so the runtime check is the enforcement; recorded as
+  `kernel-enforcement=none:macos`.
+- **Windows/WSL.** No equivalent; `kernel-enforcement=none:windows`. In a
+  WSL guest, SELinux is normally absent: `none:selinux-absent`.
+
+Every run records which applied (`kernel-enforcement=selinux|none:<reason>`)
+in the same record as the inherited names (§4.8). A host without kernel
+enforcement is reported as such, never silently.
+
 ## 5. Audit of the tree
 
 Method: `scripts/portability/shell-decider-floor.txt` (593 lines, 592 files
@@ -718,7 +783,40 @@ The project's `research/` store is for human-factors research
 is tool documentation, so it is recorded here rather than as a research
 record.
 
+Added for §4.14. These were NOT fetched when this section was written; they
+are cited from the author's knowledge, and R8 must verify them against the
+pages before relying on them:
+
+- ld.so(8), "Secure-execution mode": the loader ignores `LD_PRELOAD`,
+  `LD_LIBRARY_PATH` and related names when `AT_SECURE` is non-zero.
+  https://man7.org/linux/man-pages/man8/ld.so.8.html
+- getauxval(3), `AT_SECURE`: set when the process's credentials changed on
+  exec, or when an LSM requested it.
+  https://man7.org/linux/man-pages/man3/getauxval.3.html
+- SELinux `process:noatsecure`: withholding it on a domain transition makes
+  the kernel set `AT_SECURE`, which in turn makes glibc clean the
+  environment. SELinux Notebook, "Process object class".
+  https://github.com/SELinuxProject/selinux-notebook
+
 ## 9. Open questions — decisions for the operator or coordinator, ranked
+
+**Decided by the operator, 2026-11-07:**
+
+- **Q1 (layer 2):** keep the `TILLANDSIAS_*` prefix, filtered by the hard
+  block, with the namespace-hygiene guard (§4.10), as designed.
+- **Q2 (`env.get` on credential shapes):** refuse reads as well as
+  inheritance, as designed (§4.6); R2 migrates the one script.
+- **Q3 (per-call class-A literal):** refuse the call, AND record it as a
+  violation classified innocent / suspicious / unclassified, AND enforce
+  below the runtime with SELinux where the platform allows (§4.14, spec
+  `7120e541`, rows R8 and R9).
+
+The coordinator's constraints (macuahuitl, 2026-11-07) also bind: an
+explicit per-script allowlist and never a blanket pass-through, and
+credentials never inherit.
+
+Q4 and Q5 remain open with the defaults below.
+
 
 1. **Layer 2: keep `TILLANDSIAS_*` as a hard-block-filtered prefix (this
    design), or replace it with an explicit control-plane list?** The list
