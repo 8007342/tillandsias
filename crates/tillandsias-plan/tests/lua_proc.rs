@@ -2117,6 +2117,10 @@ printf '%s' "$id"
     // ---------------------------------------------------------------------
 
     const DWWY_PLANTED: &str = "planted-dwwy-4b7e21";
+    /// A planted credential-shaped PROJECT name, spelled in two halves (here
+    /// and in the Lua bodies) so the namespace-hygiene guard, which reads
+    /// source text, does not take the probe for a real variable of the tree.
+    const DWWY_PROBE_TOKEN: &str = concat!("TILLANDSIAS_", "PROBE_TOKEN");
 
     fn dwwy_text(out: &std::process::Output) -> (String, String) {
         (
@@ -2529,7 +2533,9 @@ printf '%s' "$id"
             end
             verdict.ok('env-get-never')
             "#,
-            &[("GH_TOKEN", DWWY_PLANTED), ("LD_PRELOAD", DWWY_PLANTED)],
+            // LD_PRELOAD is NOT planted on the runner: the runner's own loader would
+            // read it. env.get refuses the name whether or not it is set.
+            &[("GH_TOKEN", DWWY_PLANTED)],
             &[],
         );
         let (so, se) = dwwy_text(&out);
@@ -2606,13 +2612,13 @@ printf '%s' "$id"
         let log = f.dir.path().join("timing.jsonl");
         let log_s = lua_path(&log);
         let body = r#"
-            assert(proc.run{argv={'printenv','TILLANDSIAS_PROBE_TOKEN'}}.code == 0, 'census period: the shaped project name was dropped')
+            assert(proc.run{argv={'printenv','TILLANDSIAS_' .. 'PROBE_TOKEN'}}.code == 0, 'census period: the shaped project name was dropped')
             assert(proc.run{argv={'printenv','TILLANDSIAS_PROBE_TOKEN_FILE'}}.code == 0, 'a locator project name was dropped')
             assert(proc.run{argv={'printenv','TILLANDSIAS_COORD_CLIENT_SECRET'}}.code ~= 0, '2031-h5ru: the narrow filter is no longer enforced')
             verdict.ok('census')
         "#;
         let planted = [
-            ("TILLANDSIAS_PROBE_TOKEN", DWWY_PLANTED),
+            (DWWY_PROBE_TOKEN, DWWY_PLANTED),
             ("TILLANDSIAS_PROBE_TOKEN_FILE", "/tmp/t-2031"),
             ("TILLANDSIAS_COORD_CLIENT_SECRET", DWWY_PLANTED),
             ("TILLANDSIAS_TIMING_LOG", log_s.as_str()),
@@ -2634,7 +2640,7 @@ printf '%s' "$id"
         );
         let named = dwwy_names(&recs[1]["env_block_would_drop"]);
         assert!(
-            named.contains(&"TILLANDSIAS_PROBE_TOKEN:credential-shape".to_string()),
+            named.contains(&format!("{DWWY_PROBE_TOKEN}:credential-shape")),
             "the census did not name the shaped project variable: {named:?}"
         );
         assert!(

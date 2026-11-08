@@ -169,9 +169,45 @@ pub struct Header {
     /// widens fs.read / fs.walk beyond the repo, read-only, Observing only
     /// (1384-ddua, coordinator ruling 2026-09-30).
     pub read_env: Vec<String>,
+    /// ORDER 2031-dwwy (design 2029-39bt §4.5): `-- @env-profile NAME ...`,
+    /// profiles of child_env::ENV_INHERIT_PROFILES whose names children
+    /// inherit. Passed to children, NEVER readable (env.get reads `@env` only).
+    pub env_profiles: Vec<String>,
+    /// `-- @env-inherit NAME ...`: exact names children inherit (the one-off).
+    pub env_inherit: Vec<String>,
+    /// `note:` lines the header earned (a declared base name is a no-op).
+    pub notes: Vec<String>,
 }
 
-pub fn parse_header(src: &str) -> Header {
+impl Header {
+    /// The declared inherit set the doors read.
+    pub fn declared(&self) -> crate::child_env::Declared {
+        crate::child_env::Declared {
+            profiles: self.env_profiles.clone(),
+            inherit: self.env_inherit.clone(),
+        }
+    }
+}
+
+/// The `@` directives a header line may carry (design 2029-39bt §4.5). Any
+/// other is refused: a typo (`@env-inherits`) must not silently become
+/// today's behaviour.
+pub const HEADER_DIRECTIVES: &[&str] = &[
+    "trace",
+    "class",
+    "env",
+    "read-env",
+    "env-profile",
+    "env-inherit",
+    "research",
+    "cheatsheet",
+];
+
+/// Parse and JUDGE the header. A refusal (an unknown directive, a glob, an
+/// unknown profile, a hard-blocked, inherit-blocked or fixed declaration)
+/// names the directive or the variable and its class, never a value, and is
+/// given before any script code runs.
+pub fn parse_header(src: &str) -> Result<Header, crate::child_env::EnvRefusal> {
     let mut h = Header::default();
     for l in src.lines() {
         let t = l.trim();
@@ -180,15 +216,35 @@ pub fn parse_header(src: &str) -> Header {
         }
         let Some(c) = t.strip_prefix("--") else { break };
         let c = c.trim();
-        if let Some(v) = c.strip_prefix("@class") {
-            h.cacheable = v.trim() == "cacheable";
-        } else if let Some(v) = c.strip_prefix("@read-env") {
-            h.read_env.extend(v.split_whitespace().map(str::to_string));
-        } else if let Some(v) = c.strip_prefix("@env") {
-            h.env.extend(v.split_whitespace().map(str::to_string));
+        let Some(directive) = c.strip_prefix('@') else {
+            continue;
+        };
+        let (word, rest) = directive
+            .split_once(char::is_whitespace)
+            .unwrap_or((directive, ""));
+        let names = rest.split_whitespace().map(str::to_string);
+        match word {
+            "class" => h.cacheable = rest.trim() == "cacheable",
+            "read-env" => h.read_env.extend(names),
+            "env" => h.env.extend(names),
+            "env-profile" => h.env_profiles.extend(names),
+            "env-inherit" => h.env_inherit.extend(names),
+            w if HEADER_DIRECTIVES.contains(&w) => {}
+            w => {
+                return Err(crate::child_env::EnvRefusal {
+                    token: format!("refused:script-header:unknown-directive:{w}"),
+                    why: format!(
+                        "'@{w}' is not a header directive; known: @{}",
+                        HEADER_DIRECTIVES.join(" @")
+                    ),
+                    remedy: "fix the spelling, or move the line below the header (the first non-comment line ends it)".into(),
+                });
+            }
         }
     }
-    h
+    let (_, notes) = crate::child_env::Declared::validate(&h.env_profiles, &h.env_inherit)?;
+    h.notes = notes;
+    Ok(h)
 }
 
 /// The name a verdict-less script is refused under: the file stem.
@@ -699,6 +755,11 @@ fn register(
         env.set(
             "get",
             lua.create_function(move |_, n: String| {
+                // ORDER 2031-dwwy (operator ruling Q2): a class-A name is never
+                // readable, declared or not.
+                if let Some(refusal) = crate::child_env::env_get_refusal(&n) {
+                    return Err(LuaError::RuntimeError(refusal));
+                }
                 if !declared.iter().any(|d| d == &n) {
                     return Err(LuaError::RuntimeError(format!(
                         "env.get: '{n}' is not declared; add it to the header: -- @env {n}"
@@ -720,7 +781,18 @@ fn run_to_verdict(
     host: crate::lua_predicate::script_process::Host,
 ) -> (String, Option<String>, i32) {
     let name = script_name(path);
-    let header = parse_header(src);
+    // cli_run judged the header before anything ran; a refusal here is the
+    // same answer, kept so this function never runs an unjudged header.
+    let header = match parse_header(src) {
+        Ok(h) => h,
+        Err(r) => {
+            return (
+                r.token,
+                Some(format!("  why: {}\n  remedy: {}", r.why, r.remedy)),
+                1,
+            );
+        }
+    };
     let class = if header.cacheable {
         PredicateClass::Cacheable
     } else {
@@ -867,10 +939,54 @@ fn run_guarded(
     })
 }
 
+/// ORDER 2031-dwwy (spec 42690226, tasks 1.6 and 1.8): what the script's
+/// children inherited, by NAME only — the declared profiles, the declared
+/// names present and absent on the runner — and, under
+/// TILLANDSIAS_ENV_BLOCK_WARN=1, the census of project names the full block
+/// would drop. Never a value, never a base or namespace name.
+#[derive(Debug, Default, Clone)]
+struct EnvRecord {
+    profiles: Vec<String>,
+    inherited: Vec<String>,
+    absent: Vec<String>,
+    would_drop: Vec<String>,
+}
+
+static ENV_RECORD: std::sync::Mutex<Option<EnvRecord>> = std::sync::Mutex::new(None);
+
+fn env_record(header: &Header) -> EnvRecord {
+    let runner: Vec<_> = std::env::vars_os().collect();
+    let declared = header.declared();
+    // An empty call cannot be refused: this is the answer every door gets.
+    let env = crate::child_env::ChildEnv::build(&runner, &declared, &[]).unwrap_or_default();
+    EnvRecord {
+        profiles: declared.profiles,
+        inherited: env.inherited,
+        absent: env.absent,
+        would_drop: if crate::child_env::warn_mode() {
+            env.would_drop
+                .iter()
+                .map(|(n, c)| format!("{n}:{c}"))
+                .collect()
+        } else {
+            Vec::new()
+        },
+    }
+}
+
 /// One JSON line into TILLANDSIAS_TIMING_LOG, and only there: a runner never
-/// falls back to /tmp/tillandsias-timing.jsonl (1204-3s2s).
+/// falls back to /tmp/tillandsias-timing.jsonl (1204-3s2s). Without a timing
+/// log, the warn census goes to stderr, names only, so it is never lost.
 fn emit_timing(name: &str, line: &str, code: i32, elapsed: Duration) {
+    let env = ENV_RECORD
+        .lock()
+        .ok()
+        .and_then(|r| r.clone())
+        .unwrap_or_default();
     let Some(p) = std::env::var_os("TILLANDSIAS_TIMING_LOG") else {
+        for n in &env.would_drop {
+            eprintln!("note:env-block:would-drop:{n}");
+        }
         return;
     };
     let rec = serde_json::json!({
@@ -880,6 +996,10 @@ fn emit_timing(name: &str, line: &str, code: i32, elapsed: Duration) {
         "exit": code,
         "elapsed_ms": elapsed.as_millis() as u64,
         "read_roots": READ_ROOTS.lock().map(|r| r.clone()).unwrap_or_default(),
+        "env_profiles": env.profiles,
+        "env_inherited": env.inherited,
+        "env_absent": env.absent,
+        "env_block_would_drop": env.would_drop,
         "ts_ms": std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_millis() as u64)
@@ -1036,6 +1156,26 @@ pub fn cli_run(args: &[String]) -> ! {
         }
     };
     let t0 = Instant::now();
+    // ORDER 2031-dwwy (design 2029-39bt §4.5): the header is judged BEFORE any
+    // script code runs, so a refusal is a refusal of the script with no
+    // partial effects. It names the directive or the variable and its class.
+    let header = match parse_header(&src) {
+        Ok(h) => h,
+        Err(r) => {
+            println!("{}", r.token);
+            eprintln!("  why: {}", r.why);
+            eprintln!("  remedy: {}", r.remedy);
+            emit_timing(&name, &r.token, 1, t0.elapsed());
+            std::process::exit(1);
+        }
+    };
+    for note in &header.notes {
+        eprintln!("{note}");
+    }
+    if let Ok(mut r) = ENV_RECORD.lock() {
+        *r = Some(env_record(&header));
+    }
+    crate::child_env::install_script_declared(header.declared());
     let deadline = timeout.and_then(|d| t0.checked_add(d));
     let host = crate::lua_predicate::script_process::Host::new(deadline);
     #[cfg(unix)]
@@ -1220,11 +1360,51 @@ mod tests {
     fn header_declares_class_and_env() {
         let h = parse_header(
             "#!/usr/bin/env x\n-- @class cacheable\n-- @env HOME PATH\nlocal x = 1\n-- @env LATE\n",
-        );
+        )
+        .unwrap();
         assert!(h.cacheable);
         assert_eq!(h.env, vec!["HOME", "PATH"]);
     }
 
+    // ORDER 2031-dwwy: the two inherit directives, and every refusal is given
+    // by name. A directive AFTER the header is not a header line.
+    #[test]
+    fn header_inherit_directives_and_refusals() {
+        let h = parse_header(
+            "-- @trace order:x\n-- @env-profile podman cargo\n-- @env-inherit TOOLBOX_PATH PATH\n-- @research r\n-- @cheatsheet c\nlocal x = 1\n-- @bogus\n",
+        )
+        .unwrap();
+        assert_eq!(h.env_profiles, vec!["podman", "cargo"]);
+        assert_eq!(h.env_inherit, vec!["TOOLBOX_PATH", "PATH"]);
+        assert_eq!(h.notes, vec!["note:env-inherit:base:PATH"]);
+        assert!(h.env.is_empty(), "@env-profile is not @env");
+        for (src, token) in [
+            (
+                "-- @env-inherits X",
+                "refused:script-header:unknown-directive:env-inherits",
+            ),
+            ("-- @envv X", "refused:script-header:unknown-directive:envv"),
+            (
+                "-- @env-inherit CONTAINERS_*",
+                "refused:env-inherit:glob-not-supported:CONTAINERS_*",
+            ),
+            (
+                "-- @env-profile podmann",
+                "refused:env-inherit:unknown-profile:podmann",
+            ),
+            (
+                "-- @env-inherit LD_PRELOAD",
+                "refused:env-inherit:never:LD_PRELOAD:loader",
+            ),
+            (
+                "-- @env-inherit GIT_DIR",
+                "refused:env-inherit:inherit-blocked:GIT_DIR:redirection",
+            ),
+            ("-- @env-inherit LANG", "refused:env-inherit:fixed:LANG"),
+        ] {
+            assert_eq!(parse_header(src).unwrap_err().token, token, "{src}");
+        }
+    }
     #[test]
     fn durations_parse() {
         assert_eq!(parse_duration("200ms"), Some(Duration::from_millis(200)));

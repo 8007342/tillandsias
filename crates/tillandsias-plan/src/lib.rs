@@ -86,6 +86,8 @@ pub use tillandsias_msg::shape as msg_shape;
 /// ORDER 1506-nvqt — the Maildir-shaped lane store behind `tillandsias-plan
 /// msg`; no networking, no ack verb (the ack is the infrastructure's).
 pub mod msg_store;
+// ORDER 2031-dwwy: THE one child-environment builder every door calls.
+pub mod child_env;
 pub mod run_verb;
 // ORDER 1384-bqhy: `script run` (the Lua decider runner) and the one classify.
 pub mod script_run;
