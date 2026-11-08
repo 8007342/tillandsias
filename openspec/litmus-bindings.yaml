@@ -593,6 +593,7 @@ specs:
   - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:git-mirror-ready-before-retry-push
   - litmus:git-mirror-warm-start-keeps-tracking-refs
+  - litmus:git-mirror-vault-sink-wait-is-an-event
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
   - litmus:mirror-relay-state
