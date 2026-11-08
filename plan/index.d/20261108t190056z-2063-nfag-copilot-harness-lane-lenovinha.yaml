@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-github-copilot-harness-lane-at-parity-with-the-codex-claude-and-antigravity-lanes
+    order: 2063-nfag
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    size: M
+    capability_tags: [forge, lane, harness, vault, cli, tray, egress, mcp]
+    estimated_hours: 8
+    title: |
+      A GitHub Copilot harness lane at parity with the codex, claude and antigravity lanes: tillandsias --copilot <project>, --cloud owner/repo --copilot and a tray menu item launch GitHub's official copilot CLI in the forge; tillandsias --copilot-login signs in by device flow into Vault
+    context: |
+      Operator request 2026-11-08, relayed by coordinator macuahuitl-fedora. The operator reports that Copilot has tokens available. Parity reference: the existing lanes (entrypoint-forge-codex.sh, entrypoint-forge-claude.sh, entrypoint-forge-antigravity.sh; --codex-login and --claude-login into Vault). The release pin follows #999 (2027-e2cf): the latest upstream release, version-held and digest-verified with rollback, and each lane refreshes only its own harness. The policy hook from #1008 (2028-j4a7) refuses agent-run sign-in flows; --copilot-login joins that list. Before pinning, the install channel and licence of the copilot CLI must be checked, and the licence label must state the real upstream licence.
+    exit_criteria:
+      - 'RED FIRST: tillandsias --copilot <project> and --cloud owner/repo --copilot parse to the copilot lane (a CLI fixture fails before the flag exists); a tray menu item launches the same lane'
+      - 'tillandsias --copilot-login runs a device-flow sign-in whose credential is stored only in Vault, never at rest in plaintext, the same pattern as --codex-login and --claude-login'
+      - 'RED FIRST: the #1008 command policy refuses an agent-run copilot login (a hook fixture fails before the entry is added)'
+      - 'images/default/entrypoint-forge-copilot.sh refreshes only the copilot harness; RED FIRST: a per-lane refresh fixture shows that launching another lane does not refresh copilot, and that copilot does not refresh the others'
+      - 'the copilot CLI is installed from its official channel at the latest release, version-checked the way #999 does it, with the upstream licence recorded'
+      - 'an MCP config overlay, the egress hosts in the providers tier, the lane registry entry and the docs'
+    verifiable_closure: 'the three red-first fixtures (CLI flag, hook refusal, per-lane refresh) red before and green after, plus one live --copilot launch on Linux whose agent answers a turn after an operator-run --copilot-login'
+    unscoreable: 'none.'
+    next_action: 'Check the copilot CLI install channel, release feed and licence; then write the CLI-flag fixture red.'
+    provenance: operator 2026-11-08 via coordinator macuahuitl-fedora; filed by lenovinha.
+    depends_on: []
+    related: [2027-e2cf, 2028-j4a7]
+    events:
+      - {type: filed, ts: '2026-11-08T19:00:56Z', host: lenovinha, summary: filed p2 ready; operator feature; picked up after 2061-cpnt}
