@@ -2672,15 +2672,22 @@ _gs_exec_step() {
     local _gs_tee
     exec 8> >(tee "$_step_out")
     _gs_tee=$!
+    # 2059-s42d: point stdout/stderr at the tee with `exec`, never as a
+    # redirection on the `_run` call. bash 3.2 (darwin's /bin/bash) applies a
+    # function call's `8>&-` by SAVING fd 8 to a high fd (12) without
+    # close-on-exec, so every child, even a job redirected to /dev/null, still
+    # held the step's pipe and the gate refused it. `exec` saves nothing.
+    # fds 9/6 keep the gate's own stdout/stderr to restore after.
+    exec 9>&1 6>&2 1>&8 2>&1 8>&-
     if [ -n "$STEP_LUA" ]; then
         # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
         # preflight-door contract (1570-mxcg), so a fixture that must ask the
         # plan binary finds one in the land queue's clean env too.
-        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" >&8 2>&1 8>&- || _step_rc=$?
+        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" || _step_rc=$?
     else
-        _run bash "$_gs_root/$STEP_SCRIPT" >&8 2>&1 8>&- || _step_rc=$?
+        _run bash "$_gs_root/$STEP_SCRIPT" || _step_rc=$?
     fi
-    exec 8>&-
+    exec 1>&9 2>&6 9>&- 6>&-
     _gs_await_step_pipe "$_gs_tee"
 }
 
@@ -2711,6 +2718,18 @@ _gs_await_step_pipe() {
             _seen="$_seen$_p "
             _holders="${_holders:+$_holders }$_p($(tr '\0' ' ' < "/proc/$_p/cmdline" 2>/dev/null | cut -c1-60))"
         done
+    elif command -v lsof >/dev/null 2>&1; then
+        # 2059-s42d: no /proc (darwin). lsof names tee's read end by the
+        # address of its peer (`n->0x…`); every writer holds an fd whose
+        # device IS that address. Only this user's processes can hold it.
+        _pipe="$(lsof -nP -a -p "$_tee" -d 0 -F n 2>/dev/null | sed -n 's/^n->//p' | head -n 1)"
+        if [ -n "$_pipe" ]; then
+            for _p in $(lsof -nP -u "$(id -u)" -F pd 2>/dev/null |
+                awk -v want="d$_pipe" '/^p/ { p = substr($0, 2) } $0 == want { print p }' | sort -u); do
+                [ "$_p" = "$_tee" ] && continue
+                _holders="${_holders:+$_holders }$_p($(ps -o command= -p "$_p" 2>/dev/null | cut -c1-60))"
+            done
+        fi
     fi
     printf 'refused:gate-step:background-job-holds-pipe:%s holders=%s\n' \
         "${STEP_SCRIPT:-$STEP_LUA}" "${_holders:-unknown}" | tee -a "$_step_out" >&2
