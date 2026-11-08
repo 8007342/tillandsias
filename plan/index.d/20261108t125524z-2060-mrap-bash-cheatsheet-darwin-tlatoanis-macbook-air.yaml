@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: bash-cheatsheet-records-the-darwin-bash-3-2-saved-fd-leak-and-the-bsd-xargs-and-wc-differences
+    order: 2060-mrap
+    status: ready
+    kind: docs
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [docs, macos, portability]
+    estimated_hours: 0.5
+    title: "Record the darwin bash 3.2 saved-fd leak and the BSD xargs -a / wc -l padding pitfalls in cheatsheets/languages/bash.md"
+    context: "Three darwin shell faults found 2026-11-08 on tlatoanis-macbook-air will bite other scripts: bash 3.2 leaking a function-call redirection's saved fd into children (2059-s42d), BSD xargs lacking -a, and BSD wc -l padding its count (2056-29t4). Asked for by macuahuitl-fedora."
+    exit_criteria:
+      - "cheatsheets/languages/bash.md names all three, each with its measured symptom and a portable form."
+    verifiable_closure: "The bash cheatsheet's pitfalls list carries the three darwin entries."
+    unscoreable: 'none.'
+    next_action: "Land the cheatsheet edit."
+    provenance: "tlatoanis-macbook-air claude, 2026-11-08."
+    events:
+    - type: filed
+      ts: '2026-11-08T12:55:24Z'
+      host: tlatoanis-macbook-air
+      summary: "filed ready: the bash cheatsheet records three darwin shell pitfalls"

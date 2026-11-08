@@ -36,6 +36,13 @@
     {
       "brief": "Drag-and-drop page builder for plain HTML and CSS sites.",
       "edits": "The page's .html and .css files directly; every save is a commit.",
+      "egress": [
+        "siblings",
+        "registries",
+        "assets",
+        "providers",
+        "research"
+      ],
       "entry": [
         "/usr/local/bin/studio-grapesjs"
       ],
@@ -70,6 +77,13 @@
     {
       "brief": "Content editor for markdown sites (Hugo, Jekyll, Astro, 11ty).",
       "edits": "Markdown files and their frontmatter under the content folders, plus uploads under static/; scaffolds admin/config.yml when it is missing.",
+      "egress": [
+        "siblings",
+        "registries",
+        "assets",
+        "providers",
+        "research"
+      ],
       "entry": [
         "/usr/local/bin/studio-decap"
       ],
@@ -105,6 +119,13 @@
     {
       "brief": "Visual content editing for Next.js, Astro and Hugo, in local mode.",
       "edits": "Content files under content/ (markdown, MDX or JSON) and the tina/config schema.",
+      "egress": [
+        "siblings",
+        "registries",
+        "assets",
+        "providers",
+        "research"
+      ],
       "entry": [
         "/usr/local/bin/studio-tina"
       ],
@@ -138,6 +159,13 @@
     {
       "brief": "Visual editor for React sites, built from the site's own components.",
       "edits": "Only the page layout data (which components, in what order, with what props) under .tillandsias/studio/puck/; never component source.",
+      "egress": [
+        "siblings",
+        "registries",
+        "assets",
+        "providers",
+        "research"
+      ],
       "entry": [
         "/usr/local/bin/studio-puck"
       ],
@@ -168,6 +196,13 @@
     {
       "brief": "Visual editor for Next.js and Tailwind. Needs a CodeSandbox account: its projects run in a cloud sandbox, not offline in the forge (measured, 1865-dn5h).",
       "edits": "The app's own source under app/, src/ and components/ (not available offline in the forge).",
+      "egress": [
+        "siblings",
+        "registries",
+        "assets",
+        "providers",
+        "research"
+      ],
       "entry": [
         "/usr/local/bin/studio-onlook"
       ],
@@ -198,6 +233,11 @@
     {
       "brief": "Node-based image generation on the local models, outputs to the lane's scratch volume.",
       "edits": "Nothing in the checkout: outputs land in the lane's scratch volume (/work/tmp/imagegen), and the agent commits the ones the user keeps.",
+      "egress": [
+        "siblings",
+        "model-hubs",
+        "assets"
+      ],
       "entry": [],
       "frameworks": [],
       "good_for": [

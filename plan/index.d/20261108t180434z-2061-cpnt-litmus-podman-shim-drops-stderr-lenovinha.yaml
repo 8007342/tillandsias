@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-podman-shim-forwards-a-bounded-podman-calls-stderr-as-real-podman-does
+    order: 2061-cpnt
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, podman, shim, testing]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-podman-cli/src/lib.rs
+    title: |
+      Under the litmus runtime every podman call goes through tillandsias-podman-cli raw, whose bounded path returns only the captured stdout and drops stderr, so podman logs of a container that logs to stderr (squid) reads near-empty and litmus:proxy-tier-ports-live reports could-not-run (squid never listened on 3131) while the same script passes 8/8 run directly
+    context: |
+      MEASURED on lenovinha 2026-11-08 at work/2041-i3nk 400cda2af. A throwaway container that prints one stdout and one stderr line: real podman logs returns both lines; the shim (target/litmus-runtime/bin/podman) returns only the stdout line. raw() in crates/tillandsias-podman-cli/src/lib.rs maps a successful execute to output.stdout and never writes output.stderr. 2024-82vw fixed the same loss for an attached exec only. Squid logs to stderr, so test-proxy-tier-ports-live.lua never sees "Accepting SSL bumped" under the runner. The script passes 8/8 run directly, through both the PATH plan binary and the worktree one. Separately, a stale target/debug/tillandsias-podman-cli made the shim refuse every call (podman-cli-stale) until rebuilt, which the script reports as podman is not on this host.
+    exit_criteria:
+      - 'RED FIRST: a test runs the shim raw path against a podman stub that writes one line to stdout and one to stderr and exits 0; pre-fix the stderr line is lost'
+      - 'post-fix the bounded raw path writes the captured stderr to its own stderr on success (as real podman would), and stdout is unchanged'
+      - 'NEGATIVE CONTROL: a failing call still reports its error once (stderr not printed twice)'
+      - 'litmus:proxy-tier-ports-live passes 8/8 under scripts/run-litmus-test.sh on a Linux host'
+    verifiable_closure: 'the stub arm red before and green after, and litmus:proxy-tier-ports-live 8/8 under the runner'
+    unscoreable: 'none.'
+    provenance: lenovinha 2026-11-08, found re-running the proxy litmus for the #1019 eviction.
+    depends_on: []
+    related: [2041-i3nk, 2024-82vw]
+    events:
+      - {type: filed, ts: '2026-11-08T18:04:34Z', host: lenovinha, summary: filed p2 ready; the shim drops stderr of bounded podman calls}

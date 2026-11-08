@@ -40,8 +40,9 @@ for i, s in ipairs(reg.studios or {}) do
     end
     -- 2026-ggu8: affordances are what an agent chooses by when no option is
     -- [Recommended], so a studio without them cannot be chosen well. Each is
-    -- required and non-empty.
-    for _, k in ipairs({ "good_for", "not_for" }) do
+    -- required and non-empty. 2041-jb57: so is `egress`, the studio's egress
+    -- tiers (check-egress-declarations.lua judges the tier names).
+    for _, k in ipairs({ "good_for", "not_for", "egress" }) do
         if type(s[k]) ~= "table" or table.is_empty(s[k]) then
             verdict.emit("refused:studio-registry:studio-" .. i .. ":" .. k .. "-missing-or-empty", 1)
         end
