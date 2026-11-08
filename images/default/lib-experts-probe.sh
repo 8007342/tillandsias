@@ -59,33 +59,50 @@ tillandsias_experts_probe() {
         return 0
     fi
 
-    # A binary predating this subcommand must be named as such, not read as a
-    # dead endpoint — the stale-artifact signal order 569 established.
-    if ! "$_tep_bin" capabilities 2>/dev/null | grep -qx 'experts-probe'; then
-        TILLANDSIAS_EXPERTS_ADVICE="probe-subcommand-missing: this tillandsias-plan predates experts-probe (718-ja7g) — rebuild it; tier liveness is UNKNOWN, not absent"
+    # ORDER 2049-krk2 (openspec forge-lua-helpers D3.2): the capabilities
+    # check, the probe and the field split are lua/experts-probe.lua on
+    # `script run --helper`, run BY the binary being probed. The module sits
+    # beside this file (images/default/lua/ in a checkout,
+    # /usr/local/lib/tillandsias/lua/ in the image). No second implementation:
+    # a missing module, or a binary too old to run a helper, is named.
+    _tep_lua=""
+    for _tep_c in "${BASH_SOURCE[0]%/*}/lua/experts-probe.lua" /usr/local/lib/tillandsias/lua/experts-probe.lua; do
+        if [ -r "$_tep_c" ]; then _tep_lua="$_tep_c"; break; fi
+    done
+    if [ -z "$_tep_lua" ]; then
+        TILLANDSIAS_EXPERTS_ADVICE="probe-helper-missing: lua/experts-probe.lua is absent from this image — tier liveness is UNKNOWN, not absent"
         TILLANDSIAS_EXPERTS_LINE="experts_probe: l0=ready l1=unknown l2=unknown embed=? synth=? advice=${TILLANDSIAS_EXPERTS_ADVICE}"
         return 0
     fi
 
-    _tep_out="$("$_tep_bin" experts-probe 2>/dev/null | head -1)"
-    case "$_tep_out" in
+    # The RUNNER is the tillandsias-plan on PATH; the PROBED binary is the one
+    # resolved above (often the same file). Kept apart so a stale probed binary
+    # is still named probe-subcommand-missing / probe-no-verdict by the module.
+    _tep_runner="$(command -v tillandsias-plan 2>/dev/null || true)"
+    [ -n "$_tep_runner" ] || _tep_runner="$_tep_bin"
+    _tep_vals="$("$_tep_runner" script run --helper "$_tep_lua" -- "$_tep_bin" 2>/dev/null)" || _tep_vals=""
+    # Four lines in a fixed order (the module's header): line, l1, l2, advice.
+    {
+        IFS= read -r _tep_line
+        IFS= read -r _tep_l1
+        IFS= read -r _tep_l2
+        IFS= read -r _tep_advice
+    } <<EOF
+$_tep_vals
+EOF
+    case "$_tep_line" in
         experts_probe:*) : ;;
         *)
-            TILLANDSIAS_EXPERTS_ADVICE="probe-no-verdict: experts-probe produced no parseable line"
+            # A RUNNER that cannot run a --helper predates 2049-w2q6: the
+            # stale-artifact signal, named like the missing subcommand.
+            TILLANDSIAS_EXPERTS_ADVICE="probe-subcommand-missing: ${_tep_runner} cannot run script run --helper (2049-w2q6) — rebuild it; tier liveness is UNKNOWN, not absent"
             TILLANDSIAS_EXPERTS_LINE="experts_probe: l0=ready l1=unknown l2=unknown embed=? synth=? advice=${TILLANDSIAS_EXPERTS_ADVICE}"
             return 0
             ;;
     esac
-
-    TILLANDSIAS_EXPERTS_LINE="$_tep_out"
-    # Field extraction without a JSON parser, matching the field=value idiom
-    # lib-inference-state.sh already emits.
-    TILLANDSIAS_EXPERTS_L1="$(printf '%s' "$_tep_out" | sed -n 's/.*[ ]l1=\([^ ]*\).*/\1/p')"
-    TILLANDSIAS_EXPERTS_L2="$(printf '%s' "$_tep_out" | sed -n 's/.*[ ]l2=\([^ ]*\).*/\1/p')"
-    # advice runs to end-of-line: it is a sentence and may contain spaces.
-    TILLANDSIAS_EXPERTS_ADVICE="$(printf '%s' "$_tep_out" | sed -n 's/.*[ ]advice=\(.*\)$/\1/p')"
-    [ -n "$TILLANDSIAS_EXPERTS_L1" ] || TILLANDSIAS_EXPERTS_L1="unknown"
-    [ -n "$TILLANDSIAS_EXPERTS_L2" ] || TILLANDSIAS_EXPERTS_L2="unknown"
-    [ -n "$TILLANDSIAS_EXPERTS_ADVICE" ] || TILLANDSIAS_EXPERTS_ADVICE="-"
+    TILLANDSIAS_EXPERTS_LINE="$_tep_line"
+    TILLANDSIAS_EXPERTS_L1="${_tep_l1:-unknown}"
+    TILLANDSIAS_EXPERTS_L2="${_tep_l2:-unknown}"
+    TILLANDSIAS_EXPERTS_ADVICE="${_tep_advice:--}"
     return 0
 }
