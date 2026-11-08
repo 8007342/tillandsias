@@ -39,9 +39,9 @@ const ROUTER_CONTAINER: &str = "tillandsias-router";
 /// The per-window forwarder (`node -e`, from the chromium-framework image).
 const FORWARDER_JS: &str = include_str!("browser_window_forwarder.js");
 /// The window's entrypoint: Chromium under the CDP pipe relay (1655-urz9).
-const CDP_RELAY_JS: &str = include_str!("browser_window_cdp_relay.js");
+const CDP_RELAY_JS: &str = crate::WINDOW_CDP_RELAY_JS;
 /// Where the window container sees its CDP socket directory.
-const CDP_DIR_IN_CONTAINER: &str = "/run/tillandsias-cdp";
+const CDP_DIR_IN_CONTAINER: &str = crate::WINDOW_CDP_DIR_IN_CONTAINER;
 /// The router's preview TLS listener, the forwarder's only upstream.
 const ROUTER_TLS_PORT: &str = "8443";
 

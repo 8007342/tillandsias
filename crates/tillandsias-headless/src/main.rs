@@ -19171,23 +19171,117 @@ impl BrowserDisplayContext {
     }
 }
 
+/// A window's entrypoint: Chromium under the CDP pipe relay (order 1655-urz9),
+/// shared by browser.open windows and the OpenCode Web and studio windows.
+pub(crate) const WINDOW_CDP_RELAY_JS: &str = include_str!("browser_window_cdp_relay.js");
+/// Where a window container sees its CDP socket directory.
+pub(crate) const WINDOW_CDP_DIR_IN_CONTAINER: &str = "/run/tillandsias-cdp";
+
+/// The OpenCode Web (or studio) window (order 2046-6em7). It opens on
+/// about:blank under the CDP pipe relay, exactly as a browser.open window
+/// does, and the launcher hands it the login page over CDP
+/// ([`navigate_window_to_login`]). The login data URL embeds the session OTP,
+/// which the router re-issues as the live cookie, so it must never be a
+/// container argument: those are readable for the session's whole life in
+/// `podman inspect` and in /proc/<pid>/cmdline. `TILLANDSIAS_CDP_DETACH=keep`
+/// keeps Chromium running after the launcher hands over the login and leaves.
 fn build_opencode_web_browser_spec(
-    app_url: &str,
     version: &str,
     profile_dir: &Path,
     certs_dir: &Path,
     display: &BrowserDisplayContext,
     project_name: &str,
+    cdp_dir: &Path,
 ) -> Result<ContainerSpec, String> {
     let container_name = format!("tillandsias-browser-{project_name}");
-    build_project_browser_spec(
-        app_url,
+    let entrypoint = serde_json::json!(["node", "-e", WINDOW_CDP_RELAY_JS, "--"]).to_string();
+    Ok(build_project_browser_spec(
+        "about:blank",
         version,
         profile_dir,
         certs_dir,
         display,
         &container_name,
+    )?
+    .entrypoint(entrypoint)
+    .volume(
+        cdp_dir.display().to_string(),
+        WINDOW_CDP_DIR_IN_CONTAINER,
+        MountMode::ReadWrite,
     )
+    .env(
+        "TILLANDSIAS_CDP_SOCKET",
+        format!("{WINDOW_CDP_DIR_IN_CONTAINER}/cdp.sock"),
+    )
+    .env("TILLANDSIAS_CDP_DETACH", "keep"))
+}
+
+/// How long the window's relay has to appear, and its page to attach.
+const WINDOW_LOGIN_BUDGET: Duration = Duration::from_secs(30);
+
+/// Order 2046-6em7: load the login page into a freshly started window over
+/// its CDP relay, the mechanism browser.open uses, so the OTP travels only
+/// on the window's private socket. Waits for the first page target, attaches
+/// to it (flattened) and navigates. A navigation error is a refusal, never a
+/// silently unauthenticated window. The caller closes the connection after;
+/// the relay (`TILLANDSIAS_CDP_DETACH=keep`) leaves Chromium running.
+fn navigate_window_to_login(
+    conn: &tillandsias_browser_mcp::cdp_client::CdpConnection,
+    login_url: &str,
+    budget: Duration,
+) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + budget;
+    let target = loop {
+        let targets = conn
+            .call(None, "Target.getTargets", serde_json::json!({}))
+            .map_err(|e| format!("window CDP: Target.getTargets failed: {e}"))?;
+        let page = targets
+            .get("targetInfos")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|infos| {
+                infos
+                    .iter()
+                    .find(|t| t.get("type").and_then(serde_json::Value::as_str) == Some("page"))
+            })
+            .and_then(|t| t.get("targetId").and_then(serde_json::Value::as_str))
+            .map(str::to_string);
+        match page {
+            Some(id) => break id,
+            None if std::time::Instant::now() >= deadline => {
+                return Err(format!("window CDP: no page target within {budget:?}"));
+            }
+            None => std::thread::sleep(Duration::from_millis(100)),
+        }
+    };
+    let attached = conn
+        .call(
+            None,
+            "Target.attachToTarget",
+            serde_json::json!({ "targetId": target, "flatten": true }),
+        )
+        .map_err(|e| format!("window CDP: Target.attachToTarget failed: {e}"))?;
+    let session = attached
+        .get("sessionId")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("window CDP: Target.attachToTarget returned no sessionId")?
+        .to_string();
+    let navigated = conn
+        .call(
+            Some(&session),
+            "Page.navigate",
+            serde_json::json!({ "url": login_url }),
+        )
+        // The error text never quotes the URL: it carries the OTP.
+        .map_err(|e| format!("window CDP: Page.navigate to the login page failed: {e}"))?;
+    match navigated
+        .get("errorText")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some(err) if !err.is_empty() => {
+            Err(format!("window CDP: the login page did not load: {err}"))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn build_project_browser_spec(
@@ -19653,13 +19747,27 @@ fn launch_opencode_web_browser(
     let project_label = router_host_label(project_name);
     let otp = tillandsias_otp::issue_session(&project_label);
     let login_url = tillandsias_otp::build_login_data_url(&url, &otp);
+    let container_name = format!("tillandsias-browser-{project_name}");
+    // Order 2046-6em7: the window's CDP socket dir, 0700, made here and
+    // mounted into this window only (as browser.open's `cdp_dir`).
+    let cdp_dir = profile_root.join(format!("{container_name}.cdp"));
+    let _ = std::fs::remove_dir_all(&cdp_dir);
+    let mut cdp_dir_builder = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt as _;
+        cdp_dir_builder.mode(0o700);
+    }
+    cdp_dir_builder
+        .create(&cdp_dir)
+        .map_err(|e| format!("Failed to create window CDP dir {:?}: {e}", cdp_dir))?;
     let spec = build_opencode_web_browser_spec(
-        &login_url,
         version,
         &profile_path,
         certs_dir,
         &display,
         project_name,
+        &cdp_dir,
     )?;
     let args = spec.build_run_args();
 
@@ -19697,8 +19805,31 @@ fn launch_opencode_web_browser(
     emit_opencode_web_event(project_name, "browser", "session_ready", Some(&url))?;
 
     emit_opencode_web_event(project_name, "browser", "launch", Some("podman-run"))?;
-    let container_name = format!("tillandsias-browser-{project_name}");
-    let result = rt_block_on_podman_run(args, &container_name, "browser", debug);
+    let mut result = rt_block_on_podman_run(args, &container_name, "browser", debug);
+    if result.is_ok() {
+        // Order 2046-6em7: the login travels over the window's CDP socket,
+        // never its argv. A window that cannot be logged in is removed, not
+        // left on about:blank.
+        emit_opencode_web_event(project_name, "browser", "login", Some("cdp"))?;
+        let login = tillandsias_browser_mcp::cdp_client::CdpConnection::connect(
+            &cdp_dir.join("cdp.sock"),
+            WINDOW_LOGIN_BUDGET,
+        )
+        .map_err(|e| format!("window CDP: {e}"))
+        .and_then(|conn| {
+            let r = navigate_window_to_login(&conn, &login_url, WINDOW_LOGIN_BUDGET);
+            conn.shutdown();
+            r
+        });
+        if let Err(err) = login {
+            let _ = emit_opencode_web_event(project_name, "browser", "login_failed", Some(&err));
+            let mut rm = podman_command();
+            rm.args(["rm", "-f", &container_name]);
+            let _ =
+                rm.output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+            result = Err(err);
+        }
+    }
     if result.is_ok() {
         emit_opencode_web_event(project_name, "browser", "launched", Some("gui"))?;
 
@@ -19707,6 +19838,7 @@ fn launch_opencode_web_browser(
         // The browser is now running detached; this task waits for it to exit,
         // then removes the container and the host-side profile dir.
         let profile_cleanup_path = profile_path.clone();
+        let cdp_cleanup_path = cdp_dir.clone();
         std::thread::spawn(move || {
             let rt = match tokio::runtime::Runtime::new() {
                 Ok(r) => r,
@@ -19719,6 +19851,7 @@ fn launch_opencode_web_browser(
                 eprintln!("[tillandsias] Browser cleanup error: {e}");
             }
             let _ = std::fs::remove_dir_all(&profile_cleanup_path);
+            let _ = std::fs::remove_dir_all(&cdp_cleanup_path);
         });
     } else if let Err(ref err) = result {
         let _ = emit_opencode_web_event(project_name, "browser", "launch_failed", Some(err));
@@ -35983,19 +36116,13 @@ esac
             xdg_runtime_dir: Some(runtime.path().to_path_buf()),
             audio_socket: None,
         };
-        let token = [7u8; 32];
-        let expected_app_url = tillandsias_otp::build_login_data_url(
-            "http://opencode.visual-chess.localhost/",
-            &token,
-        );
-
         let spec = build_opencode_web_browser_spec(
-            &expected_app_url,
             "1.2.3",
             &profile_dir,
             &certs_dir,
             &display,
             "visual-chess",
+            Path::new("/tmp/tillandsias/browser/tillandsias-browser-visual-chess.cdp"),
         )
         .expect("browser spec");
         let args = spec.build_run_args();
@@ -36030,9 +36157,10 @@ esac
             args.iter()
                 .any(|arg| arg == "tillandsias-chromium-framework:v1.2.3")
         );
+        // 2046-6em7: the window opens blank; the login arrives over CDP.
         assert!(
-            args.iter()
-                .any(|arg| arg == &format!("--app={expected_app_url}"))
+            args.iter().any(|arg| arg == "--app=about:blank"),
+            "{args:?}"
         );
         assert!(
             args.iter()
@@ -36271,14 +36399,15 @@ esac
         );
     }
 
-    /// The OpenCode Web / studio window's run argv carries the login data URL,
-    /// whose form holds the session OTP (also the session cookie). The argv
-    /// the shared podman layer redacts for failure messages (stderr and the
-    /// `launch_failed` OpenCode Web event) must hold neither the OTP nor the
-    /// data URL. Built from the production inputs: a real OTP, the real
-    /// login URL builder and the real window spec.
+    /// Order 2046-6em7 (supersedes the 2045-eqx3 redaction premise here): the
+    /// OpenCode Web / studio window's podman argv and env carry NEITHER the
+    /// session OTP (also the live cookie) NOR any data: URL, raw or redacted,
+    /// because the login page reaches the window over its CDP relay, the
+    /// browser.open mechanism. Built from the production inputs: a real OTP,
+    /// the real login URL builder and the real window spec. Pre-fix this
+    /// FAILED: the login data URL was the window's `--app=`.
     #[test]
-    fn opencode_web_window_argv_redacts_the_login_otp() {
+    fn opencode_web_window_argv_and_env_never_carry_the_login_otp() {
         let runtime = tempfile::tempdir().expect("runtime dir");
         std::fs::write(runtime.path().join("wayland-0"), b"").expect("socket stand-in");
         let display = BrowserDisplayContext {
@@ -36290,30 +36419,191 @@ esac
         let otp = tillandsias_otp::issue_session("visual-chess");
         let otp_text = tillandsias_otp::format_cookie_value(&otp);
         let login_url = tillandsias_otp::build_login_data_url(url, &otp);
+        let payload = login_url
+            .strip_prefix("data:text/html;base64,")
+            .expect("login URL is a base64 data URL");
+        // Premise: the login page really carries the secret, so its absence
+        // from the argv below is a finding and not a vacuous pass.
+        use base64::Engine as _;
+        let page = String::from_utf8(
+            base64::engine::general_purpose::STANDARD
+                .decode(payload)
+                .expect("login page is base64"),
+        )
+        .expect("login page is UTF-8");
+        assert!(
+            page.contains(&otp_text),
+            "premise: the login page holds the OTP"
+        );
+
+        let cdp_dir = Path::new("/tmp/tillandsias/browser/tillandsias-browser-visual-chess.cdp");
         let spec = build_opencode_web_browser_spec(
-            &login_url,
             "1.2.3",
             Path::new("/tmp/tillandsias/browser/test-profile"),
             Path::new("/tmp/tillandsias/ca"),
             &display,
             "visual-chess",
+            cdp_dir,
         )
         .expect("a Wayland session builds a browser spec");
         let mut full = vec!["run".to_string()];
         full.extend(spec.build_run_args());
-        // Premise: the secret really is in the argv, base64-encoded in --app.
-        let payload = login_url
-            .strip_prefix("data:text/html;base64,")
-            .expect("login URL is a base64 data URL");
+        let redacted = tillandsias_podman::backend::redact_argv(&full);
+        for argv in [&full, &redacted] {
+            for a in argv.iter() {
+                assert!(!a.contains(&otp_text), "OTP in a window argument");
+                assert!(!a.contains(payload), "login page in a window argument");
+                assert!(!a.contains("data:"), "a data: URL in a window argument");
+            }
+        }
+        // The window is driven over CDP, as browser.open's windows are: the
+        // pipe relay is its entrypoint, its socket dir is mounted, and the
+        // relay keeps Chromium after the launcher's login hand-over.
+        let joined = full.join(" ");
+        assert!(full.iter().any(|a| a == "--app=about:blank"), "{joined}");
+        assert!(joined.contains("--remote-debugging-pipe"), "{joined}");
+        assert!(!joined.contains("--remote-debugging-port"), "{joined}");
         assert!(
-            full.iter().any(|a| a.contains(payload)),
-            "premise: the window argv carries the login data URL"
+            joined.contains(&format!(
+                "{}:{WINDOW_CDP_DIR_IN_CONTAINER}",
+                cdp_dir.display()
+            )),
+            "{joined}"
         );
-        let redacted = tillandsias_podman::backend::redact_argv(&full).join(" ");
-        assert!(!redacted.contains(payload), "login data URL leaked");
-        assert!(!redacted.contains(&otp_text), "OTP leaked");
-        assert!(redacted.contains("--app=data:<redacted>"), "{redacted}");
-        assert!(redacted.contains("--ozone-platform=wayland"), "{redacted}");
+        assert!(
+            has_arg(
+                &full,
+                &format!("TILLANDSIAS_CDP_SOCKET={WINDOW_CDP_DIR_IN_CONTAINER}/cdp.sock")
+            ),
+            "{joined}"
+        );
+        assert!(has_arg(&full, "TILLANDSIAS_CDP_DETACH=keep"), "{joined}");
+        assert!(joined.contains("--ozone-platform=wayland"), "{joined}");
+    }
+
+    /// A stand-in Chromium on one end of a socket pair: answers the three
+    /// commands [`navigate_window_to_login`] sends, the first getTargets with
+    /// no page yet, and records every (method, sessionId, params).
+    #[cfg(unix)]
+    type SeenCdp =
+        std::sync::Arc<std::sync::Mutex<Vec<(String, Option<String>, serde_json::Value)>>>;
+
+    #[cfg(unix)]
+    fn fake_window_cdp(
+        navigate_error: Option<&'static str>,
+    ) -> (tillandsias_browser_mcp::cdp_client::CdpConnection, SeenCdp) {
+        use std::io::{BufRead as _, BufReader, Write as _};
+        let (ours, theirs) = std::os::unix::net::UnixStream::pair().expect("socket pair");
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = std::sync::Arc::clone(&seen);
+        std::thread::spawn(move || {
+            let mut writer = theirs.try_clone().expect("clone");
+            let mut reader = BufReader::new(theirs);
+            let mut asked_targets = 0;
+            loop {
+                let mut frame = Vec::new();
+                if reader.read_until(0, &mut frame).unwrap_or(0) == 0 {
+                    return;
+                }
+                frame.pop();
+                let msg: serde_json::Value = serde_json::from_slice(&frame).expect("json frame");
+                let method = msg["method"].as_str().unwrap_or("").to_string();
+                let session = msg["sessionId"].as_str().map(str::to_string);
+                log.lock()
+                    .unwrap()
+                    .push((method.clone(), session, msg["params"].clone()));
+                let result = match method.as_str() {
+                    "Target.getTargets" => {
+                        asked_targets += 1;
+                        if asked_targets == 1 {
+                            serde_json::json!({ "targetInfos": [] })
+                        } else {
+                            serde_json::json!({ "targetInfos": [
+                                { "targetId": "B", "type": "browser" },
+                                { "targetId": "P1", "type": "page" }
+                            ] })
+                        }
+                    }
+                    "Target.attachToTarget" => serde_json::json!({ "sessionId": "S1" }),
+                    "Page.navigate" => match navigate_error {
+                        Some(e) => serde_json::json!({ "frameId": "F", "errorText": e }),
+                        None => serde_json::json!({ "frameId": "F", "loaderId": "L1" }),
+                    },
+                    _ => serde_json::json!({}),
+                };
+                let mut out =
+                    serde_json::to_vec(&serde_json::json!({ "id": msg["id"], "result": result }))
+                        .expect("encode");
+                out.push(0);
+                if writer.write_all(&out).is_err() {
+                    return;
+                }
+            }
+        });
+        let conn = tillandsias_browser_mcp::cdp_client::CdpConnection::from_stream(ours)
+            .expect("cdp connection");
+        (conn, seen)
+    }
+
+    /// Order 2046-6em7: the login page reaches the window as ONE Page.navigate
+    /// on the page's own flattened session, after waiting for the page to
+    /// exist, and a navigation error is a refusal whose text never quotes the
+    /// URL (it carries the OTP).
+    #[cfg(unix)]
+    #[test]
+    fn the_window_login_is_one_page_navigate_over_cdp_and_a_failure_refuses() {
+        let otp = tillandsias_otp::issue_session("visual-chess");
+        let otp_text = tillandsias_otp::format_cookie_value(&otp);
+        let login_url = tillandsias_otp::build_login_data_url(
+            "http://opencode.visual-chess.localhost:8080/",
+            &otp,
+        );
+        let (conn, seen) = fake_window_cdp(None);
+        navigate_window_to_login(&conn, &login_url, Duration::from_secs(5))
+            .expect("a window with a page is logged in");
+        let seen = seen.lock().unwrap().clone();
+        let methods: Vec<&str> = seen.iter().map(|(m, _, _)| m.as_str()).collect();
+        assert_eq!(
+            methods,
+            [
+                "Target.getTargets",
+                "Target.getTargets",
+                "Target.attachToTarget",
+                "Page.navigate"
+            ],
+            "waits for the page, attaches, navigates once"
+        );
+        assert_eq!(
+            seen[2].2["targetId"], "P1",
+            "attaches to the PAGE, not the browser"
+        );
+        assert_eq!(seen[2].2["flatten"], true);
+        assert_eq!(
+            seen[3].1.as_deref(),
+            Some("S1"),
+            "navigates on the page session"
+        );
+        assert_eq!(seen[3].2["url"], login_url.as_str());
+
+        let (conn, _) = fake_window_cdp(Some("net::ERR_CONNECTION_REFUSED"));
+        let err = navigate_window_to_login(&conn, &login_url, Duration::from_secs(5))
+            .expect_err("a failed login navigation refuses");
+        assert!(err.contains("net::ERR_CONNECTION_REFUSED"), "{err}");
+        assert!(!err.contains(&otp_text) && !err.contains("data:"), "{err}");
+    }
+
+    /// Order 2046-6em7: the relay's keep mode never ends Chromium's command
+    /// pipe (a closed fd 3 would end it) and drains fd 4, and the default
+    /// mode still ends Chromium when its one client leaves (browser.open).
+    #[test]
+    fn the_cdp_relay_keep_mode_leaves_chromium_running_and_default_mode_ends_it() {
+        let relay = WINDOW_CDP_RELAY_JS;
+        assert!(relay.contains("process.env.TILLANDSIAS_CDP_DETACH === 'keep'"));
+        assert!(relay.contains("socket.pipe(toChromium, { end: !KEEP })"));
+        assert!(relay.contains("fromChromium.unpipe(socket);"));
+        assert!(relay.contains("fromChromium.resume();"));
+        // NEGATIVE CONTROL: outside keep mode the client leaving ends Chromium.
+        assert!(relay.contains("if (chromium.exitCode === null) chromium.kill('SIGTERM');"));
     }
 
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {
