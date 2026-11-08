@@ -59,9 +59,104 @@ pub fn replaced_on_disk() -> bool {
         .unwrap_or(false)
 }
 
+/// ORDER 2053-bg68: run a binary this test JUST wrote.
+///
+/// The write-then-exec race: `std::fs::copy` holds the new file open for
+/// writing, and a sibling test that forks in that moment gives its child a
+/// copy of that fd until the child's own exec closes it. Executing the file
+/// while any process holds it open for writing is ETXTBSY ("Text file busy"),
+/// so a parallel test run fails here at random (evicted #1012 on macuahuitl).
+/// Same class as 1478-9r6f.
+///
+/// The sibling's child drops the fd at its own exec, microseconds later, so
+/// the honest fix is to retry ETXTBSY, and only ETXTBSY, for a bounded time:
+/// 1 ms doubling to 32 ms, 40 tries (about 1.1 s at most). Any other error is
+/// returned at once. Serialising every forking test instead would cover only
+/// the tests that remember to take the lock.
+#[cfg(all(test, target_os = "linux"))]
+pub(crate) fn output_of_fresh_binary(
+    cmd: &mut std::process::Command,
+) -> std::io::Result<std::process::Output> {
+    let mut wait = std::time::Duration::from_millis(1);
+    let mut tries = 0;
+    loop {
+        match cmd.output() {
+            Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) && tries < 40 => {
+                tries += 1;
+                std::thread::sleep(wait);
+                wait = (wait * 2).min(std::time::Duration::from_millis(32));
+            }
+            r => return r,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 2053-bg68: a freshly copied binary runs even while another thread is
+    /// forking. Pre-fix: FAILS with ETXTBSY within a few hundred tries on a
+    /// loaded host (the sibling's fork inherits the copy's write fd).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_freshly_written_binary_runs_while_a_sibling_thread_forks() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let src = std::path::PathBuf::from("/usr/bin/true");
+        if !src.is_file() {
+            eprintln!("skip: /usr/bin/true is not here");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let stop = Arc::new(AtomicBool::new(false));
+        let forkers: Vec<_> = (0..4)
+            .map(|_| {
+                let stop = stop.clone();
+                std::thread::spawn(move || {
+                    while !stop.load(Ordering::Relaxed) {
+                        let _ = std::process::Command::new("/usr/bin/true").status();
+                    }
+                })
+            })
+            .collect();
+        let mut busy = 0;
+        let mut other = Vec::new();
+        for i in 0..300 {
+            let copy = dir.path().join(format!("t{i}"));
+            std::fs::copy(&src, &copy).unwrap();
+            match output_of_fresh_binary(&mut std::process::Command::new(&copy)) {
+                Ok(o) if o.status.success() => {}
+                Ok(o) => other.push(format!("exit {:?}", o.status.code())),
+                Err(e) if e.raw_os_error() == Some(libc::ETXTBSY) => busy += 1,
+                Err(e) => other.push(e.to_string()),
+            }
+        }
+        stop.store(true, Ordering::Relaxed);
+        for f in forkers {
+            f.join().unwrap();
+        }
+        assert!(other.is_empty(), "unexpected failures: {other:?}");
+        assert_eq!(busy, 0, "{busy} of 300 execs of a fresh copy were ETXTBSY");
+    }
+
+    /// 2053-bg68 NEGATIVE CONTROL: only ETXTBSY is retried; a file that can
+    /// never run fails at once with its own error.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_fresh_file_that_cannot_run_fails_at_once_and_is_not_retried() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("not-executable");
+        std::fs::write(&f, b"plain data").unwrap();
+        let t = std::time::Instant::now();
+        let e = output_of_fresh_binary(&mut std::process::Command::new(&f)).unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied, "{e}");
+        assert!(
+            t.elapsed() < std::time::Duration::from_millis(200),
+            "it was retried: {:?}",
+            t.elapsed()
+        );
+    }
 
     #[test]
     fn the_installed_path_drops_the_deleted_suffix_only_when_a_file_is_there() {
@@ -128,7 +223,7 @@ mod tests {
             if old {
                 cmd.env("TILLANDSIAS_SELF_EXE_PROBE_OLD", "1");
             }
-            String::from_utf8_lossy(&cmd.output().unwrap().stdout).into_owned()
+            String::from_utf8_lossy(&output_of_fresh_binary(&mut cmd).unwrap().stdout).into_owned()
         };
         let old = run(true);
         assert!(
