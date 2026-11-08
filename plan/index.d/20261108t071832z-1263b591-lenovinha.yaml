@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-proxy-allowlist-is-split-into-tier-files-served-per-tier-port
+    field: status
+    value: blocked
+    ts: "2026-11-08T07:18:32Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-proxy-allowlist-is-split-into-tier-files-served-per-tier-port
+    event:
+      type: falsified
+      ts: "2026-11-08T07:18:32Z"
+      host: lenovinha
+      summary: |-
+        falsified 'implemented' claim; evidence: PR #1019 is not landed (still in the land queue, coordinator macuahuitl-fedora 2026-11-08); implemented was set before land — status set to 'blocked', new attempt epoch
+  - packet_id: the-proxy-allowlist-is-split-into-tier-files-served-per-tier-port
+    event:
+      type: note
+      ts: "2026-11-08T07:18:32Z"
+      host: lenovinha
+      summary: |-
+        correction: part 2 waits on the landing of PR #1019 (work/2041-i3nk at f6eed4c21). Flips to implemented after land, citing the merge commit. The vocabulary has no pending-land status.

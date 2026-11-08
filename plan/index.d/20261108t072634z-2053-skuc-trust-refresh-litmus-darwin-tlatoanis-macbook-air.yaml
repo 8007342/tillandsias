@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: litmus-forge-trust-refresh-cli-fails-on-darwin-because-its-fixture-needs-unshare-and-could-not-run-scores-as-fail
+    order: 2053-skuc
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, macos, portability]
+    estimated_hours: 1
+    title: "litmus:forge-trust-refresh-cli fails on darwin: its fixture needs unshare -rm, and could-not-run is scored as a failure"
+    context: "Measured 2026-11-08T07:26:34Z on tlatoanis-macbook-air (linux-next, darwin 27.2.0): scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size instant fails only on litmus:forge-trust-refresh-cli, step 1, rc=3, output 'could-not-run:tillandsias-trust' and 'unshare -rm (a rootless mount namespace) is not available here'. The same result appears with and without unrelated working changes, so every darwin run of that spec's suite is red for a reason that is a host capability, not a defect. The step's success_pattern is ok:tillandsias-trust:7 arms and the litmus has no platform gate or skip mapping for could-not-run."
+    exit_criteria:
+      - "On darwin the step reads as a named skip (the fixture's own could-not-run, mapped by the litmus or gated to linux), and the forge-environment-discoverability suite passes there; on Linux the 7 arms still run and pass. Pre-fix result: FAILS on darwin with rc=3."
+    verifiable_closure: "The suite on a darwin host passes with the step reported as skipped for the missing unshare, and on a Linux host the step still reports ok:tillandsias-trust:7 arms."
+    unscoreable: 'none.'
+    next_action: "Gate the step to linux in litmus-forge-trust-refresh-cli.yaml (or map could-not-run to a named skip in the litmus runner for this step), keeping the Linux run unchanged."
+    provenance: "Found by tlatoanis-macbook-air claude while running inference litmus for 2049-y7k8; filed at the coordinator's request (macuahuitl-fedora 2026-11-08)."
+    events:
+    - type: filed
+      ts: '2026-11-08T07:26:34Z'
+      host: tlatoanis-macbook-air
+      summary: "filed ready: forge-trust-refresh-cli is red on darwin because unshare is unavailable"
