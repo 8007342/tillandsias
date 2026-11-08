@@ -543,6 +543,77 @@ impl VzRuntime {
         let _ = std::fs::rename(path, &prev);
     }
 
+    /// How many crashed-boot consoles a rebuild keeps (2029-ku5y).
+    pub const CRASHED_CONSOLES_KEPT: usize = 3;
+
+    /// 2029-ku5y: before a rebuild wipes the guest, keep its console instead
+    /// of deleting it. After a CLEAN stop it becomes `console.log.prev`
+    /// (the existing two-generation policy). After an UNCLEAN stop — the
+    /// running marker is still there — it is kept as
+    /// `console.crashed-<epoch>.log`, the newest
+    /// [`Self::CRASHED_CONSOLES_KEPT`] of which survive, so the boot that
+    /// broke is never displaced by the rebuild that follows it.
+    ///
+    /// MEASURED 2026-11-07 (v56.11.7.1 smoke): a force-stop at 22:15Z, then a
+    /// rebuild, left one console.log and no .prev; the only kernel record of
+    /// the 22:11 failure (2029-b87w) was gone. Best-effort: a failure here
+    /// must never block the rebuild.
+    fn keep_console_before_wipe(&self) {
+        let log = self.console_log_path();
+        if !log.exists() {
+            return;
+        }
+        if previous_stop_was_unclean(&self.image_root) {
+            let since = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let mut dest = self.image_root.join(format!("console.crashed-{since}.log"));
+            let mut n = 1;
+            while dest.exists() {
+                dest = self
+                    .image_root
+                    .join(format!("console.crashed-{since}-{n}.log"));
+                n += 1;
+            }
+            let _ = std::fs::rename(&log, &dest);
+            self.prune_crashed_consoles();
+        } else {
+            let _ = std::fs::rename(&log, log.with_extension("log.prev"));
+        }
+    }
+
+    /// The kept crashed-boot consoles, oldest first.
+    pub fn crashed_console_paths(&self) -> Vec<PathBuf> {
+        let mut v: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(&self.image_root)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| {
+                let n = e.file_name().to_string_lossy().into_owned();
+                n.starts_with("console.crashed-") && n.ends_with(".log")
+            })
+            .map(|e| {
+                let t = e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH);
+                (t, e.path())
+            })
+            .collect();
+        v.sort();
+        v.into_iter().map(|(_, p)| p).collect()
+    }
+
+    fn prune_crashed_consoles(&self) {
+        let all = self.crashed_console_paths();
+        if all.len() > Self::CRASHED_CONSOLES_KEPT {
+            for old in &all[..all.len() - Self::CRASHED_CONSOLES_KEPT] {
+                let _ = std::fs::remove_file(old);
+            }
+        }
+    }
+
     /// Path of the early-boot serial console log.
     pub fn console_log_path(&self) -> PathBuf {
         self.image_root.join("console.log")
@@ -639,6 +710,9 @@ impl VzRuntime {
     ///
     /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     pub fn wipe_provisioned_artifacts(&self) -> std::io::Result<()> {
+        // 2029-ku5y: the console of the boot being wiped is evidence, most of
+        // all after an unclean stop. Keep it BEFORE the marker goes.
+        self.keep_console_before_wipe();
         for required in [
             self.rootfs_image_path(),
             self.kernel_path(),
@@ -652,7 +726,6 @@ impl VzRuntime {
         }
         for best_effort in [
             self.rootfs_image_path().with_extension("qcow2"),
-            self.console_log_path(),
             self.image_root.join("cidata.iso"),
             // 1377-hcnv: the swap image goes with the VM it served.
             self.image_root.join(SWAP_IMAGE_FILE),
@@ -5489,8 +5562,48 @@ mod tests {
         ] {
             assert!(!gone.exists(), "{} must be deleted", gone.display());
         }
+        // 2029-ku5y: the console is kept, not deleted (clean stop -> .prev).
+        assert_eq!(
+            std::fs::read(rt.console_log_path().with_extension("log.prev")).unwrap(),
+            b"x"
+        );
         assert!(sibling.exists(), "unrelated sibling state must survive");
         assert!(tmp.path().exists(), "image_root itself must survive");
+    }
+
+    /// 2029-ku5y: start, crash (marker left), rebuild, start, crash, rebuild:
+    /// both crashed boots' consoles survive, and only the newest
+    /// CRASHED_CONSOLES_KEPT are kept.
+    #[test]
+    fn rebuild_after_unclean_stop_keeps_the_crashed_console() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(7, tmp.path().to_path_buf());
+        for boot in 0..5 {
+            std::fs::write(rt.console_log_path(), format!("boot {boot} panic")).unwrap();
+            mark_vm_running(tmp.path()).unwrap();
+            rt.wipe_provisioned_artifacts().unwrap();
+            assert!(!rt.console_log_path().exists());
+            assert!(
+                !previous_stop_was_unclean(tmp.path()),
+                "wipe clears the marker"
+            );
+            if boot == 1 {
+                let kept: Vec<String> = rt
+                    .crashed_console_paths()
+                    .iter()
+                    .map(|p| std::fs::read_to_string(p).unwrap())
+                    .collect();
+                assert_eq!(kept, ["boot 0 panic", "boot 1 panic"]);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(15));
+        }
+        let kept: Vec<String> = rt
+            .crashed_console_paths()
+            .iter()
+            .map(|p| std::fs::read_to_string(p).unwrap())
+            .collect();
+        assert_eq!(kept, ["boot 2 panic", "boot 3 panic", "boot 4 panic"]);
+        assert!(!rt.console_log_path().with_extension("log.prev").exists());
     }
 
     /// The wipe is idempotent: a never-provisioned (or half-wiped) root
