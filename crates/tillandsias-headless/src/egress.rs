@@ -12,35 +12,76 @@
 
 /// The image directories' declarations, embedded at build time.
 const DECLARATIONS: &[(&str, &str)] = &[
-    ("builder", include_str!("../../../images/builder/egress.yaml")),
-    ("chromium", include_str!("../../../images/chromium/egress.yaml")),
-    ("default", include_str!("../../../images/default/egress.yaml")),
-    ("flutter", include_str!("../../../images/flutter/egress.yaml")),
+    (
+        "builder",
+        include_str!("../../../images/builder/egress.yaml"),
+    ),
+    (
+        "chromium",
+        include_str!("../../../images/chromium/egress.yaml"),
+    ),
+    (
+        "default",
+        include_str!("../../../images/default/egress.yaml"),
+    ),
+    (
+        "flutter",
+        include_str!("../../../images/flutter/egress.yaml"),
+    ),
     ("git", include_str!("../../../images/git/egress.yaml")),
-    ("imagegen", include_str!("../../../images/imagegen/egress.yaml")),
-    ("imagegen-corridorkey", include_str!("../../../images/imagegen-corridorkey/egress.yaml")),
-    ("imagegen-studio", include_str!("../../../images/imagegen-studio/egress.yaml")),
-    ("inference", include_str!("../../../images/inference/egress.yaml")),
+    (
+        "imagegen",
+        include_str!("../../../images/imagegen/egress.yaml"),
+    ),
+    (
+        "imagegen-corridorkey",
+        include_str!("../../../images/imagegen-corridorkey/egress.yaml"),
+    ),
+    (
+        "imagegen-studio",
+        include_str!("../../../images/imagegen-studio/egress.yaml"),
+    ),
+    (
+        "inference",
+        include_str!("../../../images/inference/egress.yaml"),
+    ),
     ("proxy", include_str!("../../../images/proxy/egress.yaml")),
     ("router", include_str!("../../../images/router/egress.yaml")),
     ("studio", include_str!("../../../images/studio/egress.yaml")),
     ("vault", include_str!("../../../images/vault/egress.yaml")),
     ("warp", include_str!("../../../images/warp/egress.yaml")),
     ("web", include_str!("../../../images/web/egress.yaml")),
-    ("web-wrangler", include_str!("../../../images/web-wrangler/egress.yaml")),
+    (
+        "web-wrangler",
+        include_str!("../../../images/web-wrangler/egress.yaml"),
+    ),
     ("webkit", include_str!("../../../images/webkit/egress.yaml")),
 ];
 
 /// Tiers the proxy serves. `research` is served by the proxy only until
 /// enclave-fetch (2041-csm4) takes it over.
-const PROXIED: &[&str] = &["registries", "assets", "providers", "model-hubs", "vcs", "research"];
+const PROXIED: &[&str] = &[
+    "registries",
+    "assets",
+    "providers",
+    "model-hubs",
+    "vcs",
+    "research",
+];
 
 /// The tiers `image` declares, or `None` when it has no declaration.
 pub(crate) fn declared(image: &str) -> Option<Vec<&'static str>> {
     let (_, text) = DECLARATIONS.iter().find(|(name, _)| *name == image)?;
-    let line = text.lines().find_map(|l| l.trim_start().strip_prefix("tiers:"))?;
+    let line = text
+        .lines()
+        .find_map(|l| l.trim_start().strip_prefix("tiers:"))?;
     let list = line.trim().strip_prefix('[')?.strip_suffix(']')?;
-    Some(list.split(',').map(str::trim).filter(|t| !t.is_empty()).collect())
+    Some(
+        list.split(',')
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .collect(),
+    )
 }
 
 /// Whether `image`'s container is given the proxy environment.
