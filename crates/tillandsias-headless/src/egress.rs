@@ -28,6 +28,10 @@ const DECLARATIONS: &[(&str, &str)] = &[
         "flutter",
         include_str!("../../../images/flutter/egress.yaml"),
     ),
+    (
+        "enclave-fetch",
+        include_str!("../../../images/enclave-fetch/egress.yaml"),
+    ),
     ("git", include_str!("../../../images/git/egress.yaml")),
     (
         "imagegen",

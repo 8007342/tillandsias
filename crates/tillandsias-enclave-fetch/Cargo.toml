@@ -1,0 +1,22 @@
+[package]
+name = "tillandsias-enclave-fetch"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Enclave MCP service: fetch, feed and docs from a curated catalog, outside the forge's shell egress"
+
+[[bin]]
+name = "tillandsias-enclave-fetch"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = "1"
+serde_yaml = { workspace = true }
+reqwest = { workspace = true }
+url = "2"
+
+[lints]
+workspace = true
