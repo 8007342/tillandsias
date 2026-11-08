@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-forge-python-environment-installs-through-the-proxy
+    event:
+      type: note
+      ts: "2026-11-06T05:25:47Z"
+      agent_id: linux-lenovinha-claude-20261106t052546z
+      host: lenovinha
+      summary: |
+        Code-read, no lane launched and no fix made (lenovinha). Waiting on kumbia's real reproduction.
+
+        Which bundle the forge uses:
+        - The image moves Fedora's tls-ca-bundle.pem to /usr/local/share/tillandsias/vendor-ca-bundle.crt. It then symlinks /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem and /etc/pki/tls/cert.pem to /run/tillandsias/ca-bundle.crt (images/default/Containerfile, around line 30).
+        - At forge entry, lib-common.sh init_runtime_ca_trust composes that file ONCE: vendor roots plus /run/tillandsias/ca-chain.crt. The ca-chain.crt is a read-only single-file bind of the host's certs_dir/intermediate.crt (main.rs, around line 5471).
+        - The typed launcher forbids SSL_CERT_FILE, REQUESTS_CA_BUNDLE and NODE_EXTRA_CA_CERTS (test at main.rs, around line 28600). So uv trusts the proxy only if its TLS stack reads the system bundle.
+        - uv comes from Fedora's package (Containerfile.base, line 27). I have not verified whether Fedora's uv build uses native or system certs by default, or bundled webpki roots.
+
+        Reading of the error:
+        - BadSignature (rather than UnknownIssuer) suggests uv DID find a trusted CA with the issuer's name, but that CA's key did not verify the leaf. That is what a stale CA looks like: a CA reminted on the host, with the proxy re-signing under the new key, while the forge still trusts the old one.
+        - Two ways a running forge keeps the old CA. (1) The bundle is composed only at entry. (2) A single-file bind mount keeps the old inode if the host replaces intermediate.crt by rename.
+        - This is a hypothesis, not evidence.
+
+        Doc drift: cheatsheets/build/uv.md says SSL_CERT_FILE is set in the forge. The launcher forbids it.
+
+        For the reproduction, record:
+        - uv --version, and whether uv respects the system store (UV_NATIVE_TLS / --native-tls).
+        - sha256 of /run/tillandsias/ca-chain.crt inside the forge, against the host's current intermediate.crt.
+        - The issuer and the authority key identifier of the proxy's leaf: openssl s_client -proxy ... -showcerts.
+        - Whether the forge started before or after the last CA change.

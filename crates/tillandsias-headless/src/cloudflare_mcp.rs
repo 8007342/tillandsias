@@ -727,7 +727,10 @@ pub(crate) fn call_live(
     debug: bool,
 ) -> Result<serde_json::Value, String> {
     let http = crate::cloudflare_oauth::ReqwestHttpClient::default();
-    let store = crate::vault_bootstrap::VaultCloudflareTokenStore { debug };
+    let store = crate::vault_bootstrap::VaultCloudflareTokenStore {
+        debug,
+        may_start_vault: true,
+    };
     let freshen = || crate::vault_bootstrap::cloudflare_token_due_check_live(debug).map(|_| ());
     let api_base = api_base_url();
     let deps = Deps {
@@ -812,6 +815,7 @@ mod tests {
 
     fn ok(result: serde_json::Value) -> Result<HttpResponse, String> {
         Ok(HttpResponse {
+            retry_after_s: None,
             status: 200,
             body:
                 serde_json::json!({"success": true, "errors": [], "messages": [], "result": result})
@@ -821,6 +825,7 @@ mod tests {
 
     fn status(code: u16, body: &str) -> Result<HttpResponse, String> {
         Ok(HttpResponse {
+            retry_after_s: None,
             status: code,
             body: body.into(),
         })

@@ -70,11 +70,12 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## cloud
 
-- cloudflare-workers-static-assets.md — ## Provenance [pull-on-demand: stub]
-- gcp-buildpacks.md                   — deploying to Cloud Run with the "Google Cloud's buildpacks" build [bundled, partial-verify]
-- gcp-cloud-run-deploy-paths.md       — a web app should deploy to Google Cloud Run from its GitHub repo, [bundled, partial-verify]
-- gcp-cloudbuild-yaml.md              — a repo needs its own Cloud Build pipeline (tests before deploy, [bundled, partial-verify]
-- gcp-dockerfile-for-cloud-run.md     — deploying to Cloud Run with the "Dockerfile" build type, or any [bundled, partial-verify]
+- cloudflare-free-tier-storage-limits.md — Use this cheatsheet when choosing where a Worker on the **Free** plan keeps sta… [pull-on-demand: stub]
+- cloudflare-workers-static-assets.md    — ## Provenance [pull-on-demand: stub]
+- gcp-buildpacks.md                      — deploying to Cloud Run with the "Google Cloud's buildpacks" build [bundled, partial-verify]
+- gcp-cloud-run-deploy-paths.md          — a web app should deploy to Google Cloud Run from its GitHub repo, [bundled, partial-verify]
+- gcp-cloudbuild-yaml.md                 — a repo needs its own Cloud Build pipeline (tests before deploy, [bundled, partial-verify]
+- gcp-dockerfile-for-cloud-run.md        — deploying to Cloud Run with the "Dockerfile" build type, or any [bundled, partial-verify]
 
 ## concurrent-git
 
@@ -151,6 +152,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - container-image-tagging.md                — Understanding how Tillandsias tags images with versions, detects stale images, … [bundled, partial-verify]
 - container-lifecycle.md [DRAFT]            — Launching containers and waiting for readiness, implementing health checks, cle… [bundled, partial-verify]
 - container-networking.md [DRAFT]           — Configuring podman container network modes and bridges. [bundled, partial-verify]
+- container-startup-orchestration.md        — **Use when:** deciding how the enclave (proxy, vault, router, git, inference, [pull-on-demand: stub]
 - cross-platform-terminal-launch.md [DRAFT] — Handling terminal window launch on Windows and Linux. [bundled, partial-verify]
 - dedicated-service-account-podman.md       — You want Tillandsias to own a dedicated rootless Podman runtime under a service [bundled, partial-verify]
 - enclave-network.md [DRAFT]                — Understanding enclave network topology and routing. [bundled, partial-verify]
@@ -207,6 +209,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - socket-container-orchestration.md [DRAFT] — Orchestrating Tillandsias enclave startup (proxy → git → inference → forge) wit… [bundled, partial-verify]
 - socket-enclave-diagnostics.md [DRAFT]     — Debugging enclave startup failures, health check timeouts, orchestration hangs,… [bundled, partial-verify]
 - squid-cache-peer-routing.md [DRAFT]       — Configuring Squid peer routing and cache hierarchies. [bundled, partial-verify]
+- startup-io-memory-pressure.md             — starts happen back to back, and the host (a QLC NVMe laptop, a VZ guest on a [pull-on-demand: stub]
 - statusnotifier-tray.md                    — Implementing or debugging the Linux tray icon/menu path for Tillandsias. [bundled, partial-verify]
 - syslog-configuration.md [DRAFT]           — Configuring syslog logging in containers. [bundled, partial-verify]
 - systemd-socket-activation.md              — building a daemon (like tillandsias-router) that systemd should supervise; coor… [pull-on-demand: stub]
@@ -237,6 +240,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## security
 
+- oauth-callback-relay.md          — Use this cheatsheet when a native or CLI app signs in with OAuth through a [pull-on-demand: stub]
 - owasp-top-10-2021.md             — You're writing or reviewing any web-facing software, APIs, or services that tou… [bundled, partial-verify]
 
 ## test

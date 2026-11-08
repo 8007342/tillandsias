@@ -1084,6 +1084,10 @@ pub struct DiagnoseReport {
     pub initrd_present: bool,
     pub initrd_bytes: Option<u64>,
     pub release_tag: &'static str,
+    /// 1918-vzsr: Virtualization.framework's save-restore verdict for this
+    /// VM's device set, as configured and without virtio-entropy. A static
+    /// probe: nothing boots and nothing is created.
+    pub save_restore: String,
     pub manifest_pin_aarch64_qcow2: Option<String>,
     pub provisioned: bool,
     /// 701-kgvk. Which guest binary this bundle carries, versus the one actually
@@ -1202,6 +1206,9 @@ fn collect_report() -> DiagnoseReport {
         initrd_present,
         initrd_bytes,
         release_tag: crate::action_host::FEDORA_BASELINE,
+        save_restore: tillandsias_vm_layer::vz::VzRuntime::new(3, root.clone())
+            .save_restore_verdict()
+            .line(),
         manifest_pin_aarch64_qcow2,
         provisioned,
         guest_binary_bundle_sha256: provenance.bundle_sha256,
@@ -1264,6 +1271,7 @@ fn print_human(r: &DiagnoseReport) {
     print_artifact("  vmlinuz", r.kernel_present, r.kernel_bytes);
     print_artifact("  initramfs.img", r.initrd_present, r.initrd_bytes);
     println!("Release:    {}", r.release_tag);
+    println!("{}", r.save_restore);
     println!("Manifest:   bundled at build (compile-time include_str!)");
     match &r.manifest_pin_aarch64_qcow2 {
         Some(sha) => println!("  aarch64.qcow2 SHA-256 pin: {sha}\u{2026}"),
@@ -2887,6 +2895,155 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
     None
 }
 
+/// 1918-vzsr criterion 3: time one VZ save and one restore-to-`podman info`
+/// on this host's provisioned VM. Stops the Vault first (a saved image must
+/// not hold an unsealed Vault), saves, releases, restores, and polls
+/// `podman info` until it answers. The snapshot is deleted on every path.
+pub fn measure_save_restore_main() -> i32 {
+    use std::time::{Duration, Instant};
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    use tillandsias_vm_layer::VmRuntime;
+
+    if let Err(err) = stage_embedded_guest_binary() {
+        eprintln!("{{\"error\":\"stage guest binary: {err}\"}}");
+        return 1;
+    }
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        eprintln!("{{\"error\":\"not provisioned; run --provision first\"}}");
+        return 1;
+    }
+    let snapshot = image_root().join("vm-measure.vzvmsave");
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+    let code = rt.block_on(async {
+        let run = |cmd: &'static str| {
+            let vz = &vz;
+            async move {
+                let stream =
+                    open_control_wire_stream(vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(5))
+                        .await?;
+                // The streaming exec hands output to the callback only.
+                let captured = std::cell::RefCell::new(Vec::new());
+                let out = tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
+                    stream,
+                    &["/bin/bash", "-lc", cmd],
+                    &[],
+                    |chunk: &[u8]| captured.borrow_mut().extend_from_slice(chunk),
+                )
+                .await?;
+                Ok::<_, String>((
+                    out.exit.code,
+                    String::from_utf8_lossy(&captured.into_inner()).into_owned(),
+                ))
+            }
+        };
+
+        eprintln!("[measure-save-restore] cold boot…");
+        let boot_t0 = Instant::now();
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return 1;
+        }
+        let credentials = crate::installation_uuid::CliCredentialExchange::new();
+        let first_answer = DeliverOnFirstAnswer::new();
+        if let Err(e) = vz
+            .wait_phase_ready(Duration::from_secs(300), |t| {
+                let probe = probe_phase_secure_or_plain(&vz, t);
+                let vzr: &tillandsias_vm_layer::vz::VzRuntime = &vz;
+                let (first_answer, credentials) = (&first_answer, &credentials);
+                async move {
+                    let answer = probe.await;
+                    first_answer
+                        .observe(&answer, || {
+                            cli_credential_exchange(vzr, credentials, "boot")
+                        })
+                        .await;
+                    answer.map(exec_guest_ready_phase)
+                }
+            })
+            .await
+        {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        let cold_ms = wait_podman_info(&run, boot_t0).await;
+        eprintln!("[measure-save-restore] cold boot to podman info: {cold_ms:?} ms");
+
+        // The Vault must be down before the save (1918-vzsr save_permitted).
+        let vault = run(
+            "podman stop -t 20 tillandsias-vault >/dev/null 2>&1; sleep 5; \
+             podman inspect -f '{{.State.Running}}' tillandsias-vault 2>/dev/null || echo absent",
+        )
+        .await;
+        let vault_running =
+            !matches!(&vault, Ok((_, o)) if o.contains("false") || o.contains("absent"));
+        eprintln!("[measure-save-restore] vault after stop: {vault:?}");
+
+        let save_t0 = Instant::now();
+        if let Err(e) = vz.save_state_to(&snapshot, vault_running) {
+            eprintln!("{{\"error\":\"save: {e}\"}}");
+            let _ = std::fs::remove_file(&snapshot);
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        let save_ms = save_t0.elapsed().as_millis();
+        let snapshot_bytes = std::fs::metadata(&snapshot).map(|m| m.len()).unwrap_or(0);
+        vz.release_saved();
+        eprintln!(
+            "[measure-save-restore] saved in {save_ms} ms ({snapshot_bytes} bytes); restoring…"
+        );
+
+        vz.restore_next_start_from(snapshot.clone());
+        let restore_t0 = Instant::now();
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"restore: {e}\"}}");
+            let _ = std::fs::remove_file(&snapshot);
+            return 1;
+        }
+        let resumed_ms = restore_t0.elapsed().as_millis();
+        let restore_ms = wait_podman_info(&run, restore_t0).await;
+        let _ = std::fs::remove_file(&snapshot);
+        println!(
+            "save-restore-timing: cold_boot_to_podman_info_ms={} save_ms={save_ms} \
+             snapshot_bytes={snapshot_bytes} restore_resumed_ms={resumed_ms} \
+             restore_to_podman_info_ms={}",
+            cold_ms.map_or("none".to_string(), |v| v.to_string()),
+            restore_ms.map_or("none".to_string(), |v| v.to_string()),
+        );
+        cli_credential_exchange(&vz, &credentials, "before stop").await;
+        let _ = vz.stop(Duration::from_secs(30)).await;
+        if restore_ms.is_some() { 0 } else { 1 }
+    });
+    let _ = std::fs::remove_file(&snapshot);
+    code
+}
+
+/// Poll `podman info` until it exits 0 (5 min cap); the elapsed ms since `t0`.
+async fn wait_podman_info<F, Fut>(run: &F, t0: std::time::Instant) -> Option<u128>
+where
+    F: Fn(&'static str) -> Fut,
+    Fut: std::future::Future<Output = Result<(i32, String), String>>,
+{
+    while t0.elapsed() < std::time::Duration::from_secs(300) {
+        if let Ok((0, _)) = run("podman info --format '{{.Version.Version}}' >/dev/null").await {
+            return Some(t0.elapsed().as_millis());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use tillandsias_control_wire::secure_wire_mode::{SecureWireMode, parse_secure_wire_mode};
@@ -3626,6 +3783,7 @@ mod tests {
             initrd_present: false,
             initrd_bytes: None,
             release_tag: "fedora-44",
+            save_restore: "save-restore: supported; without virtio-entropy: supported".into(),
             manifest_pin_aarch64_qcow2: Some("55c60a3b80d3".to_string()),
             provisioned: true,
             // 701-kgvk: the healthy shape — bundle and staged agree.
@@ -3853,8 +4011,8 @@ mod tests {
             }
         }
         assert_eq!(
-            checked, 6,
-            "the six VM-booting CLI modes were found and checked"
+            checked, 7,
+            "the seven VM-booting CLI modes (1918-vzsr added --measure-save-restore) were found and checked"
         );
     }
 

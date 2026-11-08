@@ -1,0 +1,35 @@
+# @trace spec:ci-release
+# @trace order:1270-5mz8
+#
+# 2026-09-19, macuahuitl: scripts/tillandsias-podman, the path the litmus
+# runtime shim routes every podman call through, picked a four-day-old debug
+# tillandsias-podman-cli by its executable bit alone, and release gates #3 and
+# #4 ran the forge lane on code the tree no longer held. Red before 1270-5mz8:
+# the STALE arm's marker binary runs.
+name: litmus:prebuilt-resolver-refuses-stale
+spec: ci-release
+phase: pre-build
+description: A prebuilt tillandsias-podman-cli older than its sources is refused by name with the rebuild command and never executed; a fresh one still runs
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, git, find, touch; scratch trees under target/plan-scratch
+
+critical_path:
+  - step: "a stale prebuilt is refused by name and never runs; a fresh prebuilt runs"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-prebuilt-resolver-refuses-stale.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:prebuilt-resolver:stale-refused:2/2"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "two arms: STALE refused with marker absent, FRESH executed"
+  log_fields:
+    spec: "ci-release"
+    test: "prebuilt-resolver-refuses-stale"
+
+rollback:
+  on_failure: "read the FAIL lines; the freshness check is the candidate loop in scripts/tillandsias-podman"
+  command: "grep -n 'podman-cli-stale' scripts/tillandsias-podman"

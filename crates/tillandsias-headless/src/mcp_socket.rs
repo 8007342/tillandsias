@@ -58,6 +58,112 @@ pub(crate) mod test_runtime_root {
     }
 }
 
+#[cfg(test)]
+mod call_gate_tests {
+    use super::*;
+
+    /// ORDER 1990-mcpq: the limit concurrency owes (779-dqsv): never more
+    /// than `max` calls at once, and a freed slot admits the next.
+    #[test]
+    fn the_call_gate_never_admits_more_than_its_limit() {
+        let gate = CallGate::new(2);
+        let a = gate.enter();
+        let b = gate.enter();
+        assert_eq!(gate.running(), 2);
+        let g = gate.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let _c = g.enter();
+            tx.send(()).unwrap();
+        });
+        assert!(
+            rx.recv_timeout(std::time::Duration::from_millis(200))
+                .is_err(),
+            "a third call waits while two run"
+        );
+        drop(a);
+        rx.recv_timeout(std::time::Duration::from_secs(2))
+            .expect("a freed slot admits it");
+        waiter.join().unwrap();
+        drop(b);
+        assert_eq!(gate.running(), 0);
+    }
+}
+
+#[cfg(all(test, unix))]
+mod refused_wait_tests {
+    use super::*;
+
+    /// ORDER 1980-lsrc, deterministic: a forked child that has not exec'd yet
+    /// holds the listener, so right after the drop the socket still ACCEPTS
+    /// (the flake: the old fixtures asserted a refusal here). Waiting sees it
+    /// refuse once the child is gone.
+    #[test]
+    fn a_listener_held_by_a_forked_child_is_waited_out() {
+        let dir = tempfile::Builder::new()
+            .prefix("lsrc")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let path = dir.path().join("s.sock");
+        let listener = UnixListener::bind(&path).unwrap();
+        // SAFETY: the child only closes descriptors, sleeps and _exits; it
+        // runs no Rust code that could touch a lock another thread held at
+        // fork time.
+        //
+        // 2000-envt: fork copies EVERY descriptor in this process, including
+        // the flock'd lock files parallel tests hold at that instant, and this
+        // child keeps them for 300 ms. A test that dropped its lock then saw it
+        // still held (a_graceful_exit_leaves_another_owners_enclave_running,
+        // a_second_launch_of_a_project_takes_the_next_instance). The child
+        // keeps only the listener it exists to hold.
+        use std::os::fd::AsRawFd as _;
+        let keep = listener.as_raw_fd();
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0, "fork");
+        if pid == 0 {
+            unsafe {
+                for fd in 3..1024 {
+                    if fd != keep {
+                        libc::close(fd);
+                    }
+                }
+                libc::usleep(300_000);
+                libc::_exit(0);
+            }
+        }
+        drop(listener);
+        let immediate = UnixStream::connect(&path).is_ok();
+        let waited = wait_until_refused(&path);
+        let mut status = 0;
+        unsafe { libc::waitpid(pid, &mut status, 0) };
+        assert!(
+            immediate,
+            "the race: a dropped listener a fork holds still accepts"
+        );
+        assert!(waited, "and it refuses once the fork is gone");
+    }
+}
+
+/// ORDER 1980-lsrc: wait (up to ~3 s) until `path` refuses connections.
+///
+/// A test that drops its listener and expects the next connect to be refused
+/// races every parallel test that spawns a process: between fork and exec the
+/// child holds a copy of each fd, the listener included (CLOEXEC closes it
+/// only at exec), so for that window the "departed" socket still accepts.
+/// That made `a_cli_lane_refuses_by_name_when_another_process_owns_its_socket`
+/// and the lane-adoption fixture flake on lenovinha after 1969-scp2.
+#[cfg(test)]
+pub(crate) fn wait_until_refused(path: &std::path::Path) -> bool {
+    for _ in 0..300 {
+        match UnixStream::connect(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => return true,
+            Ok(_) => std::thread::sleep(std::time::Duration::from_millis(10)),
+            Err(_) => return false,
+        }
+    }
+    false
+}
+
 /// [`mcp_socket_base_dir`] for an explicit `XDG_RUNTIME_DIR` value, so a test
 /// can pass one without touching the process environment. An empty value
 /// counts as unset (order 1748-fbqe, see [`crate::nonempty_runtime_dir`]).
@@ -283,7 +389,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 "capabilities": { "tools": {} },
                 "serverInfo": {
                     "name": "tillandsias-host-services",
-                    "version": env!("CARGO_PKG_VERSION"),
+                    // 1993-cver: the release version, from VERSION.
+                    "version": crate::VERSION.trim(),
                     "buildId": build_identity(),
                 },
                 // 1969-7qm7: the grouped index is what the agent sees FIRST.
@@ -373,6 +480,11 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::imagegen_tool::descriptor());
             // 1956-x7xp: the headless studio workflow runner, beside it.
             tools.push(crate::studio_tool::descriptor());
+            // 2002-stjb: the same run as a ticket, and its status.
+            tools.push(crate::studio_jobs::queue_descriptor());
+            tools.push(crate::studio_jobs::status_descriptor());
+            // 1986-snpx: the read-only model listing beside it.
+            tools.push(crate::studio_tool::models_descriptor());
             // 1969-cfyt: the studio appliance, started on demand.
             tools.extend(crate::imagegen_studio::tool_descriptors());
             // 1956-26qh: the GPU-free family contract checker, beside it.
@@ -401,6 +513,14 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.extend(crate::studio::tool_descriptors());
             // 1969-7qm7: the index tool, then the deprecated flat aliases last.
             tools.push(crate::host_tools::index_descriptor());
+            // 2003-stbf: whether this lane runs the installed build.
+            tools.push(serde_json::json!({
+                "name": LANE_VERSION_TOOL,
+                "description": "Whether the lane serving this forge runs the installed Tillandsias \
+                    build: current, stale (naming both versions; the forge's tools keep the old \
+                    code until it is relaunched) or unknown. Reports only; restarts nothing.",
+                "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false}
+            }));
             let tools = crate::host_tools::with_deprecated_aliases(tools);
             serde_json::json!({ "result": { "tools": tools } })
         }
@@ -411,6 +531,19 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                 crate::host_tools::canonical(req["params"]["name"].as_str().unwrap_or(""));
             let args = req["params"]["arguments"].as_object();
 
+            // 2003-stbf: does the lane serving this forge run the installed build?
+            if tool_name == LANE_VERSION_TOOL {
+                let mut resp = serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "result": tillandsias_browser_mcp::framing::tool_result_content(
+                        lane_freshness(build_identity(), installed_build_identity().as_deref())
+                    )
+                });
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
             if tool_name == crate::host_tools::INDEX_TOOL {
                 let mut resp = serde_json::json!({
                     "jsonrpc": "2.0",
@@ -578,6 +711,24 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
+                // 2002-stjb: queue a run as a job; read its ticket.
+                "studio.queue_workflow" | "studio.job_status" => {
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    let out = if tool_name == "studio.queue_workflow" {
+                        crate::studio_jobs::queue(project_label, instance, arguments)
+                    } else {
+                        crate::studio_jobs::status(project_label, instance, arguments)
+                    };
+                    match out {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
                 // 1969-cfyt: the forge agent starts the studio on demand.
                 "studio.start" => {
                     let version = crate::VERSION.trim();
@@ -597,12 +748,76 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                                 debug,
                             ))
                         },
-                    ) {
+                        &|| crate::imagegen_studio::probe_listening(project_label),
+                    )
+                    .and_then(|mut result| {
+                        // 1985-stdu: already running: connect this forge
+                        // and refresh the window route.
+                        if result["started"] == false {
+                            crate::imagegen_studio::reattach(project_label, debug)?;
+                        }
+                        result["window_url"] =
+                            serde_json::json!(crate::imagegen_studio::window_url(project_label));
+                        Ok(result)
+                    }) {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
                         Err(e) => serde_json::json!({
                             "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                "studio.models" => {
+                    let engine = crate::studio_tool::HttpStudio::for_this_host(project_label).ok();
+                    let listing = crate::studio_tool::models_listing(
+                        &crate::imagegen_models::models_dir(),
+                        engine
+                            .as_ref()
+                            .map(|e| e as &dyn crate::studio_tool::StudioEngine),
+                    );
+                    serde_json::json!({
+                        "result": tillandsias_browser_mcp::framing::tool_result_content(listing)
+                    })
+                }
+                // 1987-smnt: a fresh container reads the tray's current folder map.
+                "studio.restart" => {
+                    crate::imagegen_studio::stop(project_label);
+                    let version = crate::VERSION.trim();
+                    let client = tillandsias_podman::PodmanClient::new();
+                    let plan = crate::imagegen_studio::plan_explicit(
+                        &tillandsias_core::cache_root::cache_root(),
+                    );
+                    match rt
+                        .block_on(crate::imagegen_studio::start(
+                            &client,
+                            &plan,
+                            project_label,
+                            version,
+                            debug,
+                        ))
+                        .and_then(|()| {
+                            // 1990-stry: answer once ComfyUI listens again.
+                            crate::imagegen_studio::wait_until_listening(
+                                project_label,
+                                &|| crate::imagegen_studio::probe_listening(project_label),
+                                crate::imagegen_studio::LISTEN_BUDGET,
+                                crate::imagegen_studio::LISTEN_POLL,
+                            )
+                        })
+                        .map(|_| {
+                            let mut v = crate::imagegen_studio::status_json(
+                                project_label,
+                                crate::imagegen_studio::is_running(project_label),
+                            );
+                            v["restarted"] = serde_json::json!(true);
+                            v
+                        }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": format!("studio_restart_failed: {e}") }
                         }),
                     }
                 }
@@ -1104,6 +1319,10 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         )),
         false,
     );
+    // 1990-mcpq: shared by the per-call threads below, under one gate.
+    let browser = std::sync::Arc::new(browser);
+    let rt = std::sync::Arc::new(rt);
+    let gate = CallGate::new(MAX_CONCURRENT_CALLS);
     // Order 1655-urz9 + 776-jcf3 (operator, 2026-10-24): browser.open with no
     // device names desktop. The per-project `[browser] device` used to be read
     // from the host checkout's `.tillandsias/config.toml`; there is no host
@@ -1198,6 +1417,48 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             }
             // 1971-mcpu: a panic inside one tool answers that call with a
             // typed error; it never closes the lane's connection.
+            // 1990-mcpq: a tools/call runs on its own thread, so a long
+            // one (a studio workflow) never holds back the next call on
+            // this connection (kumbia: browser.open waited >120 s). Replies
+            // go out through the one shared writer, matched by id.
+            Ok(req) if req["method"] == "tools/call" => {
+                let (browser, rt, shared) = (browser.clone(), rt.clone(), shared.clone());
+                let (label, instance) = (project_label.clone(), identity.instance.clone());
+                let id = req.get("id").cloned().unwrap_or(serde_json::Value::Null);
+                // Backpressure: wait here (reading no more lines) while
+                // MAX_CONCURRENT_CALLS run.
+                let slot = gate.enter();
+                let spawned =
+                    std::thread::Builder::new()
+                        .name("mcp-call".into())
+                        .spawn(move || {
+                            let _slot = slot;
+                            let write = |line: &str| {
+                                let mut w = shared.lock().unwrap_or_else(|p| p.into_inner());
+                                let _ = w.write_all(format!("{line}\n").as_bytes());
+                            };
+                            let resp = dispatch_guarded(&req, || {
+                                handle_mcp_jsonrpc_streaming(
+                                    &label,
+                                    &instance,
+                                    &req,
+                                    &browser,
+                                    &rt,
+                                    &mut |line| write(&cap_response_line(&line)),
+                                )
+                            });
+                            if let Some(resp) = resp {
+                                write(&cap_response_line(&resp));
+                            }
+                        });
+                match spawned {
+                    Ok(_) => None,
+                    Err(e) => Some(mcp_error(
+                        &serde_json::json!({ "id": id }),
+                        format!("could not start a call thread: {e}"),
+                    )),
+                }
+            }
             Ok(req) => dispatch_guarded(&req, || {
                 handle_mcp_jsonrpc_streaming(
                     &project_label,
@@ -1233,6 +1494,53 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 return;
             }
         }
+    }
+}
+
+/// ORDER 1990-mcpq: at most this many tools/call run at once on ONE
+/// connection. The read loop waits for a slot before starting the next call
+/// (backpressure, never a refusal), so a client cannot spawn without bound.
+pub(crate) const MAX_CONCURRENT_CALLS: usize = 8;
+
+/// The per-connection call gate: `enter` blocks while `max` calls run.
+pub(crate) struct CallGate {
+    running: std::sync::Mutex<usize>,
+    freed: std::sync::Condvar,
+    max: usize,
+}
+
+impl CallGate {
+    pub(crate) fn new(max: usize) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(CallGate {
+            running: std::sync::Mutex::new(0),
+            freed: std::sync::Condvar::new(),
+            max,
+        })
+    }
+
+    /// Wait for a slot; the returned guard frees it when dropped.
+    pub(crate) fn enter(self: &std::sync::Arc<Self>) -> CallSlot {
+        let mut n = self.running.lock().unwrap_or_else(|p| p.into_inner());
+        while *n >= self.max {
+            n = self.freed.wait(n).unwrap_or_else(|p| p.into_inner());
+        }
+        *n += 1;
+        CallSlot(self.clone())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn running(&self) -> usize {
+        *self.running.lock().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+pub(crate) struct CallSlot(std::sync::Arc<CallGate>);
+
+impl Drop for CallSlot {
+    fn drop(&mut self) {
+        let mut n = self.0.running.lock().unwrap_or_else(|p| p.into_inner());
+        *n -= 1;
+        self.0.freed.notify_one();
     }
 }
 
@@ -1326,7 +1634,7 @@ pub(crate) const LANE_TRAY_MARKER: &str = "tray-owned";
 pub(crate) const LANE_ADOPT_TICK: std::time::Duration = std::time::Duration::from_millis(500);
 
 /// Hand lane `(project, instance)` to the tray (see [`LANE_TRAY_MARKER`]).
-#[cfg_attr(any(test, not(feature = "host-services")), allow(dead_code))]
+#[cfg_attr(not(feature = "host-services"), allow(dead_code))]
 pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), String> {
     let dir = mcp_socket_host_dir_for_lane(project, instance);
     fs::create_dir_all(&dir).map_err(|e| format!("failed to create {}: {e}", dir.display()))?;
@@ -1335,6 +1643,29 @@ pub(crate) fn mark_lane_tray_owned(project: &str, instance: &str) -> Result<(), 
         .map_err(|e| format!("failed to write {}: {e}", marker.display()))?;
     let _ = fs::set_permissions(&marker, fs::Permissions::from_mode(0o600));
     Ok(())
+}
+
+/// ORDER 1988-trkp: before a keep-forges exit, hand every lane this process
+/// serves to the next tray (the marker its adoption tick binds). Returns the
+/// lanes marked.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn mark_served_lanes_for_adoption() -> Vec<LaneListenerKey> {
+    let lanes: Vec<LaneListenerKey> = lane_listener_registry()
+        .lock()
+        .expect("lane registry lock")
+        .iter()
+        .cloned()
+        .collect();
+    lanes
+        .into_iter()
+        .filter(|(p, i)| match mark_lane_tray_owned(p, i) {
+            Ok(()) => true,
+            Err(e) => {
+                warn!(project = %p, instance = %i, error = %e, "1988-trkp: could not mark lane for adoption");
+                false
+            }
+        })
+        .collect()
 }
 
 fn lane_instance(instance: &str) -> &str {
@@ -1358,7 +1689,9 @@ pub(crate) fn build_identity() -> &'static str {
     static ID: OnceLock<String> = OnceLock::new();
     ID.get_or_init(|| {
         use sha2::{Digest, Sha256};
-        let digest = env::current_exe()
+        // 1984-pexe: /proc/self/exe reads the RUNNING build even after an
+        // upgrade replaced its file (current_exe then names "… (deleted)").
+        let digest = crate::self_exe::for_spawn()
             .and_then(fs::read)
             .map(|bytes| {
                 let hash = Sha256::digest(&bytes);
@@ -1370,6 +1703,110 @@ pub(crate) fn build_identity() -> &'static str {
             .unwrap_or_else(|_| "unknown".to_owned());
         format!("{}+{digest}", crate::VERSION.trim())
     })
+}
+
+/// ORDER 2003-stbf: the tool a forge agent calls to learn whether the lane
+/// serving it runs the installed build.
+pub(crate) const LANE_VERSION_TOOL: &str = "tillandsias.lane_version";
+
+fn digest8(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .take(8)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The version an installed binary's `--version` prints (`Tillandsias v<ver>`).
+pub(crate) fn parse_version_line(out: &str) -> Option<String> {
+    let v = out
+        .lines()
+        .next()?
+        .trim()
+        .strip_prefix("Tillandsias v")?
+        .trim();
+    (!v.is_empty()
+        && v.chars()
+            .all(|c| c.is_ascii_alphanumeric() || ".-+".contains(c)))
+    .then(|| v.to_string())
+}
+
+/// ORDER 2003-stbf: the INSTALLED binary's identity, in [`build_identity`]'s
+/// `<version>+<digest>` form: the file now at this program's installed path
+/// (an upgrade replaces it under a running lane) and what its `--version`
+/// prints. `None` when either cannot be read.
+pub(crate) fn installed_build_identity() -> Option<String> {
+    let path = crate::self_exe::for_other_process().ok()?;
+    let bytes = fs::read(&path).ok()?;
+    let out = std::process::Command::new(&path)
+        .arg("--version")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    let version = parse_version_line(&String::from_utf8_lossy(&out.stdout))?;
+    Some(format!("{version}+{}", digest8(&bytes)))
+}
+
+/// ORDER 2003-stbf: is a lane running `running` (a build id) current against
+/// the installed build? Report only: a forge may hold live work, so nothing is
+/// restarted. An unreadable installed build, or a lane that cannot name its
+/// own, is `unknown`, never `current`.
+pub(crate) fn lane_freshness(running: &str, installed: Option<&str>) -> serde_json::Value {
+    let version = |id: &str| id.split('+').next().unwrap_or(id).to_string();
+    match installed {
+        None => serde_json::json!({
+            "status": "unknown",
+            "lane": running,
+            "installed": null,
+            "why": "the installed binary could not be read, so this lane cannot be called current",
+        }),
+        Some(_) if running.ends_with("+unknown") || running.starts_with("unanswered") => {
+            serde_json::json!({
+                "status": "unknown",
+                "lane": running,
+                "installed": installed,
+                "why": "the lane did not name its own build",
+            })
+        }
+        Some(inst) if inst == running => serde_json::json!({
+            "status": "current",
+            "lane": running,
+            "installed": inst,
+        }),
+        Some(inst) => serde_json::json!({
+            "status": "stale",
+            "lane": running,
+            "installed": inst,
+            "lane_version": version(running),
+            "installed_version": version(inst),
+            "why": format!(
+                "this lane runs {} but {} is installed; its tools keep the old code until the \
+                 forge is relaunched (tillandsias <project>). Nothing is restarted automatically: \
+                 the forge may hold live work.",
+                version(running),
+                version(inst)
+            ),
+        }),
+    }
+}
+
+/// ORDER 2003-stbf: every lane socket on this host, by lane directory name.
+pub(crate) fn lane_sockets() -> Vec<(String, std::path::PathBuf)> {
+    let root = crate::control_socket_host_dir().join("mcp");
+    let mut out: Vec<(String, std::path::PathBuf)> = fs::read_dir(&root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| {
+            let sock = e.path().join("mcp.sock");
+            sock.exists()
+                .then(|| (e.file_name().to_string_lossy().into_owned(), sock))
+        })
+        .collect();
+    out.sort();
+    out
 }
 
 /// 1961-8ats: what the process answering on `socket` says it is, read from
@@ -1976,8 +2413,9 @@ mod lane_adoption_tests {
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         let _ = fs::remove_file(&path);
         drop(UnixListener::bind(&path).unwrap());
+        // 1980-lsrc: a parallel test's fork may hold the listener until exec.
         assert!(
-            matches!(UnixStream::connect(&path), Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused),
+            wait_until_refused(&path),
             "the fixture must reproduce the refusing socket"
         );
         path
@@ -2632,8 +3070,8 @@ mod host_tool_discovery_fixtures {
         );
         assert!(desc("image.generate").contains("locally on this computer"));
         assert!(desc("studio.run_workflow").contains("studio container"));
-        assert!(desc("webstudio.open").contains("starts nothing from the lane"));
-        assert!(desc("webstudio.options").contains("Not the ComfyUI image studio"));
+        assert!(desc("webstudio.open").contains("STARTS the studio through the tray"));
+        assert!(desc("webstudio.options").contains("Each option carries its affordances"));
         for n in [
             "preview.status",
             "preview.stop",
@@ -2648,6 +3086,106 @@ mod host_tool_discovery_fixtures {
                 desc(n)
             );
         }
+    }
+
+    /// Order 2025-e6mi: "open in a studio" from a forge launches the studio
+    /// through the tray and hands the agent its URLs, for any project. RED
+    /// before: webstudio.open answered an error naming `tillandsias --studio`
+    /// for the operator to run, and launched nothing.
+    #[test]
+    fn webstudio_open_launches_from_the_lane_once_and_returns_its_urls() {
+        use crate::studio::{LaneLauncher, with_test_launcher};
+        use std::sync::Mutex;
+
+        #[derive(Default)]
+        struct Stub {
+            launches: Mutex<Vec<(String, String, String)>>,
+        }
+        impl LaneLauncher for Stub {
+            fn project_remote(&self, project: &str) -> Result<String, String> {
+                Ok(format!("https://github.com/someone/{project}.git"))
+            }
+            fn launch(&self, project: &str, remote: &str, studio: &str) -> Result<bool, String> {
+                let mut l = self.launches.lock().unwrap();
+                let key = (project.to_string(), remote.to_string(), studio.to_string());
+                if l.contains(&key) {
+                    return Ok(false);
+                }
+                l.push(key);
+                Ok(true)
+            }
+            fn router_port(&self) -> Option<u16> {
+                Some(8080)
+            }
+        }
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let project = "e6mi-site";
+        let browser = lane_browser_server(project, "default", None, true);
+        let open = |studio: &str| {
+            handle_mcp_jsonrpc(
+                project,
+                "default",
+                &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                    "params":{"name":"webstudio.open","arguments":{"studio": studio}}}),
+                &browser,
+                &rt,
+            )
+            .unwrap()
+        };
+        let stub = std::sync::Arc::new(Stub::default());
+        let (first, second, unknown, unbuilt) = with_test_launcher(stub.clone(), || {
+            (
+                open("grapesjs"),
+                open("grapesjs"),
+                open("nope"),
+                open("onlook"),
+            )
+        });
+
+        let text = |r: &serde_json::Value| r.to_string();
+        assert!(first.get("error").is_none(), "{first}");
+        for needle in [
+            "\\\"started\\\":true",
+            "window_url",
+            "preview_url",
+            "studio.e6mi-site.localhost:8080",
+        ] {
+            assert!(text(&first).contains(needle), "{needle}: {first}");
+        }
+        assert!(!text(&first).contains("tillandsias --studio"), "{first}");
+        assert!(text(&second).contains("\\\"started\\\":false"), "{second}");
+        assert_eq!(
+            *stub.launches.lock().unwrap(),
+            [(
+                project.to_string(),
+                format!("https://github.com/someone/{project}.git"),
+                "grapesjs".to_string()
+            )],
+            "launched exactly once, with the lane's project identity"
+        );
+        assert!(unknown.get("error").is_some(), "{unknown}");
+        assert!(unbuilt.get("error").is_some(), "{unbuilt}");
+        assert!(text(&unbuilt).contains("CodeSandbox") || text(&unbuilt).contains("cloud account"));
+
+        // The descriptor and the agent guidance no longer send the agent to
+        // the operator with a command.
+        let tools = list(&browser, &rt);
+        let d = tools
+            .iter()
+            .find(|t| t["name"] == "webstudio.open")
+            .unwrap()["description"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(!d.contains("starts nothing from the lane"), "{d}");
+        assert!(d.contains("STARTS"), "{d}");
+        let guidance =
+            include_str!("../../../images/default/config-overlay/mcp/forge-agent-guidance.md");
+        assert!(
+            !guidance.contains("`webstudio.open` starts nothing from the lane"),
+            "forge-agent-guidance.md still says webstudio.open starts nothing"
+        );
     }
 
     #[test]
@@ -2705,5 +3243,49 @@ mod host_tool_discovery_fixtures {
         )
         .unwrap();
         assert_eq!(unknown["error"]["code"], -32601);
+    }
+}
+
+#[cfg(test)]
+mod lane_freshness_tests {
+    use super::*;
+
+    /// 2003-stbf: a lane is current only when its build matches the
+    /// installed one; a different installed build is stale, naming both
+    /// versions; an unreadable installed build or a lane that cannot name its
+    /// own is unknown, never current. Pre-fix: FAILS, nothing compared them.
+    #[test]
+    fn a_lane_reports_current_stale_or_unknown_against_the_installed_build() {
+        let cur = lane_freshness("56.11.6.1+aaaa", Some("56.11.6.1+aaaa"));
+        assert_eq!(cur["status"], "current");
+        let stale = lane_freshness("56.11.4.1+bbbb", Some("56.11.6.1+aaaa"));
+        assert_eq!(stale["status"], "stale");
+        assert_eq!(stale["lane_version"], "56.11.4.1");
+        assert_eq!(stale["installed_version"], "56.11.6.1");
+        let why = stale["why"].as_str().unwrap();
+        assert!(
+            why.contains("56.11.4.1") && why.contains("56.11.6.1") && why.contains("relaunched"),
+            "{why}"
+        );
+        // A rebuild at the same version is still a different build.
+        assert_eq!(
+            lane_freshness("56.11.6.1+bbbb", Some("56.11.6.1+aaaa"))["status"],
+            "stale"
+        );
+        assert_eq!(lane_freshness("56.11.6.1+aaaa", None)["status"], "unknown");
+        assert_eq!(
+            lane_freshness("56.11.6.1+unknown", Some("56.11.6.1+unknown"))["status"],
+            "unknown"
+        );
+        assert_eq!(
+            lane_freshness("unanswered (refused)", Some("56.11.6.1+aaaa"))["status"],
+            "unknown"
+        );
+        assert_eq!(
+            parse_version_line("Tillandsias v56.10.26.2\n").as_deref(),
+            Some("56.10.26.2")
+        );
+        assert_eq!(parse_version_line("something else"), None);
+        assert_eq!(parse_version_line("Tillandsias v$(rm -rf)"), None);
     }
 }

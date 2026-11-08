@@ -1,0 +1,13 @@
+# Gate step 1957-msjs — a provider usage limit one host's forge recorded holds
+# the forges of every fleet host. Two simulated hosts share one plan dir (no
+# network, no podman): host A's exit publishes the record as a plan fragment,
+# host B's offline launch fold names A and B's forge refuses without calling
+# the provider; an expired deadline holds nothing, the operator override still
+# works, a failed or hung push is deferred within its bound and retried.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking a provider usage limit recorded on one host holds every host (1957-msjs)"
+STEP_LUA="scripts/lua/test-provider-limit-relay.lua"
+STEP_ERROR="a provider usage limit recorded on one host no longer reaches the others, or an expired one still holds (1957-msjs) — see the FAIL lines above"
+STEP_OK="provider-limit relay fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:provider-limit-relay:18 arms"

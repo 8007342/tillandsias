@@ -1776,11 +1776,11 @@ So a validation packet this loop writes should say, explicitly:
 
 ```bash
 scripts/check-stranded-in-progress.sh
-scripts/check-landed-but-open.sh
+tillandsias-plan script run scripts/lua/check-landed-but-open.lua
 scripts/archive-plan-packets.sh
 ```
 
-`check-landed-but-open.sh` (1367-emjg) is the other half of the same leak: it
+`check-landed-but-open.lua` (1367-emjg; Lua since 1270-5mz8) is the other half of the same leak: it
 lists every order a CODE landing on trunk cites in its subject (default window
 ten days) whose row is still ready, pending, in_progress or implemented. On
 2026-09-23 that was 21 of 177 landed orders; on 2026-09-28 it found 920-tqhs a

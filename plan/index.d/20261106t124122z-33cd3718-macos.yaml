@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-cloudflare-login-qr-relay-is-deployed-at-a-path-on-observatorium-tillandsias-org-with-a-poll-endpoint-registered-as-a-redirect-uri-and-on-by-default-so-a-phone-scan-completes-a-tray-sign-in
+    event:
+      type: progress
+      ts: "2026-11-06T12:41:22Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: macos
+      summary: |
+        RELEASED to ready (WIP audit 2026-11-06, checked against trunk). Landed: the login side, f784bcb84 (#497), with the relay at https://cloudflare.tillandsias.org/cloudflare/callback, and the relay default turned ON by 1954-cfqr (5757d9bc4). The observatorium-path design in criteria 1-3 was withdrawn on 2026-10-17 (event), so those criteria describe a placement that was not built. LEFT: criterion 6, the live QR sign-in on a stable release through the tray, plus restating criteria 1-3 for the cloudflare.tillandsias.org relay. Not marked implemented: no evidence covers the live check.

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora, 2026-11-02).
+packets:
+- packet_id: the-tillandsias-org-pre-push-hook-rebuilds-the-site-in-a-container-not-with-the-hosts-python3
+  order: 1959-v39z
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - website
+  - release-gate
+  - podman
+  estimated_hours: 2
+  title: The tillandsias.org project's own pre-push hook rebuilds and checks the site with the HOST's python3; the operator rule is no dev tools on the host, so run it in a container or in the forge
+  context: 'Observed on macuahuitl 2026-11-02 while publishing tillandsias.org: the sibling project''s pre-push hook invokes python3 scripts/build-matrix.py / scripts/refresh.py and friends directly on the host to rebuild var/html/index.html and check it before the push. The operator''s standing rule for every host is that no development tooling runs on the host itself — tooling lives in a container (podman) or inside the forge. The tillandsias.org repository is a sibling project, not this one: this ledger references it only through the Powered By refresh (1958-yfib, 1958-jyfk: scripts/snapshot-stack.py, scripts/refresh.py, python3 scripts/build-matrix.py) and the stable-promotion step that deploys observatorium.tillandsias.org (scripts/promote-stable.sh step 4, 1798-khw6); scripts/release-preflight.sh and scripts/test-mcp-plan-resolver-pinning.sh cite the operator''s tillandsias.org sessions as evidence. There is no sibling-project hook convention in this repo to copy from, so the fix is in the tillandsias.org repository: the hook wraps its python3 steps in podman run on a pinned python image (or the tillandsias builder toolbox), or defers the build to the forge lane that opens the PR and only verifies the committed output is fresh.'
+  exit_criteria:
+  - 'On a host with no python3 on PATH (or with it shadowed by a stub that exits 127), git push in a tillandsias.org checkout runs the pre-push hook to completion: the site is rebuilt and checked inside a container, the push proceeds.'
+  - 'The hook names the image it uses and refuses with a one-line reason and remedy when podman is absent, instead of falling back to a host interpreter.'
+  - 'The 1958-jyfk per-cycle closure (python3 scripts/snapshot-stack.py, python3 scripts/build-matrix.py) is updated to the containerised form so the runbook does not reintroduce the host dependency.'
+  verifiable_closure: 'In the tillandsias.org repository: a hook fixture that shadows python3 with an exit-127 stub and runs .git/hooks/pre-push (or the hook script it points at) to a green rebuild; named by the claimer in the tillandsias.org commit and cited back here in the completion event.'
+  unscoreable: 'the hook and its fixture live in the sibling tillandsias.org repository, which this ledger''s litmus runner cannot execute; the completion event cites the tillandsias.org commit and its fixture verdict line.'
+  next_action: 'Whoever owns tillandsias.org: read its pre-push hook, list the python3 steps it runs, and wrap them in podman run with a pinned image (or move the build into the forge lane and keep only a freshness check in the hook); add the exit-127 python3 fixture; then update the 1958-jyfk closure text here.'
+  provenance: macuahuitl-fedora 2026-11-02, coordinator observation during tillandsias.org publishing; filed by calmecacpilli.
+  events:
+  - type: filed
+    ts: '2026-11-02T08:51:59Z'
+    host: calmecacpilli
+    summary: filed p2 at the coordinator's request; the operator rule is no dev tools on the host and the site hook runs host python3

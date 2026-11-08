@@ -526,8 +526,16 @@ async fn execute_raw_podman(client: &PodmanClient, argv: Vec<String>) -> Result<
     // the bounded path killed the meta-orchestration e2e forge at the Container
     // budget (300s) on the v56.9.19.1 release gate (2026-09-19) while the
     // launcher's own caps were 600s and 1500s. Mirror the seam, do not bound it.
-    if head == "run" && !raw_run_is_detached(&argv[1..]) {
+    if head == "run" && raw_is_attached(&argv) {
         return raw_run_attached(client, &argv[1..]).await;
+    }
+    // ORDER 2024-82vw: an attached `exec` is the same kind of session —
+    // `toolbox run` is one, and the litmus runtime's re-exec of build.sh into
+    // the builder toolbox goes through it. The bounded path kept stdout and
+    // dropped stderr, so every stderr line of the re-exec'd gate vanished
+    // under the runner only. Inherit stdio, carry the child's own status.
+    if raw_verb_index(&argv).map(|i| argv[i].as_str()) == Some("exec") && raw_is_attached(&argv) {
+        return raw_exec_attached(&argv).await;
     }
     let operation = match head {
         "run" | "create" | "start" | "stop" | "kill" | "rm" | "remove" | "exec" | "ps"
@@ -566,6 +574,57 @@ async fn raw(
         .await
         .map(|output| output.stdout)
         .map_err(|err| err.to_string())
+}
+
+/// Is this raw argv an ATTACHED session the shim must mirror with inherited
+/// stdio and the child's real status, rather than the bounded,
+/// stdout-captured `execute`?
+fn raw_is_attached(argv: &[String]) -> bool {
+    match raw_verb_index(argv) {
+        Some(i) if argv[i] == "run" || argv[i] == "exec" => !raw_run_is_detached(&argv[i + 1..]),
+        _ => false,
+    }
+}
+
+/// Where the podman VERB sits in a raw argv. Global options may precede it —
+/// toolbox calls `podman --log-level error exec …` — so the verb is the first
+/// word that is neither a flag nor the value of a value-taking global flag.
+fn raw_verb_index(argv: &[String]) -> Option<usize> {
+    const VALUED_GLOBALS: &[&str] = &[
+        "--log-level",
+        "--root",
+        "--runroot",
+        "--tmpdir",
+        "--storage-driver",
+        "--storage-opt",
+        "--url",
+        "--connection",
+        "-c",
+        "--identity",
+        "--cgroup-manager",
+        "--events-backend",
+        "--runtime",
+        "--runtime-flag",
+        "--conmon",
+        "--hooks-dir",
+        "--module",
+        "--imagestore",
+        "--network-cmd-path",
+        "--network-config-dir",
+        "--volumepath",
+        "--config",
+        "--ssh",
+        "--cdi-spec-dir",
+    ];
+    let mut i = 0;
+    while i < argv.len() {
+        let arg = argv[i].as_str();
+        if !arg.starts_with('-') {
+            return Some(i);
+        }
+        i += if VALUED_GLOBALS.contains(&arg) { 2 } else { 1 };
+    }
+    None
 }
 
 /// Does this `podman run …` argv (the part after `run`) ask for `--detach`?
@@ -622,6 +681,25 @@ async fn raw_run_attached(client: &PodmanClient, args: &[String]) -> Result<Stri
         None => Err(format!(
             "attached container {name} was terminated by a signal: no exit status to carry (status=absent)"
         )),
+    }
+}
+
+/// The attached `exec`: stdio inherited, no façade budget, the child's real
+/// exit status carried out whole; a signal-terminated child has none and says
+/// so (1260-2qgi).
+async fn raw_exec_attached(argv: &[String]) -> Result<String, String> {
+    let mut cmd = tillandsias_podman::podman_cmd();
+    cmd.args(argv)
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit());
+    let status = cmd.status().await.map_err(|err| {
+        format!("could not spawn attached podman exec: {err}\nnext: verify podman is on PATH")
+    })?;
+    match status.code() {
+        Some(0) => Ok(String::new()),
+        Some(code) => std::process::exit(code),
+        None => Err("attached podman exec was terminated by a signal: no exit status to carry (status=absent)".to_string()),
     }
 }
 
@@ -1037,7 +1115,7 @@ mod tests {
 
 #[cfg(test)]
 mod raw_run_attached_tests {
-    use super::{container_name_from_run_args, raw_run_is_detached};
+    use super::{container_name_from_run_args, raw_is_attached, raw_run_is_detached};
 
     fn argv(parts: &[&str]) -> Vec<String> {
         parts.iter().map(|part| part.to_string()).collect()
@@ -1065,6 +1143,51 @@ mod raw_run_attached_tests {
             container_name_from_run_args(&args).as_deref(),
             Some("tillandsias-tillandsias-forge")
         );
+    }
+
+    // ORDER 2024-82vw: `toolbox run` is `podman exec` underneath. Under the
+    // litmus runtime that exec went through the bounded `execute`, which keeps
+    // stdout and DROPS stderr, so a re-exec'd build.sh lost every stderr line
+    // (the 1966-ubsw warning's quoted record) under the runner only.
+    #[test]
+    fn a_foreground_exec_is_attached_and_a_detached_one_is_not() {
+        // MEASURED: the argv toolbox 0.x hands podman (litmus calls.log,
+        // 2026-11-07): a GLOBAL option precedes the verb.
+        let toolbox = argv(&[
+            "--log-level",
+            "error",
+            "exec",
+            "--detach-keys",
+            "",
+            "--interactive",
+            "--user",
+            "lenovinha",
+            "--workdir",
+            "/x",
+            "tillandsias-builder",
+            "capsh",
+            "--caps=",
+            "--",
+            "-c",
+            "exec \"$@\"",
+        ]);
+        assert!(
+            raw_is_attached(&toolbox),
+            "toolbox's podman exec is attached"
+        );
+        assert!(raw_is_attached(&argv(&["exec", "-it", "c", "bash"])));
+        for detach in ["-d", "--detach", "-dit"] {
+            assert!(
+                !raw_is_attached(&argv(&["exec", detach, "c", "true"])),
+                "{detach}"
+            );
+        }
+        // Every other verb keeps the bounded, stdout-captured path.
+        for verb in ["ps", "inspect", "logs", "image", "volume"] {
+            assert!(!raw_is_attached(&argv(&[verb, "x"])), "{verb}");
+        }
+        assert!(raw_is_attached(&argv(&["run", "--rm", "img"])));
+        assert!(!raw_is_attached(&argv(&["run", "-d", "img"])));
     }
 
     #[test]

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: verify-image-usable-is-ported-to-lua-and-the-carried-waiver-grammar-names-cross-cutting-items
+    event:
+      type: progress
+      ts: "2026-11-08T00:19:28Z"
+      agent_id: linux-lenovinha-opus5-20261108t001928z
+      host: lenovinha
+      summary: |
+        SECOND CASE for the waiver-grammar half (2027-e2cf, PR #999, 2026-11-07). The shell-to-lua carry offered scripts/check-committable-branch.sh (107 lines) and was waived as too-big:scripts/check-committable-branch.sh:107. too-big is not the true reason. The true reason is cross-cutting: the item is pinned by litmus-committable-branch-guard-shape (whose steps copy the .sh into temp repos), by the test script scripts/test-cycle-preflight-cargo-resolution.sh:192, by scripts/check-host-tools.sh, and by a Rust test in crates/tillandsias-headless/src/main.rs. All of these sit outside the change. The grammar should accept cross-cutting:<item>:<pins> so that a waiver line records the real reason; this is the second waiver (after 2005-ccli) forced onto too-big. Requested by macuahuitl-fedora (coordinator).

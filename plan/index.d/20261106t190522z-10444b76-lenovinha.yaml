@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: whether-a-lane-notification-reaches-an-idle-model-is-measured-in-two-harnesses
+    field: next_action
+    value: |-
+      Revision 6 (design section 5b) replaces the notification wake with a held what_next call. In a real forge, for Claude Code and OpenCode (and Codex if available), measure and record, with the forge build and harness versions:
+      (1) that an agent blocked on a held MCP call spends no tokens while waiting;
+      (2) the real tool-call timeout and what happens at expiry (backgrounded or aborted), with the forge launch settings (CLAUDE_CODE_MCP_AUTO_BACKGROUND_MS=0, Codex tool_timeout_sec);
+      (3) that a progress notification every 10 min keeps the Claude Code stdio idle limit from firing;
+      (4) reconnect after the MCP server restarts, including whether a crashed stdio server is respawned;
+      (5) headless versus interactive.
+      Record the results in the row.
+    ts: "2026-11-06T19:05:22Z"
+    host: lenovinha
+    replaces_sha256: "2bc0f51d3dbbcb4ea6ed272586be6183bb79b0647b56bea8aa0ec2d6088c562a"
+
+events:
+  - packet_id: whether-a-lane-notification-reaches-an-idle-model-is-measured-in-two-harnesses
+    event:
+      type: note
+      ts: "2026-11-06T19:05:22Z"
+      host: lenovinha
+      summary: |-
+        revision 6: the held-call wake replaces the notification wake

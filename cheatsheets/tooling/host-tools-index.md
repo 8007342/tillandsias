@@ -42,10 +42,11 @@ committed_for_project: false
 | `image.generate` | local image generation (stable-diffusion.cpp) | starts the engine on the host GPU queue on first use; model downloads need the user's consent token |
 | `studio.start`, `studio.status` | the ComfyUI studio appliance | start it on demand (idempotent; nothing starts it at forge launch; it stops with the forge) and read whether it runs |
 | `studio.run_workflow`, `studio.key_footage` | headless ComfyUI work | queue GPU work in the project's studio container, which must be running (call `studio.start {}` first; no relaunch) |
+| `studio.models` | read-only model check | the pinned studio files and whether each is on disk, this tray's model table (compare its `models_tsv` with the checkout's `images/imagegen/models.tsv`), and what each ComfyUI loader lists |
 | `studio.validate_family`, `studio.finish_pixels`, `studio.contact_sheet` | family checks, pixel finish, review grid | nothing; no GPU |
 | `browser.open` (+12 `browser.*`) | browser windows ON THE HOST for project-local URLs | `browser.open` STARTS a window; `dev: true` adds CDP, eval and tails |
 | `cloudflare.scope_probe` (+11 reads) | the operator's Cloudflare account, GET only | nothing; probe first |
-| `webstudio.options` / `.open` / `.changes` / `.publish_request` | visual co-edit studios (GrapesJS, Decap, Tina, Puck) | nothing from the lane today; `.open` names the operator command |
+| `webstudio.options` / `.open` / `.changes` / `.publish_request` | visual co-edit studios (GrapesJS, Decap, Tina, Puck) | `.open` STARTS the studio through the tray and opens the dev Chromium window (2025-e6mi); the others start nothing |
 | `tillandsias.index` | this table | nothing |
 
 ## Deprecated aliases (one release)
@@ -57,3 +58,5 @@ committed_for_project: false
 - `studio.*` is ComfyUI; `webstudio.*` is GrapesJS/Decap/Tina/Puck. They are not the same studio.
 - `studio_unavailable` means the ComfyUI container is not running; starting it from the socket on demand is order 1969-cfyt, not yet shipped.
 - The forge has no browser binary: `browser.open` is the only way to see a page.
+
+Studio notes (kumbia forge, 2026-11-03): BiRefNet's alpha is soft (interior pixels read 254, not 255), so threshold it before treating it as a cutout mask. Only `~/.cache/tillandsias-project` survives a forge restart; anything else written in the forge is gone after it.

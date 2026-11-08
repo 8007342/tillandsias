@@ -347,7 +347,8 @@ fn is_root() -> bool {
 /// Re-execute this binary once through pkexec. Returns only if pkexec could
 /// not be used; the caller then prints the sudo line.
 fn elevate(verb: &str, user: &str) -> Option<i32> {
-    let exe = std::env::current_exe().ok()?;
+    // 1984-pexe: pkexec runs this path: the installed one, not /proc/self.
+    let exe = crate::self_exe::for_other_process().ok()?;
     let has_pkexec = std::env::var_os("PATH")
         .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join("pkexec").is_file()));
     if !has_pkexec {
@@ -391,7 +392,7 @@ pub(crate) fn run(args: &[String]) -> i32 {
         if let Some(code) = elevate(&o.verb, &user) {
             return code;
         }
-        let exe = std::env::current_exe()
+        let exe = crate::self_exe::for_other_process()
             .map(|p| p.display().to_string())
             .unwrap_or_else(|_| "tillandsias".into());
         println!("blocked:swap-{}:needs-root", o.verb);

@@ -19,6 +19,11 @@
 FROM docker.io/hashicorp/vault:1.18 AS vault-agent
 
 FROM docker.io/library/alpine:3.20
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
 # Step 1: Install dependencies
@@ -53,6 +58,7 @@ RUN apk add --no-cache \
         curl \
         jq \
         ruby \
+        openssl \
     && adduser -D -u 1000 -s /bin/bash git \
     && mkdir -p /srv/git /var/log/git-service /strategic \
     && chown -R git:git /srv/git /var/log/git-service /strategic
@@ -145,6 +151,17 @@ COPY ssh-lane-sidecar.sh /usr/local/bin/ssh-lane-sidecar
 RUN chmod +x /usr/local/bin/ssh-lane-sidecar
 
 # @trace spec:tillandsias-vault, spec:git-mirror-service
+# 1998-mvrs (b): the host binds the cert-only trust DIRECTORY at
+# /etc/tillandsias/ca-trust; every reader keeps the /etc/tillandsias/ca.crt path.
+# 2018-cabd: one-shot helpers (remote_projects.rs: repo listing, clone) bind the
+# single FILE at /etc/tillandsias/ca.crt instead. A bind onto a symlink lands on
+# its target, so the target must exist in the image: without it the bind is not
+# readable and vault-cli refuses "CA bundle not readable". The empty file is
+# only a mount point; a directory bind over ca-trust/ hides it.
+RUN mkdir -p /etc/tillandsias/ca-trust \
+    && touch /etc/tillandsias/ca-trust/intermediate.crt \
+    && chmod 644 /etc/tillandsias/ca-trust/intermediate.crt \
+    && ln -sf ca-trust/intermediate.crt /etc/tillandsias/ca.crt
 COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl
 COPY vault-agent-signer.hcl /etc/tillandsias/vault-agent-signer.hcl
 COPY vault-agent-bootstrap.sh /usr/local/bin/vault-agent-bootstrap

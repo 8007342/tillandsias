@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: image-generate-progress-count-test-flakes-when-a-parallel-test-holds-the-process-gpu-queue
+    order: 2032-gpuq
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [testing, flaky, imagegen, mcp]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/mcp_socket.rs
+      - crates/tillandsias-headless/src/imagegen_tool.rs
+    title: |
+      mcp_socket image_generate_is_listed_and_returns_files_with_metadata_and_progress expects exactly 3 progress notifications and fails with 4 when the GPU queue is held, so an unrelated PR's bintest goes red
+    context: |
+      MEASURED on lenovinha 2026-11-07: the full gate for #893 (work/1978-n8c6 at
+      67a943dc3, which touches only the git image entrypoint) failed bintest on
+      mcp_socket::image_generate_fixtures::image_generate_is_listed_and_returns_files_with_metadata_and_progress
+      (crates/tillandsias-headless/src/mcp_socket.rs, the assert_eq on lines.len() == 3 near line 2792).
+      It received 4 notifications, the extra one being "waiting for the GPU: 1 job(s) ahead",
+      the queue progress line that 1955-rjv3 added. The GPU queue is per process (one per tray), so under cargo test it is
+      shared by every test thread in the binary. The likely holder is a parallel test in the
+      same binary, for example imagegen_concurrent_calls_never_overlap_on_the_device, and not a job elsewhere on
+      the host. That is NOT yet confirmed. The assertion counts lines instead of naming the step lines, so an environment fault (queue
+      contention) is reported as a defect in whichever PR is being gated.
+    exit_criteria:
+      - 'the test asserts on the step progress lines (or isolates the queue: a fresh queue per test, or the queue tests serialised) so that a queue-wait line from a concurrent test cannot fail it'
+      - 'a REAL regression still fails: a missing step progress line, or a wrong progressToken or final progress value, still fails the test'
+      - 'RED FIRST: a reproduction that holds the queue from a second thread during the test makes it fail before the fix and pass after'
+    verifiable_closure: 'cargo test -p tillandsias-headless image_generate_is_listed_and_returns_files_with_metadata_and_progress passes, with the queue held by a concurrent ticket in the reproduction arm, and fails when a step progress line is removed'
+    provenance: lenovinha from #893's gate failure; filed at the request of macuahuitl-fedora (coordinator).
+    depends_on: []
+    related: [1955-rjv3, 1978-n8c6]
+    events:
+      - type: filed
+        ts: '2026-11-08T00:19:48Z'
+        host: lenovinha
+        summary: filed after #893's bintest went red on the image_generate progress count (4 lines vs 3, including a GPU queue-wait line)

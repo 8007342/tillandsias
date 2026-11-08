@@ -2938,7 +2938,26 @@ _run_lua_decider() {  # $1 = scripts/lua/<name>.lua, remaining args are explicit
     TILLANDSIAS_SCRIPT_RUNNER_BIN="$_ld_bin" _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
 }
 
+# ORDER 1270-5mz8: the litmus runtime shim routes every podman call through
+# scripts/tillandsias-podman, which runs a PREBUILT tillandsias-podman-cli. Build
+# it once, before the first phase mints the shim, and say so in the gate log, so
+# a release gate can never measure the forge lane on a binary older than the
+# tree (2026-09-19: two release gates did). The shim refuses a stale one too.
+_LITMUS_PODMAN_CLI_READY=0
+_ensure_litmus_podman_cli() {
+    [ "$_LITMUS_PODMAN_CLI_READY" = 1 ] && return 0
+    _LITMUS_PODMAN_CLI_READY=1
+    local _pc_rc=0
+    (cd "$SCRIPT_DIR" && cargo build -q -p tillandsias-podman-cli) || _pc_rc=$?
+    if [ "$_pc_rc" -eq 0 ]; then
+        echo "podman-cli: built-before-litmus-shim (cargo build -p tillandsias-podman-cli rc=0; 1270-5mz8)"
+    else
+        echo "podman-cli: build-failed-before-litmus-shim rc=$_pc_rc — the shim will refuse a stale prebuilt by name (1270-5mz8)"
+    fi
+}
+
 _run_litmus_phase() {
+    _ensure_litmus_podman_cli
     local phase="$1"
     local size="$2"
     local log_file="$3"
@@ -3856,6 +3875,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     if ! _run_lua_decider "scripts/lua/check-smoke-agent-prompt-is-minimal.lua" 2>&1; then
         _error "a smoke skill hands its forge agent the /meta-orchestration loop — a smoke spends one short turn on the shared hosted model (1941-smkp)"
         exit 1
+    fi
+
+    # ORDER 1958-yfib. Tillandsias is GPL-3.0-or-later; a file of ours declaring
+    # another licence, or an image leaving the OCI licence label to its base
+    # layer (measured: tillandsias-inference shipped fedora-minimal's MIT), is
+    # refused. Vendored upstream files are listed in the guard with reasons.
+    if ! _run_lua_decider "scripts/lua/check-own-licence-declarations.lua" 2>&1; then
+        _error "a file of ours declares a licence other than GPL-3.0-or-later, or an image inherits its base image's licence label (1958-yfib) — see the refused: lines above"
+        exit 1
+    fi
+
+    # ORDER 1958-yfib. The stack ledger (docs/credits/stack.v1.json) is generated
+    # from cargo metadata, the Containerfiles, the lockfiles and the model
+    # register. ADVISORY here: it is refreshed at each stable release (1958-jyfk),
+    # not on every dependency bump, so a stale ledger warns and does not red the gate.
+    if ! _run_lua_decider "scripts/lua/build-stack-ledger.lua" --check 2>&1; then
+        _warn "advisory: docs/credits/stack.v1.json is stale against the sources of truth — regenerate with \`tillandsias-plan script run scripts/lua/build-stack-ledger.lua\` (refreshed at each stable release, 1958-jyfk)"
     fi
 
     # ORDER 1484-uf29. The typed Lua runner is the decision path. Every input
@@ -5113,6 +5149,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "these tests compile only with --features tray,listen-vsock; the --workspace pass above cannot see them"
         exit 1
     fi
+    # 2000-camv: the one host-services INTEGRATION test the gate runs. The
+    # --workspace pass builds integration tests with default features, where
+    # --cloud-usage is not compiled, so this fixture (a read must never mint
+    # the operator's CA) only blocks when it is run here, by name.
+    _step "Running --cloud-usage never-mints fixture (2000-camv)..."
+    _cu_rc=0
+    _run cargo test -p tillandsias-headless --test cloud_usage_never_mints \
+        --features tray,listen-vsock --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1 |
+        tee -a "$_fg_transcript" || _cu_rc="${PIPESTATUS[0]}"
+    if [[ $_cu_rc -ne 0 ]]; then
+        _error "fail:cloud-usage-never-mints: --cloud-usage changed the CA directory or did not run (cargo rc=$_cu_rc) — transcript: $_fg_transcript"
+        _error "  why: a read-only command that mints replaces the host CA under a running Vault, and every tray read then fails TLS verification"
+        _error "  remedy: keep --cloud-usage read-only (set_read_only_process) and re-run: cargo test -p tillandsias-headless --test cloud_usage_never_mints --features tray,listen-vsock"
+        exit 1
+    fi
     # CRITERION 2: state how many actually RAN, so "ran 0 because the feature
     # was off" is distinguishable from "ran and passed". A pass that silently
     # executes nothing is the failure this packet exists to close, and it has
@@ -5884,6 +5935,22 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # (it drops the env-dep it set itself). Refuses a new site in test code
     # beyond its per-file floor and prints the count; the fixture shows the
     # defect on a real cargo (two copies, one target) and the guard's arms.
+    # ORDER 2007-vy3p — a grep pattern this host's grep cannot compile makes
+    # grep exit 2, and `if grep -q` reads exit 2 as a clean miss: the check
+    # passes without having run (2006-wahn: BSD grep rejected the attestation
+    # grammar's '^(|...' and the plan-only lane admitted every line). Compiles
+    # every literal pattern in scripts/ and the hooks under THIS grep; the
+    # fixture also proves the push and purge gates refuse on exit 2.
+    _step "Checking every literal grep pattern compiles under this grep (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/check-grep-patterns-compile.lua" 2>&1; then
+        _error "a grep pattern does not compile under this host's grep — a gate using it would pass without running (2007-vy3p)"
+        exit 1
+    fi
+    _step "Checking gate greps fail closed on exit 2 (2007-vy3p)..."
+    if ! _run_lua_decider "scripts/lua/test-grep-exit-two-fails-closed.lua" 2>&1; then
+        _error "a gate grep reads exit 2 as a pass — see the FAIL lines above (2007-vy3p)"
+        exit 1
+    fi
     _step "Checking for new compile-time CARGO_MANIFEST_DIR paths in tests (1590-j20f)..."
     if ! _run_lua_decider "scripts/lua/check-manifest-dir-env.lua" 2>&1; then
         _error "a test reads a fixture through compile-time env!(\"CARGO_MANIFEST_DIR\") — use std::env::var(\"CARGO_MANIFEST_DIR\") at runtime (1590-j20f)"

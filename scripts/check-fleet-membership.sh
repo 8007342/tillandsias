@@ -241,6 +241,12 @@ else
     esac
 fi
 
+# ---- 11. provider-limit relay (1957-msjs): a deferred push is retried by the slot --
+_deferred="${TILLANDSIAS_PROVIDER_LIMIT_STATE:-${HOME:-/tmp}/.local/state/tillandsias}/provider-limit-deferred"
+if [ -s "$_deferred" ]; then
+    _todo "provider-limit-deferred:1957-msjs:a provider usage limit has not reached trunk yet; run scripts/provider-limit-relay.sh retry"
+fi
+
 # ---- verdict ----------------------------------------------------------------
 if [ "$todos" = 0 ]; then
     echo "ok:join-the-fleet:${HOST}:${REGIME}:ran=${ran} skipped=${skipped}"

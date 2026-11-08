@@ -33,6 +33,12 @@
 # the C-RADIO directory with local_files_only=True; the env below repeats the
 # offline switches so nothing reaches for the Hub even from a stray import.
 FROM docker.io/library/python:3.12.16-slim-bookworm
+# 1958-yfib: an image inherits its base layer's labels, so it states its own:
+# our recipe (GPL-3.0-or-later) AND what it mostly ships. CorridorKey at 485f5e9 is the CORRIDOR KEY LICENCE v2.0 (CC BY-NC-SA 4.0 plus
+# additional terms that take precedence; upstream LICENSE). DECLARED here, not
+# accepted: acceptance is the operator's, through the 1956-ecpb consent gate.
+# Every component's licence: docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND LicenseRef-CorridorKey-Licence-2.0"
 
 ARG CORRIDORKEY_SHA=485f5e9ab759ead6138cc990776184b59d6ea971
 ARG TORCH_VERSION=2.9.1+cu128

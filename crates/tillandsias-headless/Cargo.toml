@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "56.11.3"
+version = "0.0.0"  # 1993-cver: frozen; the release version is VERSION
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]

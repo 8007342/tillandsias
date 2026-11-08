@@ -65,9 +65,11 @@ revenue cap) may appear. The Stability AI Community Licence (SD-Turbo,
 SD3.5) is removed.
 
 Rows live in `images/imagegen/tiers.tsv` (declarative, read like
-`tier-table.tsv`). The table is a LADDER, smallest first. Every host starts
-at I0, whatever its hardware. The classifier computes the host's CEILING
-tier from the accel envelope; it never starts above I0.
+`tier-table.tsv`). The table is ordered smallest first; I0 is the floor
+every host can run and is fetched on first use unasked. The classifier
+computes the host's CEILING tier from the accel envelope. Which tier a
+call runs is decided by section 5 (operator ruling 2026-11-01): the highest
+tier within the ceiling whose files are present or granted, not I0.
 
 | Tier | Model | Licence | Default size / steps | Hardware needed to OFFER it |
 |---|---|---|---|---|
@@ -114,31 +116,52 @@ true`, and `bigger_tier_offer` (section 5). No base64 anywhere in the
 text result.
 
 Request: `prompt` (required), `negative_prompt`, `width`, `height`, `seed`,
-`steps`, `count` (≤ 4), `tier` (default: the smallest cached tier, I0 on
-first use), `consent_token`.
+`steps`, `count` (≤ 4), `tier` (default: the highest tier within the
+ceiling whose files are present or granted; any smaller tier may be named),
+`consent_token`.
 
-### 5. Smallest first, one tier up at a time
+### 5. The consent gate is a one-time download gate per host
 
-1. Every request runs on the smallest tier available (I0 on first use). It
-   never asks.
-2. When the host's ceiling is above the tier just used, the result carries
-   `bigger_tier_offer`: the next tier only (never a jump of two), a
-   `consent_token`, and one curated `ask` sentence, e.g. "There are bigger
-   models that give better results, but they are slower. Want to try the
-   next one?" When that tier's files are not yet downloaded, the sentence
-   is the honest one: "We only download the big files if you're OK waiting
-   longer for better results."
-3. User-facing text MUST NOT carry raw download sizes, gigabyte figures or
-   second estimates. Numbers stay in structured fields the agent may log.
-4. The agent shows `ask` to the user verbatim. On yes it re-calls with
-   `tier` set to the offered tier and the `consent_token`; the token is
-   host-minted, single-use, bound to the request hash, tier and lane, and
-   expires in 10 minutes. A request for a tier above the last accepted one
-   without a token returns `consent_required` with the same offer and does
-   nothing else.
-5. After the user accepts tier N, the next result offers tier N+1 if the
-   ceiling allows, and so on.
-6. Later: a large download may additionally be gated by the OS approval
+Operator ruling 2026-11-01 (on #825, rows 1957-5m8g and 1957-8hkf),
+verbatim: "the bigger models gate should be asked only for downloading
+models the first time ... there's no real reason to use the smaller
+models". This replaces the 2026-10-25 "smallest first, one tier up at a
+time" shape (Q3 below), which in the field (demon_attack-forge rounds 1+2)
+cost every I1 picture an extra I0 run and a fresh prompt, and offered
+tiers with nothing pinned. The gate protects the host's disk and link,
+not image quality; it is not a quality ladder.
+
+1. A tier is AVAILABLE when its pinned files are on this computer, or
+   their download was granted on this host. I0 is always available: it is
+   fetched on first use unasked, as before, so a fresh host can make a
+   first picture.
+2. A tierless call runs the highest available tier within the host
+   ceiling (I0 only when nothing above it is available). There is no ladder
+   walk and no session grant to re-earn.
+3. Any tier up to the ceiling may be requested directly by name (I3 on a
+   host holding only I0 asks for I3, not I1). Smaller tiers stay available
+   by name.
+4. Only a tier whose files are missing asks, and only once per host: the
+   call returns `consent_required` carrying a download offer — `tier`,
+   `model`, `download_bytes`, `ask`, `consent_token`, `how`,
+   `expires_in_s` — and runs nothing. The `ask` states the cost honestly
+   (1957-8hkf): "This model is not on this computer yet: it needs a
+   one-time download of N.N GB (about M min) and that much disk. Download
+   it?" GB comes from the pinned sizes, minutes from an assumed link rate
+   until one is measured.
+5. The agent shows `ask` verbatim. On yes it re-calls with the same
+   prompt, `tier` and the `consent_token`; the token is host-minted,
+   single-use, bound to the request hash, tier and lane, and expires in
+   10 minutes. Redeeming it records a standing HOST grant for that tier's
+   download (`grant: {tier, kind: download, scope: host, expiry: none,
+   expiry_enforced: false}`, named in the result); that tier never asks
+   again on this host. Approvals are standing; no expiry is enforced yet.
+6. A result at a tier below the ceiling may still carry
+   `bigger_tier_offer`: the next INSTALLABLE tier above everything already
+   present, as the same download offer, or null when nothing above needs
+   fetching. A tier with no pinned files is never offered, and a direct
+   request for it fails `tier_unavailable` (1957-8hkf).
+7. Later: a large download may additionally be gated by the OS approval
    dialog, which shows sizes and a disk bar — see the parallel change
    `os-verified-approval-gates`. This change does not depend on it.
 
@@ -194,6 +217,9 @@ Models are shared with the light tool's cache where formats allow.
 
 - Q1 Output: shared `/work/tmp/imagegen/`, destroyed on teardown.
 - Q2 Licences: permissive/open only; Stability Community rows removed.
-- Q3 Consent: smallest first, one tier at a time, curated sentences, no
-  sizes; 120 s / 2 GB thresholds removed.
+- Q3 Consent (2026-10-25): smallest first, one tier at a time, curated
+  sentences, no sizes; 120 s / 2 GB thresholds removed. SUPERSEDED by the
+  operator ruling 2026-11-01 (#825, 1957-5m8g): a one-time per-host
+  download gate, any tier directly, the ask carries GB and minutes
+  (section 5).
 - Q4 Studio: a later packet.

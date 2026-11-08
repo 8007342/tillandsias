@@ -51,6 +51,7 @@ pub(crate) fn available() -> bool {
             && String::from_utf8_lossy(&o.stdout).trim() == "systemd");
         if systemd {
             ensure_slice_monitored();
+            ensure_slice_protected();
         }
         systemd
     })
@@ -85,6 +86,82 @@ fn ensure_slice_monitored() {
         Err(e) => eprintln!(
             "[tillandsias] oom: systemctl unavailable ({e}); forges run without the slice policy"
         ),
+    }
+}
+
+/// ORDER 1913-fh6l. The slice's `memory.low`: every forge this host's tier
+/// runs at once, at its own reservation. With `memory_recursiveprot` a forge's
+/// `--memory-reservation` is capped by its ancestors, and the slice sat at 0,
+/// so the reservation protected nothing. `memory.low` only shields memory in
+/// use, so an idle reservation costs the rest of the host little.
+pub(crate) fn slice_protection_bytes(forge_low_mib: u64, forges: u64) -> u64 {
+    forge_low_mib
+        .saturating_mul(forges)
+        .saturating_mul(1024 * 1024)
+}
+
+/// `systemctl set-property --runtime` argv for the slice's `MemoryLow`. A
+/// rootful host (the macOS and WSL guests) sets it on the system manager,
+/// which owns the slice; a rootless one on the user manager, which owns ITS
+/// slice (`user@<uid>.service/tillandsias.slice`). `--runtime`: re-applied
+/// each launch, gone at reboot, never written to disk.
+pub(crate) fn slice_protection_argv(rootful: bool, bytes: u64) -> Vec<String> {
+    let mut argv: Vec<String> = Vec::new();
+    if !rootful {
+        argv.push("--user".into());
+    }
+    argv.extend(
+        ["--no-ask-password", "set-property", "--runtime", SLICE]
+            .iter()
+            .map(|s| s.to_string()),
+    );
+    argv.push(format!("MemoryLow={bytes}"));
+    argv
+}
+
+/// The one-time root step a ROOTLESS host's operator takes: the slice's
+/// system-owned ancestors (user.slice, user@<uid>.service) sit at 0 and cap
+/// it, and no rootless process may raise them. Printed, never applied.
+pub(crate) fn operator_drop_in(bytes: u64) -> String {
+    format!(
+        "[tillandsias] memory: forges run in {SLICE} under user.slice, whose memory.low is below {bytes}, \
+         so their reservation is capped (1913-fh6l). One root step lifts it for every user:\n\
+         \x20 sudo mkdir -p /etc/systemd/system/user.slice.d /etc/systemd/system/user@.service.d\n\
+         \x20 printf '[Slice]\\nMemoryLow={bytes}\\n' | sudo tee /etc/systemd/system/user.slice.d/50-tillandsias-memory-low.conf\n\
+         \x20 printf '[Service]\\nMemoryLow={bytes}\\n' | sudo tee /etc/systemd/system/user@.service.d/50-tillandsias-memory-low.conf\n\
+         \x20 sudo systemctl daemon-reload"
+    )
+}
+
+fn ensure_slice_protected() {
+    let budget = tillandsias_core::forge_budget::ForgeBudget::for_this_host();
+    let forges = tillandsias_core::forge_budget::ForgeBudget::concurrent_forges_on_this_host();
+    let bytes = slice_protection_bytes(budget.memory_low_mib, forges);
+    if bytes == 0 {
+        return;
+    }
+    // SAFETY: geteuid has no preconditions and cannot fail.
+    let rootful = unsafe { libc::geteuid() } == 0;
+    match std::process::Command::new("systemctl")
+        .args(slice_protection_argv(rootful, bytes))
+        .output()
+    {
+        Ok(o) if o.status.success() => {}
+        Ok(o) => eprintln!(
+            "[tillandsias] memory: could not set {SLICE} MemoryLow={bytes} ({}); forges run without the slice protection (1913-fh6l)",
+            String::from_utf8_lossy(&o.stderr).trim()
+        ),
+        Err(e) => eprintln!(
+            "[tillandsias] memory: systemctl unavailable ({e}); forges run without the slice protection (1913-fh6l)"
+        ),
+    }
+    if !rootful {
+        let user_slice = std::fs::read_to_string("/sys/fs/cgroup/user.slice/memory.low")
+            .ok()
+            .and_then(|v| v.trim().parse::<u64>().ok());
+        if user_slice.is_some_and(|v| v < bytes) {
+            eprintln!("{}", operator_drop_in(bytes));
+        }
     }
 }
 
@@ -234,6 +311,34 @@ mod tests {
             None
         );
         assert_eq!(candidate_cgroup("1:name=systemd:/x\n", root), None);
+    }
+
+    /// 1913-fh6l: the slice protects every forge the tier runs; a rootful
+    /// guest sets it on the system manager, a rootless host on its own user
+    /// manager, both --runtime.
+    #[test]
+    fn the_slice_protects_every_forge_the_tier_runs() {
+        // The 8 vCPU / 8 GiB macOS guest: two forges at 2 GiB.
+        let bytes = slice_protection_bytes(2048, 2);
+        assert_eq!(bytes, 4 * 1024 * 1024 * 1024);
+        assert_eq!(
+            slice_protection_argv(true, bytes).join(" "),
+            "--no-ask-password set-property --runtime tillandsias.slice MemoryLow=4294967296"
+        );
+        assert_eq!(
+            slice_protection_argv(false, bytes).join(" "),
+            "--user --no-ask-password set-property --runtime tillandsias.slice MemoryLow=4294967296"
+        );
+        let note = operator_drop_in(bytes);
+        assert!(
+            note.contains("user.slice.d/50-tillandsias-memory-low.conf"),
+            "{note}"
+        );
+        assert!(
+            note.contains("user@.service.d/50-tillandsias-memory-low.conf"),
+            "{note}"
+        );
+        assert!(note.contains("MemoryLow=4294967296"), "{note}");
     }
 
     #[test]

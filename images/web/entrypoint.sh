@@ -14,4 +14,5 @@ echo ""
 echo "Serving at http://localhost:8080"
 echo ""
 
-exec httpd -f -p 8080 -h /var/www
+# 2007-hear: /etc/httpd.conf adds the audio MIME types.
+exec httpd -f -p 8080 -h /var/www -c /etc/httpd.conf

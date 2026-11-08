@@ -241,4 +241,146 @@ mod tests {
         assert_eq!(row["exit"], 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    fn repo_file(rel: &str) -> std::path::PathBuf {
+        std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..")
+        .join(rel)
+    }
+
+    /// 2004-in3v: the forge entrypoint's timer helpers, run for real. One
+    /// line per step in the lifecycle log, none on stderr unless debugging.
+    #[test]
+    #[cfg(unix)]
+    fn forge_step_helpers_log_one_line_per_step_and_stay_off_the_screen() {
+        let lib = repo_file("images/default/lib-common.sh");
+        let t = tempfile::tempdir().unwrap();
+        let log = t.path().join("lifecycle.log");
+        let script = format!(
+            "eval \"$(sed -n '/^_forge_now_us()/,/^}}/p;/^forge_step_line()/,/^}}/p;\
+             /^forge_step_mark()/,/^}}/p;/^forge_step_done()/,/^}}/p' '{}')\"\n\
+             set -e\nforge_step_mark\ntrue\nforge_step_done first\n\
+             forge_step_mark\nX=exported\nforge_step_done second\n\
+             [ \"$X\" = exported ]\n",
+            lib.display()
+        );
+        let run = |debug: &str| {
+            let _ = std::fs::remove_file(&log);
+            let out = std::process::Command::new("bash")
+                .arg("-c")
+                .arg(&script)
+                .env("TILLANDSIAS_LIFECYCLE_LOG", &log)
+                .env("TILLANDSIAS_DEBUG", debug)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "{}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            (
+                std::fs::read_to_string(&log).unwrap(),
+                String::from_utf8_lossy(&out.stderr).into_owned(),
+            )
+        };
+        let (logged, stderr) = run("");
+        let lines: Vec<&str> = logged.lines().collect();
+        assert_eq!(lines.len(), 2, "{logged}");
+        for (line, step) in lines.iter().zip(["first", "second"]) {
+            let ms = line
+                .strip_prefix(&format!("bringup: step=forge-entry-{step} ms="))
+                .unwrap_or_else(|| panic!("bad line: {line}"));
+            assert!(ms.parse::<u64>().is_ok(), "{line}");
+        }
+        assert!(stderr.is_empty(), "the agent's screen got: {stderr}");
+        let (_, debug_stderr) = run("1");
+        assert_eq!(
+            debug_stderr
+                .lines()
+                .filter(|l| l.starts_with("bringup: "))
+                .count(),
+            2
+        );
+    }
+
+    /// 2004-in3v: every forge entrypoint times each step as a bare call
+    /// between a mark and a done, with unique names, and ends a total span
+    /// at its launch line.
+    #[test]
+    fn every_forge_entrypoint_times_each_step_and_the_total() {
+        for (file, launch) in [
+            (
+                "entrypoint-forge-opencode.sh",
+                "trace_lifecycle \"entrypoint\" \"opencode launching\"",
+            ),
+            (
+                "entrypoint-forge-claude.sh",
+                "trace_lifecycle \"entrypoint\" \"claude launching\"",
+            ),
+            (
+                "entrypoint-forge-codex.sh",
+                "trace_lifecycle \"entrypoint\" \"codex launching\"",
+            ),
+            (
+                "entrypoint-forge-antigravity.sh",
+                "trace_lifecycle \"entrypoint\" \"antigravity launching\"",
+            ),
+            (
+                "entrypoint-forge-opencode-web.sh",
+                "trace_lifecycle \"exec\" \"launching opencode serve upstream ($OC_BIN)\"",
+            ),
+            (
+                "entrypoint-terminal.sh",
+                "trace_lifecycle \"entrypoint\" \"terminal launching\"",
+            ),
+        ] {
+            let src =
+                std::fs::read_to_string(repo_file(&format!("images/default/{file}"))).unwrap();
+            let lines: Vec<&str> = src.lines().collect();
+            let mut names = Vec::new();
+            for (i, line) in lines.iter().enumerate() {
+                if let Some(name) = line.strip_prefix("forge_step_done ") {
+                    assert!(
+                        i >= 2 && lines[i - 2] == "forge_step_mark",
+                        "{file} {name}: no mark"
+                    );
+                    assert!(
+                        !lines[i - 1].starts_with("forge_step"),
+                        "{file} {name}: no step"
+                    );
+                    names.push(name);
+                }
+            }
+            assert!(names.len() >= 8, "{file}: {names:?}");
+            assert!(
+                names.contains(&"clone"),
+                "{file}: the clone is the step most likely to be slow"
+            );
+            let mut unique = names.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            assert_eq!(
+                unique.len(),
+                names.len(),
+                "{file}: duplicate step names: {names:?}"
+            );
+            let t0 = src
+                .find("FORGE_ENTRY_T0_US=\"${EPOCHREALTIME//[.,]/}\"")
+                .expect(file);
+            let first_step = src.find("forge_step_mark").unwrap();
+            assert!(
+                t0 < first_step,
+                "{file}: the total starts before the first step"
+            );
+            let total = src
+                .find("forge_step_line total ")
+                .unwrap_or_else(|| panic!("{file}: no total"));
+            let at = src
+                .find(launch)
+                .unwrap_or_else(|| panic!("{file}: no launch line"));
+            assert!(total > at, "{file}: the total span ends at launch");
+        }
+    }
 }

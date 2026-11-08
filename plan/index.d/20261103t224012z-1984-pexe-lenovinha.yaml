@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03, coordinator-assigned (hit live on the kumbia forge).
+packets:
+- packet_id: a-running-tray-spawns-itself-through-proc-self-exe-so-an-upgrade-on-disk-does-not-break-every-image-ensure
+  order: 1984-pexe
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, upgrade, images, spawn]
+  estimated_hours: 1
+  title: A running tray spawns itself through /proc/self/exe, so an upgrade on disk does not break every image ensure
+  context: 'When an install or upgrade replaces the tray binary while it runs, current_exe() is "…/tillandsias (deleted)". The detached image-ensure helper spawn then failed "spawn image ensure helper: No such file or directory (os error 2)", so studio.start and every ensure broke until a restart (kumbia forge, 2026-11-03). Audit: the tray companion spawn and build_identity (which read the deleted path, so the identity fell back) are self-spawn or self-read sites; the hold-window prefix, the tray lane argv and pkexec hand the path to another process.'
+  exit_criteria:
+  - 'After the running binary is unlinked, a self-spawn through self_exe::for_spawn starts. Pre-fix result: FAILS, current_exe() is "(deleted)" and the spawn is ENOENT (kept as the test''s control).'
+  - 'A path handed to another process drops " (deleted)" only when a file is at the stripped path again.'
+  verifiable_closure: 'cargo test --bin tillandsias --features tray,listen-vsock -- self_exe'
+  unscoreable: 'unpinnable-until-the-guard-exists: a Rust fixture that copies and unlinks its own test binary (1136-n8sh).'
+  next_action: 'Land self_exe and the five call sites.'
+  provenance: kumbia forge live failure relayed by macuahuitl-fedora 2026-11-03.
+  events:
+  - type: filed
+    ts: '2026-11-03T22:40:12Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    field: status
+    value: ready
+    ts: "2026-11-06T12:29:03Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    event:
+      type: falsified
+      ts: "2026-11-06T12:29:03Z"
+      host: lenovinha
+      summary: |-
+        falsified 'implemented' claim; evidence: ea1977279: implemented was set while parts (a) and (c) were never done, so it overstated the row — status set to 'ready', new attempt epoch
+  - packet_id: a-running-git-mirror-recovers-by-itself-after-vault-restarts
+    event:
+      type: note
+      ts: "2026-11-06T12:29:03Z"
+      host: lenovinha
+      summary: |-
+        back to ready on coordinator ruling: #961 is evidence for part (b) only; (a), (c) and (b)'s live rotation remain (next_action). (c) data: --github-login relaunched Vault 2026-11-05 19:15 PST and the mirror stayed agent-unauthenticated until restarted

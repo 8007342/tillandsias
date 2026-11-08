@@ -1,0 +1,32 @@
+# @trace spec:local-web-preview, order:2007-hear
+name: litmus:forge-listen-page
+spec: local-web-preview
+phase: pre-build
+status: active
+description: >
+  Order 2007-hear: tillandsias-listen writes a listening page for a folder of
+  audio candidates, one <audio controls> row per file, with every file name and
+  sidecar text HTML-escaped and every link URL-quoted (a hostile file name is
+  shown, never run). It refuses to write into a folder git tracks or does not
+  ignore, so nothing reaches git, and git status is unchanged.
+severity: medium
+size: small
+preconditions:
+  - python3 and git on the host
+critical_path:
+  - step: "Req: an ignored folder of audio candidates gets an escaped listening page and git status is unchanged; a tracked or unignored folder is refused"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tillandsias-listen.lua 2>&1"
+    timeout_ms: 300000
+    success_pattern: "ok:tillandsias-listen:7 arms"
+observability:
+  traces:
+    - "@trace order:2007-hear"
+  expected_log: "ok:tillandsias-listen:7 arms"
+  log_fields:
+    spec: "local-web-preview"
+    test: "forge-listen-page"
+rollback:
+  on_failure: >
+    images/default/cli/tillandsias-listen emitted unescaped project data, wrote
+    into a folder git would pick up, or missed an audio file.
+  command: "python3 images/default/cli/tillandsias-listen --help"

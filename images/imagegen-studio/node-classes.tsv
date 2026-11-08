@@ -34,6 +34,21 @@ comfyui-core	CLIPVisionLoader
 comfyui-core	CLIPVisionEncode
 comfyui-core	UNETLoader
 comfyui-core	VAELoader
+# 1982-kpin: Qwen-Image-Edit, FLUX.2 and Wan VACE workflow classes (core at v0.40.0).
+comfyui-core	TextEncodeQwenImageEdit
+comfyui-core	TextEncodeQwenImageEditPlus
+comfyui-core	CFGNorm
+comfyui-core	EmptyFlux2LatentImage
+comfyui-core	Flux2Scheduler
+comfyui-core	FluxKontextMultiReferenceLatentMethod
+comfyui-core	ReferenceLatent
+comfyui-core	WanVaceToVideo
+comfyui-core	TrimVideoLatent
+comfyui-core	CreateVideo
+comfyui-core	SaveVideo
+comfyui-core	LoadVideo
+comfyui-core	GetVideoComponents
+comfyui-core	EmptyHunyuanLatentVideo
 comfyui-core	VAEDecode
 comfyui-core	VAEDecodeTiled
 comfyui-core	VAEEncode
@@ -81,6 +96,8 @@ comfyui-core	SaveImage
 comfyui-core	PreviewImage
 comfyui-core	SaveAnimatedPNG
 comfyui-core	SaveAnimatedWEBP
+# 1983-svid: the WebM video output node (a Wan workflow saves through it).
+comfyui-core	SaveWEBM
 comfyui-core	LoadImage
 comfyui-core	LoadImageMask
 comfyui-core	LoadImageOutput
@@ -187,16 +204,28 @@ ComfyUI_IPAdapter_plus	IPAdapterEmbeds
 ComfyUI_IPAdapter_plus	IPAdapterCombineEmbeds
 ComfyUI_IPAdapter_plus	IPAdapterNoise
 ComfyUI_IPAdapter_plus	PrepImageForClipVision
+# 1986-snpx: only Apply and Decode. DecodeRGBA (and DecodeSplit, its
+# subclass) call JoinImageWithAlpha.join_image_with_alpha, absent at ComfyUI
+# v0.40.0 (AttributeError on the kumbia forge); use Decode + core
+# JoinImageWithAlpha with the alpha inverted. Joint/Cond/Diff Apply load
+# weights that are not pinned (the studio has no egress).
 ComfyUI-layerdiffuse	LayeredDiffusionApply
 ComfyUI-layerdiffuse	LayeredDiffusionDecode
-ComfyUI-layerdiffuse	LayeredDiffusionDecodeRGBA
-ComfyUI-layerdiffuse	LayeredDiffusionDecodeSplit
-ComfyUI-layerdiffuse	LayeredDiffusionDiffApply
-ComfyUI-layerdiffuse	LayeredDiffusionCondApply
-ComfyUI-layerdiffuse	LayeredDiffusionCondJointApply
-ComfyUI-layerdiffuse	LayeredDiffusionJointApply
 ComfyUI_BiRefNet_ll	LoadRembgByBiRefNetModel
 ComfyUI_BiRefNet_ll	RembgByBiRefNet
 ComfyUI_BiRefNet_ll	RembgByBiRefNetAdvanced
 ComfyUI_BiRefNet_ll	GetMaskByBiRefNet
 ComfyUI_BiRefNet_ll	BlurFusionForegroundEstimation
+# 2007-acst: ACE-Step 1.5 text-to-music and the core audio savers (comfy_extras/nodes_ace.py, nodes_audio.py at the pinned v0.40.0).
+comfyui-core	TextEncodeAceStepAudio1.5
+comfyui-core	EmptyAceStep1.5LatentAudio
+comfyui-core	VAEDecodeAudio
+comfyui-core	SaveAudio
+comfyui-core	SaveAudioMP3
+comfyui-core	SaveAudioOpus
+comfyui-core	SaveAudioAdvanced
+# 2018-auin: audio-to-audio inputs and edits (comfy_extras/nodes_audio.py at the pinned v0.40.0: node_id LoadAudio :366, VAEEncodeAudio :70, TrimAudioDuration :430, AudioConcat :597).
+comfyui-core	LoadAudio
+comfyui-core	VAEEncodeAudio
+comfyui-core	TrimAudioDuration
+comfyui-core	AudioConcat

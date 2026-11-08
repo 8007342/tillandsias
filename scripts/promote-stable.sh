@@ -56,6 +56,10 @@
 
 set -euo pipefail
 
+# 1247-amcu: every refusal says why it refused and what would clear it, on
+# stderr, so the verdict token on stdout stays what callers parse.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # Flags are order-independent. The old form took --force positionally as $2, so
@@ -73,7 +77,7 @@ while [ $# -gt 0 ]; do
         --dry-run)  DRY_RUN=1 ;;
         --to)       shift; TARGET="${1:-}" ;;
         -*)         echo "usage: $0 vX.Y.YYMMDD.N [--force] [--dry-run]" >&2
-                    echo "refused:bad-tag:$1"; exit 1 ;;
+                    _afford "this script takes a release tag and only --force, --dry-run and --to" "pass the daily tag to promote (vX.Y.YYMMDD.N), or demote <mistaken> --to <intended>, and drop the unknown flag"; echo "refused:bad-tag:$1"; exit 1 ;;
         *)          if [ -z "$TAG" ]; then TAG="$1"; else TARGET="$1"; fi ;;
     esac
     shift
@@ -146,7 +150,7 @@ _enqueue_website_update() { # $1=previous stable commit (may be empty) $2=commit
 
 if [ -z "$TAG" ] || ! _valid_tag "$TAG"; then
     echo "usage: $0 vX.Y.YYMMDD.N [--force] [--dry-run]" >&2
-    echo "refused:bad-tag:${TAG:-<empty>}"
+    _afford "promotion names exactly one daily release, as vX.Y.YYMMDD.N" "pass the tag from gh release list (the prerelease you vetted); scripts/promote-stable.sh --dry-run <tag> checks the gates without promoting"; echo "refused:bad-tag:${TAG:-<empty>}"
     exit 1
 fi
 
@@ -159,12 +163,12 @@ if [ "$MODE" = "demote" ]; then
     # stayed wrong.
     if [ -z "$TARGET" ] || ! _valid_tag "$TARGET"; then
         echo "demote needs the release that SHOULD be latest: $0 demote <mistaken> --to <intended>" >&2
-        echo "refused:missing-target:${TARGET:-<empty>}"
+        _afford "demotion must name the release that should become latest, because make_latest is sticky and nothing recomputes it" "run scripts/promote-stable.sh demote <mistaken> --to <intended>, with <intended> a published release tag"; echo "refused:missing-target:${TARGET:-<empty>}"
         exit 1
     fi
     for _t in "$TAG" "$TARGET"; do
         if ! gh release view "$_t" >/dev/null 2>&1; then
-            echo "refused:no-release:$_t"
+            _afford "one of the two tags has no GitHub release this gh can see" "check the tag with gh release view <tag> (and gh auth status for this remote); demote between two published releases only"; echo "refused:no-release:$_t"
             exit 1
         fi
     done
@@ -172,7 +176,7 @@ if [ "$MODE" = "demote" ]; then
     NWO="$(_nwo)"
     if [ -z "$NWO" ]; then
         echo "cannot resolve owner/repo; is gh authenticated for this remote?" >&2
-        echo "refused:no-release:$TAG"
+        _afford "the owner/repo of this checkout's remote could not be resolved, so no release can be read" "run gh auth status and gh repo view in this checkout; authenticate gh for this remote, then re-run"; echo "refused:no-release:$TAG"
         exit 1
     fi
 
@@ -184,7 +188,7 @@ if [ "$MODE" = "demote" ]; then
 
     TARGET_ID="$(gh api "repos/$NWO/releases/tags/$TARGET" --jq .id 2>/dev/null)"
     if [ -z "$TARGET_ID" ]; then
-        echo "refused:no-release:$TARGET"
+        _afford "the intended release has no release id on the GitHub API, so it cannot be made latest" "check gh api repos/<owner>/<repo>/releases/tags/<intended>; demote only to a published release"; echo "refused:no-release:$TARGET"
         exit 1
     fi
 
@@ -201,6 +205,7 @@ if [ "$MODE" = "demote" ]; then
     if [ "$LATEST_NOW" != "$TARGET" ]; then
         echo "DEMOTION DID NOT TAKE: /releases/latest still resolves to ${LATEST_NOW:-<unknown>}, not $TARGET." >&2
         echo "make_latest is sticky; re-run or PATCH make_latest=true on $TARGET by hand, then re-verify." >&2
+        # affordance-ok: the stderr lines right above this verdict say why it refused and what to do
         echo "refused:demote-verify-failed:$LATEST_NOW"
         exit 1
     fi
@@ -217,7 +222,7 @@ if [ "$MODE" = "demote" ]; then
 fi
 
 if ! gh release view "$TAG" >/dev/null 2>&1; then
-    echo "refused:no-release:$TAG"
+    _afford "the tag has no GitHub release this gh can see, so there is nothing to promote" "check the tag with gh release view <tag> (and gh auth status for this remote); promote a published daily"; echo "refused:no-release:$TAG"
     exit 1
 fi
 
@@ -409,6 +414,7 @@ if [ "$_has_evidence" -eq 0 ]; then
         echo "  have:               ${_ev_found:-<none>}" >&2
         echo "  MISSING:            ${_ev_missing}" >&2
         echo "Run /smoke-curl-install-and-test-e2e on the missing platform(s), or pass --force (operator override)." >&2
+        # affordance-ok: the stderr lines right above this verdict say why it refused and what to do
         echo "refused:no-evidence:$TAG:missing=${_ev_missing}"
         exit 1
     fi
@@ -450,6 +456,7 @@ if [ -z "$COMMIT" ]; then
     echo "The release's commit could not be resolved from '$TAG' or from" >&2
     echo "targetCommitish '${COMMIT_RAW:-<empty>}', so the stable tag would be" >&2
     echo "moved to an unknown place. Refusing (1061-zd83)." >&2
+    # affordance-ok: the stderr lines right above this verdict say why it refused and what to do
     echo "refused:promote-commit-unresolvable:${COMMIT_RAW:-empty}"
     exit 1
 fi
@@ -469,6 +476,7 @@ if [ "$_stable_push_rc" -ne 0 ]; then
     echo "  why: the pre-push hook refused (its lines above name the guard) or origin was unreachable" >&2
     echo "  remedy: wait for an idle land queue, then finish with: git -C \"$REPO_ROOT\" push origin refs/tags/stable --force" >&2
     echo "          a tag on a commit already on origin/main needs no ./build.sh --check (1768-2k56)" >&2
+    # affordance-ok: the why and remedy lines right above this verdict carry its affordance
     echo "refused:stable-tag-push-refused:$COMMIT"
     exit 1
 fi
@@ -484,6 +492,7 @@ if [ -z "$STABLE_REMOTE" ]; then
     echo "confirm it. This is NOT a report that the tag is wrong — the check" >&2
     echo "could not run. Verify by hand:" >&2
     echo "  git ls-remote origin 'refs/tags/stable^{}'   # expect $COMMIT" >&2
+    # affordance-ok: the stderr lines right above this verdict say why it refused and what to do
     echo "refused:stable-tag-unverified:$COMMIT"
     exit 1
 fi
@@ -493,6 +502,7 @@ if [ "$STABLE_REMOTE" != "$COMMIT" ]; then
     echo "  origin refs/tags/stable: $STABLE_REMOTE" >&2
     echo "The GitHub release and the git tag now disagree, which is the state" >&2
     echo "1061-zd83 was filed for. Do not report this promotion as done." >&2
+    # affordance-ok: the stderr lines right above this verdict say why it refused and what to do
     echo "refused:stable-tag-not-moved:$STABLE_REMOTE:expected:$COMMIT"
     exit 1
 fi

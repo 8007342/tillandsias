@@ -6,6 +6,9 @@
 #
 # Secrets: git identity env only; GitHub token stays in git service.
 
+# 2004-in3v: the start of the forge-entry-total span (bash 5 in the image).
+FORGE_ENTRY_T0_US="${EPOCHREALTIME//[.,]/}"
+
 # ── Fleet messaging: pending mail at session start (order 1506-ssb5) ───────
 # @trace order:1506-ssb5, openspec/changes/fleet-messaging-poc/design.md
 #
@@ -83,7 +86,9 @@ trap 'exit_pause' EXIT
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:forge-opencode-onboarding
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
+forge_step_mark
 populate_hot_paths
+forge_step_done hot-paths
 
 # @trace plan/issues/macos-forge-base-build-arch-and-fragility-2026-07-05.md (order 188)
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
@@ -98,23 +103,35 @@ trace_lifecycle "entrypoint" "opencode starting"
 # Clone via the shared lib-common::clone_project_from_mirror — supports both
 # filesystem (Windows/WSL) and git daemon (Linux/podman) transports with
 # wipe-before-clone for re-attach idempotency.
+forge_step_mark
 clone_project_from_mirror
+forge_step_done clone
 
 # (Inline clone block removed — shared function above replaces it.)
 
 # ── OpenCode + OpenSpec (hard-installed) ───────────────────
 # @trace spec:default-image, spec:forge-shell-tools
+forge_step_mark
 require_opencode
+forge_step_done require-harness
 [ -x "$OC_BIN" ] || harness_missing_fatal opencode
+forge_step_mark
 require_openspec
+forge_step_done require-openspec
+forge_step_mark
 apply_opencode_config_overlay
+forge_step_done config-overlay
 
 # @trace spec:default-image, spec:tillandsias-vault
 # Preserve the existing Gemini credential source, but adapt it inside the
 # container to OpenCode's no-file environment contract. Both the actual
 # credential and the installed-binary contract are verified before launch.
+forge_step_mark
 prepare_opencode_vault_auth
+forge_step_done vault-auth
+forge_step_mark
 opencode_actual_auth_ok "$OC_BIN"
+forge_step_done auth-check
 
 trace_lifecycle "entrypoint" "opencode ready"
 
@@ -142,15 +159,21 @@ fi
 export_ssh_env || true
 
 # ── Find project directory ──────────────────────────────────
+forge_step_mark
 find_project_dir
+forge_step_done find-project
 
 # ── Export project environment ───────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Export discovery env vars: TILLANDSIAS_PROJECT_PATH, TILLANDSIAS_PROJECT_GENUS
+forge_step_mark
 export_project_env
+forge_step_done project-env
 
 [ -n "$PROJECT_DIR" ] && cd "$PROJECT_DIR"
+forge_step_mark
 configure_git_identity
+forge_step_done git-identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
 # ── OpenSpec init (only when absent, silent) ────────────────
@@ -158,18 +181,28 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # files (order 1422-w3p8; see openspec_init_if_absent in lib-common.sh).
 # The CLI is the project's pinned version when openspec/cli-version exists
 # (order 1441-myz3; see ensure_openspec_pinned).
+forge_step_mark
 ensure_openspec_pinned "$PROJECT_DIR"
+forge_step_done openspec-pin
 # Flaky-optional installs (dev tools, prebuilt tools) run in
 # the background with status files and first-use shims (order 1951-vv5m).
+forge_step_mark
 start_flaky_installs
+forge_step_done flaky-installs
+forge_step_mark
 openspec_init_if_absent "$PROJECT_DIR" opencode
+forge_step_done openspec-init
 
 # ── Startup context injection ───────────────────────────────
 # @trace spec:project-bootstrap-readme
+forge_step_mark
 inject_startup_context "$PROJECT_DIR"
+forge_step_done startup-context
 
 # ── Banner ──────────────────────────────────────────────────
+forge_step_mark
 show_banner "opencode"
+forge_step_done banner
 
 # ── Synthetic first prompt (startup skill) ─────────────────
 # @trace spec:project-bootstrap-readme
@@ -229,6 +262,7 @@ export FORCE_COLOR="${FORCE_COLOR:-3}"
 
 # ── Launch OpenCode ─────────────────────────────────────────
 trace_lifecycle "entrypoint" "opencode launching"
+forge_step_line total "$((($(_forge_now_us) - ${FORGE_ENTRY_T0_US:-$(_forge_now_us)}) / 1000))"
 
 # Detect if `--print` is in the arguments.
 IS_DIAGNOSTICS=false

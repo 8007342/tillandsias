@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at the coordinator's request (macuahuitl-fedora, 2026-11-02), from
+# two Codex lane deaths on macuahuitl while publishing tillandsias.org.
+packets:
+- packet_id: a-codex-forge-lane-survives-a-very-long-tool-output-instead-of-dying-with-exit-101
+  order: 1959-q638
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags:
+  - lane
+  - forge
+  - podman
+  - testing
+  estimated_hours: 4
+  title: A Codex forge lane dies with exit 101 and no message when a command prints a very long output; bound or stream long tool output so a big print cannot kill the session
+  context: 'Measured twice on macuahuitl 2026-11-02 publishing tillandsias.org from a Codex lane: once right after a command printed a 32k-line JSON diff, once on a minified one-line HTML file. Both times the lane ended with the forge saying only "stage ''codex'' attached command exited with status Some(101)" — no panic text, no last line, the session gone. The reporting site is crates/tillandsias-podman/src/client.rs: run_container_attached_observed (line ~1150) calls run_container_attached_status (line ~1209), which spawns podman with stdin/stdout/stderr Stdio::inherit() (lines ~1228-1230) so the TUI owns the terminal; on a non-zero status it calls format_attached_command_failure (line ~2649), whose "cause: the container launched and the foreground tool exited non-zero" is the ONLY account the operator gets. 101 is the exit code of a panicking Rust binary, which is what the codex CLI is: the agent process inside the container died on the oversized output (the exact panic — a buffer, a UTF-8 slice at a byte boundary, an allocation — is unknown because stderr went to a terminal the TUI was redrawing). The lane itself never caps or streams what a tool returns to the agent, so one unlucky cat decides whether the session lives.'
+  exit_criteria:
+  - 'A stub command that prints 50 MB over many lines, run inside a codex lane, leaves the session alive: the agent sees a bounded excerpt with an explicit "truncated: <n> bytes, <m> lines; full output at <path>" tail, and the forge reports no attached-command failure.'
+  - 'A stub command that prints one 5 MB line (minified HTML/JSON) behaves the same: alive, bounded, the tail names the truncation.'
+  - 'When the attached agent process does exit 101, the lane captures its last stderr lines (a bounded tee alongside the inherited terminal, or a panic log inside the container) and format_attached_command_failure quotes them, instead of the unconditional "the foreground tool exited non-zero" line.'
+  verifiable_closure: 'cargo test -p tillandsias-podman long_tool_output_is_bounded_and_the_lane_survives (a fixture lane running a stub that writes 50 MB / one 5 MB line through the same tool-output path codex uses; asserts the session is alive and the excerpt carries the truncation tail), plus a litmus named by the claimer in the same commit; red on today''s tree.'
+  next_action: 'Reproduce on linux with a stub (yes | head -c 50M; and python3 -c "print(''x''*5_000_000)") inside a codex lane and capture codex''s stderr to a file inside the container to read the panic. Then put a byte/line budget on the tool-output path the lane hands the agent (truncate with a tail naming the full-output file), and make run_container_attached_status keep the last stderr lines so format_attached_command_failure can quote them.'
+  provenance: macuahuitl-fedora 2026-11-02, coordinator evidence from two tillandsias.org publishing sessions; filed by calmecacpilli.
+  events:
+  - type: filed
+    ts: '2026-11-02T08:51:59Z'
+    host: calmecacpilli
+    summary: filed p2 at the coordinator's request; two exit-101 deaths on macuahuitl 2026-11-02 after a 32k-line JSON diff and a one-line minified HTML

@@ -40,11 +40,12 @@
 #   violation:gate-wrote-tracked-files:<n>
 #   blocked:tracked-files-unwritten:<reason>
 set -uo pipefail
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 
 mode="${1:-}"
 state="${2:-}"
-[ -n "$mode" ] && [ -n "$state" ] || { echo "blocked:tracked-files-unwritten:usage"; exit 2; }
+[ -n "$mode" ] && [ -n "$state" ] || { _afford "it needs a mode and a state file, and was given ${mode:-no mode}/${state:-no state file}" "scripts/check-tracked-files-unwritten.sh snapshot <state-file> before the gate, then verify <state-file> after it"; echo "blocked:tracked-files-unwritten:usage"; exit 2; }
 
 _hash_tracked() {
     # NUL-delimited: a path with a space or a newline must not split, and this
@@ -56,6 +57,7 @@ _hash_tracked() {
 case "$mode" in
     snapshot)
         if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            _afford "the checkout this script lives in is not a git work tree, so there is no tracked set to hash" "run it from a git checkout of tillandsias"
             echo "blocked:tracked-files-unwritten:not-a-git-repo"
             exit 2
         fi
@@ -67,6 +69,7 @@ case "$mode" in
         _hash_tracked > "$state" 2>/dev/null
         _n="$(grep -c . "$state" 2>/dev/null || echo 0)"
         if [ "${_n:-0}" -lt 1 ]; then
+            _afford "hashing the tracked set wrote nothing to $state, so there is no baseline to verify against" "check that git ls-files lists files here and that $state is writable, then snapshot again"
             echo "blocked:tracked-files-unwritten:snapshot-empty"
             exit 2
         fi
@@ -76,10 +79,11 @@ case "$mode" in
         if [ ! -s "$state" ]; then
             # A missing baseline must not read as a clean tree — that is the
             # fail-open shape this file exists to refuse.
+            _afford "no baseline at $state, and a missing baseline must not read as a clean tree" "run snapshot $state at gate start, then verify the same path"
             echo "blocked:tracked-files-unwritten:no-snapshot-at:$state"
             exit 2
         fi
-        now="$(mktemp)" || { echo "blocked:tracked-files-unwritten:mktemp-failed"; exit 2; }
+        now="$(mktemp)" || { _afford "mktemp could not create the comparison file" "free space or fix permissions in ${TMPDIR:-/tmp}, then verify again"; echo "blocked:tracked-files-unwritten:mktemp-failed"; exit 2; }
         trap 'rm -f "$now"' EXIT
         _hash_tracked > "$now"
         # SAME PATH, DIFFERENT HASH. Keyed by path in awk rather than joined on
@@ -94,6 +98,7 @@ case "$mode" in
         ' "$state" "$now")"
         n="$(printf '%s' "$changed" | grep -c . || true)"
         if [ "${n:-0}" -gt 0 ]; then
+            # affordance-ok: the block that follows prints why, remedy and the file list
             echo "violation:gate-wrote-tracked-files:$n"
             {
                 echo "  why: the gate modified files in the checkout it was measuring."
@@ -132,6 +137,7 @@ case "$mode" in
         echo "ok:tracked-files-unwritten:$(grep -c . "$now" || echo 0) files"
         ;;
     *)
+        _afford "$mode is not a mode of this script" "use snapshot <state-file> or verify <state-file>"
         echo "blocked:tracked-files-unwritten:unknown-mode:$mode"
         exit 2
         ;;

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha-silverblue, 2026-11-03. Operator approval first-hand in the lenovinha session (two answers below).
+packets:
+- packet_id: a-projects-forge-and-the-operator-share-its-comfyui-studio-in-a-visible-window-on-a-per-project-network-and-another-projects-forge-is-refused
+  order: 1985-stdu
+  status: in_progress
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [studio, comfyui, browser, network, security]
+  estimated_hours: 8
+  title: A project's forge and the operator share its ComfyUI studio in a visible window on a per-project network, and another project's forge is refused
+  context: 'OPERATOR (first-hand, lenovinha session 2026-11-03), verbatim: "Yes, build it, but we want to allow cooperative work, both the agent and the user should be able to interact with the locally running studio". Asked how to isolate: "Per-project network (Recommended)". FOUND: every forge, the router and every studio share tillandsias-enclave, so since 1969-cfyt any project''s forge can reach any studio directly, and the router''s preview listener (:8443, on the enclave) takes any SNI from any enclave member; only browser windows are bound to their project, by the forwarder. DESIGN: a per-project internal network tillandsias-studio-<label>; studio.start runs the studio only on it, and connects the router and that project''s forge containers to it. A preview route comfyui.<label> (not studio.<label>, which the --studio lane''s OTP route holds) carries a remote_ip guard limited to that subnet. The project''s window forwarders join the studio network and dial the router there. Another forge reaches the router only from the enclave: 403, and the studio container not at all.'
+  exit_criteria:
+  - 'From the project''s forge, browser.open {url: https://comfyui.<label>.localhost:<port>/, dev:true} shows ComfyUI, and the operator can use that window. Pre-fix result: FAILS, no such route.'
+  - 'Another project''s forge is refused through the router (403) and cannot reach the studio container directly. Pre-fix result: FAILS, the studio is on the shared enclave.'
+  - 'The project''s forge reads /object_info and runs workflows on the same studio.'
+  verifiable_closure: 'unit fixtures for the network, the route guard and the forwarder; a live two-project probe on one host.'
+  unscoreable: 'unpinnable-until-the-guard-exists: needs live podman networks for the end-to-end proof (1136-n8sh).'
+  related: [1969-cfyt, 1983-svid]
+  next_action: 'Build the per-project network and route guard red-first, then the forwarder attach, then the live two-project probe.'
+  provenance: coordinator macuahuitl-fedora relay, then the operator first-hand in the lenovinha session 2026-11-03.
+  events:
+  - type: filed
+    ts: '2026-11-03T23:59:16Z'
+    host: lenovinha
+    summary: filed p1 in_progress, claimed by opus5, operator-approved first-hand
