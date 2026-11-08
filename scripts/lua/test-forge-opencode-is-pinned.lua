@@ -17,9 +17,9 @@
 -- lanes' harnesses (a claude lane installed agy on every launch).
 --
 -- Runs the REAL functions cut from images/default/lib-common.sh. A stub curl
--- answers the releases-list API with $FAKE_JSON and serves $FAKE_TGZ for the
+-- answers the releases/latest API with $FAKE_JSON and serves $FAKE_TGZ for the
 -- asset download; harness_probe is stubbed (FAKE_PROBE_FAIL=1 fails it):
---   1 LATEST    a fresh forge resolves the latest v1 release (v1.9.10), downloads
+--   1 LATEST    a fresh forge resolves upstream's latest (v1.9.10), downloads
 --               its x64 asset, verifies it, installs it and records last-good
 --   2 BASELINE  a CPU without avx2 downloads and verifies the -baseline asset
 --   3 TAMPER    an asset whose sha256 is not the published digest is REFUSED;
@@ -36,10 +36,11 @@
 --  11 WIRED     require_opencode goes through the release installer, not npm
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-forge-opencode-is-pinned.lua
---  12 PICK     the highest v1 FULL release is chosen, by numeric order: never
---               process-daemon-v*, a prerelease, a draft or a -rc tag
---  13 V2      a full v2.x release is never chosen; v2 is a separate product
---               with other contracts (operator ruling B1, 2026-11-08)
+--  12 MARKER  the release upstream MARKS latest installs (operator ruling
+--               2026-11-08), even when a higher v1 exists; the list is not read
+--  13 V2      a marked release outside the v1 line (a v2, a prerelease, a
+--               draft, process-daemon-v*) is refused BEFORE download and the v1
+--               last-good runs, until the v2 migration row 2042-44v9 closes
 -- Verdict: ok:forge-opencode-is-pinned:13 arms | violation:forge-opencode-is-pinned:<n>-failed
 
 local NAME = "forge-opencode-is-pinned"
@@ -57,8 +58,6 @@ local function arm(name, cond, got)
     else out.line("FAIL: " .. name .. " — got: " .. tostring(got)); failed[#failed + 1] = name end
 end
 local lib = fs.read("images/default/lib-common.sh") or ""
--- The highest v1 full release in the fake feed is v1.9.10, which beats v1.9.9
--- only numerically, so PICK also proves the sort is by number.
 local LATEST = "1.9.10"
 
 fs.mkdir(REL .. "/bin")
@@ -114,28 +113,15 @@ proc.run({ argv = { "chmod", "+x", ABS .. "/tgz/opencode" } })
 proc.run({ argv = { "tar", "-czf", ABS .. "/fake.tgz", "-C", ABS .. "/tgz", "opencode" } })
 local sumr = proc.run({ argv = HAVE_SHA and { "sha256sum", ABS .. "/fake.tgz" } or { "shasum", "-a", "256", ABS .. "/fake.tgz" } })
 local FAKE = (sumr.stdout or ""):match("^(%x+)") or ""
-local function api(x64, base)
+-- The releases/latest answer: ONE release object (upstream's own marker).
+local function api(x64, base, tag, pre, draft)
     local function a(name, dg)
         if dg == nil then return '{"name":"' .. name .. '"}' end
         return '{"name":"' .. name .. '","digest":"sha256:' .. dg .. '"}'
     end
-    local assets = '"assets":[' .. a("opencode-linux-x64.tar.gz", x64) .. ","
-        .. a("opencode-linux-x64-baseline.tar.gz", base) .. "]"
-    -- Decoys that must never be chosen: full v2 releases (another product
-    -- line, ruling B1), another tag family, a higher v1 prerelease, a higher
-    -- v1 draft, a v1 -rc tag, and older v1 full releases, including 1.9.9,
-    -- which beats 1.9.10 only as a string.
-    return "["
-        .. '{"tag_name":"v2.2.6","draft":false,"prerelease":false,' .. assets .. "},"
-        .. '{"tag_name":"v2.0.0","draft":false,"prerelease":false,' .. assets .. "},"
-        .. '{"tag_name":"process-daemon-v1.99.0","draft":false,"prerelease":false,' .. assets .. "},"
-        .. '{"tag_name":"v1.0.1","draft":false,"prerelease":false,' .. assets .. "},"
-        .. '{"tag_name":"v1.20.0","draft":false,"prerelease":true,' .. assets .. "},"
-        .. '{"tag_name":"v1.21.0","draft":true,"prerelease":false,' .. assets .. "},"
-        .. '{"tag_name":"v1.10.0-rc1","draft":false,"prerelease":false,' .. assets .. "},"
-        .. '{"tag_name":"v1.9.9","draft":false,"prerelease":false,' .. assets .. "},"
-        .. '{"tag_name":"v' .. LATEST .. '","draft":false,"prerelease":false,' .. assets .. "}"
-        .. "]"
+    return '{"tag_name":"' .. (tag or ("v" .. LATEST)) .. '","prerelease":' .. tostring(pre == true)
+        .. ',"draft":' .. tostring(draft == true) .. ',"assets":['
+        .. a("opencode-linux-x64.tar.gz", x64) .. "," .. a("opencode-linux-x64-baseline.tar.gz", base) .. "]}"
 end
 fs.write(REL .. "/api-good.json", api(FAKE, FAKE))
 fs.write(REL .. "/api-bad.json", api(string.rep("0", 64), string.rep("0", 64)))
@@ -187,7 +173,7 @@ local d = case_dir(nil)
 local r, curl = run(d, "release", OC)
 local path = text.trim(r.stdout or "")
 arm("1 LATEST a fresh forge resolves, verifies, installs and records the latest release",
-    curl:find("api.github.com/repos/anomalyco/opencode/releases?", 1, true) ~= nil
+    curl:find("api.github.com/repos/anomalyco/opencode/releases/latest", 1, true) ~= nil
         and curl:find("/releases/download/v" .. LATEST .. "/opencode-linux-x64.tar.gz", 1, true) ~= nil
         and ver_of(path) == "opencode v" .. LATEST and lg_of(d) == LATEST,
     "curl=" .. curl .. " path=" .. path .. " lg=" .. lg_of(d) .. " " .. (r.stderr or ""))
@@ -264,20 +250,33 @@ arm("9 LANE a claude lane refreshes claude only (no agy, no codex); an antigravi
         and npm:find("@openai/codex", 1, true) == nil and lane2:find("LANE:agy", 1, true) ~= nil,
     "claude-lane=" .. lane .. " npm=" .. npm .. " agy-lane=" .. lane2)
 
--- 12 PICK: the highest v1 FULL release, by numeric order
+-- 12 MARKER: upstream's marked release is what installs, even when a higher v1
+-- exists: only /releases/latest is asked, never the release list.
+fs.write(REL .. "/api-marker.json", api(FAKE, FAKE, "v1.9.9"))
 d = case_dir(nil)
-r, curl = run(d, "release", OC)
+r, curl = run(d, "release", OC, { FAKE_JSON = ABS .. "/api-marker.json" })
 local picked = curl:match("/releases/download/([^/]+)/") or ""
-arm("12 PICK the highest v1 full release (v1.9.10, numeric) beats process-daemon-v1.99, a v1.20 prerelease, a v1.21 draft, a -rc tag and v1.9.9",
-    picked == "v1.9.10", "picked=" .. picked .. " " .. curl)
+arm("12 MARKER the release upstream marks latest (v1.9.9) installs; the release list is never consulted",
+    picked == "v1.9.9" and curl:find("/releases/latest", 1, true) ~= nil and curl:find("releases?", 1, true) == nil
+        and lg_of(d) == "1.9.9",
+    "picked=" .. picked .. " lg=" .. lg_of(d) .. " " .. curl)
 
--- 13 V2: a feed whose only full releases are v2 never yields a v2 install
-fs.write(REL .. "/api-v2only.json", '[{"tag_name":"v2.2.6","draft":false,"prerelease":false,"assets":[{"name":"opencode-linux-x64.tar.gz","digest":"sha256:' .. FAKE .. '"}]}]')
-d = case_dir("1.0.0")
-r, curl = run(d, "release", OC, { FAKE_JSON = ABS .. "/api-v2only.json" })
-path = text.trim(r.stdout or "")
-arm("13 V2 a full v2.x release is never chosen (another product, ruling B1): no download, last-good v1 runs",
-    downloads(curl) == 0 and ver_of(path) == "opencode v1.0.0", "now=" .. ver_of(path) .. " " .. curl .. (r.stderr or ""))
+-- 13 V2: a marked release outside the v1 line is refused BEFORE download, and
+-- the v1 last-good keeps running. Cases: a marked v2.2.6, a marked v1
+-- prerelease, a marked draft, a marked process-daemon-v1.99.0.
+local v2_ok, v2_got = true, {}
+for i, c in ipairs({ { "v2.2.6" }, { "v1.20.0", true }, { "v1.21.0", false, true }, { "process-daemon-v1.99.0" } }) do
+    fs.write(REL .. "/api-out" .. i .. ".json", api(FAKE, FAKE, c[1], c[2], c[3]))
+    d = case_dir("1.0.0")
+    r, curl = run(d, "release", OC, { FAKE_JSON = ABS .. "/api-out" .. i .. ".json" })
+    path = text.trim(r.stdout or "")
+    local ok = downloads(curl) == 0 and ver_of(path) == "opencode v1.0.0" and lg_of(d) == "1.0.0"
+        and (r.stderr or ""):find("refused:harness-release:opencode:marked-latest-not-v1:" .. c[1], 1, true) ~= nil
+    if not ok then v2_ok = false end
+    v2_got[#v2_got + 1] = c[1] .. "=" .. tostring(ok)
+end
+arm("13 V2 a marked v2, prerelease, draft or other tag family is refused before download; the v1 last-good runs",
+    v2_ok, table.concat(v2_got, " "))
 
 -- 10 UNPINNED
 d = case_dir(nil)

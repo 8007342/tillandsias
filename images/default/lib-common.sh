@@ -3304,13 +3304,14 @@ harness_pin() {
 # opencode installs from its upstream GitHub release, at LATEST, on every launch
 # like the other harnesses (operator ruling 2026-11-08). npm's opencode-ai
 # stopped at 1.19.5 while upstream shipped 2.x. The safety rules:
-#   - "latest" is the HIGHEST full release of ONE MAJOR LINE (operator ruling
-#     B1, 2026-11-08): for opencode, the highest v1.x.y. Upstream ships v1 and
-#     v2 as parallel products. v2 removed OPENCODE_AUTH_CONTENT, stopped
-#     reading config.json, renamed config keys and moved serve under /api, so
-#     moving to v2 is a migration row, never an automatic upgrade. Drafts,
-#     prereleases, -rc tags and other tag families (process-daemon-v*) are
-#     never chosen;
+#   - "latest" is UPSTREAM's releases/latest marker (operator ruling,
+#     2026-11-08), held to ONE MAJOR LINE: for opencode, v1. Upstream ships v1
+#     and v2 as parallel products and marks v1 latest (1.19.5 today). v2
+#     removed OPENCODE_AUTH_CONTENT, stopped reading config.json, renamed config
+#     keys and moved serve under /api. So a marked release that is not a full
+#     v<major>.y.z (a v2, a prerelease, a draft, another tag family) is REFUSED
+#     BEFORE download until the v2 migration row 2042-44v9 closes. A rollback
+#     would not save a fresh forge, which has no last-good to roll back to;
 #   - the downloaded asset must match the release's PUBLISHED sha256 digest. A
 #     missing digest or a mismatch FAILS CLOSED: nothing is installed;
 #   - a fresh version must pass harness_probe (liveness plus our contracts)
@@ -3369,19 +3370,22 @@ _require_release_harness() {
         return 0
     fi
     asset="$(harness_release_asset "$bin")" || { _rel_fallback "no release asset for $(uname -m)"; return 0; }
-    # The highest v<major>.y.z full release among the recent ones (ruling B1).
+    # Upstream's own latest marker (operator ruling 2026-11-08).
     json="$(curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' \
-        "https://api.github.com/repos/$repo/releases?per_page=50" 2>/dev/null \
-        | jq -c --arg m "$major" '[ .[] | select((.draft | not) and (.prerelease | not)
-                     and (.tag_name | test("^v" + $m + "\\.[0-9]+\\.[0-9]+$"))) ]
-                 | sort_by(.tag_name | ltrimstr("v") | split(".") | map(tonumber))
-                 | last // empty' 2>/dev/null)" || json=""
+        "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)" || json=""
     tag="$(printf '%s' "$json" | jq -r '.tag_name // empty' 2>/dev/null)" || tag=""
-    ver="${tag#v}"
-    if [ -z "$ver" ]; then
-        _rel_fallback "could not resolve the latest v$major.x $repo release (offline, rate-limited, or none listed)"
+    if [ -z "$tag" ]; then
+        _rel_fallback "could not resolve the latest $repo release (offline or rate-limited)"
         return 0
     fi
+    # Held to the major line BEFORE any download (2042-44v9 owns v2).
+    if ! printf '%s' "$json" | jq -e --arg m "$major" '(.draft | not) and (.prerelease | not)
+            and (.tag_name | test("^v" + $m + "\\.[0-9]+\\.[0-9]+$"))' >/dev/null 2>&1; then
+        trace_lifecycle "harness" "refused:harness-release:$name:marked-latest-not-v$major:$tag (only full v$major.y.z releases install until 2042-44v9; nothing downloaded)"
+        _rel_fallback "upstream marks $tag latest, which is outside the v$major line"
+        return 0
+    fi
+    ver="${tag#v}"
     want="$(printf '%s' "$json" | jq -r --arg a "$asset" \
         '.assets[] | select(.name == $a) | .digest // empty' 2>/dev/null | head -n 1)"
     want="${want#sha256:}"
