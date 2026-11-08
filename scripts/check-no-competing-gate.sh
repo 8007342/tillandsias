@@ -13,7 +13,7 @@
 #
 # THREE STATES, NOT TWO. This is the whole design and it was measured rather
 # than reasoned (yoga, 2026-09-13). Every process of a dispatch carries
-# TILLANDSIAS_WRAPPER_TOKEN. Grouped by that token, live processes fall into:
+# TILLANDSIAS_WRAPPER_MARK (2031-z4rm; the retired TILLANDSIAS_WRAPPER_TOKEN is still matched). Grouped by that token, live processes fall into:
 #
 #   LIVE   a live host-side `toolbox run` in the group      -> a healthy gate
 #   idle   host side gone, ONLY conmon left                 -> normal residue
@@ -116,7 +116,7 @@ PROC_ROOT="${TILLANDSIAS_PROC_ROOT:-/proc}"
 #
 # AND IT DELIBERATELY DOES NOT ANSWER. The tempting move is to let an
 # undispatched caller assert --host-side and get a verdict. It cannot: the
-# classifier groups by TILLANDSIAS_WRAPPER_TOKEN and needs a host side AND a
+# classifier groups by TILLANDSIAS_WRAPPER_MARK and needs a host side AND a
 # container side to tell LIVE from STRAY. With no dispatch the group is one
 # process and the only reachable verdict is `ok:no-competing-gate` — the clean
 # run that asserts nothing this header warns about twice, and which
@@ -201,15 +201,15 @@ if [ ! -e "$_hs" ] || [ ! -r "$_hs" ]; then
 fi
 _hs_tok=""
 if ! { while IFS= read -r -d '' e; do
-           case "$e" in TILLANDSIAS_WRAPPER_TOKEN=*) _hs_tok="${e#*=}"; break ;; esac
+           case "$e" in TILLANDSIAS_WRAPPER_MARK=*|TILLANDSIAS_WRAPPER_TOKEN=*) _hs_tok="${e#*=}"; break ;; esac
        done < "$_hs"; } 2>/dev/null; then
     echo "could-not-run:competing-gate:blind (our own environ at $_hs could not be read through)"
     exit 3
 fi
 if [ -z "$_hs_tok" ]; then
-    echo "refused:competing-gate:caller-contract (caller asserted --host-side $HOST_SIDE_PID but did not export TILLANDSIAS_WRAPPER_TOKEN into this process; FIX THE CALL SITE, this is not a substrate limit)"
+    echo "refused:competing-gate:caller-contract (caller asserted --host-side $HOST_SIDE_PID but did not export TILLANDSIAS_WRAPPER_MARK into this process; FIX THE CALL SITE, this is not a substrate limit)"
     _afford "the detector recognises the live host-side wrapper by the token in its own environment; with none, every gate would look headless" \
-        "export TILLANDSIAS_WRAPPER_TOKEN (the wrapper's token) in the caller before it runs scripts/check-no-competing-gate.sh --host-side $HOST_SIDE_PID"
+        "export TILLANDSIAS_WRAPPER_MARK (the wrapper's token) in the caller before it runs scripts/check-no-competing-gate.sh --host-side $HOST_SIDE_PID"
     exit 2
 fi
 
@@ -270,7 +270,7 @@ for d in "$PROC_ROOT"/[0-9]*; do
     fi
     tok=""
     if ! { while IFS= read -r -d '' e; do
-               case "$e" in TILLANDSIAS_WRAPPER_TOKEN=*) tok="${e#*=}"; break ;; esac
+               case "$e" in TILLANDSIAS_WRAPPER_MARK=*|TILLANDSIAS_WRAPPER_TOKEN=*) tok="${e#*=}"; break ;; esac
            done < "$d/environ"; } 2>/dev/null; then
         # THE SAME RULE AS ABOVE, via the same function (1141-vf9w, yoga
         # 2026-09-26). An environ can pass `-r` (0400, ours) and still refuse
