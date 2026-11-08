@@ -3280,11 +3280,121 @@ _clear_stale_npm_staging() {
 # @latest, and 1.19.5 was published 2026-10-28T06:17Z. 1.19.4 is the last
 # release before that onset. It is the A/B's control and not yet proven
 # better; whatever the A/B favours replaces it here, in one reviewed line.
+# npm harness pins (2027-e2cf). A package with no pin installs @latest, and
+# _require_harness's trace names it as unpinned. opencode left npm: the
+# opencode-ai package stopped at 1.19.5 (2026-10-28) while upstream went on to
+# 2.x, so it is a release harness now (harness_release_pin below).
 harness_pin() {
     case "$1" in
-        opencode-ai) echo "1.19.4" ;;
         *) return 1 ;;
     esac
+}
+
+# ── Release-tarball harnesses (2027-e2cf) ──
+# opencode installs from its upstream GitHub release, pinned by VERSION and by
+# the sha256 of each asset, taken from the release's own asset digests when the
+# pin was set. The digest lives in this tree, not in the release: a replaced
+# release asset cannot vouch for itself. A mismatch FAILS CLOSED: nothing is
+# installed and the launch stops in harness_missing_fatal. Bumping the pin
+# means changing all three lines together, after the contract probe passes on
+# the new release.
+harness_release_pin() {
+    case "$1" in
+        opencode) echo "2.2.6" ;;
+        *) return 1 ;;
+    esac
+}
+
+# $1=bin $2=version $3=asset → the pinned sha256 (no prefix)
+harness_release_sha256() {
+    case "$1@$2/$3" in
+        # v2.2.6 ships byte-identical x64 and x64-baseline tarballs (both
+        # digests measured 2026-11-08); they are pinned per asset anyway, so a
+        # future split release is still verified per asset.
+        opencode@2.2.6/opencode-linux-x64.tar.gz) echo "08bb21d6326ce740d91cce7ebe88a6536933f6e1e30353b91a06b01f25da306c" ;;
+        opencode@2.2.6/opencode-linux-x64-baseline.tar.gz) echo "08bb21d6326ce740d91cce7ebe88a6536933f6e1e30353b91a06b01f25da306c" ;;
+        *) return 1 ;;
+    esac
+}
+
+# The release asset for this CPU. x86_64 with AVX2 takes the default build; a
+# CPU without AVX2 takes -baseline, because a non-baseline Bun binary dies with
+# SIGILL there. The forge base is glibc (fedora-minimal), so never -musl.
+# TILLANDSIAS_CPUINFO overrides /proc/cpuinfo for the fixture.
+harness_release_asset() {
+    local bin="$1" arch
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64)
+            if grep -qw avx2 "${TILLANDSIAS_CPUINFO:-/proc/cpuinfo}" 2>/dev/null; then
+                echo "$bin-linux-x64.tar.gz"
+            else
+                echo "$bin-linux-x64-baseline.tar.gz"
+            fi
+            ;;
+        aarch64 | arm64) echo "$bin-linux-arm64.tar.gz" ;;
+        *) return 1 ;;
+    esac
+}
+
+# $1=friendly-name $2=bin $3=owner/repo → echoes the resolved binary path,
+# which does not exist when nothing verified could be installed.
+_require_release_harness() {
+    local name="$1" bin="$2" repo="$3" ver asset want dir path have tmp got
+    ver="$(harness_release_pin "$bin")" || { echo ""; return 0; }
+    dir="${TILLANDSIAS_HARNESS_RELEASE_DIR:-$HOME/.cache/tillandsias-project/harness-release}/$bin/$ver"
+    path="$dir/$bin"
+    if [ -x "$path" ]; then
+        have="$("$path" --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+        if [ "$have" = "$ver" ]; then
+            trace_lifecycle "install" "$name: available ($ver, release pin; 2027-e2cf)"
+            echo "$path"
+            return 0
+        fi
+        trace_lifecycle "harness" "$name at $path is ${have:-unknown}, pinned $ver (2027-e2cf) — reinstalling the pin"
+    fi
+    asset="$(harness_release_asset "$bin")" || {
+        trace_lifecycle "harness" "refused:harness-release:$name:no-asset-for-$(uname -m)"
+        echo "$path"
+        return 0
+    }
+    want="$(harness_release_sha256 "$bin" "$ver" "$asset")" || {
+        trace_lifecycle "harness" "refused:harness-release:$name:no-pinned-digest:$asset@$ver (fail closed; pin its sha256 in harness_release_sha256)"
+        echo "$path"
+        return 0
+    }
+    mkdir -p "$dir" 2>/dev/null || true
+    tmp="$(mktemp -d "$dir/.install.XXXXXX" 2>/dev/null)" || {
+        trace_lifecycle "harness" "$name install FAILED (non-fatal): cannot create a staging dir under $dir"
+        echo "$path"
+        return 0
+    }
+    trace_lifecycle "harness" "$name: installing pinned $ver from $repo release asset $asset (2027-e2cf)"
+    if ! curl -fsSL --max-time 300 --retry 2 --retry-delay 3 \
+        "https://github.com/$repo/releases/download/v$ver/$asset" -o "$tmp/$asset" 2>"$tmp/curl.err"; then
+        trace_lifecycle "harness" "$name install FAILED (non-fatal, retried next launch): $(tail -2 "$tmp/curl.err" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+        rm -rf "$tmp" 2>/dev/null || true
+        echo "$path"
+        return 0
+    fi
+    got="$(sha256sum "$tmp/$asset" 2>/dev/null | cut -d' ' -f1)"
+    if [ "$got" != "$want" ]; then
+        trace_lifecycle "harness" "refused:harness-release:$name:digest-mismatch:$asset@$ver:want=$want:got=${got:-none} (fail closed: nothing installed)"
+        rm -rf "$tmp" 2>/dev/null || true
+        echo "$path"
+        return 0
+    fi
+    if ! tar -xzf "$tmp/$asset" -C "$tmp" "$bin" 2>/dev/null || [ ! -x "$tmp/$bin" ]; then
+        trace_lifecycle "harness" "$name install FAILED (non-fatal): the verified $asset holds no executable $bin"
+        rm -rf "$tmp" 2>/dev/null || true
+        echo "$path"
+        return 0
+    fi
+    # Atomic on the cache volume: a sibling container sees the old binary or
+    # the verified new one, never a partial file.
+    mv -f "$tmp/$bin" "$path" && rm -rf "$tmp" 2>/dev/null
+    trace_lifecycle "install" "$name: available ($("$path" --version 2>/dev/null | head -n 1 || echo unknown), sha256 verified)"
+    echo "$path"
 }
 
 _require_harness() {
@@ -3704,17 +3814,20 @@ curl_install_claude() {
 }
 
 require_opencode() {
-    # npm on-demand is the ONLY channel (operator ruling 2026-08-31,
-    # opencode-curl-install-never-populates-its-cache): the vendor curl
-    # installer's own check_version() exits 0 on any PATH-visible opencode
-    # without consulting OPENCODE_INSTALL_DIR, so the curl lane could
-    # structurally never populate its cache while the npm binary existed —
-    # proven from the upstream installer source by yoga, measured by
-    # lenovinha. _require_harness installs opencode-ai only when the binary
-    # is missing and carries its own bounded wait on the npm-update lock,
-    # so the 626-p4xd/805-yzhw double-extraction race this function used to
-    # choreograph around cannot recur: there is one writer left.
-    OC_BIN="$(_require_harness opencode opencode-ai opencode)"
+    # The release tarball is the ONLY channel (2027-e2cf, operator 2026-11-08:
+    # latest opencode, off npm). npm's opencode-ai stopped at 1.19.5 while
+    # upstream shipped 2.x. This is NOT the vendor curl installer retired on
+    # 2026-08-31: that installer's check_version() exited 0 on any opencode
+    # visible on PATH, so it never populated its cache. Here we fetch the asset
+    # ourselves, check its pinned sha256 and install it atomically into a
+    # per-version directory. One writer, so no npm-update lock is involved.
+    # 2027-e2cf: opencode is a release harness (pinned version and sha256);
+    # npm's opencode-ai stopped at 1.19.5. Its directory goes first on PATH so
+    # a bare `opencode` in a shell is the verified pin, not a stale npm copy.
+    OC_BIN="$(_require_release_harness opencode opencode anomalyco/opencode)"
+    if [ -x "$OC_BIN" ]; then
+        export PATH="$(dirname "$OC_BIN"):$PATH"
+    fi
     return 0
 }
 
