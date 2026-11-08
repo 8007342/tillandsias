@@ -191,6 +191,21 @@ pub const PROC_RUN_BASE_ENV_PASSTHROUGH: &[&str] = &[
     "DBUS_SESSION_BUS_ADDRESS",
 ];
 
+/// ORDER 2031-h5ru (p1). Does this `TILLANDSIAS_*` runner variable pass to a
+/// child? Not when its last `_`-separated segment is SECRET, PASS or PASSWORD:
+/// TILLANDSIAS_COORD_CLIENT_SECRET (the coordinator's Access client secret) and
+/// TILLANDSIAS_KEY_PASS (the at-rest CA key passphrase) are read by the process
+/// that needs them from ITS OWN environment, and no child ever needed them.
+/// Deliberately narrow: TOKEN and KEY are not here, because
+/// TILLANDSIAS_WRAPPER_TOKEN is a reaper marker that must keep propagating and
+/// TILLANDSIAS_NOTARY_KEY is a path; the full hard block with its renames is
+/// 2031-dwwy / 2031-z4rm (design 2029-39bt). Compared case-insensitively, as
+/// Windows treats environment names.
+pub fn project_variable_passes(name: &str) -> bool {
+    let last = name.rsplit('_').next().unwrap_or("").to_ascii_uppercase();
+    !matches!(last.as_str(), "SECRET" | "PASS" | "PASSWORD")
+}
+
 /// Fixed values every child gets, so a verdict cannot depend on the caller's
 /// locale, timezone or a git credential prompt.
 pub const PROC_RUN_BASE_ENV_FIXED: &[(&str, &str)] = &[
@@ -214,7 +229,8 @@ pub(crate) fn base_env_command(argv: Vec<String>) -> tillandsias_exec::Command {
         }
     }
     for (k, v) in std::env::vars_os() {
-        if k.to_string_lossy().starts_with("TILLANDSIAS_") {
+        let name = k.to_string_lossy();
+        if name.starts_with("TILLANDSIAS_") && project_variable_passes(&name) {
             cmd = cmd.env(k, v);
         }
     }

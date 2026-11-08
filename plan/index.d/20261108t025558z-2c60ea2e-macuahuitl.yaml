@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: validate-yaml-greens-a-zero-byte-fragment-so-a-failed-heredoc-reads-as-valid-evidence
+    field: status
+    value: implemented
+    ts: "2026-11-08T02:55:58Z"
+    host: macuahuitl
+
+events:
+  - packet_id: validate-yaml-greens-a-zero-byte-fragment-so-a-failed-heredoc-reads-as-valid-evidence
+    event:
+      type: progress
+      ts: "2026-11-08T02:55:58Z"
+      host: macuahuitl
+      summary: |-
+        status 'implemented' (not terminal) with evidence_refs: work/1117-66qv@b10583b36 + cargo test -p tillandsias-plan --test validate_yaml_empty (5/5 pass) + cargo test -p tillandsias-plan (all pass) + cargo clippy -p tillandsias-plan --all-targets -- -D warnings (clean)
+  - packet_id: validate-yaml-greens-a-zero-byte-fragment-so-a-failed-heredoc-reads-as-valid-evidence
+    event:
+      type: note
+      ts: "2026-11-08T02:55:58Z"
+      host: macuahuitl
+      summary: |-
+        Fix implemented and pushed on work/1117-66qv; awaiting landing. Full ./build.sh --check in this forge is blocked by pre-existing 2042-w7v4 (inotify watcher hangs the codex rotation-copy test).
