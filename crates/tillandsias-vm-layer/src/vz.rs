@@ -5303,6 +5303,53 @@ mod tests {
         );
     }
 
+    /// Order 309 (macOS half, audited by 2055-jiu2): the guest's headless unit
+    /// must not carry the hardening that wedged headless-driven podman on
+    /// Windows (2026-07-12): a cap-stripped or no-new-privileges uid-0 podman
+    /// selects ROOTLESS mode, finds an empty store and fails every vault and
+    /// lane ensure. Audited 2026-11-08: the macOS unit carries none of these,
+    /// so the hazard is absent; this pins it absent until the
+    /// listener/orchestrator split (or podman-socket delegation) lands and
+    /// the directives return as joint-presence pins, as on Windows.
+    /// Read from the RENDERED provisioning script, and the needles are
+    /// assembled, so the test cannot match its own text.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_guest_headless_unit_keeps_full_root_for_podman() {
+        let script = provision_user_data("off");
+        let open = [
+            "cat > /etc/systemd/system/",
+            "tillandsias-headless.service << 'EOF'",
+        ]
+        .concat();
+        let start = script.find(&open).expect("the headless unit heredoc");
+        let body = &script[start + open.len()..];
+        let unit = &body[..body.find("\nEOF\n").expect("the unit's EOF")];
+        assert!(
+            unit.contains("ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock"),
+            "found the right unit"
+        );
+        for directive in [
+            "NoNewPrivileges",
+            "CapabilityBoundingSet",
+            "AmbientCapabilities",
+            "ProtectSystem",
+            "ProtectHome",
+            "PrivateTmp",
+            "PrivateDevices",
+            "RestrictNamespaces",
+            "SystemCallFilter",
+            "User",
+            "DynamicUser",
+        ] {
+            let needle = [directive, "="].concat();
+            assert!(
+                !unit.lines().any(|l| l.trim_start().starts_with(&needle)),
+                "{needle} in the guest headless unit would make uid-0 podman go rootless (order 309)"
+            );
+        }
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn provision_user_data_upgrades_the_guest_os_before_installing() {
