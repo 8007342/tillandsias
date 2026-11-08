@@ -150,10 +150,10 @@ summarize-cargo.sh [path-to-Cargo.toml]
 - Project-local summarizers at `<project>/.tillandsias/summarizers/` (optional, loaded by dispatcher)
 - Dispatcher walks both and invokes all
 
-## Validator (`check-readme-discipline.sh`)
+## Validator (`scripts/lua/check-readme-discipline.lua`)
 
 ```bash
-check-readme-discipline.sh [path-to-README.md]
+tillandsias-plan script run scripts/lua/check-readme-discipline.lua [-- <project-dir, inside the repository>]
 ```
 
 **Checks** (in order):

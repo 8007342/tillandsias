@@ -10,7 +10,7 @@ preconditions:
   - workspace contains cheatsheets/welcome/readme-discipline.md
   - workspace contains docs/OPENCODE-INTEGRATION-COMPLETED.md
   - workspace contains scripts/regenerate-readme.sh
-  - workspace contains scripts/check-readme-discipline.sh
+  - workspace contains scripts/lua/check-readme-discipline.lua
   - bash is available in PATH
 
 critical_path:
@@ -20,7 +20,7 @@ critical_path:
     expected_behavior: "readme-discipline contract present"
 
   - step: "verify the cheatsheet documents the summarizer interface and validator exit codes"
-    command: "grep -Fq 'summarize-cargo.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'check-readme-discipline.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'requires_cheatsheets' cheatsheets/welcome/readme-discipline.md && echo 'readme-discipline interface present'"
+    command: "grep -Fq 'summarize-cargo.sh' cheatsheets/welcome/readme-discipline.md && grep -Fq 'check-readme-discipline.lua' cheatsheets/welcome/readme-discipline.md && grep -Fq 'requires_cheatsheets' cheatsheets/welcome/readme-discipline.md && echo 'readme-discipline interface present'"
     timeout_ms: 10000
     expected_behavior: "readme-discipline interface present"
 
@@ -30,7 +30,7 @@ critical_path:
     expected_behavior: "readme-discipline provenance present"
 
   - step: "verify the dispatcher and validator scripts are present and executable"
-    command: "test -x scripts/regenerate-readme.sh && test -x scripts/check-readme-discipline.sh && echo 'readme bootstrap scripts present'"
+    command: "test -x scripts/regenerate-readme.sh && test -f scripts/lua/check-readme-discipline.lua && echo 'readme bootstrap scripts present'"
     timeout_ms: 10000
     expected_behavior: "readme bootstrap scripts present"
 
