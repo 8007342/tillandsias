@@ -403,7 +403,6 @@ scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
 scripts scripts/check-plan-schema-divergence.sh 2
 scripts scripts/check-purge-clears-vault-credentials.sh 1
-scripts scripts/check-readme-discipline.sh 3
 scripts scripts/check-refusal-affordance-added.sh 3
 scripts scripts/check-release-asset-integrity.sh 12
 scripts scripts/check-release-tier-freshness.sh 7

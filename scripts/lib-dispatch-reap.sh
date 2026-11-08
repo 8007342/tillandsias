@@ -136,14 +136,19 @@ tillandsias_marked_pids() {
         return 2
     fi
     [ -n "$token" ] || return 0
-    needle="TILLANDSIAS_WRAPPER_TOKEN=$token"
+    # ORDER 2031-z4rm: the marker is TILLANDSIAS_WRAPPER_MARK. The old name,
+    # TILLANDSIAS_WRAPPER_TOKEN, is still MATCHED (never written) for one
+    # transition window: a wrapper started from an older checkout on the same
+    # host carries it, and missing its subtree would leave an orphan gate.
+    needle="TILLANDSIAS_WRAPPER_MARK=$token"
+    local retired="TILLANDSIAS_WRAPPER_TOKEN=$token"
     for d in /proc/[0-9]*; do
         pid="${d#/proc/}"
         [ "$pid" = "$$" ] && continue
         [ -r "$d/environ" ] || continue
         {
             while IFS= read -r -d '' e; do
-                if [ "$e" = "$needle" ]; then
+                if [ "$e" = "$needle" ] || [ "$e" = "$retired" ]; then
                     printf '%s\n' "$pid"
                     break
                 fi
