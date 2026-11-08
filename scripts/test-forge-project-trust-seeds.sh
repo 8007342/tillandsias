@@ -156,8 +156,17 @@ else
     bad "claude order: bypass=$b restore=$r trust=$c"
 fi
 
-# ── 5 (optional): the real agy accepts what the seed writes ─────────────────
-AGY="$(command -v agy 2>/dev/null || true)"
+# ── 5 (optional, OPT-IN): the real agy accepts what the seed writes ────────
+# OPT-IN ONLY (2026-11-08). `agy -p ping` under a fresh, credential-less HOME
+# starts agy's interactive SIGN-IN, which opens a browser window on a desktop
+# host: measured on tlatoanis-macbook-air, where five default-image litmus runs
+# put about ten Antigravity sign-in windows in front of the operator. A test
+# must never start a sign-in flow (the 2026-11-07 ruling), so this arm runs
+# only when TILLANDSIAS_TEST_REAL_AGY=1 names it, on a host where that is safe.
+AGY=""
+if [ "${TILLANDSIAS_TEST_REAL_AGY:-0}" = "1" ]; then
+    AGY="$(command -v agy 2>/dev/null || true)"
+fi
 if [ -n "$AGY" ] && [ -x "$AGY" ]; then
     fresh_home agyreal
     seed_agy_workspace_trust "$PROJ"
@@ -178,7 +187,11 @@ if [ -n "$AGY" ] && [ -x "$AGY" ]; then
         bad "agy control: the map form was not rejected; the acceptance check proves nothing"
     fi
 else
-    echo "note:forge-project-trust-seeds:optional-arm-skipped:real-agy-absent"
+    if [ "${TILLANDSIAS_TEST_REAL_AGY:-0}" = "1" ]; then
+        echo "note:forge-project-trust-seeds:optional-arm-skipped:real-agy-absent"
+    else
+        echo "note:forge-project-trust-seeds:optional-arm-skipped:real-agy-not-opted-in (TILLANDSIAS_TEST_REAL_AGY=1; it starts a sign-in)"
+    fi
 fi
 
 # ── 6 (optional): the real codex parses and VALIDATES what the seed writes ───
