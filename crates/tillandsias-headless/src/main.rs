@@ -36271,6 +36271,51 @@ esac
         );
     }
 
+    /// The OpenCode Web / studio window's run argv carries the login data URL,
+    /// whose form holds the session OTP (also the session cookie). The argv
+    /// the shared podman layer redacts for failure messages (stderr and the
+    /// `launch_failed` OpenCode Web event) must hold neither the OTP nor the
+    /// data URL. Built from the production inputs: a real OTP, the real
+    /// login URL builder and the real window spec.
+    #[test]
+    fn opencode_web_window_argv_redacts_the_login_otp() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-0"), b"").expect("socket stand-in");
+        let display = BrowserDisplayContext {
+            wayland_display: Some("wayland-0".to_string()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+            audio_socket: None,
+        };
+        let url = "http://opencode.visual-chess.localhost:8080/";
+        let otp = tillandsias_otp::issue_session("visual-chess");
+        let otp_text = tillandsias_otp::format_cookie_value(&otp);
+        let login_url = tillandsias_otp::build_login_data_url(url, &otp);
+        let spec = build_opencode_web_browser_spec(
+            &login_url,
+            "1.2.3",
+            Path::new("/tmp/tillandsias/browser/test-profile"),
+            Path::new("/tmp/tillandsias/ca"),
+            &display,
+            "visual-chess",
+        )
+        .expect("a Wayland session builds a browser spec");
+        let mut full = vec!["run".to_string()];
+        full.extend(spec.build_run_args());
+        // Premise: the secret really is in the argv, base64-encoded in --app.
+        let payload = login_url
+            .strip_prefix("data:text/html;base64,")
+            .expect("login URL is a base64 data URL");
+        assert!(
+            full.iter().any(|a| a.contains(payload)),
+            "premise: the window argv carries the login data URL"
+        );
+        let redacted = tillandsias_podman::backend::redact_argv(&full).join(" ");
+        assert!(!redacted.contains(payload), "login data URL leaked");
+        assert!(!redacted.contains(&otp_text), "OTP leaked");
+        assert!(redacted.contains("--app=data:<redacted>"), "{redacted}");
+        assert!(redacted.contains("--ozone-platform=wayland"), "{redacted}");
+    }
+
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {
         let start = source
             .find(signature)
