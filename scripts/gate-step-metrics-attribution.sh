@@ -39,6 +39,9 @@ if [ -z "$log" ] || [ -z "$run" ]; then
     exit 2
 fi
 own="${4:-$PPID}"
+# BSD wc -l pads its count ("      77"); strip it, or the guard below reads a
+# padded count as garbage, resets it to 0 and counts the whole log (2056-29t4).
+before="${before//[[:space:]]/}"
 case "$before" in ''|*[!0-9]*) before=0 ;; esac
 if [ ! -f "$log" ]; then echo "ours=0 foreign=0 unattributed=0 concurrent=0 verdict=ok"; exit 0; fi
 counts="$(awk -v skip="$before" -v id="\"run_id\":\"$run\"" '

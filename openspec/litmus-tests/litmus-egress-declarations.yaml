@@ -1,0 +1,37 @@
+# @trace spec:proxy-container, order:2041-jb57
+#
+# Every image directory and every studio declares its egress tiers
+# (openspec change curated-egress-tiers): an undeclared container gets no
+# egress, so a missing declaration must be caught here, not discovered as a
+# broken container. The decider scripts/lua/check-egress-declarations.lua
+# judges images/*/egress.yaml and the studio registry's `egress` fields; the
+# controls prove it refuses an undeclared image, an unknown tier, and an
+# egress-point that is not the proxy.
+name: litmus:egress-declarations
+spec: proxy-container
+phase: pre-build
+description: >
+  Every images/<dir> with a Containerfile has an egress.yaml naming tiers on
+  the ladder with a reason, and every studio declares egress.
+severity: high
+size: instant
+
+critical_path:
+  - step: "2041-jb57: today's images and studios all declare egress tiers"
+    command: "out=$(tillandsias-plan script run scripts/lua/check-egress-declarations.lua); rc=$?; case \"$out\" in ok:egress-declarations:*) [ \"$rc\" -eq 0 ] && echo 'ok: every image and studio declares egress' ;; *) echo \"FAIL rc=$rc out=[$out]\"; exit 1 ;; esac"
+    timeout_ms: 20000
+    expected_behavior: "ok: every image and studio declares egress"
+
+  - step: "2041-jb57 NEGATIVE CONTROL: an image directory without egress.yaml is refused"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-egd.XXXXXX); mkdir -p \"$T/images/vault\" \"$T/images/newimg\"; cp images/vault/egress.yaml images/vault/Containerfile \"$T/images/vault/\"; cp images/vault/Containerfile \"$T/images/newimg/\"; out=$(TILLANDSIAS_IMAGES_DIR=\"$T/images\" tillandsias-plan script run scripts/lua/check-egress-declarations.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:egress-declarations:newimg:undeclared' ] && echo 'ok: undeclared image refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: undeclared image refused"
+
+  - step: "2041-jb57 NEGATIVE CONTROL: an unknown tier and an egress-point on a non-egress image are refused"
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-egd.XXXXXX); mkdir -p \"$T/images/vault\" \"$T/images/router\"; cp images/vault/Containerfile \"$T/images/vault/\"; cp images/router/Containerfile \"$T/images/router/\"; printf 'tiers: [siblings, internet]\\nreason: control\\n' > \"$T/images/router/egress.yaml\"; printf 'tiers: [egress-point]\\nreason: control\\n' > \"$T/images/vault/egress.yaml\"; out=$(TILLANDSIAS_IMAGES_DIR=\"$T/images\" tillandsias-plan script run scripts/lua/check-egress-declarations.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:egress-declarations:router:unknown-tier:internet,vault:egress-point-not-an-egress' ] && echo 'ok: bad tiers refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: bad tiers refused"
+
+observability:
+  traces:
+    - "@trace spec:proxy-container"

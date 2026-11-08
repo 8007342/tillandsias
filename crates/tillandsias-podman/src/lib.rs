@@ -562,6 +562,11 @@ fn looks_like_secret_value(value: &str) -> bool {
 /// `KEY=VALUE` (passed via `-e`/`--env`) or bare opaque values (passed via
 /// `--secret`/`--password`).
 fn redact_one(arg: &str) -> String {
+    // A data URL inlines a whole document (the web windows' login form holds
+    // the session OTP), flag form included, so it goes before the flag skip.
+    if let Some(hidden) = crate::backend::redact_data_url(arg) {
+        return hidden;
+    }
     // Don't touch flag-like tokens (`--something`); they're never secret values.
     if arg.starts_with('-') {
         return arg.to_string();
@@ -1850,6 +1855,31 @@ exit 0
         let line = format_podman_invocation_line("container", "podman", &args);
         assert!(line.len() <= 403, "line too long: {} chars", line.len());
         assert!(line.ends_with("..."), "line not truncated: {line}");
+    }
+
+    /// The `--debug` invocation line hid the browser's
+    /// `--app=data:text/html;base64,<login form with the OTP>` only because a
+    /// real browser argv is longer than the 400-character cut (measured on
+    /// yoga 2026-11-08). A short argv proves the redaction, not the cut,
+    /// is what keeps it out.
+    #[test]
+    fn invocation_line_redacts_a_data_url_before_any_truncation() {
+        let payload = "PGh0bWw+PGlucHV0IG5hbWU9Im90cCIgdmFsdWU9InNlY3JldCI+PC9odG1sPg";
+        let line = format_podman_invocation_line(
+            "container",
+            "podman",
+            &[
+                "run".into(),
+                "img:v1".into(),
+                format!("--app=data:text/html;base64,{payload}"),
+            ],
+        );
+        assert!(
+            line.len() < 400,
+            "premise: the line is not truncated: {line}"
+        );
+        assert!(!line.contains(payload), "data URL payload leaked: {line}");
+        assert!(line.contains("--app=data:<redacted>"), "{line}");
     }
 
     /// @trace spec:podman-idiomatic-patterns

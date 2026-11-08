@@ -1021,7 +1021,7 @@ impl PodmanClient {
 
     /// Start a container with the given arguments.
     pub async fn run_container(&self, args: &[String]) -> Result<String, PodmanError> {
-        debug!(?args, "Running container");
+        debug!(args = ?redact_argv(args), "Running container");
 
         // @trace spec:cross-platform, spec:wsl-runtime, spec:browser-isolation-tray-integration
         // Windows: detached forge launches go through wsl.exe. We translate

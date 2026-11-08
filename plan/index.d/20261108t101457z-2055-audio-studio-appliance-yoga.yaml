@@ -1,0 +1,108 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 at the coordinator's request (macuahuitl-fedora relay of an operator approval). Code is cited by symbol, never by line. Written for any project; kumbia is the first client.
+packets:
+  - packet_id: an-audio-studio-sibling-appliance-runs-analysis-and-transform-tools-on-the-gpu-queue-with-provenance
+    order: 2055-grzz
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, audio, containers, gpu]
+    estimated_hours: 10
+    owned_files:
+      - images/audio-studio/Containerfile
+    title: "An audio studio appliance, a sibling studio beside ComfyUI, runs ffmpeg, sox, rubberband and a glitch detector on audio inputs and writes outputs with provenance under /work/tmp"
+    context: |
+      Coordinator relay 2026-11-08 of an operator approval: a GENERIC audio studio, alongside ComfyUI (registry id comfyui, kind sibling, image imagegen-studio, order 1921-2krx). Operator-approved contents:
+      rubberband and sox, GPL tools inside the container only and never shipped in a release artefact (built on the host like imagegen-studio);
+      ffmpeg with libopus and the native AAC encoder (permissive or LGPL, no fdk-aac);
+      Python with numpy, scipy, librosa, soundfile and pyloudnorm, for glitch detection: clicks, dropouts, spectral holes, clipping and loop seams.
+      Requirements: GPU work goes through the shared host queue; outputs go under /work/tmp/audio with provenance, as studio.run_workflow writes them; there is no egress (model downloads belong to 2055-d9sa and 2055-dihg); the registry declares it with good_for, not_for and edits.
+      Stem separation is 2055-d9sa; generative repaint, extend and lego are 2055-dihg; ComfyUI's LoadAudio input binding stays 2018-auin.
+      The Python lives in the appliance image for users, not in this repo's scripts or tests (standing no-Python rule): tests are cargo or Lua.
+    exit_criteria:
+      - "images/studio/registry.lua declares an audio studio (kind sibling, its own image) with good_for, not_for and edits; build-studio-registry.lua accepts it, and webstudio.options lists it with those fields."
+      - "One studio tool runs a named transform (at least: loudness-normalise, time-stretch with rubberband, convert to opus and to AAC) and one runs glitch detection, which returns JSON findings with a time range and kind for each of: click, dropout, spectral hole, clipping, loop seam. Each tool writes its output under /work/tmp/audio with a provenance record naming the tool, its version, the input hashes and the parameters."
+      - "A cargo or Lua fixture feeds synthetic audio with one planted fault of each kind and asserts each is found at its planted time range, plus a clean control file with no findings. Pre-fix result: FAILS, no audio studio exists."
+      - "The release artefacts carry no rubberband or sox binary, checked by listing the tray bundle."
+    verifiable_closure: "The planted-fault fixture finds each of the five fault kinds at its planted range and reports nothing on the clean control; the registry lists the studio with good_for/not_for/edits; a bundle listing shows no rubberband or sox. Pre-fix result: FAILS, no audio studio exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the planted-fault fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Read how imagegen-studio is built and launched as a sibling (1874-zry8, 1921-2krx) and copy that shape; write the planted-fault fixture first.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-08 (operator approval of rubberband, sox and Demucs; the permissive list); yoga read of images/studio/registry.lua.
+    events:
+      - type: filed
+        ts: "2026-11-08T10:14:57Z"
+        host: yoga
+        summary: "filed at the coordinator's request; first slice of the audio studio"
+  - packet_id: the-audio-studio-separates-a-mix-into-stems-with-demucs-and-builds-cumulative-tiers-from-chosen-stems
+    order: 2055-d9sa
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, audio, models, licence, gpu]
+    estimated_hours: 8
+    depends_on:
+      - an-audio-studio-sibling-appliance-runs-analysis-and-transform-tools-on-the-gpu-queue-with-provenance
+    owned_files:
+      - images/audio-studio/stems.toml
+    title: "The audio studio separates a mix into stems with Demucs v4 (htdemucs, 6-stem where available) and builds cumulative tiers by adding chosen stems, with the weights fetched only after accept-licence and the consent token"
+    context: |
+      Operator approved Demucs v4 / htdemucs on 2026-11-08 (coordinator relay). The weights' licence is checked through accept-licence BEFORE any fetch: the code licence is not the weights' licence, and htdemucs_6s may differ from htdemucs. The fetch goes through the model-hubs egress tier (2041-i3nk) behind the consent token, never a direct download.
+      Layering is generic, though kumbia (the first client) wants vertical layering: one arrangement per level, split into stems, with tiers built by adding stems. So a tier tool takes stems plus an ordered list of tiers (each tier names the stems it adds) and writes one loudness-matched mix per tier. It never assumes a song form.
+    exit_criteria:
+      - "Before any weights fetch, the studio refuses with licence_acknowledgement_required unless the Demucs weights' licence is acknowledged through accept-licence; once acknowledged, the fetch goes through the model-hubs egress tier with the consent token, and a fetch without the token is refused."
+      - "A separation on a real GPU host (through the shared queue) writes 4 stems for htdemucs, or 6 for htdemucs_6s where present, under /work/tmp/audio with provenance (model id, weights hash, input hash). The sum of the stems reconstructs the input within a stated tolerance."
+      - "The tier tool, given stems and tiers [[drums],[drums,bass],[drums,bass,other]], writes three mixes. Each mix contains exactly its stems (checked by residual energy against the stem sum) and is loudness-matched to a stated LUFS target."
+      - "Pre-fix result: FAILS, no separation tool exists."
+    verifiable_closure: "A real GPU-queue separation writes 4 or 6 stems whose sum reconstructs the input within tolerance, with provenance; the tier fixture's three mixes each contain exactly their stems at the LUFS target; the weights fetch is refused without the licence acknowledgement and the consent token. Pre-fix result: FAILS, no separation tool exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the tier fixture and the refusal arms in the same commit (1136-n8sh).
+    next_action: >
+      Read the Demucs weights' licence (htdemucs and htdemucs_6s separately) and run accept-licence if it is outside the permissive list; then write the tier fixture.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-08 (operator approval of Demucs; kumbia's vertical layering as the first client).
+    events:
+      - type: filed
+        ts: "2026-11-08T10:14:57Z"
+        host: yoga
+        summary: "filed at the coordinator's request; stems and tiers slice of the audio studio"
+  - packet_id: the-audio-studio-repaints-extends-and-adds-or-removes-one-instrument-with-ace-step
+    order: 2055-dihg
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, audio, models, licence, gpu]
+    estimated_hours: 12
+    depends_on:
+      - an-audio-studio-sibling-appliance-runs-analysis-and-transform-tools-on-the-gpu-queue-with-provenance
+    owned_files:
+      - images/audio-studio/ace-step.toml
+    title: "The audio studio regenerates a time range (repaint), extends or completes a piece, and adds or removes one instrument track (lego/extract) with ACE-Step 1.5, run natively or through pinned ComfyUI nodes"
+    context: |
+      Asked by the coordinator 2026-11-08 (permissive-list item; the licence is still checked before any fetch, as in 2055-d9sa). Two routes, and the implementer picks one with a measurement: ACE-Step 1.5 native in the audio studio image, or pinned ComfyUI nodes in imagegen-studio. The ComfyUI route needs 2018-auin (the LoadAudio input binding) first. Either way the call goes through the shared GPU queue, outputs go under /work/tmp/audio with provenance, and the weights come through the model-hubs egress tier behind the consent token.
+      Each operation is checked by a property, never by listening: repaint changes only the requested range; extend keeps the original prefix; lego/extract changes one track.
+    exit_criteria:
+      - "Repaint of [t0,t1] on a real GPU host returns audio whose samples outside [t0,t1] match the input (outside a stated crossfade), and whose inside differs; with provenance (model id, weights hash, seed, range)."
+      - "Extend returns audio whose first N seconds match the input within tolerance and whose length grows by the requested amount."
+      - "Lego (add a named instrument) and extract (remove one) each return audio whose separated stems (2055-d9sa's tool) differ from the input's only in the named instrument's stem, beyond a stated threshold."
+      - "The route choice (native or ComfyUI nodes) is recorded with the measurement that chose it (VRAM, wall time on yoga's GPU). Pre-fix result: FAILS, no generative audio tool exists."
+    verifiable_closure: "On a real GPU host: repaint changes only the requested range; extend keeps the prefix and grows by the request; lego and extract change only the named instrument's stem; each output carries provenance; the route choice cites its measurement. Pre-fix result: FAILS, no generative audio tool exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the range/prefix/stem property checks in the same commit (1136-n8sh).
+    next_action: >
+      Read ACE-Step 1.5's code and weights licences; measure VRAM and wall time on yoga's GPU for the native route against the pinned-ComfyUI-node route, then pick one and record why.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T10:14:57Z"
+        host: yoga
+        summary: "filed at the coordinator's request; generative slice of the audio studio"

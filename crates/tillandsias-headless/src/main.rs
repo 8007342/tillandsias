@@ -73,6 +73,7 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod egress;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
@@ -2403,6 +2404,27 @@ fn proxy_env_args() -> Vec<String> {
         "--env".into(),
         "NODE_USE_ENV_PROXY=1".into(),
     ]
+}
+
+// The proxy env for `image`, or nothing when its egress declaration names no
+// proxied tier (order 2041-jb57: undeclared means none).
+// @trace spec:proxy-container, order:2041-jb57
+fn proxy_env_args_for(image: &str) -> Vec<String> {
+    if egress::wants_proxy(image) {
+        proxy_env_args()
+    } else {
+        Vec::new()
+    }
+}
+
+// apply_proxy_env, gated on `image`'s egress declaration like
+// proxy_env_args_for.
+fn apply_proxy_env_for(spec: ContainerSpec, image: &str) -> ContainerSpec {
+    if egress::wants_proxy(image) {
+        apply_proxy_env(spec)
+    } else {
+        spec
+    }
 }
 
 // Applies the canonical proxy env vars to a ContainerSpec builder.
@@ -7180,7 +7202,7 @@ fn build_git_run_args(
     // the enclave proxy. Uses enclave_no_proxy() — the canonical full NO_PROXY
     // list — not a shorter hand-rolled one.
     // See cheatsheets/runtime/enclave-proxy-patterns.md for justification.
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("git"));
     if let Some(url) = project_remote_url.and_then(sanitize_forge_origin_url)
         && !url.is_empty()
     {
@@ -8544,7 +8566,7 @@ fn build_inference_run_args(
         effective_tier,
         &usable_nodes,
     ));
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("inference"));
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
     // ..)` calls — but the tail ended `[.., image, "/usr/bin/ollama", "serve"]`,
@@ -11132,7 +11154,7 @@ fn build_opencode_forge_args(
             args.push("--detach".into());
         }
     }
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("default"));
     args.extend([
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
@@ -21954,7 +21976,7 @@ fn build_forge_agent_run_args_with_vault(
             FORGE_SPEC_INDEX_MOUNT.to_string(),
             MountMode::ReadOnly,
         );
-    let mut spec = apply_proxy_env(spec)
+    let mut spec = apply_proxy_env_for(spec, "default")
         // Order 801-a2by: name the durable root explicitly so the in-forge
         // readers resolve it without probing for podman (which the enclave does
         // not have) and without an existence heuristic that would silently
@@ -36271,6 +36293,51 @@ esac
         );
     }
 
+    /// The OpenCode Web / studio window's run argv carries the login data URL,
+    /// whose form holds the session OTP (also the session cookie). The argv
+    /// the shared podman layer redacts for failure messages (stderr and the
+    /// `launch_failed` OpenCode Web event) must hold neither the OTP nor the
+    /// data URL. Built from the production inputs: a real OTP, the real
+    /// login URL builder and the real window spec.
+    #[test]
+    fn opencode_web_window_argv_redacts_the_login_otp() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-0"), b"").expect("socket stand-in");
+        let display = BrowserDisplayContext {
+            wayland_display: Some("wayland-0".to_string()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+            audio_socket: None,
+        };
+        let url = "http://opencode.visual-chess.localhost:8080/";
+        let otp = tillandsias_otp::issue_session("visual-chess");
+        let otp_text = tillandsias_otp::format_cookie_value(&otp);
+        let login_url = tillandsias_otp::build_login_data_url(url, &otp);
+        let spec = build_opencode_web_browser_spec(
+            &login_url,
+            "1.2.3",
+            Path::new("/tmp/tillandsias/browser/test-profile"),
+            Path::new("/tmp/tillandsias/ca"),
+            &display,
+            "visual-chess",
+        )
+        .expect("a Wayland session builds a browser spec");
+        let mut full = vec!["run".to_string()];
+        full.extend(spec.build_run_args());
+        // Premise: the secret really is in the argv, base64-encoded in --app.
+        let payload = login_url
+            .strip_prefix("data:text/html;base64,")
+            .expect("login URL is a base64 data URL");
+        assert!(
+            full.iter().any(|a| a.contains(payload)),
+            "premise: the window argv carries the login data URL"
+        );
+        let redacted = tillandsias_podman::backend::redact_argv(&full).join(" ");
+        assert!(!redacted.contains(payload), "login data URL leaked");
+        assert!(!redacted.contains(&otp_text), "OTP leaked");
+        assert!(redacted.contains("--app=data:<redacted>"), "{redacted}");
+        assert!(redacted.contains("--ozone-platform=wayland"), "{redacted}");
+    }
+
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {
         let start = source
             .find(signature)
@@ -40420,8 +40487,14 @@ mod keep_id_warm_tests {
         let root = podman_cmd_sync()
             .args(["info", "--format", "{{.Store.GraphRoot}}"])
             .output_bounded(OperationKind::Inspect.default_budget())
+            .ok()
+            .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
+        if let Some(why) = keep_id_graph_root_unusable(&root) {
+            eprintln!("skip: {why}");
+            return;
+        }
         // 1960-kidw: podman may run on the HOST (the builder toolbox's podman
         // is a flatpak-spawn shim), so the GraphRoot it reports is a host
         // path. A store under $HOME is visible here at the same path; one
@@ -40501,11 +40574,9 @@ mod keep_id_warm_tests {
             .args(["rmi", "-f", &tag])
             .output_bounded(OperationKind::Image.default_budget());
         assert!(!layer.is_empty(), "the image's layer digest");
-        assert!(
-            seen >= 1,
-            "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
-            layers_json.display()
-        );
+        if let Some(fault) = keep_id_store_fault(&root, &layers_json, seen, &layer) {
+            panic!("{fault}");
+        }
         assert_eq!(
             after_build, 0,
             "a fresh image starts with no mapped copy (the premise)"
@@ -40514,6 +40585,70 @@ mod keep_id_warm_tests {
         assert_eq!(
             after_start, 1,
             "the first keep-id start made no copy of its own"
+        );
+    }
+
+    /// ORDER 2054-kiwm: why the GraphRoot podman answered cannot name a store,
+    /// or None when it can. Under load the `podman info` query can time out
+    /// or fail, which used to leave an EMPTY root: the store path became the
+    /// relative `overlay-layers/layers.json` and the test blamed the store.
+    fn keep_id_graph_root_unusable(root: &str) -> Option<String> {
+        if root.is_empty() {
+            return Some(
+                "podman answered no GraphRoot (empty; the info query failed or timed out)".into(),
+            );
+        }
+        (!Path::new(root).is_absolute())
+            .then(|| format!("podman answered a relative GraphRoot {root:?}, which names no store"))
+    }
+
+    /// The store fault the warm test reports when the built image's own
+    /// layer is missing from a store that podman did name.
+    fn keep_id_store_fault(
+        root: &str,
+        layers_json: &Path,
+        seen: usize,
+        layer: &str,
+    ) -> Option<String> {
+        (seen == 0).then(|| {
+            format!(
+                "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
+                layers_json.display()
+            )
+        })
+    }
+
+    /// 2054-kiwm: an empty or relative GraphRoot is a named SKIP, never a
+    /// store fault. Pre-fix: FAILS, the empty root fell through to the
+    /// store-not-readable assertion.
+    #[test]
+    fn an_empty_or_relative_graph_root_is_a_named_skip_not_a_store_fault() {
+        for root in ["", "  ", "overlay", "relative/storage"] {
+            let why = keep_id_graph_root_unusable(root.trim());
+            assert!(
+                why.as_deref().is_some_and(|w| w.contains("GraphRoot")),
+                "root {root:?} must skip naming the GraphRoot, got {why:?}; else: {:?}",
+                keep_id_store_fault(root, &keep_id_layers_json(root), 0, "sha256:x")
+            );
+        }
+    }
+
+    /// 2054-kiwm NEGATIVE CONTROL: a real GraphRoot is not skipped, and a
+    /// layers.json there that truly lacks the layer is still a failure.
+    #[test]
+    fn a_real_graph_root_missing_the_layer_still_fails() {
+        let root = "/var/home/u/.local/share/containers/storage";
+        assert_eq!(keep_id_graph_root_unusable(root), None);
+        let fault = keep_id_store_fault(root, &keep_id_layers_json(root), 0, "sha256:x");
+        assert!(
+            fault
+                .as_deref()
+                .is_some_and(|f| f.contains("the store is not readable from here")),
+            "{fault:?}"
+        );
+        assert_eq!(
+            keep_id_store_fault(root, &keep_id_layers_json(root), 1, "sha256:x"),
+            None
         );
     }
 

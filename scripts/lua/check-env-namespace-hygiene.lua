@@ -5,8 +5,8 @@
 -- credential only if it IS one.
 --
 -- WHY. Every Lua door child gets the runner's TILLANDSIAS_* variables minus the
--- credential-shaped ones (2031-h5ru; the full hard block is 2031-dwwy, design
--- openspec/changes/lua-door-environment-inheritance §4.10). That filter is
+-- credential-shaped ones (2031-h5ru, enforced; the full hard block of 2031-dwwy,
+-- crates/tillandsias-plan/src/child_env.rs, design 2029-39bt §4.10). That filter is
 -- safe only while the namespace keeps two promises, and this guard holds the
 -- tree to both:
 --   * a real secret is spelled so the filter catches it, and is listed in
@@ -17,12 +17,20 @@
 --     TILLANDSIAS_WRAPPER_MARK; TILLANDSIAS_NOTARY_KEY, a path, became
 --     TILLANDSIAS_NOTARY_KEY_FILE (both 2031-z4rm).
 --
--- THE SHAPE (design 2029-39bt §4.2, class A2, applied to the namespace): a name
--- is credential-shaped when its last _-segment is TOKEN, SECRET, PASSWORD,
--- PASS, KEY or AUTH, or it contains TOKEN, SECRET, PASSWORD, API_KEY or
--- PRIVATE_KEY — UNLESS its last segment is a locator (FILE PATH DIR ID NAME FP
--- LOG URL ADDR SRC COUNT), which names WHERE a credential is, not the
--- credential. Case-insensitive.
+-- THE SHAPE (design 2029-39bt §4.2, class A2, applied to the namespace) is the
+-- one in crates/tillandsias-plan/src/child_env.rs::credential_shape (2031-dwwy):
+-- a name is credential-shaped when its last _-segment is TOKEN, SECRET,
+-- PASSWORD, PASSWD, PASSPHRASE, PASS, KEY, AUTH, CREDENTIALS, CREDENTIAL,
+-- COOKIE or SESSION, or it contains TOKEN, SECRET, PASSWORD, PASSWD,
+-- PASSPHRASE, API_KEY, ACCESS_KEY, PRIVATE_KEY, SECRET_KEY, SIGNING_KEY,
+-- CLIENT_SECRET or CREDENTIAL — UNLESS its last segment is a locator (FILE PATH
+-- DIR ID NAME FP LOG URL ADDR SRC COUNT; ENV_FILE and SINK_FILE end in FILE),
+-- which names WHERE a credential is, not the credential. Case-insensitive. The
+-- Rust rule's prefix and exact-name arms (AWS_, GH_TOKEN, ...) cannot match a
+-- TILLANDSIAS_ name, so they are not repeated here.
+-- tests/lua_source_agreements.rs::rust_and_lua_credential_shapes_agree runs
+-- THIS guard over every TILLANDSIAS_ name in the tree plus one probe per rule
+-- and holds its refusals equal to the Rust rule's.
 --
 -- Scans code, not prose: build.sh, and *.sh *.lua *.rs files under scripts/,
 -- crates/ and images/. plan/, openspec/ and cheatsheets are prose and may name
@@ -53,8 +61,11 @@ local RETIRED_NAMES = {
 -- source carries one. Skipped by exact path, never by pattern.
 local SELF_TEST = "scripts/lua/test-env-namespace-hygiene.lua"
 
-local TERMINAL = { TOKEN = true, SECRET = true, PASSWORD = true, PASS = true, KEY = true, AUTH = true }
-local CONTAINS = { "TOKEN", "SECRET", "PASSWORD", "API_KEY", "PRIVATE_KEY" }
+local TERMINAL = { TOKEN = true, SECRET = true, PASSWORD = true, PASSWD = true, PASSPHRASE = true,
+                   PASS = true, KEY = true, AUTH = true, CREDENTIALS = true, CREDENTIAL = true,
+                   COOKIE = true, SESSION = true }
+local CONTAINS = { "TOKEN", "SECRET", "PASSWORD", "PASSWD", "PASSPHRASE", "API_KEY", "ACCESS_KEY",
+                   "PRIVATE_KEY", "SECRET_KEY", "SIGNING_KEY", "CLIENT_SECRET", "CREDENTIAL" }
 local LOCATOR = { FILE = true, PATH = true, DIR = true, ID = true, NAME = true, FP = true,
                   LOG = true, URL = true, ADDR = true, SRC = true, COUNT = true }
 
