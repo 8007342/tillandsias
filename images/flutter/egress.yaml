@@ -1,0 +1,6 @@
+# @trace spec:proxy-container, order:2041-jb57
+# Egress tiers for this image (openspec change curated-egress-tiers).
+# Undeclared means none; scripts/lua/check-egress-declarations.lua refuses a
+# Containerfile directory without this file.
+tiers: [siblings, registries, assets]
+reason: opt-in Flutter toolchain sibling: SDK and pub packages
