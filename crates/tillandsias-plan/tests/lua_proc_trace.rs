@@ -341,13 +341,16 @@ fn trace_does_not_capture_stdin_environment_or_child_fd_payloads() {
     let f = Fixture::new();
     let script = f.write(
         "payload.sh",
-        "read -r input\nprintf 'private-stdout-%s' \"$input\"\nprintf 'private-stderr-%s' \"$TRACE_SECRET\" >&2\n",
+        "read -r input\nprintf 'private-stdout-%s' \"$input\"\nprintf 'private-stderr-%s' \"$TRACE_PAYLOAD\" >&2\n",
     );
+    // ORDER 2031-dwwy: the payload variable is not spelled like a credential
+    // (it was TRACE_SECRET): a credential-shaped per-call literal now refuses
+    // the call before any child runs, which is not what this test measures.
     let output = f.run(
         &format!(
             r#"
             local r = proc.run{{argv={{"bash", {script:?}}}, stdin="private-stdin\n",
-                env={{TRACE_SECRET="private-env"}}}}
+                env={{TRACE_PAYLOAD="private-env"}}}}
             assert(r.stdout == "private-stdout-private-stdin")
             assert(r.stderr == "private-stderr-private-env")
             out.line("result:" .. json.encode(r))

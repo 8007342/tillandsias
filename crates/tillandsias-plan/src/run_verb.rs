@@ -9,10 +9,15 @@
 //! --stdin-file). There is no positional command string and no --shell: argv is
 //! argv, so there is nothing for a shell, MSYS or wsl.exe to re-quote.
 //!
-//! The child's environment is the same base proc.run gives a Lua caller
+//! The child's environment comes from THE builder every Lua door uses,
+//! `child_env::ChildEnv` (order 2031-dwwy, design 2029-39bt §4): the base
+//! passthrough, the TILLANDSIAS_* namespace, the declared inherit set
+//! (`--env-profile NAME`, `--env-inherit NAME`), the fixed overrides, then the
+//! caller's --env additions; nothing else is inherited, so a token the caller
+//! happens to export does not reach the child, and a class-A name (a loader
+//! variable, a credential shape) is refused even when named.
 //! (PROC_RUN_BASE_ENV_PASSTHROUGH, TILLANDSIAS_*, PROC_RUN_BASE_ENV_FIXED) plus
 //! the caller's --env additions; nothing else is inherited, so a token the
-//! caller happens to export does not reach the child.
 //!
 //! PASSED (only when the caller has them): PATH, HOME, TMPDIR, TEMP/TMP and the
 //! Windows system set, CARGO_TARGET_DIR, XDG_RUNTIME_DIR and
@@ -24,10 +29,9 @@
 //! Every decision is audited (1443-w9hf): a refusal with no run_id, a spawn
 //! with the executor's run identity.
 
+use crate::child_env::{ChildEnv, Declared, EnvRefusal};
 use crate::command_policy as cp;
-use crate::lua_predicate::{
-    PROC_RUN_BASE_ENV_FIXED, PROC_RUN_BASE_ENV_PASSTHROUGH, PROC_RUN_DEFAULT_TIMEOUT_MS,
-};
+use crate::lua_predicate::PROC_RUN_DEFAULT_TIMEOUT_MS;
 use std::path::PathBuf;
 
 /// One request through the door.
@@ -43,6 +47,9 @@ pub struct RunSpec {
     pub stdin: Option<Vec<u8>>,
     /// Run the child as a process-group leader so a deadline kills its tree.
     pub group: bool,
+    /// The declared inherit set (`--env-profile`, `--env-inherit`), already
+    /// judged by `Declared::validate` (order 2031-dwwy).
+    pub declared: Declared,
 }
 
 impl RunSpec {
@@ -55,6 +62,7 @@ impl RunSpec {
             capture_bytes: None,
             stdin: None,
             group: true,
+            declared: Declared::default(),
         }
     }
 }
@@ -62,6 +70,9 @@ impl RunSpec {
 /// What happened.
 #[derive(Debug)]
 pub enum RunOutcome {
+    /// A per-call --env literal named a class-A variable (order 2031-dwwy);
+    /// refused before the policy was asked, and no child was spawned.
+    EnvRefused(EnvRefusal),
     /// The policy refused (deny) or requires consent; no child was spawned.
     Refused(cp::Decision),
     /// The program could not be started.
@@ -88,27 +99,6 @@ pub enum RunOutcome {
 /// (1260-2qgi; coordinator ruling 2026-09-28; spec command-runtime).
 pub const WINDOWS_EXTERNAL_KILL_LIMIT: &str = "limit:windows-external-kill-reads-as-exited";
 
-/// The child's environment: the proc.run base set plus the caller's additions.
-pub fn base_env(additions: &[(String, String)]) -> Vec<(String, String)> {
-    let mut env = Vec::new();
-    for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
-        if let Ok(v) = std::env::var(key) {
-            env.push((key.to_string(), v));
-        }
-    }
-    for (k, v) in std::env::vars() {
-        // 2031-h5ru: the same rule as lua_predicate::base_env_command.
-        if k.starts_with("TILLANDSIAS_") && crate::lua_predicate::project_variable_passes(&k) {
-            env.push((k, v));
-        }
-    }
-    for (k, v) in PROC_RUN_BASE_ENV_FIXED {
-        env.push((k.to_string(), v.to_string()));
-    }
-    env.extend(additions.iter().cloned());
-    env
-}
-
 /// The `--json` result (slice 2): exactly one object with the keys run_id,
 /// status, code, signal, ok, stdout, stderr, truncated, wall_ms, argv, policy
 /// (signal added by coordinator ruling 2026-09-28: `code` is an integer only
@@ -123,11 +113,55 @@ pub fn base_env(additions: &[(String, String)]) -> Vec<(String, String)> {
 /// status: exited | signaled | timed_out | spawn_failed | no_status | policy_denied |
 /// policy_consent. ok is true only for exited with code 0 and nothing clipped.
 /// policy: {decision, rule_id, why, remedy}. argv is echoed through redact().
+///
+/// ORDER 2031-dwwy (spec 42690226): a call that DECLARED an inherit set
+/// (`--env-profile` / `--env-inherit`) also carries `env_profiles`,
+/// `env_inherited` (declared and present on the caller) and `env_absent`
+/// (declared and unset) — names only, never a value. A call that declared
+/// nothing keeps the eleven keys above (all three arrays would be empty by
+/// construction, and scripts/test-run-verb-agent-door.sh pins the eleven). A
+/// class-A name declared or set per call is status `env_refused`, exit 1, with
+/// the refusal token in `stderr`.
 pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value, i32) {
+    let (mut value, code) = outcome_json_base(spec, outcome);
+    if spec.declared == Declared::default() {
+        return (value, code);
+    }
+    let runner: Vec<_> = std::env::vars_os().collect();
+    // An empty call cannot be refused, so this is the same answer the door got.
+    let names = ChildEnv::build(&runner, &spec.declared, &[]).unwrap_or_default();
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert(
+            "env_profiles".into(),
+            serde_json::json!(spec.declared.profiles),
+        );
+        obj.insert("env_inherited".into(), serde_json::json!(names.inherited));
+        obj.insert("env_absent".into(), serde_json::json!(names.absent));
+    }
+    (value, code)
+}
+
+fn outcome_json_base(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value, i32) {
     use serde_json::{Value, json};
     let argv: Vec<String> = spec.argv.iter().map(|a| cp::redact(a)).collect();
     let policy = |decision: &str, d_rule: &str, why: Option<&str>, remedy: Option<&str>| json!({"decision": decision, "rule_id": d_rule, "why": why, "remedy": remedy});
     match outcome {
+        RunOutcome::EnvRefused(r) => (
+            json!({
+                "run_id": Value::Null,
+                "status": "env_refused",
+                "code": Value::Null,
+                "signal": Value::Null,
+                "ok": false,
+                "stdout": "",
+                "stderr": r.token,
+                "truncated": false,
+                "wall_ms": 0,
+                "argv": argv,
+                "policy": policy("deny", "env-inherit", Some(&r.why), Some(&r.remedy)),
+            }),
+            1,
+        ),
         RunOutcome::Refused(d) => {
             let (status, decision) = match d.strictness {
                 cp::Strictness::Consent => ("policy_consent", "consent"),
@@ -217,6 +251,12 @@ pub fn outcome_json(spec: &RunSpec, outcome: &RunOutcome) -> (serde_json::Value,
 
 /// Decide, then (only on allow) spawn. `caller` names the door in the audit.
 pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
+    // ORDER 2031-dwwy: the one builder. A per-call class-A literal is refused
+    // before the policy is asked (and before consent could be spent).
+    let child = match ChildEnv::for_declared(&spec.declared, &spec.env) {
+        Ok(c) => c,
+        Err(r) => return RunOutcome::EnvRefused(r),
+    };
     let cwd = spec
         .cwd
         .clone()
@@ -252,13 +292,10 @@ pub fn execute(spec: &RunSpec, caller: &str) -> RunOutcome {
         return RunOutcome::Refused(d);
     }
 
-    let mut cmd = tillandsias_exec::Command::new(spec.argv.clone())
-        .env_clear()
+    let mut cmd = child
+        .command(spec.argv.clone())
         .current_dir(cwd)
         .group(spec.group);
-    for (k, v) in base_env(&spec.env) {
-        cmd = cmd.env(k, v);
-    }
     if let Some(bytes) = &spec.stdin {
         cmd = cmd.stdin_bytes(bytes.clone());
     }

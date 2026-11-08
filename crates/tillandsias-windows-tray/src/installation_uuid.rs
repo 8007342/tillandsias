@@ -922,9 +922,9 @@ mod tests {
     /// runs), an overwrite replaces it, and delete clears it.
     ///
     /// OPT-IN (order 1562-uxhc): it writes the real store, so it is
-    /// `#[ignore]`d AND needs TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST=1. A
+    /// `#[ignore]`d AND needs TILLANDSIAS_REAL_CRED_STORE_TEST=1. A
     /// person runs it deliberately:
-    ///   TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST=1 cargo test -p tillandsias-windows-tray \
+    ///   TILLANDSIAS_REAL_CRED_STORE_TEST=1 cargo test -p tillandsias-windows-tray \
     ///     credential_manager_persists_uuid_across_calls -- --ignored
     /// It first removes, by name, the `-test-` targets earlier aborted runs
     /// left behind (see `remove_stale_test_targets`), and removes its own
@@ -935,8 +935,8 @@ mod tests {
     #[test]
     #[ignore = "writes the real Credential Manager; opt-in, see the doc comment"]
     fn credential_manager_persists_uuid_across_calls() {
-        if std::env::var("TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST").as_deref() != Ok("1") {
-            eprintln!("skip:real-credential-store:TILLANDSIAS_REAL_CREDENTIAL_STORE_TEST is not 1");
+        if std::env::var("TILLANDSIAS_REAL_CRED_STORE_TEST").as_deref() != Ok("1") {
+            eprintln!("skip:real-credential-store:TILLANDSIAS_REAL_CRED_STORE_TEST is not 1");
             return;
         }
         let _opt_in = RealStoreOptIn::enter();
