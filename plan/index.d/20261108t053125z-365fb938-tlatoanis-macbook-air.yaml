@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-lua-helpers-migrate-five-hot-image-helpers-to-the-lua-runner-with-a-helper-mode-a-shipped-module-guard-and-a-monotone-shell-out-ratchet
+    field: status
+    value: ready
+    ts: "2026-11-08T05:31:25Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: forge-lua-helpers-migrate-five-hot-image-helpers-to-the-lua-runner-with-a-helper-mode-a-shipped-module-guard-and-a-monotone-shell-out-ratchet
+    event:
+      type: note
+      ts: "2026-11-08T05:31:25Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        operator approved 2026-11-08 (relayed by coordinator) after review

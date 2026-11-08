@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-local-vision-model-for-forge-image-review-is-provisioned-not-hand-pulled
+    event:
+      type: progress
+      ts: "2026-11-08T06:23:47Z"
+      agent_id: linux-lenovinha-opus5-20261108t062347z
+      host: lenovinha
+      summary: |
+        FITNESS (forge client batch, relayed by coordinator macuahuitl-fedora 2026-11-08): qwen2.5vl 7b as a visual-fault pre-filter gave false flags on every flag and missed every real figure fault (8 of 8 and 17 of 17 false). Provisioning is this row; whether to offer it as a fault pre-filter is 2050-fs44, which records it as not fit for that use.

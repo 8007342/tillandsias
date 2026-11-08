@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 from the OpenCode Web window audit (operator ask relayed by macuahuitl). Code is cited by symbol, never by line.
+packets:
+  - packet_id: a-failed-browser-window-launch-writes-the-opencode-web-session-cookie-to-the-event-log-via-the-unredacted-data-url
+    order: 2045-eqx3
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, podman, browser, rust]
+    estimated_hours: 1
+    title: "Every logged podman argv redacts data: URLs, so a failed OpenCode Web or studio window launch cannot write the session cookie to a log"
+    context: |
+      Measured 2026-11-08 on yoga during a real `tillandsias --cloud 8007342/visual-chess --opencode-web --debug` launch (opencode 1.19.5; window closed afterwards, no prompts). The lane itself meets the operator's ask: `opencode serve` serves the web UI (200 text/html app shell at / on :4097 and :4096); the browser argv is --ozone-platform=wayland with only WAYLAND_DISPLAY and XDG_RUNTIME_DIR and no DISPLAY; the forge publishes no port (the router is 127.0.0.1-only); the window opens only after wait_for_authenticated_opencode_web succeeds, the same rule run_studio_mode uses. THE GAP: the window opens `--app=<data URL>` built by tillandsias_otp::build_login_data_url, which embeds the OTP; the router sidecar's /_auth/login re-issues those bytes as the live session cookie. tillandsias_podman's redact_argv left `--app=data:...` whole, and that redacted argv goes into every launch-failure message (stderr, and the launch_failed entry in the OpenCode Web event log), so a failed window launch wrote the session cookie to a file. Under --debug it stayed hidden only because the invocation line was truncated before --app (403 characters). The same path serves the studio windows.
+    exit_criteria:
+      - "cargo tests in tillandsias-podman assert that redact_argv and the debug invocation-line redactor hide both a bare data: argument and a --flag=data: argument before any truncation, and a tillandsias-headless test builds a real OTP, the real login data URL and the real OpenCode Web window spec and asserts the OTP appears in no redacted argv or debug line. Pre-fix result: FAILS, the data URL survives redact_argv whole."
+    verifiable_closure: "cargo tests in tillandsias-podman assert that redact_argv and the debug invocation-line redactor hide both a bare data: argument and a --flag=data: argument before any truncation, and a tillandsias-headless test builds a real OTP, the real login data URL and the real OpenCode Web window spec and asserts the OTP appears in no redacted argv or debug line. Pre-fix result: FAILS, the data URL survives redact_argv whole."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the tests named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      yoga: implemented locally (redact_data_url in tillandsias_podman::backend); push on work/2045-eqx3 after preflight.
+    provenance: |
+      yoga OpenCode Web audit 2026-11-08 (agent run, one real launch, closed); macuahuitl relay of the operator ask.
+    events:
+      - type: filed
+        ts: "2026-11-08T04:59:10Z"
+        host: yoga
+        summary: "filed from the OpenCode Web window audit; yoga holds the fix"
