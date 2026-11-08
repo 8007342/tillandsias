@@ -5032,7 +5032,7 @@ fn run_run_verb(args: &[String]) -> ! {
     use tillandsias_plan::run_verb as rv;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
+            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--env-profile NAME]… [--env-inherit NAME]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
              \x20 argv is argv: there is no command-string form and no --shell.\n\
              \x20 --json prints one object (run_id,status,code,signal,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
              \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
@@ -5041,6 +5041,8 @@ fn run_run_verb(args: &[String]) -> ! {
              \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none.\n\
              \x20 The child env is scrubbed: passed (when set) PATH HOME TMPDIR CARGO_TARGET_DIR XDG_RUNTIME_DIR\n\
              \x20 DBUS_SESSION_BUS_ADDRESS TILLANDSIAS_*; fixed LC_ALL=C LANG=C TZ=UTC; all else dropped (use --env K=V).\n\
+             \x20 --env-profile NAME / --env-inherit NAME pass named caller variables (child_env::ENV_INHERIT_PROFILES);\n\
+             \x20 a class-A name (loader, shell-init, program-naming, credential-shape) is refused declared or per call.\n\
              \x20 --caller names the door in the audit log: run (default) or mcp (project-info run_command).\n\
              \x20 A child the verb kills (the deadline) is timed_out on every locus. {}: on Windows a child\n\
              \x20 killed from OUTSIDE (MSYS kill) reads as exited with the MSYS code (2304 for SIGKILL), undecoded.",
@@ -5049,6 +5051,8 @@ fn run_run_verb(args: &[String]) -> ! {
         std::process::exit(2);
     };
     let mut spec = rv::RunSpec::new(Vec::new());
+    let mut env_profiles: Vec<String> = Vec::new();
+    let mut env_inherit: Vec<String> = Vec::new();
     let mut json = false;
     let mut caller = "run";
     let mut i = 0;
@@ -5105,6 +5109,10 @@ fn run_run_verb(args: &[String]) -> ! {
                 _ => usage(),
             },
             "--cwd" => spec.cwd = Some(PathBuf::from(v)),
+            // ORDER 2031-dwwy: the declared inherit layer, the same table and
+            // hard block as a script header's @env-profile / @env-inherit.
+            "--env-profile" => env_profiles.push(v.to_string()),
+            "--env-inherit" => env_inherit.push(v.to_string()),
             "--env" => {
                 let Some((k, val)) = v.split_once('=') else {
                     usage()
@@ -5136,13 +5144,28 @@ fn run_run_verb(args: &[String]) -> ! {
     if !saw_dd || spec.argv.is_empty() {
         usage();
     }
-    let outcome = rv::execute(&spec, caller);
+    let outcome = match tillandsias_plan::child_env::Declared::validate(&env_profiles, &env_inherit)
+    {
+        Ok((declared, notes)) => {
+            for n in notes {
+                eprintln!("{n}");
+            }
+            spec.declared = declared;
+            rv::execute(&spec, caller)
+        }
+        Err(r) => rv::RunOutcome::EnvRefused(r),
+    };
     if json {
         let (value, code) = rv::outcome_json(&spec, &outcome);
         println!("{value}");
         std::process::exit(code);
     }
     match outcome {
+        // A class-A name declared or set per call (2031-dwwy): named, never valued.
+        rv::RunOutcome::EnvRefused(r) => {
+            eprintln!("{}", r.lines());
+            std::process::exit(1);
+        }
         rv::RunOutcome::Refused(d) => {
             eprintln!("{}", d.token);
             if let Some(w) = &d.why {

@@ -275,7 +275,7 @@ Before shaping work, run the first-pass reconciliation and carry its
 candidates into the handoff:
 
 ```bash
-scripts/check-stale-ready-rows.sh          # stale-candidate:<order>:<n>:<sha> … then ok:stale-ready-rows:<c>/<ready>:pass=cites-order
+tillandsias-plan script run scripts/lua/check-stale-ready-rows.lua  # stale-candidate:<order>:<n>:<sha> … then ok:stale-ready-rows:<c>/<ready>:pass=cites-order
 ```
 
 and the landed-work-ref pass beside it (1934-mxxc, report-only Lua):

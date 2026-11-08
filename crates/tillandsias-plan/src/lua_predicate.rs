@@ -153,91 +153,18 @@ pub const PROC_RUN_FIELDS: &[&str] = &[
 /// deadline and has to be written out.
 pub const PROC_RUN_DEFAULT_TIMEOUT_MS: u64 = 300_000;
 
-/// The environment a child starts from: NOTHING is inherited except this set,
-/// plus the call's own `env` additions (design section 5.3). One constant, so
-/// "which variables leak into a check" has one answer.
-pub const PROC_RUN_BASE_ENV_PASSTHROUGH: &[&str] = &[
-    "PATH",
-    "HOME",
-    "TMPDIR",
-    // A Windows child without these cannot start many programs at all.
-    "SystemRoot",
-    "SYSTEMROOT",
-    "SystemDrive",
-    "WINDIR",
-    "COMSPEC",
-    "PATHEXT",
-    "TEMP",
-    "TMP",
-    "USERPROFILE",
-    "APPDATA",
-    "LOCALAPPDATA",
-    // ORDER 1593-1ny6. Where this build's artifacts live, so a nested runner a
-    // Lua fixture starts (run-litmus-test.sh, plan-binary-probe.sh, cargo)
-    // finds the same plan binary the caller runs. Dropped, a linked worktree
-    // on a shared target has no ./target of its own and the nested runner
-    // reports blocked:litmus-no-plan-binary: test-litmus-verdict-reads-stdout-
-    // only.lua refused 5-of-5 there (the Mac, then yolanda-windows, 2026-10-11).
-    // A path, not a secret; deciders that pass --target-dir explicitly
-    // (check-cross-target-build.lua, 958-w4kq) now agree with the inherited one.
-    "CARGO_TARGET_DIR",
-    // ORDER 1838-nwyn. The caller's user-session handles, passed only when the
-    // caller has them (an unset key is never invented). `toolbox run` and
-    // rootless podman locate the user runtime dir and session bus through
-    // these; scrubbed, `toolbox run --container tillandsias-builder true` fails
-    // "failed to initialize container" under the run door and the land queue
-    // evicted three candidates (2026-10-23). Paths/sockets, not secrets.
-    "XDG_RUNTIME_DIR",
-    "DBUS_SESSION_BUS_ADDRESS",
-];
-
-/// ORDER 2031-h5ru (p1). Does this `TILLANDSIAS_*` runner variable pass to a
-/// child? Not when its last `_`-separated segment is SECRET, PASS or PASSWORD:
-/// TILLANDSIAS_COORD_CLIENT_SECRET (the coordinator's Access client secret) and
-/// TILLANDSIAS_KEY_PASS (the at-rest CA key passphrase) are read by the process
-/// that needs them from ITS OWN environment, and no child ever needed them.
-/// Deliberately narrow: TOKEN and KEY are not here, because
-/// TILLANDSIAS_WRAPPER_TOKEN is a reaper marker that must keep propagating and
-/// TILLANDSIAS_NOTARY_KEY is a path; the full hard block with its renames is
-/// 2031-dwwy / 2031-z4rm (design 2029-39bt). Compared case-insensitively, as
-/// Windows treats environment names.
-pub fn project_variable_passes(name: &str) -> bool {
-    let last = name.rsplit('_').next().unwrap_or("").to_ascii_uppercase();
-    !matches!(last.as_str(), "SECRET" | "PASS" | "PASSWORD")
-}
-
-/// Fixed values every child gets, so a verdict cannot depend on the caller's
-/// locale, timezone or a git credential prompt.
-pub const PROC_RUN_BASE_ENV_FIXED: &[(&str, &str)] = &[
-    ("LC_ALL", "C"),
-    ("LANG", "C"),
-    ("TZ", "UTC"),
-    ("GIT_TERMINAL_PROMPT", "0"),
-];
-
-/// A child command that starts from the base environment and nothing else
-/// (design section 5.3). EVERY Lua door builds its command here — proc.run,
-/// proc.spawn, proc.chain and the legacy sh.run / expert.shell — so "which
-/// variables leak into a check" has one answer (order 1551-nyzb: sh.run used
-/// to inherit the caller's whole environment, measured as a secret set in the
-/// runner's environment arriving in the child's `printenv`).
-pub(crate) fn base_env_command(argv: Vec<String>) -> tillandsias_exec::Command {
-    let mut cmd = tillandsias_exec::Command::new(argv).env_clear();
-    for key in PROC_RUN_BASE_ENV_PASSTHROUGH {
-        if let Some(v) = std::env::var_os(key) {
-            cmd = cmd.env(key, v);
-        }
-    }
-    for (k, v) in std::env::vars_os() {
-        let name = k.to_string_lossy();
-        if name.starts_with("TILLANDSIAS_") && project_variable_passes(&name) {
-            cmd = cmd.env(k, v);
-        }
-    }
-    for (k, v) in PROC_RUN_BASE_ENV_FIXED {
-        cmd = cmd.env(k, v);
-    }
-    cmd
+/// A child command for `argv` whose environment comes from THE builder,
+/// `child_env::ChildEnv` (order 2031-dwwy, design 2029-39bt §4): EVERY Lua door
+/// builds its command here — proc.run, proc.spawn, proc.chain and the legacy
+/// sh.run / expert.shell — so "which variables reach a check" has one answer
+/// (order 1551-nyzb: sh.run used to inherit the caller's whole environment).
+/// `call` is the door's per-call `env` literals; a class-A name among them
+/// refuses the call (the error names the variable and its class, never a value).
+pub(crate) fn base_env_command(
+    argv: Vec<String>,
+    call: &[(String, String)],
+) -> Result<tillandsias_exec::Command, crate::child_env::EnvRefusal> {
+    Ok(crate::child_env::ChildEnv::for_call(call)?.command(argv))
 }
 
 /// The cwd a door runs in when the call names none: the repository root, else
@@ -279,7 +206,9 @@ pub(crate) fn prepare_shell(
             d.remedy.unwrap_or_default()
         )));
     }
-    let mut cmd = base_env_command(argv).current_dir(&cwd);
+    let mut cmd = base_env_command(argv, &[])
+        .map_err(|r| mlua::Error::RuntimeError(format!("sh.run: {}", r.lines())))?
+        .current_dir(&cwd);
     let timeout_ms = timeout_ms.unwrap_or(PROC_RUN_DEFAULT_TIMEOUT_MS);
     if timeout_ms > 0 {
         cmd = cmd.timeout(std::time::Duration::from_millis(timeout_ms));
@@ -448,13 +377,11 @@ pub(crate) fn validate_proc(
             )));
         }
     };
-    let mut cmd = base_env_command(argv.clone());
 
     let cwd = match cwd_path {
         Some(p) => p,
         None => default_cwd().map_err(|e| err(format!("cannot resolve effective cwd: {e}")))?,
     };
-    cmd = cmd.current_dir(&cwd);
 
     let mut env_added: Vec<(String, String)> = Vec::new();
     match spec.get::<LuaValue>("env")? {
@@ -470,8 +397,7 @@ pub(crate) fn validate_proc(
                         "env names must be nonempty without NUL or '=', values without NUL".into(),
                     ));
                 }
-                env_added.push((k.clone(), v.clone()));
-                cmd = cmd.env(k, v);
+                env_added.push((k, v));
             }
         }
         other => {
@@ -481,6 +407,11 @@ pub(crate) fn validate_proc(
             )));
         }
     }
+    // ORDER 2031-dwwy: the one builder; a per-call class-A literal is a
+    // programmer error and raises before anything is authorised or spawned.
+    let mut cmd = base_env_command(argv.clone(), &env_added)
+        .map_err(|r| err(r.lines()))?
+        .current_dir(&cwd);
 
     let explicit_stdin = match spec.get::<LuaValue>("stdin")? {
         LuaValue::Nil => false,
