@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: vault-leaf-mint-signs-with-copy-extensions-which-libressl-rejects-so-the-ca-and-leaf-tests-are-red-under-macos-system-openssl
+    order: 2058-xduu
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, tls, macos, portability]
+    estimated_hours: 2
+    title: "The Vault TLS leaf mint signs with openssl x509 -copy_extensions, which LibreSSL (macOS /usr/bin/openssl) rejects, so two CA/leaf tests are red in the darwin gate"
+    context: "Measured 2026-11-08T12:05:50Z on tlatoanis-macbook-air (linux-next 06fdd4a25): ./build.sh --check failed test-baseline with new-red=2. The failing tests were tillandsias::tests::a_reminted_ca_keeps_the_replaced_one_trusted_until_the_leaf_is_reissued and ca_and_vault_leaf_mints_leave_no_plaintext_key_where_the_store_is_inactive, both 'openssl x509 for Vault TLS leaf failed: exit 1'. vault_bootstrap.rs signs the leaf with -copy_extensions copy. LibreSSL 3.3.6 answers 'unknown option -copy_extensions'. The gate's bash login PATH resolves openssl to /usr/bin (LibreSSL); an interactive zsh resolves Homebrew OpenSSL 4.1, where the tests pass. Not the 2031-h5ru/dwwy env filter: the spawn is a plain std::process::Command that sets TILLANDSIAS_KEY_PASS on the child. The shipped product is unaffected: the macOS build ships headless only as a linux-musl guest binary, and the guest has OpenSSL 3."
+    exit_criteria:
+      - "The leaf is signed with flags both LibreSSL and OpenSSL 3+ accept: the SANs go in through -extfile, and the extfile names subjectKeyIdentifier and authorityKeyIdentifier, because an extfile replaces openssl's defaults and a two-CA trust (2000-camv) needs the AKI. A test signs the leaf under every openssl on the host. Pre-fix result: FAILS under LibreSSL with unknown option -copy_extensions."
+    verifiable_closure: "cargo test -p tillandsias-headless --bin tillandsias passes with PATH=/usr/bin:$PATH and with the default PATH on darwin, and on Linux."
+    unscoreable: 'none.'
+    next_action: "Land the -extfile sign, with the test that runs it under each openssl."
+    provenance: "Found by tlatoanis-macbook-air claude during the 2031-dwwy census; assigned p1 by macuahuitl-fedora (2026-11-08)."
+    events:
+    - type: filed
+      ts: '2026-11-08T12:05:50Z'
+      host: tlatoanis-macbook-air
+      summary: "filed ready p1: the Vault leaf mint's -copy_extensions breaks under LibreSSL"
