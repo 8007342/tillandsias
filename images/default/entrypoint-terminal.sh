@@ -78,7 +78,7 @@ forge_step_done config-overlay
 # advertises the full combined tool stack. Backgrounded + fail-soft, same as
 # the agent entrypoints, so it never blocks shell startup. The prebuilt
 # dev-tools start with start_flaky_installs below (order 1951-vv5m).
-ensure_forge_harnesses >>/tmp/forge-lifecycle.log &
+ensure_forge_harnesses none >>/tmp/forge-lifecycle.log &
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007

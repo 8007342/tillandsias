@@ -3013,6 +3013,13 @@ harness_record_last_good() {
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 
 ensure_forge_harnesses() {
+    # $1 = this lane's harness: claude | opencode | codex | antigravity | none.
+    # A lane refreshes ONLY its own harness, plus openspec, which every lane
+    # uses (2027-e2cf: a claude lane installed agy on every launch). No
+    # argument means all, which keeps the old behaviour for direct callers and
+    # fixtures; every entrypoint passes its lane.
+    local lane="${1:-all}"
+    _lane_wants() { [ "$lane" = all ] || [ "$lane" = "$1" ]; }
     # Avoid a concurrent npm join race — only the first process runs npm.
     local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
     # 1971-rikj: the lock records its holder ("<hostname> <pid>"). It lives on
@@ -3074,7 +3081,7 @@ ensure_forge_harnesses() {
     # zero network work. OpenCode left the curl channel 2026-08-31 (operator
     # ruling; its installer could never populate the curl cache while the
     # npm binary was on PATH) — it is npm on-demand via _require_harness.
-    if declare -F curl_install_claude >/dev/null 2>&1; then
+    if _lane_wants claude && declare -F curl_install_claude >/dev/null 2>&1; then
         curl_install_claude || trace_lifecycle "harness" "claude curl refresh failed (using cache)"
     fi
 
@@ -3092,6 +3099,9 @@ ensure_forge_harnesses() {
             "@fission-ai/openspec") bin=openspec ;;
             "@openai/codex") bin=codex ;;
         esac
+        if [ "$bin" = codex ] && ! _lane_wants codex; then
+            continue
+        fi
         # A project that pins its openspec CLI (openspec/cli-version) owns the
         # version: ensure_openspec_pinned installs exactly that pin in the
         # foreground and records it here. Refreshing it to @latest behind the
@@ -3133,7 +3143,7 @@ ensure_forge_harnesses() {
     # the tool cache (1968-2wpe).  require_antigravity is fail-soft here, while the primary
     # antigravity entrypoint still emits an actionable fatal message when no
     # cached binary exists.
-    if declare -F require_antigravity >/dev/null 2>&1; then
+    if _lane_wants antigravity && declare -F require_antigravity >/dev/null 2>&1; then
         require_antigravity || trace_lifecycle "harness" "antigravity refresh failed (using cache)"
     fi
 
@@ -3176,7 +3186,7 @@ ensure_forge_harnesses() {
             echo "all missing) and the launch-time npm installs failed. This is almost"
             echo "always dead enclave egress — e.g. 'Could not resolve proxy: proxy'."
             echo "Fix egress (or relaunch the forge: installs retry at every launch),"
-            echo "or retry by hand: npm install -g opencode-ai@latest"
+            echo "or relaunch: every harness install retries at each launch."
             echo ""
         } >&2
         return 0
@@ -3269,11 +3279,189 @@ _clear_stale_npm_staging() {
     find "$parent" -maxdepth 1 -type d -name ".${base}-*" -exec rm -rf {} + 2>/dev/null || true
 }
 
+# ORDER 2027-e2cf: the version each npm harness is installed at. A harness
+# listed here is installed at exactly this version, and a cached copy at any
+# other version is replaced. One that is not listed installs @latest, and the
+# trace says so: an unpinned client changes under every lane with no commit.
+#
+# opencode-ai 1.19.4. Cold Linux lanes died with "EPROTO: The TLS handshake
+# failed" in 5 of 6 runs from 2026-10-31. Nothing in the proxy or forge network
+# path changed between v56.10.30.1 and v56.10.31.1. The forge installed
+# @latest, and 1.19.5 was published 2026-10-28T06:17Z. 1.19.4 is the last
+# release before that onset. It is the A/B's control and not yet proven
+# better; whatever the A/B favours replaces it here, in one reviewed line.
+# npm harness pins (2027-e2cf). A package with no pin installs @latest, and
+# _require_harness's trace names it as unpinned. opencode left npm: the
+# opencode-ai package stopped at 1.19.5 (2026-10-28) while upstream went on to
+# 2.x, so it is a release harness now (_require_release_harness below).
+harness_pin() {
+    case "$1" in
+        *) return 1 ;;
+    esac
+}
+
+# ── Release-tarball harnesses (2027-e2cf) ──
+# opencode installs from its upstream GitHub release, at LATEST, on every launch
+# like the other harnesses (operator ruling 2026-11-08). npm's opencode-ai
+# stopped at 1.19.5 while upstream shipped 2.x. The safety rules:
+#   - "latest" is UPSTREAM's releases/latest marker (operator ruling,
+#     2026-11-08), held to ONE MAJOR LINE: for opencode, v1. Upstream ships v1
+#     and v2 as parallel products and marks v1 latest (1.19.5 today). v2
+#     removed OPENCODE_AUTH_CONTENT, stopped reading config.json, renamed config
+#     keys and moved serve under /api. So a marked release that is not a full
+#     v<major>.y.z (a v2, a prerelease, a draft, another tag family) is REFUSED
+#     BEFORE download until the v2 migration row 2042-44v9 closes. A rollback
+#     would not save a fresh forge, which has no last-good to roll back to;
+#   - the downloaded asset must match the release's PUBLISHED sha256 digest. A
+#     missing digest or a mismatch FAILS CLOSED: nothing is installed;
+#   - a fresh version must pass harness_probe (liveness plus our contracts)
+#     before it is recorded last-good. If it fails, the launch rolls back to the
+#     last-good version (order 284). With nothing verified, the launch stops
+#     in harness_missing_fatal;
+#   - a successful check is reused for TILLANDSIAS_HARNESS_RELEASE_TTL seconds
+#     (600), because unauthenticated API calls are limited to 60 an hour per
+#     address and every forge on a host shares that budget.
+# The release asset for this CPU. x86_64 with AVX2 takes the default build; a
+# CPU without AVX2 takes -baseline, because a non-baseline Bun binary dies with
+# SIGILL there. The forge base is glibc (fedora-minimal), so never -musl.
+# TILLANDSIAS_CPUINFO overrides /proc/cpuinfo for the fixture.
+harness_release_asset() {
+    local bin="$1" arch
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64)
+            if grep -qw avx2 "${TILLANDSIAS_CPUINFO:-/proc/cpuinfo}" 2>/dev/null; then
+                echo "$bin-linux-x64.tar.gz"
+            else
+                echo "$bin-linux-x64-baseline.tar.gz"
+            fi
+            ;;
+        aarch64 | arm64) echo "$bin-linux-arm64.tar.gz" ;;
+        *) return 1 ;;
+    esac
+}
+
+# $1=friendly-name $2=bin $3=owner/repo $4=major line → echoes the binary
+# path to run. The path does not exist when nothing verified is available.
+_require_release_harness() {
+    local name="$1" bin="$2" repo="$3" major="${4:?_require_release_harness needs a major line}"
+    local root lg_file lg="" lg_path="" stamp asset json tag ver want dir path tmp got have
+    root="${TILLANDSIAS_HARNESS_RELEASE_DIR:-$HOME/.cache/tillandsias-project/harness-release}/$bin"
+    lg_file="$root/last-good"
+    stamp="$root/checked"
+    mkdir -p "$root" 2>/dev/null || true
+    lg="$(cat "$lg_file" 2>/dev/null)" || lg=""
+    [ -n "$lg" ] && lg_path="$root/$lg/$bin"
+    _rel_fallback() {
+        # $1 = why. The last-good version, if it is still there; else no binary.
+        if [ -n "$lg_path" ] && [ -x "$lg_path" ]; then
+            trace_lifecycle "harness" "$name: $1 — using last-good $lg"
+            echo "$lg_path"
+        else
+            trace_lifecycle "harness" "$name: $1 — and no last-good version is installed"
+            echo "$root/none/$bin"
+        fi
+    }
+    # A recent successful check, with its version still installed, does no network.
+    if [ -n "$lg_path" ] && [ -x "$lg_path" ] && [ -n "$(find "$stamp" -maxdepth 0 \
+        -newermt "-${TILLANDSIAS_HARNESS_RELEASE_TTL:-600} seconds" 2>/dev/null)" ]; then
+        trace_lifecycle "install" "$name: available ($lg, checked within ${TILLANDSIAS_HARNESS_RELEASE_TTL:-600}s)"
+        echo "$lg_path"
+        return 0
+    fi
+    asset="$(harness_release_asset "$bin")" || { _rel_fallback "no release asset for $(uname -m)"; return 0; }
+    # Upstream's own latest marker (operator ruling 2026-11-08).
+    json="$(curl -fsSL --max-time 30 -H 'Accept: application/vnd.github+json' \
+        "https://api.github.com/repos/$repo/releases/latest" 2>/dev/null)" || json=""
+    tag="$(printf '%s' "$json" | jq -r '.tag_name // empty' 2>/dev/null)" || tag=""
+    if [ -z "$tag" ]; then
+        _rel_fallback "could not resolve the latest $repo release (offline or rate-limited)"
+        return 0
+    fi
+    # Held to the major line BEFORE any download (2042-44v9 owns v2).
+    if ! printf '%s' "$json" | jq -e --arg m "$major" '(.draft | not) and (.prerelease | not)
+            and (.tag_name | test("^v" + $m + "\\.[0-9]+\\.[0-9]+$"))' >/dev/null 2>&1; then
+        trace_lifecycle "harness" "refused:harness-release:$name:marked-latest-not-v$major:$tag (only full v$major.y.z releases install until 2042-44v9; nothing downloaded)"
+        _rel_fallback "upstream marks $tag latest, which is outside the v$major line"
+        return 0
+    fi
+    ver="${tag#v}"
+    want="$(printf '%s' "$json" | jq -r --arg a "$asset" \
+        '.assets[] | select(.name == $a) | .digest // empty' 2>/dev/null | head -n 1)"
+    want="${want#sha256:}"
+    dir="$root/$ver"
+    path="$dir/$bin"
+    if [ -x "$path" ]; then
+        have="$("$path" --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"
+        if [ "$have" = "$ver" ] && [ "$lg" = "$ver" ]; then
+            touch "$stamp" 2>/dev/null || true
+            trace_lifecycle "install" "$name: available ($ver, latest)"
+            echo "$path"
+            return 0
+        fi
+    fi
+    if ! grep -qE '^[0-9a-f]{64}$' <<<"$want"; then
+        trace_lifecycle "harness" "refused:harness-release:$name:no-published-digest:$asset@$ver (fail closed: nothing installed)"
+        _rel_fallback "latest $ver is unverifiable"
+        return 0
+    fi
+    mkdir -p "$dir" 2>/dev/null || true
+    tmp="$(mktemp -d "$root/.install.XXXXXX" 2>/dev/null)" || { _rel_fallback "cannot create a staging dir under $root"; return 0; }
+    trace_lifecycle "harness" "$name: installing latest $ver from $repo release asset $asset (2027-e2cf)"
+    if ! curl -fsSL --max-time 300 --retry 2 --retry-delay 3 \
+        "https://github.com/$repo/releases/download/$tag/$asset" -o "$tmp/$asset" 2>"$tmp/curl.err"; then
+        trace_lifecycle "harness" "$name download FAILED: $(tail -2 "$tmp/curl.err" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
+        rm -rf "$tmp" 2>/dev/null || true
+        _rel_fallback "download of $ver failed"
+        return 0
+    fi
+    got="$(sha256sum "$tmp/$asset" 2>/dev/null | cut -d' ' -f1)"
+    if [ "$got" != "$want" ]; then
+        trace_lifecycle "harness" "refused:harness-release:$name:digest-mismatch:$asset@$ver:want=$want:got=${got:-none} (fail closed: nothing installed)"
+        rm -rf "$tmp" 2>/dev/null || true
+        _rel_fallback "latest $ver failed verification"
+        return 0
+    fi
+    if ! tar -xzf "$tmp/$asset" -C "$tmp" "$bin" 2>/dev/null || [ ! -x "$tmp/$bin" ]; then
+        rm -rf "$tmp" 2>/dev/null || true
+        _rel_fallback "the verified $asset holds no executable $bin"
+        return 0
+    fi
+    # Atomic on the cache volume: a sibling sees the old binary or the verified
+    # new one, never a partial file.
+    mv -f "$tmp/$bin" "$path" && rm -rf "$tmp" 2>/dev/null
+    if ! harness_probe "$bin" "$path"; then
+        trace_lifecycle "harness" "$name $ver FAILED health probe — rolling back (order 284)"
+        _rel_fallback "latest $ver failed its probe"
+        return 0
+    fi
+    printf '%s\n' "$ver" > "$lg_file.tmp" 2>/dev/null && mv -f "$lg_file.tmp" "$lg_file"
+    touch "$stamp" 2>/dev/null || true
+    # Keep only the new last-good: each version is ~250 MB on the cache volume.
+    local old
+    for old in "$root"/*/; do
+        old="${old%/}"
+        [ "${old##*/}" = "$ver" ] || rm -rf "$old" 2>/dev/null || true
+    done
+    trace_lifecycle "install" "$name: available ($ver, latest, sha256 verified against the release digest, recorded last-good)"
+    echo "$path"
+}
+
 _require_harness() {
     # $1=friendly-name  $2=npm-package  $3=bin-name  → echoes resolved path
-    local name="$1" pkg="$2" bin="$3" path errlog
+    local name="$1" pkg="$2" bin="$3" path errlog pin spec have
+    pin="$(harness_pin "$pkg" 2>/dev/null)" || pin=""
+    spec="$pkg@${pin:-latest}"
     path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin"
     [ -x "$path" ] || path="${TILLANDSIAS_HARNESS_FALLBACK_DIR:-/usr/local/bin}/$bin"
+    # A cached copy at another version than the pin is not this forge's harness.
+    if [ -n "$pin" ] && [ -x "$path" ]; then
+        have="$("$path" --version 2>/dev/null | head -n 1 | tr -d '[:space:]')"
+        if [ "$have" != "$pin" ]; then
+            trace_lifecycle "harness" "$name is ${have:-unknown}, pinned $pin (2027-e2cf) — reinstalling the pin"
+            path="${NPM_CONFIG_PREFIX:-/usr/local}/bin/$bin.not-the-pin"
+        fi
+    fi
     # Updater race (2026-07-11 gate incident): a SIBLING container's
     # background ensure_forge_harnesses replaces the shared prefix's bin
     # symlinks non-atomically, so a launch landing in that window sees the
@@ -3294,12 +3482,16 @@ _require_harness() {
         [ -x "$path" ] && trace_lifecycle "harness" "$name appeared after ${waited}s (sibling updater)"
     fi
     if [ ! -x "$path" ]; then
-        trace_lifecycle "harness" "$name missing — install latest"
+        if [ -n "$pin" ]; then
+            trace_lifecycle "harness" "$name: installing pinned $spec (2027-e2cf)"
+        else
+            trace_lifecycle "harness" "$name missing — install $spec (unpinned: this version can change with no commit; 2027-e2cf)"
+        fi
         # order 559: clear any stale npm atomic-staging dir so a killed prior
         # install cannot block this one with ENOTEMPTY.
         _clear_stale_npm_staging "$pkg"
         errlog="$(mktemp /tmp/npm-install-${bin}.XXXXXX 2>/dev/null || echo /tmp/npm-install-$bin.err)"
-        if ! npm install -g --no-audit --no-fund "$pkg@latest" >"$errlog" 2>&1; then
+        if ! npm install -g --no-audit --no-fund "$spec" >"$errlog" 2>&1; then
             trace_lifecycle "harness" "$name install FAILED (non-fatal): $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
             trace_lifecycle "harness" "$name install log: $errlog"
             echo "$path"
@@ -3672,17 +3864,21 @@ curl_install_claude() {
 }
 
 require_opencode() {
-    # npm on-demand is the ONLY channel (operator ruling 2026-08-31,
-    # opencode-curl-install-never-populates-its-cache): the vendor curl
-    # installer's own check_version() exits 0 on any PATH-visible opencode
-    # without consulting OPENCODE_INSTALL_DIR, so the curl lane could
-    # structurally never populate its cache while the npm binary existed —
-    # proven from the upstream installer source by yoga, measured by
-    # lenovinha. _require_harness installs opencode-ai only when the binary
-    # is missing and carries its own bounded wait on the npm-update lock,
-    # so the 626-p4xd/805-yzhw double-extraction race this function used to
-    # choreograph around cannot recur: there is one writer left.
-    OC_BIN="$(_require_harness opencode opencode-ai opencode)"
+    # The release tarball is the ONLY channel (2027-e2cf, operator 2026-11-08:
+    # latest opencode, off npm). npm's opencode-ai stopped at 1.19.5 while
+    # upstream shipped 2.x. This is NOT the vendor curl installer retired on
+    # 2026-08-31: that installer's check_version() exited 0 on any opencode
+    # visible on PATH, so it never populated its cache. Here we fetch the asset
+    # ourselves, check its pinned sha256 and install it atomically into a
+    # per-version directory. One writer, so no npm-update lock is involved.
+    # 2027-e2cf: opencode is a release harness (pinned version and sha256);
+    # npm's opencode-ai stopped at 1.19.5. Its directory goes first on PATH so
+    # a bare `opencode` in a shell is the verified pin, not a stale npm copy.
+    # Major line 1 (ruling B1): v2 is a separate product with other contracts.
+    OC_BIN="$(_require_release_harness opencode opencode anomalyco/opencode 1)"
+    if [ -x "$OC_BIN" ]; then
+        export PATH="$(dirname "$OC_BIN"):$PATH"
+    fi
     return 0
 }
 

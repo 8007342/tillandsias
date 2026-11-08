@@ -64,7 +64,7 @@ forge_step_done hot-paths
 
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 # EVERY_LAUNCH agent harness update; backgrounded, fail-soft.
-ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
+ensure_forge_harnesses claude >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "claude-code starting"

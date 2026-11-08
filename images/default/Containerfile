@@ -127,6 +127,15 @@ COPY lib-expert-capability.sh /usr/local/lib/tillandsias/lib-expert-capability.s
 # COPY is dropped, forge discovery reports `project_engine: state=unknown ...
 # probe=helper-missing` instead of a verdict — named, never silent.
 COPY lib-project-engine-capability.sh /usr/local/lib/tillandsias/lib-project-engine-capability.sh
+# @trace order:2047-ci2k — sourced by lib-common.sh from its own directory
+# (embed endpoint, ledger freshness) and by both MCP wrappers via
+# /usr/local/lib/tillandsias/ (experts probe, MCP build id). They existed in the
+# tree and were never copied, so a built forge silently took every fallback.
+# scripts/lua/check-forge-lib-copies.lua refuses a sourced lib with no COPY.
+COPY lib-embed-endpoint.sh /usr/local/lib/tillandsias/lib-embed-endpoint.sh
+COPY lib-experts-probe.sh /usr/local/lib/tillandsias/lib-experts-probe.sh
+COPY lib-ledger-freshness.sh /usr/local/lib/tillandsias/lib-ledger-freshness.sh
+COPY lib-mcp-build-id.sh /usr/local/lib/tillandsias/lib-mcp-build-id.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
