@@ -14,7 +14,7 @@ description: "Entrypoint skill for Tillandsias forge container. Detects project 
    → Run `/bootstrap-readme-and-project` (empty project flow)
 
 2. If `README.md` exists:
-   - Run `check-readme-discipline.sh README.md`
+   - Run `tillandsias-plan script run scripts/lua/check-readme-discipline.lua` (from the project root)
    - If exit 0 (valid): → Run `/status` (project is ready)
    - If exit >0 (invalid): → Run `/bootstrap-readme` (repair flow)
 

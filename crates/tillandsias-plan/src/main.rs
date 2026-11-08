@@ -432,6 +432,7 @@ const USAGE: &str = concat!(
     "                                     returns collected envelope on stdout.\n",
     "           validate-yaml <file>...   ORDER 746-htj9. Load each file with serde_yaml and\n",
     "                                     report ok:yaml-loads / blocked:yaml-load-failed /\n",
+    "                                     blocked:yaml-empty (zero bytes or whitespace only) /\n",
     "                                     blocked:yaml-unreadable. THE sanctioned YAML reader:\n",
     "                                     no interpreter (yq, ruby) exists in all three\n",
     "                                     environments the gates run in; this binary does.\n",
@@ -4027,6 +4028,16 @@ fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
             let mut failed = false;
             for file in files {
                 match std::fs::read_to_string(file) {
+                    // ORDER 1117-66qv. serde_yaml loads the EMPTY document as
+                    // `Null`, so a zero-byte file (a heredoc that never wrote)
+                    // used to answer `ok:yaml-loads` — the strongest verdict
+                    // this reader emits, for a file with nothing in it. Empty
+                    // is its own verdict, distinct from load failure and from
+                    // the valid empty document a writer could mean.
+                    Ok(text) if text.trim().is_empty() => {
+                        println!("blocked:yaml-empty:{file}: file is empty or whitespace only");
+                        failed = true;
+                    }
                     Ok(text) => match serde_yaml::from_str::<serde_yaml::Value>(&text) {
                         Ok(_) => println!("ok:yaml-loads:{file}"),
                         Err(err) => {
