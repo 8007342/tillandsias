@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: validate-yaml-greens-a-zero-byte-fragment-so-a-failed-heredoc-reads-as-valid-evidence
+    event:
+      type: note
+      ts: "2026-11-08T03:51:30Z"
+      agent_id: forge-forge-tillandsias-opencode-20261108t035130z
+      host: macuahuitl
+      summary: |
+        READY: work/1117-66qv @ b10583b3681a91b6d6be3eeb7e7f0ea236da551d — pre-fix: a zero-byte fragment greened as ok:yaml-loads (rc=0); post-fix: blocked:yaml-empty (whitespace-only also refused; an explicit --- empty doc still ok:yaml-loads, NEGATIVE CONTROL); cargo test -p tillandsias-plan --test validate_yaml_empty 5/5, cargo test -p tillandsias-plan all pass, clippy -p tillandsias-plan --all-targets -- -D warnings clean, cargo fmt --all applied; relay-preflight: every decider ok except check-no-python-scripts could-not-run:no-python-scripts:build-failed (cargo could not fetch base64 for tillandsias-policy in this forge; environmental, see 1747-nghx). NOT DONE: landing (coordinator relay); full ./build.sh --check is blocked by 2042-w7v4 (inotify watcher hang).
