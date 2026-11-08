@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: every-image-and-studio-declares-its-egress-tiers
+    event:
+      type: note
+      ts: "2026-11-08T02:19:30Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Implemented on work/2041-jb57 (22c03b5ef, macOS): egress.yaml for all 17 image dirs, a studio egress field enforced by build-studio-registry.lua, check-egress-declarations.lua with litmus:egress-declarations (two negative controls), and headless gating the proxy env on the declaration at the git, inference and forge (opencode + agent) sites. Verified on darwin: headless tests 1423 passed with --features tray,listen-vsock, clippy -D warnings clean, proxy-container litmus 7/7. STILL NEEDS LINUX: (1) a live enclave launch confirming git, inference and the forge still reach upstream through the proxy, and vault/router launch with no proxy env; (2) wiring the remaining unconditional sites (build_stack_common_args catalog stacks, run_provider_login, toolchain_exec, imagegen_models), which need image names chosen for catalog containers and live checks; (3) network choice from tiers (internal network for none/siblings), which depends on the per-tier proxy ports from 2041-i3nk part 2 (lenovinha).
