@@ -101,6 +101,13 @@ recommended.
   the wrapper emits the same named fallback the old code emitted when its tool
   was absent (`unknown`, `unavailable`, `NOT-READY (probe-tool-missing: ...)`),
   never a silently different answer.
+- **The Lua `fs` door cannot reach a target outside the repository root.**
+  `fs.*` is confined to the checkout, and a helper's target often is not in it,
+  so read such a target through a child (`git -C <dir>`) or the plan binary
+  (`tillandsias-plan hash sha256 <file>`), never `fs.*`. Measured twice:
+  2049-ndde (`fs.exists` refused the project in `/tmp`; every value read
+  `unknown`) and 2049-vv58 (the hashed MCP script lives in
+  `/home/forge/.config-overlay/mcp/`).
 
 ## D3 — The five conversions
 
@@ -147,6 +154,8 @@ recommended.
 
 ### D3.5 `config-overlay/mcp/mcp-usage-log.sh` → `lua/mcp-usage-log.lua`
 
+**Dropped (2049-ky3a, coordinator 2026-11-08): stays shell; see D5.** Kept below as the record of what was proposed.
+
 - `time.now_ms()` replaces `date +%s%3N` (the `%3N` hazard of `841-ruh9`);
   `json.encode` builds the record; append one line to
   `TILLANDSIAS_EXPERT_USAGE_LOG` (default `/tmp/forge-expert-usage.jsonl`).
@@ -190,6 +199,7 @@ recommended.
 | `images/default/entrypoint*.sh` | the container's first process; it may call the binary, but it must run before it |
 | `images/default/lib-localized-errors.sh` | sources locale bundles at source time; pure string formatting, no forks to remove |
 | `scripts/build-forge-plan-bin.sh` | it builds the binary |
+| `images/default/config-overlay/mcp/mcp-usage-log.sh` | D3.5 dropped (2049-ky3a): it appends to logs under `/tmp`, outside the `fs` root, and it runs on every tool call, so a runner exec per `date` removes no forks and adds latency |
 
 ## D6 — Verification
 

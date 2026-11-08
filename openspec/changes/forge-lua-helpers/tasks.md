@@ -33,7 +33,7 @@ record the pre/post `strace -f -e execve` count in the packet.
       execve → 1 runner + 3 git. `[mint on claim]`
 - [ ] 1.4 `lib-mcp-build-id.sh` → `lua/mcp-build-id.lua`; 12 hex, `unknown`
       on unreadable, no fallback chain; 5 execve → 1. `[mint on claim]`
-- [ ] 1.5 `config-overlay/mcp/mcp-usage-log.sh` → `lua/mcp-usage-log.lua`;
+- [x] 1.5 DROPPED (2049-ky3a, stays shell, design D5): `config-overlay/mcp/mcp-usage-log.sh` → `lua/mcp-usage-log.lua`;
       `time.now_ms` clock, one JSONL line, base four keys always present,
       best-effort, nothing on stdout; `mcp_now_ms`/`mcp_log_usage` signatures
       unchanged. `[mint on claim]`
