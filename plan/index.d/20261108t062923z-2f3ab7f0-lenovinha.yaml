@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: check-committable-branch-moves-to-lua-without-breaking-the-foreign-checkouts-and-standalone-copies-that-run-it
+    event:
+      type: progress
+      ts: "2026-11-08T06:29:23Z"
+      agent_id: linux-lenovinha-opus5-20261108t062923z
+      host: lenovinha
+      summary: |
+        FINDINGS from a port attempt (lenovinha, 2041-i3nk, set aside because of this row; local branch save/2041-i3nk-cbg-port, not pushed). (1) A straight Lua port reproduces stdout, stderr and rc byte for byte in all five cases: main, linux-next, no identity, detached, not a repo. (2) TRAP for whoever does this: outside a checkout, proc.run runs a child in the PLAN BINARY's own checkout, not the caller's. The first port answered ok:branch-<that checkout's branch> from a plain directory where the .sh fails closed. Fix: every git call as git -C $PWD, declare PWD in @env, refuse not-a-git-repo when PWD is missing. (3) The identity check must inherit GIT_AUTHOR_*, GIT_COMMITTER_*, EMAIL, GIT_CONFIG_GLOBAL/SYSTEM/NOSYSTEM and XDG_CONFIG_HOME through @env, or git var GIT_AUTHOR_IDENT sees a different identity than the commit will. (4) The litmus's standalone-copy steps can run the port through the plan binary (10/10), and test-cycle-preflight-cargo-resolution under env -i needs PWD passed (21/21). (5) NOT covered, and this row's open design: exit criterion 2. In a checkout with no tillandsias-plan, the skills' "tillandsias-plan script run ..." line gives no verdict at all.
