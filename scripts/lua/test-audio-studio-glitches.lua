@@ -1,5 +1,5 @@
 -- @env PATH HOME XDG_RUNTIME_DIR
--- @trace order:2055-grzz
+-- @trace order:2055-grzz, order:2066-azxa
 --
 -- test-audio-studio-glitches.lua — the audio studio's glitch detector
 -- (images/audio-studio/audio-tool, `detect`) finds each of the five fault
@@ -203,6 +203,34 @@ for _, f in ipairs(files) do
         end
     end
 end
+
+-- 2066-azxa: a REAL-LENGTH file. lpc() took the full O(n^2) autocorrelation,
+-- so an 86 s stereo .ogg never returned in a forge, and the runaway containers
+-- then starved every later call. The 3 s files above could not show it. This
+-- is 90 s of 44.1 kHz stereo .ogg, made by the image's own ffmpeg. detect
+-- --loop must answer in under 60 s; the measured time after the fix is ~2 s,
+-- and before it the run passed 600 s and never answered.
+local LONG = "long-90s-stereo.ogg"
+local mk = proc.run{ argv = { "podman", "run", "--rm", "--network=none", "--pull=never", "--cap-drop=ALL",
+    "--security-opt=no-new-privileges", "--security-opt=label=disable", "--userns=keep-id:uid=1001,gid=1001",
+    "-v", here .. "/" .. REL .. ":/work/tmp/audio/in", "--entrypoint", "ffmpeg", TAG, "-v", "error",
+    "-f", "lavfi", "-i", "anoisesrc=d=90:c=pink:a=0.3", "-ac", "2", "-ar", "44100", "-c:a", "libvorbis",
+    "/work/tmp/audio/in/" .. LONG }, timeout_ms = 300000 }
+if not mk.ok or not fs.exists(REL .. "/" .. LONG) then
+    log.raw(text.trim((mk.stdout or "") .. "\n" .. (mk.stderr or "")))
+    verdict.emit("could-not-run:audio-studio-glitches:long-input:" .. (mk.status or "?"), 2)
+end
+local t0 = time.now_ms()
+local lr = proc.run{ argv = { "podman", "run", "--rm", "--network=none", "--pull=never", "--cap-drop=ALL",
+    "--security-opt=no-new-privileges", "--security-opt=label=disable", "--timeout=120",
+    "-v", here .. "/" .. REL .. ":/work/tmp/audio/in:ro", TAG,
+    "detect", "--input", "/work/tmp/audio/in/" .. LONG, "--loop" }, timeout_ms = 180000 }
+local secs = (time.now_ms() - t0) / 1000
+local lok, lres = pcall(json.parse, lr.stdout or "")
+arm(string.format("a 90 s stereo .ogg (detect --loop) answers in under 60 s (took %.1f s)", secs),
+    lr.ok and secs < 60 and lok and type(lres) == "table" and type(lres.findings) == "table"
+        and math.abs((tonumber(lres.duration) or 0) - 90) < 0.5 and lres.channels == 2,
+    string.format("rc=%s %.1f s %s", tostring(lr.code), secs, text.trim(lr.stdout or ""):sub(1, 200)))
 
 out.line("audio-studio glitch fixture: " .. passes .. " passed, " .. fails .. " failed")
 if fails == 0 then verdict.emit("ok:audio-studio-glitches:" .. passes .. "-arms", 0) end
