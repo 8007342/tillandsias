@@ -3,6 +3,13 @@ name: haiku-delegate
 description: Delegate small bounded Tillandsias tasks to Claude Haiku workers while the primary agent keeps ownership of specs, integration, verification, and commits.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Haiku Delegate
 
 Use this skill for cheap parallel side work only: file inventory, stale-reference audits,
