@@ -26,6 +26,8 @@ const ANTIGRAVITY_FORGE_HCL: &str =
     include_str!("../../../images/vault/policies/antigravity-forge.hcl");
 const ANTIGRAVITY_LOGIN_HCL: &str =
     include_str!("../../../images/vault/policies/antigravity-login.hcl");
+const COPILOT_FORGE_HCL: &str = include_str!("../../../images/vault/policies/copilot-forge.hcl");
+const COPILOT_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/copilot-login.hcl");
 const OPENCODE_FORGE_HCL: &str = include_str!("../../../images/vault/policies/opencode-forge.hcl");
 
 /// Named policy bound to a Vault token.
@@ -59,6 +61,9 @@ pub enum Policy {
     ClaudeForge,
     AntigravityForge,
     AntigravityLogin,
+    /// ORDER 2063-nfag: the copilot lane (forge restore) and its login container.
+    CopilotForge,
+    CopilotLogin,
     OpenCodeForge,
 }
 
@@ -78,6 +83,8 @@ impl Policy {
             Policy::ClaudeForge => "claude-forge-policy",
             Policy::AntigravityForge => "antigravity-forge-policy",
             Policy::AntigravityLogin => "antigravity-login-policy",
+            Policy::CopilotForge => "copilot-forge-policy",
+            Policy::CopilotLogin => "copilot-login-policy",
             Policy::OpenCodeForge => "opencode-forge-policy",
         }
     }
@@ -98,6 +105,8 @@ impl Policy {
             Policy::ClaudeForge => "images/vault/policies/claude-forge.hcl",
             Policy::AntigravityForge => "images/vault/policies/antigravity-forge.hcl",
             Policy::AntigravityLogin => "images/vault/policies/antigravity-login.hcl",
+            Policy::CopilotForge => "images/vault/policies/copilot-forge.hcl",
+            Policy::CopilotLogin => "images/vault/policies/copilot-login.hcl",
             Policy::OpenCodeForge => "images/vault/policies/opencode-forge.hcl",
         }
     }
@@ -118,6 +127,8 @@ impl Policy {
             Policy::ClaudeForge => CLAUDE_FORGE_HCL,
             Policy::AntigravityForge => ANTIGRAVITY_FORGE_HCL,
             Policy::AntigravityLogin => ANTIGRAVITY_LOGIN_HCL,
+            Policy::CopilotForge => COPILOT_FORGE_HCL,
+            Policy::CopilotLogin => COPILOT_LOGIN_HCL,
             Policy::OpenCodeForge => OPENCODE_FORGE_HCL,
         }
     }
@@ -136,6 +147,8 @@ impl Policy {
             Policy::ClaudeForge,
             Policy::AntigravityForge,
             Policy::AntigravityLogin,
+            Policy::CopilotForge,
+            Policy::CopilotLogin,
             Policy::OpenCodeForge,
         ]
     }
@@ -214,6 +227,26 @@ mod tests {
         assert!(!hcl.contains("claude/oauth") && !hcl.contains("antigravity/oauth"));
     }
 
+    /// ORDER 2063-nfag: the copilot token (secret/copilot/oauth) is readable
+    /// only by its own lane and login container, never by another lane's
+    /// policy or the generic forge policy.
+    #[test]
+    fn only_the_copilot_policies_reach_the_copilot_token() {
+        for p in Policy::all() {
+            // Tray reaches every path through its host-resident `secret/*`
+            // (rotation); no lane holds it. Every other policy is literal.
+            if *p == Policy::Tray {
+                continue;
+            }
+            let own = matches!(p, Policy::CopilotForge | Policy::CopilotLogin);
+            assert_eq!(
+                p.hcl().contains("copilot/oauth"),
+                own,
+                "{p:?} copilot/oauth reach"
+            );
+        }
+    }
+
     #[test]
     fn provider_forge_policies_are_scoped_to_their_own_oauth_only() {
         // Each forge-lane policy reads/writes ONLY its provider's OAuth doc —
@@ -229,6 +262,13 @@ mod tests {
             (
                 Policy::AntigravityForge,
                 "antigravity/oauth",
+                ["codex/oauth", "claude/oauth"],
+            ),
+            // 2063-nfag: other lanes cannot read the copilot token, and the
+            // copilot lane cannot read theirs.
+            (
+                Policy::CopilotForge,
+                "copilot/oauth",
                 ["codex/oauth", "claude/oauth"],
             ),
         ] {

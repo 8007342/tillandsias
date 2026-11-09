@@ -29,10 +29,40 @@ case "$PROVIDER" in
         VAULT_PATH="secret/antigravity/oauth"
         LOGIN_HINT="tillandsias --agy-login"
         ;;
-    *) echo "Usage: TILLANDSIAS_OAUTH_PROVIDER={claude|antigravity} {restore|harvest|digest|watch CHILD_PID [DIGEST]}" >&2; exit 64 ;;
+    copilot)
+        # 2063-nfag: the credential is an opaque archive of COPILOT_HOME's
+        # credential files (copilot picks the file name), restored into RAM
+        # (/dev/shm) in the copilot forge only; secret/copilot/oauth is
+        # readable by no other lane's policy.
+        COPILOT_HOME="${COPILOT_HOME:-/dev/shm/copilot-home}"
+        AUTH_FILE=""
+        VAULT_PATH="secret/copilot/oauth"
+        LOGIN_HINT="tillandsias --copilot-login"
+        ;;
+    *) echo "Usage: TILLANDSIAS_OAUTH_PROVIDER={claude|antigravity|copilot} {restore|harvest|digest|watch CHILD_PID [DIGEST]}" >&2; exit 64 ;;
 esac
 
+# copilot: the archive's member files, minus copilot's volatile state.
+copilot_cred_files() {
+    find "$COPILOT_HOME" -type f ! -path "$COPILOT_HOME/session-state/*" \
+        ! -path "$COPILOT_HOME/logs/*" ! -path "$COPILOT_HOME/pkg/*" 2>/dev/null | LC_ALL=C sort
+}
+
 restore_auth() {
+    if [[ "$PROVIDER" == copilot ]]; then
+        local tmp
+        mkdir -p "$COPILOT_HOME" && chmod 700 "$COPILOT_HOME"
+        umask 077
+        tmp="$(mktemp "$COPILOT_HOME/.restore.XXXXXX")"
+        if ! vault-cli.sh read -field=credentials_b64 "$VAULT_PATH" | base64 -d >"$tmp" \
+            || [[ ! -s "$tmp" ]] || ! tar -xzf "$tmp" -C "$COPILOT_HOME"; then
+            rm -f "$tmp"
+            echo "ERROR: copilot credentials are unavailable or invalid; run '$LOGIN_HINT' in a terminal." >&2
+            return 2
+        fi
+        rm -f "$tmp"
+        return 0
+    fi
     local auth_dir tmp
     auth_dir="$(dirname "$AUTH_FILE")"
     mkdir -p "$auth_dir"
@@ -64,12 +94,30 @@ restore_auth() {
 }
 
 harvest_auth() {
+    if [[ "$PROVIDER" == copilot ]]; then
+        [[ -n "$(copilot_cred_files)" ]] || return 0
+        tar -C "$COPILOT_HOME" --exclude=./session-state --exclude=./logs --exclude=./pkg \
+            --exclude='./.restore.*' -czf - . | base64 -w0 | \
+            vault-cli.sh write-stdin "$VAULT_PATH" credentials_b64 >/dev/null
+        return
+    fi
     [[ -s "$AUTH_FILE" ]] || return 0
     base64 -w0 <"$AUTH_FILE" | \
         vault-cli.sh write-stdin "$VAULT_PATH" credentials_b64 >/dev/null
 }
 
 auth_digest() {
+    if [[ "$PROVIDER" == copilot ]]; then
+        local files
+        files="$(copilot_cred_files)"
+        if [[ -n "$files" ]]; then
+            # shellcheck disable=SC2086
+            tr '\n' '\0' <<<"$files" | xargs -0 sha256sum | sha256sum | awk '{print $1}'
+        else
+            printf 'missing'
+        fi
+        return
+    fi
     if [[ -s "$AUTH_FILE" ]]; then
         sha256sum "$AUTH_FILE" | awk '{print $1}'
     else

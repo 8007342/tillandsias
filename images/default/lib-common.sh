@@ -4325,6 +4325,43 @@ apply_antigravity_config_overlay() {
     trace_lifecycle "config" "antigravity MCP overlay applied"
 }
 
+# 2063-nfag: the copilot lane's MCP servers (forge-plan, project-info,
+# host-browser, git-tools), merged into $COPILOT_HOME/mcp-config.json the same
+# way as the antigravity overlay. The built-in GitHub MCP server stays off
+# (--disable-builtin-mcps in the entrypoint): git goes through the mirror.
+apply_copilot_config_overlay() {
+    local overlay_root="${TILLANDSIAS_CONFIG_OVERLAY_ROOT:-/home/forge/.config-overlay}"
+    local overlay_cfg="$overlay_root/copilot/mcp-config.json"
+    local user_cfg="${COPILOT_HOME:-$HOME/.copilot}/mcp-config.json"
+    local tmp
+
+    [ -f "$overlay_cfg" ] || return 0
+    if ! jq -e 'type == "object" and (.mcpServers | type == "object")' \
+        "$overlay_cfg" >/dev/null 2>&1; then
+        trace_lifecycle "config" "copilot MCP overlay invalid; existing config preserved"
+        return 1
+    fi
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ]; then
+        if ! jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1 \
+            || ! jq -s '.[0] * {mcpServers: ((.[0].mcpServers // {}) * .[1].mcpServers)}' \
+                "$user_cfg" "$overlay_cfg" >"$tmp"; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "copilot MCP config invalid; existing file preserved"
+            return 1
+        fi
+    else
+        cp "$overlay_cfg" "$tmp" || {
+            rm -f "$tmp"
+            return 1
+        }
+    fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "copilot MCP overlay applied"
+}
+
 # Seed first-run state so a FRESH forge's claude never blocks on an
 # interactive dialog (2026-08-31, coordinator-minted sessions — THREE
 # blockers found across the live rounds, each invisible until the one
