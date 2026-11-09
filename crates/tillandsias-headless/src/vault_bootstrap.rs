@@ -6428,6 +6428,8 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::ClaudeForge => "claude-forge",
         Policy::AntigravityForge => "antigravity-forge",
         Policy::AntigravityLogin => "antigravity-login",
+        Policy::CopilotForge => "copilot-forge",
+        Policy::CopilotLogin => "copilot-login",
         Policy::OpenCodeForge => "opencode-forge",
     }
 }

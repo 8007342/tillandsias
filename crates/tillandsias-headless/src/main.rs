@@ -762,12 +762,15 @@ fn main() {
     let antigravity_login = user_args
         .iter()
         .any(|a| a == "--antigravity-login" || a == "--agy-login");
+    // 2063-nfag: the operator's device-code sign-in for the copilot lane.
+    let copilot_login = user_args.iter().any(|a| a == "--copilot-login");
     let list_cloud_projects = user_args.iter().any(|a| a == "--list-cloud-projects");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let codex = user_args.iter().any(|a| a == "--codex");
     let claude = user_args.iter().any(|a| a == "--claude");
     let bash = user_args.iter().any(|a| a == "--bash");
     let antigravity = user_args.iter().any(|a| a == "--antigravity");
+    let copilot = user_args.iter().any(|a| a == "--copilot");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
     // 1860-auhm: `--studio <id>` opens the project in a registered web studio.
     let studio_id: Option<String> = match user_args.iter().position(|a| a == "--studio") {
@@ -1052,12 +1055,14 @@ fn main() {
         "--codex-login",
         "--antigravity-login",
         "--agy-login",
+        "--copilot-login",
         "--list-cloud-projects",
         "--opencode",
         "--codex",
         "--claude",
         "--bash",
         "--antigravity",
+        "--copilot",
         "--opencode-web",
         "--studio",
         "--observatorium",
@@ -1114,6 +1119,7 @@ fn main() {
         || claude
         || bash
         || antigravity
+        || copilot
         || opencode_web
         // 1953-stsk: --studio was missing, so a studio launch SIGTERMed the
         // running tray (lenovinha 2026-11-01).
@@ -1130,6 +1136,7 @@ fn main() {
         || claude_login
         || codex_login
         || antigravity_login
+        || copilot_login
         || list_cloud_projects
         || cache_clear
         || cache_verify;
@@ -1215,6 +1222,18 @@ fn main() {
             .expect("Antigravity device-auth provider spec must exist");
         Some((
             ProviderId::Antigravity,
+            AuthModel::OAuthDevice,
+            spec.image_name,
+            spec.login_script(),
+            LoginInputMode::Terminal,
+        ))
+    } else if copilot_login {
+        // 2063-nfag: `copilot login --device-code` in the one-shot login
+        // container; the credential is archived straight into Vault.
+        let spec = provider_device_auth_spec(&ProviderId::Copilot)
+            .expect("Copilot device-auth provider spec must exist");
+        Some((
+            ProviderId::Copilot,
             AuthModel::OAuthDevice,
             spec.image_name,
             spec.login_script(),
@@ -1558,6 +1577,7 @@ fn main() {
             (codex, "--codex"),
             (claude, "--claude"),
             (antigravity, "--antigravity"),
+            (copilot, "--copilot"),
             (bash, "--bash"),
         ]
         .into_iter()
@@ -1596,18 +1616,9 @@ fn main() {
         }
     }
 
-    if codex || claude || bash || antigravity {
+    if let Some((mode, flag)) = forge_agent_lane(&user_args) {
         let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
         maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
-        let (mode, flag) = if codex {
-            (ForgeAgentMode::Codex, "--codex")
-        } else if claude {
-            (ForgeAgentMode::Claude, "--claude")
-        } else if antigravity {
-            (ForgeAgentMode::Antigravity, "--antigravity")
-        } else {
-            (ForgeAgentMode::Maintenance, "--bash")
-        };
         if let Some(project_path) = config_path {
             let result = run_cli_with_vault_credential_cleanup(debug, || {
                 run_forge_agent_cli_mode(
@@ -2034,6 +2045,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
     println!("       tillandsias --claude <project> [--debug|--diagnostics]");
     println!("       tillandsias --bash <project> [--debug|--diagnostics]");
+    println!("       tillandsias --copilot <project> [--debug|--diagnostics]");
     println!(
         "       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]"
     );
@@ -2047,6 +2059,7 @@ fn print_usage(version: &str) {
     println!("  --codex        Launch Codex inside the forge for a project");
     println!("  --claude       Launch Claude Code inside the forge for a project");
     println!("  --antigravity  Launch Antigravity inside the forge for a project");
+    println!("  --copilot      Launch the GitHub Copilot CLI inside the forge for a project");
     println!("  --bash         Launch the forge welcome shell for a project");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
     println!("  --observatorium Launch the project Observatorium viewer");
@@ -2122,6 +2135,7 @@ fn print_usage(version: &str) {
         "  --codex-login Authenticate Codex (device flow: codex login --device-auth) into Vault"
     );
     println!("  --antigravity-login Authenticate Antigravity (agy device flow) into Vault");
+    println!("  --copilot-login Authenticate GitHub Copilot (device code) into Vault");
     println!("  --agy-login    Alias for --antigravity-login");
     println!(
         "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
@@ -15094,6 +15108,8 @@ pub enum ProviderId {
     Claude,
     Codex,
     Antigravity,
+    /// ORDER 2063-nfag: GitHub Copilot CLI (device-code sign-in).
+    Copilot,
 }
 
 impl ProviderId {
@@ -15103,6 +15119,7 @@ impl ProviderId {
             ProviderId::Claude => "secret/claude/oauth",
             ProviderId::Codex => "secret/codex/oauth",
             ProviderId::Antigravity => "secret/antigravity/oauth",
+            ProviderId::Copilot => "secret/copilot/oauth",
         }
     }
 
@@ -15112,6 +15129,7 @@ impl ProviderId {
             ProviderId::Claude => "Claude",
             ProviderId::Codex => "Codex",
             ProviderId::Antigravity => "Antigravity",
+            ProviderId::Copilot => "GitHub Copilot",
         }
     }
 
@@ -15121,6 +15139,7 @@ impl ProviderId {
             ProviderId::Claude => "claude",
             ProviderId::Codex => "codex",
             ProviderId::Antigravity => "antigravity",
+            ProviderId::Copilot => "copilot",
         }
     }
 
@@ -15143,7 +15162,10 @@ impl ProviderId {
                 "printf '\\n' >&2\n",
                 "printf 'Add more permissions later if you need them.\\n' >&2\n",
             ),
-            ProviderId::Claude | ProviderId::Codex | ProviderId::Antigravity => "",
+            ProviderId::Claude
+            | ProviderId::Codex
+            | ProviderId::Antigravity
+            | ProviderId::Copilot => "",
         }
     }
 
@@ -15153,6 +15175,7 @@ impl ProviderId {
             ProviderId::Claude => "tillandsias-claude-token",
             ProviderId::Codex => "tillandsias-codex-token",
             ProviderId::Antigravity => "tillandsias-antigravity-token",
+            ProviderId::Copilot => "tillandsias-copilot-token",
         }
     }
 
@@ -15162,6 +15185,7 @@ impl ProviderId {
             ProviderId::Claude => CLAUDE_DEVICE_AUTH_SPEC.vault_field,
             ProviderId::Codex => CODEX_DEVICE_AUTH_SPEC.vault_field,
             ProviderId::Antigravity => ANTIGRAVITY_DEVICE_AUTH_SPEC.vault_field,
+            ProviderId::Copilot => COPILOT_DEVICE_AUTH_SPEC.vault_field,
         }
     }
 }
@@ -15224,11 +15248,25 @@ const ANTIGRAVITY_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthS
     vault_field: "credentials_b64",
 };
 
+/// ORDER 2063-nfag: `copilot login --device-code` in the one-shot login
+/// container, COPILOT_HOME on tmpfs; the credential files are archived
+/// straight into Vault (operator ruling 2026-11-08, option B). The token's
+/// scopes are unverified, and the operator chose this knowing that.
+const COPILOT_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/provider-device-auth",
+    login_args: &["copilot"],
+    credential_path: "$COPILOT_HOME (tmpfs; archived, never on disk)",
+    vault_path: "secret/copilot/oauth",
+    vault_field: "credentials_b64",
+};
+
 fn provider_device_auth_spec(provider: &ProviderId) -> Option<&'static ProviderDeviceAuthSpec> {
     match provider {
         ProviderId::Codex => Some(&CODEX_DEVICE_AUTH_SPEC),
         ProviderId::Claude => Some(&CLAUDE_DEVICE_AUTH_SPEC),
         ProviderId::Antigravity => Some(&ANTIGRAVITY_DEVICE_AUTH_SPEC),
+        ProviderId::Copilot => Some(&COPILOT_DEVICE_AUTH_SPEC),
         ProviderId::GitHub => None,
     }
 }
@@ -20408,6 +20446,8 @@ pub(crate) enum ForgeAgentMode {
     Codex,
     OpenCode,
     Antigravity,
+    /// ORDER 2063-nfag: GitHub's official copilot CLI.
+    Copilot,
     Maintenance,
 }
 
@@ -20418,6 +20458,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Codex => "/usr/local/bin/entrypoint-forge-codex.sh",
             ForgeAgentMode::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
             ForgeAgentMode::Antigravity => "/usr/local/bin/entrypoint-forge-antigravity.sh",
+            ForgeAgentMode::Copilot => "/usr/local/bin/entrypoint-forge-copilot.sh",
             ForgeAgentMode::Maintenance => "/usr/local/bin/entrypoint-terminal.sh",
         }
     }
@@ -20428,6 +20469,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Codex => "codex",
             ForgeAgentMode::OpenCode => "opencode",
             ForgeAgentMode::Antigravity => "antigravity",
+            ForgeAgentMode::Copilot => "copilot",
             ForgeAgentMode::Maintenance => "maintenance",
         }
     }
@@ -20445,6 +20487,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Antigravity => {
                 ("Antigravity session open", "Antigravity session ended")
             }
+            ForgeAgentMode::Copilot => ("Copilot session open", "Copilot session ended"),
             ForgeAgentMode::Maintenance => ("Terminal open", "Terminal closed"),
         }
     }
@@ -20458,9 +20501,27 @@ impl ForgeAgentMode {
             ForgeAgentMode::Codex => "codex",
             ForgeAgentMode::OpenCode => "opencode",
             ForgeAgentMode::Antigravity => "antigravity",
+            ForgeAgentMode::Copilot => "copilot",
             ForgeAgentMode::Maintenance => "terminal",
         }
     }
+}
+
+/// The forge agent lane a launcher argv selects, with the flag that named it.
+/// Precedence when several are given is the historical one: codex, claude,
+/// antigravity, copilot (2063-nfag), then --bash. (Pulled out of main for 2063-nfag so the lane
+/// flags are testable.)
+fn forge_agent_lane(args: &[String]) -> Option<(ForgeAgentMode, &'static str)> {
+    [
+        ("--codex", ForgeAgentMode::Codex),
+        ("--claude", ForgeAgentMode::Claude),
+        ("--antigravity", ForgeAgentMode::Antigravity),
+        ("--copilot", ForgeAgentMode::Copilot),
+        ("--bash", ForgeAgentMode::Maintenance),
+    ]
+    .into_iter()
+    .find(|(flag, _)| args.iter().any(|a| a == flag))
+    .map(|(flag, mode)| (mode, flag))
 }
 
 /// ORDER 828-h7kw. The line the hold prints, and the pure half of the hold
@@ -22299,7 +22360,9 @@ fn build_forge_agent_run_args_with_vault(
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
         ForgeAgentMode::Antigravity => Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
+        // 2063-nfag: copilot has no API-key provider; its token is restored
+        // inside its own forge from secret/copilot/oauth.
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Copilot | ForgeAgentMode::Maintenance => None,
     };
     if let Some(p) = provider_api
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
@@ -22464,20 +22527,22 @@ pub(crate) fn build_forge_agent_run_argv(
 /// no provider credential.
 fn mode_provider_pair(
     mode: ForgeAgentMode,
-) -> Option<(ProviderId, crate::vault_bootstrap::ProviderId)> {
+) -> Option<(ProviderId, Option<crate::vault_bootstrap::ProviderId>)> {
     match mode {
         ForgeAgentMode::Claude => Some((
             ProviderId::Claude,
-            crate::vault_bootstrap::ProviderId::Anthropic,
+            Some(crate::vault_bootstrap::ProviderId::Anthropic),
         )),
         ForgeAgentMode::Codex => Some((
             ProviderId::Codex,
-            crate::vault_bootstrap::ProviderId::Openai,
+            Some(crate::vault_bootstrap::ProviderId::Openai),
         )),
         ForgeAgentMode::Antigravity => Some((
             ProviderId::Antigravity,
-            crate::vault_bootstrap::ProviderId::Gemini,
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
         )),
+        // 2063-nfag: copilot signs in by device code only (no API key).
+        ForgeAgentMode::Copilot => Some((ProviderId::Copilot, None)),
         ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
     }
 }
@@ -22491,9 +22556,11 @@ fn provider_auth_satisfied(mode: ForgeAgentMode, debug: bool) -> bool {
     let Some((op, ap)) = mode_provider_pair(mode) else {
         return true;
     };
-    let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
-        .map(|v| !v.is_empty())
-        .unwrap_or(false);
+    let api_key_exists = ap.is_some_and(|ap| {
+        crate::vault_bootstrap::read_provider_api_key(ap, debug)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+    });
     if api_key_exists {
         return true;
     }
@@ -28056,6 +28123,7 @@ mod tests {
             "claude",
             "bash",
             "antigravity",
+            "copilot",
             "opencode_web",
             "observatorium",
             "inference_tier",
@@ -28066,6 +28134,7 @@ mod tests {
             "claude_login",
             "codex_login",
             "antigravity_login",
+            "copilot_login",
             // 1911-3dqo, yoga 2026-10-30: --rejoin was missing, so a rejoin
             // SIGTERMed the running tray and it stopped the whole stack and
             // the very forge the rejoin came for (tray log: "Received
@@ -34807,6 +34876,31 @@ esac
     /// identify the harness selected by the launcher. Cover both launch
     /// builders and every direct agent lane; checking the built argv pins the
     /// exact environment that Podman places inside the container.
+    /// ORDER 2063-nfag. `--copilot` selects the copilot lane, alone and with
+    /// --cloud; the existing lanes keep their flags and precedence. Pre-fix:
+    /// FAILS, --copilot selected nothing.
+    #[test]
+    fn the_copilot_flag_selects_the_copilot_lane() {
+        let sel = |a: &[&str]| {
+            let v: Vec<String> = a.iter().map(|s| s.to_string()).collect();
+            forge_agent_lane(&v).map(|(m, f)| (m.slug(), f))
+        };
+        assert_eq!(sel(&["--copilot", "/p"]), Some(("copilot", "--copilot")));
+        assert_eq!(
+            sel(&["--cloud", "owner/repo", "--copilot"]),
+            Some(("copilot", "--copilot"))
+        );
+        assert_eq!(sel(&["--codex", "/p"]), Some(("codex", "--codex")));
+        assert_eq!(sel(&["--claude", "/p"]), Some(("claude", "--claude")));
+        assert_eq!(
+            sel(&["--antigravity", "/p"]),
+            Some(("antigravity", "--antigravity"))
+        );
+        assert_eq!(sel(&["--bash", "/p"]), Some(("maintenance", "--bash")));
+        assert_eq!(sel(&["--opencode", "/p"]), None);
+        assert_eq!(sel(&["--copilot-login"]), None, "the login is not the lane");
+    }
+
     #[test]
     fn forge_launch_args_export_exact_harness_identity() {
         let _pseam = podman_false_seam();

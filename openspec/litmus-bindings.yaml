@@ -1358,6 +1358,7 @@ specs:
   - litmus:vault-github-token-capture-shape
   - litmus:codex-device-auth-shape
   - litmus:provider-device-auth-shape
+  - litmus:copilot-vault-auth
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex

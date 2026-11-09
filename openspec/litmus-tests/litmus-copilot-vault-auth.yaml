@@ -1,0 +1,37 @@
+# @trace spec:tillandsias-vault
+# @trace order:2063-nfag
+#
+# The copilot lane signs in by device code (operator ruling 2026-11-08, option
+# B; the token's scopes are unverified and the operator chose this knowing it).
+# `copilot login --device-code` runs with COPILOT_HOME in RAM, and copilot's
+# credential files go to Vault as one opaque archive at secret/copilot/oauth,
+# which only the copilot lane's policy can read. The forge restores them into
+# its RAM COPILOT_HOME. Red before 2063-nfag: both helpers refuse the copilot
+# provider (exit 64), so all five arms fail.
+name: litmus:copilot-vault-auth
+spec: tillandsias-vault
+phase: pre-build
+description: The copilot sign-in round-trips through Vault without a plaintext file on disk. The harvest archives copilot's credential files (not session-state, logs or pkg) and the restore brings them back. The digest moves on a credential change and ignores session churn. An empty Vault fails the restore, naming tillandsias --copilot-login. A login that stored no token writes nothing to Vault, and a login that did stores it and writes nothing to HOME.
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, tar, base64, find and sha256sum; a file-backed stub vault-cli.sh, a stub lib-common (require_copilot) and a stub copilot CLI on a scratch PATH (no network, no real Vault)
+
+critical_path:
+  - step: "harvest and restore round-trip; digest ignores session churn; empty Vault names --copilot-login; no token writes nothing; a login stores the token and touches no HOME file"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-copilot-vault-auth.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:copilot-vault-auth:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "five arms: ROUNDTRIP, DIGEST, RESTORE-FAIL, NO-TOKEN, LOGIN-OK"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "copilot-vault-auth"
+
+rollback:
+  on_failure: "read the FAIL lines; the copilot cases are in images/default/provider-oauth-vault.sh and images/default/provider-device-auth.sh"
+  command: "grep -n copilot images/default/provider-oauth-vault.sh images/default/provider-device-auth.sh"
