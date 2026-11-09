@@ -43,7 +43,7 @@ test('a ratio needs both integers and the words "share of" in the same block', (
   assert.deepEqual(rules(page('<p>100% unmet</p>')), ['ratio-without-integers']);
   const ok = `<p>${num(view, 'releases.0.residual.value')} of ${num(view, 'releases.0.residual.denominator')} unmet ${share(view, 'releases.0.residual.value', 'releases.0.residual.denominator')}</p>`;
   assert.deepEqual(rules(page(ok)), []);
-  assert.match(share(view, 'releases.0.residual.value', 'releases.0.residual.denominator'), /share of .*100%/);
+  assert.match(share(view, 'releases.0.residual.value', 'releases.0.residual.denominator'), /100% \(share of /);
 });
 
 test('a share of a missing count is missing, not a percentage', () => {

@@ -18,7 +18,10 @@ test('a field the snapshot lacks stays null in the view', () => {
   const first = view.releases[0];
   assert.equal(first.tag, 'v56.10.14.1');
   assert.equal(first.residual.measured, null);
-  assert.equal(first.residual.histogram.declared, null);
+  // No histogram was recorded; declared is derived by arithmetic from the recorded traced count.
+  assert.equal(first.residual.histogramRecorded, false);
+  assert.equal(first.residual.histogram.declared, 1534);
+  assert.equal(view.releases[1].residual.histogramRecorded, true);
   assert.equal(first.provenance.scopeSha256, null);
   for (const rung of ['absent', 'negatively_tested', 'runtime_observed', 'evidence_bundled']) {
     assert.equal(view.releases.at(-1).residual.histogram[rung], null, rung);

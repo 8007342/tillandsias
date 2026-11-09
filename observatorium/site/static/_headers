@@ -1,0 +1,9 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+/*.html
+  Cache-Control: no-cache
+/
+  Cache-Control: no-cache
+/data/*
+  Cache-Control: public, max-age=60, must-revalidate
