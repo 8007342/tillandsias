@@ -29,7 +29,7 @@ critical_path:
   - step: "the tools refuse bad calls before the appliance runs, write provenance naming tool versions, inputs and params, and the registry lists the audio studio as a tools-only sibling"
     command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- audio_studio:: the_audio_studio_is_a_tools_only_sibling_listed_with_its_affordances 2>&1); grep -E 'test result' <<<\"$out\""
     timeout_ms: 900000
-    expected_behavior: "test result: ok. 7 passed"
+    expected_behavior: "test result: ok. 8 passed"
 
 observability:
   traces:
