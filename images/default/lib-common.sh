@@ -3013,7 +3013,9 @@ harness_record_last_good() {
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
 
 ensure_forge_harnesses() {
-    # $1 = this lane's harness: claude | opencode | codex | antigravity | none.
+    # $1 = this lane's harness: claude | opencode | codex | antigravity |
+    # copilot | none. copilot is fetched in the foreground by require_copilot
+    # (2063-nfag), so its lane refreshes only openspec here.
     # A lane refreshes ONLY its own harness, plus openspec, which every lane
     # uses (2027-e2cf: a claude lane installed agy on every launch). No
     # argument means all, which keeps the old behaviour for direct callers and
@@ -3330,7 +3332,8 @@ harness_release_asset() {
     arch="$(uname -m)"
     case "$arch" in
         x86_64)
-            if grep -qw avx2 "${TILLANDSIAS_CPUINFO:-/proc/cpuinfo}" 2>/dev/null; then
+            # 2063-nfag: copilot ships one x64 build (no -baseline variant).
+            if [ "$bin" = copilot ] || grep -qw avx2 "${TILLANDSIAS_CPUINFO:-/proc/cpuinfo}" 2>/dev/null; then
                 echo "$bin-linux-x64.tar.gz"
             else
                 echo "$bin-linux-x64-baseline.tar.gz"
@@ -3341,11 +3344,15 @@ harness_release_asset() {
     esac
 }
 
-# $1=friendly-name $2=bin $3=owner/repo $4=major line → echoes the binary
-# path to run. The path does not exist when nothing verified is available.
+# $1=friendly-name $2=bin $3=owner/repo $4=major line [$5=sums] → echoes the
+# binary path to run. The path does not exist when nothing verified is
+# available. With $5=sums the release must ALSO ship SHA256SUMS.txt naming the
+# same sha256 for the asset (2063-nfag, operator ruling 2026-11-08 for
+# copilot); a missing file or a disagreeing line fails closed.
 _require_release_harness() {
     local name="$1" bin="$2" repo="$3" major="${4:?_require_release_harness needs a major line}"
-    local root lg_file lg="" lg_path="" stamp asset json tag ver want dir path tmp got have
+    local need_sums="${5:-}"
+    local root lg_file lg="" lg_path="" stamp asset json tag ver want dir path tmp got have sums_line
     root="${TILLANDSIAS_HARNESS_RELEASE_DIR:-$HOME/.cache/tillandsias-project/harness-release}/$bin"
     lg_file="$root/last-good"
     stamp="$root/checked"
@@ -3405,6 +3412,12 @@ _require_release_harness() {
         _rel_fallback "latest $ver is unverifiable"
         return 0
     fi
+    if [ "$need_sums" = sums ] && ! printf '%s' "$json" | jq -e \
+        '.assets | any(.name == "SHA256SUMS.txt")' >/dev/null 2>&1; then
+        trace_lifecycle "harness" "refused:harness-release:$name:no-sums-file:$ver (SHA256SUMS.txt is required; fail closed: nothing downloaded)"
+        _rel_fallback "latest $ver ships no SHA256SUMS.txt"
+        return 0
+    fi
     mkdir -p "$dir" 2>/dev/null || true
     tmp="$(mktemp -d "$root/.install.XXXXXX" 2>/dev/null)" || { _rel_fallback "cannot create a staging dir under $root"; return 0; }
     trace_lifecycle "harness" "$name: installing latest $ver from $repo release asset $asset (2027-e2cf)"
@@ -3421,6 +3434,22 @@ _require_release_harness() {
         rm -rf "$tmp" 2>/dev/null || true
         _rel_fallback "latest $ver failed verification"
         return 0
+    fi
+    if [ "$need_sums" = sums ]; then
+        if ! curl -fsSL --max-time 60 "https://github.com/$repo/releases/download/$tag/SHA256SUMS.txt" \
+            -o "$tmp/SHA256SUMS.txt" 2>/dev/null; then
+            trace_lifecycle "harness" "refused:harness-release:$name:sums-unreadable:$ver (fail closed: nothing installed)"
+            rm -rf "$tmp" 2>/dev/null || true
+            _rel_fallback "SHA256SUMS.txt for $ver could not be fetched"
+            return 0
+        fi
+        sums_line="$(awk -v a="$asset" '$2 == a || $2 == "*" a { print $1; exit }' "$tmp/SHA256SUMS.txt" 2>/dev/null)"
+        if [ "$sums_line" != "$want" ]; then
+            trace_lifecycle "harness" "refused:harness-release:$name:sums-mismatch:$asset@$ver:digest=$want:sums=${sums_line:-none} (fail closed: nothing installed)"
+            rm -rf "$tmp" 2>/dev/null || true
+            _rel_fallback "latest $ver: SHA256SUMS.txt disagrees with the published digest"
+            return 0
+        fi
     fi
     if ! tar -xzf "$tmp/$asset" -C "$tmp" "$bin" 2>/dev/null || [ ! -x "$tmp/$bin" ]; then
         rm -rf "$tmp" 2>/dev/null || true
@@ -3443,7 +3472,7 @@ _require_release_harness() {
         old="${old%/}"
         [ "${old##*/}" = "$ver" ] || rm -rf "$old" 2>/dev/null || true
     done
-    trace_lifecycle "install" "$name: available ($ver, latest, sha256 verified against the release digest, recorded last-good)"
+    trace_lifecycle "install" "$name: available ($ver, latest, sha256 verified against the release digest${need_sums:+ and SHA256SUMS.txt}, recorded last-good)"
     echo "$path"
 }
 
@@ -3878,6 +3907,21 @@ require_opencode() {
     OC_BIN="$(_require_release_harness opencode opencode anomalyco/opencode 1)"
     if [ -x "$OC_BIN" ]; then
         export PATH="$(dirname "$OC_BIN"):$PATH"
+    fi
+    return 0
+}
+
+# 2063-nfag: GitHub's official copilot CLI (proprietary; the GitHub Copilot
+# CLI License, LicenseRef-GitHub-Copilot-CLI, accepted by the operator
+# 2026-11-08). Fetched at launch from upstream's releases/latest, never baked
+# into an image (the licence allows redistribution only bundled), verified
+# against the published digest AND SHA256SUMS.txt, last-good rollback. Only the
+# copilot lane calls this, in the foreground; ensure_forge_harnesses never
+# fetches it, so no other lane refreshes it.
+require_copilot() {
+    COPILOT_BIN="$(_require_release_harness copilot copilot github/copilot-cli 1 sums)"
+    if [ -x "$COPILOT_BIN" ]; then
+        export PATH="$(dirname "$COPILOT_BIN"):$PATH"
     fi
     return 0
 }

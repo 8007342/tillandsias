@@ -1,0 +1,37 @@
+# @trace spec:default-image
+# @trace order:2063-nfag
+#
+# The copilot lane runs GitHub's official copilot CLI, which is proprietary (the
+# GitHub Copilot CLI License; redistribution only bundled). Operator ruling
+# 2026-11-08: fetch it at launch from upstream's releases/latest, verify it
+# against the published digest AND the release's SHA256SUMS.txt, keep last-good
+# rollback, never bake it into an image. Only the copilot lane fetches it. Red
+# before 2063-nfag: all six arms fail on trunk (no require_copilot, no sums
+# check, a -baseline asset picked on a CPU without avx2).
+name: litmus:forge-copilot-harness
+spec: default-image
+phase: pre-build
+description: The copilot CLI installs from upstream's latest v1 release only when the asset's sha256 matches both the published API digest and the release's SHA256SUMS.txt; a missing SHA256SUMS.txt or a disagreeing line is refused before install. A CPU without AVX2 takes the single x64 build. The shared harness refresh never fetches copilot; only the copilot lane's foreground require_copilot does.
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, sed, tar, jq and sha256sum; stub curl, uname and npm on a scratch PATH (no network)
+
+critical_path:
+  - step: "digest and sums agree installs; sums disagreeing refused; no sums file refused before download; no-avx2 takes x64; only the copilot lane fetches copilot; require_copilot wired with sums required"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-copilot-harness.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:forge-copilot-harness:6 arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "six arms: LATEST, SUMS-BAD, SUMS-NONE, NOAVX2, LANE, WIRED"
+  log_fields:
+    spec: "default-image"
+    test: "forge-copilot-harness"
+
+rollback:
+  on_failure: "read the FAIL lines; the installer is _require_release_harness (its sums argument) and require_copilot, in images/default/lib-common.sh"
+  command: "grep -nE '_require_release_harness|require_copilot|need_sums' images/default/lib-common.sh"
