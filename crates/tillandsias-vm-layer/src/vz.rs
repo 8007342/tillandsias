@@ -1630,6 +1630,22 @@ systemctl restart systemd-journald || true
 # which is why the journal forward above stays.
 grubby --update-kernel=ALL --args="console=hvc0" || true
 
+# ORDER 2029-b87w. KERNEL FAULT REPORTS GO TO hvc0 DIRECTLY, NOT ONLY VIA
+# JOURNALD. console=hvc0 above routes the kernel's console, but at the default
+# console loglevel (4) the "segfault at ... ip ..." lines are KERN_INFO and are
+# dropped from the console; they reached console.log only through journald,
+# which is exactly what stops answering when the guest wedges (the 2026-11-07
+# folio/btrfs hang). Console loglevel 7 prints INFO and above; fatal signals
+# are reported by the kernel itself; a task blocked 60 s prints its stack.
+# Effective now (sysctl --system) and on every later boot.
+cat > /etc/sysctl.d/90-tillandsias-console.conf << 'EOF'
+kernel.printk = 7 4 1 7
+kernel.print-fatal-signals = 1
+kernel.hung_task_timeout_secs = 60
+kernel.hung_task_warnings = 20
+EOF
+sysctl --system >/dev/null 2>&1 || true
+
 # ORDER 1642-cc54. A CLEAN POWER-OFF THE HOST CAN TRUST.
 # MEASURED 2026-10-12 (console=hvc0 + initcall_debug, three tray quits): the
 # guest's systemd-shutdown synced, unmounted every filesystem, remounted /
@@ -5300,6 +5316,27 @@ mod tests {
         assert!(
             ok.contains("tillandsias-guest-upgrade ok installed_kernel=kernel-core-7.2.13"),
             "{ok}"
+        );
+    }
+
+    /// 2029-b87w: kernel fault reports must reach hvc0 without journald.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn provision_user_data_sends_kernel_faults_to_the_serial_console() {
+        let script = provision_user_data("off");
+        let conf = ["/etc/sysctl.d/", "90-tillandsias-console.conf"].concat();
+        let at = script.find(&conf).expect("the console sysctl drop-in");
+        let body = &script[at..];
+        for line in [
+            ["kernel.printk", " = 7 4 1 7"].concat(),
+            ["kernel.print-fatal-signals", " = 1"].concat(),
+            ["kernel.hung_task_timeout_secs", " = 60"].concat(),
+        ] {
+            assert!(body.contains(&line), "{line} missing");
+        }
+        assert!(
+            body.contains(&["sysctl --system", " >/dev/null"].concat()),
+            "applied now, not only next boot"
         );
     }
 

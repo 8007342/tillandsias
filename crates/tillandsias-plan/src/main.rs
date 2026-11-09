@@ -5262,7 +5262,20 @@ fn run_classify_bash(args: &[String]) -> ! {
             let c = bp::classify(cmd, &ctx);
             bp::log_decision(&ctx, cmd, c.verdict.as_str(), &c.rule, false);
             match c.verdict {
-                bp::Verdict::Allow => std::process::exit(0),
+                // ORDER 2065-baby (operator approval 2026-11-09): in a FORGE, a
+                // removal whose every target is inside a safe root is answered
+                // `allow`, so Claude Code's own deletion prompt does not stop
+                // it. Anything else stays silent and Claude Code decides.
+                bp::Verdict::Allow => {
+                    let roots = tillandsias_plan::safe_roots::SafeRoots::forge();
+                    if let Some(answer) =
+                        tillandsias_plan::safe_roots::hook_allow(ctx.host_kind, cmd, &cwd, &roots)
+                    {
+                        bp::log_decision(&ctx, cmd, "allow", "safe-root-removal", false);
+                        println!("{answer}");
+                    }
+                    std::process::exit(0);
+                }
                 bp::Verdict::Deny => {
                     eprintln!("{}", c.token);
                     if let Some(w) = &c.why {

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-browser-screenshot-returns-base64-not-a-file-2065-9hfj
+    order: 2065-9hfj
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [browser, mcp, forge]
+    estimated_hours: 4
+    title: "browser.screenshot returns raw base64; save a PNG under the forge or scratchpad and return its path"
+    context: "handle_browser_screenshot returns {data: base64}. The MCP runs host-side, so the PNG must be written forge-side. Reported 2026-11-09 by the demon_attack forge session (demon-attack-3e). Packet: plan/issues/forge-browser-screenshot-returns-base64-not-a-file-2026-11-09.md."
+    exit_criteria:
+      - "From a forge, browser.screenshot returns a path, and Read of it shows the page."
+    verifiable_closure: "From a forge, browser.screenshot returns a path, and Read of it shows the page."
+    unscoreable: 'none.'
+    next_action: "Pick the write side: the forge MCP shim, or a mounted host dir."
+    provenance: "Filed at macuahuitl-fedora's request (2026-11-09) by tlatoanis-macbook-air claude, from the demon-attack-3e forge session's report."
+    events:
+    - type: filed
+      ts: '2026-11-09T19:08:22Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the demon-attack-3e forge gap report"

@@ -149,6 +149,7 @@ COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-w
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-forge-codex.sh /usr/local/bin/entrypoint-forge-codex.sh
 COPY entrypoint-forge-antigravity.sh /usr/local/bin/entrypoint-forge-antigravity.sh
+COPY entrypoint-forge-copilot.sh /usr/local/bin/entrypoint-forge-copilot.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
 COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
@@ -157,6 +158,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
              /usr/local/bin/entrypoint-forge-codex.sh \
              /usr/local/bin/entrypoint-forge-antigravity.sh \
+             /usr/local/bin/entrypoint-forge-copilot.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/tillandsias-brew-shim-exec \
              /usr/local/bin/harness-supervisor \
@@ -214,6 +216,7 @@ COPY config-overlay/claude/settings.json /home/forge/.config-overlay/claude/sett
 # @trace spec:forge-environment-discoverability, order:1678-62p7
 # Antigravity reads MCP configuration from ~/.gemini/config/mcp_config.json.
 COPY config-overlay/antigravity/mcp_config.json /home/forge/.config-overlay/antigravity/mcp_config.json
+COPY config-overlay/copilot/mcp-config.json /home/forge/.config-overlay/copilot/mcp-config.json
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish

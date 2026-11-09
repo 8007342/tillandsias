@@ -16,6 +16,10 @@
 .antigravity.google
 # Antigravity CLI binary updater (exact observed Cloud Run service, order 307).
 antigravity-cli-auto-updater-974169037036.us-central1.run.app
+# 2063-nfag: the GitHub Copilot CLI lane (api.githubcopilot.com and its
+# individual/business/enterprise endpoints). Sign-in and the CLI release use
+# github.com and githubusercontent.com, already in the vcs and assets tiers.
+.githubcopilot.com
 .together.ai
 .groq.com
 .fireworks.ai

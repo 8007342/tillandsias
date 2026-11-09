@@ -7,7 +7,7 @@
 # launch or a paste-token prompt (operator directive 2026-07-12: clickable
 # URLs / pasted tokens spill escape garbage in forge terminals).
 #
-# Usage: provider-device-auth {claude|antigravity}
+# Usage: provider-device-auth {claude|antigravity|copilot}
 set -euo pipefail
 
 PROVIDER="${1:-}"
@@ -92,8 +92,37 @@ case "$PROVIDER" in
             wait "$_agy_pid" 2>/dev/null || true
         fi
         ;;
+    copilot)
+        # 2063-nfag (operator ruling 2026-11-08, option B): `copilot login
+        # --device-code` with COPILOT_HOME on /dev/shm (RAM). No credential
+        # store exists in a container, so copilot writes its token to a
+        # plaintext file under COPILOT_HOME; that file never leaves RAM. The
+        # credential files are archived into one opaque document (the file
+        # name is copilot's, not ours) and written straight to Vault below.
+        # The token's scopes are unverified; the operator chose this knowing it.
+        export COPILOT_HOME="${TILLANDSIAS_COPILOT_LOGIN_HOME:-/dev/shm/copilot-login-home}"
+        mkdir -p "$COPILOT_HOME" && chmod 700 "$COPILOT_HOME"
+        VAULT_PATH="secret/copilot/oauth"
+        require_copilot
+        if [[ ! -x "${COPILOT_BIN:-}" ]]; then
+            echo "ERROR: the GitHub Copilot CLI could not be installed or verified in the login container" >&2
+            echo "(it must match both the release digest and SHA256SUMS.txt; check egress for github.com)." >&2
+            exit 2
+        fi
+        "$COPILOT_BIN" login --device-code
+        # A token-shaped string must exist under COPILOT_HOME, or nothing is
+        # stored. grep -q prints nothing, so the token is never shown.
+        if ! grep -rqE '(gh[ousr]_|github_pat_)[A-Za-z0-9_]{20,}' "$COPILOT_HOME" 2>/dev/null; then
+            echo "ERROR: copilot login finished but stored no token under COPILOT_HOME" >&2
+            exit 3
+        fi
+        AUTH_FILE="$(dirname "$COPILOT_HOME")/copilot-credentials.tgz"
+        umask 077
+        tar -C "$COPILOT_HOME" --exclude=./session-state --exclude=./logs --exclude=./pkg \
+            -czf "$AUTH_FILE" .
+        ;;
     *)
-        echo "Usage: provider-device-auth {claude|antigravity}" >&2
+        echo "Usage: provider-device-auth {claude|antigravity|copilot}" >&2
         exit 64
         ;;
 esac
