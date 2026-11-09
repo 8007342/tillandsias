@@ -2408,7 +2408,25 @@ async fn reload_inner(project: &str, instance: &str, debug: bool) -> Result<Valu
         "" => None,
         dir => Some(validate_app_dir(dir)?),
     };
-    publish_locked(project, instance, runtime, app_dir.as_deref(), debug).await
+    publish_locked(project, instance, runtime, app_dir.as_deref(), debug)
+        .await
+        .map_err(|e| explain_reload_app_dir(e, app_dir.as_deref()))
+}
+
+/// Order 2065-pu7j: reload republishes the app_dir RECORDED when the preview
+/// started. When that directory has since been deleted (a Flutter clean, a
+/// removed worktree), the bare "not a directory" refusal read as if the
+/// agent had passed a bad argument to reload, which takes none. Name the
+/// recorded directory and the way out. The `invalid_app_dir: ` prefix is kept.
+fn explain_reload_app_dir(err: String, recorded: Option<&str>) -> String {
+    match recorded {
+        Some(dir) if err.starts_with("invalid_app_dir: ") => format!(
+            "{err}. preview.reload republishes the app_dir this preview was started with ({dir:?}), \
+             and that directory is gone; rebuild it, or call preview.start with the current app_dir \
+             (omit app_dir to publish the project root)"
+        ),
+        _ => err,
+    }
 }
 
 /// Called only after the launcher proves no forge remains for this lane. This
@@ -3265,6 +3283,23 @@ mod tests {
                 format!("invalid_app_dir: {dir:?} is not a directory in the project")
             );
         }
+    }
+
+    /// 2065-pu7j: a reload whose recorded app_dir vanished names that
+    /// directory and the way out; other errors pass through unchanged.
+    #[test]
+    fn a_reload_whose_recorded_app_dir_vanished_says_so() {
+        let gone = "invalid_app_dir: \"build/web\" is not a directory in the project".to_string();
+        let msg = explain_reload_app_dir(gone.clone(), Some("build/web"));
+        assert!(msg.starts_with(&gone), "{msg}");
+        assert!(msg.contains("started with (\"build/web\")"), "{msg}");
+        assert!(msg.contains("preview.start"), "{msg}");
+        assert_eq!(explain_reload_app_dir(gone.clone(), None), gone);
+        let other = "not_running: no preview to reload".to_string();
+        assert_eq!(
+            explain_reload_app_dir(other.clone(), Some("build/web")),
+            other
+        );
     }
 
     /// 1788-qlwq slice 11: a root-index app named by app_dir (a Flutter
