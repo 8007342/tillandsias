@@ -7425,8 +7425,8 @@ mod tests {
             Some(LeafAction::Copilot)
         );
         let max = LeafAction::ALL.iter().map(|a| a.offset()).max().unwrap();
-        assert!(max < PROJECT_LEAF_COUNT && PROJECT_SUBMENU_OFFSET >= PROJECT_LEAF_COUNT);
-        assert!(PROJECT_SUBMENU_OFFSET < 16);
+        assert!(max < PROJECT_LEAF_COUNT);
+        const { assert!(PROJECT_SUBMENU_OFFSET >= PROJECT_LEAF_COUNT && PROJECT_SUBMENU_OFFSET < 16) };
         assert_eq!(
             shared_id_to_int("project.cloud.alpha.copilot"),
             cloud_project_base("alpha") + LeafAction::Copilot.offset()
