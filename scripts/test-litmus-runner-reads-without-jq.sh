@@ -16,7 +16,9 @@
 #      prepends a cached toolbox-extracted yq ahead of PATH, so the first cut of
 #      this fixture shadowed only jq and passed pre-fix)
 # and asserts the SELECTION is byte-identical: the ordered `Executing
-# litmus:<name>` lines plus the `Total: N (executed: E, skipped: S)` line.
+# litmus:<name>` lines plus the `Total: N` count. The executed/skipped split
+# is a RUNTIME outcome (a live-state step may skip in one run), not the
+# selection, so it is not compared (2061-cpnt).
 # The stubs must have been reached in B (a log with no calls means the shadow
 # did not take, and the run proves nothing): blocked:stub-not-reached.
 #
@@ -44,8 +46,34 @@ export LITMUS_STUB_LOG="$scratch/calls.log"
 selection() {   # <log> -> the ordered selection, colour stripped
     sed 's/\x1b\[[0-9;]*m//g' "$1" \
         | grep -E '^ℹ Executing litmus:|^  Total: [0-9]+ \(executed: [0-9]+, skipped: [0-9]+\)' \
-        | sed 's/^ℹ Executing //'
+        | sed 's/^ℹ Executing //' \
+        | sed -E 's/^(  Total: [0-9]+) \(executed: [0-9]+, skipped: [0-9]+\)$/\1/'
 }
+
+# 2061-cpnt: a test that SKIPS at runtime in one run and not the other (a
+# live-state step) moves the executed/skipped split without changing the
+# selection; the land queue evicted #1036 on exactly that
+# ("Total: 45 (executed: 32, skipped: 13)" vs "(executed: 31, skipped: 14)").
+# The selection is the Executing lines plus Total N; the split is not compared.
+# Self-check on synthetic logs: a split-only change compares EQUAL, while a
+# changed Total or Executing list still DIFFERS (negative control). The
+# names are BUILT (a literal pin token is read as a claim by
+# check-litmus-pin-claims.sh).
+SPLIT_LP=litmus
+printf 'ℹ Executing %s:a\n  Total: 45 (executed: 32, skipped: 13)\n' "$SPLIT_LP" > "$scratch/split-a.log"
+printf 'ℹ Executing %s:a\n  Total: 45 (executed: 31, skipped: 14)\n' "$SPLIT_LP" > "$scratch/split-b.log"
+printf 'ℹ Executing %s:a\n  Total: 44 (executed: 31, skipped: 13)\n' "$SPLIT_LP" > "$scratch/split-n.log"
+printf 'ℹ Executing %s:b\n  Total: 45 (executed: 32, skipped: 13)\n' "$SPLIT_LP" > "$scratch/split-x.log"
+if [ "$(selection "$scratch/split-a.log")" != "$(selection "$scratch/split-b.log")" ]; then
+    echo "FAIL: a runtime skip (executed/skipped split only) was read as a selection difference (2061-cpnt)"
+    exit 1
+fi
+if [ "$(selection "$scratch/split-a.log")" = "$(selection "$scratch/split-n.log")" ] \
+    || [ "$(selection "$scratch/split-a.log")" = "$(selection "$scratch/split-x.log")" ]; then
+    echo "FAIL: control: a changed Total or Executing list compared equal (2061-cpnt)"
+    exit 1
+fi
+echo "ok:   split arm: a runtime skip is not a selection difference; Total and Executing still are"
 
 run() {   # <label> [PATH prefix]
     if [ -n "${2:-}" ]; then
