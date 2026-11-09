@@ -41,6 +41,8 @@ declared-closures
 declared-closures-check
 decompose
 dependencies-of
+# disk-preflight: order 1878-2cwt — D4 worktree eviction before a new worktree.
+disk-preflight
 # discipline: order 1443-w79y — branch-discipline seed (show|target|check-ref);
 #   order 1446-xqi6 adds install-hooks|raise|hook (per-project hook templates).
 discipline
