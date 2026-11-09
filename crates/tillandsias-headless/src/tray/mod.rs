@@ -329,6 +329,8 @@ enum LaunchKind {
     /// terminal. @trace spec:tray-ux
     Codex,
     Antigravity,
+    /// GitHub Copilot CLI lane (2063-nfag).
+    Copilot,
     Maintenance,
 }
 
@@ -2217,6 +2219,7 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                 LaunchKind::Codex => "--codex",
                 LaunchKind::OpenCode => "--opencode",
                 LaunchKind::Antigravity => "--antigravity",
+                LaunchKind::Copilot => "--copilot",
                 LaunchKind::Maintenance => "--bash",
                 LaunchKind::OpenCodeWeb => "--opencode-web",
                 LaunchKind::Observatorium => "--observatorium",
@@ -2416,7 +2419,11 @@ fn build_separator_item(id: i32) -> MenuNode {
 // | +4     | OpenCode Web    | 📐      |
 // | +5     | Observatorium   | 🔭      |
 // | +6     | Maintenance     | 🔧      |
-// | +7     | (submenu node)  | —       |
+// | +7     | Copilot         | 🛩️      |
+// | +8     | (submenu node)  | —       |
+//
+// Display order is `LeafAction::ALL` (Copilot after Antigravity); offsets
+// are ids only, so adding Copilot at +7 left every older id unchanged.
 //
 // Helpers: [`local_project_base`], [`cloud_project_base`], and
 // [`project_action_from_id`] are the only place this layout is encoded.
@@ -2426,17 +2433,19 @@ enum LeafAction {
     Codex,
     OpenCode,
     Antigravity,
+    Copilot,
     OpenCodeWeb,
     Observatorium,
     Maintenance,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 7] = [
+    const ALL: [LeafAction; 8] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
         LeafAction::Antigravity,
+        LeafAction::Copilot,
         LeafAction::OpenCodeWeb,
         LeafAction::Observatorium,
         LeafAction::Maintenance,
@@ -2451,6 +2460,7 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => 4,
             LeafAction::Observatorium => 5,
             LeafAction::Maintenance => 6,
+            LeafAction::Copilot => 7,
         }
     }
 
@@ -2460,6 +2470,7 @@ impl LeafAction {
             LeafAction::Codex => "\u{1F3D7}\u{FE0F} Codex",
             LeafAction::OpenCode => "\u{1F4BB} OpenCode",
             LeafAction::Antigravity => "\u{1FA90} Antigravity",
+            LeafAction::Copilot => "\u{1F6E9}\u{FE0F} Copilot",
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
             LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
@@ -2486,8 +2497,8 @@ const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
 /// that fallback in place. @trace spec:tray-ux
 const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
-const PROJECT_LEAF_COUNT: i32 = 7;
-const PROJECT_SUBMENU_OFFSET: i32 = 7;
+const PROJECT_LEAF_COUNT: i32 = 8;
+const PROJECT_SUBMENU_OFFSET: i32 = 8;
 
 /// Maximum number of cloud projects rendered as top-level entries inside the
 /// `☁️ Cloud >` submenu before an overflow item replaces the tail.
@@ -2547,7 +2558,7 @@ fn project_base(name: &str, scope: ProjectScope) -> i32 {
     let (lo, hi) = match scope {
         ProjectScope::Cloud => (CLOUD_BASE_LO, CLOUD_BASE_HI),
     };
-    // Quantise to multiples of 16 so leaf offsets (0..=5) never overflow
+    // Quantise to multiples of 16 so leaf offsets (0..=8) never overflow
     // into the next project's base.
     let span = ((hi - lo) / 16) as u32;
     let raw = (hash.finish() as u32) % span.max(1);
@@ -2582,7 +2593,7 @@ fn project_action_from_id(
 }
 
 // @trace spec:tray-minimal-ux
-/// Build the per-project submenu (seven leaves, no nesting).
+/// Build the per-project submenu (eight leaves, no nesting).
 ///
 /// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
 /// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
@@ -3006,6 +3017,7 @@ fn shared_id_to_int(id: &str) -> i32 {
                     "opencode-web" => 4,
                     "observatorium" => 5,
                     "maintenance" => 6,
+                    "copilot" => 7,
                     "" => PROJECT_SUBMENU_OFFSET,
                     _ => return fallback_menu_id(other),
                 };
@@ -3754,6 +3766,7 @@ impl DbusMenuIface {
                             LeafAction::Claude => LaunchKind::Claude,
                             LeafAction::OpenCode => LaunchKind::OpenCode,
                             LeafAction::Antigravity => LaunchKind::Antigravity,
+                            LeafAction::Copilot => LaunchKind::Copilot,
                             LeafAction::OpenCodeWeb => LaunchKind::OpenCodeWeb,
                             LeafAction::Observatorium => LaunchKind::Observatorium,
                             LeafAction::Maintenance => LaunchKind::Maintenance,
@@ -7374,10 +7387,10 @@ mod tests {
     }
 
     #[test]
-    fn project_submenu_has_seven_leaves_in_order() {
-        // Per-project submenus are 7-leaf flat menus: Claude, Codex,
-        // OpenCode, Antigravity, OpenCode Web, Observatorium, Maintenance.
-        // Order is locked by `LeafAction::offset`.
+    fn project_submenu_has_eight_leaves_in_order() {
+        // Per-project submenus are 8-leaf flat menus: Claude, Codex,
+        // OpenCode, Antigravity, Copilot (2063-nfag), OpenCode Web,
+        // Observatorium, Maintenance. Order is locked by `LeafAction::ALL`.
         let project = ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
@@ -7390,19 +7403,34 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
-        // Seven leaves, no sub-submenus.
-        assert_eq!(submenu.2.len(), 7);
+        assert_eq!(submenu.2.len(), 8);
         let leaf_labels = labels(&submenu);
-        // labels() walks the layout depth-first; index 0 is the submenu
-        // container, indices 1..=7 are the leaves in offset order.
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
         assert!(leaf_labels[2].contains("Codex"));
         assert!(leaf_labels[3].contains("OpenCode") && !leaf_labels[3].contains("Web"));
         assert!(leaf_labels[4].contains("Antigravity"));
-        assert!(leaf_labels[5].contains("OpenCode Web"));
-        assert!(leaf_labels[6].contains("Observatorium"));
-        assert!(leaf_labels[7].contains("Maintenance"));
+        assert!(leaf_labels[5].contains("Copilot"));
+        assert!(leaf_labels[6].contains("OpenCode Web"));
+        assert!(leaf_labels[7].contains("Observatorium"));
+        assert!(leaf_labels[8].contains("Maintenance"));
+    }
+
+    #[test]
+    fn copilot_leaf_id_round_trips_and_stays_inside_its_project() {
+        // 2063-nfag: the copilot leaf resolves back to Copilot, and no leaf or
+        // submenu id reaches the next project's base (stride 16).
+        assert_eq!(
+            LeafAction::from_offset(LeafAction::Copilot.offset()),
+            Some(LeafAction::Copilot)
+        );
+        let max = LeafAction::ALL.iter().map(|a| a.offset()).max().unwrap();
+        assert!(max < PROJECT_LEAF_COUNT && PROJECT_SUBMENU_OFFSET >= PROJECT_LEAF_COUNT);
+        assert!(PROJECT_SUBMENU_OFFSET < 16);
+        assert_eq!(
+            shared_id_to_int("project.cloud.alpha.copilot"),
+            cloud_project_base("alpha") + LeafAction::Copilot.offset()
+        );
     }
 
     #[test]

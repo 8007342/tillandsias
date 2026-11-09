@@ -120,7 +120,7 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 
 Every forge launcher MUST inject `TILLANDSIAS_AGENT` into the container with
 the identity of the harness it actually launches. The stable values are
-`opencode`, `opencode-web`, `claude`, `codex`, `antigravity`, and `terminal`.
+`opencode`, `opencode-web`, `claude`, `codex`, `antigravity`, `copilot`, and `terminal`.
 Launcher-provided identity MUST take precedence over compatibility defaults in
 deprecated entrypoint/profile helpers.
 
