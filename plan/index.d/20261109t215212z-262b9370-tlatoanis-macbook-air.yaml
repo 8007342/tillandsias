@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-src-tmpfs-fills-under-multi-agent-flutter-2065-5vcv
+    field: status
+    value: obsoleted
+    ts: "2026-11-09T21:52:12Z"
+    host: tlatoanis-macbook-air
+
+events:
+  - packet_id: forge-src-tmpfs-fills-under-multi-agent-flutter-2065-5vcv
+    event:
+      type: note
+      ts: "2026-11-09T21:52:12Z"
+      host: tlatoanis-macbook-air
+      summary: |-
+        DUPLICATE of 1878-2cwt (disk preflight and worktree eviction) and 1866-ubtc (src tmpfs pruning), plus openspec forge-storage task group 2 (disk-backed scratch); coordinator ruling 2026-11-09. Kept as the demon-attack-3e evidence.
