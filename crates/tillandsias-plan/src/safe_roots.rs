@@ -382,6 +382,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_symlinked_ancestor_is_not_a_safe_root() {
         let (_d, r, proj) = fixture();
