@@ -347,6 +347,10 @@ jobs:
               tillandsias-headless-aarch64-unknown-linux-musl; do
             result-plan/bin/tillandsias-plan script run scripts/lua/check-embedded-elf-arch.lua -- "release-artifacts/$bin" 2
           done
+          # ORDER 2055-grzz: rubberband and sox are GPL tools approved for the
+          # audio studio CONTAINER only; no release artefact may carry either,
+          # by name or embedded (the tray embeds its assets raw).
+          result-plan/bin/tillandsias-plan script run scripts/lua/check-audio-studio-bundle.lua -- release-artifacts
 
           # Smoke the host binary's headless mode (runs on this x86_64 runner).
           release-artifacts/tillandsias-linux-x86_64 --version

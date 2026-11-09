@@ -1,0 +1,45 @@
+# @trace order:2055-grzz
+name: litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools
+spec: local-web-preview
+phase: pre-build
+description: The audio studio appliance finds each of five planted faults (click, dropout, spectral hole, clipping, loop seam) at its planted range and nothing on a clean control; its tools validate before running, write provenance, and run with no network; the registry lists it as a tools-only sibling; no release artefact carries rubberband or sox
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains images/audio-studio/Containerfile, audio-tool.py and requirements.lock
+  - podman is available and can build images/audio-studio (first build pulls the pinned Python base and Debian packages; later runs reuse the layer cache); the detector runs in it with --network=none, never on the host
+
+critical_path:
+  - step: "five planted faults found at their ranges, the clean control (looped) silent, each planted fault asserted in the samples first"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-audio-studio-glitches.lua"
+    timeout_ms: 1800000
+    expected_behavior: "ok:audio-studio-glitches:11-arms"
+
+  - step: "each named transform runs in the appliance and does what it says by measurement: -20 LUFS, rubberband 1.5x duration, decodable opus and aac of the input's length, sox 22050 Hz; an existing output and a path outside /work/tmp/audio are refused inside"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-audio-studio-transforms.lua"
+    timeout_ms: 1800000
+    expected_behavior: "ok:audio-studio-transforms:7-arms"
+
+  - step: "the bundle check refuses rubberband/sox by name, by content, inside a .tar.gz and (with the image present) the image's own binaries renamed; text naming them passes; an empty bundle is never ok"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-audio-studio-bundle.lua"
+    timeout_ms: 300000
+    expected_behavior: "ok:audio-studio-bundle-fixture:"
+
+  - step: "the tools refuse bad calls before the appliance runs, write provenance naming tool versions, inputs and params, and the registry lists the audio studio as a tools-only sibling"
+    command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- audio_studio:: the_audio_studio_is_a_tools_only_sibling_listed_with_its_affordances 2>&1); grep -E 'test result' <<<\"$out\""
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 7 passed"
+
+observability:
+  traces:
+    - "@trace order:2055-grzz"
+  expected_log: "ok:audio-studio-glitches:11-arms"
+  log_fields:
+    spec: "local-web-preview"
+    test: "audio-studio-finds-planted-faults-and-ships-no-gpl-tools"
+    artifact: "images/audio-studio/ + crates/tillandsias-headless/src/audio_studio.rs + scripts/lua/test-audio-studio-glitches.lua + scripts/lua/check-audio-studio-bundle.lua"
+
+rollback:
+  on_failure: "read the FAIL lines: a planted fault missed or a finding of another kind names the detector stage in images/audio-studio/audio-tool.py; a premise refusal means the fixture's own generator changed"
+  command: "podman run --rm --network=none localhost/tillandsias-audio-studio:glitch-fixture versions"

@@ -65,6 +65,10 @@ pub(crate) struct Studio {
     /// A sibling's image; a forge studio's image is derived from its id.
     #[serde(default, rename = "image")]
     pub sibling_image: Option<String>,
+    /// 2055-grzz: a TOOLS-ONLY sibling (port 0, no window) lists the MCP
+    /// tools that drive it; empty for every windowed studio.
+    #[serde(default)]
+    pub tools: Vec<String>,
 }
 
 impl Studio {
@@ -78,6 +82,11 @@ impl Studio {
 
     pub(crate) fn is_sibling(&self) -> bool {
         self.kind.as_deref() == Some("sibling")
+    }
+
+    /// 2055-grzz: no window to open; the agent uses [`Studio::tools`].
+    pub(crate) fn is_tools_only(&self) -> bool {
+        !self.tools.is_empty()
     }
 }
 
@@ -136,6 +145,8 @@ pub(crate) struct StudioOption {
     pub recommended: bool,
     pub available: bool,
     pub note: Option<String>,
+    /// 2055-grzz: the MCP tools of a tools-only studio (empty otherwise).
+    pub tools: Vec<String>,
 }
 
 /// Every studio, with at most one `[Recommended]`: the first studio listing
@@ -157,6 +168,11 @@ pub(crate) fn options(framework: Option<&str>) -> Vec<StudioOption> {
                 Some("needs cloud account".to_string())
             } else if s.status != "ready" {
                 Some(format!("lane not built yet ({})", s.packet))
+            } else if s.is_tools_only() {
+                Some(format!(
+                    "no window to open: use the {} tools",
+                    s.tools.join(" and ")
+                ))
             } else {
                 None
             };
@@ -173,8 +189,9 @@ pub(crate) fn options(framework: Option<&str>) -> Vec<StudioOption> {
                 edits: s.edits.clone(),
                 license: s.license.clone(),
                 recommended: rec,
-                available: s.status == "ready",
+                available: s.status == "ready" && !s.is_tools_only(),
                 note,
+                tools: s.tools.clone(),
             }
         })
         .collect()
@@ -232,6 +249,17 @@ impl WebLane {
             return Err(format!(
                 "studio {} is listed but its lane is not built yet: order {} lands its image",
                 s.name, s.packet
+            ));
+        }
+        // 2055-grzz: a tools-only studio has no window to launch, and the
+        // sibling launcher would otherwise start the ComfyUI appliance for it.
+        if s.is_tools_only() {
+            return Err(format!(
+                "studio {} has no window to open: a forge agent uses the {} MCP tools \
+                 (each call runs the {} appliance with no network)",
+                s.name,
+                s.tools.join(" and "),
+                s.image()
             ));
         }
         Ok(Self {
@@ -660,11 +688,13 @@ mod tests {
     }
 
     #[test]
-    fn the_registry_lists_the_five_lanes_and_comfyui_and_never_silex() {
+    fn the_registry_lists_the_five_lanes_comfyui_and_audio_and_never_silex() {
         let ids: Vec<&str> = registry().studios.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(
             ids,
-            ["grapesjs", "decap", "tina", "puck", "onlook", "comfyui"]
+            [
+                "grapesjs", "decap", "tina", "puck", "onlook", "comfyui", "audio"
+            ]
         );
         assert!(registry().studios.iter().all(|s| !s.brief.is_empty()));
     }
@@ -811,6 +841,48 @@ mod tests {
         // NEGATIVE CONTROL: a forge studio is not a sibling.
         assert!(!find("grapesjs").unwrap().is_sibling());
         assert_eq!(find("grapesjs").unwrap().image(), "studio-grapesjs");
+    }
+
+    /// 2055-grzz: the audio studio is a TOOLS-ONLY sibling on its own image.
+    /// webstudio.options lists it with its affordances and tools, never
+    /// [Recommended] and not openable; webstudio.open (WebLane::studio) refuses
+    /// it by naming the tools, so the sibling launcher can never start the
+    /// ComfyUI appliance for it.
+    #[test]
+    fn the_audio_studio_is_a_tools_only_sibling_listed_with_its_affordances() {
+        let s = find("audio").expect("the registry declares the audio studio");
+        assert!(s.is_sibling() && s.is_tools_only());
+        assert_eq!(s.image(), crate::audio_studio::IMAGE);
+        assert_eq!(s.port, 0);
+        assert!(s.entry.is_empty());
+        assert_eq!(s.tools, ["audio.transform", "audio.detect_glitches"]);
+        let o = options(None).into_iter().find(|o| o.id == "audio").unwrap();
+        assert!(!o.good_for.is_empty() && !o.not_for.is_empty() && !o.edits.is_empty());
+        assert!(o.edits.contains("/work/tmp/audio"), "{}", o.edits);
+        assert!(!o.recommended && !o.available);
+        assert_eq!(o.tools, s.tools);
+        let note = o.note.unwrap();
+        assert!(note.contains("audio.detect_glitches"), "{note}");
+        for fw in [
+            Some("plain-html"),
+            Some("react"),
+            Some("next-tailwind"),
+            Some("markdown-ssg"),
+        ] {
+            assert!(
+                options(fw)
+                    .iter()
+                    .all(|o| !(o.id == "audio" && o.recommended))
+            );
+        }
+        let err = WebLane::studio("audio").unwrap_err();
+        assert!(
+            err.contains("no window") && err.contains("audio.transform"),
+            "{err}"
+        );
+        // NEGATIVE CONTROL: a windowed sibling has no tools and still opens.
+        assert!(!find("comfyui").unwrap().is_tools_only());
+        assert!(WebLane::studio("comfyui").is_ok());
     }
 
     #[test]
