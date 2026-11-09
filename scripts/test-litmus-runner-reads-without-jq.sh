@@ -56,11 +56,14 @@ selection() {   # <log> -> the ordered selection, colour stripped
 # ("Total: 45 (executed: 32, skipped: 13)" vs "(executed: 31, skipped: 14)").
 # The selection is the Executing lines plus Total N; the split is not compared.
 # Self-check on synthetic logs: a split-only change compares EQUAL, while a
-# changed Total or Executing list still DIFFERS (negative control).
-printf 'ℹ Executing litmus:a\n  Total: 45 (executed: 32, skipped: 13)\n' > "$scratch/split-a.log"
-printf 'ℹ Executing litmus:a\n  Total: 45 (executed: 31, skipped: 14)\n' > "$scratch/split-b.log"
-printf 'ℹ Executing litmus:a\n  Total: 44 (executed: 31, skipped: 13)\n' > "$scratch/split-n.log"
-printf 'ℹ Executing litmus:b\n  Total: 45 (executed: 32, skipped: 13)\n' > "$scratch/split-x.log"
+# changed Total or Executing list still DIFFERS (negative control). The
+# names are BUILT (a literal pin token is read as a claim by
+# check-litmus-pin-claims.sh).
+SPLIT_LP=litmus
+printf 'ℹ Executing %s:a\n  Total: 45 (executed: 32, skipped: 13)\n' "$SPLIT_LP" > "$scratch/split-a.log"
+printf 'ℹ Executing %s:a\n  Total: 45 (executed: 31, skipped: 14)\n' "$SPLIT_LP" > "$scratch/split-b.log"
+printf 'ℹ Executing %s:a\n  Total: 44 (executed: 31, skipped: 13)\n' "$SPLIT_LP" > "$scratch/split-n.log"
+printf 'ℹ Executing %s:b\n  Total: 45 (executed: 32, skipped: 13)\n' "$SPLIT_LP" > "$scratch/split-x.log"
 if [ "$(selection "$scratch/split-a.log")" != "$(selection "$scratch/split-b.log")" ]; then
     echo "FAIL: a runtime skip (executed/skipped split only) was read as a selection difference (2061-cpnt)"
     exit 1
