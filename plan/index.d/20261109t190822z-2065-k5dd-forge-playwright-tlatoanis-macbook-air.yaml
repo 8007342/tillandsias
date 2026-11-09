@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-has-no-playwright-for-smoke-scripts-2065-k5dd
+    order: 2065-k5dd
+    status: ready
+    kind: fix
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, browser, testing]
+    estimated_hours: 4
+    title: "The forge has no Playwright or browser, so project tools/*smoke*.cjs cannot run"
+    context: "Option (a) is shipping or caching Playwright in the forge; option (b) is a Playwright-compatible CDP endpoint backed by the enclave browser. Reported 2026-11-09 by the demon_attack forge session (demon-attack-3e). Packet: plan/issues/forge-has-no-playwright-for-smoke-scripts-2026-11-09.md."
+    exit_criteria:
+      - "node tools/<x>smoke.cjs runs to its own verdict in a forge against the local preview."
+    verifiable_closure: "node tools/<x>smoke.cjs runs to its own verdict in a forge against the local preview."
+    unscoreable: 'none.'
+    next_action: "Choose (a) or (b); (b) keeps the browser-isolation boundary."
+    provenance: "Filed at macuahuitl-fedora's request (2026-11-09) by tlatoanis-macbook-air claude, from the demon-attack-3e forge session's report."
+    events:
+    - type: filed
+      ts: '2026-11-09T19:08:22Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the demon-attack-3e forge gap report"
