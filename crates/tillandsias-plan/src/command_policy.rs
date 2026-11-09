@@ -536,6 +536,19 @@ fn unwrap_launcher(argv: &[String]) -> &[String] {
     argv.get(i..).unwrap_or(&[])
 }
 
+/// copilot options that take the next word, so `copilot -p login` is a
+/// prompt, not the login subcommand.
+const COPILOT_VALUE_FLAGS: &[&str] = &[
+    "-p",
+    "--prompt",
+    "--model",
+    "--agent",
+    "--add-dir",
+    "--log-dir",
+    "--log-level",
+    "--config-dir",
+];
+
 fn is_credential_mutation(argv: &[String]) -> Option<&'static str> {
     let argv = unwrap_launcher(argv);
     let prog = program_name(argv.first()?);
@@ -560,6 +573,16 @@ fn is_credential_mutation(argv: &[String]) -> Option<&'static str> {
             let w = positional_words(args, &[]);
             if w.first() == Some(&"login") {
                 return Some("vault");
+            }
+        }
+        // ORDER 2063-nfag: the vendor CLI's own sign-in. `copilot login`
+        // stores its token in a plaintext file under COPILOT_HOME when no
+        // credential store exists (every forge); the operator signs in with
+        // `tillandsias --copilot-login`, which harvests straight to Vault.
+        "copilot" => {
+            let w = positional_words(args, COPILOT_VALUE_FLAGS);
+            if matches!(w.first(), Some(&"login") | Some(&"logout")) {
+                return Some("copilot");
             }
         }
         // ORDER 2028-j4a7: the launcher's and the trays' sign-in flags
@@ -753,7 +776,7 @@ pub fn floor_decide(req: &Request, protected: &[String]) -> Option<Decision> {
     }
     if let Some(tool) = is_credential_mutation(&req.argv) {
         let remedy = match tool {
-            "gh" | "tillandsias" => {
+            "gh" | "tillandsias" | "copilot" => {
                 "agents never start or relay a sign-in flow: the OPERATOR signs in from \
                      the tray (2028-j4a7). Stop and report the credential step blocked; do \
                      not run the login, read its device code or relay it. A re-auth on one \
@@ -2131,6 +2154,41 @@ mod tests {
             &["tillandsias", "--version"],
             &["tillandsias", "--diagnose"],
             &["tillandsias-plan", "status", "2028-j4a7"],
+        ] {
+            assert_eq!(tok(a, HostKind::Forge), "ok:policy:allow:default", "{a:?}");
+        }
+    }
+
+    /// ORDER 2063-nfag. The copilot lane's sign-in is the operator's
+    /// `tillandsias --copilot-login` (device code, token straight to Vault).
+    /// An agent running the vendor CLI's own `copilot login` would leave the
+    /// token in a plaintext file under COPILOT_HOME, so it is refused too;
+    /// running copilot itself is not.
+    #[test]
+    fn an_agent_run_copilot_login_is_denied_and_running_copilot_is_not() {
+        for a in [
+            &["tillandsias", "--copilot-login"][..],
+            &["copilot", "login"],
+            &["copilot", "login", "--device-code"],
+            &["/usr/local/bin/copilot", "login", "--with-token"],
+            &["copilot", "logout"],
+            &["nohup", "copilot", "login"],
+            &["env", "COPILOT_HOME=/tmp/x", "copilot", "login"],
+        ] {
+            for k in [HostKind::Forge, HostKind::BareMetal] {
+                assert_eq!(
+                    tok(a, k),
+                    "refused:policy:no-credential-mutation",
+                    "{a:?} on {k:?}"
+                );
+            }
+        }
+        for a in [
+            &["copilot", "--version"][..],
+            &["copilot", "-p", "explain login flows"],
+            &["copilot", "-p", "login"],
+            &["copilot", "help", "environment"],
+            &["copilot", "--resume"],
         ] {
             assert_eq!(tok(a, HostKind::Forge), "ok:policy:allow:default", "{a:?}");
         }
