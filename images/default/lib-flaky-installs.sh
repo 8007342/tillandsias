@@ -92,11 +92,12 @@ real() {
     for p in \$PATH; do [ "\$p" = "\$shimdir" ] || rest="\${rest:+\$rest:}\$p"; done
     PATH="\$rest" command -v "\$tool"
 }
-deadline=\$(( \$(date +%s) + \${TILLANDSIAS_FLAKY_SHIM_WAIT_S:-30} ))
+# bash 5 EPOCHSECONDS: no date fork per poll (forge-helper-shell, 2063-nfag).
+deadline=\$(( EPOCHSECONDS + \${TILLANDSIAS_FLAKY_SHIM_WAIT_S:-30} ))
 while :; do
     r="\$(real)" && exec "\$r" "\$@"
     read -r state reason _ <"\$status" 2>/dev/null || state=absent
-    [ "\$state" = installing ] && [ "\$(date +%s)" -lt "\$deadline" ] || break
+    [ "\$state" = installing ] && [ "\$EPOCHSECONDS" -lt "\$deadline" ] || break
     sleep 1
 done
 case "\$state" in

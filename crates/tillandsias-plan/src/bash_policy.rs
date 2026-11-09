@@ -1034,6 +1034,9 @@ mod tests {
             "gh auth login --web",
             "gh auth refresh -s repo",
             "cd /x && tillandsias-tray --github-login",
+            // 2063-nfag: the copilot lane's sign-in, both shapes.
+            "tillandsias --copilot-login",
+            "copilot login --device-code > /tmp/c.log 2>&1 &",
         ] {
             let k = classify(cmd, &c);
             assert_eq!(k.verdict, Verdict::Deny, "{cmd}");

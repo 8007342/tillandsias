@@ -342,6 +342,7 @@ specs:
   - litmus:forge-plan-binary-on-path
   - litmus:npm-harness-install-idempotent-shape
   - litmus:forge-opencode-is-pinned
+  - litmus:forge-copilot-harness
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:provider-usage-limit
