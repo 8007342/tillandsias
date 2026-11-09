@@ -1,0 +1,6 @@
+# @trace spec:proxy-container, order:2041-jb57, order:2055-grzz
+# Egress tiers for this image (openspec change curated-egress-tiers).
+# Undeclared means none; scripts/lua/check-egress-declarations.lua refuses a
+# Containerfile directory without this file.
+tiers: [none]
+reason: the audio studio appliance runs each call with --network=none; stem and generative weights (2055-d9sa, 2055-dihg) come through the model-hubs tier in their own slices

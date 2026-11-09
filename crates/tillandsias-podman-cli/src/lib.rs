@@ -569,10 +569,21 @@ async fn raw(
     operation: OperationKind,
     argv: Vec<String>,
 ) -> Result<String, String> {
+    // ORDER 2061-cpnt: keep the stdout capture (callers parse it) and pass
+    // the call's stderr through, as the real podman would. Dropping it made
+    // `podman logs` of a container that logs to stderr (squid) read empty
+    // under the litmus runtime. A failure already carries its stderr in the
+    // error text, so it is not written twice.
     client
         .execute(operation, &argv)
         .await
-        .map(|output| output.stdout)
+        .map(|output| {
+            if !output.stderr.is_empty() {
+                use std::io::Write;
+                let _ = std::io::stderr().write_all(output.stderr.as_bytes());
+            }
+            output.stdout
+        })
         .map_err(|err| err.to_string())
 }
 

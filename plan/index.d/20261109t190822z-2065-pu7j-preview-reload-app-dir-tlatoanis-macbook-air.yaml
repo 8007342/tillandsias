@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-preview-reload-after-app-dir-deleted-2065-pu7j
+    order: 2065-pu7j
+    status: ready
+    kind: fix
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [preview, forge]
+    estimated_hours: 4
+    title: "preview.reload fails with a bare invalid_app_dir when the pinned app_dir was deleted; say so clearly, and consider falling back to the wrangler assets dir"
+    context: "reload republishes the recorded app_dir label; after a Flutter clean it is gone, the site 404s, and the refusal read as a bad argument. Reported 2026-11-09 by the demon_attack forge session (demon-attack-3e). Packet: plan/issues/forge-preview-reload-after-app-dir-deleted-2026-11-09.md."
+    exit_criteria:
+      - "The reload refusal names the recorded dir and the way out (done on work/2065-pu7j); the wrangler assets-dir fallback is ruled on."
+    verifiable_closure: "The reload refusal names the recorded dir and the way out (done on work/2065-pu7j); the wrangler assets-dir fallback is ruled on."
+    unscoreable: 'none.'
+    next_action: "Land work/2065-pu7j; ASK for a ruling on the wrangler assets fallback."
+    provenance: "Filed at macuahuitl-fedora's request (2026-11-09) by tlatoanis-macbook-air claude, from the demon-attack-3e forge session's report."
+    events:
+    - type: filed
+      ts: '2026-11-09T19:08:22Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the demon-attack-3e forge gap report"
