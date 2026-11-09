@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 at the coordinator's suggestion (macuahuitl-fedora). Code is cited by symbol, never by line.
+packets:
+  - packet_id: relay-preflight-runs-the-tray-listen-vsock-pass-when-any-headless-source-changes-not-only-tray
+    order: 2065-skdk
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, preflight, mcp]
+    estimated_hours: 1
+    owned_files:
+      - scripts/relay-preflight.sh
+    title: "relay-preflight runs its tray,listen-vsock cargo pass when any crates/tillandsias-headless/src file changes, not only src/tray/, so a change that adds an MCP tool is red at the preflight instead of being evicted at the land gate"
+    context: |
+      MEASURED 2026-11-08: #1034 (2055-grzz) passed ./build.sh --preflight on yoga, then the land gate evicted it. Under --features tray,listen-vsock, three tray::tests (the tools/list, socket browser-family and NDJSON handshake tests) pin the exact MCP tool count, and grzz's audio.transform and audio.detect_glitches took it from 49 to 51.
+      relay-preflight.sh sets _tray_touched only when the diff matches ^crates/tillandsias-headless/src/tray/. grzz changed mcp_socket.rs and audio_studio.rs, which supply the tool list those tests count, so the serial tray pass never ran. The --workspace pass does not build those tests.
+      Reproduce: on the grzz merge before fix 389af0219, `cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock` gave rc=101 (1489 passed, 3 failed).
+    exit_criteria:
+      - "A diff touching crates/tillandsias-headless/src/ outside tray/ (e.g. mcp_socket.rs) makes relay-preflight run cargo-test:tillandsias-headless+tray; `--plan` lists plan:crate:tillandsias-headless+tray,listen-vsock for it."
+      - "A diff touching no tillandsias-headless source still skips the pass (the cost stays scoped)."
+      - "A fixture shows both arms by --plan output, with a negative control: the unwidened trigger gives no tray line for an mcp_socket.rs-only diff."
+    verifiable_closure: "relay-preflight --plan on an mcp_socket.rs-only diff lists the tray,listen-vsock pass. Pre-fix result: it does not (grzz preflight green, land gate rc=101)."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds scripts/lua/test-relay-preflight-tray-trigger.lua (the --plan arms) in the same commit as the trigger change (1136-n8sh).
+    next_action: >
+      Widen the _tray_touched match in relay-preflight.sh to ^crates/tillandsias-headless/src/ and add the --plan fixture arms.
+    provenance: |
+      #1034 eviction relayed by macuahuitl-fedora 2026-11-08; yoga's rerun on work/2055-grzz merged with trunk 5e3092d18.
+    events:
+      - type: filed
+        ts: "2026-11-08T20:00:00Z"
+        host: yoga
+        summary: "filed at the coordinator's suggestion after #1034 was evicted on the tray count pins"

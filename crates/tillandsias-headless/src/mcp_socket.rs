@@ -487,6 +487,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::studio_tool::models_descriptor());
             // 1969-cfyt: the studio appliance, started on demand.
             tools.extend(crate::imagegen_studio::tool_descriptors());
+            // 2055-grzz: the audio studio appliance's tools, beside it.
+            tools.extend(crate::audio_studio::tool_descriptors());
             // 1956-26qh: the GPU-free family contract checker, beside it.
             tools.push(validate_family_descriptor());
             // 1957-emar: the GPU arbiter's status and unload, beside them.
@@ -703,6 +705,21 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             emit(line);
                         }
                     }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 2055-grzz: one audio studio call, one appliance container.
+                "audio.transform" | "audio.detect_glitches" => {
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    match crate::audio_studio::call(tool_name, project_label, instance, arguments)
+                        .unwrap_or_else(|| Err(format!("unknown tool {tool_name}")))
+                    {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),

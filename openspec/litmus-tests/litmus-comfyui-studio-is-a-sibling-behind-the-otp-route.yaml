@@ -18,7 +18,7 @@ critical_path:
   - step: "the registry JSON (with the comfyui sibling row) is what registry.lua generates, and the generator's sibling rules held"
     command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/build-studio-registry.lua -- --check"
     timeout_ms: 10000
-    expected_behavior: "ok:studio-registry:fresh:6"
+    expected_behavior: "ok:studio-registry:fresh:7"
 
   - step: "comfyui is a ready sibling lane on imagegen-studio:8188 routed as studio.<label>; its argv has no -p/--publish and mounts /models read-only"
     command: "out=$(cargo test -q --bin tillandsias --features tray,listen-vsock -- comfyui_is_a_ready_sibling_lane_on_its_own_image the_studio_is_absent_by_default_and_resolves_with_the_shared_cache_when_enabled 2>&1); grep -E 'test result' <<<\"$out\""
