@@ -54,6 +54,10 @@ RUN apk add --no-cache squid openssl bash ca-certificates socat \
 
 COPY squid.conf /etc/squid/squid.conf
 COPY allowlist.txt /etc/squid/allowlist.txt
+# 2041-i3nk part 2: the tier files, each loaded on its own port, and the
+# generated per-tier port include (scripts/lua/build-proxy-allowlist.lua).
+COPY tiers/ /etc/squid/tiers/
+COPY tier-ports.conf /etc/squid/tier-ports.conf
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # @trace spec:proxy-container
 # 767-es4w: crash supervision for squid. PID 1 is the supervisor, squid is its
@@ -76,7 +80,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/squid-supervisor
 RUN test "$(id -u proxy):$(id -g proxy)" = "1000:1000"
 USER 1000:1000
 
-EXPOSE 3128 3129
+EXPOSE 3128 3129 3130 3131 3132 3133 3134 3135
 
 # @trace spec:proxy-container, spec:socket-container-orchestration
 # 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800). No startup

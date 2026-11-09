@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-github-copilot-harness-lane-at-parity-with-the-codex-claude-and-antigravity-lanes
+    event:
+      type: decision
+      ts: "2026-11-08T19:15:16Z"
+      agent_id: linux-lenovinha-opus5-20261108t191516z
+      host: lenovinha
+      summary: |
+        LICENCE ACCEPTANCE, recorded here because the accept-licence flow (licence_consent.rs, licences/acknowledgements/) gates model-weight fetches and does not cover a CLI. Licence: LicenseRef-GitHub-Copilot-CLI, the "GitHub Copilot CLI License" (github/copilot-cli LICENSE.md, text sha256 c694e2d9b3f3bb40704ca9bdc823dc90269999ab4c013dfd8a52c407046074b4, 3553 bytes, last changed in commit 6c98eb0bd64f). Accepted 2026-11-08 by the operator for their use, given first-hand to the coordinator session (macuahuitl-fedora) and relayed to lenovinha; recorded as "operator, coordinator session". RULING ON DISTRIBUTION: the CLI is fetched at launch from releases/latest, verified against SHA256SUMS.txt, with last-good rollback, and is never baked into an image. Not signed: no approval key is enrolled on this host.
