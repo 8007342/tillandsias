@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: guest-podman-wedges-on-its-database-lock-with-defunct-podman-children-2066-fxbh
+    order: 2066-fxbh
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vm, podman]
+    estimated_hours: 3
+    title: "macOS guest: podman wedges on 'database is locked', with defunct [podman] children up to 20 h old"
+    context: "On 2026-11-09, podman ps in the guest timed out at 20 s with 'beginning transaction: database is locked'. Four defunct [podman] children were present (the oldest 71698 s), under a 'podman events --format json' running since boot. Evidence: plan/issues/macos-vz-guest-storage-probe-2026-11-09.md (work/2066-395p)."
+    exit_criteria:
+      - "The holder of the lock is named, and a fix keeps podman ps under 2 s after a day of uptime."
+    verifiable_closure: "The holder of the lock is named, and a fix keeps podman ps under 2 s after a day of uptime."
+    unscoreable: 'none.'
+    next_action: "Identify the lock holder (lsof on /var/lib/containers/storage/db.sql in the guest), and why its children are not reaped."
+    provenance: "Measured by tlatoanis-macbook-air claude, 2026-11-09, at macuahuitl-fedora's ruling (c) on 2065-5vcv."
+    events:
+    - type: filed
+      ts: '2026-11-09T22:00:57Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the read-only macOS guest storage probe"
