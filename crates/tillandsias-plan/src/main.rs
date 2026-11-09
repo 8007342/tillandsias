@@ -89,6 +89,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "declared-closures-check",
     "dependencies-of",
     "decompose",
+    "disk-preflight",
     "discipline",
     "policy",
     "expert-context-pack",
@@ -386,6 +387,13 @@ const USAGE: &str = concat!(
     "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
+    "           disk-preflight [--repo D] [--target D] [--l0] [--dry-run]\n",
+    "                                     ORDER 1878-2cwt. Before a new worktree: when free\n",
+    "                                     space on --target (default --repo, default .) is\n",
+    "                                     below max(2 GiB, 15%) (--l0: 25%), evict CLEAN and\n",
+    "                                     PUSHED worktrees, oldest HEAD first. Prints ok:disk-\n",
+    "                                     preflight:... (exit 0) or refused:disk-low:<path>:<free>\n",
+    "                                     (exit 1). Never evicts dirty or unpushed worktrees.\n",
     "           decompose <query...>      adversarial query decomposition via LLM\n",
     "                                     (order 920-pxg6). Returns a JSON array of\n",
     "                                     {prompt, kind} variants for concurrent dispatch.\n",
@@ -9330,6 +9338,67 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // was observed — an index reached through a probe path yielded
             // confidence=exact with a citation `verify-answer` refused.
             emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
+        }
+        "disk-preflight" => {
+            use tillandsias_plan::disk_preflight as dp;
+            let mut repo = PathBuf::from(".");
+            let mut target: Option<PathBuf> = None;
+            let (mut l0, mut dry) = (false, false);
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--repo" | "--target" if i + 1 < args.len() => {
+                        let v = PathBuf::from(&args[i + 1]);
+                        if args[i] == "--repo" {
+                            repo = v
+                        } else {
+                            target = Some(v)
+                        }
+                        i += 1;
+                    }
+                    "--l0" => l0 = true,
+                    "--dry-run" => dry = true,
+                    other => {
+                        eprintln!(
+                            "usage: tillandsias-plan disk-preflight [--repo D] [--target D] [--l0] [--dry-run] (unknown {other:?})"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+            let target = target.unwrap_or_else(|| repo.clone());
+            let Some(wts) = dp::list_worktrees(&repo) else {
+                println!("refused:disk-preflight:not-a-repo:{}", repo.display());
+                std::process::exit(2);
+            };
+            let out = dp::run(
+                &wts,
+                l0,
+                || dp::space_of(&target),
+                |p| {
+                    if dry {
+                        println!("would-evict:{}", p.display());
+                        true
+                    } else {
+                        dp::remove_worktree(&repo, p)
+                    }
+                },
+            );
+            for p in match &out {
+                dp::Outcome::Ok { evicted, .. } | dp::Outcome::DiskLow { evicted, .. } if !dry => {
+                    evicted.as_slice()
+                }
+                _ => &[],
+            } {
+                println!("evicted:{}", p.display());
+            }
+            println!("{}", dp::verdict(&target, &out));
+            std::process::exit(if matches!(out, dp::Outcome::Ok { .. }) {
+                0
+            } else {
+                1
+            });
         }
         "decompose" => {
             // ORDER 920-pxg6. LLM-based adversarial query decomposition.
