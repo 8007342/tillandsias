@@ -1517,6 +1517,14 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 /// never wipes the disk out from under a running tray's VM.
 ///
 /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+/// ORDER 1315-d4qd: the HARD reset needs BOTH roots without a fallback.
+pub(crate) fn hard_reset_roots(
+    image: Result<PathBuf, String>,
+    cache: Result<PathBuf, String>,
+) -> Result<(PathBuf, PathBuf), String> {
+    Ok((image?, cache?))
+}
+
 pub fn reset_guest_main() -> i32 {
     // ORDER 1574-mrst: HARD needs a per-run approval and a reachable Keychain,
     // and clears the vault Keychain items, fallbacks and vault-data after the
@@ -1524,8 +1532,20 @@ pub fn reset_guest_main() -> i32 {
     use tillandsias_core::reset_state as rs;
     let approve_arg = std::env::args().any(|a| a == rs::HARD_APPROVAL_ARG);
     let env = std::env::var(rs::HARD_APPROVAL_ENV).ok();
-    let cache_root = tillandsias_core::cache_root::cache_root();
-    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    // ORDER 1315-d4qd: both roots resolve with NO silent default, before the
+    // gate and the announcement — a HARD reset announced from /tmp or the temp
+    // dir is a false report even if nothing is removed.
+    let (root, cache_root) = match hard_reset_roots(
+        crate::diagnose::image_root_for_destruction(),
+        tillandsias_core::cache_root::cache_root_for_destruction(),
+    ) {
+        Ok(r) => r,
+        Err(err) => {
+            eprintln!("[reset-guest] RESULT: REFUSED \u{2014} {err}");
+            return 1;
+        }
+    };
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, root);
     if let Err(err) = crate::reset_state::run_hard_reset_in(
         approve_arg,
         env.as_deref(),
@@ -3953,6 +3973,23 @@ mod tests {
             fs_stall_report_line(FS_STALL_UNCHECKED),
             "Guest filesystem: NOT CHECKED — unchecked:plain-diagnose-is-guest-free"
         );
+    }
+
+    /// 1315-d4qd: --reset-guest refuses when EITHER root would be a fallback.
+    #[test]
+    fn hard_reset_refuses_a_fallback_image_or_cache_root() {
+        use std::path::PathBuf;
+        let ok = || Ok::<PathBuf, String>(PathBuf::from("/r"));
+        let no = |m: &str| Err::<PathBuf, String>(m.to_string());
+        assert_eq!(
+            super::hard_reset_roots(no("refused:reset-state:no-home"), ok()).unwrap_err(),
+            "refused:reset-state:no-home"
+        );
+        assert_eq!(
+            super::hard_reset_roots(ok(), no("refused:reset-state:no-cache-root")).unwrap_err(),
+            "refused:reset-state:no-cache-root"
+        );
+        assert!(super::hard_reset_roots(ok(), ok()).is_ok());
     }
 
     /// Plain --diagnose stays guest-free: the collector never runs the check.
