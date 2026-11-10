@@ -28,6 +28,8 @@
 //           {"winch": [rows, cols]}
 //       Down (host -> shim):
 //           {"out": "<base64>", "fd": 1|2}  {"exit": <code>}
+//           {"hb": 1} every heartbeat_s (in the result) while the program runs;
+//       the shim calls four missed beats a silent host (2069-f58n).
 //       A tty session merges stdout/stderr on fd 1 through a host pty, so
 //       Ctrl-C and `r`/`R` reach `flutter run` as bytes; a non-tty session
 //       keeps the streams apart and forwards signals to podman, whose
@@ -703,6 +705,7 @@ pub(crate) fn serve_exec(
         cols: req.cols,
         label: format!("{project}/{name}"),
         notice,
+        heartbeat: HEARTBEAT,
     };
     run_session(&frames, id, reader, &session, spawn);
     if dev_server.is_some()
@@ -727,6 +730,9 @@ struct Session {
     label: String,
     /// Sent to the shim once, right after the session starts.
     notice: Option<String>,
+    /// How often the host proves it is alive while the program is quiet
+    /// (2069-f58n). Advertised in the result as `heartbeat_s`.
+    heartbeat: Duration,
 }
 
 /// The session engine: spawn through `spawn` (podman in production, any
@@ -781,7 +787,11 @@ fn run_session<F>(
     );
     if !frames.send(&json!({
         "jsonrpc": "2.0", "id": id,
-        "result": {"session": session.label, "tty": session.tty},
+        "result": {
+            "session": session.label,
+            "tty": session.tty,
+            "heartbeat_s": session.heartbeat.as_secs_f64(),
+        },
     })) {
         signal_child(&child, nix::sys::signal::Signal::SIGTERM);
         let _ = child.wait();
@@ -790,6 +800,20 @@ fn run_session<F>(
     if let Some(notice) = &session.notice {
         frames.send(&json!({"notice": notice}));
     }
+    let beating = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    {
+        let (f, beating, every) = (frames.clone(), beating.clone(), session.heartbeat);
+        std::thread::spawn(move || {
+            while beating.load(std::sync::atomic::Ordering::Relaxed) {
+                std::thread::sleep(every);
+                if !beating.load(std::sync::atomic::Ordering::Relaxed) || !f.send(&json!({"hb": 1}))
+                {
+                    return;
+                }
+            }
+        });
+    }
+    let _stop_beating = StopOnDrop(beating);
 
     // Output: the pty master, or stdout and stderr separately.
     let mut pumps = Vec::new();
@@ -924,6 +948,19 @@ fn run_session<F>(
         code,
         "toolchain session finished"
     );
+}
+
+/// 2069-f58n: the session heartbeat. The shim treats four missed beats as a
+/// silent host and fails with `host_lane=silent`.
+const HEARTBEAT: Duration = Duration::from_secs(5);
+
+/// Stops the heartbeat thread when the session ends, on every return path.
+struct StopOnDrop(Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for StopOnDrop {
+    fn drop(&mut self) {
+        self.0.store(false, std::sync::atomic::Ordering::Relaxed);
+    }
 }
 
 static SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -1188,6 +1225,15 @@ mod tests {
     /// exec session through the REAL engine, with `sh -c <script>` in place
     /// of podman. Returns the socket path.
     fn fake_host(dir: &std::path::Path, script: &'static str) -> std::path::PathBuf {
+        fake_host_with(dir, script, HEARTBEAT)
+    }
+
+    /// [`fake_host`] with a chosen session heartbeat.
+    fn fake_host_with(
+        dir: &std::path::Path,
+        script: &'static str,
+        heartbeat: Duration,
+    ) -> std::path::PathBuf {
         let sock = dir.join("mcp.sock");
         let listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
         std::thread::spawn(move || {
@@ -1210,6 +1256,7 @@ mod tests {
                             cols: parsed.cols,
                             label: "test".into(),
                             notice: Some("hello from the host".into()),
+                            heartbeat,
                         };
                         let argv = parsed.argv.clone();
                         run_session(&frames, &req["id"], reader, &session, |i, o, e| {
@@ -1855,5 +1902,131 @@ mod tests {
             crate::image_build_progress::progress_in_log("flutter", log),
             Some((12, 14, "copying files".to_string()))
         );
+    }
+
+    /// 2069-f58n: a lane host that accepts, reads each request, answers
+    /// `toolchain_prepare` with ready when `ready_prepare`, answers an exec
+    /// with `exec_reply` when given, then holds the connection open and says
+    /// nothing more: the half-dead host of a tray handover.
+    fn silent_host(
+        dir: &std::path::Path,
+        ready_prepare: bool,
+        exec_reply: Option<Value>,
+    ) -> std::path::PathBuf {
+        let sock = dir.join("silent.sock");
+        let listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            for stream in listener.incoming() {
+                let Ok(stream) = stream else { return };
+                let mut writer = stream.try_clone().unwrap();
+                let mut reader = std::io::BufReader::new(stream);
+                let mut line = String::new();
+                if reader.read_line(&mut line).unwrap_or(0) == 0 {
+                    continue;
+                }
+                let req: Value = serde_json::from_str(line.trim()).unwrap();
+                let answer = if req["method"] == "tillandsias/exec" {
+                    exec_reply
+                        .clone()
+                        .map(|r| json!({"jsonrpc": "2.0", "id": req["id"], "result": r}))
+                } else if ready_prepare {
+                    Some(
+                        json!({"jsonrpc": "2.0", "id": req["id"], "result": tillandsias_browser_mcp::framing::tool_result_content(json!({"state": "ready"}))}),
+                    )
+                } else {
+                    None
+                };
+                if let Some(a) = answer {
+                    let _ = writeln!(writer, "{a}");
+                }
+                held.push((reader, writer));
+            }
+        });
+        sock
+    }
+
+    /// Run `cmd` for at most `limit`; a run past it is killed and reported
+    /// as `None`, so a regression to the old hang fails instead of hanging.
+    fn output_within(
+        mut cmd: std::process::Command,
+        limit: Duration,
+    ) -> Option<std::process::Output> {
+        let mut child = cmd
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + limit;
+        while Instant::now() < deadline {
+            if let Ok(Some(_)) = child.try_wait() {
+                return Some(child.wait_with_output().unwrap());
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        None
+    }
+
+    /// The shim's "the host cannot run it" exit (EX_UNAVAILABLE).
+    const UNAVAILABLE_EXIT: i32 = 69;
+
+    /// 2069-f58n: a host that accepted the prepare request and never answered
+    /// held the client in S with 0 s CPU for 40 min. It must name the silent
+    /// host and exit 69 within the reply timeout.
+    #[test]
+    fn shim_names_a_host_that_accepts_and_never_answers() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = silent_host(dir.path(), false, None);
+        let Some(mut cmd) = shim(dir.path(), &sock, &["test", "-j", "2"]) else {
+            eprintln!("skip: no python3");
+            return;
+        };
+        cmd.env("TILLANDSIAS_FLUTTER_LANE_REPLY_TIMEOUT_S", "1");
+        let out = output_within(cmd, Duration::from_secs(20))
+            .expect("the shim hung on a host that never answered");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(UNAVAILABLE_EXIT), "{stderr}");
+        assert!(stderr.contains("host_lane=silent"), "{stderr}");
+        assert!(stderr.contains("toolchain_prepare"), "{stderr}");
+    }
+
+    /// 2069-f58n: a session the host started with a heartbeat promise, then
+    /// went silent on, is named as such instead of held forever.
+    #[test]
+    fn shim_names_a_host_that_goes_silent_mid_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = silent_host(
+            dir.path(),
+            true,
+            Some(json!({"session": "test", "tty": false, "heartbeat_s": 0.25})),
+        );
+        let Some(cmd) = shim(dir.path(), &sock, &["test", "-j", "2"]) else {
+            eprintln!("skip: no python3");
+            return;
+        };
+        let out = output_within(cmd, Duration::from_secs(20))
+            .expect("the shim hung on a session that went silent");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(UNAVAILABLE_EXIT), "{stderr}");
+        assert!(stderr.contains("host_lane=silent"), "{stderr}");
+    }
+
+    /// 2069-f58n: the host's heartbeat keeps a long, quiet, healthy session
+    /// alive past the client's silence limit (four heartbeats).
+    #[test]
+    fn a_quiet_session_survives_on_heartbeats() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = fake_host_with(dir.path(), "sleep 3; echo done", Duration::from_millis(250));
+        let Some(cmd) = shim(dir.path(), &sock, &["test"]) else {
+            eprintln!("skip: no python3");
+            return;
+        };
+        let out = output_within(cmd, Duration::from_secs(20)).expect("the shim hung");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(0), "{stderr}");
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "done\n", "{stderr}");
     }
 }
