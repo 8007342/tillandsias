@@ -1,0 +1,29 @@
+# @trace order:2068-eeti, order:2055-d9sa
+# THE DEMUCS WEIGHT MANIFEST, read by crates/tillandsias-headless/src/audio_separate.rs.
+# One row per FILE audio.separate needs, pinned by publisher revision, sha256 and size.
+# NONE of these files is ever baked into an image or redistributed by Tillandsias:
+# they are fetched on the user's own machine by the restricted fetch (order
+# 2068-ypgq), after the project's licence acknowledgement and the user's yes,
+# through the model-hubs tier, into the shared model cache at
+#   <models_dir>/audio/demucs/<file>
+# which the separator (order 2068-cqis) mounts read-only.
+#
+# Columns (tab-separated):
+#   model       the audio.separate model name: htdemucs | htdemucs_6s
+#   repo        Hugging Face id (the maintainer's own repos)
+#   revision    the Hub commit the file is pinned at
+#   file        the file in that repo, and its path under audio/demucs/
+#   sha256      the Hub's LFS sha256 (?blobs=true)
+#   bytes       size
+#   licence     licence id; demucs-weights-unstated is RESTRICTED (the restricted
+#               register carries its terms, quoting the maintainer's README)
+#   source      the model card
+#
+# SAFETENSORS ONLY (coordinator ruling 2026-11-10): these are the maintainer's
+# own exports, class and init args as JSON in the safetensors metadata, read
+# from the Hub API on 2026-11-10. Each corresponds to the upstream pickle
+# (.th) the Demucs package downloads; that pickle is never fetched or loaded:
+#   htdemucs     955717e8-8726e21a.th  ->  adefossez/HTDemucs 955717e8.safetensors
+#   htdemucs_6s  5c90dfd2-34c22ccb.th  ->  adefossez/HTDemucs-6s 5c90dfd2.safetensors
+htdemucs	adefossez/HTDemucs	cbc8a9b1a87023b7fd74e7b3412e6321c0eab003	955717e8.safetensors	d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd	84025440	demucs-weights-unstated	https://huggingface.co/adefossez/HTDemucs
+htdemucs_6s	adefossez/HTDemucs-6s	3c5ee475be622df764938de97e4281a7b07ffa58	5c90dfd2.safetensors	d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411	54885744	demucs-weights-unstated	https://huggingface.co/adefossez/HTDemucs-6s

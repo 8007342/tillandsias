@@ -23,8 +23,9 @@
 //! - No GPU: this slice's tools run on the CPU, so they never take the GPU
 //!   queue (gpu_queue.rs). Stem separation (2055-d9sa) and the generative
 //!   tools (2055-dihg) are GPU work and go through it.
-//! - No egress and no model weights here; those slices bring theirs through
-//!   the model-hubs tier.
+//! - No egress and no model weights here; audio.separate (audio_separate.rs,
+//!   2068-eeti) fetches its licensed weights on the host through
+//!   the model-hubs tier, behind the licence gate.
 #![cfg_attr(not(feature = "host-services"), allow(dead_code))]
 
 /// The appliance image (images/audio-studio).
@@ -472,6 +473,11 @@ mod tools {
         instance: &str,
         args: &Value,
     ) -> Option<Result<Value, String>> {
+        if name == "audio.separate" {
+            // 2068-eeti: the licence gate and the weights fetch come before
+            // any image is built; the separator is 2068-cqis.
+            return Some(crate::audio_separate::separate(project, instance, args));
+        }
         if name != "audio.transform" && name != "audio.detect_glitches" {
             return None;
         }
@@ -535,6 +541,7 @@ mod tools {
                     "required": ["input"]
                 }
             }),
+            crate::audio_separate::tool_descriptor(),
         ]
     }
 }

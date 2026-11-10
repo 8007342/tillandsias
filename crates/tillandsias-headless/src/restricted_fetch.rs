@@ -20,9 +20,6 @@
 //!
 //! A file whose sha256 differs from the register is discarded
 //! (`model_digest_mismatch`) and leaves nothing in the cache.
-// The first production caller is audio.separate (order 2068-eeti); until it lands
-// only this module's fixture calls fetch_restricted.
-#![allow(dead_code)]
 
 use std::fs;
 use std::io::Write;
@@ -276,7 +273,7 @@ fn fetch_one(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::licence_consent::Acknowledgement;
     use crate::licence_consent::tests::{disk_scratch, enrol, sign};
@@ -297,12 +294,12 @@ mod tests {
 
     /// A stand-in Hugging Face: `GET /<repo>/resolve/<rev>/<file>` answers the
     /// bytes it was given, anything else 404. Counts every request.
-    struct Hub {
-        port: u16,
-        hits: Arc<AtomicUsize>,
+    pub(crate) struct Hub {
+        pub(crate) port: u16,
+        pub(crate) hits: Arc<AtomicUsize>,
     }
 
-    fn hub(files: HashMap<String, Vec<u8>>) -> Hub {
+    pub(crate) fn hub(files: HashMap<String, Vec<u8>>) -> Hub {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = l.local_addr().unwrap().port();
         let hits = Arc::new(AtomicUsize::new(0));
@@ -337,8 +334,8 @@ mod tests {
 
     /// Moves the bytes of the pinned URL from the stand-in hub, as curl would
     /// through the tier port; verifying is the fetcher's job, not this one's.
-    struct HubTransport {
-        port: u16,
+    pub(crate) struct HubTransport {
+        pub(crate) port: u16,
     }
     impl Transport for HubTransport {
         fn fetch(&self, url: &str, dest: &Path, on: &mut dyn FnMut(u8)) -> Result<(), String> {
@@ -402,7 +399,7 @@ mod tests {
         }
     }
 
-    fn files_under(dir: &Path) -> Vec<String> {
+    pub(crate) fn files_under(dir: &Path) -> Vec<String> {
         let mut out = Vec::new();
         let mut stack = vec![dir.to_path_buf()];
         while let Some(d) = stack.pop() {
