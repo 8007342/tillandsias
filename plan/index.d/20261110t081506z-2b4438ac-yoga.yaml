@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: decide-the-fixed-layer-additions-term-dumb-and-git-config-nosystem
+    event:
+      type: progress
+      ts: "2026-11-10T08:15:06Z"
+      agent_id: linux-yoga-opus5-20261110t081506z
+      host: yoga
+      summary: |-
+        (Replaces the empty progress event at 2026-11-10T08:14:26Z, written when its summary file did not exist.) MEASURED on yoga 2026-11-10 at trunk e9841e243 (Silverblue, no /etc/gitconfig). Population: the 152 scripts/lua/test-*.lua fixtures (the fixed layer reaches only Lua-door children). Reading rule, fixed before the run: a fixture CHANGES when its rc or stdout differs from base; stderr counted separately; fixtures whose base and base2 runs differ are excluded and listed. Command: three tillandsias-plan release binaries differing only in child_env.rs ENV_FIXED (+("TERM","dumb"), +("GIT_CONFIG_NOSYSTEM","1")); per fixture `PATH=<dir with tillandsias-plan -> B>:$PATH TILLANDSIAS_PLAN_BIN=B timeout 300 B script run <t>` with TERM=xterm-256color on the runner; passes base, base2, term, nosys. A probe confirmed the door child saw TERM unset (base) vs TERM=dumb. RESULT: 19 noisy (stdout varies run to run; verdict and rc identical across all four passes except test-gate-step-pipe-holder, rc 1 once at base then 0). TERM=dumb: 0 of 133 changed (rc, stdout, stderr). GIT_CONFIG_NOSYSTEM=1: 0 of 133, a no-op BY CONSTRUCTION here (no system gitconfig). Proposed: TERM=dumb NO (TERM is class B, never inherited, so children already see it unset; nothing measured to gain). GIT_CONFIG_NOSYSTEM pending a darwin pass on a host with a system gitconfig (Apple git), requested of macbookair-macos; the yes/no goes into design.md then.
