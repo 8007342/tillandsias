@@ -21,9 +21,12 @@ critical_path:
     command: "grep -F 'Dashboard is a read-only projection' openspec/specs/observability-convergence/spec.md && grep -F 'Dashboard alert thresholds' openspec/specs/observability-convergence/spec.md && grep -F 'Dashboard trend metrics' openspec/specs/observability-convergence/spec.md"
     timeout_ms: 3000
 
-  - step: "the CentiColon dashboard is not committed: the renderer defaults to target/convergence (2066-obsv)"
-    command: "test ! -e docs/convergence/centicolon-dashboard.md && test ! -e docs/convergence/centicolon-dashboard.json && grep -qF 'MD_OUT=\"${MD_OUT:-$TARGET_DIR/centicolon-dashboard.md}\"' scripts/update-convergence-dashboard.sh && grep -qF 'JSON_OUT=\"${JSON_OUT:-$TARGET_DIR/centicolon-dashboard.json}\"' scripts/update-convergence-dashboard.sh && echo 'ok: dashboard rendered under target/, none committed'"
-    timeout_ms: 3000
+  - step: "a default render writes target/convergence and never docs/convergence (2066-obsv)"
+    # Behaviour, not source text: remove the local render, run the renderer with
+    # no MD_OUT/JSON_OUT, and check where it wrote. It regenerates the same local
+    # projection any CI run writes, from the real signature log.
+    command: "rm -f target/convergence/centicolon-dashboard.md target/convergence/centicolon-dashboard.json && env -u MD_OUT -u JSON_OUT TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && test -s target/convergence/centicolon-dashboard.md && jq -e .dashboard_contract target/convergence/centicolon-dashboard.json >/dev/null && test ! -e docs/convergence/centicolon-dashboard.md && test ! -e docs/convergence/centicolon-dashboard.json && echo 'ok: dashboard rendered under target/, none committed'"
+    timeout_ms: 15000
     expected_behavior: "ok: dashboard rendered under target/, none committed"
 
   - step: "verify rendered .md dashboard carries the auto-generation header and source-of-truth pointer"
