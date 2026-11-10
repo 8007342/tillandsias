@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tray-upgrade-hands-over-or-names-every-lane-still-served-by-an-older-launcher
+    field: next_action
+    value: 'Slice 1 landed in #1061 at merge bc3efda03: the tray names each lane an older launcher still serves (lane, builds, pid, exe deleted). Slice 2: hand the lane over or offer a relaunch, never killing a live session without consent, and give tillandsias-doctor a named state for it.'
+    ts: "2026-11-10T08:25:36Z"
+    host: lenovinha-silverblue
+    replaces_sha256: "f557f18ab233b696c8d1e5094c8881eeec3ea23ea8ffec7b4b1e77f7c71d6c3a"
+
+events:
+  - packet_id: a-tray-upgrade-hands-over-or-names-every-lane-still-served-by-an-older-launcher
+    event:
+      type: note
+      ts: "2026-11-10T08:25:36Z"
+      host: lenovinha-silverblue
+      summary: |-
+        slice 1 landed bc3efda03

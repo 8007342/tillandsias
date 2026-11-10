@@ -5009,6 +5009,39 @@ mod ca_refresh_margin_tests {
         );
     }
 
+    /// 2070-mtf9: after an upgrade the tray reports each lane still served
+    /// by an older build once, naming the serving process; a lane already
+    /// reported for that build is not repeated, and current lanes are silent.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn the_tray_reports_each_stale_lane_once_naming_its_server() {
+        let lines = vec![
+            "ok:lane-current:game-a: 56.11.10.1+aaaa".to_string(),
+            "warn:lane-stale:demon_attack-default: runs 56.11.9.1+bbbb, installed 56.11.10.1+aaaa; relaunch that forge to use the installed build".to_string(),
+            "note:lane-unknown:site-default: lane ?, installed 56.11.10.1+aaaa".to_string(),
+        ];
+        let who = |name: &str| {
+            (name == "demon_attack-default").then(|| "pid 1020477 (exe deleted)".to_string())
+        };
+        let mut seen = std::collections::HashSet::new();
+        let first = stale_lane_reports(&lines, &who, &mut seen);
+        assert_eq!(first.len(), 1, "{first:?}");
+        assert!(
+            first[0].starts_with("warn:lane-stale:demon_attack-default: runs 56.11.9.1+bbbb"),
+            "{}",
+            first[0]
+        );
+        assert!(
+            first[0].contains("served by pid 1020477 (exe deleted)"),
+            "{}",
+            first[0]
+        );
+        assert!(
+            stale_lane_reports(&lines, &who, &mut seen).is_empty(),
+            "repeated"
+        );
+    }
+
     /// 2006-srcs: kumbia-kombat's real seed (main) names `integration.forge:
     /// game`; the candidates follow the forge's order.
     #[test]
@@ -14284,6 +14317,61 @@ pub(crate) fn lane_freshness_lines(
             }
         })
         .collect()
+}
+
+/// ORDER 2070-mtf9: the stale-lane lines a tray has not reported yet, each
+/// naming the process that serves the lane. A tray upgrade never re-adopts a
+/// lane a live older launcher still listens on (macuahuitl 2026-11-09), so
+/// this report is how the operator learns the lane runs old code.
+#[cfg(feature = "host-services")]
+pub(crate) fn stale_lane_reports(
+    lines: &[String],
+    who: &dyn Fn(&str) -> Option<String>,
+    seen: &mut std::collections::HashSet<String>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in lines {
+        let Some(rest) = line.strip_prefix("warn:lane-stale:") else {
+            continue;
+        };
+        let Some((name, _)) = rest.split_once(':') else {
+            continue;
+        };
+        let key = line.split(';').next().unwrap_or(line).to_string();
+        if !seen.insert(key) {
+            continue;
+        }
+        out.push(match who(name) {
+            Some(w) => format!("{line}; served by {w}"),
+            None => line.clone(),
+        });
+    }
+    out
+}
+
+/// ORDER 2070-mtf9: one tray pass over every lane socket; logs each lane
+/// newly found on an older build.
+#[cfg(feature = "host-services")]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn report_stale_lanes(seen: &mut std::collections::HashSet<String>) {
+    let lanes = crate::mcp_socket::lane_sockets();
+    if lanes.is_empty() {
+        return;
+    }
+    let installed = crate::mcp_socket::installed_build_identity();
+    let lines = lane_freshness_lines(&lanes, installed.as_deref(), &|sock| {
+        crate::mcp_socket::lane_server_build(sock).unwrap_or_else(|e| format!("unanswered ({e})"))
+    });
+    let who = |name: &str| {
+        lanes
+            .iter()
+            .find(|(n, _)| n == name)
+            .and_then(|(_, sock)| crate::mcp_socket::describe_lane_server(sock))
+    };
+    for report in stale_lane_reports(&lines, &who, seen) {
+        tracing::warn!(spec = "mcp-tool-socket", order = "2070-mtf9", "{report}");
+        eprintln!("[tillandsias] {report}");
+    }
 }
 
 fn run_status_check(debug: bool) -> Result<(), String> {

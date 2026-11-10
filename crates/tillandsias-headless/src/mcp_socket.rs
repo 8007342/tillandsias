@@ -1858,6 +1858,35 @@ pub(crate) fn lane_server_build(socket: &std::path::Path) -> Result<String, Stri
     Ok(format!("{version}+unknown"))
 }
 
+/// 2070-mtf9: the pid of the process listening on `socket`, from the
+/// kernel's peer credentials (captured at listen time). `None` when nothing
+/// accepts there.
+pub(crate) fn lane_listener_pid(socket: &std::path::Path) -> Option<i32> {
+    let stream = UnixStream::connect(socket).ok()?;
+    let creds =
+        nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::PeerCredentials).ok()?;
+    Some(creds.pid())
+}
+
+/// `" (exe deleted)"` when a `/proc/<pid>/exe` link names a replaced binary.
+pub(crate) fn exe_note(exe_link: &str) -> &'static str {
+    if exe_link.ends_with(" (deleted)") {
+        " (exe deleted)"
+    } else {
+        ""
+    }
+}
+
+/// 2070-mtf9: who serves a lane, for an operator report: `pid N`, plus
+/// `(exe deleted)` when that process runs a binary an upgrade replaced.
+pub(crate) fn describe_lane_server(socket: &std::path::Path) -> Option<String> {
+    let pid = lane_listener_pid(socket)?;
+    let exe = fs::read_link(format!("/proc/{pid}/exe"))
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Some(format!("pid {pid}{}", exe_note(&exe)))
+}
+
 /// 1961-8ats: the named refusal when a tray-marked lane is answered by a
 /// build other than this one; `None` when nothing answers or the builds match.
 /// The hand-off has no other handshake, so without this a branch build's lane
@@ -3304,5 +3333,34 @@ mod lane_freshness_tests {
         );
         assert_eq!(parse_version_line("something else"), None);
         assert_eq!(parse_version_line("Tillandsias v$(rm -rf)"), None);
+    }
+}
+
+#[cfg(test)]
+mod lane_server_who_tests {
+    /// 2070-mtf9: a lane socket names the process listening on it, so a
+    /// tray upgrade can say WHICH old launcher still serves a lane (on
+    /// macuahuitl, pid 1020477 with its exe deleted).
+    #[test]
+    fn a_lane_socket_names_the_process_listening_on_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("mcp.sock");
+        let _listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+        assert_eq!(
+            super::lane_listener_pid(&sock),
+            Some(std::process::id() as i32)
+        );
+        let who = super::describe_lane_server(&sock).unwrap();
+        assert_eq!(who, format!("pid {}", std::process::id()));
+        assert!(super::describe_lane_server(&dir.path().join("none.sock")).is_none());
+    }
+
+    #[test]
+    fn a_deleted_exe_is_named() {
+        assert_eq!(
+            super::exe_note("/usr/bin/tillandsias (deleted)"),
+            " (exe deleted)"
+        );
+        assert_eq!(super::exe_note("/usr/bin/tillandsias"), "");
     }
 }
