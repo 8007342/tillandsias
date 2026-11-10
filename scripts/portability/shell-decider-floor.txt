@@ -39,7 +39,6 @@ scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
 scripts/check-ledger-distillation.sh
 scripts/check-litmus-expression-pinning-added.sh
-scripts/check-litmus-line-windows.sh
 scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
 scripts/check-long-running-view.sh
