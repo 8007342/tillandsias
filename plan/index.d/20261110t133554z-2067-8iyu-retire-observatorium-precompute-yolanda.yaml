@@ -16,6 +16,7 @@ packets:
   exit_criteria:
   - 'Every evidence property a precompute-based test asserts is asserted against observatorium/site/view.mjs (deriveView) or metrics/evidence.mjs instead, or is recorded as no longer applicable (live display-only observation) with the reason.'
   - 'metrics/precompute.mjs and the tests that only exercise it are deleted; npm test in observatorium stays green.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix writes openspec/litmus-tests/litmus-observatorium-evidence-semantics.yaml in the same commit (1136-n8sh)'
   verifiable_closure: 'git grep precompute -- observatorium returns nothing; cd observatorium && npm test passes; the moved cases fail against a view.mjs that maps a null histogram to 0 or joins two epochs.'
   provenance: yolanda forge 2026-11-10, follow-up agreed with macuahuitl-fedora while shipping 2066-obsv PR 3.
   events:
