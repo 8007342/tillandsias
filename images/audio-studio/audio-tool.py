@@ -8,7 +8,7 @@ analysis. Every subcommand prints ONE JSON object on stdout; on a refusal it
 prints {"error": "<code>: <detail>"} and exits 2.
 
   audio-tool versions
-  audio-tool detect --input <file> [--loop]
+  audio-tool detect --input <file> [--loop] [--seam-at <seconds>]
   audio-tool transform --op <op> --input <file> --output <file> [--param k=v ...]
   audio-tool tiers --stems <dir> --tiers <json> --output <dir> [--param target_lufs=N]
   audio-tool separate --model htdemucs|htdemucs_6s --weights /models/<file>.safetensors
@@ -46,6 +46,15 @@ Detection (one finding per fault: kind, start and end in seconds, detail):
                  inside the loop (a continuous wrap reads like the interior).
                  The level step either side of the wrap is reported, and never
                  decides (a percussive loop's ends legitimately differ).
+                 With --seam-at S (2078-kmbx), the same measure is taken at S
+                 seconds INSIDE the file (an excerpt cut around a loop point,
+                 a join in a longer render), against an interior grid that
+                 keeps 4096 samples clear of S; the result carries it as
+                 "seam" whether or not it is a finding. The LPC is fitted
+                 on THIS file, so a short excerpt cannot see a codec step
+                 that only the whole loop's fit magnifies (measured on
+                 kumbia's shipped comedor/salon wraps: 9.47x on the loop,
+                 clean as 2 s and 8 s excerpts); judge such loops whole.
 Clicks inside a dropout or clipping range (plus 5 ms) are that fault's edges,
 not separate findings.
 """
@@ -56,7 +65,7 @@ import subprocess
 import sys
 
 ROOT = "/work/tmp/audio"
-TOOL_VERSION = "3"  # 2068-cqis: separate (Demucs on CPU); 2: 2072-tap8 detect recalibration
+TOOL_VERSION = "4"  # 2078-kmbx: detect --seam-at; 3: 2068-cqis separate (Demucs on CPU); 2: 2072-tap8 detect recalibration
 
 
 def refuse(msg):
@@ -205,7 +214,7 @@ def robust_sigma(v):
     return 1.4826 * np.median(np.abs(v - med))
 
 
-def detect(path, loop):
+def detect(path, loop, seam_at=None):
     import numpy as np
     import soundfile as sf
     from scipy.ndimage import median_filter
@@ -314,6 +323,34 @@ def detect(path, loop):
                                  "end": round(float(min(e2, n / sr)), 4),
                                  "detail": {"low_hz": round(float(g["lo"])), "high_hz": round(float(g["hi"]))}})
 
+    # 2078-kmbx: a seam INSIDE the file (an excerpt cut around a loop point,
+    # or a join in a longer render), judged by the same measure as the wrap:
+    # the residual across index p against the 99th percentile of that measure
+    # on an interior grid that keeps clear of p (the seam is not its own
+    # reference). The residual is continuous across p because the audio is.
+    result_seam = None
+    if seam_at is not None:
+        if a is None:
+            refuse("invalid_arguments: --seam-at needs a longer file")
+        w = 4096
+        p = int(round(seam_at * sr))
+        if not (w + 64 <= p <= n - w - 64):
+            refuse(f"invalid_arguments: --seam-at {seam_at} needs {(w + 64) / sr:.3f} s of audio either side")
+        e_in = residual(mono, a)
+        grid = [int(q) for q in np.linspace(w, n - w - 1, num=max(64, (n - 2 * w) // 509))
+                if abs(int(q) - p) > w]
+        jump = seam_ratio(e_in, p, w, order)
+        p99 = float(np.quantile([seam_ratio(e_in, q, w, order) for q in grid], 0.99))
+        k = int(0.050 * sr)
+        rms = lambda v: float(np.sqrt(np.mean(v ** 2)) + 1e-12)
+        step = abs(20.0 * np.log10(rms(mono[p - k:p]) / rms(mono[p:p + k])))
+        result_seam = {"at": sec(p), "residual_ratio": round(float(jump), 2),
+                       "interior_p99": round(p99, 2), "ratio_to_p99": round(float(jump) / max(p99, 1e-9), 2),
+                       "level_step_db": round(step, 1)}
+        if jump > SEAM_FACTOR * p99:
+            findings.append({"kind": "loop_seam", "start": sec(p - int(0.010 * sr)), "end": sec(p),
+                             "detail": result_seam})
+
     # loop seam: play the end into the start
     if loop and a is not None and n > 2 * 4096 + 64:
         w = 4096
@@ -342,8 +379,13 @@ def detect(path, loop):
                                         "level_step_db": round(step, 1)}})
 
     findings.sort(key=lambda x: (x["start"], x["kind"]))
-    return {"input": path, "sample_rate": int(sr), "channels": int(channels),
-            "duration": round(n / sr, 4), "loop": bool(loop), "findings": findings}
+    out = {"input": path, "sample_rate": int(sr), "channels": int(channels),
+           "duration": round(n / sr, 4), "loop": bool(loop), "findings": findings}
+    if result_seam is not None:
+        # 2078-kmbx: the measure itself, finding or not, so a caller can see
+        # how close a clean seam came.
+        out["seam"] = result_seam
+    return out
 
 
 # --------------------------------------------------------------- transforms
@@ -714,7 +756,7 @@ def fixture_weights(model, out):
 
 def main(argv):
     if not argv:
-        refuse("invalid_arguments: usage: audio-tool versions | detect --input F [--loop] | transform --op OP --input F --output F [--param k=v ...] | tiers --stems DIR --tiers JSON --output DIR [--param target_lufs=N] | separate --model M --weights /models/F.safetensors --sha256 H --input F --output DIR")
+        refuse("invalid_arguments: usage: audio-tool versions | detect --input F [--loop] [--seam-at S] | transform --op OP --input F --output F [--param k=v ...] | tiers --stems DIR --tiers JSON --output DIR [--param target_lufs=N] | separate --model M --weights /models/F.safetensors --sha256 H --input F --output DIR")
     cmd, rest = argv[0], argv[1:]
     opts, params, flags = {}, {}, set()
     i = 0
@@ -723,7 +765,7 @@ def main(argv):
         if k in ("--loop",):
             flags.add(k)
             i += 1
-        elif k in ("--input", "--output", "--op", "--stems", "--tiers", "--model", "--weights", "--sha256") and i + 1 < len(rest):
+        elif k in ("--input", "--output", "--op", "--stems", "--tiers", "--model", "--weights", "--sha256", "--seam-at") and i + 1 < len(rest):
             opts[k] = rest[i + 1]
             i += 2
         elif k == "--param" and i + 1 < len(rest) and "=" in rest[i + 1]:
@@ -735,7 +777,13 @@ def main(argv):
     if cmd == "versions":
         result = versions()
     elif cmd == "detect":
-        result = detect(under_root(opts.get("--input"), True), "--loop" in flags)
+        seam_at = None
+        if "--seam-at" in opts:
+            try:
+                seam_at = float(opts["--seam-at"])
+            except ValueError:
+                refuse("invalid_arguments: --seam-at takes seconds")
+        result = detect(under_root(opts.get("--input"), True), "--loop" in flags, seam_at)
         result["versions"] = versions()
     elif cmd == "tiers":
         stems_dir = under_dir(opts.get("--stems"))

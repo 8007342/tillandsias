@@ -1,5 +1,5 @@
 -- @env PATH HOME XDG_RUNTIME_DIR
--- @trace order:2055-grzz, order:2066-azxa, order:2072-tap8
+-- @trace order:2055-grzz, order:2066-azxa, order:2072-tap8, order:2078-kmbx
 --
 -- test-audio-studio-glitches.lua — the audio studio's glitch detector
 -- (images/audio-studio/audio-tool, `detect`) finds each of the five fault
@@ -18,7 +18,9 @@
 --   loop_seam      the clean signal cut at 2.9876 s: looping it jumps
 -- Then (2072-tap8) a 4 s drum loop and its rolled and crossfaded variants,
 -- which must come back CLEAN, and the same loop with a planted click, a 1 ms
--- dropout, which must still be found (see the block below).
+-- dropout, which must still be found (see the block below). And (2078-kmbx)
+-- eleven REAL excerpts of kumbia's music under tests/fixtures/audio/kumbia/,
+-- each judged at its loop point with detect --seam-at (the block at the end).
 -- Before any verdict the fixture asserts each planted fault is really in the
 -- samples it wrote (a zero run, a full-scale run, the spike), so a generator
 -- bug cannot pass as a detector pass.
@@ -337,6 +339,108 @@ arm(string.format("a 90 s stereo .ogg (detect --loop) answers in under 60 s (too
     lr.ok and secs < 60 and lok and type(lres) == "table" and type(lres.findings) == "table"
         and math.abs((tonumber(lres.duration) or 0) - 90) < 0.5 and lres.channels == 2,
     string.format("rc=%s %.1f s %s", tostring(lr.code), secs, text.trim(lr.stdout or ""):sub(1, 200)))
+
+-- 2078-kmbx: REAL AUDIO. Eleven excerpts of kumbia's own music
+-- (tests/fixtures/audio/kumbia/, provenance and expectations in its
+-- LICENSE.md; operator ruling 2026-11-10). Each is cut around the source's
+-- loop point at 1.000 s, so the seam is judged WHERE IT IS, with detect
+-- --seam-at 1.0. The synthetic drum loop above is what 2072-tap8 was proven
+-- on; these are the controls whose false positives that calibration fixed.
+-- Expectations were fixed BEFORE this fixture was written, from kumbias'
+-- whole-file v2 readings, then re-measured on these cuts at SEAM_FACTOR 1.5
+-- (2026-11-10, recorded on the row): #03 reads 1.01x p99, a thin margin.
+-- PREMISE first: every file's sha256 and the set's total size (under 10 MB,
+-- the operator's limit), so a corrupted or swapped file cannot pass as a
+-- detector result.
+local KDIR = "tests/fixtures/audio/kumbia"
+local KUMBIA = {
+    { f = "01-garden-low-rolled", sha = "87615183e09e7f7f90f949573e776fc86d4a56cc22248941fafb3aeb3a43b2f0", seam = false },
+    { f = "02-bar-low-rolled", sha = "8435af2c83244d7678152965d998edb2bbc46bd0e9ab8274a67d52553a769f26", seam = false },
+    { f = "03-billiards-mid-rolled", sha = "8b82f93b20ca946468057cebb9b5065c487297ca1f14a67c6874c9f7a8f6b8cf", seam = false },
+    { f = "04-billiards-mid-mix", sha = "2ccc8eb2bdc60fe01e3bf718a26765b2755579c379e75291dda288262668cae9", seam = false, hardcut = true },
+    { f = "05-bar-mid-xfade20", sha = "bf97fa102dbd598c175d2cc8c671cb27c7965015145de290a6af14a683f2be8f", seam = false },
+    -- its click at 1.024 s and clipping are REAL (the source peaks at 1.0)
+    { f = "06-garden-mid-xfade20", sha = "4fbeff4a052c8c077953373071439ea735efaf7f5c6c0740f9235ae407e4e7cc", seam = false, others = { click = true, clipping = true } },
+    { f = "07-bar-low-offwrap", sha = "d66496c3ab49937b81b85e127be4017c9b509f505909430a384049c24cf650ab", seam = true, others = { click = true } },
+    { f = "08-bar-low-click03", sha = "9fa297529e81459f55b80338ebd591c09b6a9ea01b34859adb4bf0f520ea865b", find = "click", others = { loop_seam = true } },
+    { f = "09-bar-low-dropout1ms", sha = "7caee6edf9a0d9229ec4d3e469465b4bfa0690088fdba8d69a31b0e1e061bdb3", find = "dropout", seam = false },
+    { f = "12a-billiards-mid-perc", sha = "3a159f98b0db7fe74101d98b276a017470d53c8c5e5471d4e67150916489651f", seam = true, others = { click = true } },
+    { f = "12b-billiards-mid-harm", sha = "19ef02bf96dd4b9c3575f72f3a7f06f9a8014b6e8db99f895682c6123a3b2501", seam = true, others = { click = true } },
+}
+local total = 0
+for _, k in ipairs(KUMBIA) do
+    local path = KDIR .. "/" .. k.f .. ".flac"
+    local okr, bytes = pcall(fs.read, path)
+    if not okr or not bytes then
+        verdict.emit("violation:audio-studio-glitches:kumbia-missing:" .. k.f, 1, path .. " is not in the tree")
+    end
+    if hash.sha256(bytes) ~= k.sha then
+        verdict.emit("violation:audio-studio-glitches:kumbia-hash:" .. k.f, 1, path .. " is not the recorded excerpt")
+    end
+    total = total + #bytes
+end
+arm(string.format("the kumbia excerpt set is %d bytes, under the 10 MB limit", total), total < 10000000)
+
+local function kdetect(k, extra)
+    local argv = { "podman", "run", "--rm", "--network=none", "--pull=never", "--cap-drop=ALL",
+        "--security-opt=no-new-privileges", "--security-opt=label=disable",
+        "-v", here .. "/" .. KDIR .. ":/work/tmp/audio/in:ro", TAG,
+        "detect", "--input", "/work/tmp/audio/in/" .. k.f .. ".flac" }
+    for _, a in ipairs(extra) do argv[#argv + 1] = a end
+    local r = proc.run{ argv = argv, timeout_ms = 300000 }
+    local ok, res = pcall(json.parse, r.stdout or "")
+    -- A detector that ANSWERS a refusal (a pre-2078-kmbx tool has no
+    -- --seam-at) is a failed arm, not a fixture that could not run.
+    if ok and type(res) == "table" and res.error then return nil, tostring(res.error) end
+    if not r.ok then
+        log.raw(text.trim((r.stdout or "") .. "\n" .. (r.stderr or "")))
+        verdict.emit("could-not-run:audio-studio-glitches:detect:" .. k.f .. ":" .. (r.status or "?"), 2)
+    end
+    if not ok or type(res) ~= "table" or type(res.findings) ~= "table" then return nil, text.trim(r.stdout or "") end
+    return res
+end
+
+for _, k in ipairs(KUMBIA) do
+    local res, raw = kdetect(k, { "--seam-at", "1.0" })
+    if not res then
+        arm(k.f .. ": detect --seam-at returns JSON findings", false, raw)
+    else
+        local kinds, has, stray = {}, {}, {}
+        for _, x in ipairs(res.findings) do
+            local s, e = tonumber(x.start) or -1, tonumber(x["end"]) or -1
+            kinds[#kinds + 1] = tostring(x.kind) .. "@" .. tostring(x.start)
+            -- the planted and seam faults all sit at the loop point
+            if s >= 1.0 - 0.010 - TOL and e <= 1.0 + 0.001 + TOL then has[x.kind] = true end
+            if x.kind ~= k.find and x.kind ~= "loop_seam" and not (k.others and k.others[x.kind]) then
+                stray[#stray + 1] = tostring(x.kind)
+            end
+        end
+        local summary = table.concat(kinds, ",")
+        local seam = type(res.seam) == "table" and tonumber(res.seam.ratio_to_p99) or nil
+        if seam then summary = summary .. string.format(" seam=%.2fx", seam) end
+        if k.seam == false then
+            local seen = false
+            for _, x in ipairs(res.findings) do if x.kind == "loop_seam" then seen = true end end
+            arm(k.f .. ": its loop point is NOT a loop_seam", not seen and seam ~= nil, summary)
+        elseif k.seam == true then
+            arm(k.f .. ": its loop point is a loop_seam", has.loop_seam == true, summary)
+        end
+        if k.find then
+            arm(k.f .. ": the planted " .. k.find .. " is found at 1.000 s", has[k.find] == true, summary)
+        end
+        arm(k.f .. ": no unexpected finding", #stray == 0, summary)
+    end
+    -- the excerpt's OWN wrap joins source sample 47999 to n-48000: a hard
+    -- cut in real music, which --loop must report (measured 11.2x p99)
+    if k.hardcut then
+        local w, wraw = kdetect(k, { "--loop" })
+        local seen = false
+        for _, x in ipairs((w and w.findings) or {}) do
+            if x.kind == "loop_seam" and tonumber(x.start) >= 1.98 then seen = true end
+        end
+        arm(k.f .. ": its own end-to-start wrap (a hard cut) is a loop_seam", seen, wraw or "")
+    end
+end
 
 out.line("audio-studio glitch fixture: " .. passes .. " passed, " .. fails .. " failed")
 if fails == 0 then verdict.emit("ok:audio-studio-glitches:" .. passes .. "-arms", 0) end
