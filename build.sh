@@ -5777,7 +5777,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking groundtruth cases for mutable-status pins (680-zphp)..."
     if _class_may_skip groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*; then
         _class_skip_line groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*
-    elif ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
+    elif ! _run_lua_decider "scripts/lua/check-groundtruth-mutable-status-pins.lua" 2>&1; then
         _error "an expert-groundtruth case pins status on a live non-terminal packet — it will red the harness on the next ledger update (680-zphp)"
         exit 1
     else
