@@ -1,10 +1,4 @@
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
 .cache/
 .wrangler/
-/build
 /node_modules
-web/data/
-.tools/
 /dist

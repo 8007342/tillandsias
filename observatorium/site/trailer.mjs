@@ -2,7 +2,8 @@
 // Honesty rule 8 (design.md §3): a stale snapshot cannot ship. Offline, no
 // network: the history's last release, the newest v* tag reachable from HEAD
 // and HEAD's `Observatorium-Release:` trailer must agree before a deploy build
-// writes anything. A preview build (the default) skips only the trailer, and
+// writes anything (site/publish.mjs passes the release tag as the trailer;
+// site/verify.mjs rechecks the deploy commit). A preview skips only that, and
 // says "preview build" on every page.
 import {spawnSync} from 'node:child_process';
 

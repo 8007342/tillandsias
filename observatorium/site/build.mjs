@@ -6,11 +6,11 @@
 // the honesty rules and writes nothing unless all of them pass.
 //
 //   node site/build.mjs                 preview build into ./dist
-//   node site/build.mjs --deploy        deploy build: also requires HEAD's
-//                                       Observatorium-Release trailer
 //   node site/build.mjs --out <dir>     another output directory
 //
-// Publishing is manual and separate (see README.md): nothing here deploys.
+// A preview says "preview build" on every page. The release build is
+// site/publish.mjs <tag>, which also checks the tag and writes the deploy
+// branch; nothing here deploys (openspec/specs/observatorium-dashboard/deployment.md).
 import {createHash} from 'node:crypto';
 import {mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
@@ -90,7 +90,6 @@ export function buildSite(historyText, {newestTag, trailer, deploy = false, buil
 }
 
 function main(argv) {
-  const deploy = argv.includes('--deploy');
   const oi = argv.indexOf('--out');
   const out = resolve(oi >= 0 ? argv[oi + 1] : resolve(app, 'dist'));
   const historyText = readFileSync(resolve(app, 'history/snapshots.jsonl'), 'utf8');
@@ -99,7 +98,7 @@ function main(argv) {
     : new Date().toISOString();
   let result;
   try {
-    result = buildSite(historyText, {...gitFacts(app), deploy, builtAt});
+    result = buildSite(historyText, {newestTag: gitFacts(app).newestTag, trailer: null, deploy: false, builtAt});
   } catch (e) {
     console.error(`observatorium-site: ${e.message}`);
     process.exit(1);

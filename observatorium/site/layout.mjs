@@ -25,7 +25,7 @@ export function layout({file, title, description, body, stamp, scripts = []}) {
   const up = '../'.repeat(depth);
   const nav = PAGES.map((p) => `<li><a href="${up}${p.href}"${(file === 'index.html' ? p.href === file : p.href !== 'index.html' && file.startsWith(`${section(p.href)}/`)) ? ' aria-current="page"' : ''}>${escape(p.label)}</a></li>`).join('');
   const banner = stamp.preview
-    ? '<p class="banner" role="note">This is a preview build, not a deployment. It was built from a checkout whose commit carries no release trailer.</p>'
+    ? '<p class="banner" role="note">This is a preview build, not a published release. Published releases are built by site/publish.mjs from a release tag.</p>'
     : '';
   return `<!doctype html>
 <html lang="en">

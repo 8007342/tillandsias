@@ -1,6 +1,0 @@
-*
-!build/
-!build/web/
-!build/web/**
-!scripts/
-!scripts/serve.mjs

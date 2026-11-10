@@ -1,6 +1,0 @@
-/data/*
-  Cache-Control: public, max-age=60, must-revalidate
-/index.html
-  Cache-Control: no-cache
-/flutter_bootstrap.js
-  Cache-Control: no-cache

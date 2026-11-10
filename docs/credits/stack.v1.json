@@ -285,14 +285,6 @@
       "title": "tillandsias-inference image"
     },
     {
-      "description": "built from observatorium/Containerfile",
-      "id": "image:observatorium",
-      "kind": "container-image",
-      "optional": true,
-      "optional_source": "generator-table",
-      "title": "observatorium image"
-    },
-    {
       "description": "built from images/proxy/Containerfile",
       "id": "image:proxy",
       "kind": "container-image",
@@ -10749,558 +10741,6 @@
       "kind": "package",
       "optional": false,
       "to": "pkg:fedora:zstd"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@cloudflare/kv-asset-handler@0.5.0"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@cloudflare/unenv-preset@2.16.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@cloudflare/workerd-darwin-64@1.20261006.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@cloudflare/workerd-darwin-arm64@1.20261006.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@cloudflare/workerd-linux-64@1.20261006.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@cloudflare/workerd-linux-arm64@1.20261006.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@cloudflare/workerd-windows-64@1.20261006.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@cspotcode/source-map-support@0.8.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@emnapi/runtime@1.11.3"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/aix-ppc64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/android-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/android-arm@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/android-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/darwin-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/darwin-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/freebsd-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/freebsd-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-arm@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-ia32@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-loong64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-mips64el@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-ppc64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-riscv64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-s390x@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/linux-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/netbsd-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/netbsd-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/openbsd-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/openbsd-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/openharmony-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/sunos-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/win32-arm64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/win32-ia32@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@esbuild/win32-x64@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@img/colour@1.1.0"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-darwin-arm64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-darwin-x64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-freebsd-wasm32@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-darwin-arm64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-darwin-x64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linux-arm64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linux-arm@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linux-ppc64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linux-riscv64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linux-s390x@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linux-x64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linuxmusl-arm64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-libvips-linuxmusl-x64@1.3.4"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linux-arm64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linux-arm@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linux-ppc64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linux-riscv64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linux-s390x@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linux-x64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linuxmusl-arm64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-linuxmusl-x64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-wasm32@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-webcontainers-wasm32@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-win32-arm64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-win32-ia32@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:@img/sharp-win32-x64@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@jridgewell/resolve-uri@3.1.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@jridgewell/sourcemap-codec@1.6.0"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@jridgewell/trace-mapping@0.3.9"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@poppinss/colors@4.1.6"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@poppinss/dumper@0.6.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@poppinss/exception@1.2.3"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@sindresorhus/is@7.2.0"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:@speed-highlight/core@1.2.24"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:blake3-wasm@2.1.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:cookie@1.1.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:detect-libc@2.1.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:error-stack-parser-es@1.0.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:esbuild@0.28.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:fsevents@2.3.3"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:kleur@4.1.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:miniflare@5.20261006.2-beta"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:path-to-regexp@6.3.0"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:pathe@2.0.3"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:semver@7.8.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:sharp@0.35.5"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:supports-color@10.2.2"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": true,
-      "to": "npm:tslib@2.8.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:undici@7.29.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:unenv@2.0.0-rc.24"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:workerd@1.20261006.1"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:wrangler@4.150.0"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:ws@8.21.0"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:youch-core@0.3.3"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "direct",
-      "optional": false,
-      "to": "npm:youch@4.1.0-beta.10"
-    },
-    {
-      "from": "image:observatorium",
-      "kind": "base-image",
-      "optional": false,
-      "to": "oci:docker.io/library/node:22-alpine"
     },
     {
       "from": "image:proxy",
@@ -34748,48 +34188,6 @@
       "version": "0.4.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@cloudflare/kv-asset-handler",
-      "homepage_kind": "registry",
-      "id": "npm:@cloudflare/kv-asset-handler@0.5.0",
-      "license": "MIT OR Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@cloudflare/kv-asset-handler",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.5.0"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@cloudflare/unenv-preset",
-      "homepage_kind": "registry",
-      "id": "npm:@cloudflare/unenv-preset@2.16.2",
-      "license": "MIT OR Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@cloudflare/unenv-preset",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "2.16.2"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@cloudflare/unenv-preset",
       "homepage_kind": "registry",
       "id": "npm:@cloudflare/unenv-preset@2.7.6",
@@ -34830,27 +34228,6 @@
       "version": "1.20251001.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-darwin-64",
-      "homepage_kind": "registry",
-      "id": "npm:@cloudflare/workerd-darwin-64@1.20261006.1",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@cloudflare/workerd-darwin-64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.20261006.1"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-darwin-arm64",
       "homepage_kind": "registry",
       "id": "npm:@cloudflare/workerd-darwin-arm64@1.20251001.0",
@@ -34869,27 +34246,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "1.20251001.0"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-darwin-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@cloudflare/workerd-darwin-arm64@1.20261006.1",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@cloudflare/workerd-darwin-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.20261006.1"
     },
     {
       "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-linux-64",
@@ -34912,27 +34268,6 @@
       "version": "1.20251001.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-linux-64",
-      "homepage_kind": "registry",
-      "id": "npm:@cloudflare/workerd-linux-64@1.20261006.1",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@cloudflare/workerd-linux-64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.20261006.1"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-linux-arm64",
       "homepage_kind": "registry",
       "id": "npm:@cloudflare/workerd-linux-arm64@1.20251001.0",
@@ -34953,27 +34288,6 @@
       "version": "1.20251001.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-linux-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@cloudflare/workerd-linux-arm64@1.20261006.1",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@cloudflare/workerd-linux-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.20261006.1"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-windows-64",
       "homepage_kind": "registry",
       "id": "npm:@cloudflare/workerd-windows-64@1.20251001.0",
@@ -34992,27 +34306,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "1.20251001.0"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@cloudflare/workerd-windows-64",
-      "homepage_kind": "registry",
-      "id": "npm:@cloudflare/workerd-windows-64@1.20261006.1",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@cloudflare/workerd-windows-64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.20261006.1"
     },
     {
       "homepage": "https://www.npmjs.com/package/@codemirror/language",
@@ -35115,7 +34408,6 @@
       "version": "1.6.1"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@cspotcode/source-map-support",
       "homepage_kind": "registry",
       "id": "npm:@cspotcode/source-map-support@0.8.1",
@@ -35123,18 +34415,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@cspotcode/source-map-support",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "0.8.1"
     },
     {
@@ -35418,7 +34708,6 @@
       "version": "3.2.2"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@emnapi/runtime",
       "homepage_kind": "registry",
       "id": "npm:@emnapi/runtime@1.11.3",
@@ -35426,18 +34715,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@emnapi/runtime",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "1.11.3"
     },
     {
@@ -35461,7 +34748,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/aix-ppc64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/aix-ppc64@0.28.2",
@@ -35469,7 +34755,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35477,12 +34762,11 @@
       "name": "@esbuild/aix-ppc64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35506,7 +34790,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/android-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/android-arm64@0.28.2",
@@ -35514,7 +34797,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35522,12 +34804,11 @@
       "name": "@esbuild/android-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35551,7 +34832,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/android-arm",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/android-arm@0.28.2",
@@ -35559,7 +34839,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35567,12 +34846,11 @@
       "name": "@esbuild/android-arm",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35596,7 +34874,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/android-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/android-x64@0.28.2",
@@ -35604,7 +34881,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35612,12 +34888,11 @@
       "name": "@esbuild/android-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35641,7 +34916,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/darwin-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/darwin-arm64@0.28.2",
@@ -35649,7 +34923,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35657,12 +34930,11 @@
       "name": "@esbuild/darwin-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35686,7 +34958,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/darwin-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/darwin-x64@0.28.2",
@@ -35694,7 +34965,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35702,12 +34972,11 @@
       "name": "@esbuild/darwin-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35731,7 +35000,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/freebsd-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/freebsd-arm64@0.28.2",
@@ -35739,7 +35007,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35747,12 +35014,11 @@
       "name": "@esbuild/freebsd-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35776,7 +35042,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/freebsd-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/freebsd-x64@0.28.2",
@@ -35784,7 +35049,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35792,12 +35056,11 @@
       "name": "@esbuild/freebsd-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35821,7 +35084,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-arm64@0.28.2",
@@ -35829,7 +35091,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35837,12 +35098,11 @@
       "name": "@esbuild/linux-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35866,7 +35126,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-arm",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-arm@0.28.2",
@@ -35874,7 +35133,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35882,12 +35140,11 @@
       "name": "@esbuild/linux-arm",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35911,7 +35168,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-ia32",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-ia32@0.28.2",
@@ -35919,7 +35175,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35927,12 +35182,11 @@
       "name": "@esbuild/linux-ia32",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -35956,7 +35210,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-loong64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-loong64@0.28.2",
@@ -35964,7 +35217,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -35972,12 +35224,11 @@
       "name": "@esbuild/linux-loong64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36001,7 +35252,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-mips64el",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-mips64el@0.28.2",
@@ -36009,7 +35259,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36017,12 +35266,11 @@
       "name": "@esbuild/linux-mips64el",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36046,7 +35294,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-ppc64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-ppc64@0.28.2",
@@ -36054,7 +35301,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36062,12 +35308,11 @@
       "name": "@esbuild/linux-ppc64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36091,7 +35336,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-riscv64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-riscv64@0.28.2",
@@ -36099,7 +35343,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36107,12 +35350,11 @@
       "name": "@esbuild/linux-riscv64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36136,7 +35378,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-s390x",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-s390x@0.28.2",
@@ -36144,7 +35385,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36152,12 +35392,11 @@
       "name": "@esbuild/linux-s390x",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36181,7 +35420,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/linux-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/linux-x64@0.28.2",
@@ -36189,7 +35427,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36197,12 +35434,11 @@
       "name": "@esbuild/linux-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36226,7 +35462,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/netbsd-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/netbsd-arm64@0.28.2",
@@ -36234,7 +35469,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36242,12 +35476,11 @@
       "name": "@esbuild/netbsd-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36271,7 +35504,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/netbsd-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/netbsd-x64@0.28.2",
@@ -36279,7 +35511,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36287,12 +35518,11 @@
       "name": "@esbuild/netbsd-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36316,7 +35546,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/openbsd-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/openbsd-arm64@0.28.2",
@@ -36324,7 +35553,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36332,12 +35560,11 @@
       "name": "@esbuild/openbsd-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36361,7 +35588,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/openbsd-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/openbsd-x64@0.28.2",
@@ -36369,7 +35595,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36377,16 +35602,14 @@
       "name": "@esbuild/openbsd-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/openharmony-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/openharmony-arm64@0.28.2",
@@ -36394,7 +35617,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36402,12 +35624,11 @@
       "name": "@esbuild/openharmony-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36431,7 +35652,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/sunos-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/sunos-x64@0.28.2",
@@ -36439,7 +35659,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36447,12 +35666,11 @@
       "name": "@esbuild/sunos-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36476,7 +35694,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/win32-arm64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/win32-arm64@0.28.2",
@@ -36484,7 +35701,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36492,12 +35708,11 @@
       "name": "@esbuild/win32-arm64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36521,7 +35736,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/win32-ia32",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/win32-ia32@0.28.2",
@@ -36529,7 +35743,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36537,12 +35750,11 @@
       "name": "@esbuild/win32-ia32",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -36566,7 +35778,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@esbuild/win32-x64",
       "homepage_kind": "registry",
       "id": "npm:@esbuild/win32-x64@0.28.2",
@@ -36574,7 +35785,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -36582,12 +35792,11 @@
       "name": "@esbuild/win32-x64",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -37391,27 +36600,6 @@
       "version": "3.1.7"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/colour",
-      "homepage_kind": "registry",
-      "id": "npm:@img/colour@1.1.0",
-      "license": "MIT",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/colour",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.1.0"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-darwin-arm64",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-darwin-arm64@0.33.5",
@@ -37430,27 +36618,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "0.33.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-darwin-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-darwin-arm64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-darwin-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-darwin-x64",
@@ -37473,48 +36640,6 @@
       "version": "0.33.5"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-darwin-x64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-darwin-x64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-darwin-x64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-freebsd-wasm32",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-freebsd-wasm32@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-freebsd-wasm32",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-darwin-arm64",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-libvips-darwin-arm64@1.0.4",
@@ -37533,27 +36658,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "1.0.4"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-darwin-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-darwin-arm64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-darwin-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-darwin-x64",
@@ -37576,27 +36680,6 @@
       "version": "1.0.4"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-darwin-x64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-darwin-x64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-darwin-x64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-arm64",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-libvips-linux-arm64@1.0.4",
@@ -37615,27 +36698,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "1.0.4"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linux-arm64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linux-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-arm",
@@ -37658,69 +36720,6 @@
       "version": "1.0.5"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-arm",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linux-arm@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linux-arm",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-ppc64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linux-ppc64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linux-ppc64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-riscv64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linux-riscv64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linux-riscv64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-s390x",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-libvips-linux-s390x@1.0.4",
@@ -37739,27 +36738,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "1.0.4"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-s390x",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linux-s390x@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linux-s390x",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-x64",
@@ -37782,27 +36760,6 @@
       "version": "1.0.4"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linux-x64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linux-x64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linux-x64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linuxmusl-arm64",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-libvips-linuxmusl-arm64@1.0.4",
@@ -37821,27 +36778,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "1.0.4"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linuxmusl-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linuxmusl-arm64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linuxmusl-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linuxmusl-x64",
@@ -37864,27 +36800,6 @@
       "version": "1.0.4"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-libvips-linuxmusl-x64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-libvips-linuxmusl-x64@1.3.4",
-      "license": "LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-libvips-linuxmusl-x64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.3.4"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-linux-arm64",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-linux-arm64@0.33.5",
@@ -37903,27 +36818,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "0.33.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linux-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linux-arm64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linux-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-linux-arm",
@@ -37946,69 +36840,6 @@
       "version": "0.33.5"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linux-arm",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linux-arm@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linux-arm",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linux-ppc64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linux-ppc64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linux-ppc64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linux-riscv64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linux-riscv64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linux-riscv64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-linux-s390x",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-linux-s390x@0.33.5",
@@ -38027,27 +36858,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "0.33.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linux-s390x",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linux-s390x@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linux-s390x",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-linux-x64",
@@ -38070,27 +36880,6 @@
       "version": "0.33.5"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linux-x64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linux-x64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linux-x64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-linuxmusl-arm64",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-linuxmusl-arm64@0.33.5",
@@ -38109,27 +36898,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "0.33.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linuxmusl-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linuxmusl-arm64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linuxmusl-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-linuxmusl-x64",
@@ -38152,27 +36920,6 @@
       "version": "0.33.5"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-linuxmusl-x64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-linuxmusl-x64@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-linuxmusl-x64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-wasm32",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-wasm32@0.33.5",
@@ -38191,69 +36938,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "0.33.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-wasm32",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-wasm32@0.35.5",
-      "license": "Apache-2.0 AND LGPL-3.0-or-later AND MIT",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-wasm32",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-webcontainers-wasm32",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-webcontainers-wasm32@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-webcontainers-wasm32",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-win32-arm64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-win32-arm64@0.35.5",
-      "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-win32-arm64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
     },
     {
       "homepage": "https://www.npmjs.com/package/@img/sharp-win32-ia32",
@@ -38276,27 +36960,6 @@
       "version": "0.33.5"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-win32-ia32",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-win32-ia32@0.35.5",
-      "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-win32-ia32",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/@img/sharp-win32-x64",
       "homepage_kind": "registry",
       "id": "npm:@img/sharp-win32-x64@0.33.5",
@@ -38315,27 +36978,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "0.33.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/@img/sharp-win32-x64",
-      "homepage_kind": "registry",
-      "id": "npm:@img/sharp-win32-x64@0.35.5",
-      "license": "Apache-2.0 AND LGPL-3.0-or-later",
-      "license_family": "weak-copyleft",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "@img/sharp-win32-x64",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
     },
     {
       "homepage": "https://www.npmjs.com/package/@internationalized/date",
@@ -38438,7 +37080,6 @@
       "version": "2.3.5"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@jridgewell/resolve-uri",
       "homepage_kind": "registry",
       "id": "npm:@jridgewell/resolve-uri@3.1.2",
@@ -38446,7 +37087,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -38454,16 +37094,14 @@
       "name": "@jridgewell/resolve-uri",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "3.1.2"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@jridgewell/sourcemap-codec",
       "homepage_kind": "registry",
       "id": "npm:@jridgewell/sourcemap-codec@1.6.0",
@@ -38471,7 +37109,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -38479,12 +37116,11 @@
       "name": "@jridgewell/sourcemap-codec",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "1.6.0"
     },
     {
@@ -38508,7 +37144,6 @@
       "version": "0.3.31"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@jridgewell/trace-mapping",
       "homepage_kind": "registry",
       "id": "npm:@jridgewell/trace-mapping@0.3.9",
@@ -38516,18 +37151,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@jridgewell/trace-mapping",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "0.3.9"
     },
     {
@@ -38891,7 +37524,6 @@
       "version": "1.2.8"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@poppinss/colors",
       "homepage_kind": "registry",
       "id": "npm:@poppinss/colors@4.1.6",
@@ -38899,22 +37531,19 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@poppinss/colors",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "4.1.6"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@poppinss/dumper",
       "homepage_kind": "registry",
       "id": "npm:@poppinss/dumper@0.6.5",
@@ -38922,22 +37551,19 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@poppinss/dumper",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "0.6.5"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@poppinss/exception",
       "homepage_kind": "registry",
       "id": "npm:@poppinss/exception@1.2.3",
@@ -38945,18 +37571,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@poppinss/exception",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "1.2.3"
     },
     {
@@ -40600,7 +39224,6 @@
       "version": "2.0.1"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@sindresorhus/is",
       "homepage_kind": "registry",
       "id": "npm:@sindresorhus/is@7.2.0",
@@ -40608,18 +39231,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@sindresorhus/is",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "7.2.0"
     },
     {
@@ -40643,7 +39264,6 @@
       "version": "1.1.6"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/@speed-highlight/core",
       "homepage_kind": "registry",
       "id": "npm:@speed-highlight/core@1.2.24",
@@ -40651,18 +39271,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "@speed-highlight/core",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "1.2.24"
     },
     {
@@ -43710,7 +42328,6 @@
       "version": "4.1.0"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/blake3-wasm",
       "homepage_kind": "registry",
       "id": "npm:blake3-wasm@2.1.5",
@@ -43718,18 +42335,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "blake3-wasm",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "2.1.5"
     },
     {
@@ -44933,7 +43548,6 @@
       "version": "0.7.2"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/cookie",
       "homepage_kind": "registry",
       "id": "npm:cookie@1.1.1",
@@ -44941,7 +43555,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -44949,12 +43562,11 @@
       "name": "cookie",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "1.1.1"
     },
     {
@@ -46390,7 +45002,6 @@
       "version": "1.2.0"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/detect-libc",
       "homepage_kind": "registry",
       "id": "npm:detect-libc@2.1.2",
@@ -46398,7 +45009,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -46406,12 +45016,11 @@
       "name": "detect-libc",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "2.1.2"
     },
     {
@@ -46823,7 +45432,6 @@
       "version": "1.3.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/error-stack-parser-es",
       "homepage_kind": "registry",
       "id": "npm:error-stack-parser-es@1.0.5",
@@ -46831,18 +45439,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "error-stack-parser-es",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "1.0.5"
     },
     {
@@ -46972,7 +45578,6 @@
       "version": "0.25.4"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/esbuild",
       "homepage_kind": "registry",
       "id": "npm:esbuild@0.28.2",
@@ -46980,7 +45585,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-puck": "build-stage-only",
         "image:studio-tina": "container-image"
       },
@@ -46988,12 +45592,11 @@
       "name": "esbuild",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-puck",
         "image:studio-tina"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/puck/build/package-lock.json",
       "version": "0.28.2"
     },
     {
@@ -48013,7 +46616,6 @@
       "version": "11.4.1"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/fsevents",
       "homepage_kind": "registry",
       "id": "npm:fsevents@2.3.3",
@@ -48021,7 +46623,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -48029,12 +46630,11 @@
       "name": "fsevents",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "2.3.3"
     },
     {
@@ -50042,7 +48642,6 @@
       "version": "3.0.3"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/kleur",
       "homepage_kind": "registry",
       "id": "npm:kleur@4.1.5",
@@ -50050,7 +48649,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -50058,12 +48656,11 @@
       "name": "kleur",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "4.1.5"
     },
     {
@@ -52081,27 +50678,6 @@
       "version": "4.20251001.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/miniflare",
-      "homepage_kind": "registry",
-      "id": "npm:miniflare@5.20261006.2-beta",
-      "license": "MIT",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "miniflare",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "5.20261006.2-beta"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/minimatch",
       "homepage_kind": "registry",
       "id": "npm:minimatch@5.1.9",
@@ -53164,7 +51740,6 @@
       "version": "0.1.13"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/path-to-regexp",
       "homepage_kind": "registry",
       "id": "npm:path-to-regexp@6.3.0",
@@ -53172,18 +51747,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "path-to-regexp",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "6.3.0"
     },
     {
@@ -53227,7 +51800,6 @@
       "version": "4.0.0"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/pathe",
       "homepage_kind": "registry",
       "id": "npm:pathe@2.0.3",
@@ -53235,18 +51807,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "pathe",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "2.0.3"
     },
     {
@@ -55436,7 +54006,6 @@
       "version": "6.3.1"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/semver",
       "homepage_kind": "registry",
       "id": "npm:semver@7.8.5",
@@ -55444,7 +54013,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -55452,12 +54020,11 @@
       "name": "semver",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "7.8.5"
     },
     {
@@ -55685,27 +54252,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "0.33.5"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/sharp",
-      "homepage_kind": "registry",
-      "id": "npm:sharp@0.35.5",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "sharp",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "0.35.5"
     },
     {
       "homepage": "https://www.npmjs.com/package/shebang-command",
@@ -56606,7 +55152,6 @@
       "version": "3.35.1"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/supports-color",
       "homepage_kind": "registry",
       "id": "npm:supports-color@10.2.2",
@@ -56614,18 +55159,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "supports-color",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "10.2.2"
     },
     {
@@ -57251,7 +55794,6 @@
       "version": "2.6.2"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/tslib",
       "homepage_kind": "registry",
       "id": "npm:tslib@2.8.1",
@@ -57259,7 +55801,6 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:studio-tina": "container-image",
         "image:web-wrangler": "container-image"
       },
@@ -57267,12 +55808,11 @@
       "name": "tslib",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:studio-tina",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/studio/tina/package-lock.json",
       "version": "2.8.1"
     },
     {
@@ -57522,27 +56062,6 @@
       "version": "7.14.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/undici",
-      "homepage_kind": "registry",
-      "id": "npm:undici@7.29.1",
-      "license": "MIT",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "undici",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "7.29.1"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/unenv",
       "homepage_kind": "registry",
       "id": "npm:unenv@2.0.0-rc.21",
@@ -57561,27 +56080,6 @@
       "shipped": true,
       "source": "images/web-wrangler/package-lock.json",
       "version": "2.0.0-rc.21"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/unenv",
-      "homepage_kind": "registry",
-      "id": "npm:unenv@2.0.0-rc.24",
-      "license": "MIT",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "unenv",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "2.0.0-rc.24"
     },
     {
       "homepage": "https://www.npmjs.com/package/unified",
@@ -58474,48 +56972,6 @@
       "version": "1.20251001.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/workerd",
-      "homepage_kind": "registry",
-      "id": "npm:workerd@1.20261006.1",
-      "license": "Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "workerd",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "1.20261006.1"
-    },
-    {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/wrangler",
-      "homepage_kind": "registry",
-      "id": "npm:wrangler@4.150.0",
-      "license": "MIT OR Apache-2.0",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "wrangler",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "4.150.0"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/wrangler",
       "homepage_kind": "registry",
       "id": "npm:wrangler@4.42.0",
@@ -58578,27 +57034,6 @@
       "version": "8.18.0"
     },
     {
-      "dev_only": true,
-      "homepage": "https://www.npmjs.com/package/ws",
-      "homepage_kind": "registry",
-      "id": "npm:ws@8.21.0",
-      "license": "MIT",
-      "license_family": "permissive",
-      "link": "unknown",
-      "link_by_component": {
-        "image:observatorium": "unknown"
-      },
-      "link_note": "a lockfile beside observatorium that no Containerfile stage installs",
-      "name": "ws",
-      "optional": true,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "shipped": false,
-      "source": "observatorium/package-lock.json",
-      "version": "8.21.0"
-    },
-    {
       "homepage": "https://www.npmjs.com/package/yallist",
       "homepage_kind": "registry",
       "id": "npm:yallist@3.1.1",
@@ -58639,7 +57074,6 @@
       "version": "0.1.0"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/youch-core",
       "homepage_kind": "registry",
       "id": "npm:youch-core@0.3.3",
@@ -58647,22 +57081,19 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "youch-core",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "0.3.3"
     },
     {
-      "dev_only": true,
       "homepage": "https://www.npmjs.com/package/youch",
       "homepage_kind": "registry",
       "id": "npm:youch@4.1.0-beta.10",
@@ -58670,18 +57101,16 @@
       "license_family": "permissive",
       "link": "container-image",
       "link_by_component": {
-        "image:observatorium": "unknown",
         "image:web-wrangler": "container-image"
       },
       "link_note": "installed in the final stage of images/web-wrangler/Containerfile",
       "name": "youch",
       "optional": true,
       "pulled_by": [
-        "image:observatorium",
         "image:web-wrangler"
       ],
       "shipped": true,
-      "source": "observatorium/package-lock.json",
+      "source": "images/web-wrangler/package-lock.json",
       "version": "4.1.0-beta.10"
     },
     {
@@ -58911,22 +57340,6 @@
       ],
       "source": "images/flutter/Containerfile",
       "version": "bookworm-slim"
-    },
-    {
-      "homepage": "https://hub.docker.com/_/node",
-      "homepage_kind": "registry",
-      "id": "oci:docker.io/library/node:22-alpine",
-      "license": "unknown",
-      "license_family": "unknown",
-      "link": "container-image",
-      "link_note": "base image layer of a Tillandsias-built image",
-      "name": "docker.io/library/node:22-alpine",
-      "optional": false,
-      "pulled_by": [
-        "image:observatorium"
-      ],
-      "source": "observatorium/Containerfile",
-      "version": "22-alpine"
     },
     {
       "homepage": "https://hub.docker.com/_/node",
@@ -62406,16 +60819,16 @@
   },
   "schema": "tillandsias-stack/v1",
   "summary": {
-    "components": 58,
-    "edges": 3198,
+    "components": 57,
+    "edges": 3106,
     "license_families": {
       "model": 7,
-      "permissive": 1733,
+      "permissive": 1706,
       "service": 15,
       "strong-copyleft": 24,
-      "unknown": 163,
-      "weak-copyleft": 34
+      "unknown": 162,
+      "weak-copyleft": 20
     },
-    "nodes": 1976
+    "nodes": 1934
   }
 }
