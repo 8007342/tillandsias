@@ -40,5 +40,8 @@ Builds trigger is ever connected.
 
 ## Delivery
 
-Three PRs from `work/2066-obsv`: (1) generator, Home, honesty rules, trailer
-check; (2) the remaining pages; (3) deletions and the manual deploy flow.
+From `work/2066-obsv`: (1) generator, Home, honesty rules, trailer check;
+(2) the remaining pages; (3) no auto-deploy, Flutter removed, manual publish;
+(4) the project trace viewer moves to `tools/trace-viewer/`; (5) the committed
+CentiColon dashboard is retired. This change supersedes
+`observatorium-deploy-on-stable` (1798-khw6).

@@ -523,12 +523,16 @@ stable_channel:
       `stable` git tag to the release commit, and advances
       refs/heads/deploy/observatorium to that commit's tree (1798-khw6).
     deploy_refs: >
-      refs/heads/deploy/observatorium is the observatorium Worker's only
-      Workers Builds trigger, so a stable promotion (or demotion) is the only
-      automatic observatorium build and deploy. Only promote-stable.sh writes
-      it, through scripts/advance-deploy-ref.sh. The branch only moves forward:
-      when following the channel would mean a rewind, a restore commit carries
-      the release's exact tree. Spec: observatorium-dashboard deployment.md.
+      No automation deploys anything (operator ruling 2026-11-09, order
+      2066-obsv). refs/heads/deploy/observatorium holds the BUILT observatorium
+      site and is written only by an operator running
+      observatorium/site/publish.mjs <tag> on a clean checkout of the release;
+      the operator pushes it by hand after a gate run and deploys it with
+      `npm run deploy` (verify.mjs, then wrangler deploy) from a checkout of
+      it. No Workers Builds trigger is connected and none may be: nothing
+      builds on Cloudflare. A stable promotion or demotion does not touch the
+      branch (the 1798-khw6 step 4 and scripts/advance-deploy-ref.sh are
+      gone). Spec: observatorium-dashboard deployment.md.
     demotion: "scripts/promote-stable.sh demote <mistaken-tag> --to <intended-tag> [--dry-run]"
     demotion_is_not_the_inverse_of_promotion: >
       MEASURED 2026-08-23, order 864-mk2p. This field used to read

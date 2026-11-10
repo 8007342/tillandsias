@@ -333,35 +333,31 @@ wrangler deploy               → runs build.command = obs-build, uploads build/
 
 ## 6. Manual deploy-branch workflow
 
-*rev2: Q11.* The deploy branch (`deploy/observatorium`) holds the **source
-tree** including `wrangler.jsonc` and `history/snapshots.jsonl`; nothing
-built is committed. The Worker is deployed only by a person running
-`wrangler deploy` on their own machine; no Workers Builds trigger is in
-effect and none is added.
+*rev3 (2026-11-10, fleet lead ruling Q1 for order 2066-obsv; supersedes
+rev2's "deploy branch holds source").* The deploy branch
+(`deploy/observatorium`) holds the **built** site, as comparison.md §6.4
+recommends: `wrangler.jsonc` (static assets, no build command), `package.json`,
+`verify.mjs` and `dist/**`. Nothing builds on Cloudflare; no Workers Builds
+trigger is connected and none is added. As built:
 
-1. After a release is cut and `snapshots.jsonl` has its new line on the
-   trunk: optionally run `obs-details <release>` and commit the stripped
-   detail file.
-2. Fast-forward `deploy/observatorium` to the release commit (the branch
-   only moves forward); the fast-forward commit, or an empty commit on top,
-   carries the trailer `Observatorium-Release: <tag>`.
-3. On the operator machine, in a checkout of `deploy/observatorium`: `npm
-   run build` locally and inspect `build/web/` with a static file server.
-   The build refuses (honesty rule 8) if the history's last release, the
-   newest reachable `v*` tag, and the trailer disagree.
-4. `npm run deploy` (= `wrangler deploy`), which re-runs the build and
-   uploads the assets. Authentication is the operator's; nothing is stored
-   in the repo.
-5. Push `deploy/observatorium` by hand so the published state is
-   reconstructible from a ref. No hook, cron, or CI trigger.
-6. Rollback = check out the previous deploy-branch commit and `wrangler
-   deploy` again; the footer stamp makes the served state self-describing.
-   The branch itself is not rewound.
+1. After a release is cut and `snapshots.jsonl` has its new line, the
+   operator checks out the release tag, clean, and previews it with
+   `node observatorium/site/build.mjs`.
+2. `node observatorium/site/publish.mjs <tag>` rebuilds for that tag
+   (history, newest tag and the named tag must agree) and writes ONE commit
+   on the local deploy ref with `Observatorium-Release`,
+   `Observatorium-Snapshot` and `Observatorium-Source` trailers. It refuses an
+   already-published or older release, a dirty tree, a checkout not at the
+   tag, and any honesty-lint violation. It pushes nothing.
+3. The operator pushes the ref by hand after `./build.sh --check`.
+4. From a checkout of the deploy branch: `npm run deploy` runs `verify.mjs`
+   (honesty rule 8: the trailers must name the release and history digest
+   `dist/data/history.json` was built from) and then `wrangler deploy` with
+   the operator's own login.
+5. Rollback is `wrangler deploy` from an older deploy-branch commit; the
+   branch itself only moves forward. No hook, cron, CI or promotion moves it.
 
-Why the trailer: the honesty rule "a stale snapshot cannot ship" (L5-23) needs
-a check that runs without network and without trusting the deployer's
-memory. Comparing the trailer, the tag and the history's last line is that
-check, and it runs inside the same build wrangler invokes.
+Operator steps in full: `openspec/specs/observatorium-dashboard/deployment.md`.
 
 ## 7. Accessibility and mobile
 

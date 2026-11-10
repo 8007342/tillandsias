@@ -1,10 +1,11 @@
-// @trace spec:observatorium-dashboard, order:1782-bek5
+// @trace spec:observatorium-dashboard, order:2066-obsv
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {flutterCommand} from './build.mjs';
+import {parseArgs} from './build.mjs';
 
-test('forge builds use the trusted sibling command while standalone builds retain pinned SDKs', () => {
-  assert.equal(flutterCommand({TILLANDSIAS_PROJECT: 'tillandsias'}), 'flutter');
-  assert.equal(flutterCommand({}), null);
-  assert.equal(flutterCommand({TILLANDSIAS_PROJECT: 'tillandsias', FLUTTER: '/custom/flutter'}), '/custom/flutter');
+test('scripts/build.mjs is the release cut only', () => {
+  assert.deepEqual(parseArgs(['--release-snapshot', 'v56.11.7.1']), {tag: 'v56.11.7.1'});
+  assert.throws(() => parseArgs([]), /site\/build\.mjs/);
+  assert.throws(() => parseArgs(['--metrics-only']), /release-snapshot/);
+  assert.throws(() => parseArgs(['--release-snapshot', 'latest']), /release tag/);
 });

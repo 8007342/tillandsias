@@ -10,9 +10,11 @@
 #      (the operator-owned gate; --force overrides with a loud record),
 #   2. flips the release to prerelease=false and marks it "latest",
 #   3. moves the annotated `stable` git tag to the release commit,
-#   4. advances refs/heads/deploy/observatorium to that commit's tree, the
-#      ONLY branch the observatorium's Cloudflare Worker builds (1798-khw6;
-#      scripts/advance-deploy-ref.sh). Demotion advances it too.
+#   It does NOT deploy anything else. The observatorium used to follow the
+#   channel through a deploy branch here (1798-khw6, step 4); operator ruling
+#   2026-11-09 (order 2066-obsv): no auto-deploy anywhere. Publishing it is a
+#   separate, manual act: observatorium/site/publish.mjs <tag>, a hand push and
+#   `npm run deploy` by the operator.
 # DEMOTING A MISTAKEN PROMOTION IS NOT ONE COMMAND, and this comment used to
 # claim it was (`gh release edit <tag> --prerelease`). Measured false on
 # 2026-08-23: that sets prerelease=true and /releases/latest GOES ON SERVING THE
@@ -30,15 +32,13 @@
 #   ^demoted:<mistaken>:latest-now:<intended>$    demotion happened AND verified
 #   ^would-demote:<mistaken>:latest-would-be:<intended>$   --dry-run
 #   ^verified:stable-tag:<sha>$                   step 3 landed on origin (1061-zd83)
-#   ^verified:deploy-ref:<sha>:tree=<tree>$       step 4 landed on origin (1798-khw6)
 #   ^website-update:enqueued:<tag>:ns=<ns>$       step 5 enqueued (1846-dykd)
 #   ^website-update:already-enqueued:<tag>$       step 5, this tag was enqueued before
 #   ^website-update:deferred:<tag>:<why>$         step 5 could not enqueue; promotion stands
 #                                                 (no line: no Website-Update trailer in range)
 #   ^refused:stable-tag-push-refused:<sha>$       release flipped, tag push failed (1768-2k56)
 #   ^refused:(no-evidence|no-release|bad-tag|missing-target|demote-verify-failed
-#            |promote-commit-unresolvable|stable-tag-not-moved|stable-tag-unverified
-#            |deploy-ref-*):.*$
+#            |promote-commit-unresolvable|stable-tag-not-moved|stable-tag-unverified):.*$
 #                                                 refusal (exit 1)
 #
 # --dry-run RUNS EVERY GATE AND MUTATES NOTHING (order 864-8tqv). It exists
@@ -90,26 +90,7 @@ _valid_tag() { printf '%s' "${1:-}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+
 # hardcoded: this script is read by other forks of the runbook.
 _nwo() { gh repo view --json nameWithOwner --jq .nameWithOwner 2>/dev/null; }
 
-# ORDER 1798-khw6. Step 4: the observatorium deploys ONLY when this moves. Its
-# own grammar line (verified:deploy-ref: or refused:deploy-ref-*) is echoed so
-# this script's output names it; a refusal here is a release that is stable on
-# GitHub with a dashboard that did not follow, and it says how to finish.
-DEPLOY_REF="refs/heads/deploy/observatorium"
-_advance_deploy_ref() { # $1=commit $2=tag
-    local _out _rc=0
-    _out="$(bash "$REPO_ROOT/scripts/advance-deploy-ref.sh" "$1" --label "$2" --ref "$DEPLOY_REF" | tail -1)" || _rc=$?
-    echo "$_out"
-    if [ "$_rc" -ne 0 ] || ! printf '%s' "$_out" | grep -q '^verified:deploy-ref:'; then
-        echo "HALF-PROMOTED: the stable channel moved, but $DEPLOY_REF did not, so observatorium.tillandsias.org" >&2
-        echo "still serves the previous stable release (1798-khw6)." >&2
-        echo "  remedy: bash scripts/advance-deploy-ref.sh $1 --label $2" >&2
-        # affordance-ok: the HALF-PROMOTED lines above carry the why and the remedy
-        case "$_out" in refused:deploy-ref-*) ;; *) echo "refused:deploy-ref-unverified:$1" ;; esac
-        exit 1
-    fi
-}
-
-# ORDER 1846-dykd. Step 5: after the stable tag and the deploy ref landed, a
+# ORDER 1846-dykd. Step 5: after the stable tag landed, a
 # release whose range previous-stable..release carries `Website-Update:`
 # trailers enqueues one website-update task (tag + reasons, nothing about
 # hosts or the fleet) on the site project's coordinator namespace, through the
@@ -181,7 +162,7 @@ if [ "$MODE" = "demote" ]; then
     fi
 
     if [ "$DRY_RUN" -eq 1 ]; then
-        echo "would demote $TAG, re-mark $TARGET as latest, move the stable tag, and advance $DEPLOY_REF to $TARGET's tree." >&2
+        echo "would demote $TAG, re-mark $TARGET as latest, and move the stable tag." >&2
         echo "would-demote:$TAG:latest-would-be:$TARGET"
         exit 0
     fi
@@ -211,12 +192,6 @@ if [ "$MODE" = "demote" ]; then
     fi
     echo "/releases/latest verified: now resolves to $TARGET." >&2
 
-    # The dashboard follows the channel back (1798-khw6). The release TAG's
-    # own commit is exact; targetCommitish can be a branch name (1061-zd83).
-    git -C "$REPO_ROOT" fetch -q --force origin "refs/tags/$TARGET:refs/tags/$TARGET" 2>/dev/null || true
-    DEPLOY_COMMIT="$(git -C "$REPO_ROOT" rev-parse --verify --quiet "refs/tags/$TARGET^{commit}" || true)"
-    [ -n "$DEPLOY_COMMIT" ] || DEPLOY_COMMIT="$TARGET_COMMIT"
-    _advance_deploy_ref "$DEPLOY_COMMIT" "$TARGET"
     echo "demoted:$TAG:latest-now:$TARGET"
     exit 0
 fi
@@ -424,7 +399,7 @@ fi
 # outward-facing channel. --dry-run stops exactly here, which is what makes the
 # gates testable without publishing anything.
 if [ "$DRY_RUN" -eq 1 ]; then
-    echo "would promote $TAG: flip prerelease=false + latest, move the stable tag, advance $DEPLOY_REF (deploys the observatorium)." >&2
+    echo "would promote $TAG: flip prerelease=false + latest, move the stable tag." >&2
     echo "would-promote:$TAG"
     exit 0
 fi
@@ -507,9 +482,6 @@ if [ "$STABLE_REMOTE" != "$COMMIT" ]; then
     exit 1
 fi
 echo "verified:stable-tag:$COMMIT"
-
-# Step 4 (1798-khw6): the one event that deploys observatorium.tillandsias.org.
-_advance_deploy_ref "$COMMIT" "$TAG"
 
 # Step 5 (1846-dykd): a release whose range carries a Website-Update trailer
 # enqueues ONE website-update task on the site project's coordinator namespace.
