@@ -3,6 +3,13 @@ name: forge-continuous-enhancement
 description: Iteratively enhance the forge container and environment by running diagnostics, building, and committing changes autonomously.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Forge Continuous Enhancement
 
 **Purpose:**

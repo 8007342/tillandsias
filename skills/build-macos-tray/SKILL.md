@@ -3,6 +3,13 @@ name: build-macos-tray
 description: Full macOS-host build + autonomous-smoke + install-locally cycle for tillandsias-macos-tray. Captures structured findings to plan/issues/macos-build-findings-<DATE>.md so other hosts see whether the macOS build is green and what regressed. Runs unattended; iteration-friendly — refine the skill itself between calls based on what each run surfaces.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # /build-macos-tray
 
 Run a full macOS-host build + autonomous-smoke + install-locally cycle of

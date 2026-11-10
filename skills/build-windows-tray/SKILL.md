@@ -3,6 +3,13 @@ name: build-windows-tray
 description: Build + install the windows-tray release binary on the local Windows host, post-install --diagnose verify, and file findings in ./plan/ for future fixing.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # /build-windows-tray
 
 A canonical, fine-tunable workflow for the **windows host's** daily build+install
