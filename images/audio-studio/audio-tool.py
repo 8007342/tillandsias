@@ -17,15 +17,23 @@ Paths must be under /work/tmp/audio (the lane's audio scratch volume).
 Detection (one finding per fault: kind, start and end in seconds, detail):
   click          a sample-level impulse: the linear-prediction residual (LPC
                  order 32, fit on the whole file) above 12x its LOCAL robust
-                 level (20 ms median), so a loud passage is not a click.
-  dropout        an interior run of digital silence of at least 5 ms (leading
+                 level (20 ms median), so a loud passage is not a click, AND
+                 above 12x the residual's level in the 5 ms on EACH side of it,
+                 so a drum onset (quiet before, noise after) is not a click.
+  dropout        an interior run of digital silence of at least 1 ms (leading
                  and trailing silence are not dropouts).
-  spectral_hole  a band at least 400 Hz wide, 25 dB under its own median level,
-                 for at least 80 ms, in frames whose overall level is normal.
+  spectral_hole  a NOTCH at least 400 Hz wide, 25 dB under its own median
+                 level, for at least 80 ms, in frames whose overall level is
+                 normal, with 400 Hz of content present above and below it (an
+                 empty top band between hi-hats is not a hole).
   clipping       runs of at least 3 identical full-scale samples (flat tops),
                  merged across gaps under 10 ms.
   loop_seam      with --loop only: playing the end into the start jumps, by
-                 the residual across the wrap point or a level step over 6 dB.
+                 the residual across the wrap point, against its robust level,
+                 over 1.5x the 99th percentile of the same measure taken
+                 inside the loop (a continuous wrap reads like the interior).
+                 The level step either side of the wrap is reported, and never
+                 decides (a percussive loop's ends legitimately differ).
 Clicks inside a dropout or clipping range (plus 5 ms) are that fault's edges,
 not separate findings.
 """
@@ -36,7 +44,7 @@ import subprocess
 import sys
 
 ROOT = "/work/tmp/audio"
-TOOL_VERSION = "1"
+TOOL_VERSION = "2"  # 2072-tap8: detect recalibrated for percussive music
 
 
 def refuse(msg):
@@ -144,6 +152,40 @@ def residual(x, a):
     return lfilter(np.concatenate(([1.0], -a)), [1.0], x)
 
 
+CLICK_RATIO = 12.0
+# Calibrated by kumbias on v56.11.10.1 (2026-11-10, this ref): wrap/interior_p99
+# on continuous wraps (rolled, crossfaded, frame-aligned re-encodes) read at
+# most 0.93; a real off-wrap cut 6.9; Opus codec steps at misaligned game-loop
+# wraps 1.05-9.47. 1.5 flags the cut and every codec step from 1.64 up, and
+# keeps every good wrap; the smallest codec steps (1.05-1.34) go unreported.
+SEAM_FACTOR = 1.5
+DROPOUT_SECS = 0.001
+
+
+def two_sided(mag, s, e, sr):
+    """The larger of the residual's robust levels just BEFORE [s, e) and just
+    AFTER it (5 ms each, 0.5 ms clear of the event). An impulse stands out
+    against both; a transient into sustained noise does not (2072-tap8)."""
+    import numpy as np
+
+    g, w = max(1, int(0.0005 * sr)), max(8, int(0.005 * sr))
+    pre = mag[max(0, s - g - w):max(0, s - g)]
+    post = mag[min(len(mag), e + g):min(len(mag), e + g + w)]
+    lv = [float(np.median(v)) / 0.6745 for v in (pre, post) if v.size]
+    return max(lv) if lv else 0.0
+
+
+def seam_ratio(e, p, w, order):
+    """The residual's peak within 8 samples of index p over its robust level in
+    the w samples either side (64 samples clear): the loop-seam measure, taken
+    at the wrap and at interior points alike (2072-tap8)."""
+    import numpy as np
+
+    joint = np.abs(e[p - 8:p + 8]).max()
+    ref = np.concatenate((e[max(order, p - w):p - 64], e[p + 64:p + w]))
+    return float(joint / max(robust_sigma(ref), 1e-9))
+
+
 def robust_sigma(v):
     import numpy as np
 
@@ -164,10 +206,11 @@ def detect(path, loop):
     findings = []
     lsb = 1.5 / 32768.0
 
-    # dropout: interior digital silence >= 5 ms
+    # dropout: interior digital silence >= 1 ms (2072-tap8: was 5 ms, and a
+    # planted 1 ms dropout in a drum loop went unreported)
     dropouts = []
     for s, e in runs(np.abs(mono) <= lsb):
-        if s > 0 and e < n and e - s >= int(0.005 * sr):
+        if s > 0 and e < n and e - s >= int(DROPOUT_SECS * sr):
             dropouts.append((s, e))
             findings.append({"kind": "dropout", "start": sec(s), "end": sec(e),
                              "detail": {"samples": int(e - s)}})
@@ -195,15 +238,22 @@ def detect(path, loop):
         glob = max(robust_sigma(e), 1e-9)
         local = median_filter(mag, size=max(3, int(0.020 * sr) | 1), mode="nearest") / 0.6745
         local = np.maximum(local, 0.1 * glob)
-        cand = (mag > 12.0 * local) & (mag > 1e-3)
+        cand = (mag > CLICK_RATIO * local) & (mag > 1e-3)
         cand[:order] = False
         guard = int(0.005 * sr)
         masked = [(s - guard, e2 + guard) for s, e2 in dropouts + clips]
         for s, e2 in merge(runs(cand), int(0.002 * sr)):
             if any(s < me and e2 > ms for ms, me in masked):
                 continue
+            # 2072-tap8: a drum onset passes the centred test above (quiet
+            # before, loud after), so the impulse must also stand out against
+            # the residual on BOTH sides of it. An impulse returns to the floor
+            # after it; a drum hit keeps exciting the residual.
+            ratio = mag[s:max(e2, s + 1)].max() / max(two_sided(mag, s, max(e2, s + 1), sr), 0.1 * glob)
+            if ratio < CLICK_RATIO:
+                continue
             findings.append({"kind": "click", "start": sec(s), "end": sec(max(e2, s + 1)),
-                             "detail": {"peak_ratio": round(float((mag[s:e2] / local[s:e2]).max()), 1)}})
+                             "detail": {"peak_ratio": round(float(ratio), 1)}})
 
     # spectral hole: a band 25 dB under its own median, in normal-level frames
     nper = 2048
@@ -222,8 +272,16 @@ def detect(path, loop):
             if not active[ti] or idx.size == 0:
                 continue
             m = p[idx, ti] < ref[idx] - 25.0
+            # 2072-tap8: a hole is a NOTCH, with at least 400 Hz of content
+            # present on both sides of it in the same frame. A top band that is
+            # empty between hi-hats is the music's shape, not a fault, and it
+            # tracked the transients and the frame alignment.
+            k = int(np.ceil(400.0 / df))
+            present = [(ps, pe) for ps, pe in runs(~m) if pe - ps >= k]
             best = None
             for s, e2 in runs(m):
+                if not (any(pe <= s for _, pe in present) and any(ps >= e2 for ps, _ in present)):
+                    continue
                 lo, hi = f[idx[s]], f[idx[e2 - 1]] + df
                 if hi - lo >= 400.0 and (best is None or hi - lo > best[1] - best[0]):
                     best = (lo, hi)
@@ -245,19 +303,31 @@ def detect(path, loop):
                                  "detail": {"low_hz": round(float(g["lo"])), "high_hz": round(float(g["hi"]))}})
 
     # loop seam: play the end into the start
-    if loop and a is not None and n > 8192:
+    if loop and a is not None and n > 2 * 4096 + 64:
         w = 4096
         y = np.concatenate((mono[-w:], mono[:w]))
-        ey = np.abs(residual(y, a))
-        joint = ey[w - 8:w + 8].max()
-        ref_e = np.concatenate((ey[order:w - 64], ey[w + 64:]))
-        jump = joint / max(robust_sigma(ref_e), 1e-9)
+        jump = seam_ratio(residual(y, a), w, w, order)
+        # 2072-tap8: a WRAP IS ONE MORE POINT OF THE LOOP. A continuous wrap
+        # reads like the loop's own interior, so the wrap is judged against the
+        # same measure taken on a grid of interior points, not against a fixed
+        # floor: kumbias' 7 good game-loop wraps read residual_ratio 6-166 under
+        # audio-tool 1 (ordinary musical change across a bar line) and a real
+        # off-wrap cut 287, so no fixed floor separates them. The grid has at
+        # least 64 points (every 509 samples on a long loop), so even a short
+        # loop has an interior to compare against. The level step is reported but decides nothing: a percussive loop's
+        # first and last 50 ms legitimately differ (a kick on the one), and
+        # kumbias' rolled and crossfaded controls read 7-14 dB with no seam.
+        e_loop = residual(mono, a)
+        grid = np.linspace(w, n - w - 1, num=max(64, (n - 2 * w) // 509)).astype(int)
+        p99 = float(np.quantile([seam_ratio(e_loop, p, w, order) for p in grid], 0.99))
         k = int(0.050 * sr)
         rms = lambda v: float(np.sqrt(np.mean(v ** 2)) + 1e-12)
         step = abs(20.0 * np.log10(rms(mono[-k:]) / rms(mono[:k])))
-        if jump > 12.0 or step > 6.0:
+        if jump > SEAM_FACTOR * p99:
             findings.append({"kind": "loop_seam", "start": sec(n - int(0.010 * sr)), "end": sec(n),
-                             "detail": {"residual_ratio": round(float(jump), 1), "level_step_db": round(step, 1)}})
+                             "detail": {"residual_ratio": round(float(jump), 1),
+                                        "interior_p99": round(p99, 1),
+                                        "level_step_db": round(step, 1)}})
 
     findings.sort(key=lambda x: (x["start"], x["kind"]))
     return {"input": path, "sample_rate": int(sr), "channels": int(channels),
