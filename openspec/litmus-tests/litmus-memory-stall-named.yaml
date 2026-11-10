@@ -29,7 +29,7 @@ inputs:
 
 preconditions:
   - the headless binary is built (target/debug/tillandsias, or TILLANDSIAS_HEADLESS_BIN); the fixture reports could-not-run otherwise
-  - localhost/tillandsias-forge-base:latest is in the podman store (tillandsias --init); could-not-run otherwise
+  - a versioned localhost/tillandsias-forge-base tag is in the podman store (tillandsias --init); could-not-run otherwise
   - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
 
 critical_path:

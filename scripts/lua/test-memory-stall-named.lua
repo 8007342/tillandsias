@@ -15,7 +15,7 @@
 --   IDLE  the same budget running `sleep` (NEGATIVE CONTROL)
 -- Before any verdict the fixture asserts its premise from the kernel: the
 -- HOG's scope reads full avg60 >= 10 with high events, and the IDLE's does
--- not. The image is the forge base (the forge's own userland).
+-- not. The image is the forge base (the forge's own userland), at a versioned tag.
 --
 -- PRE-FIX: the binary has no --memory-stall and answers Unsupported option.
 -- The binary is TILLANDSIAS_HEADLESS_BIN, else target/debug/tillandsias.
@@ -23,7 +23,7 @@
 -- Usage: tillandsias-plan script run scripts/lua/test-memory-stall-named.lua
 
 local NAME = "memory-stall-named"
-local IMG = "localhost/tillandsias-forge-base:latest"
+local REPO = "localhost/tillandsias-forge-base"
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
 if top.code ~= 0 or ROOT == "" then verdict.could_not_run(NAME, "git rev-parse --show-toplevel did not answer") end
@@ -32,8 +32,15 @@ if not BIN or BIN == "" then BIN = ROOT .. "/target/debug/tillandsias" end
 if proc.run({ argv = { "test", "-x", BIN }, timeout_ms = 10000 }).code ~= 0 then
     verdict.could_not_run(NAME, "no headless binary at " .. BIN .. " (cargo build -p tillandsias-headless, or set TILLANDSIAS_HEADLESS_BIN)")
 end
-if proc.run({ argv = { "podman", "image", "exists", IMG }, timeout_ms = 30000 }).code ~= 0 then
-    verdict.could_not_run(NAME, IMG .. " is not in the store (tillandsias --init builds it)")
+-- A VERSIONED tag, never the mutable one (check-container-bases): the newest
+-- v<version> tag of the forge base in this store.
+local tags = proc.run({ argv = { "podman", "images", "--filter", "reference=" .. REPO, "--format", "{{.Tag}}" }, timeout_ms = 30000 })
+local IMG
+for _, t in ipairs(text.lines(tags.stdout or "")) do
+    if t:match("^v%d") then IMG = REPO .. ":" .. t; break end
+end
+if not IMG then
+    verdict.could_not_run(NAME, "no versioned " .. REPO .. " tag in the store (tillandsias --init builds it)")
 end
 
 local tag = tostring(math.random(100000, 999999))

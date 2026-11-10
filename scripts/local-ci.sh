@@ -1423,8 +1423,13 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # ============================================================================
 
     log_section "Container Base Image Policy"
-    if [[ -f "scripts/check-container-bases.sh" ]]; then
-        if bash scripts/check-container-bases.sh 2>&1 | tee /tmp/container-bases.log; then
+    # 2067-dwqd: ported to Lua. No runnable plan binary is a missing guard, not a pass.
+    _cb_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _cb_plan=""
+    if [[ -f "scripts/lua/check-container-bases.lua" && -n "$_cb_plan" ]]; then
+        _rc=0
+        "$_cb_plan" script run scripts/lua/check-container-bases.lua > /tmp/container-bases.log 2>&1 || _rc=$?
+        cat /tmp/container-bases.log
+        if [ "$_rc" -eq 0 ]; then
             log_pass "Container base images match role policy"
             archive_check_log "container-base-policy" "pass" /tmp/container-bases.log
         else
@@ -1433,7 +1438,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "container-base-policy" "fail" /tmp/container-bases.log
         fi
     else
-        log_fail_missing_guard "container-base-policy" "scripts/check-container-bases.sh"
+        log_fail_missing_guard "container-base-policy" "scripts/lua/check-container-bases.lua (or no runnable tillandsias-plan)"
         archive_check_log "container-base-policy" "skipped"
     fi
 
