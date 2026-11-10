@@ -288,6 +288,9 @@ COPY cli/tillandsias-trust /opt/agents/tillandsias-cli/bin/tillandsias-trust
 COPY cli/tillandsias-listen /opt/agents/tillandsias-cli/bin/tillandsias-listen
 # 2006-srcr: how full /home/forge/src is, what to move, and its high-water mark (python3).
 COPY cli/tillandsias-room /opt/agents/tillandsias-cli/bin/tillandsias-room
+# 2067-dwqd: run a heavy job inside the forge's real budget (queue, headroom,
+# thread caps, process-tree kill on sustained memory pressure); stock Lua 5.4.
+COPY cli/forge-guard /opt/agents/tillandsias-cli/bin/forge-guard
 # 1874-pn3s: `flutter` is now a shell front that runs this lane client when the
 # lane is ready, else a cached SDK from the project cache, else a typed refusal.
 COPY cli/flutter-lane /opt/agents/tillandsias-cli/libexec/flutter-lane
@@ -305,7 +308,8 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-impact /usr/local/bin/tillandsias-impact \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-trust /usr/local/bin/tillandsias-trust \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-listen /usr/local/bin/tillandsias-listen \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-room /usr/local/bin/tillandsias-room
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-room /usr/local/bin/tillandsias-room \
+    && ln -sf /opt/agents/tillandsias-cli/bin/forge-guard /usr/local/bin/forge-guard
 
 # ── Skills mapping ─────────────────────────────────────────────
 # @trace

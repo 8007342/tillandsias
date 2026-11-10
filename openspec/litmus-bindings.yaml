@@ -492,6 +492,7 @@ specs:
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
   - litmus:json-get-help-names-its-subset
+  - litmus:json-get-parity-binary-swap
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -522,6 +523,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-src-room
+  - litmus:forge-guard
   - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
