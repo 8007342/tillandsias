@@ -195,7 +195,11 @@ mod tests {
             "lib/highlight.min.css",
             "lib/highlight.min.js",
         ] {
-            fs::write(root.join("tools/trace-viewer").join(rel), "trace viewer asset").unwrap();
+            fs::write(
+                root.join("tools/trace-viewer").join(rel),
+                "trace viewer asset",
+            )
+            .unwrap();
         }
         symlink(
             "../wrangler/bin/wrangler.js",
@@ -219,10 +223,7 @@ mod tests {
         let selected = root.join("tools/trace-viewer/lib/chart.umd.js");
         fs::remove_file(&selected).unwrap();
         symlink("highlight.min.js", &selected).unwrap();
-        assert!(
-            std::panic::catch_unwind(|| collect_trace_viewer(&root, &mut Vec::new()))
-                .is_err()
-        );
+        assert!(std::panic::catch_unwind(|| collect_trace_viewer(&root, &mut Vec::new())).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 }

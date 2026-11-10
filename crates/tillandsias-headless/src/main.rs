@@ -17577,6 +17577,13 @@ fn observatorium_container_name(project_name: &str) -> String {
     format!("tillandsias-observatorium-{project_name}")
 }
 
+/// Order 2066-obsv (PR 4): the project trace viewer --observatorium serves at
+/// /observatorium/ lives in the runtime asset root's tools/trace-viewer/;
+/// observatorium/ is the static release site and is never mounted.
+fn trace_viewer_assets(root: &Path) -> PathBuf {
+    root.join("tools").join("trace-viewer")
+}
+
 fn build_observatorium_web_args(
     project_path: &Path,
     project_name: &str,
@@ -17704,9 +17711,7 @@ fn run_observatorium_mode(
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
-    // 2066-obsv: the trace viewer's source is tools/trace-viewer/; it is still
-    // served at /observatorium/.
-    let observatorium_assets = root.join("tools/trace-viewer");
+    let observatorium_assets = trace_viewer_assets(&root);
     if !observatorium_assets.join("index.html").is_file() {
         return Err(format!(
             "Observatorium UI assets not found at {}",
@@ -37635,15 +37640,25 @@ esac
     /// directory in the runtime asset root changed.
     #[test]
     fn observatorium_mode_serves_the_trace_viewer_from_tools() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let window = source_window(source, "fn run_observatorium_mode(");
-        assert!(
-            window.contains(r#"root.join("tools/trace-viewer")"#),
-            "--observatorium must mount the runtime asset root's tools/trace-viewer"
+        let root = Path::new("/tmp/runtime");
+        let assets = trace_viewer_assets(root);
+        assert_eq!(assets, Path::new("/tmp/runtime/tools/trace-viewer"));
+        let args = build_observatorium_web_args(
+            Path::new("/tmp/project"),
+            "project",
+            &assets,
+            "tillandsias-web:v1.2.3",
         );
         assert!(
-            !window.contains(r#"root.join("observatorium")"#),
-            "--observatorium must not mount observatorium/ (the static release site)"
+            args.iter().any(|arg| arg
+                == "type=bind,source=/tmp/runtime/tools/trace-viewer,target=/var/www/observatorium,relabel=shared,readonly=true"),
+            "--observatorium must mount tools/trace-viewer at /var/www/observatorium: {args:?}"
+        );
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.contains("source=/tmp/runtime/observatorium,")),
+            "--observatorium must not mount observatorium/ (the static release site): {args:?}"
         );
     }
 
