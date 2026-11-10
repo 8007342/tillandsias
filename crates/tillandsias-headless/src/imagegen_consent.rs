@@ -241,6 +241,69 @@ pub fn redeem(
     Ok(())
 }
 
+/// What a restricted fetch's token is bound to besides the lane and request:
+/// the exact file set, as its sorted sha256 list (order 2068-ypgq). Prefixed
+/// so no tier name can collide with it.
+pub fn restricted_subject(shas: &[String]) -> String {
+    let mut s: Vec<String> = shas.iter().map(|x| x.to_ascii_lowercase()).collect();
+    s.sort();
+    s.dedup();
+    let mut h = Sha256::new();
+    h.update(s.join(",").as_bytes());
+    format!("restricted:{:x}", h.finalize())
+}
+
+/// Mint a single-use offer to download a RESTRICTED file set (order
+/// 2068-ypgq). Unlike a tier's, the yes is never kept: every fetch of
+/// restricted weights asks, and redeeming records no host grant.
+pub fn offer_restricted(lane: &str, request: &str, subject: &str, bytes: u64) -> Value {
+    let token = mint_token();
+    if let Ok(mut s) = state().lock() {
+        let now = Instant::now();
+        s.offers
+            .retain(|_, g| now.duration_since(g.minted) < TOKEN_TTL);
+        s.offers.insert(
+            token.clone(),
+            Offered {
+                lane: lane.to_string(),
+                tier: subject.to_string(),
+                request: request.to_string(),
+                minted: now,
+            },
+        );
+    }
+    json!({
+        "subject": subject,
+        "consent_token": token,
+        "ask": ask_download(bytes),
+        "download_bytes": bytes,
+        "how": "Show `ask` to the user exactly as written. Only if they say yes, call the same tool again \
+                with the same arguments and this consent_token. It is good for this one download only. \
+                If they say no, nothing is downloaded.",
+        "expires_in_s": TOKEN_TTL.as_secs(),
+    })
+}
+
+/// Spend a restricted offer's `token`. Single use, like [`redeem`]: the token
+/// is removed whether or not it matches. No grant is recorded.
+pub fn redeem_restricted(
+    token: Option<&str>,
+    lane: &str,
+    subject: &str,
+    request: &str,
+) -> Result<(), Refusal> {
+    let token = token.filter(|t| !t.is_empty()).ok_or(Refusal::Missing)?;
+    let mut s = state().lock().map_err(|_| Refusal::Unknown)?;
+    let offered = s.offers.remove(token).ok_or(Refusal::Unknown)?;
+    if offered.minted.elapsed() >= TOKEN_TTL {
+        return Err(Refusal::Unknown);
+    }
+    if offered.lane != lane || offered.tier != subject || offered.request != request {
+        return Err(Refusal::Mismatch);
+    }
+    Ok(())
+}
+
 /// The `consent_required` result: the download offer, and nothing run.
 pub fn consent_required(offer: Value, refusal: Refusal) -> Value {
     json!({

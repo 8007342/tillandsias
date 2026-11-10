@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: one-child-environment-builder-with-a-hard-block-and-per-script-declared-inherit
+    field: next_action
+    value: |-
+      Start after 2031-z4rm renames the two non-secret names; tasks.md 1.1-1.8.
+
+
+      [2026-11-10T07:03:15Z yoga] STATE 2026-11-10 (yoga, at the coordinator's direction). Part 1 LANDED: #1007 (29f2c719e, 2026-11-08) merged the one ChildEnv builder, the hard block, declared inherit and the podman profile, in WARN mode on the inherited TILLANDSIAS_ layer. WARN CENSUS (tasks 1.8), per coordinator macuahuitl-fedora's relay of 2026-11-10: the TILLANDSIAS_ENV_BLOCK_WARN=1 ./build.sh --check census ran 2026-11-08 and linux and darwin both reported 0 would-drop names; msys is unmeasured (yolanda offline). Not re-measured here: yoga's own 2026-11-08 census run stopped at the workspace suite (2062-qsga, since landed in #1035) and yoga's timing logs hold no census record, so the linux figure is the coordinator's, not yoga's. OPEN ASKS for the Windows host (pickup: windows): (1) the msys census, TILLANDSIAS_ENV_BLOCK_WARN=1 ./build.sh --check on windows-next, recording the env_block_would_drop names on this row; (2) a Windows run of cargo test -p tillandsias-plan --test lua_proc windows_folds_case_for_the_hard_block. Then the flip (delete warn mode, enforce class A on the TILLANDSIAS_ layer, a_credential_shaped_project_variable_does_not_reach_a_child goes green), which also waits on the operator. 2031-zq68 no longer depends on this row (it needs only the podman profile; depends_on emptied 2026-11-10).
+    ts: "2026-11-10T07:03:15Z"
+    host: yoga
+
+events:
+  - packet_id: one-child-environment-builder-with-a-hard-block-and-per-script-declared-inherit
+    event:
+      type: progress
+      ts: "2026-11-10T07:03:15Z"
+      host: yoga
+      summary: |-
+        status 'Start after 2031-z4rm renames the two non-secret names; tasks.md 1.1-1.8.
+        
+        
+        [2026-11-10T07:03:15Z yoga] STATE 2026-11-10 (yoga, at the coordinator's direction). Part 1 LANDED: #1007 (29f2c719e, 2026-11-08) merged the one ChildEnv builder, the hard block, declared inherit and the podman profile, in WARN mode on the inherited TILLANDSIAS_ layer. WARN CENSUS (tasks 1.8), per coordinator macuahuitl-fedora's relay of 2026-11-10: the TILLANDSIAS_ENV_BLOCK_WARN=1 ./build.sh --check census ran 2026-11-08 and linux and darwin both reported 0 would-drop names; msys is unmeasured (yolanda offline). Not re-measured here: yoga's own 2026-11-08 census run stopped at the workspace suite (2062-qsga, since landed in #1035) and yoga's timing logs hold no census record, so the linux figure is the coordinator's, not yoga's. OPEN ASKS for the Windows host (pickup: windows): (1) the msys census, TILLANDSIAS_ENV_BLOCK_WARN=1 ./build.sh --check on windows-next, recording the env_block_would_drop names on this row; (2) a Windows run of cargo test -p tillandsias-plan --test lua_proc windows_folds_case_for_the_hard_block. Then the flip (delete warn mode, enforce class A on the TILLANDSIAS_ layer, a_credential_shaped_project_variable_does_not_reach_a_child goes green), which also waits on the operator. 2031-zq68 no longer depends on this row (it needs only the podman profile; depends_on emptied 2026-11-10).' (not terminal) with evidence_refs: gh pr view 1007 (merged 29f2c719e 2026-11-08); coordinator relay 2026-11-10 (census linux/darwin 0 names); yoga timing-log scan 2026-11-10 found no census records
