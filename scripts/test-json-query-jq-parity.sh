@@ -32,7 +32,7 @@ GOLDEN="$ROOT/scripts/portability/jq-subset-golden.txt"
 if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
     PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
 else
-    PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
+    PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
 fi
 
 # 2073-i4jr: run a private SNAPSHOT of the binary, never the resolved path.
