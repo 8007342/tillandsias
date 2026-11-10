@@ -18,3 +18,4 @@ STEP_ERROR="the observatorium test suite failed, or the fixture no longer reds a
 STEP_OK="observatorium test suite passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no node >= 22 on PATH, so the observatorium suite could not run"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-10 darwin ok:observatorium-npm-test:67 tests (work/2066-obsv @ 03a00a19a, node v26.13.0, rc=0, both arms ok)"

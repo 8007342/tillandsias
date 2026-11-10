@@ -20,7 +20,7 @@
 - [x] 3.3 site/publish.mjs <tag> writes the built site onto the local deploy ref with Observatorium-Release/-Snapshot/-Source trailers and pushes nothing; site/verify.mjs is the pre-deploy stale-ship guard (`npm run deploy` on the deploy branch).
 - [x] 3.4 wrangler.jsonc: static assets from ./dist, no build command, 404-page.
 - [x] 3.5 methodology/versioning.yaml deploy_refs and openspec/specs/observatorium-dashboard/deployment.md describe the manual operator flow; design.md section 6 rev3.
-- [ ] 3.6 Gate step for observatorium npm test with a STEP_SECOND_REGIME attestation (fleet lead routes the second host).
+- [x] 3.6 Gate step for observatorium npm test with a STEP_SECOND_REGIME attestation (fleet lead routes the second host): scripts/gate-steps.d/930-2066-obsv.step runs scripts/lua/test-observatorium-npm-test.lua; darwin record from tlatoanis-macbook-air 2026-11-10.
 
 ## PR 4 — move the project trace viewer (fleet lead 2026-11-10, option a)
 - [x] 4.1 Move observatorium/index.html and lib/*.js to tools/trace-viewer/; --observatorium, tillandsias-embed and scripts/run-observatorium.sh follow; the clickable-trace-index spec and litmus stay green. The flag and the Project observatorium view requirement are unchanged.
