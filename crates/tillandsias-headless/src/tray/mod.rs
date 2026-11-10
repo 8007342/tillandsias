@@ -1096,6 +1096,18 @@ fn spawn_lane_adoption() {
                     crate::mcp_socket::adopt_marked_lanes();
                 }
             });
+        // 2070-mtf9: name every lane an older launcher still serves, at
+        // startup and then each minute, once per lane and build.
+        #[cfg(feature = "host-services")]
+        let _ = std::thread::Builder::new()
+            .name("lane-freshness".into())
+            .spawn(|| {
+                let mut seen = std::collections::HashSet::new();
+                loop {
+                    crate::report_stale_lanes(&mut seen);
+                    std::thread::sleep(std::time::Duration::from_secs(60));
+                }
+            });
     });
 }
 
