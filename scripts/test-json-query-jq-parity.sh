@@ -26,7 +26,14 @@ GOLDEN="$ROOT/scripts/portability/jq-subset-golden.txt"
 
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
+# Resolve from the CHECKOUT and make the path absolute (class 1401-x76w, as
+# 84f37ff24 did for hardware-fingerprint); an explicit TILLANDSIAS_PLAN_BIN
+# keeps its caller-relative meaning.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
+else
+    PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
+fi
 
 # 2073-i4jr: run a private SNAPSHOT of the binary, never the resolved path.
 # That path is a build output a concurrent guard may relink mid-run; about 80
