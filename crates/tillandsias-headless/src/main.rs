@@ -144,6 +144,9 @@ mod forge_swap;
 // 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
 #[cfg(target_os = "linux")]
 mod oom_posture;
+// 2067-dwqd: the tray names a container held at its memory.high.
+#[cfg(target_os = "linux")]
+mod memory_stall_watch;
 // 1944-trsp: one tray per enclave (a lifetime flock), and a CLI that can tell.
 mod tray_presence;
 // RAM-only source-volume identity is needed by default CLI launchers too.
@@ -471,6 +474,31 @@ fn main() {
                 "  why: cloud.usage reads tokens from Vault and needs the host-services and vault features"
             );
             eprintln!("  remedy: use the installed tray build of tillandsias");
+            std::process::exit(2);
+        }
+    }
+
+    // Order 2067-dwqd: `--memory-stall [--for <secs>]`, a read-only probe of
+    // whether a tillandsias container is held at its memory.high: the tray's
+    // own watch, sampled every 5 s for `--for` seconds (default 30). Exits 1
+    // when it names a stall. Also listed in known_flags (five sites).
+    if let Some(idx) = user_args.iter().position(|a| a == "--memory-stall") {
+        let secs = match user_args.get(idx + 1).map(String::as_str) {
+            Some("--for") => user_args.get(idx + 2).and_then(|s| s.parse::<u64>().ok()),
+            _ => Some(30),
+        };
+        let Some(secs) = secs else {
+            eprintln!("usage: tillandsias --memory-stall [--for <secs>]");
+            std::process::exit(2);
+        };
+        #[cfg(target_os = "linux")]
+        std::process::exit(memory_stall_watch::run_cli(secs));
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = secs;
+            eprintln!(
+                "could-not-run:memory-stall: cgroup v2 is Linux-only; run it where the containers run"
+            );
             std::process::exit(2);
         }
     }
@@ -1066,6 +1094,8 @@ fn main() {
         "--fs-stall-check",
         "--gap-secs",
         // Order 1913-fh6l: dispatched early (memory_protection::run_cli).
+        // Order 2067-dwqd: dispatched early (memory_stall_watch::run_cli).
+        "--memory-stall",
         "--memory-protection",
         // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
         // too so no reorder can make it `Unsupported option`.
@@ -2055,6 +2085,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cloud-usage [--debug]");
     println!("       tillandsias --fs-stall-check [--gap-secs N]");
     println!("       tillandsias --memory-protection <container>");
+    println!("       tillandsias --memory-stall [--for <secs>]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -2141,6 +2172,9 @@ fn print_usage(version: &str) {
     );
     println!(
         "  --memory-protection <container>  Read-only: does the container's memory.low protect anything? Walks its cgroup chain to the root and prints each level's memory.low and the effective protection; exits 1 when an ancestor caps it below the reservation"
+    );
+    println!(
+        "  --memory-stall [--for <secs>]  Read-only: is a tillandsias container held at its memory.high (throttled, not killed, so it looks frozen)? Samples memory.pressure and memory.events every 5 s for --for seconds (default 30), prints a warn:memory-stall: line naming each one; exits 1 when any is stalled"
     );
     println!(
         "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
@@ -9879,15 +9913,21 @@ pub(crate) fn quarantine_invalid_checkout(path: &Path) -> Result<PathBuf, String
 /// @trace spec:remote-projects, spec:host-shell-architecture
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, String> {
-    let short_name = nwo
-        .rsplit('/')
+    // Order 2067-774h: one spelling per project. A clone URL or owner/repo
+    // ending in `.git` (or `/`) names the bare repo: GitHub repository names
+    // cannot end in ".git", and a lane labelled "repo.git" misses every host
+    // lookup keyed on "repo" (the known-project list, the tray's lane table).
+    let canonical = nwo.trim_end_matches('/');
+    let canonical = canonical.strip_suffix(".git").unwrap_or(canonical);
+    let short_name = canonical
+        .rsplit(['/', ':'])
         .next()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| format!("--cloud value has no repo name: {nwo}"))?;
     let remote_url = if nwo.starts_with("https://") || nwo.starts_with("git@") {
-        nwo.to_string()
+        format!("{canonical}.git")
     } else {
-        format!("https://github.com/{nwo}.git")
+        format!("https://github.com/{canonical}.git")
     };
     if debug {
         eprintln!(
@@ -19563,6 +19603,98 @@ mod tray_notify_tests {
         assert!(matches!(out, TrayNotify::NoTray(_)), "{out:?}");
     }
 
+    /// Order 2067-774h: a `--cloud` value spelled with `.git` (a clone URL, or
+    /// owner/repo.git) names the same project as the bare repo. MEASURED in a
+    /// live forge 2026-11-09: the lane carried "tlatoani.net.git", so its git
+    /// service, MCP socket and every host lookup missed the known project
+    /// "tlatoani.net" (refused:lane-tray-version-mismatch, "not a known
+    /// project on this host"). GitHub repository names cannot end in ".git".
+    #[cfg(any(feature = "tray", feature = "listen-vsock"))]
+    #[test]
+    fn a_cloud_value_spelled_with_dot_git_names_the_bare_project() {
+        let _g = crate::test_support::env_lock();
+        let prev = std::env::var_os("TILLANDSIAS_PROJECT_REMOTE_URL");
+        let mut got = Vec::new();
+        for nwo in [
+            "8007342/tlatoani.net",
+            "8007342/tlatoani.net.git",
+            "8007342/tlatoani.net/",
+            "https://github.com/8007342/tlatoani.net.git",
+            "https://github.com/8007342/tlatoani.net",
+            "git@github.com:8007342/tlatoani.net.git",
+        ] {
+            let name = resolve_cloud_project_checkout(nwo, false);
+            let remote = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL").unwrap_or_default();
+            got.push((nwo, name, remote));
+        }
+        let refused = resolve_cloud_project_checkout("8007342/.git", false);
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("TILLANDSIAS_PROJECT_REMOTE_URL", v),
+                None => std::env::remove_var("TILLANDSIAS_PROJECT_REMOTE_URL"),
+            }
+        }
+        for (nwo, name, remote) in &got {
+            assert_eq!(name.as_deref(), Ok("tlatoani.net"), "{nwo}");
+            assert!(!remote.ends_with(".git.git"), "{nwo}: {remote}");
+            assert!(remote.contains("8007342/tlatoani.net"), "{nwo}: {remote}");
+        }
+        assert!(refused.is_err(), "{refused:?}");
+    }
+
+    /// Order 2067-774h: the web-session handshake dials the socket the
+    /// running tray serves (2007-rtky: `<runtime>/tillandsias/control/`), not
+    /// the pre-2007 path. MEASURED in a live forge 2026-11-09: a stale real
+    /// socket from an exited tray sat at the old path (the legacy symlink
+    /// never replaces a real file), the handshake dialled it, got "Connection
+    /// refused", and webstudio.open answered started:true with no window.
+    #[test]
+    fn issue_web_session_dials_the_trays_current_socket_not_a_stale_legacy_one() {
+        let _g = crate::test_support::env_lock();
+        let run = tempfile::tempdir().unwrap();
+        let prev = std::env::var_os("XDG_RUNTIME_DIR");
+        // SAFETY: serialised by env_lock; restored below.
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", run.path()) };
+        // An exited tray's socket at the legacy path: the file stays, connect
+        // is refused.
+        let legacy = control_socket_host_dir().join("control.sock");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        drop(UnixListener::bind(&legacy).unwrap());
+        // The running tray, on its current socket.
+        let listener = UnixListener::bind(control_socket_file()).unwrap();
+        let t = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let body = read_control_frame_blocking(&mut s).unwrap();
+            let got = decode(&body).unwrap().body;
+            let ack = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::IssueAck { seq_acked: 1 },
+            };
+            let encoded = encode(&ack).unwrap();
+            let mut frame = (encoded.len() as u32).to_be_bytes().to_vec();
+            frame.extend_from_slice(&encoded);
+            s.write_all(&frame).unwrap();
+            got.kind()
+        });
+        let out = send_issue_web_session("tlatoani.net", &[7u8; 32]);
+        if out.is_err() {
+            // Unblock the listener thread so the test reports instead of hanging.
+            let _ = UnixStream::connect(control_socket_file());
+        }
+        let kind = t.join();
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
+                None => std::env::remove_var("XDG_RUNTIME_DIR"),
+            }
+        }
+        assert!(out.is_ok(), "{out:?}");
+        assert_eq!(kind.ok(), Some("IssueWebSession"));
+    }
+
     /// Order 1719-83po: each notifier sends ITS OWN variant through the shared
     /// framing and reads the ack; this also pins the GitHub path through the
     /// refactor into notify_tray_login_stored.
@@ -19602,16 +19734,37 @@ mod tray_notify_tests {
 
 #[cfg(unix)]
 fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
-    // Get control socket path from XDG_RUNTIME_DIR or default.
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
-        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
-    let socket_path = format!("{}/tillandsias/control.sock", runtime_dir);
+    // Order 2067-774h: the socket the running tray serves (2007-rtky:
+    // control/control.sock), the same one every other CLI-to-tray call dials.
+    // This used to build the pre-2007 `<runtime>/tillandsias/control.sock`
+    // itself; a stale real socket left there by an exited tray is never
+    // replaced by the legacy symlink, so the handshake got ECONNREFUSED while
+    // the live tray listened one directory down. The legacy path is tried
+    // only when the current socket does not exist (a pre-2007 tray).
+    let socket_path = tray_control_socket_path();
+    let legacy_path = control_socket_host_dir().join("control.sock");
 
     // Connect to the socket. The connect itself has no built-in timeout, but
     // it's a local UDS so it either binds immediately or returns ENOENT/
     // ECONNREFUSED.
-    let mut stream = UnixStream::connect(&socket_path)
-        .map_err(|e| format!("Failed to connect to control socket {}: {}", socket_path, e))?;
+    let mut stream = match UnixStream::connect(&socket_path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => UnixStream::connect(&legacy_path)
+            .map_err(|le| {
+                format!(
+                    "Failed to connect to control socket {} ({e}) or the pre-2007 {} ({le})",
+                    socket_path.display(),
+                    legacy_path.display()
+                )
+            })?,
+        Err(e) => {
+            return Err(format!(
+                "Failed to connect to control socket {}: {}",
+                socket_path.display(),
+                e
+            ));
+        }
+    };
 
     // The whole round-trip must complete within a couple of seconds; the
     // tray broadcast is synchronous so the ack should land in single-digit

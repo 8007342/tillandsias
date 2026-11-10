@@ -9,6 +9,13 @@ metadata:
   trace: "order:1311-ajpm, order:1317-9ugn, spec:methodology-accountability"
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Join the Fleet
 
 Run this once per session on any worker, bare metal or in-forge. Every command

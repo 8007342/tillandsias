@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-flutter-lane-client-fails-loudly-with-a-named-error-when-the-host-side-drops-its-request
+    field: next_action
+    value: 'PR #1058 queued. Root cause measured on macuahuitl: the lane was still served by the old 56.11.9.1 launcher (pid 1020477, exe deleted), and the new tray never re-adopted it; the handover is filed as 2070-mtf9. Close this row when #1058 lands, citing 2070-mtf9 for the drop.'
+    ts: "2026-11-10T04:11:04Z"
+    host: lenovinha-silverblue
+    replaces_sha256: "4efa099658dbac0f2381e45386201f1f5d6eca55cde05ab23231d04d6615e39b"
+
+events:
+  - packet_id: a-flutter-lane-client-fails-loudly-with-a-named-error-when-the-host-side-drops-its-request
+    event:
+      type: note
+      ts: "2026-11-10T04:11:04Z"
+      host: lenovinha-silverblue
+      summary: |-
+        root-cause evidence from macuahuitl

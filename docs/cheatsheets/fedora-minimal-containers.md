@@ -26,7 +26,7 @@ Quick reference for Fedora Minimal (fedora-minimal:44) behavior in Tillandsias c
 
 Fedora Minimal is the required baseline for containers that run agent toolchains, browser processes, inference runtimes, or anything expected to participate in future SELinux policy tuning. Alpine remains acceptable only for narrow appliance images documented in `docs/cheatsheets/alpine-containers.md`.
 
-This split keeps the security-sensitive runtime boring: Fedora/glibc for complex execution surfaces, Alpine/musl only where the container behaves like a single-purpose utility. `scripts/check-container-bases.sh` enforces the current role-to-base matrix.
+This split keeps the security-sensitive runtime boring: Fedora/glibc for complex execution surfaces, Alpine/musl only where the container behaves like a single-purpose utility. `scripts/lua/check-container-bases.lua` enforces the current role-to-base matrix.
 
 ## Package Manager
 

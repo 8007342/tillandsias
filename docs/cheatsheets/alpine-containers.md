@@ -36,7 +36,7 @@ Alpine is allowed only for narrow appliance containers where the runtime surface
 | inference | Fedora Minimal required | Ollama/GPU/tooling compatibility relies on glibc/Fedora package behavior. |
 | chromium | Fedora Minimal required | Browser sandboxing, fonts, NSS, seccomp, and glibc assumptions are not worth optimizing away. |
 
-`scripts/check-container-bases.sh` enforces this matrix. `latest` tags are forbidden; changing a role's base image is an architecture change, not a local Containerfile tweak.
+`scripts/lua/check-container-bases.lua` enforces this matrix. `latest` tags are forbidden; changing a role's base image is an architecture change, not a local Containerfile tweak.
 
 ## Shell
 
