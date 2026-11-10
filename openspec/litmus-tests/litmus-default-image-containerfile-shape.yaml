@@ -58,7 +58,7 @@ critical_path:
     # :1818 versioned_image_tag), so the fallback is never used on the real
     # build path, and a bare name resolves to `:latest` anyway. What must stay
     # true is that the ARG exists and the FROM consumes it — which is also what
-    # scripts/check-container-bases.sh:60 has been asserting all along.
+    # scripts/lua/check-container-bases.lua has been asserting all along.
     command: "grep -F 'FROM registry.fedoraproject.org/fedora-minimal:44' images/default/Containerfile.base && grep -Eq '^ARG BASE_IMAGE=localhost/tillandsias-forge-base(:[A-Za-z0-9._-]+)?$' images/default/Containerfile && grep -Fq 'FROM ${BASE_IMAGE}' images/default/Containerfile && echo 'fedora-minimal:44'"
     timeout_ms: 3000
     expected_behavior: "fedora-minimal:44"

@@ -953,6 +953,25 @@ fn notify_github_refresh_expiring(message: String) {
         .and_then(|mut c| c.wait());
 }
 
+/// Order 2067-dwqd: a container stalled on its memory budget. Critical
+/// urgency: the forge looks frozen until someone acts. Best-effort, like the
+/// others; the `warn:memory-stall:` line is on stderr regardless.
+#[cfg(target_os = "linux")]
+fn notify_memory_stall(message: String) {
+    let _ = std::process::Command::new("notify-send")
+        .args([
+            "--app-name=Tillandsias",
+            "--urgency=critical",
+            "Tillandsias: a forge is stalled on memory",
+        ])
+        .arg(&message)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .and_then(|mut c| c.wait());
+}
+
 /// Order 1762-bano: the desktop notification for certificates a running tray
 /// cannot renew on its own. Plain words only; the message is the whole action.
 fn notify_cert_expiring(message: String) {
@@ -4102,6 +4121,10 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // unchanged CA, and names a CA or Vault leaf near notAfter (launch renews
     // those with a 60-day margin; a running tray never swaps the CA).
     crate::spawn_cert_expiry_scheduler(debug, Some(Box::new(notify_cert_expiring)));
+    // Order 2067-dwqd: a forge (or sibling) held at its memory.high is named
+    // on the desktop, once per episode, instead of freezing silently.
+    #[cfg(target_os = "linux")]
+    crate::memory_stall_watch::spawn(Box::new(notify_memory_stall));
     // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
     // failure degrades the tray to no-agent-publish rather than killing
     // it — the control socket above is load-bearing, this one is not

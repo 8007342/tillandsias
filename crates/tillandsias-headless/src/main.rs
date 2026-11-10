@@ -143,6 +143,9 @@ mod forge_swap;
 // 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
 #[cfg(target_os = "linux")]
 mod oom_posture;
+// 2067-dwqd: the tray names a container held at its memory.high.
+#[cfg(target_os = "linux")]
+mod memory_stall_watch;
 // 1944-trsp: one tray per enclave (a lifetime flock), and a CLI that can tell.
 mod tray_presence;
 // RAM-only source-volume identity is needed by default CLI launchers too.
@@ -452,6 +455,31 @@ fn main() {
                 "  why: cloud.usage reads tokens from Vault and needs the host-services and vault features"
             );
             eprintln!("  remedy: use the installed tray build of tillandsias");
+            std::process::exit(2);
+        }
+    }
+
+    // Order 2067-dwqd: `--memory-stall [--for <secs>]`, a read-only probe of
+    // whether a tillandsias container is held at its memory.high: the tray's
+    // own watch, sampled every 5 s for `--for` seconds (default 30). Exits 1
+    // when it names a stall. Also listed in known_flags (five sites).
+    if let Some(idx) = user_args.iter().position(|a| a == "--memory-stall") {
+        let secs = match user_args.get(idx + 1).map(String::as_str) {
+            Some("--for") => user_args.get(idx + 2).and_then(|s| s.parse::<u64>().ok()),
+            _ => Some(30),
+        };
+        let Some(secs) = secs else {
+            eprintln!("usage: tillandsias --memory-stall [--for <secs>]");
+            std::process::exit(2);
+        };
+        #[cfg(target_os = "linux")]
+        std::process::exit(memory_stall_watch::run_cli(secs));
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = secs;
+            eprintln!(
+                "could-not-run:memory-stall: cgroup v2 is Linux-only; run it where the containers run"
+            );
             std::process::exit(2);
         }
     }
@@ -1044,6 +1072,8 @@ fn main() {
         // Order 1966-47vt: dispatched early (cloud_usage::call_live).
         "--cloud-usage",
         // Order 1913-fh6l: dispatched early (memory_protection::run_cli).
+        // Order 2067-dwqd: dispatched early (memory_stall_watch::run_cli).
+        "--memory-stall",
         "--memory-protection",
         // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
         // too so no reorder can make it `Unsupported option`.
@@ -2032,6 +2062,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --cloud-usage [--debug]");
     println!("       tillandsias --memory-protection <container>");
+    println!("       tillandsias --memory-stall [--for <secs>]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -2115,6 +2146,9 @@ fn print_usage(version: &str) {
     );
     println!(
         "  --memory-protection <container>  Read-only: does the container's memory.low protect anything? Walks its cgroup chain to the root and prints each level's memory.low and the effective protection; exits 1 when an ancestor caps it below the reservation"
+    );
+    println!(
+        "  --memory-stall [--for <secs>]  Read-only: is a tillandsias container held at its memory.high (throttled, not killed, so it looks frozen)? Samples memory.pressure and memory.events every 5 s for --for seconds (default 30), prints a warn:memory-stall: line naming each one; exits 1 when any is stalled"
     );
     println!(
         "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
