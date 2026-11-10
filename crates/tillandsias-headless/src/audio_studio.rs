@@ -33,6 +33,12 @@ pub const IMAGE: &str = "audio-studio";
 pub const FORGE_AUDIO: &str = "/work/tmp/audio";
 /// The appliance's own user (`useradd -u 1001` in its Containerfile).
 pub const STUDIO_UID: u32 = 1001;
+/// One call's wall-clock deadline, enforced by conmon (`podman run --timeout`)
+/// so the CONTAINER dies with it. Killing only the podman client leaves the
+/// container running: on 2026-11-09 runaway detect containers outlived their
+/// 30 min client bound and starved every later call, a 4 s file included
+/// (2066-azxa). A measured 86 s stereo detect takes ~2 s and a transform ~3 s.
+pub const DEADLINE_SECS: u64 = 600;
 /// The named transforms, with the extension a default output gets.
 pub const OPS: &[(&str, &str)] = &[
     ("loudness_normalise", "wav"),
@@ -72,6 +78,7 @@ pub fn run_args(volume: &str, image_tag: &str, tool_args: &[String]) -> Vec<Stri
     .iter()
     .map(|s| s.to_string())
     .collect();
+    a.push(format!("--timeout={DEADLINE_SECS}"));
     a.push(format!(
         "--userns=keep-id:uid={STUDIO_UID},gid={STUDIO_UID}"
     ));
@@ -111,9 +118,12 @@ mod tools {
 
     impl Appliance for PodmanAppliance {
         fn run(&self, tool_args: &[String]) -> Result<String, String> {
+            let started = std::time::Instant::now();
+            // The client bound sits past the container's own deadline, so the
+            // container is what times out and the client sees its exit.
             let out = crate::podman_command()
                 .args(run_args(&self.volume, &self.image_tag, tool_args))
-                .output_bounded(Duration::from_secs(30 * 60))
+                .output_bounded(Duration::from_secs(DEADLINE_SECS + 60))
                 .map_err(|e| format!("engine_failed: podman run {IMAGE}: {e}"))?;
             let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
             // audio-tool prints {"error": ...} on stdout and exits 2 on a refusal.
@@ -123,14 +133,26 @@ mod tools {
                 return Err(e.to_string());
             }
             if !out.status.success() {
-                return Err(format!(
-                    "engine_failed: {IMAGE} exited {:?}: {}",
+                return Err(failure_message(
                     out.status.code(),
-                    String::from_utf8_lossy(&out.stderr).trim()
+                    started.elapsed(),
+                    &String::from_utf8_lossy(&out.stderr),
                 ));
             }
             Ok(stdout)
         }
+    }
+
+    /// A failed run, named: past the deadline it is `deadline_exceeded`
+    /// (conmon killed the container), otherwise the exit code and stderr.
+    pub(crate) fn failure_message(code: Option<i32>, elapsed: Duration, stderr: &str) -> String {
+        if elapsed >= Duration::from_secs(DEADLINE_SECS) {
+            return format!(
+                "deadline_exceeded: {IMAGE} ran past its {DEADLINE_SECS} s deadline and was killed \
+                 (exit {code:?}); split the input, or report the file that took this long"
+            );
+        }
+        format!("engine_failed: {IMAGE} exited {code:?}: {}", stderr.trim())
     }
 
     fn podman_ok(args: &[&str]) -> Result<String, String> {
@@ -572,6 +594,8 @@ mod tests {
             "--security-opt=no-new-privileges",
             "--rm",
             "--pull=never",
+            // 2066-azxa: conmon kills the container at the deadline.
+            "--timeout=600",
         ] {
             assert!(a.iter().any(|x| x == flag), "{flag}: {a:?}");
         }
@@ -768,6 +792,19 @@ mod tests {
             .unwrap_err()
             .contains("malformed")
         );
+    }
+
+    #[test]
+    fn a_run_killed_at_the_deadline_is_named_deadline_exceeded_not_an_engine_failure() {
+        let late = failure_message(
+            Some(255),
+            std::time::Duration::from_secs(DEADLINE_SECS) + std::time::Duration::from_millis(5),
+            "",
+        );
+        assert!(late.starts_with("deadline_exceeded:"), "{late}");
+        assert!(late.contains("600 s"), "{late}");
+        let early = failure_message(Some(1), std::time::Duration::from_secs(3), "boom\n");
+        assert_eq!(early, "engine_failed: audio-studio exited Some(1): boom");
     }
 
     #[test]

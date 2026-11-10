@@ -114,7 +114,11 @@ def lpc(x, order):
     import numpy as np
     from scipy.linalg import solve_toeplitz
 
-    r = np.correlate(x, x, mode="full")[len(x) - 1:len(x) + order]
+    # Only lags 0..order: one dot product each, O(n * order). The full
+    # np.correlate this replaced is O(n^2) and never returned on an 86 s
+    # stereo file (2066-azxa).
+    n = len(x)
+    r = np.array([np.dot(x[:n - k], x[k:]) for k in range(order + 1)])
     if r[0] <= 0:
         return np.zeros(order)
     r = r.copy()
