@@ -5797,6 +5797,13 @@ Fedora base, not your host, and the difference has bitten agents repeatedly.
 \`lua-edit FILE OLD NEW [OLD NEW ...]\` applies every pair or none: it refuses, changing
 nothing, unless each OLD occurs exactly once. \`lua-conflict FILE ours|theirs|both [HUNK]\`
 resolves merge-conflict hunks; \`git add\` the file after.
+**Size heavy jobs from this forge's budget, not the host's** (2067-dwqd): \`nproc\` can
+report more CPUs than this forge may use, and memory.high THROTTLES instead of killing,
+so an oversized job freezes the forge. \`forge-guard budget\` prints the real CPUs and
+memory headroom; \`forge-guard run [--need-mb N] [--threads N] -- CMD\` queues heavy jobs
+one at a time, refuses when the memory is not there, caps thread pools, and kills the
+job tree under sustained memory pressure. \`forge-guard wait --pid P|--file F\` replaces
+\`pgrep -f\` wait loops (which match themselves).
 **ABSENT:** \`ruby\` — several skills still show \`ruby -ryaml\` for YAML validation.
 It is not here. Use \`yq\` instead (verified: it accepts valid YAML and exits
 non-zero on invalid).

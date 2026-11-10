@@ -521,6 +521,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-src-room
+  - litmus:forge-guard
   - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
