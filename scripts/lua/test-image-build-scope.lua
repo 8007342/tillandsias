@@ -24,7 +24,7 @@ if top.code ~= 0 or ROOT == "" then verdict.could_not_run(NAME, "git rev-parse -
 local BIN = env.get("TILLANDSIAS_HEADLESS_BIN")
 if not BIN or BIN == "" then BIN = ROOT .. "/target/debug/tillandsias" end
 if proc.run({ argv = { "test", "-x", BIN }, timeout_ms = 10000 }).code ~= 0 then
-    verdict.could_not_run(NAME, "no headless binary at " .. BIN .. " (cargo build -p tillandsias-headless, or set TILLANDSIAS_HEADLESS_BIN)")
+    verdict.skip(NAME, "no-headless-binary", "no headless binary at " .. BIN .. " (cargo build -p tillandsias-headless, or set TILLANDSIAS_HEADLESS_BIN)")
 end
 
 local REL = "target/plan-scratch/build-scope-" .. time.iso_utc():gsub("[^%w]", "") .. "-" .. tostring(math.random(100000, 999999))

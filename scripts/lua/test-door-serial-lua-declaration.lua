@@ -1,5 +1,5 @@
 -- @trace order:1630-dwab
--- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN TILLANDSIAS_PLAN_BIN
 --
 -- test-door-serial-lua-declaration.lua — a .lua guard can declare itself
 -- serial (`-- preflight: serial — <reason>`), and the door's own launcher then
@@ -47,9 +47,9 @@ local ROOT = text.trim(top.stdout or "")
 if top.status ~= "exited" or top.code ~= 0 or ROOT == "" then
     verdict.could_not_run("door-serial-lua-declaration", "git rev-parse --show-toplevel did not answer")
 end
-local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
+local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or env.get("TILLANDSIAS_PLAN_BIN") or ""
 if PLAN == "" then
-    verdict.could_not_run("door-serial-lua-declaration", "TILLANDSIAS_SCRIPT_RUNNER_BIN is unset, so a .lua guard cannot be launched")
+    verdict.could_not_run("door-serial-lua-declaration", "neither TILLANDSIAS_SCRIPT_RUNNER_BIN nor TILLANDSIAS_PLAN_BIN is set, so a .lua guard cannot be launched")
 end
 -- relative to the checkout (the door's ./target/... form); the launcher below
 -- runs it from a scratch root, where a relative path names nothing
