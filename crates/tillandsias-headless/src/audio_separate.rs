@@ -14,9 +14,17 @@
 //! - `consent_required` (an `Ok` carrying the offer): the weights are not yet
 //!   cached and the user has not said yes to this download.
 //!
-//! With the weights cached and verified, the separator itself is order
-//! 2068-cqis; until it lands the call answers `separator_not_built`, having
-//! changed nothing but the model cache.
+//! With the weights cached and verified (2068-cqis), the studio runs Demucs on
+//! CPU with exactly that one file bind-mounted READ-ONLY at /models/<file>
+//! and the registered sha256 on its argv; audio-tool re-hashes the bytes it
+//! loads, refuses anything that is not that safetensors file, and disables
+//! torch.load before Demucs is imported. The stems land under
+//! /work/tmp/audio/out/separate/<name>-<ticket>/<source>.wav, each with a
+//! provenance sidecar naming the weights row (model, sha256), the input's
+//! sha256 and the acknowledgement, and the answer carries the measured
+//! reconstruction (the stems' sum against the input).
+
+use std::path::PathBuf;
 
 use serde_json::{Value, json};
 
@@ -129,22 +137,35 @@ fn request_key(model: &str) -> String {
 /// How a call fetches its rows: the restricted fetch, or a fixture's.
 pub type FetchFn<'a> = dyn FnMut(&Ask, &[ModelFile]) -> Result<Fetch, String> + 'a;
 
-/// The call against an explicit weights manifest and fetch (fixtures).
+/// How a call reaches the studio once the weights are verified: given the
+/// read-only (host file, container path) mounts, the appliance that runs
+/// audio-tool and the host directory holding the lane's audio. Production
+/// builds the image and mounts the lane volume; fixtures stub both.
+pub type StudioFn<'a> = dyn FnMut(Vec<(PathBuf, String)>) -> Result<(Box<dyn audio_studio::Appliance>, PathBuf), String>
+    + 'a;
+
+/// Where the weights appear inside the studio: `/models/<file>`.
+pub const MODELS_MOUNT: &str = "/models";
+
+/// The call against an explicit weights manifest, fetch and studio (fixtures).
 pub fn separate_with(
     weights: &[ModelFile],
     project: &str,
     instance: &str,
     args: &Value,
     fetch: &mut FetchFn,
+    studio: &mut StudioFn,
 ) -> Result<Value, String> {
     let req = request(args)?;
     let rows = rows_for(weights, &req.model);
-    if rows.is_empty() {
+    if rows.len() != 1 {
         return Err(format!(
-            "model_refused: no weights row for {} in images/audio-studio/weights.tsv",
-            req.model
+            "model_refused: {} has {} weights rows in images/audio-studio/weights.tsv; want exactly one",
+            req.model,
+            rows.len()
         ));
     }
+    let row = &rows[0];
     let lane = imagegen_consent::lane_key(project, instance);
     let key = request_key(&req.model);
     let ask = Ask {
@@ -153,31 +174,143 @@ pub fn separate_with(
         request: &key,
         token: args["consent_token"].as_str(),
     };
-    match fetch(&ask, &rows)? {
-        Fetch::ConsentRequired(offer) => Ok(offer),
-        Fetch::Ready { paths, consent } => Err(format!(
-            "separator_not_built: the {} weights are cached and verified ({}; acknowledgement {}), \
-             but the {}-stem separator is order 2068-cqis and has not landed. Nothing was separated \
-             from {}.",
-            req.model,
-            paths
-                .iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", "),
-            consent.join(", "),
-            req.stems,
-            req.input
-        )),
+    let (paths, consent) = match fetch(&ask, &rows)? {
+        Fetch::ConsentRequired(offer) => return Ok(offer),
+        Fetch::Ready { paths, consent } => (paths, consent),
+    };
+    let [host_weights] = paths.as_slice() else {
+        return Err(format!(
+            "engine_failed: the fetch returned {} paths for one weights row",
+            paths.len()
+        ));
+    };
+    // Only the one verified file is mounted, read-only, under its own name.
+    let inside = format!("{MODELS_MOUNT}/{}", row.file);
+    let (app, host_dir) = studio(vec![(host_weights.clone(), inside.clone())])?;
+    let in_rel = audio_studio::forge_rel("input", &req.input)?;
+    let (inp, in_host) = audio_studio::input_record(&host_dir, &req.input, &in_rel)?;
+    let output = format!(
+        "{}/out/separate/{}-{}",
+        audio_studio::FORGE_AUDIO,
+        audio_studio::stem(&in_rel),
+        audio_studio::ticket()
+    );
+    let out_rel = audio_studio::forge_rel("output", &output)?;
+    if host_dir.join(&out_rel).exists() {
+        return Err(format!("output_exists: {output}"));
     }
+    let argv: Vec<String> = [
+        "separate",
+        "--model",
+        &req.model,
+        "--weights",
+        &inside,
+        "--sha256",
+        &row.sha256,
+        "--input",
+        &req.input,
+        "--output",
+        &output,
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let res: Value = serde_json::from_str(&app.run(&argv)?)
+        .map_err(|e| format!("engine_failed: audio-tool printed no JSON: {e}"))?;
+    // The studio's answer is checked, not trusted: the hash it loaded, and
+    // exactly the model's stem count, each a file on the lane.
+    if res["weights_sha256"].as_str() != Some(row.sha256.as_str()) {
+        return Err(format!(
+            "engine_failed: the studio loaded weights {}, not the registered {}",
+            res["weights_sha256"], row.sha256
+        ));
+    }
+    let sources: Vec<String> = res["sources"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|s| s.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    if sources.len() != usize::from(req.stems) {
+        return Err(format!(
+            "engine_failed: {} answered {} stems, want {}",
+            req.model,
+            sources.len(),
+            req.stems
+        ));
+    }
+    let mut full_argv = vec!["audio-tool".to_string()];
+    full_argv.extend(argv);
+    let params = json!({ "model": req.model, "sources": sources });
+    let mut versions = res["versions"].clone();
+    versions["engine"] = res["engine"].clone();
+    let mut stems = Vec::new();
+    for s in &sources {
+        if s.is_empty() || !s.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+            return Err(format!("engine_failed: malformed source name {s:?}"));
+        }
+        let path = format!("{output}/{s}.wav");
+        let host = host_dir.join(format!("{out_rel}/{s}.wav"));
+        if !host.is_file() {
+            return Err(format!("engine_failed: separate wrote no {path}"));
+        }
+        let mut rec = audio_studio::record(
+            "audio.separate",
+            inp.clone(),
+            &in_host,
+            versions.clone(),
+            "separate",
+            params.clone(),
+            full_argv.clone(),
+        );
+        rec.models = rows.clone();
+        rec.consent = Some(consent.clone());
+        let prov = rec.write_beside(&host)?;
+        stems.push(json!({
+            "source": s,
+            "path": path,
+            "provenance_path": format!("{path}.provenance.json"),
+            "provenance": prov,
+        }));
+    }
+    Ok(json!({
+        "model": req.model,
+        "input": req.input,
+        "output": output,
+        "sample_rate": res["sample_rate"].clone(),
+        "stems": stems,
+        "reconstruction": res["reconstruction"].clone(),
+        "weights": { "repo": row.repo, "revision": row.revision, "file": row.file, "sha256": row.sha256 },
+        "consent": consent,
+    }))
 }
 
-/// Production: the shipped manifest and the restricted fetch.
+/// Production: the shipped manifest, the restricted fetch, and the studio
+/// image (built on first use) on this lane's volume.
 pub fn separate(project: &str, instance: &str, args: &Value) -> Result<Value, String> {
     let weights = parse_weights(WEIGHTS_TSV)?;
-    separate_with(&weights, project, instance, args, &mut |ask, rows| {
-        restricted_fetch::fetch_restricted(ask, rows, &mut |_e: FetchEvent| {})
-    })
+    separate_with(
+        &weights,
+        project,
+        instance,
+        args,
+        &mut |ask, rows| restricted_fetch::fetch_restricted(ask, rows, &mut |_e: FetchEvent| {}),
+        &mut |ro| {
+            let version = crate::VERSION.trim();
+            let root = crate::resolve_runtime_asset_root(version, false)?;
+            let tag = crate::versioned_image_tag(audio_studio::IMAGE, version);
+            crate::ensure_image_exists(&root, audio_studio::IMAGE, &tag, false)?;
+            let host_dir = audio_studio::lane_host_dir(project, instance)?;
+            let app = audio_studio::PodmanAppliance {
+                volume: audio_studio::lane_volume(project, instance),
+                image_tag: tag,
+                ro,
+            };
+            Ok((Box::new(app) as Box<dyn audio_studio::Appliance>, host_dir))
+        },
+    )
 }
 
 pub fn tool_descriptor() -> Value {
@@ -189,7 +322,10 @@ pub fn tool_descriptor() -> Value {
              and need this project's acknowledgement first: a call without one answers \
              licence_acknowledgement_required (run the accept-licence skill). The first call then answers \
              consent_required with an offer: ask the user, and call again with its consent_token to \
-             download the weights once. The separator itself is not built yet (order 2068-cqis).",
+             download the weights once. Runs on CPU. Returns the stems' paths \
+             under {}/out/separate/, each with a provenance sidecar, and the reconstruction (how closely \
+             the stems sum back to the input, in dB).",
+            audio_studio::FORGE_AUDIO,
             audio_studio::FORGE_AUDIO
         ),
         "inputSchema": {
@@ -343,6 +479,12 @@ mod tests {
             fetch_restricted_in(&gate, &models, &transport, ask, rows, &mut |_| {})
         };
         let args = json!({ "input": "/work/tmp/audio/mix.wav" });
+        // No arm here reaches the studio: every one stops at the gate or fetch.
+        let mut no_studio = |_ro: Vec<(std::path::PathBuf, String)>| {
+            Err::<(Box<dyn audio_studio::Appliance>, std::path::PathBuf), String>(
+                "studio_reached: the gate let this call through".into(),
+            )
+        };
 
         // 1. Bad arguments are refused before the gate.
         let e = separate_with(
@@ -351,6 +493,7 @@ mod tests {
             "",
             &json!({ "input": "/etc/passwd" }),
             &mut fetch,
+            &mut no_studio,
         )
         .unwrap_err();
         assert!(e.starts_with("invalid_arguments:"), "{e}");
@@ -360,12 +503,14 @@ mod tests {
             "",
             &json!({ "input": "/work/tmp/audio/mix.wav", "model": "mdx_extra" }),
             &mut fetch,
+            &mut no_studio,
         )
         .unwrap_err();
         assert!(e.starts_with("invalid_arguments:"), "{e}");
 
         // 2. No acknowledgement: refused, naming the skill; nothing contacted.
-        let e = separate_with(&weights, "my-game", "", &args, &mut fetch).unwrap_err();
+        let e =
+            separate_with(&weights, "my-game", "", &args, &mut fetch, &mut no_studio).unwrap_err();
         assert!(e.starts_with("licence_acknowledgement_required:"), "{e}");
         assert!(e.contains("accept-licence"), "{e}");
         assert!(e.contains("demucs-weights-unstated"), "{e}");
@@ -375,14 +520,16 @@ mod tests {
         // 2b. Another project's acknowledgement does not cover this one.
         let other = sign(&dir, &key, demucs_ack("project:other-game"));
         fs::write(acks.join("adefossez-htdemucs.yaml"), other.to_yaml()).unwrap();
-        let e = separate_with(&weights, "my-game", "", &args, &mut fetch).unwrap_err();
+        let e =
+            separate_with(&weights, "my-game", "", &args, &mut fetch, &mut no_studio).unwrap_err();
         assert!(e.starts_with("licence_acknowledgement_required:"), "{e}");
         assert_eq!(hub.hits.load(SeqCst), 0);
 
         // 3. With this project's acknowledgement: the fetch's consent offer.
         let mine = sign(&dir, &key, demucs_ack("project:my-game"));
         fs::write(acks.join("adefossez-htdemucs.yaml"), mine.to_yaml()).unwrap();
-        let offer = separate_with(&weights, "my-game", "", &args, &mut fetch).unwrap();
+        let offer =
+            separate_with(&weights, "my-game", "", &args, &mut fetch, &mut no_studio).unwrap();
         assert_eq!(offer["status"], "consent_required", "{offer}");
         assert_eq!(offer["ran"], false);
         assert_eq!(hub.hits.load(SeqCst), 0);
@@ -398,6 +545,7 @@ mod tests {
             "",
             &json!({ "input": "/work/tmp/audio/mix.wav", "model": "htdemucs_6s", "consent_token": token }),
             &mut fetch,
+            &mut no_studio,
         )
         .unwrap();
         assert_eq!(e["status"], "consent_required", "{e}");
@@ -405,7 +553,8 @@ mod tests {
 
         // 4. With the token: the pinned Hub URL is fetched, and the stand-in's
         // bytes fail the register's sha256, leaving nothing in the cache.
-        let offer = separate_with(&weights, "my-game", "", &args, &mut fetch).unwrap();
+        let offer =
+            separate_with(&weights, "my-game", "", &args, &mut fetch, &mut no_studio).unwrap();
         let token = offer["offer"]["consent_token"]
             .as_str()
             .unwrap()
@@ -416,6 +565,7 @@ mod tests {
             "",
             &json!({ "input": "/work/tmp/audio/mix.wav", "consent_token": token }),
             &mut fetch,
+            &mut no_studio,
         )
         .unwrap_err();
         assert!(e.starts_with("model_digest_mismatch:"), "{e}");
@@ -440,6 +590,167 @@ mod tests {
             ProxyTransport::model_hubs_for_this_build().proxy_port,
             crate::imagegen_models::MODEL_HUBS_PORT
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// A stub studio: records the mounts and argv, writes one file per source
+    /// it answers under the requested output, and answers like audio-tool.
+    struct StubStudio {
+        root: std::path::PathBuf,
+        calls: std::rc::Rc<std::cell::RefCell<Vec<Vec<String>>>>,
+        reply: Value,
+    }
+
+    impl audio_studio::Appliance for StubStudio {
+        fn run(&self, a: &[String]) -> Result<String, String> {
+            self.calls.borrow_mut().push(a.to_vec());
+            let out = &a[a.iter().position(|x| x == "--output").unwrap() + 1];
+            let rel = audio_studio::forge_rel("output", out).unwrap();
+            fs::create_dir_all(self.root.join(&rel)).unwrap();
+            for s in self.reply["sources"].as_array().unwrap() {
+                fs::write(
+                    self.root.join(format!("{rel}/{}.wav", s.as_str().unwrap())),
+                    b"RIFF....WAVE",
+                )
+                .unwrap();
+            }
+            Ok(self.reply.to_string())
+        }
+    }
+
+    /// 2068-cqis: past the gate. Pre-fix: FAILS, a Ready fetch answered
+    /// separator_not_built. The studio gets exactly the verified file,
+    /// read-only, under /models with the registered sha256 on its argv; each
+    /// stem gets a sidecar naming the weights row, the input's sha256 and the
+    /// acknowledgement; and the studio's answer is checked, not trusted.
+    #[test]
+    fn a_ready_separation_mounts_only_the_verified_weights_and_writes_stems_with_provenance() {
+        let dir = disk_scratch("audio-separate-ready");
+        let lane = dir.join("lane");
+        fs::create_dir_all(lane.join("in")).unwrap();
+        fs::write(lane.join("in/mix.wav"), b"RIFF-mix-WAVE").unwrap();
+        let cached = dir.join("models/audio/demucs/955717e8.safetensors");
+        fs::create_dir_all(cached.parent().unwrap()).unwrap();
+        fs::write(&cached, b"verified by the fetch").unwrap();
+        let weights = parse_weights(WEIGHTS_TSV).unwrap();
+        let row = rows_for(&weights, "htdemucs")[0].clone();
+        let args = json!({ "input": "/work/tmp/audio/in/mix.wav" });
+        let good = json!({
+            "weights_sha256": row.sha256,
+            "sources": ["drums", "bass", "other", "vocals"],
+            "sample_rate": 44100,
+            "reconstruction": { "snr_db": 31.2 },
+            "versions": { "audio_tool": "3" },
+            "engine": { "torch": "2.9.1+cpu", "demucs": "4.1.0" },
+        });
+        let run = |reply: Value, model: &str| {
+            let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+            let mounts = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+            let mut fetch = |_: &Ask, rows: &[ModelFile]| {
+                assert_eq!(rows.len(), 1);
+                Ok(Fetch::Ready {
+                    paths: vec![cached.clone()],
+                    consent: vec!["licences/acknowledgements/adefossez-htdemucs.yaml".into()],
+                })
+            };
+            let (c2, m2, root) = (calls.clone(), mounts.clone(), lane.clone());
+            let mut studio = move |ro: Vec<(std::path::PathBuf, String)>| {
+                m2.borrow_mut().extend(ro);
+                Ok((
+                    Box::new(StubStudio {
+                        root: root.clone(),
+                        calls: c2.clone(),
+                        reply: reply.clone(),
+                    }) as Box<dyn audio_studio::Appliance>,
+                    root.clone(),
+                ))
+            };
+            let mut a = args.clone();
+            a["model"] = json!(model);
+            let r = separate_with(&weights, "my-game", "", &a, &mut fetch, &mut studio);
+            let calls = calls.borrow().clone();
+            let mounts = mounts.borrow().clone();
+            (r, calls, mounts)
+        };
+
+        let (r, calls, mounts) = run(good.clone(), "htdemucs");
+        let v = r.unwrap();
+        assert_eq!(
+            mounts,
+            vec![(cached.clone(), "/models/955717e8.safetensors".to_string())]
+        );
+        let argv = &calls[0];
+        let after = |flag: &str| argv[argv.iter().position(|x| x == flag).unwrap() + 1].clone();
+        assert_eq!(argv[0], "separate");
+        assert_eq!(after("--weights"), "/models/955717e8.safetensors");
+        assert_eq!(after("--sha256"), row.sha256);
+        assert_eq!(after("--model"), "htdemucs");
+        let stems = v["stems"].as_array().unwrap();
+        assert_eq!(stems.len(), 4, "{v}");
+        let input_sha = crate::provenance::sha256_file(&lane.join("in/mix.wav")).unwrap();
+        for s in stems {
+            let path = s["path"].as_str().unwrap();
+            let rel = audio_studio::forge_rel("path", path).unwrap();
+            let side = lane.join(format!("{rel}.provenance.json"));
+            let p: Value = serde_json::from_slice(&fs::read(&side).unwrap()).unwrap();
+            assert_eq!(p["tool"], "audio.separate");
+            assert_eq!(p["models"][0]["sha256"], row.sha256.as_str(), "{p}");
+            assert_eq!(p["models"][0]["repo"], "adefossez/HTDemucs");
+            assert!(p["models"][0]["consent"].is_string(), "{p}");
+            assert_eq!(p["inputs"][0]["sha256"], input_sha.as_str());
+            assert_eq!(p["placement"], "cpu");
+        }
+        assert_eq!(v["reconstruction"]["snr_db"], 31.2);
+
+        // The studio claiming other weights is refused.
+        let mut lie = good.clone();
+        lie["weights_sha256"] = json!("0".repeat(64));
+        let e = run(lie, "htdemucs").0.unwrap_err();
+        assert!(
+            e.starts_with("engine_failed:") && e.contains("not the registered"),
+            "{e}"
+        );
+
+        // Fewer stems than the model's is refused.
+        let mut short = good.clone();
+        short["sources"] = json!(["drums", "bass", "other"]);
+        let e = run(short, "htdemucs").0.unwrap_err();
+        assert!(e.contains("answered 3 stems, want 4"), "{e}");
+
+        // htdemucs_6s wants six and mounts its own file name.
+        let (r, _, mounts) = run(good.clone(), "htdemucs_6s");
+        assert!(r.unwrap_err().starts_with("engine_failed:"));
+        assert_eq!(mounts[0].1, "/models/5c90dfd2.safetensors");
+
+        // A missing input is refused before the studio runs.
+        let mut gone = args.clone();
+        gone["input"] = json!("/work/tmp/audio/in/absent.wav");
+        let (calls, _) = {
+            let mut fetch = |_: &Ask, _: &[ModelFile]| {
+                Ok(Fetch::Ready {
+                    paths: vec![cached.clone()],
+                    consent: vec!["a".into()],
+                })
+            };
+            let calls = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+            let (c2, root) = (calls.clone(), lane.clone());
+            let mut studio = move |_ro: Vec<(std::path::PathBuf, String)>| {
+                Ok((
+                    Box::new(StubStudio {
+                        root: root.clone(),
+                        calls: c2.clone(),
+                        reply: json!({}),
+                    }) as Box<dyn audio_studio::Appliance>,
+                    root.clone(),
+                ))
+            };
+            let e =
+                separate_with(&weights, "my-game", "", &gone, &mut fetch, &mut studio).unwrap_err();
+            assert!(e.starts_with("input_missing:"), "{e}");
+            let n = calls.borrow().len();
+            (n, ())
+        };
+        assert_eq!(calls, 0);
         let _ = fs::remove_dir_all(&dir);
     }
 }
