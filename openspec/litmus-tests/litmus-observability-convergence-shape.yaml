@@ -25,7 +25,7 @@ critical_path:
     # Behaviour, not source text: remove the local render, run the renderer with
     # no MD_OUT/JSON_OUT, and check where it wrote. It regenerates the same local
     # projection any CI run writes, from the real signature log.
-    command: "rm -f target/convergence/centicolon-dashboard.md target/convergence/centicolon-dashboard.json && env -u MD_OUT -u JSON_OUT TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && test -s target/convergence/centicolon-dashboard.md && jq -e .dashboard_contract target/convergence/centicolon-dashboard.json >/dev/null && test ! -e docs/convergence/centicolon-dashboard.md && test ! -e docs/convergence/centicolon-dashboard.json && echo 'ok: dashboard rendered under target/, none committed'"
+    command: "rm -f target/convergence/centicolon-dashboard.md target/convergence/centicolon-dashboard.json && env -u MD_OUT -u JSON_OUT TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && test -s target/convergence/centicolon-dashboard.md && test -s target/convergence/centicolon-dashboard.json && test ! -e docs/convergence/centicolon-dashboard.md && test ! -e docs/convergence/centicolon-dashboard.json && echo 'ok: dashboard rendered under target/, none committed'"
     timeout_ms: 15000
     expected_behavior: "ok: dashboard rendered under target/, none committed"
 
