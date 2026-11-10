@@ -15,6 +15,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 ## agents
 
 - claude-code.md                   — Running Claude Code inside the forge, understanding its CLI, passing model flag… [bundled, partial-verify]
+- forge-tooling-language.md        — choosing the language for a script, helper or tool you write inside a forge [pull-on-demand: project-committed]
 - opencode.md                      — Launching web-based visual IDE, running OpenCode CLI, debugging web sessions, p… [bundled, partial-verify]
 - openspec.md                      — Creating/applying/archiving OpenSpec changes, understanding the artifact lifecy… [bundled, partial-verify]
 

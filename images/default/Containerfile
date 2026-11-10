@@ -110,6 +110,12 @@ COPY lib-inference-state.sh /usr/local/lib/tillandsias/lib-inference-state.sh
 # lib-*.sh finds its module at /usr/local/lib/tillandsias/lua/; without this
 # COPY a ported helper reports probe-tool-missing in every built forge.
 COPY lua/ /usr/local/lib/tillandsias/lua/
+
+# 2067-faum (operator ruling 2026-11-09): Lua, Rust and Go are ALWAYS in the
+# forge; agents are told to prefer them in that order. They come from
+# Containerfile.base; this layer refuses to finish if one went missing.
+# scripts/lua/check-forge-languages.lua --containerfile pins this line.
+RUN for t in lua cargo rustc go; do command -v "$t" >/dev/null || { echo "FATAL: $t missing from the forge (2067-faum: Lua, Rust and Go are always available)" >&2; exit 1; }; done
 # @trace order:1264-s4id — push capability (can this forge push to THIS repo?),
 # read from the mirror's verdict; sourced by lib-common.sh from its directory.
 COPY lib-push-capability.sh /usr/local/lib/tillandsias/lib-push-capability.sh
