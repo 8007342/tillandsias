@@ -815,7 +815,7 @@ The coordinator's constraints (macuahuitl, 2026-11-07) also bind: an
 explicit per-script allowlist and never a blanket pass-through, and
 credentials never inherit.
 
-Q4 and Q5 remain open with the defaults below.
+Q5 remains open with the default below; Q4 is decided (2031-4p5h, 2026-11-10).
 
 
 1. **Layer 2: keep `TILLANDSIAS_*` as a hard-block-filtered prefix (this
@@ -834,6 +834,30 @@ Q4 and Q5 remain open with the defaults below.
 4. **Add `TERM=dumb` and `GIT_CONFIG_NOSYSTEM=1` to the fixed layer?** Both
    remove nondeterminism; `TERM=dumb` changes colour output of children
    today. Default: not in this change; file as a follow-up measurement.
+   **DECIDED 2026-11-10 (2031-4p5h): NO to both.**
+
+   The measurement was the 152 `scripts/lua/test-*.lua` fixtures, run as
+   four passes: base, base again, `+TERM=dumb` and
+   `+GIT_CONFIG_NOSYSTEM=1`. The three plan binaries differ only in
+   `ENV_FIXED`. A fixture counts as changed when its rc or stdout differs
+   from base. Fixtures whose two base runs differ are excluded; stderr is
+   counted separately. It ran on yoga (Linux, trunk e9841e243, no
+   `/etc/gitconfig`) and on tlatoanis-macbook-air (darwin, Apple Git-157).
+
+   - **`TERM=dumb`: NO.** It changed 0 of the 133 stable fixtures on yoga,
+     in rc, stdout or stderr. `TERM` is already class B (`output-shape`,
+     never inherited), so a probe child already sees it unset, and a value
+     adds nothing that was measured.
+   - **`GIT_CONFIG_NOSYSTEM=1`: NO.** It changed 0 fixtures on yoga, where
+     it is a no-op by construction, and 0 of the stable fixtures on darwin
+     (19 noisy of 152). On darwin it does have a target: Apple git reads a
+     built-in config from the CommandLineTools `gitconfig` (with
+     `credential.helper` and `init.defaultbranch`), and the flag hides it.
+     So it buys no measured determinism. Its cost is real: it would
+     silently drop a door child's keychain credential helper and its
+     default branch on macOS.
+
+   Reopen either with a fixture whose output it changes.
 5. **The locator-suffix list** (`_FILE _PATH _DIR _ID _NAME _FP _LOG _URL
    _ADDR _SRC _COUNT _ENV_FILE _SINK_FILE`): closed as written, or drop
    `_SRC`/`_COUNT` and rename the two names that need them? Default: as

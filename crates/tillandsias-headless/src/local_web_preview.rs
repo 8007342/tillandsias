@@ -3839,6 +3839,32 @@ mod tests {
             crate::local_projects::ram_workspace_volume("a", "b-c")
         );
         with_stub("exit 0", |_| {
+            // with_stub's scratch is the std temp dir: tmpfs on a Fedora host,
+            // DISK inside a forge (yolanda, 2026-11-10: "no tmpfs to hold the
+            // preview leaf key"), so this check's premise rode on the
+            // substrate. Give the leaves a tmpfs home of their own, a private
+            // scratch under /dev/shm, removed with the test. Without any tmpfs
+            // the publish branch cannot be exercised: inside a container that
+            // is skipped by name; on a host it stays a failure below.
+            let shm = tempfile::tempdir_in("/dev/shm")
+                .ok()
+                .filter(|d| crate::on_tmpfs(d.path()));
+            match &shm {
+                Some(d) => unsafe {
+                    std::env::set_var("TILLANDSIAS_TEST_PREVIEW_TLS_SHM", d.path());
+                },
+                None if Path::new("/run/.containerenv").exists()
+                    || Path::new("/.dockerenv").exists() =>
+                {
+                    eprintln!(
+                        "SKIP: source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only: \
+                         no tmpfs in this container (/dev/shm absent or not tmpfs), so the TLS \
+                         publish branch cannot be exercised here; a host run covers it"
+                    );
+                    return;
+                }
+                None => {}
+            }
             let root = router_dir();
             std::fs::create_dir_all(root.join("preview-tls")).unwrap();
             std::fs::write(root.join("preview-tls-port"), "18443").unwrap();

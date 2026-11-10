@@ -38,6 +38,7 @@
 mod container;
 mod dashboard;
 mod error;
+pub mod memory_stall;
 mod models;
 mod mount_io;
 pub mod prometheus_exporter;

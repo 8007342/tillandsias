@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-flutter-lane-client-fails-loudly-with-a-named-error-when-the-host-side-drops-its-request
+    order: 2069-f58n
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, flutter-lane, tray, host-shell, reliability]
+    estimated_hours: 4
+    title: |
+      flutter-lane clients hang forever in S with 0 s CPU when the host side drops the request, holding the forge test lock
+    context: |
+      Reported 2026-11-09 by coordinator macuahuitl-fedora from the demon_attack forge on macuahuitl. flutter test -j 2 runs python3 /opt/agents/tillandsias-cli/libexec/flutter-lane test -j 2, which sat in S with 0 s CPU for about 40 min, twice that night (pids 536328 and 740971). Other runs finished in 1-2 min. The hung client holds the forge test lock. The first hang spanned a tray restart to v56.11.10.1 while that forge's launcher (the --cloud ... --claude client) was still the old 56.11.9.1 binary. Suspects: the host side dropping the request on tray handover, or a launcher/tray version split.
+    exit_criteria:
+      - 'red first: a fake host that accepts the request then goes silent makes the client hang today; after the fix the client exits non-zero with a named error within a bounded time'
+      - 'the client heartbeats or watches liveness so a long, healthy test run is not killed by the timeout'
+      - 'the drop is root-caused, particularly across a tray restart, and the cause is fixed or filed as its own row'
+    verifiable_closure: 'the fake-host fixture red before and green after; the root-cause finding cited in this row'
+    unscoreable: 'none.'
+    next_action: 'Locate the flutter-lane client and its host endpoint; write the silent-fake-host fixture first.'
+    provenance: coordinator macuahuitl-fedora 2026-11-09; filed by lenovinha-silverblue.
+    depends_on: []
+    related: [2067-faum]
+    events:
+      - {type: filed, ts: '2026-11-10T03:02:25Z', host: lenovinha-silverblue, summary: filed p1 ready by lenovinha-silverblue}

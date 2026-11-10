@@ -670,7 +670,7 @@ Codex's own device flow usable without inventing a destination. Non-TTY and
 
 ### Invariant: Policies are defined
 - **ID**: tillandsias-vault.invariant.policies-defined
-- **Expression**: `vault.policies HAS_KEYS {git-mirror-policy, forge-policy, tray-policy, inference-policy, github-login-policy, claude-login-policy, codex-login-policy, antigravity-login-policy, claude-forge-policy, codex-forge-policy, antigravity-forge-policy, opencode-forge-policy}`
+- **Expression**: `vault.policies HAS_KEYS {git-mirror-policy, forge-policy, tray-policy, inference-policy, github-login-policy, claude-login-policy, codex-login-policy, antigravity-login-policy, claude-forge-policy, codex-forge-policy, antigravity-forge-policy, copilot-login-policy, copilot-forge-policy, opencode-forge-policy}`
 - **Measurable**: true
 
 ### Invariant: forge-policy has no token read capability

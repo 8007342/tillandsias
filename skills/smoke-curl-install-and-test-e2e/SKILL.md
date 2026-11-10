@@ -3,6 +3,13 @@ name: smoke-curl-install-and-test-e2e
 description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-installs the latest release binary from GitHub, does a full `podman system reset --force`, runs `tillandsias --debug --init` from a pristine state, and (if init is clean) launches `tillandsias --cloud 8007342/tillandsias --opencode` with ONE short fixed smoke prompt (run the credential guard, reply with a fixed token; never the /meta-orchestration loop, 1941-smkp). Every issue observed — by this skill's agent during install/reset/init, or by the agent's one turn inside the forge — is filed as a plan/issues work packet for later pickup by /advance-work-from-plan.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Smoke: Curl-Install and Test End-to-End
 
 This skill validates that a **published release** actually works for a real

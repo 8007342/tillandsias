@@ -329,6 +329,8 @@ enum LaunchKind {
     /// terminal. @trace spec:tray-ux
     Codex,
     Antigravity,
+    /// GitHub Copilot CLI lane (2063-nfag).
+    Copilot,
     Maintenance,
 }
 
@@ -951,6 +953,25 @@ fn notify_github_refresh_expiring(message: String) {
         .and_then(|mut c| c.wait());
 }
 
+/// Order 2067-dwqd: a container stalled on its memory budget. Critical
+/// urgency: the forge looks frozen until someone acts. Best-effort, like the
+/// others; the `warn:memory-stall:` line is on stderr regardless.
+#[cfg(target_os = "linux")]
+fn notify_memory_stall(message: String) {
+    let _ = std::process::Command::new("notify-send")
+        .args([
+            "--app-name=Tillandsias",
+            "--urgency=critical",
+            "Tillandsias: a forge is stalled on memory",
+        ])
+        .arg(&message)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .and_then(|mut c| c.wait());
+}
+
 /// Order 1762-bano: the desktop notification for certificates a running tray
 /// cannot renew on its own. Plain words only; the message is the whole action.
 fn notify_cert_expiring(message: String) {
@@ -1092,6 +1113,18 @@ fn spawn_lane_adoption() {
                 loop {
                     std::thread::sleep(crate::mcp_socket::LANE_ADOPT_TICK);
                     crate::mcp_socket::adopt_marked_lanes();
+                }
+            });
+        // 2070-mtf9: name every lane an older launcher still serves, at
+        // startup and then each minute, once per lane and build.
+        #[cfg(feature = "host-services")]
+        let _ = std::thread::Builder::new()
+            .name("lane-freshness".into())
+            .spawn(|| {
+                let mut seen = std::collections::HashSet::new();
+                loop {
+                    crate::report_stale_lanes(&mut seen);
+                    std::thread::sleep(std::time::Duration::from_secs(60));
                 }
             });
     });
@@ -2217,6 +2250,7 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                 LaunchKind::Codex => "--codex",
                 LaunchKind::OpenCode => "--opencode",
                 LaunchKind::Antigravity => "--antigravity",
+                LaunchKind::Copilot => "--copilot",
                 LaunchKind::Maintenance => "--bash",
                 LaunchKind::OpenCodeWeb => "--opencode-web",
                 LaunchKind::Observatorium => "--observatorium",
@@ -2416,7 +2450,11 @@ fn build_separator_item(id: i32) -> MenuNode {
 // | +4     | OpenCode Web    | 📐      |
 // | +5     | Observatorium   | 🔭      |
 // | +6     | Maintenance     | 🔧      |
-// | +7     | (submenu node)  | —       |
+// | +7     | Copilot         | 🛩️      |
+// | +8     | (submenu node)  | —       |
+//
+// Display order is `LeafAction::ALL` (Copilot after Antigravity); offsets
+// are ids only, so adding Copilot at +7 left every older id unchanged.
 //
 // Helpers: [`local_project_base`], [`cloud_project_base`], and
 // [`project_action_from_id`] are the only place this layout is encoded.
@@ -2426,17 +2464,19 @@ enum LeafAction {
     Codex,
     OpenCode,
     Antigravity,
+    Copilot,
     OpenCodeWeb,
     Observatorium,
     Maintenance,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 7] = [
+    const ALL: [LeafAction; 8] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
         LeafAction::Antigravity,
+        LeafAction::Copilot,
         LeafAction::OpenCodeWeb,
         LeafAction::Observatorium,
         LeafAction::Maintenance,
@@ -2451,6 +2491,7 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => 4,
             LeafAction::Observatorium => 5,
             LeafAction::Maintenance => 6,
+            LeafAction::Copilot => 7,
         }
     }
 
@@ -2460,6 +2501,7 @@ impl LeafAction {
             LeafAction::Codex => "\u{1F3D7}\u{FE0F} Codex",
             LeafAction::OpenCode => "\u{1F4BB} OpenCode",
             LeafAction::Antigravity => "\u{1FA90} Antigravity",
+            LeafAction::Copilot => "\u{1F6E9}\u{FE0F} Copilot",
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
             LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
@@ -2486,8 +2528,8 @@ const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
 /// that fallback in place. @trace spec:tray-ux
 const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
-const PROJECT_LEAF_COUNT: i32 = 7;
-const PROJECT_SUBMENU_OFFSET: i32 = 7;
+const PROJECT_LEAF_COUNT: i32 = 8;
+const PROJECT_SUBMENU_OFFSET: i32 = 8;
 
 /// Maximum number of cloud projects rendered as top-level entries inside the
 /// `☁️ Cloud >` submenu before an overflow item replaces the tail.
@@ -2547,7 +2589,7 @@ fn project_base(name: &str, scope: ProjectScope) -> i32 {
     let (lo, hi) = match scope {
         ProjectScope::Cloud => (CLOUD_BASE_LO, CLOUD_BASE_HI),
     };
-    // Quantise to multiples of 16 so leaf offsets (0..=5) never overflow
+    // Quantise to multiples of 16 so leaf offsets (0..=8) never overflow
     // into the next project's base.
     let span = ((hi - lo) / 16) as u32;
     let raw = (hash.finish() as u32) % span.max(1);
@@ -2582,7 +2624,7 @@ fn project_action_from_id(
 }
 
 // @trace spec:tray-minimal-ux
-/// Build the per-project submenu (seven leaves, no nesting).
+/// Build the per-project submenu (eight leaves, no nesting).
 ///
 /// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
 /// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
@@ -3006,6 +3048,7 @@ fn shared_id_to_int(id: &str) -> i32 {
                     "opencode-web" => 4,
                     "observatorium" => 5,
                     "maintenance" => 6,
+                    "copilot" => 7,
                     "" => PROJECT_SUBMENU_OFFSET,
                     _ => return fallback_menu_id(other),
                 };
@@ -3754,6 +3797,7 @@ impl DbusMenuIface {
                             LeafAction::Claude => LaunchKind::Claude,
                             LeafAction::OpenCode => LaunchKind::OpenCode,
                             LeafAction::Antigravity => LaunchKind::Antigravity,
+                            LeafAction::Copilot => LaunchKind::Copilot,
                             LeafAction::OpenCodeWeb => LaunchKind::OpenCodeWeb,
                             LeafAction::Observatorium => LaunchKind::Observatorium,
                             LeafAction::Maintenance => LaunchKind::Maintenance,
@@ -4077,6 +4121,10 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // unchanged CA, and names a CA or Vault leaf near notAfter (launch renews
     // those with a 60-day margin; a running tray never swaps the CA).
     crate::spawn_cert_expiry_scheduler(debug, Some(Box::new(notify_cert_expiring)));
+    // Order 2067-dwqd: a forge (or sibling) held at its memory.high is named
+    // on the desktop, once per episode, instead of freezing silently.
+    #[cfg(target_os = "linux")]
+    crate::memory_stall_watch::spawn(Box::new(notify_memory_stall));
     // Order 363: the NDJSON MCP tool socket for in-forge agents. A bind
     // failure degrades the tray to no-agent-publish rather than killing
     // it — the control socket above is load-bearing, this one is not
@@ -5018,16 +5066,16 @@ mod tests {
             assert!(tools.contains(&gpu), "{gpu} (1957-emar): {tools:?}");
         }
         // 2055-grzz: the audio studio appliance's two tools.
-        for audio in ["audio.transform", "audio.detect_glitches"] {
+        for audio in ["audio.transform", "audio.detect_glitches", "audio.separate"] {
             assert!(tools.contains(&audio), "{audio} (2055-grzz): {tools:?}");
         }
         assert_eq!(
             tools.len() - cloudflare,
             // 1966-47vt: + cloud.usage when the store is built in.
             // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
-            // 2055-grzz: + audio.transform, audio.detect_glitches.
-            if cfg!(feature = "vault") { 51 } else { 50 },
-            "5 preview.* + toolchain.prepare + image.generate + 10 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart; 2002-stjb: + studio.queue_workflow, studio.job_status) + 13 browser.* + 4 webstudio.* + tillandsias.index + tillandsias.lane_version (2003-stbf) + audio.transform + audio.detect_glitches (2055-grzz) + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
+            // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
+            if cfg!(feature = "vault") { 52 } else { 51 },
+            "5 preview.* + toolchain.prepare + image.generate + 10 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart; 2002-stjb: + studio.queue_workflow, studio.job_status) + 13 browser.* + 4 webstudio.* + tillandsias.index + tillandsias.lane_version (2003-stbf) + audio.transform + audio.detect_glitches (2055-grzz) + audio.separate (2068-eeti) + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5099,10 +5147,10 @@ mod tests {
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
                 // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
-                // 2055-grzz: + audio.transform, audio.detect_glitches.
+                // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
                 // 2002-stjb: + studio.queue_workflow, studio.job_status.
-                if cfg!(feature = "vault") { 51 } else { 50 },
-                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart), 13 browser.*, 4 webstudio.*, tillandsias.index, audio.transform + audio.detect_glitches (2055-grzz), the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
+                if cfg!(feature = "vault") { 52 } else { 51 },
+                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart), 13 browser.*, 4 webstudio.*, tillandsias.index, audio.transform + audio.detect_glitches (2055-grzz), audio.separate (2068-eeti), the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5674,10 +5722,10 @@ mod tests {
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
                 // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
-                // 2055-grzz: + audio.transform, audio.detect_glitches.
+                // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
                 // 2002-stjb: + studio.queue_workflow, studio.job_status.
-                if cfg!(feature = "vault") { 51 } else { 50 },
-                "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 2055-grzz: + audio.transform, audio.detect_glitches; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
+                if cfg!(feature = "vault") { 52 } else { 51 },
+                "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
             );
 
             drop(writer);
@@ -7374,10 +7422,10 @@ mod tests {
     }
 
     #[test]
-    fn project_submenu_has_seven_leaves_in_order() {
-        // Per-project submenus are 7-leaf flat menus: Claude, Codex,
-        // OpenCode, Antigravity, OpenCode Web, Observatorium, Maintenance.
-        // Order is locked by `LeafAction::offset`.
+    fn project_submenu_has_eight_leaves_in_order() {
+        // Per-project submenus are 8-leaf flat menus: Claude, Codex,
+        // OpenCode, Antigravity, Copilot (2063-nfag), OpenCode Web,
+        // Observatorium, Maintenance. Order is locked by `LeafAction::ALL`.
         let project = ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
@@ -7390,19 +7438,34 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Cloud);
 
-        // Seven leaves, no sub-submenus.
-        assert_eq!(submenu.2.len(), 7);
+        assert_eq!(submenu.2.len(), 8);
         let leaf_labels = labels(&submenu);
-        // labels() walks the layout depth-first; index 0 is the submenu
-        // container, indices 1..=7 are the leaves in offset order.
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
         assert!(leaf_labels[2].contains("Codex"));
         assert!(leaf_labels[3].contains("OpenCode") && !leaf_labels[3].contains("Web"));
         assert!(leaf_labels[4].contains("Antigravity"));
-        assert!(leaf_labels[5].contains("OpenCode Web"));
-        assert!(leaf_labels[6].contains("Observatorium"));
-        assert!(leaf_labels[7].contains("Maintenance"));
+        assert!(leaf_labels[5].contains("Copilot"));
+        assert!(leaf_labels[6].contains("OpenCode Web"));
+        assert!(leaf_labels[7].contains("Observatorium"));
+        assert!(leaf_labels[8].contains("Maintenance"));
+    }
+
+    #[test]
+    fn copilot_leaf_id_round_trips_and_stays_inside_its_project() {
+        // 2063-nfag: the copilot leaf resolves back to Copilot, and no leaf or
+        // submenu id reaches the next project's base (stride 16).
+        assert_eq!(
+            LeafAction::from_offset(LeafAction::Copilot.offset()),
+            Some(LeafAction::Copilot)
+        );
+        let max = LeafAction::ALL.iter().map(|a| a.offset()).max().unwrap();
+        assert!(max < PROJECT_LEAF_COUNT);
+        const { assert!(PROJECT_SUBMENU_OFFSET >= PROJECT_LEAF_COUNT && PROJECT_SUBMENU_OFFSET < 16) };
+        assert_eq!(
+            shared_id_to_int("project.cloud.alpha.copilot"),
+            cloud_project_base("alpha") + LeafAction::Copilot.offset()
+        );
     }
 
     #[test]

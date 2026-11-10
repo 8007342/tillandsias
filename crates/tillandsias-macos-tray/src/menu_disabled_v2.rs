@@ -193,11 +193,11 @@ mod tests {
             .find(|s| s.id == ids::CLOUD_PROJECTS)
             .expect("cloud-projects present");
         // Agents-first inversion (tray-ux, operator 2026-09-22): Cloud's
-        // children are the 7 agent rows; each opens the project list.
+        // children are the 8 agent rows; each opens the project list.
         assert_eq!(
             projects.children.len(),
-            7,
-            "7 agent rows (claude/codex/opencode/antigravity/opencode-web/observatorium/maintenance)"
+            8,
+            "8 agent rows (claude/codex/opencode/antigravity/copilot/opencode-web/observatorium/maintenance)"
         );
         for agent in &projects.children {
             assert_eq!(

@@ -17,6 +17,9 @@
 --   5 RENDERER  the no-in-forge-renderer line is present
 --   6 ROUTER    both router rows (direct, via-proxy) are failed with a reason
 --   7 CONTEXT   the forge startup context names tillandsias-doctor
+--   8 STALE     a lane that ANSWERS but which the tray marked lane-stale (an
+--               older launcher still serves it, 2070-mtf9) is failed as
+--               host_lane=stale-build, naming the serving pid and the remedy
 -- Red before 1874-6p63: there is no tillandsias-doctor.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-tillandsias-doctor.lua
@@ -128,6 +131,44 @@ local lib = fs.read("images/default/lib-common.sh") or ""
 local ctx = lib:match("inject_startup_context%(%) {.-\n}\n") or ""
 arm("7 CONTEXT the forge startup context names tillandsias-doctor",
     ctx:find("tillandsias-doctor", 1, true) ~= nil, #ctx > 0 and "inject_startup_context found" or "no inject_startup_context")
+
+-- 2070-mtf9: a live listener plus the tray's lane-stale marker beside it.
+fs.mkdir(REL .. "/live")
+local ok_l, live = pcall(fs.listen_unix, REL .. "/live/m.s")
+if ok_l then
+    fs.write(REL .. "/live/lane-stale",
+        "warn:lane-stale:doctor-smoke-default: runs 56.11.9.1+bbbb, installed 56.11.10.1+aaaa; relaunch that forge to use the installed build; served by pid 1020477 (exe deleted)\n")
+    local r2 = proc.run({
+        argv = { "bash", ROOT .. "/" .. DOCTOR, "--json" },
+        env = {
+            PATH = DIR .. "/bin:" .. (env.get("PATH") or "/usr/bin:/bin"),
+            HOME = DIR,
+            TILLANDSIAS_PROJECT = "doctor-smoke",
+            TILLANDSIAS_CONTROL_SOCKET = DIR .. "/live/m.s",
+            TILLANDSIAS_DOCTOR_LIB_DIR = ROOT .. "/images/default",
+            TILLANDSIAS_DOCTOR_MCP_CONFIG = DIR .. "/none.json",
+            TILLANDSIAS_DOCTOR_CHEATSHEETS = DIR .. "/sheets",
+            TILLANDSIAS_DOCTOR_SRC_DIR = DIR,
+            TILLANDSIAS_DOCTOR_CACHE_DIR = DIR,
+            TILLANDSIAS_DOCTOR_PROBE_SECS = "3",
+        },
+        timeout_ms = 120000,
+    })
+    live:close()
+    local ok2, rep2 = pcall(json.parse, r2.stdout or "")
+    local lane2
+    if ok2 and type(rep2) == "table" then
+        for _, c in ipairs(rep2.checks or {}) do if c.name == "lane" then lane2 = c end end
+    end
+    arm("8 STALE a lane an older launcher still serves is failed as host_lane=stale-build with its pid",
+        lane2 and lane2.status == "failed"
+            and lane2.detail:find("host_lane=stale-build", 1, true) ~= nil
+            and lane2.detail:find("pid 1020477", 1, true) ~= nil
+            and lane2.detail:find("relaunch", 1, true) ~= nil,
+        show(lane2))
+else
+    arm("8 STALE a live fixture socket could be bound", false, tostring(live))
+end
 
 proc.run({ argv = { "rm", "-rf", DIR }, timeout_ms = 30000 })
 if #failed > 0 then

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: guest-podman-wedges-on-its-database-lock-with-defunct-podman-children-2066-fxbh
+    event:
+      type: note
+      ts: "2026-11-10T00:43:33Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |
+        Root cause (read-only, 2026-11-10 ~00:45Z, guest up 1d23h, kernel 6.19.10-300.fc44.aarch64): podman's "database is locked" is a symptom of a btrfs deadlock on the guest root /dev/vda2, not a podman bug. The btrfs-transaction kthread (pid 527) is stuck in __btrfs_run_delayed_items <- btrfs_commit_transaction. A kworker doing btrfs_preempt_reclaim_metadata_space is stuck in the same function. auditd is stuck in btrfs_inode_lock <- btrfs_buffered_write. Everything starting a transaction is stuck in D in wait_current_trans: systemd, NetworkManager, chronyd, journald, dnf5 makecache, a podman (472828, Zl zombie whose second thread is in wait_current_trans and still holds the sqlite POSIX write lock), and tillandsias-headless mkdir threads (filename_create). Load is about 14, all from D tasks; IO and memory PSI are 0, so nothing is in flight. This is a lockup, not slow disk. The kernel has no hung_task sysctl and dmesg shows nothing, so the stall is invisible. Mount: btrfs rw,compress=zstd:1,discard=async,space_cache=v2. Fix direction: (1) a guest watchdog that detects btrfs-transaction or wait_current_trans D-state for more than N minutes and reports a named stall to the tray (no detector exists today); (2) recovery is a guest reboot, since D tasks are unkillable; (3) a mitigation candidate is to drop discard=async or try a newer kernel, and a red fixture needs a reproducer. Not fixed by killing podman.

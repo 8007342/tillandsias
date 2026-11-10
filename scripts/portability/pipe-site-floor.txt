@@ -357,7 +357,6 @@ scripts scripts/check-carry-forward.sh 6
 scripts scripts/check-claim-confirmed.sh 6
 scripts scripts/check-claims-across-branches.sh 5
 scripts scripts/check-containers-conf-proxy-env.sh 4
-scripts scripts/check-convergence-velocity.sh 1
 scripts scripts/check-credential-channel.sh 15
 scripts scripts/check-cycle-flow-log-fresh.sh 6
 scripts scripts/check-daily-maintenance.sh 2

@@ -74,11 +74,23 @@ pub struct VzRuntime {
     /// restore so the configuration matches the saved one.
     #[cfg(target_os = "macos")]
     identity: std::sync::Mutex<Option<boot::MachineIdentity>>,
+    /// 2066-d7g7: true once THIS runtime's `start()` has taken over the
+    /// per-launch boot artifacts (cidata.iso, vm-swap.img). Only the owner
+    /// removes them; a bystander runtime on the same root leaves them alone.
+    #[cfg(target_os = "macos")]
+    owns_boot_artifacts: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(target_os = "macos")]
 impl Drop for VzRuntime {
     fn drop(&mut self) {
+        // 2066-d7g7: a runtime that never started this VM owns none of its files.
+        if !self
+            .owns_boot_artifacts
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return;
+        }
         let cidata_path = self.image_root.join("cidata.iso");
         if cidata_path.exists() {
             let _ = std::fs::remove_file(&cidata_path);
@@ -391,6 +403,8 @@ impl VzRuntime {
             restore_from: std::sync::Mutex::new(None),
             #[cfg(target_os = "macos")]
             identity: std::sync::Mutex::new(None),
+            #[cfg(target_os = "macos")]
+            owns_boot_artifacts: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -3738,6 +3752,8 @@ impl VmRuntime for VzRuntime {
         // stop(). Boot without it rather than refuse to boot when it cannot be
         // made or no tier fits.
         let swap_image = self.image_root.join(boot::SWAP_IMAGE_FILE);
+        self.owns_boot_artifacts
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         let free = boot::free_bytes_at(&self.image_root);
         let swap_disk = if restoring.is_some() && swap_image.exists() {
             // 1918-vzsr: the restored guest has this image swapped on.
@@ -4504,6 +4520,29 @@ impl VmRuntime for VzRuntime {
 
 #[cfg(test)]
 mod tests {
+    /// 2066-d7g7: a runtime that never started this VM must not delete the
+    /// live VM's swap image or cidata when it is dropped. Every short-lived
+    /// VzRuntime on the same image_root (exec-guest, diagnose, tests) used to
+    /// unlink the running guest's vm-swap.img, hiding its blocks from du.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn dropping_a_runtime_that_never_started_leaves_the_live_vms_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let swap = dir.path().join(SWAP_IMAGE_FILE);
+        let cidata = dir.path().join("cidata.iso");
+        std::fs::write(&swap, b"live").unwrap();
+        std::fs::write(&cidata, b"live").unwrap();
+        drop(VzRuntime::new(3, dir.path().to_path_buf()));
+        assert!(
+            swap.exists(),
+            "a bystander runtime unlinked the live swap image"
+        );
+        assert!(
+            cidata.exists(),
+            "a bystander runtime removed the live cidata"
+        );
+    }
+
     use super::*;
 
     /// VZ calls in `text` that are NOT inside an `on_vm_queue(...)` call
