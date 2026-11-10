@@ -253,7 +253,7 @@ pub fn artefacts(rows: &[ModelFile]) -> Vec<RestrictedArtefact> {
 
 /// The weights the cache lacks (by presence and size; the sha256 was checked
 /// at fetch time by the gate and is recorded in the provenance).
-fn missing_weights(models_dir: &Path, rows: &[ModelFile]) -> Vec<String> {
+pub(crate) fn missing_weights(models_dir: &Path, rows: &[ModelFile]) -> Vec<String> {
     rows.iter()
         .filter(|m| {
             let p = models_dir.join(CACHE_SUBDIR).join(&m.file);
