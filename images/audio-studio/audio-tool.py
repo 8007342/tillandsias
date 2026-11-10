@@ -11,8 +11,20 @@ prints {"error": "<code>: <detail>"} and exits 2.
   audio-tool detect --input <file> [--loop]
   audio-tool transform --op <op> --input <file> --output <file> [--param k=v ...]
   audio-tool tiers --stems <dir> --tiers <json> --output <dir> [--param target_lufs=N]
+  audio-tool separate --model htdemucs|htdemucs_6s --weights /models/<file>.safetensors
+                      --sha256 <hex> --input <file> --output <dir>
+  audio-tool fixture-weights --model <m> --output <file>     (fixtures only)
 
-Paths must be under /work/tmp/audio (the lane's audio scratch volume).
+Paths must be under /work/tmp/audio (the lane's audio scratch volume); the
+separation weights under /models (a read-only mount of the one verified file).
+
+Separation (2068-cqis): Demucs HTDemucs on CPU, from the registered
+safetensors ONLY. The file must end .safetensors, hash to --sha256, declare
+class demucs.htdemucs.HTDemucs with the model's own sources, and fit it
+strictly; torch.load is disabled before Demucs is imported, so no pickle can
+load by any path. Stems are 32-bit float WAV, <output>/<source>.wav, at the
+model's 44.1 kHz stereo, with the measured reconstruction (their sum against
+the input) in the result.
 
 Detection (one finding per fault: kind, start and end in seconds, detail):
   click          a sample-level impulse: the linear-prediction residual (LPC
@@ -44,7 +56,7 @@ import subprocess
 import sys
 
 ROOT = "/work/tmp/audio"
-TOOL_VERSION = "2"  # 2072-tap8: detect recalibrated for percussive music
+TOOL_VERSION = "3"  # 2068-cqis: separate (Demucs on CPU); 2: 2072-tap8 detect recalibration
 
 
 def refuse(msg):
@@ -495,9 +507,214 @@ def tiers(stems_dir, spec, out_dir, params):
             "target_lufs": target, "tiers": written}
 
 
+# ---------------------------------------------------------------- separation
+
+MODELS_ROOT = "/models"
+# audio.separate's models: the class every weights file must declare, and its
+# sources in the maintainer's order (read from both safetensors headers,
+# 2026-11-10). Nothing else is ever instantiated from a file's metadata.
+DEMUCS_CLASS = "demucs.htdemucs.HTDemucs"
+DEMUCS_SOURCES = {
+    "htdemucs": ["drums", "bass", "other", "vocals"],
+    "htdemucs_6s": ["drums", "bass", "other", "vocals", "guitar", "piano"],
+}
+
+
+def no_pickles():
+    """Disable torch.load BEFORE Demucs is imported: its own loaders
+    (states.load_model on a path, solver checkpoints) call it on .th pickles.
+    Every weight here arrives as safetensors, so any call is a defect, and
+    it fails loudly instead of unpickling."""
+    import torch
+    import torch.serialization
+
+    def refused(*_a, **_k):
+        refuse("pickle_refused: torch.load was called; the audio studio loads safetensors only (2068-cqis)")
+
+    torch.load = refused
+    torch.serialization.load = refused
+    return torch
+
+
+def read_safetensors(buf, what):
+    """(metadata, header) of a safetensors buffer, parsed here so the bytes
+    that were hashed are the bytes that are loaded."""
+    import struct
+    if len(buf) < 8:
+        refuse(f"weights_refused: {what} is not a safetensors file (too short)")
+    (n,) = struct.unpack("<Q", buf[:8])
+    if n <= 0 or 8 + n > len(buf):
+        refuse(f"weights_refused: {what} is not a safetensors file (header length {n})")
+    try:
+        header = json.loads(buf[8:8 + n])
+    except ValueError as e:
+        refuse(f"weights_refused: {what} is not a safetensors file ({e})")
+    if not isinstance(header, dict):
+        refuse(f"weights_refused: {what} has no safetensors header object")
+    meta = header.get("__metadata__")
+    if not isinstance(meta, dict):
+        refuse(f"weights_refused: {what} carries no model metadata")
+    return meta
+
+
+def decode_args(v):
+    """The maintainer's JSON for init args: fractions as {_type: fraction}."""
+    from fractions import Fraction
+    if isinstance(v, dict):
+        if v.get("_type") == "fraction":
+            return Fraction(int(v["numerator"]), int(v["denominator"]))
+        return {k: decode_args(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [decode_args(x) for x in v]
+    return v
+
+
+def load_demucs(model, weights, sha256):
+    """The model, from exactly the registered safetensors file."""
+    import hashlib
+    if model not in DEMUCS_SOURCES:
+        refuse(f"invalid_arguments: model must be one of {', '.join(DEMUCS_SOURCES)}, got {model!r}")
+    if not weights or not os.path.isabs(weights):
+        refuse(f"invalid_arguments: --weights {weights!r} is not an absolute path under {MODELS_ROOT}/")
+    real = os.path.realpath(weights)
+    if not real.startswith(MODELS_ROOT + "/"):
+        refuse(f"invalid_arguments: --weights {weights!r} is not under {MODELS_ROOT}/")
+    if not real.endswith(".safetensors"):
+        refuse(f"weights_refused: {weights} is not a .safetensors file; the audio studio never loads "
+               "a pickle (.th, .pt, .ckpt), whatever its hash")
+    if not (sha256 and len(sha256) == 64 and all(c in "0123456789abcdef" for c in sha256)):
+        refuse("invalid_arguments: --sha256 must be 64 lowercase hex")
+    if not os.path.isfile(real):
+        refuse(f"input_missing: {weights} is not a file (is the weights cache mounted?)")
+    with open(real, "rb") as fh:
+        buf = fh.read()
+    got = hashlib.sha256(buf).hexdigest()
+    if got != sha256:
+        refuse(f"weights_refused: {weights} has sha256 {got}, not the registered {sha256}")
+    meta = read_safetensors(buf, weights)
+    if meta.get("klass") != DEMUCS_CLASS:
+        refuse(f"weights_refused: {weights} declares class {meta.get('klass')!r}; only {DEMUCS_CLASS} is built")
+    if "structure" in meta:
+        refuse(f"weights_refused: {weights} is a packed (quantised) state; only a plain state is loaded")
+    try:
+        args = decode_args(json.loads(meta.get("args", "[]")))
+        kwargs = decode_args(json.loads(meta.get("kwargs", "{}")))
+    except (ValueError, KeyError, TypeError) as e:
+        refuse(f"weights_refused: {weights} has unreadable init arguments: {e}")
+    if args != [] or not isinstance(kwargs, dict):
+        refuse(f"weights_refused: {weights} has positional or malformed init arguments")
+    if kwargs.get("sources") != DEMUCS_SOURCES[model]:
+        refuse(f"weights_refused: {weights} separates {kwargs.get('sources')}, not {model}'s {DEMUCS_SOURCES[model]}")
+    torch = no_pickles()
+    from safetensors.torch import load as st_load
+    from demucs.htdemucs import HTDemucs
+    tensors = st_load(buf)
+    net = HTDemucs(**kwargs)
+    try:
+        net.load_state_dict(tensors, strict=True)
+    except RuntimeError as e:
+        refuse(f"weights_refused: {weights} does not fit {model}: {str(e)[:300]}")
+    net.eval()
+    return torch, net, got
+
+
+def separate(model, weights, sha256, src, out_dir):
+    """Split src into the model's stems, as 32-bit float WAV at the model's
+    rate and channel count, <out_dir>/<source>.wav. Reports how well the stems
+    sum back to the input as the model saw it (resampled to its rate, mono
+    duplicated to stereo): Demucs does not constrain the sum, so this is a
+    measurement, never forced by giving one stem the remainder."""
+    import random
+    import numpy as np
+    import soundfile as sf
+
+    torch, net, digest = load_demucs(model, weights, sha256)
+    if os.path.exists(out_dir) and os.listdir(out_dir):
+        refuse(f"output_exists: {out_dir} is not empty")
+    try:
+        wav, sr = sf.read(src, dtype="float32", always_2d=True)
+    except Exception as e:
+        refuse(f"invalid_arguments: {src} is not readable audio: {e}")
+    if wav.shape[0] == 0:
+        refuse(f"invalid_arguments: {src} is empty")
+    if wav.shape[1] == 1:
+        wav = np.repeat(wav, 2, axis=1)
+    elif wav.shape[1] != net.audio_channels:
+        refuse(f"invalid_arguments: {src} has {wav.shape[1]} channels; separation takes mono or stereo")
+    if sr != net.samplerate:
+        import soxr
+        wav = soxr.resample(wav, sr, net.samplerate, quality="VHQ").astype(np.float32)
+    mix = torch.from_numpy(np.ascontiguousarray(wav.T))  # (channels, frames)
+    ref = mix.mean(0)
+    mean, std = float(ref.mean()), float(ref.std()) + 1e-8
+    from demucs.apply import apply_model
+    torch.set_num_threads(max(1, os.cpu_count() or 1))
+    random.seed(0)
+    torch.manual_seed(0)
+    try:
+        with torch.no_grad():
+            stems = apply_model(net, ((mix - mean) / std)[None], device="cpu", shifts=1, split=True,
+                                overlap=0.25, progress=False, num_workers=0)[0]
+    except RuntimeError as e:
+        refuse(f"engine_failed: separation failed: {str(e)[:400]}")
+    # Undo the normalisation; the offset goes in once across the stems, so
+    # their sum carries the input's DC exactly once.
+    stems = stems * std + mean / len(net.sources)
+    s = stems.numpy().astype(np.float64)
+    x = mix.numpy().astype(np.float64)
+    err = x - s.sum(axis=0)
+    sig_e, err_e = float((x * x).sum()), float((err * err).sum())
+    snr = float("inf") if err_e == 0 else 10 * np.log10(max(sig_e, 1e-30) / err_e)
+    os.makedirs(out_dir, exist_ok=True)
+    written = []
+    for name, y in zip(net.sources, s):
+        dst = os.path.join(out_dir, f"{name}.wav")
+        sf.write(dst, y.T.astype(np.float32), net.samplerate, subtype="FLOAT")
+        written.append({"source": name, "output": dst,
+                        "rms_dbfs": round(float(10 * np.log10(max(float((y * y).mean()), 1e-20))), 2)})
+    import demucs
+    return {"op": "separate", "model": model, "weights_sha256": digest, "sources": list(net.sources),
+            "sample_rate": net.samplerate, "channels": net.audio_channels, "frames": int(x.shape[1]),
+            "input_sample_rate": sr, "stems": written,
+            "reconstruction": {"snr_db": round(snr, 2) if np.isfinite(snr) else None,
+                               "max_abs_error": round(float(np.abs(err).max()), 6),
+                               "reference": f"the input at {net.samplerate} Hz, {net.audio_channels} channels"},
+            "engine": {"torch": torch.__version__, "demucs": demucs.__version__, "device": "cpu",
+                       "shifts": 1, "overlap": 0.25, "threads": torch.get_num_threads()}}
+
+
+def fixture_weights(model, out):
+    """FIXTURES ONLY: a RANDOMLY INITIALISED model of the registered class,
+    written as safetensors with the maintainer's metadata layout, so a gate
+    host with no acknowledged Demucs weights still exercises the loader, the
+    refusals and the stem writer. It separates nothing meaningfully."""
+    if model not in DEMUCS_SOURCES:
+        refuse(f"invalid_arguments: model must be one of {', '.join(DEMUCS_SOURCES)}")
+    torch = no_pickles()
+    from safetensors.torch import save_file
+    from demucs.htdemucs import HTDemucs
+    torch.manual_seed(0)
+    # The registered models' depth, segment and transformer shape with 8
+    # channels instead of 48, so it is small and fast. The segment is written
+    # in the maintainer's fraction JSON, so the decoder is exercised too.
+    meta_kwargs = {"sources": DEMUCS_SOURCES[model], "samplerate": 44100, "audio_channels": 2,
+                   "segment": {"_type": "fraction", "numerator": 39, "denominator": 5},
+                   "channels": 8, "bottom_channels": 0, "t_layers": 1, "t_heads": 2}
+    net = HTDemucs(**decode_args(meta_kwargs))
+    kwargs = meta_kwargs
+    sd = {k: v.contiguous() for k, v in net.state_dict().items()}
+    if os.path.exists(out):
+        refuse(f"output_exists: {out}")
+    save_file(sd, out, metadata={"klass": DEMUCS_CLASS, "args": "[]", "kwargs": json.dumps(kwargs)})
+    import hashlib
+    with open(out, "rb") as fh:
+        return {"op": "fixture-weights", "model": model, "output": out,
+                "sha256": hashlib.sha256(fh.read()).hexdigest()}
+
+
 def main(argv):
     if not argv:
-        refuse("invalid_arguments: usage: audio-tool versions | detect --input F [--loop] | transform --op OP --input F --output F [--param k=v ...] | tiers --stems DIR --tiers JSON --output DIR [--param target_lufs=N]")
+        refuse("invalid_arguments: usage: audio-tool versions | detect --input F [--loop] | transform --op OP --input F --output F [--param k=v ...] | tiers --stems DIR --tiers JSON --output DIR [--param target_lufs=N] | separate --model M --weights /models/F.safetensors --sha256 H --input F --output DIR")
     cmd, rest = argv[0], argv[1:]
     opts, params, flags = {}, {}, set()
     i = 0
@@ -506,7 +723,7 @@ def main(argv):
         if k in ("--loop",):
             flags.add(k)
             i += 1
-        elif k in ("--input", "--output", "--op", "--stems", "--tiers") and i + 1 < len(rest):
+        elif k in ("--input", "--output", "--op", "--stems", "--tiers", "--model", "--weights", "--sha256") and i + 1 < len(rest):
             opts[k] = rest[i + 1]
             i += 2
         elif k == "--param" and i + 1 < len(rest) and "=" in rest[i + 1]:
@@ -533,6 +750,25 @@ def main(argv):
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         result = transform(opts.get("--op"), src, dst, params)
         result["versions"] = versions()
+    elif cmd == "separate":
+        src = under_root(opts.get("--input"), True)
+        out_dir = under_dir(opts.get("--output"))
+        result = separate(opts.get("--model", "htdemucs"), opts.get("--weights"), opts.get("--sha256"),
+                          src, out_dir)
+        result["versions"] = versions()
+    elif cmd == "fixture-pickle-probe":
+        # FIXTURES ONLY: Demucs's own .th loader, behind the tripwire. The
+        # file the fixture passes is not a pickle (no pickle ever comes onto a
+        # machine); an unpickling error instead of pickle_refused means
+        # torch.load ran.
+        no_pickles()
+        from demucs.states import load_model
+        load_model(opts.get("--weights"))
+        refuse("engine_failed: demucs.states.load_model returned without calling torch.load")
+    elif cmd == "fixture-weights":
+        dst = under_root(opts.get("--output"), False)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        result = fixture_weights(opts.get("--model", "htdemucs"), dst)
     else:
         refuse(f"invalid_arguments: unknown subcommand {cmd!r}")
     print(json.dumps(result))

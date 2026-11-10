@@ -9551,6 +9551,12 @@
       "to": "pypi:requirements:audio-studio"
     },
     {
+      "from": "image:audio-studio",
+      "kind": "package",
+      "optional": false,
+      "to": "pypi:torch"
+    },
+    {
       "from": "image:builder",
       "kind": "base-image",
       "optional": false,
@@ -61869,11 +61875,12 @@
       "name": "torch",
       "optional": true,
       "pulled_by": [
+        "image:audio-studio",
         "image:imagegen-corridorkey",
         "image:imagegen-studio"
       ],
-      "source": "images/imagegen-corridorkey/Containerfile",
-      "version": "2.9.1+cu128"
+      "source": "images/audio-studio/Containerfile",
+      "version": "2.9.1+cpu"
     },
     {
       "homepage": "https://pypi.org/project/torchvision/",
@@ -62400,7 +62407,7 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 58,
-    "edges": 3197,
+    "edges": 3198,
     "license_families": {
       "model": 7,
       "permissive": 1733,
