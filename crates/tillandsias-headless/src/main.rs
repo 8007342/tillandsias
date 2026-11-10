@@ -74,6 +74,7 @@ use serde::{Deserialize, Serialize};
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
 mod egress;
+mod fs_stall;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
@@ -428,6 +429,24 @@ fn main() {
     // MCP tool (used vs free-tier cap per provider), so the release gate and
     // an operator can read the same numbers a forge agent gets. Read-only;
     // prints JSON with no token text. Also listed in known_flags (five sites).
+    // Order 2066-fxbh: `--fs-stall-check`, an on-demand read of /proc that
+    // names a wedged btrfs transaction (two samples, --gap-secs apart, default
+    // 3). Exit 0 for `fs-stall: none`, 1 when wedged. Read-only; no loop.
+    if user_args.iter().any(|a| a == "--fs-stall-check") {
+        let gap = user_args
+            .iter()
+            .position(|a| a == "--gap-secs")
+            .and_then(|i| user_args.get(i + 1))
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(3);
+        let v = fs_stall::check(
+            std::path::Path::new("/proc"),
+            std::time::Duration::from_secs(gap),
+        );
+        println!("{}", v.line());
+        std::process::exit(if v == fs_stall::Verdict::Clear { 0 } else { 1 });
+    }
+
     if user_args.iter().any(|a| a == "--cloud-usage") {
         #[cfg(all(feature = "host-services", feature = "vault"))]
         {
@@ -1043,6 +1062,9 @@ fn main() {
         "--via",
         // Order 1966-47vt: dispatched early (cloud_usage::call_live).
         "--cloud-usage",
+        // Order 2066-fxbh: dispatched early (fs_stall::check).
+        "--fs-stall-check",
+        "--gap-secs",
         // Order 1913-fh6l: dispatched early (memory_protection::run_cli).
         "--memory-protection",
         // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
@@ -2031,6 +2053,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
     println!("       tillandsias --cloud-usage [--debug]");
+    println!("       tillandsias --fs-stall-check [--gap-secs N]");
     println!("       tillandsias --memory-protection <container>");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
@@ -2109,6 +2132,9 @@ fn print_usage(version: &str) {
          --via qr: a phone scans a QR whose redirect is the relay page ($TILLANDSIAS_CLOUDFLARE_RELAY_URL); \
          --via paste: paste the authorization CODE the relay page (or the address bar) shows. A code, never a token: \
          it is single-use and useless without the verifier that stays in this process"
+    );
+    println!(
+        "  --fs-stall-check  Read-only: two /proc samples N s apart (default 3); names a wedged btrfs transaction (fs-stall: btrfs-transaction-wedged ...) or prints fs-stall: none"
     );
     println!(
         "  --cloud-usage  Read-only: used vs free-tier cap this month per provider (Cloudflare Workers Builds minutes, GitHub Actions cache/run minutes/billing), as JSON; the same numbers as the cloud.usage MCP tool"
