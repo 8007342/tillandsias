@@ -137,6 +137,12 @@ watch_auth() {
             last="$current"
         fi
     done
+    # 2076-w7kd: the session ended, possibly by SIGKILL: copy a rotation made
+    # since the last poll, or it is lost.
+    current="$(auth_digest)"
+    if [[ "$current" != "$last" && "$current" != missing ]]; then
+        harvest_auth
+    fi
 }
 
 case "${1:-}" in

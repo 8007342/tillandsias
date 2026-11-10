@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # @trace order:968-uhzg, spec:methodology-accountability
 #
-# Fixture for scripts/check-exact-version-literal-added.sh (order 968-uhzg),
+# Fixture for scripts/lua/check-exact-version-literal-added.lua (order 968-uhzg;
+# ported from the .sh under 2066-obsv), run on `tillandsias-plan script run`
 # over a scratch repo whose origin/linux-next is its first commit:
 #
 #   1. an ADDED `.schema_version == 2` (jq) is REFUSED, naming file:line;
@@ -22,7 +23,7 @@ set -uo pipefail
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-exact-version-literal-added.sh"
+GUARD="$ROOT/scripts/lua/check-exact-version-literal-added.lua"
 pass=0; total=6
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1"; }
@@ -31,6 +32,7 @@ bad() { echo "FAIL: $1"; }
 command -v git >/dev/null 2>&1 || { echo "skip:exact-version-literal-added-fixture:no-git"; exit 0; }
 _plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _plan=""
 case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
+[ -n "$_plan" ] || { echo "fail:exact-version-literal-added-fixture:0/$total (no plan binary to run the guard)"; exit 1; }
 
 _tmpbase="$ROOT/target/plan-scratch"; mkdir -p "$_tmpbase" 2>/dev/null || _tmpbase="${TMPDIR:-/tmp}"
 W="$(mktemp -d "$_tmpbase/exact-version.XXXXXX")"
@@ -40,14 +42,13 @@ trap 'rm -rf "$W"' EXIT INT TERM
 repo() {
     local r="$W/$1"
     mkdir -p "$r/scripts" "$r/crates/c/src"
-    cp "$GUARD" "$r/scripts/"
     printf '%s\n' "$2" > "$r/scripts/v.sh"
     git -C "$r" init -q && git -C "$r" -c user.email=f@x -c user.name=f add -A \
         && git -C "$r" -c user.email=f@x -c user.name=f commit -qm base
     git -C "$r" update-ref refs/remotes/origin/linux-next HEAD
     echo "$r"
 }
-run() { OUT="$(cd "$1" && bash scripts/check-exact-version-literal-added.sh 2>&1)"; RC=$?; }
+run() { OUT="$(cd "$1" && "$_plan" script run "$GUARD" 2>&1)"; RC=$?; }
 
 # 1 — an added jq exact pin is refused, by file:line.
 R="$(repo one '#!/bin/bash')"

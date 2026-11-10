@@ -3,7 +3,7 @@
 # WHAT IT GUARDS. A validator that compares a version to a bare number EXACTLY
 # (`.schema_version == 2`) makes the first schema bump unpublishable, and stays
 # latent until someone bumps (host-capability-probe.sh, lenovinha 2026-09-02).
-# scripts/check-exact-version-literal-added.sh refuses such a line when a change
+# scripts/lua/check-exact-version-literal-added.lua refuses such a line when a change
 # ADDS it, unless it compares against a named constant, is a floor, or states an
 # `exact-version: <reason>`. The fixture drives the guard over scratch repos
 # (jq/shell/Rust spellings, marker, constant, floor, diff-scope negative
