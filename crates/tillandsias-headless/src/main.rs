@@ -14322,6 +14322,7 @@ pub(crate) fn stale_lane_reports(
 /// ORDER 2070-mtf9: one tray pass over every lane socket; logs each lane
 /// newly found on an older build.
 #[cfg(feature = "host-services")]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn report_stale_lanes(seen: &mut std::collections::HashSet<String>) {
     let lanes = crate::mcp_socket::lane_sockets();
     if lanes.is_empty() {
