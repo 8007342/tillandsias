@@ -14,6 +14,8 @@
 # huggingface-hub, lameenc, pyyaml and sphn (its Hub download, mp3 writer and
 # audio IO); audio-tool never imports those paths, so they are deliberately
 # absent, and the Containerfile's pip check allows exactly those four lines.
+# tqdm is "MPL-2.0 AND MIT": allowed unmodified by operator ruling 2026-11-10
+# (recorded in the Containerfile's approved-contents list). Never patch it.
 certifi==2026.10.23
 cffi==2.1.1
 charset-normalizer==3.5.2

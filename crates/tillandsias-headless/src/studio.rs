@@ -4,8 +4,8 @@
 //! (Lua owns the registry; `scripts/lua/build-studio-registry.lua` writes
 //! `data/studios.json`, embedded here). This module only consumes it:
 //! framework detection and the choice list (`webstudio.options`, 1969-7qm7; `studio_options` is its deprecated alias), the web lane a
-//! studio launches as (the OpenCode Web route, OTP and window, under
-//! `studio.<label>`), and the co-edit feed (`webstudio.changes`), read from the
+//! studio launches as (a TLS-only, network-limited route and a window that
+//! opens with no user action, under `studio.<label>`, 2067-uc3k), and the co-edit feed (`webstudio.changes`), read from the
 //! forge's own checkout.
 //!
 //! The write-back guard is NOT here: saves land in the forge's checkout, so the
@@ -410,8 +410,96 @@ pub(crate) trait LaneLauncher: Send + Sync {
     /// Launch `studio` for `project` from `remote`, detached. `Ok(false)`
     /// when one this tray launched is still running: nothing new starts.
     fn launch(&self, project: &str, remote: &str, studio: &str) -> Result<bool, String>;
-    /// The router's published host port, when the router is up.
-    fn router_port(&self) -> Option<u16>;
+    /// 2067-uc3k: the preview TLS listener's host port, when it exists; the
+    /// window is `https://studio.<label>.localhost:<it>/`.
+    fn tls_port(&self) -> Option<u16>;
+    /// 2067-uc3k: open the operator's window on `url` through lane
+    /// `(project, instance)`'s browser.open registry once the studio answers,
+    /// with no user action. Returns at once; the wait runs detached.
+    fn open_window(&self, project: &str, instance: &str, studio: &str, url: &str);
+}
+
+/// 2067-uc3k: the env the tray sets on a `--studio` launch it will open the
+/// window for itself, so the launcher routes and returns without one.
+pub(crate) const WINDOW_BY_TRAY_ENV: &str = "TILLANDSIAS_STUDIO_WINDOW_BY_TRAY";
+
+/// 2067-uc3k: how long the window waits for the studio to answer. A first
+/// use builds the studio image (the launcher's own images stage allows 40
+/// minutes), so the wait outlasts that.
+#[cfg(feature = "host-services")]
+const WINDOW_WAIT: std::time::Duration = std::time::Duration::from_secs(50 * 60);
+
+/// 2067-uc3k: open `url` as a visible (`dev: true`) window in lane
+/// `(project, instance)`'s browser.open registry: the same window the agent's
+/// browser.* tools drive, and the same admission (the routed-host allowlist,
+/// the window's forwarder on the project's studio network).
+#[cfg(feature = "host-services")]
+pub(crate) fn open_lane_window(project: &str, instance: &str, url: &str) -> Result<String, String> {
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .map_err(|e| format!("studio window: runtime: {e}"))?;
+    let server = crate::mcp_socket::lane_browser_server(
+        project,
+        instance,
+        Some(std::sync::Arc::new(
+            crate::browser_open::TrayBrowserContainers::new(false),
+        )),
+        false,
+    );
+    let request = tillandsias_browser_mcp::framing::RpcRequest {
+        id: Some(1),
+        method: "tools/call".to_string(),
+        params: serde_json::json!({
+            "name": "browser.open", "arguments": { "url": url, "dev": true }
+        }),
+    };
+    match rt.block_on(server.handle_request(request)) {
+        tillandsias_browser_mcp::framing::RpcResponse::Success { result, .. }
+            if result["isError"] != serde_json::json!(true) =>
+        {
+            Ok(result.to_string())
+        }
+        tillandsias_browser_mcp::framing::RpcResponse::Success { result, .. } => Err(format!(
+            "studio window: browser.open refused {url}: {result}"
+        )),
+        tillandsias_browser_mcp::framing::RpcResponse::Error { message, .. } => Err(format!(
+            "studio window: browser.open refused {url}: {message}"
+        )),
+        tillandsias_browser_mcp::framing::RpcResponse::Notification => {
+            Err("studio window: browser.open answered nothing".to_string())
+        }
+    }
+}
+
+/// 2067-uc3k: wait until `answers()` (the studio route is served and its
+/// upstream answers), giving up when `gave_up()` (the launch failed) or after
+/// `budget`; then open the window. The seams keep it testable without podman.
+#[cfg(feature = "host-services")]
+pub(crate) fn open_when_ready(
+    answers: &dyn Fn() -> bool,
+    gave_up: &dyn Fn() -> Option<String>,
+    open: &mut dyn FnMut() -> Result<String, String>,
+    budget: std::time::Duration,
+    poll: std::time::Duration,
+) -> Result<String, String> {
+    let start = std::time::Instant::now();
+    loop {
+        if answers() {
+            return open();
+        }
+        if let Some(why) = gave_up() {
+            return Err(format!("studio window not opened: {why}"));
+        }
+        if start.elapsed() >= budget {
+            return Err(format!(
+                "studio window not opened: the studio did not answer within {} s",
+                budget.as_secs()
+            ));
+        }
+        std::thread::sleep(poll);
+    }
 }
 
 #[cfg(all(feature = "host-services", test))]
@@ -443,7 +531,7 @@ fn lane_launcher() -> std::sync::Arc<dyn LaneLauncher> {
 
 /// The production launcher: the tray spawns itself as
 /// `tillandsias --studio <id> --cloud <remote>` (the operator's own launch:
-/// same route, OTP session, authenticated probe and dev Chromium window,
+/// the same TLS-only route, with the window left to this tray, 2067-uc3k;
 /// Wayland-only), detached, logging to the host log dir.
 #[cfg(feature = "host-services")]
 struct TrayLauncher;
@@ -515,6 +603,8 @@ impl LaneLauncher for TrayLauncher {
             .map_err(|e| format!("webstudio.open: clone log handle: {e}"))?;
         let mut cmd = std::process::Command::new(exe);
         cmd.args(["--studio", studio, "--cloud", remote])
+            // 2067-uc3k: this tray opens the window in the lane's registry.
+            .env(WINDOW_BY_TRAY_ENV, "1")
             .stdin(std::process::Stdio::null())
             .stdout(log)
             .stderr(log_err);
@@ -531,15 +621,30 @@ impl LaneLauncher for TrayLauncher {
         Ok(true)
     }
 
-    fn router_port(&self) -> Option<u16> {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .ok()?;
-        let client = tillandsias_podman::PodmanClient::new();
-        rt.block_on(crate::existing_router_host_port(&client, false))
-            .ok()
-            .flatten()
+    fn tls_port(&self) -> Option<u16> {
+        crate::local_web_preview::tls_port().ok()
+    }
+
+    fn open_window(&self, project: &str, instance: &str, studio: &str, url: &str) {
+        let (project, instance, url) = (project.to_string(), instance.to_string(), url.to_string());
+        let key = format!("{project}\u{1f}{studio}");
+        std::thread::spawn(move || {
+            let gave_up = || {
+                let mut running = launched();
+                let status = running.get_mut(&key)?.try_wait().ok()??;
+                (!status.success()).then(|| format!("the studio launch exited with {status}"))
+            };
+            let outcome = open_when_ready(
+                &|| crate::local_web_preview::studio_answers(&project),
+                &gave_up,
+                &mut || open_lane_window(&project, &instance, &url),
+                WINDOW_WAIT,
+                std::time::Duration::from_secs(2),
+            );
+            if let Err(e) = outcome {
+                tracing::warn!(spec = "web-studio-lane", project = %project, "{e}");
+            }
+        });
     }
 }
 
@@ -549,6 +654,7 @@ impl LaneLauncher for TrayLauncher {
 #[cfg(feature = "host-services")]
 pub(crate) fn open_from_lane(
     project: &str,
+    instance: &str,
     args: &serde_json::Value,
     launcher: &dyn LaneLauncher,
 ) -> Result<serde_json::Value, String> {
@@ -556,19 +662,24 @@ pub(crate) fn open_from_lane(
     let lane = WebLane::studio(id)?;
     let remote = launcher.project_remote(project)?;
     let started = launcher.launch(project, &remote, lane.studio_id())?;
+    // 2067-uc3k: https on the preview TLS listener, the only scheme a
+    // browser.open window loads; served only to the project's network.
     let url = launcher
-        .router_port()
-        .map(|port| crate::project_service_url(lane.service, project, port));
+        .tls_port()
+        .map(|port| crate::local_web_preview::studio_url_on(project, port));
+    if started && let Some(url) = &url {
+        launcher.open_window(project, instance, lane.studio_id(), url);
+    }
     Ok(serde_json::json!({
         "studio": lane.studio_id(),
         "label": lane.label,
         "started": started,
         // The studio's canvas IS the live preview of the page being edited,
-        // so both name the same authenticated route.
+        // so both name the same route.
         "window_url": url,
         "preview_url": url,
         "window": if started {
-            "the tray is starting the studio; the operator's dev Chromium window opens on their desktop once it answers an authenticated request (first use builds its image and can take minutes)"
+            "the tray is starting the studio and opens the operator's window on their desktop once it answers, with nothing for them to do (first use builds its image and can take minutes)"
         } else {
             "already running: the operator's window is open; nothing new was started"
         },
@@ -634,7 +745,7 @@ pub(crate) fn call(
             Ok(serde_json::json!({ "framework": framework, "options": options(framework) }))
         })(),
         // 2025-e6mi: the tray launches it; the agent never relays a command.
-        "webstudio.open" => open_from_lane(project, args, &*lane_launcher()),
+        "webstudio.open" => open_from_lane(project, instance, args, &*lane_launcher()),
         "webstudio.changes" => changes_git_args(args["cursor"].as_str())
             .and_then(|a| git_in_lane(project, instance, &a))
             .map(|out| serde_json::json!({ "changes": parse_changes(&out) })),
@@ -649,6 +760,52 @@ pub(crate) fn call(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 2067-uc3k: the window opens exactly once, only after the studio
+    /// answers; a failed launch or an exhausted budget opens nothing and says
+    /// why.
+    #[cfg(feature = "host-services")]
+    #[test]
+    fn the_window_opens_once_the_studio_answers_and_never_before() {
+        use std::cell::Cell;
+        use std::time::Duration;
+        let polls = Cell::new(0);
+        let opened = Cell::new(0);
+        let answers = || {
+            polls.set(polls.get() + 1);
+            polls.get() >= 3
+        };
+        let out = open_when_ready(
+            &answers,
+            &|| None,
+            &mut || {
+                assert!(polls.get() >= 3, "opened before the studio answered");
+                opened.set(opened.get() + 1);
+                Ok("window".into())
+            },
+            Duration::from_secs(5),
+            Duration::from_millis(1),
+        );
+        assert_eq!(out.as_deref(), Ok("window"));
+        assert_eq!(opened.get(), 1);
+
+        let never = open_when_ready(
+            &|| false,
+            &|| Some("the studio launch exited with exit status: 1".into()),
+            &mut || panic!("opened after a failed launch"),
+            Duration::from_secs(5),
+            Duration::from_millis(1),
+        );
+        assert!(never.unwrap_err().contains("exited"));
+        let late = open_when_ready(
+            &|| false,
+            &|| None,
+            &mut || panic!("opened without an answer"),
+            Duration::from_millis(5),
+            Duration::from_millis(1),
+        );
+        assert!(late.unwrap_err().contains("did not answer"));
+    }
 
     /// 2026-ggu8: every option carries the affordances an agent picks by,
     /// for a detected framework and for none, and the descriptor tells the
