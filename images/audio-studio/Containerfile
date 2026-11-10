@@ -16,6 +16,13 @@
 #   detector and for the agent's own analysis. The Python lives in this image
 #   for users; the repo's scripts and tests never run it on the host
 #   (scripts/lua/test-audio-studio-glitches.lua runs it in here).
+# - torch (BSD-3-Clause, CPU build) and demucs 4.1.0 (MIT code; its WEIGHTS
+#   are separate and gated, 2068-ypgq) for stem separation (2068-cqis).
+# - tqdm 4.70.1, "MPL-2.0 AND MIT", which demucs.apply imports unconditionally.
+#   Operator ruling 2026-11-10 (macuahuitl-fedora relay): allowed UNMODIFIED,
+#   as in the ComfyUI image. MPL-2.0 is file-level copyleft: patching any tqdm
+#   file would oblige us to publish that file's source, so this image never
+#   patches it; requirements.lock pins the PyPI release as published.
 #
 # Run time: --network=none, --cap-drop=ALL, no-new-privileges, uid 1001, one
 # container per call (audio_studio.rs). No model weights, ever: stem
