@@ -1149,6 +1149,58 @@ pub struct DiagnoseReport {
     /// A status is mandatory precisely because absence is ambiguous: "no
     /// metrics" must never be readable as "no containers".
     pub metrics_status: String,
+
+    /// 2066-fxbh: the guest filesystem stall check (`--fs-stall-check` run in
+    /// the guest). Grammar, pinned by test:
+    ///   `unchecked:plain-diagnose-is-guest-free` — standalone --diagnose
+    ///   `none`                                   — no wedged btrfs transaction
+    ///   `wedged:<detail>`                        — the guest is stalled; reboot it
+    ///   `unsupported:guest-lacks-fs-stall-check` — an older guest binary
+    ///   `error:<slug>`                           — the check could not run
+    pub fs_stall: String,
+}
+
+/// 2066-fxbh: plain `--diagnose` never reaches the guest.
+pub(crate) const FS_STALL_UNCHECKED: &str = "unchecked:plain-diagnose-is-guest-free";
+
+/// The guest-side command. A `/bin/bash -lc` argv is what the exec allowlist admits.
+pub(crate) const FS_STALL_ARGV: [&str; 3] =
+    ["/bin/bash", "-lc", "tillandsias-headless --fs-stall-check"];
+
+/// Map the guest's `--fs-stall-check` answer to the `fs_stall` grammar.
+pub(crate) fn fs_stall_status(
+    res: &Result<tillandsias_vm_layer::vsock_exec::ExecOutput, String>,
+) -> String {
+    let out = match res {
+        Ok(o) => o,
+        Err(_) => return "error:exec".to_string(),
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let line = text
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("fs-stall: "));
+    match (out.exit.code, line) {
+        (0, Some("fs-stall: none")) => "none".to_string(),
+        (1, Some(l)) if l.starts_with("fs-stall: btrfs-transaction-wedged") => {
+            format!("wedged:{}", l.trim_start_matches("fs-stall: "))
+        }
+        _ => "unsupported:guest-lacks-fs-stall-check".to_string(),
+    }
+}
+
+/// The human row for `fs_stall`.
+pub(crate) fn fs_stall_report_line(status: &str) -> String {
+    if let Some(detail) = status.strip_prefix("wedged:") {
+        format!(
+            "Guest filesystem: STALLED — {detail}. The guest disk is deadlocked; podman, \
+             journald and the tray's own guest calls hang until the guest reboots (2066-fxbh)."
+        )
+    } else if status == "none" {
+        "Guest filesystem: ok (no wedged btrfs transaction)".to_string()
+    } else {
+        format!("Guest filesystem: NOT CHECKED — {status}")
+    }
 }
 
 /// Status constant for the default standalone path — no VM handle, so the
@@ -1222,6 +1274,7 @@ fn collect_report() -> DiagnoseReport {
         // tray's handle. The opt-in verb below is the only reader.
         metrics: None,
         metrics_status: METRICS_STATUS_NO_HANDLE.to_string(),
+        fs_stall: FS_STALL_UNCHECKED.to_string(),
     }
 }
 
@@ -1294,6 +1347,7 @@ fn print_human(r: &DiagnoseReport) {
     println!("{}", provision_report_line());
     println!("{}", guest_state_report_line_at(unix_now_secs()));
     println!("{}", guest_health_report_line());
+    println!("{}", fs_stall_report_line(&r.fs_stall));
     println!("{}", unclean_rebuild_report_line(&image_root()));
     println!("No live probe was made; this report cannot contact the guest.");
     println!();
@@ -2492,6 +2546,10 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
         eprintln!("[diagnose] stage guest binary: {err}");
         return finish_metrics_report(report, format);
     }
+    // 2066-fxbh: a running tray owns the live guest; ask it through the relay.
+    if report.tray_process_running {
+        report.fs_stall = fs_stall_via_tray_relay();
+    }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true);
     if !vz.is_provisioned() {
@@ -2512,6 +2570,8 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
         }
     };
 
+    let tray_running = report.tray_process_running;
+    let fs_stall_out: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
     let outcome: Result<Option<tillandsias_control_wire::MetricsSnapshotWire>, String> = rt
         .block_on(async {
             use std::time::Duration;
@@ -2542,7 +2602,26 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
                     open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
                         .await
                         .map_err(|e| format!("vsock connect: {e}"))?;
-                tillandsias_vm_layer::vsock_exec::fetch_metrics_snapshot(stream).await
+                let snapshot =
+                    tillandsias_vm_layer::vsock_exec::fetch_metrics_snapshot(stream).await;
+                // 2066-fxbh: the guest this verb booted, when no tray owns one.
+                if !tray_running {
+                    let res = match open_control_wire_stream(
+                        &vz,
+                        CONTROL_WIRE_VSOCK_PORT,
+                        Duration::from_secs(30),
+                    )
+                    .await
+                    {
+                        Ok(s) => {
+                            tillandsias_vm_layer::vsock_exec::exec_over_stream(s, &FS_STALL_ARGV)
+                                .await
+                        }
+                        Err(e) => Err(format!("vsock connect: {e}")),
+                    };
+                    *fs_stall_out.lock().unwrap() = Some(fs_stall_status(&res));
+                }
+                snapshot
             }
             .await;
             // Stop the VM whatever happened: this verb owns the VM it booted.
@@ -2551,6 +2630,9 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
             result
         });
 
+    if let Some(st) = fs_stall_out.into_inner().unwrap() {
+        report.fs_stall = st;
+    }
     match outcome {
         Ok(Some(snapshot)) => {
             report.metrics = Some(snapshot);
@@ -2566,6 +2648,38 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
         }
     }
     finish_metrics_report(report, format)
+}
+
+/// 2066-fxbh: run the stall check on the live tray's guest through its relay.
+fn fs_stall_via_tray_relay() -> String {
+    let path = crate::guest_exec_relay::socket_path_in(&crate::guest_exec_relay::socket_dir());
+    let Ok(rt) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return "error:tokio-runtime".to_string();
+    };
+    rt.block_on(async move {
+        let stream = match tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            tokio::net::UnixStream::connect(&path),
+        )
+        .await
+        {
+            Ok(Ok(s)) => s,
+            _ => return "error:relay-unreachable".to_string(),
+        };
+        // A wedged guest can hang the exec itself; that is the stall, named.
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            tillandsias_vm_layer::vsock_exec::exec_over_stream(stream, &FS_STALL_ARGV),
+        )
+        .await
+        {
+            Ok(res) => fs_stall_status(&res),
+            Err(_) => "error:exec-timeout".to_string(),
+        }
+    })
 }
 
 /// Print a metrics-bearing report and return the ordinary diagnose exit code.
@@ -3765,6 +3879,7 @@ mod tests {
     // ────────────────────────────────────────────────────────────────
 
     use super::{DIAGNOSE_EXIT_CONVERGING, DiagnoseReport, exit_code_from};
+    use super::{FS_STALL_UNCHECKED, collect_report, fs_stall_report_line, fs_stall_status};
 
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
@@ -3794,7 +3909,56 @@ mod tests {
             tray_process_running: false,
             metrics: None,
             metrics_status: METRICS_STATUS_NO_HANDLE.to_string(),
+            fs_stall: FS_STALL_UNCHECKED.to_string(),
         }
+    }
+
+    fn exec_out(
+        code: i32,
+        out: &str,
+    ) -> Result<tillandsias_vm_layer::vsock_exec::ExecOutput, String> {
+        Ok(tillandsias_vm_layer::vsock_exec::ExecOutput {
+            exit: tillandsias_control_wire::PtyExit { code, signal: None },
+            stdout: out.as_bytes().to_vec(),
+        })
+    }
+
+    /// 2066-fxbh: every answer the guest can give maps into the pinned grammar,
+    /// and a stalled guest is NAMED in the human row.
+    #[test]
+    fn fs_stall_status_maps_every_guest_answer() {
+        assert_eq!(fs_stall_status(&exec_out(0, "fs-stall: none\n")), "none");
+        let w = fs_stall_status(&exec_out(
+            1,
+            "fs-stall: btrfs-transaction-wedged tid=527 wchan=btrfs_run_delayed_items waiters=9 examples=dnf5,systemd (D tasks cannot be killed; reboot the guest)\n",
+        ));
+        assert!(
+            w.starts_with("wedged:btrfs-transaction-wedged tid=527 "),
+            "{w}"
+        );
+        assert!(
+            fs_stall_report_line(&w)
+                .starts_with("Guest filesystem: STALLED — btrfs-transaction-wedged tid=527")
+        );
+        assert_eq!(
+            fs_stall_status(&exec_out(2, "Unsupported option: --fs-stall-check\n")),
+            "unsupported:guest-lacks-fs-stall-check"
+        );
+        assert_eq!(fs_stall_status(&Err("boom".into())), "error:exec");
+        assert_eq!(
+            fs_stall_report_line("none"),
+            "Guest filesystem: ok (no wedged btrfs transaction)"
+        );
+        assert_eq!(
+            fs_stall_report_line(FS_STALL_UNCHECKED),
+            "Guest filesystem: NOT CHECKED — unchecked:plain-diagnose-is-guest-free"
+        );
+    }
+
+    /// Plain --diagnose stays guest-free: the collector never runs the check.
+    #[test]
+    fn plain_diagnose_does_not_check_the_guest_filesystem() {
+        assert_eq!(collect_report().fs_stall, FS_STALL_UNCHECKED);
     }
 
     /// Top-level JSON keys are the support-tooling contract.
