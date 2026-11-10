@@ -15,10 +15,15 @@ severity: medium
 size: quick
 
 preconditions:
-  - workspace contains scripts/run-observatorium.sh and observatorium/index.html
+  - workspace contains scripts/run-observatorium.sh and tools/trace-viewer/index.html
   - podman, curl, and bash are available in PATH
 
 critical_path:
+  - step: "the launcher serves the trace viewer from tools/trace-viewer (2066-obsv)"
+    command: "grep -qF '${ROOT}/tools/trace-viewer:/var/www/observatorium:ro' scripts/run-observatorium.sh && test ! -e observatorium/index.html && echo 'ok: trace viewer mounted from tools/trace-viewer'"
+    timeout_ms: 3000
+    expected_behavior: "ok: trace viewer mounted from tools/trace-viewer"
+
   - step: "launch observatorium without browser automation"
     command: "OBSERVATORIUM_BROWSER=none OBSERVATORIUM_PORT=8787 ./scripts/run-observatorium.sh --project . --recreate"
     timeout_ms: 120000
@@ -44,5 +49,5 @@ observability:
     test: "clickable-trace-index-observatorium-skeleton"
 
 rollback:
-  on_failure: "inspect scripts/run-observatorium.sh and observatorium/index.html for regressions"
-  command: "sed -n '1,260p' scripts/run-observatorium.sh && sed -n '1,260p' observatorium/index.html"
+  on_failure: "inspect scripts/run-observatorium.sh and tools/trace-viewer/index.html for regressions"
+  command: "sed -n '1,260p' scripts/run-observatorium.sh && sed -n '1,260p' tools/trace-viewer/index.html"

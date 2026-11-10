@@ -186,7 +186,7 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        fs::create_dir_all(root.join("observatorium/lib")).unwrap();
+        fs::create_dir_all(root.join("tools/trace-viewer/lib")).unwrap();
         fs::create_dir_all(root.join("observatorium/node_modules/.bin")).unwrap();
         for rel in [
             "index.html",
@@ -194,7 +194,7 @@ mod tests {
             "lib/highlight.min.css",
             "lib/highlight.min.js",
         ] {
-            fs::write(root.join("observatorium").join(rel), "legacy asset").unwrap();
+            fs::write(root.join("tools/trace-viewer").join(rel), "trace viewer asset").unwrap();
         }
         symlink(
             "../wrangler/bin/wrangler.js",
@@ -207,9 +207,15 @@ mod tests {
         assert!(
             assets
                 .iter()
+                .all(|asset| asset.dest.starts_with("tools/trace-viewer/")),
+            "the trace viewer is embedded under tools/trace-viewer/, never observatorium/ (2066-obsv)"
+        );
+        assert!(
+            assets
+                .iter()
                 .all(|asset| !asset.dest.contains("node_modules"))
         );
-        let selected = root.join("observatorium/lib/chart.umd.js");
+        let selected = root.join("tools/trace-viewer/lib/chart.umd.js");
         fs::remove_file(&selected).unwrap();
         symlink("highlight.min.js", &selected).unwrap();
         assert!(

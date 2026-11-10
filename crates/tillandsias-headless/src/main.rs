@@ -37466,6 +37466,24 @@ esac
         );
     }
 
+    /// Order 2066-obsv (PR 4): the project trace viewer moved out of
+    /// observatorium/ (now the static release site) to tools/trace-viewer/.
+    /// --observatorium still serves it at /observatorium/; only the source
+    /// directory in the runtime asset root changed.
+    #[test]
+    fn observatorium_mode_serves_the_trace_viewer_from_tools() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn run_observatorium_mode(");
+        assert!(
+            window.contains(r#"root.join("tools/trace-viewer")"#),
+            "--observatorium must mount the runtime asset root's tools/trace-viewer"
+        );
+        assert!(
+            !window.contains(r#"root.join("observatorium")"#),
+            "--observatorium must not mount observatorium/ (the static release site)"
+        );
+    }
+
     // ---- 1119-w2rj: cloud vs. local launch decisions ----
     //
     // Three review findings against the cloud-only launch path (commit
