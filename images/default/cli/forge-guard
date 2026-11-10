@@ -1,0 +1,331 @@
+#!/usr/bin/env lua
+-- forge-guard — run a heavy job inside the forge's real budget (order 2067-dwqd).
+--
+-- Usage:
+--   forge-guard run [--slot NAME] [--need-mb N] [--threads N]
+--                   [--kill-at PCT] [--sustain SECS] [--no-kill] -- CMD [ARG...]
+--   forge-guard wait (--pid PID | --file PATH) [--timeout SECS]
+--   forge-guard budget
+--
+-- WHY. On 2026-11-09 the demon_attack forge sized four workers from the host's
+-- core count, each loaded its own model, and the forge sat at its memory.high
+-- for about two hours: memory.high throttles, it does not kill, so the jobs
+-- froze instead of failing. forge-guard is how a job asks the forge first.
+--
+-- run:
+--   QUEUE     one job per --slot (default "heavy") at a time, through flock(1)
+--             on ~/.cache/tillandsias-project/.forge-guard/<slot>.lock; a job
+--             that has to wait says so once
+--   HEADROOM  with --need-mb, refuses (exit 75) when the forge's memory budget
+--             (memory.high, else memory.max) minus its anon+shmem use is
+--             smaller than N MiB, checked AFTER the slot is held
+--   THREADS   the job gets OMP/MKL/OPENBLAS/NUMEXPR/VECLIB thread counts,
+--             RAYON_NUM_THREADS, GOMAXPROCS and CARGO_BUILD_JOBS set to
+--             --threads, else the forge's CPU budget; and TILLANDSIAS_CPUS /
+--             TILLANDSIAS_MEM_BUDGET_MB, so it can size itself
+--   PRESSURE  a watcher kills the job's whole process tree (TERM, then KILL
+--             after 10 s) when the forge's memory.pressure full avg10 stays at
+--             or above --kill-at (default 50) for --sustain s (default 30),
+--             and the exit is 137 with killed:forge-guard:memory-pressure. A
+--             loud kill instead of a silent two-hour throttle. --no-kill
+--             leaves only the warning line.
+--   The job runs in the FOREGROUND: Ctrl-C reaches it, and its exit code is
+--   forge-guard's.
+-- wait: until the process is gone (any process, not only a child), or the
+--   file exists; exit 0, or 124 at --timeout. Use it instead of a pgrep -f
+--   loop, which matches itself.
+-- budget: the CPU and memory budget this forge actually has.
+--
+-- Pure Lua 5.4 plus flock(1), sleep(1) and kill(1): no luaposix in the image.
+-- FORGE_GUARD_CGROUP (default /sys/fs/cgroup) and FORGE_GUARD_LOCK_DIR are
+-- seams for its fixture, scripts/lua/test-forge-guard.lua.
+
+local MiB = 1024 * 1024
+local CG = os.getenv("FORGE_GUARD_CGROUP") or "/sys/fs/cgroup"
+local SELF = arg[0]
+
+local function die(msg, code)
+    io.stderr:write(msg, "\n")
+    os.exit(code or 2)
+end
+
+local function q(s)
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
+
+local function read(path)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local s = f:read("a")
+    f:close()
+    return s
+end
+
+local function exists(path)
+    local f = io.open(path, "r")
+    if f then f:close() return true end
+    return false
+end
+
+local function sleep(secs)
+    os.execute("sleep " .. tostring(secs))
+end
+
+-- os.execute's status as a process exit code.
+local function code_of(ok, how, n)
+    if how == "signal" then return 128 + (n or 0) end
+    return n or (ok and 0 or 1)
+end
+
+-- ── budget ─────────────────────────────────────────────────────────────────
+
+local function online_cpus()
+    local p = io.popen("nproc 2>/dev/null")
+    local n = p and tonumber(p:read("l") or "")
+    if p then p:close() end
+    return n or 1
+end
+
+local function cpu_budget()
+    local n = online_cpus()
+    local quota, period = (read(CG .. "/cpu.max") or ""):match("^(%S+)%s+(%d+)")
+    local qn = tonumber(quota)
+    if qn and tonumber(period) and tonumber(period) > 0 then
+        n = math.min(n, math.max(1, math.ceil(qn / tonumber(period))))
+    end
+    return n
+end
+
+local function finite(path)
+    return tonumber((read(path) or ""):match("^%s*(%d+)"))
+end
+
+-- memory.high, else memory.max; nil when neither is set (an unbudgeted forge).
+local function mem_budget()
+    return finite(CG .. "/memory.high") or finite(CG .. "/memory.max")
+end
+
+local function anon_shmem()
+    local stat = read(CG .. "/memory.stat")
+    if not stat then return nil end
+    local anon = tonumber(stat:match("\nanon (%d+)") or stat:match("^anon (%d+)")) or 0
+    local shmem = tonumber(stat:match("\nshmem (%d+)")) or 0
+    return anon + shmem
+end
+
+local function full_avg10()
+    return tonumber(((read(CG .. "/memory.pressure") or ""):match("full avg10=([%d.]+)")))
+end
+
+-- ── process tree ───────────────────────────────────────────────────────────
+
+local function children(pid)
+    local out = {}
+    local p = io.popen("cat /proc/" .. pid .. "/task/*/children 2>/dev/null")
+    if p then
+        for c in p:read("a"):gmatch("%d+") do out[#out + 1] = c end
+        p:close()
+    end
+    return out
+end
+
+local function tree(pid, skip, acc)
+    acc = acc or {}
+    for _, c in ipairs(children(pid)) do
+        if c ~= skip then
+            acc[#acc + 1] = c
+            tree(c, skip, acc)
+        end
+    end
+    return acc
+end
+
+local function alive(pid)
+    local st = read("/proc/" .. pid .. "/stat")
+    return st ~= nil and not st:match("^%d+ %b() Z")
+end
+
+local function my_pid()
+    return (read("/proc/self/stat") or ""):match("^(%d+)")
+end
+
+-- ── argument parsing ───────────────────────────────────────────────────────
+
+local function parse(args, from, spec)
+    local o, i = {}, from
+    while i <= #args do
+        local a = args[i]
+        if a == "--" then return o, i + 1 end
+        local kind = spec[a]
+        if not kind then die("forge-guard: unknown option " .. a .. " (see forge-guard --help)") end
+        if kind == "flag" then
+            o[a] = true
+            i = i + 1
+        else
+            local v = args[i + 1]
+            if v == nil then die("forge-guard: " .. a .. " needs a value") end
+            if kind == "num" and not tonumber(v) then die("forge-guard: " .. a .. " needs a number, got " .. v) end
+            o[a] = kind == "num" and tonumber(v) or v
+            i = i + 2
+        end
+    end
+    return o, i
+end
+
+local function usage()
+    local f = io.open(SELF, "r")
+    for line in f:lines() do
+        if not line:match("^%-%-") and not line:match("^#!") then break end
+        if line:match("^%-%- ") or line == "--" then print((line:gsub("^%-%- ?", ""))) end
+    end
+    f:close()
+end
+
+-- ── subcommands ────────────────────────────────────────────────────────────
+
+local RUN_SPEC = { ["--slot"] = "str", ["--need-mb"] = "num", ["--threads"] = "num",
+    ["--kill-at"] = "num", ["--sustain"] = "num", ["--no-kill"] = "flag" }
+
+local function run(args)
+    local o, at = parse(args, 2, RUN_SPEC)
+    if at > #args then die("usage: forge-guard run [options] -- CMD [ARG...]") end
+    local slot = o["--slot"] or "heavy"
+    if not slot:match("^[%w._-]+$") then die("forge-guard: --slot must be [A-Za-z0-9._-]+") end
+    local dir = os.getenv("FORGE_GUARD_LOCK_DIR")
+        or ((os.getenv("HOME") or "/tmp") .. "/.cache/tillandsias-project/.forge-guard")
+    os.execute("mkdir -p " .. q(dir))
+    local lock = dir .. "/" .. slot .. ".lock"
+    if not os.execute("flock -n " .. q(lock) .. " true") then
+        io.stderr:write("forge-guard: slot ", slot, " is busy; waiting for it\n")
+    end
+    -- Re-enter under the lock, so the headroom check sees memory the previous
+    -- job has given back.
+    local cmd = { "flock", lock, "lua", SELF, "_job" }
+    for k, v in pairs(o) do
+        cmd[#cmd + 1] = k
+        if v ~= true then cmd[#cmd + 1] = tostring(v) end
+    end
+    cmd[#cmd + 1] = "--"
+    for i = at, #args do cmd[#cmd + 1] = args[i] end
+    local parts = {}
+    for _, a in ipairs(cmd) do parts[#parts + 1] = q(a) end
+    os.exit(code_of(os.execute(table.concat(parts, " "))))
+end
+
+local function job(args)
+    local o, at = parse(args, 2, RUN_SPEC)
+    local budget = mem_budget()
+    if o["--need-mb"] then
+        local used = anon_shmem()
+        if budget and used then
+            local free = math.floor((budget - used) / MiB)
+            if free < o["--need-mb"] then
+                print(string.format("refused:forge-guard:headroom:need=%dMiB:free=%dMiB:budget=%dMiB",
+                    o["--need-mb"], free, math.floor(budget / MiB)))
+                print("  why: the job would push this forge past its memory budget, where it is throttled, not killed")
+                print("  remedy: wait for other jobs, run fewer workers, or run it with a smaller --need-mb")
+                os.exit(75)
+            end
+        end
+    end
+    local cpus = cpu_budget()
+    local threads = math.floor(o["--threads"] or cpus)
+    local env = { "TILLANDSIAS_CPUS=" .. cpus,
+        "TILLANDSIAS_MEM_BUDGET_MB=" .. (budget and math.floor(budget / MiB) or "unbounded") }
+    for _, v in ipairs({ "OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "RAYON_NUM_THREADS",
+        "GOMAXPROCS", "CARGO_BUILD_JOBS" }) do
+        env[#env + 1] = v .. "=" .. threads
+    end
+    local me = my_pid()
+    local marker = os.tmpname()
+    os.remove(marker)
+    if me then
+        local w = { "lua", SELF, "_watch", me, marker, tostring(o["--kill-at"] or 50),
+            tostring(o["--sustain"] or 30), o["--no-kill"] and "warn" or "kill" }
+        local parts = {}
+        for _, a in ipairs(w) do parts[#parts + 1] = q(a) end
+        os.execute(table.concat(parts, " ") .. " </dev/null &")
+    end
+    local parts = { "env" }
+    for _, e in ipairs(env) do parts[#parts + 1] = q(e) end
+    for i = at, #args do parts[#parts + 1] = q(args[i]) end
+    local rc = code_of(os.execute(table.concat(parts, " ")))
+    local killed = read(marker)
+    os.remove(marker)
+    if killed then
+        io.stderr:write(killed, "\n")
+        os.exit(137)
+    end
+    os.exit(rc)
+end
+
+local function watch(args)
+    local pid, marker, at, sustain, mode = args[2], args[3], tonumber(args[4]), tonumber(args[5]), args[6]
+    local me = my_pid()
+    local hot, warned = 0, false
+    while alive(pid) do
+        local p = full_avg10()
+        if p and p >= at then hot = hot + 1 else hot, warned = 0, false end
+        if hot >= sustain then
+            local line = string.format("killed:forge-guard:memory-pressure:full-avg10=%.1f:sustained=%ds:kill-at=%g", p, hot, at)
+            if mode ~= "kill" then
+                if not warned then
+                    io.stderr:write((line:gsub("^killed:", "warn:")), " (--no-kill: left running)\n")
+                    warned = true
+                end
+            else
+                local f = io.open(marker, "w")
+                if f then f:write(line) f:close() end
+                local victims = tree(pid, me)
+                if #victims > 0 then os.execute("kill -TERM " .. table.concat(victims, " ") .. " 2>/dev/null") end
+                for _ = 1, 10 do
+                    local left = 0
+                    for _, v in ipairs(victims) do if alive(v) then left = left + 1 end end
+                    if left == 0 then break end
+                    sleep(1)
+                end
+                victims = tree(pid, me)
+                if #victims > 0 then os.execute("kill -KILL " .. table.concat(victims, " ") .. " 2>/dev/null") end
+                return
+            end
+        end
+        sleep(1)
+    end
+end
+
+local function wait(args)
+    local o = parse(args, 2, { ["--pid"] = "num", ["--file"] = "str", ["--timeout"] = "num" })
+    if (o["--pid"] == nil) == (o["--file"] == nil) then die("usage: forge-guard wait (--pid PID | --file PATH) [--timeout SECS]") end
+    local waited = 0
+    local function done()
+        if o["--pid"] then return not alive(math.floor(o["--pid"])) end
+        return exists(o["--file"])
+    end
+    while not done() do
+        if o["--timeout"] and waited >= o["--timeout"] then
+            print(string.format("timeout:forge-guard:wait:%ss", o["--timeout"]))
+            os.exit(124)
+        end
+        sleep(1)
+        waited = waited + 1
+    end
+    print(string.format("ok:forge-guard:wait:%s:after=%ds", o["--pid"] and ("pid=" .. math.floor(o["--pid"])) or ("file=" .. o["--file"]), waited))
+end
+
+local function show_budget()
+    local b, u = mem_budget(), anon_shmem()
+    print("cpus=" .. cpu_budget())
+    print("memory_budget_mb=" .. (b and math.floor(b / MiB) or "unbounded"))
+    print("anon_shmem_mb=" .. (u and math.floor(u / MiB) or "unknown"))
+    if b and u then print("headroom_mb=" .. math.floor((b - u) / MiB)) end
+end
+
+local sub = arg[1]
+if sub == "run" then run(arg)
+elseif sub == "_job" then job(arg)
+elseif sub == "_watch" then watch(arg)
+elseif sub == "wait" then wait(arg)
+elseif sub == "budget" then show_budget()
+elseif sub == "--help" or sub == "-h" or sub == "help" then usage()
+else die("usage: forge-guard run|wait|budget (forge-guard --help)") end

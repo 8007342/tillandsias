@@ -3,6 +3,13 @@ name: advance-work-from-plan
 description: Discover, claim, implement, checkpoint, and complete units of work from the shared plan ledger based on host capabilities and lease rules, complementary to multihost-orchestration.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Advance Work From Plan
 
 This skill is the recurring scheduled execution loop for worker agents. It allows any agent on any host to autonomously select, claim, implement, checkpoint, and complete shaped work from the shared `plan/` ledger — sustaining development velocity and enforcing finite-time convergence.

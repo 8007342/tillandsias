@@ -44,6 +44,7 @@ pub mod context_pack;
 /// adaptive heartbeat and a git-ledger fallback.
 pub mod coordinator_client;
 pub mod discipline_hooks;
+pub mod disk_preflight;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;

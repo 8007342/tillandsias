@@ -5424,6 +5424,14 @@ inject_startup_context() {
     # rather than assumed from the fact that the installer exists.
     local _lane_state
     _lane_state="$(lane_socket_state)"
+    # Order 1878-2cwt 5.3: the disk line. The plan binary computes it
+    # (disk-preflight --dry-run evicts nothing); shell only relays its verdict.
+    local _disk_line _disk_out _disk_n
+    _disk_out="$("$FORGE_EXPERTS_BIN_DIR/tillandsias-plan" disk-preflight --repo "$project_dir" --target /home/forge/src --l0 --dry-run 2>/dev/null)"
+    _disk_n="$(printf '%s\n' "$_disk_out" | grep -c '^would-evict:')"
+    _disk_line="$(printf '%s\n' "$_disk_out" | tail -n 1)"
+    [[ -n "$_disk_line" ]] || _disk_line="refused:disk-low:/home/forge/src:unknown (disk-preflight unavailable)"
+    _disk_line="${_disk_line} would_evict=${_disk_n:-0}"
     local _hook_line
     _hook_line="$(forge_hook_state_line "$project_dir" 2>/dev/null)"
     [[ -n "$_hook_line" ]] || _hook_line="hooks: pre_push=unknown pre_commit=unknown dir=unresolved"
@@ -5715,6 +5723,8 @@ inject_startup_context() {
 - **Host lane** — machine-readable (order 1863-eckw — branch on this, do not parse the prose): \`host_lane=${_lane_state} socket=${TILLANDSIAS_CONTROL_SOCKET:-none}\`
   - \`publish_local\`, \`browser.open\`, the \`service_*\` tools and the host toolchains (\`flutter\`) all go over this one socket. \`ready\` means they can work. \`stale\` means the socket file exists but nothing on the host accepts on it: the process that served this lane is gone, every one of those tools fails, and an MCP server reported as failed at startup stays failed. Quit nothing; tell the operator \`host_lane=stale\`, and a running tray re-serves the lane within a second, after which a new session of the agent reconnects. \`absent\`/\`unset\` mean this forge was launched with no lane at all.
 - **Diagnose** — run \`tillandsias-doctor\` (or \`tillandsias-doctor --json\`) when a tool, the router or \`flutter\` fails: one call reports the lane socket, every MCP server with its reason, the router direct and through the proxy, the flutter toolchain, the cheatsheets and free space (order 1874-6p63). There is no in-forge renderer; previews open in the host browser.
+- **Disk** — machine-readable (order 1878-2cwt — branch on this, do not parse the prose): \`${_disk_line}\`
+  - L0 is this forge's source tmpfs; the threshold is a quarter of it. \`refused:disk-low\` means a new worktree would fill it: run \`tillandsias-plan disk-preflight --repo <checkout> --target /home/forge/src --l0\`, which removes only clean, pushed worktrees, oldest first, and refuses when that is not enough. \`would_evict\` counts the worktrees it would remove now.
 - **Git guards** — machine-readable (order 969-nhh7 — branch on this, do not parse the prose): \`${_hook_line}\`
   - \`pre_push=present\` means this checkout has the composed pre-push gate, so a push with no \`./build.sh --check\` stamp is REFUSED. \`pre_push=absent\` means it is not: push CI no longer exists on any working branch, so the local gate is the ONLY automated trunk protection, and without it nothing but your own discipline is checking what reaches the trunk. Run \`scripts/install-hooks.sh\` if you see \`absent\`, and treat every push until then as unguarded. This line exists because a forge carried exactly two hooks — neither a guard — for long enough that a cycle ran the gate, got a REFUSAL, and pushed anyway with nothing to stop it; the gap was found by accident while checking something else, and an unobservable guard is indistinguishable from a missing one.
 - **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_answer\`, \`plan_next\`, \`methodology_ask\`, \`spec_answer\`, \`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`; \`expert_capability\` when any answer is \`unsupported\`) instead of grepping \`plan/index.yaml\`.
@@ -5797,6 +5807,13 @@ Fedora base, not your host, and the difference has bitten agents repeatedly.
 \`lua-edit FILE OLD NEW [OLD NEW ...]\` applies every pair or none: it refuses, changing
 nothing, unless each OLD occurs exactly once. \`lua-conflict FILE ours|theirs|both [HUNK]\`
 resolves merge-conflict hunks; \`git add\` the file after.
+**Size heavy jobs from this forge's budget, not the host's** (2067-dwqd): \`nproc\` can
+report more CPUs than this forge may use, and memory.high THROTTLES instead of killing,
+so an oversized job freezes the forge. \`forge-guard budget\` prints the real CPUs and
+memory headroom; \`forge-guard run [--need-mb N] [--threads N] -- CMD\` queues heavy jobs
+one at a time, refuses when the memory is not there, caps thread pools, and kills the
+job tree under sustained memory pressure. \`forge-guard wait --pid P|--file F\` replaces
+\`pgrep -f\` wait loops (which match themselves).
 **ABSENT:** \`ruby\` — several skills still show \`ruby -ryaml\` for YAML validation.
 It is not here. Use \`yq\` instead (verified: it accepts valid YAML and exits
 non-zero on invalid).

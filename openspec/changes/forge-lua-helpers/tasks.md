@@ -40,9 +40,9 @@ record the pre/post `strace -f -e execve` count in the packet.
 
 ## 2. Packaging and guards
 
-- [ ] 2.1 `Containerfile` copies `images/default/lua/` to
+- [x] 2.1 `Containerfile` copies `images/default/lua/` to
       `/usr/local/lib/tillandsias/lua/`. `[mint on claim]`
-- [ ] 2.2 Land `2047-ci2k` (PR #1015): the four omitted libs are copied and
+- [x] 2.2 Land `2047-ci2k` (PR #1015): the four omitted libs are copied and
       `check-forge-lib-copies.lua` is red before / green after; extend it to
       every `lua/*.lua` module a wrapper names. `[2047-ci2k]`
 - [ ] 2.3 Register the shell-outs in `images/default/lib-*.sh` as a counter

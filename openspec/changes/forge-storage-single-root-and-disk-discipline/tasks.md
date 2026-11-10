@@ -27,7 +27,7 @@
 
 - [ ] 5.1 Fixture: scratch repo with a pushed clean worktree, an unpushed one and a dirty one under a simulated low threshold; only the pushed one is evicted; unreachable threshold yields `refused:disk-low`
 - [ ] 5.2 One binary subcommand (no new shell; carried shell-to-lua obligation)
-- [ ] 5.3 Wire into every skill in design D5; add the startup-context disk line (coordinates with 1866-ubtc, which owns the in-forge source tmpfs pruning)
+- [x] 5.3 Wire into every skill in design D5; add the startup-context disk line (coordinates with 1866-ubtc, which owns the in-forge source tmpfs pruning)
 
 ## 6. Research: macOS (peer task)
 

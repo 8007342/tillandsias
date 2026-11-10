@@ -211,6 +211,10 @@ const CK_FIELD: &str = "You may not use this tool to provide inference as a paid
 const CK_SEATS: &str = "If You are, or are using this tool on behalf of, a Legal Entity whose total gross revenue exceeded US $20,000,000 (twenty million US dollars) in its most recently completed fiscal year, the permissions in Section 1 do not apply unless that Legal Entity has purchased a seat of the CorridorKey plugin from the Licensor for each individual who uses this tool.";
 const CK_NC: &str = "This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License [...] Use CorridorKey for whatever you'd like, including processing footage for commercial projects.";
 const MIT_NOTICE: &str = "The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.";
+// The Demucs README "License" section at adefossez/demucs commit 829d2189
+// (README sha256 2abed9c9…), quoted verbatim (2068-eeti).
+const DEMUCS_UNCLEAR: &str = "The license of the weights is not clear: MusDB contains some data that were only usable for research purpose. I sadly cannot help granting a license, both coming from Meta custom data, or from the original MusDB data.";
+const DEMUCS_6S: &str = "The 6 source variant of htdemucs was trained only on Meta internal dataset, which likely means CC-NC-BY license is applicable, as it was the case for all models released by FAIR.";
 const NVIDIA_UNREAD: &str = "the NVIDIA Open Model License Agreement (June 2024) is published only as a PDF at developer.download.nvidia.com, which this host could not fetch; its clauses are classed from the licence as remembered and are not quoted. Read it before relying on these classes.";
 
 /// The obligation table, keyed by licence id as the register spells it.
@@ -296,6 +300,25 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
                     detail: "US $20,000,000 gross revenue: a seat per user".into(),
                 },
                 CK_SEATS,
+            ),
+        ],
+        // 2068-eeti: Demucs htdemucs and htdemucs_6s. No licence is stated
+        // for the weights; the clauses are the maintainer's README "License"
+        // section (adefossez/demucs 829d2189). Operator ruling 2026-11-09:
+        // treat both as non-commercial, acknowledged per project.
+        "demucs-weights-unstated" => vec![
+            ob(
+                C::Attribution {
+                    text: "Demucs, Alexandre Défossez".into(),
+                },
+                DEMUCS_6S,
+            ),
+            ob(C::NonCommercial, DEMUCS_6S),
+            ob(
+                C::Review {
+                    clause: DEMUCS_UNCLEAR.into(),
+                },
+                DEMUCS_UNCLEAR,
             ),
         ],
         "mit" => vec![ob(C::Notice, MIT_NOTICE)],
@@ -1141,34 +1164,68 @@ pub fn admits_restricted_in(
     project_ack_dir: &Path,
     verifier: &Verifier,
 ) -> Result<Vec<String>, String> {
+    admit_artefacts_in(
+        restricted_register,
+        project,
+        artefacts,
+        project_ack_dir,
+        verifier,
+    )
+    .map_err(|r| match r {
+        GateRefusal::Unmatched(e) => format!("consent_required: {project}: {e}"),
+        GateRefusal::Row(e) => {
+            format!("consent_required: {project}: {e} Nothing was fetched or queued.")
+        }
+    })
+}
+
+/// Why [`admit_artefacts_in`] refused, before the caller words it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GateRefusal {
+    /// No artefact, an unreadable register, or an artefact that matches no
+    /// row (or names another licence than its row).
+    Unmatched(String),
+    /// The row's own gate refused: `model_refused`, `licence_forbids_use`,
+    /// `licence_text_unpinned` or `licence_acknowledgement_required`.
+    Row(String),
+}
+
+/// The gate behind [`admits_restricted_in`], with the refusal unworded, so
+/// the restricted fetch (order 2068-ypgq) answers the row's own refusal
+/// (`licence_acknowledgement_required: ...`) and a studio job its
+/// `consent_required:` sentence, from ONE decision.
+pub fn admit_artefacts_in(
+    restricted_register: &str,
+    project: &str,
+    artefacts: &[RestrictedArtefact],
+    project_ack_dir: &Path,
+    verifier: &Verifier,
+) -> Result<Vec<String>, GateRefusal> {
     if artefacts.is_empty() {
-        return Err(format!(
-            "consent_required: {project}: no artefact named (nothing to admit)"
+        return Err(GateRefusal::Unmatched(
+            "no artefact named (nothing to admit)".into(),
         ));
     }
-    let rows = parse_restricted(restricted_register)
-        .map_err(|e| format!("consent_required: {project}: {e}"))?;
+    let rows = parse_restricted(restricted_register).map_err(GateRefusal::Unmatched)?;
     let project_scope = format!("project:{project}");
     let scopes = [project_scope.as_str(), "operator-projects"];
     let mut ids = Vec::with_capacity(artefacts.len());
     for a in artefacts {
         let label = format!("{}@{} {}", a.repo, a.revision, a.file);
         let Some(r) = find_restricted(&rows, &a.repo, &a.revision, &a.file, &a.sha256) else {
-            return Err(format!(
-                "consent_required: {project}: {label} (sha256 {}) is not in images/models/licence-register-restricted.tsv; nothing was fetched or queued",
+            return Err(GateRefusal::Unmatched(format!(
+                "{label} (sha256 {}) is not in images/models/licence-register-restricted.tsv; nothing was fetched or queued",
                 a.sha256
-            ));
+            )));
         };
         if !r.spdx.eq_ignore_ascii_case(&a.licence) {
-            return Err(format!(
-                "consent_required: {project}: {label} is registered under licence {} but the job names {}; nothing was fetched or queued",
+            return Err(GateRefusal::Unmatched(format!(
+                "{label} is registered under licence {} but the job names {}; nothing was fetched or queued",
                 r.spdx, a.licence
-            ));
+            )));
         }
         let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
-            .map_err(|e| {
-                format!("consent_required: {project}: {e} Nothing was fetched or queued.")
-            })?;
+            .map_err(GateRefusal::Row)?;
         ids.push(
             admitted
                 .acknowledgement_slug
@@ -1179,7 +1236,7 @@ pub fn admits_restricted_in(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::imagegen_models::ModelFile;
     use std::fs;
@@ -1188,7 +1245,7 @@ mod tests {
 
     /// A disk-backed scratch dir beside the test binary (never /tmp, which is
     /// tmpfs on the fleet's Fedora hosts).
-    fn disk_scratch(tag: &str) -> PathBuf {
+    pub(crate) fn disk_scratch(tag: &str) -> PathBuf {
         let exe = std::env::current_exe().expect("test exe");
         let dir = exe
             .parent()
@@ -1201,7 +1258,7 @@ mod tests {
 
     /// An enrolled test key (D1, Linux fallback strength) and its
     /// allowed-signers file naming `grantor` as the principal.
-    fn enrol(dir: &Path, grantor: &str) -> (PathBuf, PathBuf) {
+    pub(crate) fn enrol(dir: &Path, grantor: &str) -> (PathBuf, PathBuf) {
         let key = dir.join("approval-key");
         let st = Command::new("ssh-keygen")
             .args(["-q", "-t", "ed25519", "-N", "", "-C", grantor, "-f"])
@@ -1223,7 +1280,7 @@ mod tests {
 
     /// Sign `ack`'s statement with the enrolled key (D2: `ssh-keygen -Y sign`
     /// is the Linux signer) and return the record carrying the armored SSHSIG.
-    fn sign(dir: &Path, key: &Path, mut ack: Acknowledgement) -> Acknowledgement {
+    pub(crate) fn sign(dir: &Path, key: &Path, mut ack: Acknowledgement) -> Acknowledgement {
         let msg = dir.join("statement");
         // ssh-keygen -Y sign keeps an existing .sig; a stale one would be
         // read back as this record's signature.
@@ -1671,8 +1728,19 @@ mod tests {
             );
             assert_eq!(seed.slug(), slugify(&ack.covers[0]));
         }
-        // Every repo in the register is covered by one seed record.
+        // Every repo in the register is covered by one seed record, except
+        // Demucs: operator ruling 2026-11-09, acknowledged per project with
+        // NO standing grant (2068-eeti), so no seed may cover it.
         for r in &rows {
+            if r.spdx == "demucs-weights-unstated" {
+                assert!(
+                    !acks.iter().any(|a| a.covers.contains(&r.repo)),
+                    "{}: a standing seed covers {}; Demucs has no standing grant",
+                    r.name,
+                    r.repo
+                );
+                continue;
+            }
             assert!(
                 acks.iter()
                     .any(|a| a.covers.contains(&r.repo) && a.licence == r.spdx),
@@ -1719,17 +1787,25 @@ mod tests {
             fs::write(acks.join(signed.slug() + ".yaml"), signed.to_yaml()).unwrap();
         }
         let rows = parse_restricted(shipped).unwrap();
-        let artefacts: Vec<RestrictedArtefact> = rows
+        let to_artefact = |r: &RestrictedRow| RestrictedArtefact {
+            licence: r.spdx.clone(),
+            repo: r.repo.clone(),
+            revision: r.revision.clone(),
+            file: r.file.clone(),
+            sha256: r.sha256.clone(),
+        };
+        // The CorridorKey set the standing records cover; Demucs (2068-eeti)
+        // has no standing grant, so those records must NOT admit it.
+        let (demucs, ck): (Vec<&RestrictedRow>, Vec<&RestrictedRow>) = rows
             .iter()
-            .map(|r| RestrictedArtefact {
-                licence: r.spdx.clone(),
-                repo: r.repo.clone(),
-                revision: r.revision.clone(),
-                file: r.file.clone(),
-                sha256: r.sha256.clone(),
-            })
-            .collect();
+            .partition(|r| r.spdx == "demucs-weights-unstated");
+        let artefacts: Vec<RestrictedArtefact> = ck.into_iter().map(to_artefact).collect();
         assert!(artefacts.len() >= 30, "{}", artefacts.len());
+        assert_eq!(demucs.len(), 2, "htdemucs and htdemucs_6s");
+        let demucs: Vec<RestrictedArtefact> = demucs.into_iter().map(to_artefact).collect();
+        let err =
+            admits_restricted_in(&pinned, "demon_attack", &demucs, &acks, &verifier).unwrap_err();
+        assert!(err.contains("licence_acknowledgement_required"), "{err}");
 
         let ids =
             admits_restricted_in(&pinned, "demon_attack", &artefacts, &acks, &verifier).unwrap();

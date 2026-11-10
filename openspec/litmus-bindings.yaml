@@ -327,6 +327,7 @@ specs:
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:forge-lib-copies
+  - litmus:forge-languages
   - litmus:forge-lua-tooling
   - litmus:claude-launch-stability-shape
   - litmus:harness-curl-install-shape
@@ -491,6 +492,7 @@ specs:
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
   - litmus:json-get-help-names-its-subset
+  - litmus:json-get-parity-binary-swap
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -521,6 +523,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-src-room
+  - litmus:forge-guard
   - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
@@ -1130,6 +1133,7 @@ specs:
   - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
   - litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools
+  - litmus:audio-studio-tiers
   - litmus:a-studio-launch-fails-by-stage-within-a-bound
   - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
   - litmus:flutter-shim-falls-back-or-refuses-typed
@@ -1329,6 +1333,7 @@ specs:
   - litmus:observability-metrics-shape
   - litmus:runtime-bringup-step-timers
   - litmus:guest-container-metrics-wire-shape
+  - litmus:memory-stall-named
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: podman-secrets-integration

@@ -82,7 +82,10 @@ flaky_install_shim() {
     local f
     f="$(flaky_status_dir)/$name"
     mkdir -p "$shimdir" 2>/dev/null || return 0
-    cat >"$shimdir/$tool" <<EOF
+    # The read builtin takes the heredoc, so writing the shim forks nothing
+    # (forge-helper-shell lib-flaky-installs.sh:cat:1, 2067-dwqd).
+    local body
+    IFS= read -r -d '' body <<EOF || true
 #!/usr/bin/env bash
 # First-use shim for $tool, written by flaky_install_shim (order 1951-vv5m).
 # Answers only while the real $tool is absent from PATH.
@@ -112,5 +115,6 @@ case "\$state" in
         exit 127 ;;
 esac
 EOF
+    printf '%s' "$body" >"$shimdir/$tool"
     chmod 755 "$shimdir/$tool"
 }

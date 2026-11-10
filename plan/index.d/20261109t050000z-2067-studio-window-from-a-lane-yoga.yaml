@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-09 at the coordinator's direction (macuahuitl-fedora relayed a P1 from the tlatoani.net forge: webstudio.open grapesjs answers started:true and no window opens). Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-web-session-handshake-dials-the-trays-current-control-socket-and-a-cloud-value-spelled-with-dot-git-names-the-bare-project
+    order: 2067-774h
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, control-socket, cloud, identity]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: "send_issue_web_session dials the tray's current control socket (control/control.sock, the legacy path only when that is absent), and resolve_cloud_project_checkout gives a --cloud value spelled with .git or a trailing / the bare project name"
+    context: |
+      REPORTED 2026-11-09 from the tlatoani.net forge (tray v56.11.9.1+c11b02b9), from ~/.local/state/tillandsias/studio-tlatoani.net-grapesjs.log:
+      (1) "Failed to register web session with router: Failed to connect to control socket /run/user/1000/tillandsias/control.sock: Connection refused". That file was a stale real socket from Nov 5, while the running tray served /run/user/1000/tillandsias/control/. send_issue_web_session built the pre-2007 path itself, and link_legacy_control_socket never replaces a real file.
+      (2) "refused:lane-tray-version-mismatch … Project 'tlatoani.net.git' is not a known project on this host". known-cloud-projects lists "tlatoani.net", but the lane, its git service (git-tlatoani.net.git) and MCP socket (tlatoani.net.git-default) carried ".git". resolve_cloud_project_checkout took the label as the last "/" segment as typed, and for owner/repo.git it also built https://github.com/owner/repo.git.git. validate_project_label is verbatim by design (order 505), so the fix is at the source.
+    exit_criteria:
+      - "With a stale real socket at <runtime>/tillandsias/control.sock and a tray serving control/control.sock, send_issue_web_session succeeds against the live tray. Pre-fix result: FAILS, Connection refused on the legacy path."
+      - "resolve_cloud_project_checkout gives tlatoani.net for owner/tlatoani.net, owner/tlatoani.net.git, owner/tlatoani.net/, the https clone URL with and without .git, and the git@ form; no remote ends .git.git; owner/.git is refused. Pre-fix result: FAILS, Ok(\"tlatoani.net.git\")."
+    verifiable_closure: "tray_notify_tests::issue_web_session_dials_the_trays_current_socket_not_a_stale_legacy_one and tray_notify_tests::a_cloud_value_spelled_with_dot_git_names_the_bare_project pass under --features tray,listen-vsock. Pre-fix result: both FAIL with the live forge's two errors."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the two tests land in the same commit as the fix (1136-n8sh).
+    next_action: >
+      Land work/2067-774h; then tell the tlatoani.net forge session the fix is in a build. A lane already running as tlatoani.net.git must be relaunched to drop the suffix.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-09 with the host studio log; yoga red runs of both tests on trunk cf1688f49.
+    events:
+      - type: filed
+        ts: "2026-11-09T05:00:00Z"
+        host: yoga
+        summary: "filed and taken at the coordinator's direction; bugs (1) and (2) of the three"
+  - packet_id: webstudio-open-hands-back-a-window-url-browser-open-admits-by-serving-the-studio-route-over-the-preview-tls-listener
+    order: 2067-uc3k
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, router, tls, otp, browser]
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-headless/src/studio.rs
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: "webstudio.open's window_url is an https URL on the preview TLS port that browser.open admits, because the studio's route is served over the preview TLS listener with the same OTP session as its plain route"
+    context: |
+      REPORTED 2026-11-09 (bug 3 of the tlatoani.net report): webstudio.open answers window_url http://studio.tlatoani.net.localhost:8080/, and browser.open refuses it in container mode (server.rs, order 1651-5t7n: "browser windows load the project over https only", because the forwarder binds a project only by TLS name).
+      open_from_lane builds the URL with project_service_url on LaneLauncher::router_port, the plain listener. The ComfyUI window (imagegen_studio::window_url) already uses https://<service>.<host_label>.localhost:<tls_port>/, but it routes with add_network_limited_route (preview_tls, allow_cidr) and `comfyui` is in DEV_SERVICES, so the leaf names it.
+      The studio route is an OTP-protected route on the plain listener. Moving its window to https is a design decision, not a URL change: the leaf must name studio.<label> (DEV_SERVICES), the route must carry preview_tls, and the OTP cookie and /_auth/login must work on the TLS listener for the operator's window too. Deciding whether the agent co-edit window gets the OTP session, or a network-limited route like ComfyUI's, is part of this row.
+    exit_criteria:
+      - "webstudio.open answers a window_url of the form https://studio.<host_label>.localhost:<preview tls port>/, and browser.open {url: window_url, dev: true} in container mode admits it."
+      - "The operator's window and the agent's window both reach the authenticated studio over that URL; an unauthenticated request is refused as today."
+      - "The mcp_socket webstudio.open test pins the https form; pre-fix result: FAILS (it pins http://studio.<p>.localhost:8080)."
+    verifiable_closure: "A live webstudio.open grapesjs opens a window, and browser.open of its window_url is admitted. Pre-fix result: FAILS (URL_NOT_ALLOWED: https only)."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the https pin and the live arm in the same commit (1136-n8sh).
+    next_action: >
+      Decide the auth shape (OTP session on the TLS listener vs a network-limited route), then add studio to DEV_SERVICES, route it with preview_tls, and build window_url from tls_port and host_label.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-09; yoga source read of studio::open_from_lane, imagegen_studio::window_url, local_web_preview::{add_network_limited_route, DEV_SERVICES} and browser-mcp server.rs.
+    events:
+      - type: filed
+        ts: "2026-11-09T05:00:00Z"
+        host: yoga
+        summary: "filed as its own row; the route and auth design needs deciding before code"

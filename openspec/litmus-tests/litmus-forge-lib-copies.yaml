@@ -26,6 +26,16 @@ critical_path:
     timeout_ms: 20000
     expected_behavior: "ok: missing COPY refused"
 
+  - step: "2049-xjsb NEGATIVE CONTROL: a wrapper names a lua module the image does not ship"
+    timeout_ms: 20000
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-flc.XXXXXX); mkdir -p \"$T/lua\"; cp images/default/Containerfile \"$T/\"; printf 'f=/usr/local/lib/tillandsias/lua/absent-mod.lua\\n' > \"$T/wrapper.sh\"; out=$(TILLANDSIAS_FORGE_IMAGE_DIR=\"$T\" tillandsias-plan script run scripts/lua/check-forge-lib-copies.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:forge-lib-copies:lua/absent-mod.lua' ] && echo 'ok: unshipped lua module refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    expected_behavior: "ok: unshipped lua module refused"
+
+  - step: "2049-xjsb NEGATIVE CONTROL: a named lua module present in the tree but lua/ is never COPYed"
+    timeout_ms: 20000
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-flc.XXXXXX); mkdir -p \"$T/lua\"; printf 'return 1\\n' > \"$T/lua/here-mod.lua\"; grep -v '^COPY lua/ ' images/default/Containerfile > \"$T/Containerfile\"; printf 'f=\"${BASH_SOURCE[0]%%/*}/lua/here-mod.lua\"\\n' > \"$T/wrapper.sh\"; out=$(TILLANDSIAS_FORGE_IMAGE_DIR=\"$T\" tillandsias-plan script run scripts/lua/check-forge-lib-copies.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:forge-lib-copies:lua/here-mod.lua' ] && echo 'ok: uncopied lua dir refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    expected_behavior: "ok: uncopied lua dir refused"
+
 observability:
   traces:
     - "@trace spec:default-image"

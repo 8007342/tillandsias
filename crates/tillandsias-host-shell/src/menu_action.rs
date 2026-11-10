@@ -91,6 +91,7 @@ pub fn resolve(id: &str) -> MenuAction {
         ids::AGENT_CODEX => MenuAction::SelectAgent(SelectedAgent::Codex),
         ids::AGENT_OPENCODE => MenuAction::SelectAgent(SelectedAgent::OpenCode),
         ids::AGENT_ANTIGRAVITY => MenuAction::SelectAgent(SelectedAgent::Antigravity),
+        ids::AGENT_COPILOT => MenuAction::SelectAgent(SelectedAgent::Copilot),
         ids::CLOUD_PROJECTS_OVERFLOW => MenuAction::CloudOverflow,
         "retry" => MenuAction::Retry,
         "open-log" => MenuAction::OpenLog,
@@ -146,6 +147,16 @@ fn resolve_project(id: &str) -> Option<MenuAction> {
             scope,
             name: name.to_string(),
             agent: SelectedAgent::Antigravity,
+        });
+    }
+    if let Some(name) = after_scope.strip_suffix(".copilot") {
+        if name.is_empty() {
+            return None;
+        }
+        return Some(MenuAction::Attach {
+            scope,
+            name: name.to_string(),
+            agent: SelectedAgent::Copilot,
         });
     }
     if let Some(name) = after_scope.strip_suffix(".opencode-web") {
@@ -238,6 +249,8 @@ mod tests {
             ("codex", Codex),
             ("opencode", OpenCode),
             ("antigravity", Antigravity),
+            // 2063-nfag
+            ("copilot", Copilot),
         ] {
             assert_eq!(
                 resolve(&format!("project.cloud.myapp.{verb}")),

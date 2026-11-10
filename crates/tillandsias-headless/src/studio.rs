@@ -855,7 +855,10 @@ mod tests {
         assert_eq!(s.image(), crate::audio_studio::IMAGE);
         assert_eq!(s.port, 0);
         assert!(s.entry.is_empty());
-        assert_eq!(s.tools, ["audio.transform", "audio.detect_glitches"]);
+        assert_eq!(
+            s.tools,
+            ["audio.transform", "audio.detect_glitches", "audio.separate"]
+        );
         let o = options(None).into_iter().find(|o| o.id == "audio").unwrap();
         assert!(!o.good_for.is_empty() && !o.not_for.is_empty() && !o.edits.is_empty());
         assert!(o.edits.contains("/work/tmp/audio"), "{}", o.edits);

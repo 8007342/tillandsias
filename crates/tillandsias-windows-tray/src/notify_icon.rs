@@ -5585,6 +5585,8 @@ mod tests {
             // Antigravity and Claude are the two lanes the operator actually
             // failed a device-code login in on 2026-08-17.
             ("antigravity", PtyIntent::Agent(SelectedAgent::Antigravity)),
+            // 2063-nfag
+            ("copilot", PtyIntent::Agent(SelectedAgent::Copilot)),
         ];
         for (label, intent) in &lanes {
             for project in ["myapp", "8007342/tillandsias"] {
