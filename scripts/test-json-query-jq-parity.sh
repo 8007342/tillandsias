@@ -63,10 +63,15 @@ run_case() {
     # shellcheck disable=SC2086
     if [ "$flags" = "_" ]; then set --; else set -- $flags; fi
     set +f
+    # 2079-sgp4: feed the input from a file, never a pipe. Under pipefail a
+    # -n case (the tool never reads stdin) that exits before printf writes
+    # left printf dead of SIGPIPE, and the case reported rc=141 for a correct
+    # answer (mismatch:75:null, #1079 evicted on macuahuitl).
+    printf '%s' "$input" > "$SNAP/input"
     if [ "$tool" = "jq" ]; then
-        printf '%s' "$input" | jq "$@" "$filter"
+        jq "$@" "$filter" < "$SNAP/input"
     else
-        printf '%s' "$input" | "$PLAN" json get "$@" "$filter"
+        "$PLAN" json get "$@" "$filter" < "$SNAP/input"
     fi
     echo "rc=$?"
 }
