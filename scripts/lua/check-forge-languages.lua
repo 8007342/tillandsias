@@ -8,7 +8,7 @@
 -- executable on the forge PATH. They are the tooling languages every forge
 -- agent is told to prefer, in that order (forge-agent-guidance.md), so a forge
 -- without one of them sends agents back to Python. MEASURED 2026-11-09 in
--- localhost/tillandsias-forge:latest: all four in /usr/bin (from
+-- the v56.11.4.1 forge image: all four in /usr/bin (from
 -- images/default/Containerfile.base).
 --
 -- Modes, one verdict line on stdout:
