@@ -5009,6 +5009,57 @@ mod ca_refresh_margin_tests {
         );
     }
 
+    /// 2070-mtf9 slice 2: the tray leaves `lane-stale` beside the socket of a
+    /// lane an older build serves, so the forge's tillandsias-doctor names
+    /// host_lane=stale-build; a current lane's note is removed, and a lane
+    /// that cannot be judged keeps whatever it had.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn the_tray_marks_a_stale_lane_for_the_forge_and_clears_a_current_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let lane = |n: &str| {
+            let d = dir.path().join(n);
+            std::fs::create_dir_all(&d).unwrap();
+            (n.to_string(), d.join("mcp.sock"))
+        };
+        let lanes = vec![
+            lane("old-default"),
+            lane("new-default"),
+            lane("odd-default"),
+        ];
+        std::fs::write(
+            dir.path().join("new-default/lane-stale"),
+            "left from before\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("odd-default/lane-stale"), "kept\n").unwrap();
+        let lines = vec![
+            "warn:lane-stale:old-default: runs 56.11.9.1+bbbb, installed 56.11.10.1+aaaa; relaunch that forge to use the installed build".to_string(),
+            "ok:lane-current:new-default: 56.11.10.1+aaaa".to_string(),
+            "note:lane-unknown:odd-default: lane ?, installed 56.11.10.1+aaaa".to_string(),
+        ];
+        let who =
+            |name: &str| (name == "old-default").then(|| "pid 1020477 (exe deleted)".to_string());
+        sync_lane_stale_markers(&lanes, &lines, &who);
+        let note = std::fs::read_to_string(dir.path().join("old-default/lane-stale")).unwrap();
+        assert!(
+            note.starts_with("warn:lane-stale:old-default: runs 56.11.9.1+bbbb"),
+            "{note}"
+        );
+        assert!(
+            note.contains("served by pid 1020477 (exe deleted)"),
+            "{note}"
+        );
+        assert!(
+            !dir.path().join("new-default/lane-stale").exists(),
+            "a current lane keeps no note"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("odd-default/lane-stale")).unwrap(),
+            "kept\n"
+        );
+    }
+
     /// 2070-mtf9: after an upgrade the tray reports each lane still served
     /// by an older build once, naming the serving process; a lane already
     /// reported for that build is not repeated, and current lanes are silent.
@@ -14371,6 +14422,40 @@ pub(crate) fn report_stale_lanes(seen: &mut std::collections::HashSet<String>) {
     for report in stale_lane_reports(&lines, &who, seen) {
         tracing::warn!(spec = "mcp-tool-socket", order = "2070-mtf9", "{report}");
         eprintln!("[tillandsias] {report}");
+    }
+    sync_lane_stale_markers(&lanes, &lines, &who);
+}
+
+/// ORDER 2070-mtf9 slice 2: the note a lane's forge reads. Each lane socket
+/// dir is bind-mounted read-only into its forge (/run/host/tillandsias-mcp),
+/// so a `lane-stale` file beside the socket lets the forge's tillandsias-doctor
+/// report host_lane=stale-build: the lane answers, but on an older build. A
+/// lane found current loses its note; one that cannot be judged keeps it.
+/// Nothing is restarted: a relaunch is the operator's call.
+#[cfg(feature = "host-services")]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn sync_lane_stale_markers(
+    lanes: &[(String, PathBuf)],
+    lines: &[String],
+    who: &dyn Fn(&str) -> Option<String>,
+) {
+    for ((name, sock), line) in lanes.iter().zip(lines) {
+        let Some(dir) = sock.parent() else { continue };
+        let note = dir.join("lane-stale");
+        if line.starts_with("warn:lane-stale:") {
+            let body = match who(name) {
+                Some(w) => format!("{line}; served by {w}\n"),
+                None => format!("{line}\n"),
+            };
+            if std::fs::read_to_string(&note).ok().as_deref() != Some(body.as_str()) {
+                let tmp = dir.join("lane-stale.tmp");
+                if std::fs::write(&tmp, &body).is_ok() {
+                    let _ = std::fs::rename(&tmp, &note);
+                }
+            }
+        } else if line.starts_with("ok:lane-current:") {
+            let _ = std::fs::remove_file(&note);
+        }
     }
 }
 
