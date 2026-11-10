@@ -15,7 +15,6 @@ scripts/check-cheatsheet-tiers.sh
 scripts/check-claim-confirmed.sh
 scripts/check-claims-across-branches.sh
 scripts/check-committable-branch.sh
-scripts/check-container-bases.sh
 scripts/check-containers-conf-proxy-env.sh
 scripts/check-convergence-velocity.sh
 scripts/check-credential-channel.sh
