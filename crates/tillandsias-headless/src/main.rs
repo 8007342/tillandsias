@@ -32001,6 +32001,167 @@ mod tests {
         assert!(!marker.exists(), "a copy that lands clears the marker");
     }
 
+    /// Order 2076-w7kd: run a vault helper's `watch` against a dead child
+    /// (pid 999999) with an inotifywait on PATH that announces its watch and
+    /// then stays silent, as a real one does when nothing is written. Returns
+    /// whether the watcher exited within the bound; a hung one is killed.
+    #[cfg(unix)]
+    fn watch_dead_child_under_silent_inotify(
+        helper: &str,
+        args: &[&str],
+        envs: &[(&str, std::ffi::OsString)],
+        bin: &std::path::Path,
+    ) -> bool {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let script = std::path::Path::new(&manifest)
+            .join("../../images/default")
+            .join(helper);
+        let inw = bin.join("inotifywait");
+        std::fs::write(
+            &inw,
+            "#!/usr/bin/env bash\necho 'Watches established.'\nexec sleep 30\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&inw, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg(&script)
+            .arg("watch")
+            .arg("999999")
+            .args(args)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
+            .env("TILLANDSIAS_OAUTH_WATCH_BEAT_SECS", "1")
+            .env("TILLANDSIAS_APPROVALS_WATCH_BEAT_SECS", "1")
+            .env("TILLANDSIAS_OAUTH_POLL_SECS", "0")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+        let mut child = cmd.spawn().expect("spawn watcher");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        while std::time::Instant::now() < deadline {
+            if child.try_wait().expect("try_wait").is_some() {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        false
+    }
+
+    #[cfg(unix)]
+    fn capturing_vault_cli(path: &std::path::Path, sink: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::write(
+            path,
+            format!("#!/usr/bin/env bash\ncat >'{}'\n", sink.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_codex_watcher_whose_session_died_copies_and_exits_under_inotify() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let sink = dir.path().join("vaulted");
+        capturing_vault_cli(&bin.join("vault-cli.sh"), &sink);
+        let auth = dir.path().join("auth.json");
+        std::fs::write(&auth, "{\"tokens\":{\"refresh_token\":\"rotated\"}}\n").unwrap();
+        let exited = watch_dead_child_under_silent_inotify(
+            "codex-oauth-vault.sh",
+            &["old"],
+            &[
+                ("TILLANDSIAS_CODEX_AUTH_FILE", auth.into()),
+                (
+                    "TILLANDSIAS_CODEX_STALE_MARKER",
+                    dir.path().join("stale").into(),
+                ),
+                ("TILLANDSIAS_CODEX_HARVEST_ATTEMPTS", "1".into()),
+                (
+                    "TILLANDSIAS_LIFECYCLE_LOG",
+                    dir.path().join("lifecycle.log").into(),
+                ),
+            ],
+            &bin,
+        );
+        assert!(
+            exited,
+            "the watcher of a dead session must exit, not wait on inotify forever"
+        );
+        assert!(
+            sink.exists(),
+            "the rotated sign-in must be copied to Vault before exit"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_claude_approvals_watcher_whose_session_died_harvests_and_exits_under_inotify() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let sink = dir.path().join("vaulted");
+        let cli = bin.join("vault-cli");
+        capturing_vault_cli(&cli, &sink);
+        let cfg = dir.path().join("claude.json");
+        std::fs::write(&cfg, "{\"theme\":\"dark\"}\n").unwrap();
+        let exited = watch_dead_child_under_silent_inotify(
+            "claude-approvals-vault.sh",
+            &[],
+            &[
+                ("CLAUDE_CONFIG_FILE", cfg.into()),
+                ("TILLANDSIAS_VAULT_CLI", cli.into()),
+            ],
+            &bin,
+        );
+        assert!(
+            exited,
+            "the watcher of a dead session must exit, not wait on inotify forever"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_provider_watcher_copies_a_rotation_made_after_its_last_poll() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let sink = dir.path().join("vaulted");
+        capturing_vault_cli(&bin.join("vault-cli.sh"), &sink);
+        let auth = dir.path().join("credentials.json");
+        std::fs::write(&auth, "{\"refresh\":\"rotated\"}\n").unwrap();
+        let exited = watch_dead_child_under_silent_inotify(
+            "provider-oauth-vault.sh",
+            &["old"],
+            &[
+                ("TILLANDSIAS_OAUTH_PROVIDER", "claude".into()),
+                ("TILLANDSIAS_CLAUDE_AUTH_FILE", auth.into()),
+            ],
+            &bin,
+        );
+        assert!(
+            exited,
+            "the provider watcher polls, so a dead child ends it"
+        );
+        assert!(
+            sink.exists(),
+            "a rotation since the last poll must still reach Vault"
+        );
+    }
+
     #[test]
     fn codex_login_never_uses_generic_paste_token_script() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));

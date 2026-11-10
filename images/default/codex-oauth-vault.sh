@@ -83,7 +83,7 @@ copy_if_changed() {
 }
 
 watch_auth() {
-    local child_pid="$1" initial_digest="${2:-}" poll_secs last current auth_dir inw_pid name
+    local child_pid="$1" initial_digest="${2:-}" poll_secs last current auth_dir inw_pid name beat
     last="${initial_digest:-$(auth_digest)}"
     auth_dir="$(dirname "$AUTH_FILE")"
     if command -v inotifywait >/dev/null 2>&1 && [[ -d "$auth_dir" ]]; then
@@ -92,15 +92,26 @@ watch_auth() {
         exec 3< <(exec inotifywait -m -e close_write,moved_to --format '%f' "$auth_dir" 2>&1)
         inw_pid=$!
         trap 'kill "$inw_pid" 2>/dev/null; exit 0' TERM INT
-        while read -r name <&3; do
-            case "$name" in
-                # Catch a write made before the watch existed; from here on
-                # every write is an event.
-                "Watches established.") copy_if_changed ;;
-                "$(basename "$AUTH_FILE")") copy_if_changed ;;
-            esac
+        # 2076-w7kd: a session that dies without TERMing this watcher must
+        # not leave it blocked on an event that never comes. Re-check the
+        # child on every quiet beat; the copy after the loop still runs.
+        beat="${TILLANDSIAS_OAUTH_WATCH_BEAT_SECS:-5}"
+        while kill -0 "$child_pid" 2>/dev/null; do
+            if read -r -t "$beat" name <&3; then
+                case "$name" in
+                    # Catch a write made before the watch existed; from here
+                    # on every write is an event.
+                    "Watches established.") copy_if_changed ;;
+                    "$(basename "$AUTH_FILE")") copy_if_changed ;;
+                esac
+            elif (( $? <= 128 )); then
+                # inotifywait went away (EOF): keep watching by polling.
+                break
+            fi
         done
-        return 0
+        kill "$inw_pid" 2>/dev/null || true
+        exec 3<&-
+        trap - TERM INT
     fi
     poll_secs="${TILLANDSIAS_OAUTH_POLL_SECS:-2}"
     while kill -0 "$child_pid" 2>/dev/null; do
