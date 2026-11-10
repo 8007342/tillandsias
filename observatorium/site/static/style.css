@@ -104,3 +104,24 @@ footer.stamp { max-width: 960px; margin: 0 auto; padding: 8px var(--gutter) 32px
   details.twin { display: block; }
   .card { break-inside: avoid; }
 }
+
+/* PR 2: index pages, register, definitions, filter. */
+.grid { display: grid; gap: var(--gutter); }
+@media (min-width: 720px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.crumb { margin: 0 0 4px; font-size: .95rem; }
+code.digest { overflow-wrap: anywhere; word-break: break-all; font-size: .85em; }
+dl.defs { display: grid; gap: 12px; margin: 0; }
+dl.defs > div { display: grid; gap: 2px; }
+dl.defs dt { font-weight: 600; }
+dl.defs dd { margin: 0; color: var(--muted); }
+.strength { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); font-size: .85rem; white-space: nowrap; background: var(--bg); }
+.strength-proved, .strength-property-tested, .strength-tested-by-name { border-color: var(--good); color: var(--good); }
+.strength-withdrawn { text-decoration: line-through; color: var(--muted); }
+.strength-on-paper-only, .strength-open, .strength-assumed, .strength-external-analogy { border-style: dashed; }
+table.claims th[scope="row"] { font-weight: 500; min-width: 14ch; }
+form.filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 12px; }
+form.filter input, form.filter select { min-height: 44px; padding: 8px 10px; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+form.filter input { flex: 1 1 14ch; }
+form.filter output { color: var(--muted); font-size: .9rem; }
+svg .bar-mark { stroke: var(--ink); stroke-width: 2; }
+tr[hidden] { display: none; }

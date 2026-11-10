@@ -8,6 +8,8 @@
 // renderer that turns null into 0 is caught however it was written.
 
 export const MISSING = '— not recorded';
+/** Rungs of the seven-rung lattice that no grader assigns (answers.md Q2). */
+export const UNPRODUCED = ['absent', 'negatively_tested', 'runtime_observed', 'evidence_bundled'];
 const fmt = new Intl.NumberFormat('en-US', {maximumFractionDigits: 0});
 
 export const escape = (s) => String(s)
@@ -85,6 +87,15 @@ export function lintPage(file, html, view) {
   if (!STAMP.test(html)) add('stamp', 'no footer stamp with release and UTC build time');
   const rel = body.match(RELATIVE);
   if (rel) add('relative-time', rel[0]);
+
+  // 3b. Unproduced rungs are drawn as unproduced: present, hatched, no bar.
+  for (const [svg] of html.matchAll(/<svg\b[^>]*class="chart rungs"[\s\S]*?<\/svg>/g)) {
+    for (const rung of UNPRODUCED) {
+      const g = svg.match(new RegExp(`<g data-rung="${rung}" data-produced="([a-z]+)">([\\s\\S]*?)</g>`));
+      if (!g) add('unproduced-rung', `${rung} omitted from the ladder`);
+      else if (g[1] !== 'false' || !/class="no-data"/.test(g[2]) || /class="bar(?:\s|")/.test(g[2])) add('unproduced-rung', `${rung} drawn as if produced`);
+    }
+  }
 
   // 3. Breaks are breaks.
   if (view?.releases) {

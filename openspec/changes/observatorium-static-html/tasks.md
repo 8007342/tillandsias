@@ -8,11 +8,11 @@
 - [x] 1.5 Generator fails closed on a refused release or any lint violation (site/build.mjs).
 
 ## PR 2 — remaining pages
-- [ ] 2.1 Releases index and per-release pages with the alignment panel.
-- [ ] 2.2 Obligations: seven-rung histogram (four hatched "never produced"), table with JS filter; per-obligation pages when detail rows are retained.
-- [ ] 2.3 Claims register from data/claims.yaml with strength categories.
-- [ ] 2.4 Instrument, Glossary, Data pages.
-- [ ] 2.5 Lint rule 3b: unproduced rungs always drawn hatched.
+- [x] 2.1 Releases index (JS filter, progressive) and per-release pages with the alignment panel; alignment says "not retained" until detail rows are committed (fleet lead, Q5: a separate row).
+- [x] 2.2 Obligations: seven-rung ladder, four hatched "never produced"; per-obligation rows "not retained" (Q5).
+- [x] 2.3 Claims register from data/claims.yaml (strict subset parser), seeded from design V4, every entry `review: operator-pending` and rendered so (Q6).
+- [x] 2.4 Instrument, Glossary, Data pages; data/ publishes history.json, snapshots.jsonl and claims.json with sha256.
+- [x] 2.5 Lint rule 3b: unproduced rungs always drawn hatched.
 
 ## PR 3 — deletions and manual deploy
 - [ ] 3.1 Delete the Flutter app, legacy index.html, live metrics (collect/precompute), Containerfile and toolchain pins.

@@ -2,6 +2,7 @@
 // V1 Home: "Is it getting better?" (design.md §1 V1; comparison.md §6.3).
 import {barChart, stepChart} from '../chart.mjs';
 import {escape, num, share} from '../honesty.mjs';
+import {figure} from '../layout.mjs';
 
 const L = 'latest';
 
@@ -20,21 +21,6 @@ const scopeText = (r) => {
   if (r.segment.reasons.includes('scope-unknown-before') || r.segment.reasons.includes('first-release')) return 'first recorded';
   return 'same';
 };
-
-function figure(id, heading, chart, lede = '') {
-  return `<section class="card" aria-labelledby="${id}">
-<h2 id="${id}">${heading}</h2>
-${lede}
-<figure>
-${chart.svg}
-<figcaption>${chart.caption || ''}</figcaption>
-</figure>
-<details class="twin">
-<summary>Show the numbers as a table</summary>
-<div class="table-scroll">${chart.table}</div>
-</details>
-</section>`;
-}
 
 export function home(view) {
   const latest = view.latest;
