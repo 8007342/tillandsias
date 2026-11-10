@@ -874,7 +874,6 @@ scripts scripts/update-convergence-dashboard.sh 32
 scripts scripts/validate-spec-cheatsheet-binding.sh 3
 scripts scripts/validate-traces.sh 17
 scripts scripts/verify-closure.sh 37
-scripts scripts/verify-image-usable.sh 1
 scripts scripts/verify-version-monotonic.sh 2
 scripts scripts/windows-host-capability-probe.sh 15
 scripts scripts/with-nix-builder.sh 4

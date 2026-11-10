@@ -196,7 +196,7 @@ case "$subcommand" in
                 #     field shape callers use and nothing else.
                 #
                 #   `image inspect <tag>` with stdout DISCARDED asks whether the
-                #     layers can be touched at all. verify-image-usable.sh:62
+                #     layers can be touched at all. verify-image-usable.lua
                 #     (order 1073-dqtx) uses exactly this form on purpose: every
                 #     metadata-only query — `image exists`, a size in `images`,
                 #     `image tree` — returns success over an image whose overlay
