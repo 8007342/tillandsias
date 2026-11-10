@@ -5570,7 +5570,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # bar accepts standing debt rather than redding it (the operator's
     # CRDT/Erlang posture: keep the line running, file improvement packets).
     _step "Checking for newly-added expression-pinned litmus steps (634-39ik)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-expression-pinning-added.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-litmus-expression-pinning-added.lua" 2>&1; then
         _error "a newly-added litmus step pins a literal source expression without a negative control (634-39ik)"
         exit 1
     fi
