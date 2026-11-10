@@ -113,9 +113,12 @@ local function git(argv)
     return proc.run{ argv = full, timeout_ms = 60000 }
 end
 
+-- The live ref is the last resort: the gate's frozen base (1592-idmu) comes
+-- first. test-gate-diff-base-frozen.lua counts this site by the spelling below.
+local DEFAULT_BASE = "origin/linux-next"
 local base = env.get("TILLANDSIAS_PIN_ENFORCE_BASE") or ""
 if base == "" then base = env.get("TILLANDSIAS_GATE_DIFF_BASE") or "" end
-if base == "" then base = "origin/linux-next" end
+if base == "" then base = DEFAULT_BASE end
 if not git({ "rev-parse", "--verify", "--quiet", base }).ok then
     verdict.emit("skip:" .. NAME .. ":no-base-ref", 0,
         "base ref '" .. base .. "' unavailable: no added steps could be examined")
