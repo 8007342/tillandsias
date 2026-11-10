@@ -17704,7 +17704,9 @@ fn run_observatorium_mode(
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
-    let observatorium_assets = root.join("observatorium");
+    // 2066-obsv: the trace viewer's source is tools/trace-viewer/; it is still
+    // served at /observatorium/.
+    let observatorium_assets = root.join("tools/trace-viewer");
     if !observatorium_assets.join("index.html").is_file() {
         return Err(format!(
             "Observatorium UI assets not found at {}",
