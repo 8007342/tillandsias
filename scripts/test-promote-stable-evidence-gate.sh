@@ -628,31 +628,30 @@ else
     fail=$((fail + 1))
 fi
 
-# ── ORDER 1798-khw6: STEP 4 MOVES THE OBSERVATORIUM DEPLOY REF ──────────────
-# A promotion that reaches origin must advance deploy/observatorium to the
-# release commit, and a refused advance must not be reported as a promotion.
+# ── ORDER 2066-obsv: A PROMOTION NEVER DEPLOYS THE OBSERVATORIUM ───────────
+# Operator ruling 2026-11-09: no auto-deploy anywhere. Publishing is a manual
+# `node observatorium/site/publish.mjs <tag>` plus a hand push and
+# `npm run deploy` by the operator. The 1798-khw6 step 4 (advance
+# deploy/observatorium on promotion) is gone: the helper stub above must never
+# be called and no deploy-ref line may appear.
 export DEPLOY_LOG="$WORK/deploy.log"
 : > "$DEPLOY_LOG"
 _run_promote 0 "1111111111111111111111111111111111111111"; rc4=$?
-if [ "$rc4" -eq 0 ] \
-   && grep -q '^DEPLOY-REF 1111111111111111111111111111111111111111 --label '"$VER"' --ref refs/heads/deploy/observatorium' "$DEPLOY_LOG" \
-   && grep -q '^verified:deploy-ref:1111111111111111111111111111111111111111' "$WORK/promote.out" \
+if [ "$rc4" -eq 0 ] && [ ! -s "$DEPLOY_LOG" ] \
+   && ! grep -q 'deploy-ref' "$WORK/promote.out" \
    && grep -q "^promoted:$VER" "$WORK/promote.out"; then
-    printf 'ok   %-52s -> deploy ref advanced to the release commit\n' "a promotion advances deploy/observatorium"
+    printf 'ok   %-52s -> promoted, deploy ref untouched\n' "a promotion never moves deploy/observatorium"
     pass=$((pass + 1))
 else
-    printf 'FAIL %-52s -> rc=%s log=%s out=%s\n' "a promotion advances deploy/observatorium" "$rc4" "$(tr '\n' ';' < "$DEPLOY_LOG")" "$(tail -2 "$WORK/promote.out" | tr '\n' ' ')"
+    printf 'FAIL %-52s -> rc=%s log=%s out=%s\n' "a promotion never moves deploy/observatorium" "$rc4" "$(tr '\n' ';' < "$DEPLOY_LOG")" "$(tail -2 "$WORK/promote.out" | tr '\n' ' ')"
     fail=$((fail + 1))
 fi
 
-DEPLOY_STUB_RC=1 _run_promote 0 "1111111111111111111111111111111111111111"; rc5=$?
-if [ "$rc5" -ne 0 ] && ! grep -q '^promoted:' "$WORK/promote.out" \
-   && grep -q '^refused:deploy-ref-push-refused:' "$WORK/promote.out" \
-   && grep -q 'HALF-PROMOTED' "$WORK/promote.out"; then
-    printf 'ok   %-52s -> rc=%s, refused by name, no promoted:\n' "a refused deploy-ref advance is not a promotion" "$rc5"
+if ! grep -qE 'deploy/observatorium|advance-deploy-ref' "$REAL_ROOT/scripts/promote-stable.sh"; then
+    printf 'ok   %-52s -> no reference left\n' "promote-stable.sh names no deploy ref"
     pass=$((pass + 1))
 else
-    printf 'FAIL %-52s -> rc=%s out=%s\n' "a refused deploy-ref advance is not a promotion" "$rc5" "$(tail -2 "$WORK/promote.out" | tr '\n' ' ')"
+    printf 'FAIL %-52s -> %s\n' "promote-stable.sh names no deploy ref" "$(grep -nE 'deploy/observatorium|advance-deploy-ref' "$REAL_ROOT/scripts/promote-stable.sh" | head -3 | tr '\n' ' ')"
     fail=$((fail + 1))
 fi
 
