@@ -1,0 +1,52 @@
+# @trace order:2055-d9sa
+#
+# Regression pin for order 2055-d9sa's tier tool: kumbia's vertical layering
+# (one arrangement, split into stems, tiers built by adding stems) without
+# assuming a song form. The tool sums exactly the stems a tier names and
+# applies ONE gain to reach the LUFS target. The fixture reads the mixes back
+# itself (a residual fit against the stem sum, correlation with every
+# excluded stem) and measures loudness with ffmpeg's ebur128, not the tool's
+# pyloudnorm. Red on trunk (no tiers subcommand); a per-stem rebalance and a
+# 0.3% leak of an excluded stem each red the EXACT arms.
+name: litmus:audio-studio-tiers
+spec: local-web-preview
+phase: pre-build
+description: >
+  Pin that audio-tool tiers writes one mix per tier containing exactly the
+  stems that tier names (residual against their sum under 1e-6 of the mix,
+  correlation with any excluded stem under 1e-3), each at the LUFS target
+  within 0.5 LU by ebur128; that a missing stem, a mismatched stem length
+  and an unreachable target refuse before writing.
+severity: high
+size: quick
+
+inputs:
+  - images/audio-studio/audio-tool.py
+  - scripts/lua/test-audio-studio-tiers.lua
+
+preconditions:
+  - podman is available and can build images/audio-studio; the tool runs in it with --network=none, never on the host
+  - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "three cumulative tiers each contain exactly their stems at -20 LUFS; missing stem, length mismatch and clip refuse"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-audio-studio-tiers.lua"
+    timeout_ms: 1800000
+    success_pattern: "ok:audio-studio-tiers:9-arms"
+    failure_pattern: "violation:|FAIL:"
+
+observability:
+  traces:
+    - "@trace order:2055-d9sa"
+  expected_log: "ok:audio-studio-tiers:9-arms"
+  log_fields:
+    spec: "local-web-preview"
+    test: "audio-studio-tiers"
+    artifact: "images/audio-studio/audio-tool.py"
+
+rollback:
+  on_failure: >
+    An EXACT arm red means a tier's mix is no longer a single gain times the
+    sum of exactly its stems (a per-stem gain, a limiter, or a stem leaking
+    in). A LUFS arm red means the gain no longer reaches target_lufs.
+  command: "grep -n 'def tiers' -A60 images/audio-studio/audio-tool.py"
