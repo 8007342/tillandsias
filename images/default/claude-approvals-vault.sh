@@ -79,20 +79,33 @@ harvest_if_changed() {
 }
 
 watch_approvals() {
-    local child_pid="$1" poll_secs last current cfg_dir name
+    local child_pid="$1" poll_secs last current cfg_dir name inw_pid beat
     last="$(approvals_digest)"
     cfg_dir="$(dirname "$USER_CFG")"
     if command -v inotifywait >/dev/null 2>&1 && [[ -d "$cfg_dir" ]]; then
-        # Claude rewrites the config in place or by rename. The watch ends
-        # with the container; every change has already been copied by then.
-        while read -r name; do
-            case "$name" in
-                # Catch a write made before the watch existed.
-                "Watches established.") harvest_if_changed ;;
-                "$(basename "$USER_CFG")") harvest_if_changed ;;
-            esac
-        done < <(exec inotifywait -m -e close_write,moved_to --format '%f' "$cfg_dir" 2>&1)
-        return 0
+        # Claude rewrites the config in place or by rename. 2076-w7kd: a
+        # session that dies without stopping this watcher must not leave it
+        # blocked on an event that never comes, so the child is re-checked
+        # on every quiet beat and the last harvest after the loop still runs.
+        exec 3< <(exec inotifywait -m -e close_write,moved_to --format '%f' "$cfg_dir" 2>&1)
+        inw_pid=$!
+        trap 'kill "$inw_pid" 2>/dev/null; exit 0' TERM INT
+        beat="${TILLANDSIAS_APPROVALS_WATCH_BEAT_SECS:-5}"
+        while kill -0 "$child_pid" 2>/dev/null; do
+            if read -r -t "$beat" name <&3; then
+                case "$name" in
+                    # Catch a write made before the watch existed.
+                    "Watches established.") harvest_if_changed ;;
+                    "$(basename "$USER_CFG")") harvest_if_changed ;;
+                esac
+            elif (( $? <= 128 )); then
+                # inotifywait went away (EOF): keep watching by polling.
+                break
+            fi
+        done
+        kill "$inw_pid" 2>/dev/null || true
+        exec 3<&-
+        trap - TERM INT
     fi
     poll_secs="${TILLANDSIAS_APPROVALS_POLL_SECS:-3}"
     while kill -0 "$child_pid" 2>/dev/null; do
