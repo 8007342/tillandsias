@@ -307,8 +307,8 @@ release_snapshot_discipline:
     evidence_bundle: "target/convergence/evidence-bundle.json"
     centicolon_signature: "target/convergence/centicolon-signature.jsonl"
     annotated_source_archive: "target/convergence/annotated-source-<version>.zip"
-    markdown_dashboard: "docs/convergence/centicolon-dashboard.md"
-    machine_dashboard: "docs/convergence/centicolon-dashboard.json"
+    markdown_dashboard: "target/convergence/centicolon-dashboard.md"
+    machine_dashboard: "target/convergence/centicolon-dashboard.json"
     projection_ref: "release/<version>-centicolon"
     summary: "target/convergence/summary.md"
 

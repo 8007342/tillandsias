@@ -713,7 +713,7 @@ write_convergence_artifacts() {
         --argjson pass_rate "$pass_rate" \
         --arg ci_result "$ci_result" \
         --arg evidence_bundle_ref "target/convergence/evidence-bundle.json" \
-        --arg projection_ref "docs/convergence/centicolon-dashboard.md" \
+        --arg projection_ref "target/convergence/centicolon-dashboard.md" \
         --argjson top_residual_reasons "$failed_reasons_json" \
         --arg max_residual_spec "$max_residual_spec" \
         --arg max_residual_reason "$max_residual_reason" \
@@ -2184,10 +2184,9 @@ if [[ -f "scripts/update-convergence-dashboard.sh" ]]; then
     # tracked checkout that the post-build forge gate's dirty-start guard
     # verifies. Same MD_OUT/JSON_OUT/SUMMARY_OUT redirect that build.sh's
     # _run_local_ci_gate uses (order-489 prior art); explicit caller env
-    # still wins. The TRACKED docs/convergence projection is committed
-    # release evidence (docs/RELEASING.md step 4) and is refreshed by
-    # scripts/release-preflight-local.sh AFTER this gate completes — never
-    # between generation and the forge gate.
+    # still wins. No dashboard is committed (2066-obsv retired
+    # docs/convergence/centicolon-dashboard.*), so the renderer's own default
+    # is target/ too; the explicit redirect stays for callers that set none.
     if MD_OUT="${MD_OUT:-$REPO_ROOT/target/convergence/centicolon-dashboard.md}" \
         JSON_OUT="${JSON_OUT:-$REPO_ROOT/target/convergence/centicolon-dashboard.json}" \
         SUMMARY_OUT="${SUMMARY_OUT:-$REPO_ROOT/target/convergence/summary.md}" \

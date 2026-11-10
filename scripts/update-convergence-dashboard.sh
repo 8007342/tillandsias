@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # @trace spec:observability-convergence, spec:versioning, spec:spec-traceability
 #
-# Render the repo-visible CentiColon dashboard from the append-only signature log.
-# The Markdown view is for GitHub; the JSON view is for agents and automation.
+# Render the CentiColon dashboard from the append-only signature log.
+# The Markdown view is for people; the JSON view is for agents and automation.
+# Both land under target/convergence/ (gitignored) unless MD_OUT/JSON_OUT say
+# otherwise: the dashboard is a local projection, never committed (order
+# 2066-obsv retired docs/convergence/centicolon-dashboard.*; the published view
+# of release evidence is the observatorium site).
 
 set -euo pipefail
 
@@ -19,10 +23,9 @@ export LC_ALL=C
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="${SOURCE:-$REPO_ROOT/target/convergence/centicolon-signature.jsonl}"
-DOC_DIR="$REPO_ROOT/docs/convergence"
 TARGET_DIR="$REPO_ROOT/target/convergence"
-MD_OUT="${MD_OUT:-$DOC_DIR/centicolon-dashboard.md}"
-JSON_OUT="${JSON_OUT:-$DOC_DIR/centicolon-dashboard.json}"
+MD_OUT="${MD_OUT:-$TARGET_DIR/centicolon-dashboard.md}"
+JSON_OUT="${JSON_OUT:-$TARGET_DIR/centicolon-dashboard.json}"
 SUMMARY_OUT="${SUMMARY_OUT:-$TARGET_DIR/summary.md}"
 # Latest resource sample emitted by tillandsias-metrics (Wave 13 Gap #3).
 # Schema: { "cpu_percent": f64, "memory_percent": f64, "disk_percent": f64, "sample_timestamp": iso8601 }
@@ -36,7 +39,7 @@ EMPTY_HINT="${EMPTY_HINT:-Run ./build.sh --ci-full after the signature writer is
 TERMINAL_PREVIEW="${TERMINAL_PREVIEW:-1}"
 TREND_CHUNK_WIDTH="${TREND_CHUNK_WIDTH:-32}"
 
-mkdir -p "$DOC_DIR" "$TARGET_DIR"
+mkdir -p "$TARGET_DIR" "$(dirname "$MD_OUT")" "$(dirname "$JSON_OUT")"
 
 spark_glyph() {
     awk -v value="${1:-0}" 'BEGIN {

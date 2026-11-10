@@ -40,7 +40,7 @@ markdown_distillation:
       status: archived
     - original: CONVERGENCE_WORKFLOW.md
       archived: plan/archive/2026-06-16/markdown-intake/root/CONVERGENCE_WORKFLOW.md
-      canonical: [methodology/convergence.yaml, docs/convergence/]
+      canonical: [methodology/convergence.yaml]
       status: archived
     - original: DIAGNOSTICS_STREAM_IMPLEMENTATION.md
       archived: plan/archive/2026-06-16/markdown-intake/root/DIAGNOSTICS_STREAM_IMPLEMENTATION.md

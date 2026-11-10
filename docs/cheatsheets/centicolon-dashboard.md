@@ -34,8 +34,8 @@ tier: bundled
 
 ## Canonical Outputs
 
-- `docs/convergence/centicolon-dashboard.md`
-- `docs/convergence/centicolon-dashboard.json`
+- `target/convergence/centicolon-dashboard.md` (local; not committed since 2066-obsv)
+- `target/convergence/centicolon-dashboard.json` (local; not committed since 2066-obsv)
 - `target/convergence/summary.md`
 
 ## Visual Contract
@@ -83,6 +83,4 @@ scripts/update-convergence-dashboard.sh
 
 ## Related
 
-- [CentiColon dashboard MD](</var/home/machiyotl/src/tillandsias/docs/convergence/centicolon-dashboard.md:1>)
-- [CentiColon dashboard JSON](</var/home/machiyotl/src/tillandsias/docs/convergence/centicolon-dashboard.json:1>)
 - [Renderer script](</var/home/machiyotl/src/tillandsias/scripts/update-convergence-dashboard.sh:1>)

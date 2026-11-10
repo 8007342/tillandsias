@@ -538,7 +538,7 @@ litmus_framework:
     artifacts:
       centicolon_signature: "target/convergence/centicolon-signature.jsonl"
       delta: "target/convergence/centicolon-delta.json"
-      dashboard: "docs/convergence/centicolon-dashboard.md"
+      dashboard: "target/convergence/centicolon-dashboard.md"
 
     signature_entry: |
       {

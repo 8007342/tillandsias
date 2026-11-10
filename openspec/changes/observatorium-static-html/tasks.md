@@ -26,7 +26,7 @@
 - [x] 4.1 Move observatorium/index.html and lib/*.js to tools/trace-viewer/; --observatorium, tillandsias-embed and scripts/run-observatorium.sh follow; the clickable-trace-index spec and litmus stay green. The flag and the Project observatorium view requirement are unchanged.
 
 ## PR 5 — retire the committed CentiColon dashboard
-- [ ] 5.1 Delete docs/convergence/centicolon-dashboard.{md,json}; scripts/update-convergence-dashboard.sh defaults to target/; release preflight stops committing it; update the observability-convergence litmus (shape, self-clean evidence), generate-evidence-bundle.sh, test-build-sh-ci-full-install-prep.sh, docs/RELEASING.md step 4 and the cheatsheet, with an observability-convergence spec delta.
+- [x] 5.1 Delete docs/convergence/centicolon-dashboard.{md,json}; scripts/update-convergence-dashboard.sh defaults to target/; release preflight stops committing it; update the observability-convergence litmus (shape, self-clean evidence), generate-evidence-bundle.sh, test-build-sh-ci-full-install-prep.sh, docs/RELEASING.md step 4 and the cheatsheet, with an observability-convergence spec delta.
 
 ## Not in this change
 - crates/tillandsias-headless/src/cloudflare_worker_deploy.rs (1853-qr4h) can create a Workers Builds trigger. Untouched; operator question open (fleet lead, 2026-11-10).

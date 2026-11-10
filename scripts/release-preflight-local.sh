@@ -87,15 +87,12 @@ else
     step "Skip local CI gate"
 fi
 
-step "Refresh tracked release evidence (docs/convergence dashboards)"
-# Order 495 (preflight-evidence-dirties-forge-gate): the local CI gate above
-# routes its own dashboard regeneration under target/ so the post-build forge
-# gate always starts from a clean worktree. The TRACKED docs/convergence
-# projection — committed release evidence per docs/RELEASING.md step 4 — is
-# regenerated HERE, after the gate, so generated dirt never sits between
-# generation and the forge gate. As a bonus this render includes the
-# signature record the gate just appended (previously the committed
-# dashboards lagged one CI run).
+step "Render the CentiColon dashboard (target/convergence, not committed)"
+# Order 2066-obsv: docs/convergence/centicolon-dashboard.* is retired, so this
+# render writes target/convergence/ (the renderer's default) and leaves the
+# checkout clean. It runs after the gate so it includes the signature record
+# the gate just appended. Order 495's rule still holds: nothing generated
+# here dirties the tree the forge gate checks.
 bash scripts/update-convergence-dashboard.sh
 
 if [[ "$run_nix_probe" == "1" ]]; then
@@ -149,7 +146,7 @@ if [[ "$run_nix_probe" == "1" ]]; then
 fi
 
 step "Release preflight complete"
-evidence_dirt="$(git status --porcelain -- TRACES.md 'openspec/specs/*/TRACES.md' docs/convergence || true)"
+evidence_dirt="$(git status --porcelain -- TRACES.md 'openspec/specs/*/TRACES.md' || true)"
 if [[ -n "$evidence_dirt" ]]; then
     printf 'Generated release evidence awaiting commit (docs/RELEASING.md step 4):\n%s\n\n' "$evidence_dirt"
 fi
@@ -164,7 +161,7 @@ Next release steps:
   git push origin HEAD
   gh workflow run release.yml --ref ${release_ref} -f version=${version}
 
-Dispatch the hosted release only after the local release-preflight changes,
-including regenerated dashboards under docs/convergence/, are committed and
-pushed to the release ref.
+Dispatch the hosted release only after the local release-preflight changes
+(regenerated trace indexes; the dashboard stays under target/) are committed
+and pushed to the release ref.
 EOF
