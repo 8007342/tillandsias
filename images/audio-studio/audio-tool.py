@@ -30,7 +30,7 @@ Detection (one finding per fault: kind, start and end in seconds, detail):
                  merged across gaps under 10 ms.
   loop_seam      with --loop only: playing the end into the start jumps, by
                  the residual across the wrap point, against its robust level,
-                 over twice the 99th percentile of the same measure taken
+                 over 1.5x the 99th percentile of the same measure taken
                  inside the loop (a continuous wrap reads like the interior).
                  The level step either side of the wrap is reported, and never
                  decides (a percussive loop's ends legitimately differ).
@@ -153,7 +153,12 @@ def residual(x, a):
 
 
 CLICK_RATIO = 12.0
-SEAM_FACTOR = 2.0  # provisional: kumbias measures it on the real loops
+# Calibrated by kumbias on v56.11.10.1 (2026-11-10, this ref): wrap/interior_p99
+# on continuous wraps (rolled, crossfaded, frame-aligned re-encodes) read at
+# most 0.93; a real off-wrap cut 6.9; Opus codec steps at misaligned game-loop
+# wraps 1.05-9.47. 1.5 flags the cut and every codec step from 1.64 up, and
+# keeps every good wrap; the smallest codec steps (1.05-1.34) go unreported.
+SEAM_FACTOR = 1.5
 DROPOUT_SECS = 0.001
 
 
