@@ -130,6 +130,10 @@ mod studio_contract;
 // signed acknowledgement record, the obligations spec and the consent gate.
 #[cfg(feature = "host-services")]
 mod licence_consent;
+// 2068-ypgq: the restricted-weights fetch behind the licence gate, on the
+// model-hubs tier with a single-use consent token.
+#[cfg(feature = "host-services")]
+mod restricted_fetch;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(feature = "listen-vsock")]

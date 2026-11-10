@@ -1141,34 +1141,68 @@ pub fn admits_restricted_in(
     project_ack_dir: &Path,
     verifier: &Verifier,
 ) -> Result<Vec<String>, String> {
+    admit_artefacts_in(
+        restricted_register,
+        project,
+        artefacts,
+        project_ack_dir,
+        verifier,
+    )
+    .map_err(|r| match r {
+        GateRefusal::Unmatched(e) => format!("consent_required: {project}: {e}"),
+        GateRefusal::Row(e) => {
+            format!("consent_required: {project}: {e} Nothing was fetched or queued.")
+        }
+    })
+}
+
+/// Why [`admit_artefacts_in`] refused, before the caller words it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GateRefusal {
+    /// No artefact, an unreadable register, or an artefact that matches no
+    /// row (or names another licence than its row).
+    Unmatched(String),
+    /// The row's own gate refused: `model_refused`, `licence_forbids_use`,
+    /// `licence_text_unpinned` or `licence_acknowledgement_required`.
+    Row(String),
+}
+
+/// The gate behind [`admits_restricted_in`], with the refusal unworded, so
+/// the restricted fetch (order 2068-ypgq) answers the row's own refusal
+/// (`licence_acknowledgement_required: ...`) and a studio job its
+/// `consent_required:` sentence, from ONE decision.
+pub fn admit_artefacts_in(
+    restricted_register: &str,
+    project: &str,
+    artefacts: &[RestrictedArtefact],
+    project_ack_dir: &Path,
+    verifier: &Verifier,
+) -> Result<Vec<String>, GateRefusal> {
     if artefacts.is_empty() {
-        return Err(format!(
-            "consent_required: {project}: no artefact named (nothing to admit)"
+        return Err(GateRefusal::Unmatched(
+            "no artefact named (nothing to admit)".into(),
         ));
     }
-    let rows = parse_restricted(restricted_register)
-        .map_err(|e| format!("consent_required: {project}: {e}"))?;
+    let rows = parse_restricted(restricted_register).map_err(GateRefusal::Unmatched)?;
     let project_scope = format!("project:{project}");
     let scopes = [project_scope.as_str(), "operator-projects"];
     let mut ids = Vec::with_capacity(artefacts.len());
     for a in artefacts {
         let label = format!("{}@{} {}", a.repo, a.revision, a.file);
         let Some(r) = find_restricted(&rows, &a.repo, &a.revision, &a.file, &a.sha256) else {
-            return Err(format!(
-                "consent_required: {project}: {label} (sha256 {}) is not in images/models/licence-register-restricted.tsv; nothing was fetched or queued",
+            return Err(GateRefusal::Unmatched(format!(
+                "{label} (sha256 {}) is not in images/models/licence-register-restricted.tsv; nothing was fetched or queued",
                 a.sha256
-            ));
+            )));
         };
         if !r.spdx.eq_ignore_ascii_case(&a.licence) {
-            return Err(format!(
-                "consent_required: {project}: {label} is registered under licence {} but the job names {}; nothing was fetched or queued",
+            return Err(GateRefusal::Unmatched(format!(
+                "{label} is registered under licence {} but the job names {}; nothing was fetched or queued",
                 r.spdx, a.licence
-            ));
+            )));
         }
         let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
-            .map_err(|e| {
-                format!("consent_required: {project}: {e} Nothing was fetched or queued.")
-            })?;
+            .map_err(GateRefusal::Row)?;
         ids.push(
             admitted
                 .acknowledgement_slug
@@ -1179,7 +1213,7 @@ pub fn admits_restricted_in(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::imagegen_models::ModelFile;
     use std::fs;
@@ -1188,7 +1222,7 @@ mod tests {
 
     /// A disk-backed scratch dir beside the test binary (never /tmp, which is
     /// tmpfs on the fleet's Fedora hosts).
-    fn disk_scratch(tag: &str) -> PathBuf {
+    pub(crate) fn disk_scratch(tag: &str) -> PathBuf {
         let exe = std::env::current_exe().expect("test exe");
         let dir = exe
             .parent()
@@ -1201,7 +1235,7 @@ mod tests {
 
     /// An enrolled test key (D1, Linux fallback strength) and its
     /// allowed-signers file naming `grantor` as the principal.
-    fn enrol(dir: &Path, grantor: &str) -> (PathBuf, PathBuf) {
+    pub(crate) fn enrol(dir: &Path, grantor: &str) -> (PathBuf, PathBuf) {
         let key = dir.join("approval-key");
         let st = Command::new("ssh-keygen")
             .args(["-q", "-t", "ed25519", "-N", "", "-C", grantor, "-f"])
@@ -1223,7 +1257,7 @@ mod tests {
 
     /// Sign `ack`'s statement with the enrolled key (D2: `ssh-keygen -Y sign`
     /// is the Linux signer) and return the record carrying the armored SSHSIG.
-    fn sign(dir: &Path, key: &Path, mut ack: Acknowledgement) -> Acknowledgement {
+    pub(crate) fn sign(dir: &Path, key: &Path, mut ack: Acknowledgement) -> Acknowledgement {
         let msg = dir.join("statement");
         // ssh-keygen -Y sign keeps an existing .sig; a stale one would be
         // read back as this record's signature.
