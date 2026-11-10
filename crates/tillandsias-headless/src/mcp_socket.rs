@@ -3135,6 +3135,79 @@ mod host_tool_discovery_fixtures {
         }
     }
 
+    /// ORDER 2067-uc3k: browser.open in CONTAINER mode (the tray's real mode)
+    /// admits the studio's window_url and starts a window on it, and refuses
+    /// the retired plain form. Pre-fix: webstudio.open answered the plain
+    /// form, refused here as URL_NOT_ALLOWED (https only).
+    #[test]
+    fn browser_open_in_container_mode_admits_the_studio_window_url() {
+        use std::sync::Mutex;
+        use tillandsias_browser_mcp::launcher::{
+            BrowserContainers, ContainerHandle, ContainerLaunchRequest, LaunchError,
+        };
+        #[derive(Default)]
+        struct Recording {
+            starts: Mutex<Vec<String>>,
+        }
+        impl BrowserContainers for Recording {
+            fn preview_tls_port(&self) -> Option<u16> {
+                Some(18443)
+            }
+            fn routed_hosts(&self) -> Vec<String> {
+                vec![format!(
+                    "studio.{}.localhost:18443",
+                    crate::local_web_preview::host_label("uc3k-site")
+                )]
+            }
+            fn start(
+                &self,
+                request: &ContainerLaunchRequest<'_>,
+            ) -> Result<ContainerHandle, LaunchError> {
+                self.starts.lock().unwrap().push(request.url.to_string());
+                Ok(ContainerHandle {
+                    container_name: "tillandsias-browser-uc3k-1".to_string(),
+                    network_name: "tillandsias-browser-net-uc3k".to_string(),
+                    profile_dir: std::path::PathBuf::new(),
+                    cdp_socket: None,
+                    notice: None,
+                })
+            }
+            fn stop(&self, _handle: &ContainerHandle) {}
+        }
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let host = std::sync::Arc::new(Recording::default());
+        let project = "uc3k-site";
+        let browser = lane_browser_server(project, "uc3k-lane", Some(host.clone()), false);
+        let open = |url: &str| {
+            let reply = handle_mcp_jsonrpc(
+                project,
+                "uc3k-lane",
+                &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                    "params":{"name":"browser.open","arguments":{"url": url, "dev": true}}}),
+                &browser,
+                &rt,
+            )
+            .unwrap();
+            reply.to_string()
+        };
+        let url = crate::local_web_preview::studio_url_on(project, 18443);
+        assert_eq!(url, "https://studio.uc3k-site.localhost:18443/");
+        let admitted = open(&url);
+        assert!(!admitted.contains("URL_NOT_ALLOWED"), "{admitted}");
+        assert_eq!(
+            *host.starts.lock().unwrap(),
+            std::slice::from_ref(&url),
+            "{admitted}"
+        );
+        let plain = open("http://studio.uc3k-site.localhost:8080/");
+        assert!(plain.contains("URL_NOT_ALLOWED"), "{plain}");
+        assert_eq!(
+            host.starts.lock().unwrap().len(),
+            1,
+            "the plain form started nothing"
+        );
+    }
+
     /// Order 2025-e6mi: "open in a studio" from a forge launches the studio
     /// through the tray and hands the agent its URLs, for any project. RED
     /// before: webstudio.open answered an error naming `tillandsias --studio`
@@ -3147,6 +3220,7 @@ mod host_tool_discovery_fixtures {
         #[derive(Default)]
         struct Stub {
             launches: Mutex<Vec<(String, String, String)>>,
+            windows: Mutex<Vec<(String, String, String, String)>>,
         }
         impl LaneLauncher for Stub {
             fn project_remote(&self, project: &str) -> Result<String, String> {
@@ -3161,8 +3235,16 @@ mod host_tool_discovery_fixtures {
                 l.push(key);
                 Ok(true)
             }
-            fn router_port(&self) -> Option<u16> {
-                Some(8080)
+            fn tls_port(&self) -> Option<u16> {
+                Some(18443)
+            }
+            fn open_window(&self, project: &str, instance: &str, studio: &str, url: &str) {
+                self.windows.lock().unwrap().push((
+                    project.to_string(),
+                    instance.to_string(),
+                    studio.to_string(),
+                    url.to_string(),
+                ));
             }
         }
 
@@ -3196,10 +3278,26 @@ mod host_tool_discovery_fixtures {
             "\\\"started\\\":true",
             "window_url",
             "preview_url",
-            "studio.e6mi-site.localhost:8080",
+            // 2067-uc3k: https on the preview TLS listener; pre-fix this was
+            // http://studio.e6mi-site.localhost:8080, which browser.open
+            // refuses in container mode.
+            "https://studio.e6mi-site.localhost:18443/",
         ] {
             assert!(text(&first).contains(needle), "{needle}: {first}");
         }
+        assert!(!text(&first).contains(":8080"), "{first}");
+        // 2067-uc3k: the window opens with no user action: the tray opens it
+        // in THIS lane's registry, once, for the launch that started.
+        assert_eq!(
+            *stub.windows.lock().unwrap(),
+            [(
+                project.to_string(),
+                "default".to_string(),
+                "grapesjs".to_string(),
+                "https://studio.e6mi-site.localhost:18443/".to_string()
+            )],
+            "one window, opened by the tray for the lane that asked"
+        );
         assert!(!text(&first).contains("tillandsias --studio"), "{first}");
         assert!(text(&second).contains("\\\"started\\\":false"), "{second}");
         assert_eq!(

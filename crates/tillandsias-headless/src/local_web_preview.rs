@@ -1308,7 +1308,8 @@ fn certificate_args(
 /// `*.<project>.localhost` wildcard, so the leaf vouches only for hosts the
 /// router actually serves for this project.
 // 1985-stdu: `comfyui` is the project's studio window (network-limited).
-pub(crate) const DEV_SERVICES: &[&str] = &["flutter", "comfyui"];
+// 2067-uc3k: `studio` is the web-studio lane's window (TLS-only, network-limited).
+pub(crate) const DEV_SERVICES: &[&str] = &["flutter", "comfyui", "studio"];
 
 /// Every host the router serves over TLS for `project`: `www` and each dev
 /// service. The ONE list: the leaf's subjectAltName and the WebKit window's
@@ -1561,6 +1562,83 @@ pub(crate) fn add_network_limited_route(
     cidr: &str,
     debug: bool,
 ) -> Result<String, String> {
+    limited_route(service, project, upstream, port, cidr, false, debug)
+}
+
+/// ORDER 2067-uc3k: the web-studio lane's window, `studio.<project>`.
+/// Operator ruling 2026-11-10: "Full https only, and nothing required from the
+/// user at runtime". So it is served on the preview TLS listener ONLY (no
+/// plain :8080 site, no OTP gate), to callers in `cidr` (the project's studio
+/// network: the router, and each browser.open window's forwarder) and to no
+/// one else. It replaces the OTP route the `--studio` lane used to hold under
+/// the same name. Returns the window URL.
+pub(crate) fn add_studio_route(
+    project: &str,
+    upstream: &str,
+    port: u16,
+    cidr: &str,
+    debug: bool,
+) -> Result<String, String> {
+    limited_route(STUDIO_SERVICE, project, upstream, port, cidr, true, debug)
+}
+
+/// 2067-uc3k: the router service the web-studio window is served under.
+pub(crate) const STUDIO_SERVICE: &str = "studio";
+
+/// 2067-uc3k: the studio window's URL on the preview TLS listener `port`.
+pub(crate) fn studio_url_on(project: &str, port: u16) -> String {
+    format!(
+        "https://{}.localhost:{port}/",
+        subdomain(STUDIO_SERVICE, project)
+    )
+}
+
+/// 2067-uc3k: whether the studio route of `project` is in the router's table
+/// AND its upstream answers, asked from INSIDE the router (the route admits
+/// only the project's network, so a host-side probe would get 403 by design).
+/// Any status 200..499 counts: the studio front answers, whatever the path.
+pub(crate) fn studio_answers(project: &str) -> bool {
+    let sub = subdomain(STUDIO_SERVICE, project);
+    let Some(route) = read_routes(false)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|r| r.subdomain == sub && r.preview_tls && r.tls_only)
+    else {
+        return false;
+    };
+    let endpoint = format!("http://{}:{}/", route.upstream_host, route.port);
+    podman_at(
+        Step::Ready,
+        &[
+            "exec",
+            "tillandsias-router",
+            "curl",
+            "--noproxy",
+            "*",
+            "-s",
+            "-o",
+            "/dev/null",
+            "--max-time",
+            "2",
+            "-w",
+            "%{http_code}",
+            &endpoint,
+        ],
+    )
+    .ok()
+    .and_then(|code| code.trim().parse::<u16>().ok())
+    .is_some_and(|c| (200..500).contains(&c))
+}
+
+fn limited_route(
+    service: &str,
+    project: &str,
+    upstream: &str,
+    port: u16,
+    cidr: &str,
+    tls_only: bool,
+    debug: bool,
+) -> Result<String, String> {
     ensure_router(project, debug)?;
     let _lock = crate::resource_lock::acquire(
         "preview-router",
@@ -1570,6 +1648,7 @@ pub(crate) fn add_network_limited_route(
     let mut route = crate::RouterRoute::public_service(subdomain(service, project), upstream, port);
     route.preview_tls = true;
     route.allow_cidr = Some(cidr.to_string());
+    route.tls_only = tls_only;
     let mut routes = read_routes(debug)?;
     routes.retain(|r| r.subdomain != route.subdomain);
     routes.push(route);
@@ -4079,7 +4158,7 @@ mod tests {
         );
         assert_eq!(
             preview_san("macron.dev"),
-            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost,DNS:comfyui.macron.dev.localhost"
+            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost,DNS:comfyui.macron.dev.localhost,DNS:studio.macron.dev.localhost"
         );
         assert!(
             !preview_san("proj").contains('*'),
@@ -4108,13 +4187,14 @@ mod tests {
                 "www.devxsd-gamejam.localhost",
                 "flutter.devxsd-gamejam.localhost",
                 "comfyui.devxsd-gamejam.localhost",
+                "studio.devxsd-gamejam.localhost",
             ]
         {
             misses.push(format!("preview_hosts: {hosts:?}"));
         }
         let san = preview_san(project);
         if san
-            != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost,DNS:comfyui.devxsd-gamejam.localhost"
+            != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost,DNS:comfyui.devxsd-gamejam.localhost,DNS:studio.devxsd-gamejam.localhost"
         {
             misses.push(format!("leaf SAN: {san}"));
         }

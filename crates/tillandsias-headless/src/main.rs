@@ -9488,6 +9488,10 @@ struct RouterRoute {
     /// project's studio network); everyone else gets 403 on every listener.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     allow_cidr: Option<String>,
+    /// 2067-uc3k: a public preview-TLS route served on the TLS listener only;
+    /// no plain :8080 site is emitted for it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    tls_only: bool,
 }
 
 /// 1985-stdu: the Caddy lines that refuse a caller outside `cidr` (the TCP
@@ -9511,6 +9515,7 @@ impl RouterRoute {
             public: false,
             preview_tls: false,
             allow_cidr: None,
+            tls_only: false,
         }
     }
 
@@ -9650,11 +9655,14 @@ fn generate_dynamic_caddyfile(routes_to_render: &[RouterRoute]) -> String {
         // @trace spec:enclave-service-catalog
         if route.public {
             let guard = caddy_source_guard(route.allow_cidr.as_deref());
-            routes.push_str(&format!(
-                "http://{subdomain}.localhost:8080 {{\n{guard}    \
+            // 2067-uc3k: a TLS-only route has no plaintext site at all.
+            if !(route.tls_only && route.preview_tls) {
+                routes.push_str(&format!(
+                    "http://{subdomain}.localhost:8080 {{\n{guard}    \
 reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
-            ));
+                ));
+            }
             if route.preview_tls {
                 // `<service>.<project>`: the project is everything after the
                 // first label, dots included (flutter.macron.dev → macron.dev).
@@ -20251,10 +20259,91 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
     Ok(())
 }
 
-/// ORDER 1860-auhm: a registered studio, launched as a web lane. Same stack,
-/// route, OTP and window as OpenCode Web; only the lane differs (the studio's
-/// image and entry, routed as `studio.<label>`). A studio whose lane is not
-/// built yet is refused here, before anything starts.
+/// ORDER 2067-uc3k: route `studio.<label>` to `upstream:port` over the
+/// preview TLS listener only, for the project's studio network only (the
+/// ComfyUI window's wiring, 1985-stdu): the network exists, the router is on
+/// it, and so is each browser.open window's forwarder. This replaces the OTP
+/// route the lane held under the same name; there is no plain :8080 site.
+#[cfg(feature = "host-services")]
+fn wire_studio_route(
+    project_name: &str,
+    upstream: &str,
+    port: u16,
+    debug: bool,
+) -> Result<String, String> {
+    let cidr = imagegen_studio::ensure_network(project_name)?;
+    imagegen_studio::connect(project_name, "tillandsias-router")?;
+    local_web_preview::add_studio_route(project_name, upstream, port, &cidr, debug)
+}
+
+/// 2067-uc3k: the browser lane a bare `--studio` launch opens its window in.
+#[cfg(feature = "host-services")]
+const STUDIO_CLI_LANE: &str = "studio-cli";
+
+/// 2067-uc3k: the operator's studio window, with nothing for them to do.
+/// From a lane (`webstudio.open`), the tray opens it in that lane's
+/// browser.open registry, so this returns at once. A bare `--studio` launch
+/// opens one chromium-framework window the same way once the studio answers,
+/// and stays until that window closes (the window lives in this process's
+/// registry; its forwarder and network go with it).
+#[cfg(feature = "host-services")]
+fn open_studio_window(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
+    if std::env::var(studio::WINDOW_BY_TRAY_ENV).as_deref() == Ok("1") {
+        eprintln!("[tillandsias] studio routed at {url}; the tray opens the window");
+        return Ok(());
+    }
+    let opened = studio::open_when_ready(
+        &|| local_web_preview::studio_answers(project_name),
+        &|| None,
+        &mut || studio::open_lane_window(project_name, STUDIO_CLI_LANE, url),
+        std::time::Duration::from_secs(10 * 60),
+        std::time::Duration::from_secs(2),
+    )?;
+    if debug {
+        eprintln!("[tillandsias] studio window: {opened}");
+    }
+    eprintln!("[tillandsias] studio window open at {url}; this launcher exits when it closes");
+    let prefix = format!("tillandsias-browser-{project_name}-");
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+        let mut cmd = podman_command();
+        cmd.args(["ps", "--format", "{{.Names}}"]);
+        let Ok(out) =
+            cmd.output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        else {
+            continue;
+        };
+        if !String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .any(|n| n.starts_with(&prefix))
+        {
+            break;
+        }
+    }
+    let (windows, debounce) = mcp_socket::lane_windows(project_name, STUDIO_CLI_LANE);
+    tillandsias_browser_mcp::window_registry::close_all(&windows, &debounce);
+    Ok(())
+}
+
+/// 2067-uc3k: without host-services there is no preview TLS listener, so a
+/// studio cannot be served at all; refuse by name rather than fall back to a
+/// plaintext route.
+#[cfg(not(feature = "host-services"))]
+fn wire_studio_route(_: &str, _: &str, _: u16, _: bool) -> Result<String, String> {
+    Err("a studio is served over the preview TLS listener only, which this build (no host-services) does not have".into())
+}
+
+#[cfg(not(feature = "host-services"))]
+fn open_studio_window(_: &str, _: &str, _: bool) -> Result<(), String> {
+    Err("a studio window needs the host-services build".into())
+}
+
+/// ORDER 1860-auhm: a registered studio, launched as a web lane: the same
+/// stack as OpenCode Web, with the studio's image and entry. 2067-uc3k: its
+/// route is `studio.<label>`, TLS-only and network-limited, with no OTP
+/// (`wire_studio_route`), and its window opens with no user action
+/// (`open_studio_window`). A studio whose lane is not built yet is refused
+/// here, before anything starts.
 pub(crate) fn run_studio_mode(
     project_path: &str,
     studio_id: &str,
@@ -20271,11 +20360,11 @@ pub(crate) fn run_studio_mode(
 
 /// ORDER 1921-2krx: a SIBLING studio (ComfyUI) runs in its own container next
 /// to the forge, so no forge, git mirror or inference is started for it. The
-/// studio publishes no host port; the router routes `studio.<label>` to its
-/// container on the enclave network, behind the same OTP `forward_auth` gate
-/// as OpenCode Web, and the window opens through the same session issue and
-/// authenticated probe (`launch_opencode_web_browser`), so it opens only after
-/// an authenticated 2xx.
+/// studio publishes no host port. 2067-uc3k (operator ruling 2026-11-10): the
+/// router serves `studio.<label>` over the preview TLS listener only, to the
+/// project's studio network only, with no OTP gate (`wire_studio_route`; the
+/// OTP route it held is retired), and the window opens once the studio
+/// answers, with nothing for the operator to do (`open_studio_window`).
 fn run_sibling_studio_mode(
     project_path: &str,
     is_cloud: bool,
@@ -20293,7 +20382,7 @@ fn run_sibling_studio_mode(
     // stall fails by name instead of a silent 50-minute wait (2026-11-01).
     use std::time::Duration;
     use studio_stages::{Stage, run_async, run_blocking};
-    const TOTAL: usize = 4;
+    const TOTAL: usize = 3;
     let label = lane.label.clone();
     let version = VERSION.trim().to_string();
     let images: Vec<String> = lane.images(launch_images::launch_images(
@@ -20357,31 +20446,19 @@ fn run_sibling_studio_mode(
                 router_host_port,
                 debug,
             )
-            .await?;
-            // Not public: the route keeps the OTP forward_auth gate.
-            let route = RouterRoute::new(
-                lane.route_host(&router_host_label(project_name)),
-                container.clone(),
-                lane.port,
-            );
-            upsert_router_route(route, debug)?;
-            caddy_reload_routes(debug).await
+            .await
         })
         .await
     })?;
+    // 2067-uc3k: https only, network-limited, no OTP (the route function
+    // reloads the router itself; it runs outside the async runtime).
+    let url = wire_studio_route(project_name, &container, lane.port, debug)?;
     eprintln!(
-        "[tillandsias] {label} for {project_name}: {container} (no host port; only the router's authenticated route)"
+        "[tillandsias] {label} for {project_name}: {container} (no host port; served at {url} to the project's network only)"
     );
-    let window_stage = Stage {
-        index: 4,
-        total: TOTAL,
-        name: "session and window",
-        bound: Duration::from_secs(3 * 60),
-    };
-    let (project, lane) = (project_name.to_string(), lane.clone());
-    run_blocking(&label, window_stage, move || {
-        launch_opencode_web_browser(&project, &certs_dir, router_host_port, &lane, debug)
-    })
+    // 2067-uc3k: no OTP session to issue; the window opens once the studio
+    // answers (its own wait budget), and a bare launch stays while it is open.
+    open_studio_window(project_name, &url, debug)
 }
 
 pub(crate) fn run_opencode_web_mode(
@@ -20723,17 +20800,21 @@ pub(crate) fn run_opencode_web_mode(
         // The forge image's opencode-web entrypoint runs `opencode serve --hostname 0.0.0.0
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
-        let route = RouterRoute::new(
-            lane.route_host(&router_host_label(project_name)),
-            forge_container_name(project_name),
-            lane.port,
-        );
-        upsert_router_route(route, debug)?;
+        // 2067-uc3k: a studio lane is not routed here: it is served over TLS
+        // only, network-limited, below (wire_studio_route).
+        if lane.service == "opencode" {
+            let route = RouterRoute::new(
+                lane.route_host(&router_host_label(project_name)),
+                forge_container_name(project_name),
+                lane.port,
+            );
+            upsert_router_route(route, debug)?;
 
-        // @trace spec:subdomain-routing-via-reverse-proxy
-        // After writing the dynamic Caddyfile, reload Caddy to activate the routes.
-        // The reload is graceful (no container restart) via the admin API at localhost:2019.
-        caddy_reload_routes(debug).await?;
+            // @trace spec:subdomain-routing-via-reverse-proxy
+            // After writing the dynamic Caddyfile, reload Caddy to activate the routes.
+            // The reload is graceful (no container restart) via the admin API at localhost:2019.
+            caddy_reload_routes(debug).await?;
+        }
 
         // Stop the diagnostic-event emitter before this block closes;
         // dropping `_diag_logs_handle` aborts its logs tails.
@@ -20745,6 +20826,15 @@ pub(crate) fn run_opencode_web_mode(
         Ok::<(), String>(())
     })?;
 
+    if lane.service != "opencode" {
+        let url = wire_studio_route(
+            project_name,
+            &forge_container_name(project_name),
+            lane.port,
+            debug,
+        )?;
+        return open_studio_window(project_name, &url, debug);
+    }
     launch_opencode_web_browser(project_name, &certs_dir, router_host_port, lane, debug)
 }
 
@@ -28324,6 +28414,37 @@ mod tests {
         // Without a CIDR nothing changes.
         let open = RouterRoute::public_service("www.kumbia", "tillandsias-kumbia-web", 8080);
         assert!(!generate_dynamic_caddyfile(&[open]).contains("remote_ip"));
+    }
+
+    /// ORDER 2067-uc3k (operator ruling 2026-11-10: "Full https only"): the
+    /// studio route is served on the preview TLS listener ONLY, network-limited
+    /// and with no OTP gate; no plain :8080 site is emitted for it at all.
+    /// Pre-fix: FAILS, every public route also had a plain :8080 site.
+    #[test]
+    fn a_tls_only_studio_route_has_no_plain_site_and_no_otp_gate() {
+        let mut route =
+            RouterRoute::public_service("studio.e6mi-site", "tillandsias-e6mi-site-forge", 3000);
+        route.preview_tls = true;
+        route.allow_cidr = Some("10.89.9.0/24".into());
+        route.tls_only = true;
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        assert!(
+            !caddy.contains("http://studio.e6mi-site.localhost:8080"),
+            "a plain site exists:\n{caddy}"
+        );
+        assert!(!caddy.contains("forward_auth"), "{caddy}");
+        assert!(!caddy.contains("_auth/login"), "{caddy}");
+        let at = caddy
+            .find("https://studio.e6mi-site.localhost:8443 {")
+            .unwrap_or_else(|| panic!("no TLS site:\n{caddy}"));
+        let block = &caddy[at..];
+        let guard = block
+            .find("@outside not remote_ip 10.89.9.0/24")
+            .expect("guard");
+        assert!(
+            guard < block.find("reverse_proxy").expect("proxy"),
+            "{block}"
+        );
     }
 
     #[test]
