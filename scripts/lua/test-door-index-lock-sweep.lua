@@ -1,5 +1,5 @@
 -- @trace order:1650-fb7z
--- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN TILLANDSIAS_PLAN_BIN
 --
 -- test-door-index-lock-sweep.lua — the preflight door removes a stale
 -- .git/index.lock that a guard's git left, and only such a lock. Three
@@ -39,9 +39,9 @@ local ROOT = text.trim(top.stdout or "")
 if top.status ~= "exited" or top.code ~= 0 or ROOT == "" then
     verdict.could_not_run("door-index-lock-sweep", "git rev-parse --show-toplevel did not answer")
 end
-local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
+local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or env.get("TILLANDSIAS_PLAN_BIN") or ""
 if PLAN == "" then
-    verdict.could_not_run("door-index-lock-sweep", "TILLANDSIAS_SCRIPT_RUNNER_BIN is unset, so the Lua guard cannot be run")
+    verdict.could_not_run("door-index-lock-sweep", "neither TILLANDSIAS_SCRIPT_RUNNER_BIN nor TILLANDSIAS_PLAN_BIN is set, so the Lua guard cannot be run")
 end
 local REL = "target/plan-scratch/door-index-lock-" .. time.iso_utc() .. "-" .. tostring(math.random(100000, 999999))
 fs.mkdir(REL)

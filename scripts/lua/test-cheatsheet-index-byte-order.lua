@@ -21,7 +21,7 @@
 -- Verdicts (last line), unchanged:
 --   ok:cheatsheet-index-byte-order:<pass>
 --   violation:cheatsheet-index-byte-order:<pass>/<total>        exit 1
---   skip:cheatsheet-index-byte-order:absent | no-cargo
+--   skip:cheatsheet-index-byte-order:absent | no-cargo | no-cc
 
 local REGEN = "scripts/regenerate-cheatsheet-index.sh"
 local IDX = "cheatsheets/INDEX.md"
@@ -31,6 +31,12 @@ end
 local cargo = proc.run({ argv = { "cargo", "--version" } })
 if cargo.status ~= "exited" or cargo.code ~= 0 then
     verdict.emit("skip:cheatsheet-index-byte-order:no-cargo", 0)
+end
+-- 2074-mfk5: the regenerator compiles libc/nix, so a host without a C
+-- compiler cannot answer arms 1-2; name that instead of a violation.
+local cc = proc.run({ argv = { "cc", "--version" } })
+if cc.status ~= "exited" or cc.code ~= 0 then
+    verdict.emit("skip:cheatsheet-index-byte-order:no-cc", 0)
 end
 
 local pass, fail = 0, 0

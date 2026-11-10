@@ -130,8 +130,15 @@ local function cargo_test(copy)
     local line = (r.stdout or ""):match("(compile=%S+ runtime=%S+)") or ""
     return (r.status == "exited" and r.code or -1), line, text.trim(r.stderr or "")
 end
-local rc_a, line_a, err_a = cargo_test("A")
-if rc_a ~= 0 or line_a == "" then
+-- 2074-mfk5: the probe crate links with cc; a host without one cannot ask
+-- arm 5, which is could-not-run, never a red.
+local cc = proc.run({ argv = { "cc", "--version" } })
+local NO_CC = cc.status ~= "exited" or cc.code ~= 0
+local rc_a, line_a, err_a
+if not NO_CC then rc_a, line_a, err_a = cargo_test("A") end
+if NO_CC then
+    out.line("note: arm 5 not run: no C compiler (cc) to build the probe crate")
+elseif rc_a ~= 0 or line_a == "" then
     arm("5 SHARED the probe crate builds and runs in A", false, rc_a .. " " .. line_a .. " " .. err_a:sub(1, 300))
 else
     local rc_b, line_b, err_b = cargo_test("B")
@@ -144,5 +151,8 @@ end
 
 if #failed > 0 then
     verdict.emit("violation:manifest-dir-env-fixture:" .. #failed .. "-failed", 1)
+end
+if NO_CC then
+    verdict.could_not_run("manifest-dir-env-fixture", "no C compiler (cc) on PATH, so arm 5 cannot build its probe crate; arms 1-4 passed")
 end
 verdict.ok("manifest-dir-env-fixture", "6 arms")
