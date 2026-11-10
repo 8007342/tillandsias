@@ -10,8 +10,10 @@
 # case from it and reports `drift:` when jq disagrees with the golden (a jq
 # version change), advisory, since the golden is what the verb promises.
 #
+#   note:json-get-parity:binary=<path> sha256=<hex>   the binary under test (2073-i4jr)
 #   ok:json-get-parity:<n>/<n>        every case matched (stdout bytes + rc)
-#   mismatch:<n>:<filter>             one line per divergent case, then rc=1
+#   mismatch:<n>:<filter>             one line per divergent case, then its
+#                                     want/got/stderr lines, then rc=1
 #   blocked:json-get-absent           the binary has no `json` verb (pre-fix)
 #   skip:json-get-parity:no-plan-binary  no runnable binary; exit 3 (STEP_SKIP_EXIT), never 0
 #
@@ -24,7 +26,34 @@ GOLDEN="$ROOT/scripts/portability/jq-subset-golden.txt"
 
 # shellcheck source=scripts/plan-binary-probe.sh
 . "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
-PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
+# Resolve from the CHECKOUT and make the path absolute (class 1401-x76w, as
+# 84f37ff24 did for hardware-fingerprint); an explicit TILLANDSIAS_PLAN_BIN
+# keeps its caller-relative meaning.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    PLAN="$(resolve_plan_binary 2>/dev/null)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
+else
+    PLAN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf '%s' "$_p" ;; (*) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || { echo "skip:json-get-parity:no-plan-binary"; exit 3; }
+fi
+
+# 2073-i4jr: run a private SNAPSHOT of the binary, never the resolved path.
+# That path is a build output a concurrent guard may relink mid-run; about 80
+# execs of a file being rewritten failed one random case under preflight load
+# on macuahuitl (FAIL:json-get-parity:78/79, two evictions). Measured on
+# lenovinha: rewriting the binary in place during a run gave 70/79 and "Text
+# file busy". The copy is retried until it runs, and its path and sha256 are
+# printed, so a divergence names the exact bytes that produced it.
+SNAP="$(mktemp -d "${TMPDIR:-/tmp}/json-get-parity.XXXXXX")" || { echo "blocked:json-get-parity:no-scratch"; exit 1; }
+trap 'find "$SNAP" -delete 2>/dev/null' EXIT
+snap_bin="$SNAP/$(basename "$PLAN")"
+tries=0
+until cp "$PLAN" "$snap_bin" 2>/dev/null && chmod +x "$snap_bin" && "$snap_bin" capabilities >/dev/null 2>&1; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 5 ] || { echo "blocked:json-get-parity:snapshot-failed:$PLAN"; exit 1; }
+    sleep 1
+done
+sha="$( { sha256sum "$snap_bin" 2>/dev/null || shasum -a 256 "$snap_bin" 2>/dev/null; } | awk '{print $1}')"
+echo "note:json-get-parity:binary=$PLAN sha256=${sha:-unknown} snapshot-tries=$tries"
+PLAN="$snap_bin"
 
 # Run one case under a tool; print its stdout followed by a final "rc=<n>".
 # `set -f` so a filter's `*`-free text and flags are never globbed.
@@ -91,9 +120,13 @@ tab="$(printf '\t')"
 while IFS="$tab" read -r flags filter input; do
     total=$((total + 1))
     want="$(golden_block "$total")"
-    got="$(run_case plan "$flags" "$filter" "$input" 2>/dev/null)"
+    got="$(run_case plan "$flags" "$filter" "$input" 2>"$SNAP/stderr")"
     if [ "$got" != "$want" ]; then
+        # 2073-i4jr: say why, so the next divergence names its own cause.
         echo "mismatch:$total:$filter"
+        printf '  want: %s\n' "$(printf '%s' "$want" | tr '\n' '|')"
+        printf '  got:  %s\n' "$(printf '%s' "$got" | tr '\n' '|')"
+        printf '  stderr: %s\n' "$(head -c 400 "$SNAP/stderr" | tr '\n' '|')"
         bad=$((bad + 1))
     fi
     if [ "$have_jq" -eq 1 ]; then
