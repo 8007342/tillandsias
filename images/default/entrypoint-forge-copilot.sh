@@ -89,6 +89,14 @@ trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 # on /dev/shm (RAM), so nothing copilot writes reaches disk.
 export COPILOT_HOME="${COPILOT_HOME:-/dev/shm/copilot-home}"
 mkdir -p "$COPILOT_HOME" && chmod 700 "$COPILOT_HOME"
+# 2067-faum: the forge guidance every harness gets (link_forge_agent_guidance
+# in agent-profile.sh) reaches copilot as its USER-level instructions, which
+# copilot reads from $COPILOT_HOME/copilot-instructions.md (docs.github.com,
+# cli-config-dir-reference). COPILOT_HOME is set here, after load_agent_profile.
+_copilot_guidance="${TILLANDSIAS_FORGE_GUIDANCE:-${HOME:-/home/forge}/.config-overlay/mcp/forge-agent-guidance.md}"
+if [ -f "$_copilot_guidance" ] && [ ! -e "$COPILOT_HOME/copilot-instructions.md" ]; then
+    ln -s "$_copilot_guidance" "$COPILOT_HOME/copilot-instructions.md" 2>/dev/null || true
+fi
 
 forge_step_mark
 inject_startup_context "$PROJECT_DIR"

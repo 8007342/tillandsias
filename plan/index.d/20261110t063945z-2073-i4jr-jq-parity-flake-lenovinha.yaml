@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-json-query-jq-parity-names-why-a-case-diverged-and-does-not-flake-under-preflight-load
+    order: 2073-i4jr
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, fixture, flake, land-queue, plan-binary]
+    estimated_hours: 3
+    title: |
+      test-json-query-jq-parity fails one random case (FAIL:json-get-parity:78/79) under preflight load and has evicted two PRs on macuahuitl
+    context: |
+      Reported 2026-11-10 by coordinator macuahuitl-fedora. #1044 failed at case 76 ([1,"two",null,true]); log target/land-queue-logs/20261109T222547Z-1869872/pr-1044-preflight.log on macuahuitl. #1059 failed at case 75 (null); log target/land-queue-logs/20261110T063641Z-802496/pr-1059-preflight.log. It passes 79/79 on lenovinha and on re-runs, and fails a different case each time, only under preflight load (wall 110-121 s, 28-39 deadline skips). Each eviction costs about 40 min. READ on lenovinha: the script has no per-case timeout and no scratch file; it runs the resolved plan binary about 80 times with stderr discarded, so the reason for a divergence is never shown. Suspect: a concurrent guard replacing that binary mid-run.
+    exit_criteria:
+      - 'reproduced under load (the guard run 20 times beside a cargo build, or a planted mid-run binary swap), or the cause shown from a mismatch report'
+      - 'a mismatch line prints the case stdout, rc and stderr against the golden, so the next divergence names itself'
+      - 'the cause is fixed, red first where it reproduces'
+    verifiable_closure: 'the repro red before and green after; the guard 20 times under load all ok'
+    unscoreable: 'none.'
+    next_action: 'Make a mismatch name got, want and stderr; then repro under load with a planted binary swap.'
+    provenance: coordinator macuahuitl-fedora 2026-11-10; filed and claimed by lenovinha-silverblue.
+    depends_on: []
+    related: [2070-mtf9]
+    events:
+      - {type: filed, ts: '2026-11-10T06:39:45Z', host: lenovinha-silverblue, summary: filed p1 and claimed in_progress by lenovinha-silverblue}

@@ -1,4 +1,4 @@
-# @trace order:2055-grzz
+# @trace order:2055-grzz, order:2055-d9sa
 """audio-tool: the audio studio appliance's one entrypoint.
 
 Runs INSIDE images/audio-studio only (--network=none, uid 1001). The tray's
@@ -10,6 +10,7 @@ prints {"error": "<code>: <detail>"} and exits 2.
   audio-tool versions
   audio-tool detect --input <file> [--loop]
   audio-tool transform --op <op> --input <file> --output <file> [--param k=v ...]
+  audio-tool tiers --stems <dir> --tiers <json> --output <dir> [--param target_lufs=N]
 
 Paths must be under /work/tmp/audio (the lane's audio scratch volume).
 
@@ -51,6 +52,16 @@ def under_root(path, must_exist):
         refuse(f"invalid_arguments: {path!r} is not under {ROOT}/")
     if must_exist and not os.path.isfile(real):
         refuse(f"input_missing: {path} is not a file")
+    return real
+
+
+def under_dir(path):
+    """An absolute directory path under ROOT (it need not exist yet)."""
+    if not path or not os.path.isabs(path):
+        refuse(f"invalid_arguments: {path!r} is not an absolute path under {ROOT}/")
+    real = os.path.realpath(path)
+    if not real.startswith(ROOT + "/"):
+        refuse(f"invalid_arguments: {path!r} is not under {ROOT}/")
     return real
 
 
@@ -336,9 +347,87 @@ def transform(op, src, dst, params):
     return {"op": op, "input": src, "output": dst, "params": params, "argv": argv, "measurements": meas}
 
 
+# --------------------------------------------------------------- tiers
+# @trace order:2055-d9sa
+
+def tiers(stems_dir, spec, out_dir, params):
+    """Cumulative mixes from separated stems (vertical layering, 2055-d9sa).
+
+    stems_dir holds one <name>.wav/.flac per stem, all at one sample rate and
+    length. spec is a JSON list of tiers; each tier lists EVERY stem it
+    contains (["drums"], ["drums", "bass"], ...), so a tier never depends on
+    the order of the others. Each tier's mix is the plain sum of its stems
+    times ONE gain that brings it to target_lufs (pyloudnorm, BS.1770), so a
+    mix contains exactly its stems: no per-stem rebalancing, no song form.
+    Written as 32-bit float WAV, tier-<n>.wav, n from 1.
+    """
+    import numpy as np
+    import soundfile as sf
+
+    target = num(params, "target_lufs", -16.0, -40.0, -5.0)
+    allow_clip = str(params.get("allow_clip", "false")).lower() == "true"
+    try:
+        plan = json.loads(spec)
+    except (TypeError, ValueError) as e:
+        refuse(f"invalid_arguments: --tiers is not JSON: {e}")
+    if not (isinstance(plan, list) and plan and all(
+            isinstance(t, list) and t and all(isinstance(s, str) and s for s in t) for t in plan)):
+        refuse("invalid_arguments: --tiers must be a non-empty list of non-empty lists of stem names")
+    if not os.path.isdir(stems_dir):
+        refuse(f"input_missing: {stems_dir} is not a directory")
+    stems, sr, length = {}, None, None
+    for name in sorted(os.listdir(stems_dir)):
+        base, e = os.path.splitext(name)
+        if e.lower() not in (".wav", ".flac"):
+            continue
+        data, rate = sf.read(os.path.join(stems_dir, name), dtype="float64", always_2d=True)
+        if sr is None:
+            sr, length, channels = rate, data.shape[0], data.shape[1]
+        if rate != sr or data.shape[0] != length or data.shape[1] != channels:
+            refuse(f"invalid_arguments: stem {name} is {rate} Hz x {data.shape[0]} x {data.shape[1]}ch; "
+                   f"every stem must match {sr} Hz x {length} x {channels}ch")
+        if base in stems:
+            refuse(f"invalid_arguments: two files name stem {base!r}")
+        stems[base] = data
+    for t in plan:
+        for s in t:
+            if s not in stems:
+                refuse(f"invalid_arguments: tier {t} names stem {s!r}; the stems are {sorted(stems)}")
+        if len(set(t)) != len(t):
+            refuse(f"invalid_arguments: tier {t} names a stem twice")
+    import pyloudnorm as pyln
+    meter = pyln.Meter(sr)
+    planned = []
+    for n, t in enumerate(plan, 1):
+        mix = sum(stems[s] for s in t)
+        before = meter.integrated_loudness(mix)
+        if not np.isfinite(before):
+            refuse(f"invalid_arguments: tier {n} ({'+'.join(t)}) is silent; its loudness is undefined")
+        gain_db = target - before
+        out = mix * 10.0 ** (gain_db / 20.0)
+        peak = float(np.abs(out).max())
+        if peak > 1.0 and not allow_clip:
+            refuse(f"would_clip: tier {n} ({'+'.join(t)}) at {target} LUFS peaks at {20 * np.log10(peak):.1f} dBFS; "
+                   "lower target_lufs or pass allow_clip=true")
+        planned.append((n, t, out, before, gain_db, peak))
+    os.makedirs(out_dir, exist_ok=True)
+    written = []
+    for n, t, out, before, gain_db, peak in planned:
+        dst = os.path.join(out_dir, f"tier-{n}.wav")
+        if os.path.exists(dst):
+            refuse(f"output_exists: {dst}")
+        sf.write(dst, out, sr, subtype="FLOAT")
+        written.append({"tier": n, "stems": t, "output": dst, "gain_db": round(float(gain_db), 3),
+                        "lufs_before": round(float(before), 2),
+                        "lufs_after": round(float(meter.integrated_loudness(out)), 2),
+                        "peak_dbfs": round(float(20 * np.log10(max(peak, 1e-12))), 2)})
+    return {"op": "tiers", "stems_dir": stems_dir, "stems": sorted(stems), "sample_rate": sr,
+            "target_lufs": target, "tiers": written}
+
+
 def main(argv):
     if not argv:
-        refuse("invalid_arguments: usage: audio-tool versions | detect --input F [--loop] | transform --op OP --input F --output F [--param k=v ...]")
+        refuse("invalid_arguments: usage: audio-tool versions | detect --input F [--loop] | transform --op OP --input F --output F [--param k=v ...] | tiers --stems DIR --tiers JSON --output DIR [--param target_lufs=N]")
     cmd, rest = argv[0], argv[1:]
     opts, params, flags = {}, {}, set()
     i = 0
@@ -347,7 +436,7 @@ def main(argv):
         if k in ("--loop",):
             flags.add(k)
             i += 1
-        elif k in ("--input", "--output", "--op") and i + 1 < len(rest):
+        elif k in ("--input", "--output", "--op", "--stems", "--tiers") and i + 1 < len(rest):
             opts[k] = rest[i + 1]
             i += 2
         elif k == "--param" and i + 1 < len(rest) and "=" in rest[i + 1]:
@@ -360,6 +449,11 @@ def main(argv):
         result = versions()
     elif cmd == "detect":
         result = detect(under_root(opts.get("--input"), True), "--loop" in flags)
+        result["versions"] = versions()
+    elif cmd == "tiers":
+        stems_dir = under_dir(opts.get("--stems"))
+        out_dir = under_dir(opts.get("--output"))
+        result = tiers(stems_dir, opts.get("--tiers"), out_dir, params)
         result["versions"] = versions()
     elif cmd == "transform":
         src = under_root(opts.get("--input"), True)
