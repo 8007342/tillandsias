@@ -1,5 +1,5 @@
 -- @env PATH HOME XDG_RUNTIME_DIR
--- @trace order:2055-grzz, order:2066-azxa
+-- @trace order:2055-grzz, order:2066-azxa, order:2072-tap8
 --
 -- test-audio-studio-glitches.lua — the audio studio's glitch detector
 -- (images/audio-studio/audio-tool, `detect`) finds each of the five fault
@@ -16,6 +16,9 @@
 --   clipping       x10 gain clamped to full scale over [2.300, 2.400] s
 --                  (5 ms gain ramps)
 --   loop_seam      the clean signal cut at 2.9876 s: looping it jumps
+-- Then (2072-tap8) a 4 s drum loop and its rolled and crossfaded variants,
+-- which must come back CLEAN, and the same loop with a planted click, a 1 ms
+-- dropout, which must still be found (see the block below).
 -- Before any verdict the fixture asserts each planted fault is really in the
 -- samples it wrote (a zero run, a full-scale run, the spike), so a generator
 -- bug cannot pass as a detector pass.
@@ -111,6 +114,107 @@ do
     files[#files].jump = math.abs(c[cut + 1] - c[1])
 end
 
+-- 2072-tap8: PERCUSSIVE controls, shaped like kumbias' v56.11.10.1
+-- calibration set (rolled loops, a 20 ms crossfade, a full drum mix), which
+-- the detector flagged although nothing is wrong with them. Synthetic
+-- stand-ins until kumbias' own files are admitted. 4 s = two bars at 120 bpm:
+-- kick on the beats, snare on the off-beats, a hi-hat on every eighth, each
+-- with a 1 ms attack, over 40 tones at 100..4000 Hz. Pre-fix (audio-tool 1)
+-- every control reports beat-grid clicks at the onsets, 4-24 kHz holes
+-- between the hats, and a loop_seam (level step 24 dB on the circular loop,
+-- residual ratio over 12 on the roll), and the planted 1 ms dropout is missed.
+local PN = SR * 4
+local function noise()  -- uniform, unit variance
+    return (rnd() * 2 - 1) * 1.7320508
+end
+local function hit(kind)
+    local L, s = math.floor(0.4 * SR), {}
+    local prev1, prev2 = 0.0, 0.0
+    for i = 1, L do
+        local u = (i - 1) / SR
+        local v
+        if kind == "kick" then
+            v = math.sin(2 * math.pi * (50 * u + 40 * (1 - math.exp(-u / 0.03)) * 0.03)) * math.exp(-u / 0.12) * 0.5
+        elseif kind == "snare" then
+            v = noise() * math.exp(-u / 0.06) * 0.15 + math.sin(2 * math.pi * 190 * u) * math.exp(-u / 0.05) * 0.2
+        else  -- hat: second difference of white noise (a crude high-pass)
+            local nz = noise(); v = (nz - 2 * prev1 + prev2) * math.exp(-u / 0.02) * 0.05
+            prev2, prev1 = prev1, nz
+        end
+        if i <= 48 then v = v * (i - 1) / 48 end  -- 1 ms attack
+        s[i] = v
+    end
+    return s
+end
+local function bed(len, detune)
+    local x, ph = {}, {}
+    for f = 100, 4000, 100 do ph[#ph + 1] = { w = 2 * math.pi * (f + detune) / SR, p = rnd() * 2 * math.pi } end
+    for n = 0, len - 1 do
+        local v = 0.0
+        for _, t in ipairs(ph) do v = v + 0.004 * math.sin(t.w * n + t.p) end
+        x[n + 1] = v
+    end
+    return x
+end
+local function drums(x, bars_beats, circular)
+    local len = #x
+    local function place(s, at)
+        local i0 = math.floor(at * SR)
+        for k = 1, #s do
+            local j = i0 + k
+            if circular then x[(j - 1) % len + 1] = x[(j - 1) % len + 1] + s[k]
+            elseif j <= len then x[j] = x[j] + s[k] end
+        end
+    end
+    for b = 0, bars_beats - 1 do place(hit(b % 2 == 0 and "kick" or "snare"), b * 0.5) end
+    for e = 0, 2 * bars_beats - 1 do place(hit("hat"), e * 0.25) end
+    return x
+end
+local LOOP = drums(bed(PN, 0), 8, true)          -- integer cycles, hits wrapped: seamless
+local function copy(x) local y = {}; for i = 1, #x do y[i] = x[i] end; return y end
+local function roll(x, t)
+    local k, y = math.floor(t * SR + 0.5), {}
+    for i = 1, #x do y[i] = x[(i - 1 + k) % #x + 1] end
+    return y
+end
+local function clean_ctrl(f) for i = 1, #f.x do if math.abs(f.x[i]) >= 0.99 then return false end end; return #f.x == PN end
+add("drum_loop", nil, copy(LOOP), nil, nil, true); files[#files].premise = clean_ctrl
+-- Rolled: the wrap plays two ADJACENT original samples, so it is continuous.
+add("drum_rolled_after_snare", nil, roll(LOOP, 0.51), nil, nil, true); files[#files].premise = clean_ctrl
+add("drum_rolled_before_kick", nil, roll(LOOP, 1.98), nil, nil, true); files[#files].premise = clean_ctrl
+-- Rolled to land just AFTER an onset: still continuous, but the wrap's
+-- residual ratio reads like the loop's loudest interior points (19.7 on the
+-- kick, over any fixed floor of 12), so only judging the wrap against the
+-- loop's own interior keeps these clean.
+add("drum_rolled_on_kick", nil, roll(LOOP, 1.0 + 80 / SR), nil, nil, true); files[#files].premise = clean_ctrl
+add("drum_rolled_on_snare", nil, roll(LOOP, 0.5 + 56 / SR), nil, nil, true); files[#files].premise = clean_ctrl
+add("drum_rolled_on_hat", nil, roll(LOOP, 0.25 + 200 / SR), nil, nil, true); files[#files].premise = clean_ctrl
+do  -- a non-looping 4.5 s take (detuned bed, hits not wrapped), its tail
+    -- crossfaded over the head for 20 ms, then cut to 4 s
+    local take = drums(bed(math.floor(4.5 * SR), 0.37), 9, false)
+    local x, X = {}, math.floor(0.020 * SR)
+    for i = 1, PN do x[i] = take[i] end
+    for i = 1, X do local g = (i - 1) / (X - 1); x[i] = x[i] * g + take[PN + i] * (1 - g) end
+    add("drum_crossfaded", nil, x, nil, nil, true); files[#files].premise = clean_ctrl
+end
+do  -- the planted faults must still be found in the drum mix
+    local x = copy(LOOP); local i = idx(1.37); x[i] = x[i] + 0.3
+    add("drum_click", "click", x, 1.37, 1.37 + 1 / SR, true)
+    files[#files].premise = function(f) return math.abs(f.x[i] - f.x[i - 1]) > 0.2 and math.abs(f.x[i] - f.x[i + 1]) > 0.2 end
+end
+do
+    local x = copy(LOOP); local i0 = idx(1.2)
+    for i = i0, i0 + 47 do x[i] = 0.0 end
+    add("drum_dropout_1ms", "dropout", x, 1.2, 1.2 + 48 / SR, true)
+    files[#files].premise = function(f) for i = i0, i0 + 47 do if f.x[i] ~= 0 then return false end end; return f.x[i0 - 1] ~= 0 and f.x[i0 + 48] ~= 0 end
+end
+-- No synthetic DRUM seam arm, measured: in this loop a hard cut jumping 0.33
+-- onto the next bar's kick+hat onset reads residual_ratio 14.7, the same as
+-- the continuous roll inside a snare (11.7), and a 0.09 jump onto a quiet bed
+-- reads 5.4, so no seam rule could tell them apart here. The loop_seam arm
+-- above (the tonal cut) is the in-repo seam catch; kumbias' off-wrap cut of a
+-- real game loop (residual_ratio 287) is measured in their forge (2072-tap8).
+
 -- PREMISE: each planted fault is in the samples (before any detector runs).
 local function premise(f)
     local x = f.x
@@ -132,7 +236,9 @@ local function premise(f)
     return #x == N
 end
 for _, f in ipairs(files) do
-    if not premise(f) then verdict.emit("violation:audio-studio-glitches:premise:" .. f.name, 1, "the planted fault is not in the generated samples") end
+    local held
+    if f.premise then held = f.premise(f) else held = premise(f) end
+    if not held then verdict.emit("violation:audio-studio-glitches:premise:" .. f.name, 1, "the planted fault is not in the generated samples") end
 end
 
 -- 16-bit PCM WAV.
