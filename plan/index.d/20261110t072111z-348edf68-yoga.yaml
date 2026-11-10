@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: audio-detect-glitches-answers-on-real-length-files-and-a-runaway-call-dies-at-a-container-deadline
+    field: status
+    value: completed
+    ts: "2026-11-10T07:21:11Z"
+    host: yoga
+
+events:
+  - packet_id: audio-detect-glitches-answers-on-real-length-files-and-a-runaway-call-dies-at-a-container-deadline
+    event:
+      type: completed
+      ts: "2026-11-10T07:21:11Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: #1048 67ee5cf89; test-audio-studio-glitches.lua 12 arms on trunk b5db7999e, 90 s arm 2.2 s
+  - packet_id: audio-detect-glitches-answers-on-real-length-files-and-a-runaway-call-dies-at-a-container-deadline
+    event:
+      type: note
+      ts: "2026-11-10T07:21:11Z"
+      host: yoga
+      summary: |-
+        landed; closure reproduced on trunk 2026-11-10 (yoga closure sweep, coordinator-approved)
