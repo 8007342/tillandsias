@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: test-json-query-jq-parity-feeds-each-case-without-a-pipe-so-a-null-input-case-cannot-be-sigpiped
+    order: 2079-sgp4
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, fixture, flake, land-queue]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-json-query-jq-parity.sh
+      - openspec/litmus-tests/litmus-json-get-parity-binary-swap.yaml
+    title: |
+      test-json-query-jq-parity still fails a -n case under load (mismatch:75:null got rc=141): the case input is piped from printf under pipefail, and a -n run exits without reading stdin, so the writer is SIGPIPEd
+    context: |
+      Reported 2026-11-10 by coordinator macuahuitl-fedora: #1079 evicted on macuahuitl, gate log target/land-queue-logs/20261110T183819Z-2452798/pr-1079-gate.log near line 12740, "mismatch:75:null want: null|rc=0 got: null|rc=141 stderr: (empty)". The 2073-i4jr snapshot holds; its diagnostics named this. READ on lenovinha: run_case does printf '%s' "$input" | "$PLAN" json get ... under set -o pipefail. Corpus cases 75 and 76 (both earlier evictions) are -n: the binary never reads stdin, so when it exits before printf writes, printf dies of SIGPIPE and pipefail reports 141 for a correct answer.
+    exit_criteria:
+      - 'a planted -n case with input larger than the pipe buffer is SIGPIPEd (rc=141) on trunk and passes with the fix'
+      - 'run_case feeds input from a file, not a pipe, for both jq and the binary'
+    verifiable_closure: 'litmus:json-get-parity-binary-swap sigpipe step red on trunk, green after; the guard 79/79'
+    unscoreable: 'none.'
+    next_action: 'Feed each case from a scratch file; red with a 100 KB -n case in a planted tree.'
+    provenance: coordinator macuahuitl-fedora 2026-11-10; filed and claimed by lenovinha-silverblue.
+    depends_on: []
+    related: [2073-i4jr]
+    events:
+      - {type: filed, ts: '2026-11-10T19:03:01Z', host: lenovinha-silverblue, summary: filed p1 and claimed in_progress by lenovinha-silverblue}

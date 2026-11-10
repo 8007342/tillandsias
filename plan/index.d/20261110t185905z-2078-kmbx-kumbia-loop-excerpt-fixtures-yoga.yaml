@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-10 at the coordinator's direction (macuahuitl-fedora), after the operator ruling on real kumbia excerpts. Code is cited by symbol, never by line.
+packets:
+  - packet_id: glitch-detector-fixture-reads-real-kumbia-loop-excerpts-beside-its-synthetic-arms
+    order: 2078-kmbx
+    status: ready
+    kind: test
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [audio, studio, fixtures, lua]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/test-audio-studio-glitches.lua
+      - tests/fixtures/audio/kumbia/LICENSE.md
+    title: "test-audio-studio-glitches.lua also runs the detector over real kumbia loop excerpts (about 2 s around each loop point, under 10 MB in all, with a LICENSE.md provenance note), so a calibration that only fits the synthetic drum loop cannot pass"
+    context: |
+      OPERATOR RULING 2026-11-10 (macuahuitl-fedora relay): real kumbia excerpts are allowed as detector fixtures in the tillandsias repo. Keep them to about 2 s around each loop point and under 10 MB in total, with a LICENSE.md provenance note (they are the project's own ACE-Step renders). Coordinate the excerpt set with kumbias-forge.
+      Today the 2072-tap8 calibration is proven only on a synthetic 4 s drum loop the fixture builds in Lua. The false positives it fixed came from kumbias' real controls on v56.11.10.1: rolled loops (garden low, bar low, billiards mid), a 20 ms crossfade, the full mixes and their HPSS parts, held at /work/tmp/audio/calib/ in kumbias-forge. No real audio is in the repo yet.
+      Each excerpt is cut around a loop point, so it spans the wrap: the detector's loop_seam and level-step arms see the real seam. They are stored losslessly (FLAC) with their sha256, so the fixture asserts the bytes before any verdict.
+    exit_criteria:
+      - "tests/fixtures/audio/kumbia/ holds the excerpt set agreed with kumbias-forge: each about 2 s around a loop point, under 10 MB in total (the fixture asserts the sum), each with its sha256 recorded in the fixture, and a LICENSE.md naming the source track, the ACE-Step render, the project and the operator ruling of 2026-11-10."
+      - "test-audio-studio-glitches.lua runs the detector over every excerpt. The clean controls (rolled loops, the crossfade, the mixes and their HPSS parts) return zero findings. A hard-cut wrap made from one excerpt is reported as loop_seam, and a click planted into one is reported at its planted time."
+      - "The synthetic arms keep passing. Pre-fix result: the fixture has no real-audio arm, so its arm count does not include them; a detector reverted to the pre-2072-tap8 thresholds reports findings on the rolled-loop excerpts."
+    verifiable_closure: "tillandsias-plan script run scripts/lua/test-audio-studio-glitches.lua answers ok with the excerpt arms counted. With the detector reverted to its pre-2072-tap8 loop-seam threshold, the rolled-loop excerpt arm FAILS."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the excerpt arms and their hash assertions land in the same commit as the files (1136-n8sh).
+    next_action: >
+      Ask kumbias-forge for the excerpt set (which loops, which loop points, and the render each came from); cut the excerpts inside the audio studio; add the files, their hashes and LICENSE.md; add the arms.
+    provenance: |
+      Operator ruling relayed by macuahuitl-fedora 2026-11-10; yoga source read of test-audio-studio-glitches.lua and the 2072-tap8 row.
+    events:
+      - type: filed
+        ts: "2026-11-10T18:59:05Z"
+        host: yoga
+        summary: "filed at the coordinator's direction after the operator's excerpt ruling; yoga takes it"

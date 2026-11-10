@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-10 at the coordinator's direction (macuahuitl-fedora), from a gap noticed while landing 2068-cqis. Code is cited by symbol, never by line.
+packets:
+  - packet_id: stack-ledger-credits-every-package-a-pip-lock-file-installs-with-its-declared-licence
+    order: 2077-pylk
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [credits, licences, images, lua]
+    estimated_hours: 3
+    owned_files:
+      - scripts/lua/build-stack-ledger.lua
+      - scripts/lua/build-package-licence-register.lua
+      - docs/credits/stack.v1.json
+      - docs/credits/package-licences.tsv
+    title: "docs/credits/stack.v1.json credits none of the packages a Containerfile installs with pip -r <lock file>: the audio studio's requirements.lock (tqdm, demucs, librosa, scipy and the rest) collapses into one pypi:requirements:audio-studio node with version and licence unknown"
+    context: |
+      build-stack-ledger.lua reads a Containerfile's pip lines; a named package becomes a pypi:<name> node, but `pip install -r <file>` becomes ONE node, pypi:requirements:<image>, with version "unknown", no licence, and the link_note "a requirements file resolved at image build; its members are not enumerated in this tree". That note is false for the audio studio: images/audio-studio/requirements.lock pins every transitive package at an exact version (2055-grzz, 2068-cqis). The imagegen-studio's locks/*.txt and the imagegen-corridorkey requirements take the same path.
+      So the audio-studio Containerfile's claim "Every package it carries is credited with its upstream licence in docs/credits/stack.v1.json" is not true today. tqdm ("MPL-2.0 AND MIT", allowed unmodified by operator ruling 2026-11-10) is the case that surfaced it: no node names it at all.
+      Versions can come from the lock file; licences cannot, and must not be guessed. The source of truth is the installed package's own metadata inside the locally built image (importlib.metadata's License-Expression, else License / the classifiers), the way build-package-licence-register.lua asks the package manager for distro packages. That register's IMAGES list also omits audio-studio, so even its distro packages (sox, rubberband, ffmpeg) are unregistered.
+    exit_criteria:
+      - "Every package in a lock file a Containerfile installs with `pip install -r` is its own pypi:<name> node at the lock's exact version, with an edge from its image; the pypi:requirements:<image> placeholder and its false link_note are gone for lock files that enumerate their members."
+      - "Each such node's licence is the one the package's installed metadata declares inside the locally built image, recorded in a register beside package-licences.tsv; a package whose metadata declares none stays unknown, never guessed. pypi:tqdm reads MPL-2.0 AND MIT."
+      - "build-package-licence-register.lua asks the audio-studio image too."
+      - "build-stack-ledger.lua --check is fresh on the regenerated ledger. Pre-fix result: no pypi:tqdm node exists (grep -c '\"id\": \"pypi:tqdm\"' docs/credits/stack.v1.json is 0)."
+    verifiable_closure: "After regenerating, docs/credits/stack.v1.json has a pypi:tqdm node at 4.70.1 with licence MPL-2.0 AND MIT and an edge from image:audio-studio, and tillandsias-plan script run scripts/lua/build-stack-ledger.lua -- --check answers ok:stack-ledger:fresh. Pre-fix result: FAILS (no pypi:tqdm node)."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds a fixture over a fake lock file and a fake register in the same commit (1136-n8sh); the licence half needs a built image, so its measurement is the regenerated ledger.
+    next_action: >
+      Parse lock files named by `pip install -r` into per-package nodes; extend the licence register to ask each built image's Python for installed-package licences; add audio-studio to its IMAGES.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-10 ("file the stack-ledger gap row"); yoga source read of build-stack-ledger.lua (the pip -r branch) and build-package-licence-register.lua (IMAGES) at trunk.
+    events:
+      - type: filed
+        ts: "2026-11-10T18:38:48Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; the tqdm ruling surfaced it"
