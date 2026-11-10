@@ -1449,7 +1449,7 @@ async function loadAll() {
   const [tracesRes, sheetsRes, dashRes] = await Promise.all([
     fetchFirst([sourcePath('TRACES.md'), '/TRACES.md']),
     fetchFirst([sourcePath('cheatsheets/INDEX.md'), '/cheatsheets/INDEX.md']),
-    fetchFirst([sourcePath('docs/convergence/centicolon-dashboard.json'), '/docs/convergence/centicolon-dashboard.json'], 'json')
+    fetchFirst([sourcePath('target/convergence/centicolon-dashboard.json'), '/target/convergence/centicolon-dashboard.json'], 'json')
   ]);
   
   if (tracesRes.path && !tracesRes.path.startsWith('/source/')) {

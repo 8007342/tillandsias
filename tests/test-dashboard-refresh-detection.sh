@@ -56,22 +56,26 @@ if [[ ! -x "$REPO_ROOT/.git/hooks/post-commit" ]]; then
 fi
 echo "✓ installed post-commit hook is executable"
 
+# 2066-obsv: no dashboard is committed; check a fresh render under target/.
+DASHBOARD_MD="$REPO_ROOT/target/convergence/centicolon-dashboard.md"
+bash "$REPO_ROOT/scripts/update-convergence-dashboard.sh" >/dev/null 2>&1 || { echo "✗ dashboard render failed"; exit 1; }
+
 # Verify dashboard file has refresh metadata
-if ! grep -q "Last regenerated:" "$REPO_ROOT/docs/convergence/centicolon-dashboard.md"; then
+if ! grep -q "Last regenerated:" "$DASHBOARD_MD"; then
     echo "✗ dashboard file missing refresh timestamp metadata"
     exit 1
 fi
 echo "✓ dashboard file has refresh timestamp metadata"
 
 # Verify dashboard has OBS-008 annotation
-if ! grep -q "gap:OBS-008" "$REPO_ROOT/docs/convergence/centicolon-dashboard.md"; then
+if ! grep -q "gap:OBS-008" "$DASHBOARD_MD"; then
     echo "✗ dashboard file missing gap:OBS-008 annotation"
     exit 1
 fi
 echo "✓ dashboard file has gap:OBS-008 annotation"
 
 # Verify refresh policy mentions auto-detection
-if ! grep -q "Committing changes to.*TRACES.md.*triggers an automatic" "$REPO_ROOT/docs/convergence/centicolon-dashboard.md"; then
+if ! grep -q "Committing changes to.*TRACES.md.*triggers an automatic" "$DASHBOARD_MD"; then
     echo "✗ dashboard refresh policy doesn't mention TRACES.md auto-detection"
     exit 1
 fi

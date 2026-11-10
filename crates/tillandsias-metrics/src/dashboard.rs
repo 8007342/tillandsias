@@ -3,7 +3,7 @@
 //! `emit_dashboard_metric` writes a named metric value to the tracing
 //! subscriber so any sink (file logger, journald, etc.) can pick it up.
 //! `DashboardSnapshot` is the shape the convergence dashboard expects under
-//! its `metrics` key (see `docs/convergence/centicolon-dashboard.json`).
+//! its `metrics` key (see `target/convergence/centicolon-dashboard.json`).
 //!
 //! @trace spec:observability-metrics, spec:observability-convergence
 //! @cheatsheet observability/cheatsheet-metrics.md

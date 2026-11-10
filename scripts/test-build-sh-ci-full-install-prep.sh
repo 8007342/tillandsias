@@ -101,7 +101,7 @@ for output in \
 done
 
 grep -F 'DASHBOARD_FILE="$SCRIPT_DIR/target/convergence/centicolon-dashboard.json"' "$BUILD_SH" >/dev/null
-grep -F 'DASHBOARD_FILE="${DASHBOARD_FILE:-$PROJECT_ROOT/docs/convergence/centicolon-dashboard.json}"' "$EVIDENCE_SCRIPT" >/dev/null
+grep -F 'DASHBOARD_FILE="${DASHBOARD_FILE:-$PROJECT_ROOT/target/convergence/centicolon-dashboard.json}"' "$EVIDENCE_SCRIPT" >/dev/null
 grep -F 'TILLANDSIAS_STATUS_CHECK_BIN="$INSTALL_BIN"' "$BUILD_SH" >/dev/null
 grep -F '"$INSTALL_BIN" --init' "$BUILD_SH" >/dev/null
 
@@ -125,10 +125,10 @@ fi
 
 fixture_dir="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-dashboard-local.XXXXXX")"
 trap 'rm -rf "$fixture_dir"' EXIT
+# 2066-obsv: no dashboard is committed; a render never creates one under docs/.
 tracked_md="$ROOT/docs/convergence/centicolon-dashboard.md"
 tracked_json="$ROOT/docs/convergence/centicolon-dashboard.json"
-tracked_md_before="$("${PORTABLE_SHA256[@]}" "$tracked_md")"
-tracked_json_before="$("${PORTABLE_SHA256[@]}" "$tracked_json")"
+test ! -e "$tracked_md" && test ! -e "$tracked_json"
 
 SOURCE=/dev/null \
     MD_OUT="$fixture_dir/centicolon-dashboard.md" \
@@ -139,7 +139,6 @@ SOURCE=/dev/null \
 
 test -s "$fixture_dir/centicolon-dashboard.md"
 "$JQ" -e . "$fixture_dir/centicolon-dashboard.json" >/dev/null
-test "$("${PORTABLE_SHA256[@]}" "$tracked_md")" = "$tracked_md_before"
-test "$("${PORTABLE_SHA256[@]}" "$tracked_json")" = "$tracked_json_before"
+test ! -e "$tracked_md" && test ! -e "$tracked_json"
 
 echo "ci-full-install-prep: ok"

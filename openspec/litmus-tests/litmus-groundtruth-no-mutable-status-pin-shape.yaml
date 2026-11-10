@@ -31,7 +31,7 @@ critical_path:
   # TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT lets each control supply a frozen
   # two-packet ledger it owns, so nothing in plan/ can ever move it again.
   - step: "NEGATIVE CONTROL: a case pinning status on a NON-TERMINAL packet is REFUSED"
-    command: "D=$(mktemp -d); mkdir -p \"$D/plan\" \"$D/cases\"; printf 'plan_index:\\n  version: v1\\n  steps:\\n    - packet_id: hermetic-ready-packet\\n      order: 9001\\n      title: \"non-terminal, owned by this fixture\"\\n      status: ready\\n      desired_release: v0.5\\n' > \"$D/plan/index.yaml\"; printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: hermetic-ready-packet\\n          status: ready\\n' > \"$D/cases/case.yaml\"; if TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT=\"$D\" scripts/check-groundtruth-mutable-status-pins.sh \"$D/cases\" >/dev/null 2>&1; then echo 'FAIL: a non-terminal status pin was admitted'; rm -rf \"$D\"; exit 1; fi; rm -rf \"$D\"; echo 'ok: non-terminal status pin refused'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; mkdir -p target; D=$(mktemp -d target/gt-pin.XXXXXX); mkdir -p \"$D/plan\" \"$D/cases\"; printf 'plan_index:\\n  version: v1\\n  steps:\\n    - packet_id: hermetic-ready-packet\\n      order: 9001\\n      title: \"non-terminal, owned by this fixture\"\\n      status: ready\\n      desired_release: v0.5\\n' > \"$D/plan/index.yaml\"; printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: hermetic-ready-packet\\n          status: ready\\n' > \"$D/cases/case.yaml\"; out=$(TILLANDSIAS_PLAN_BIN=\"$MFPLAN\" TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT=\"$PWD/$D\" \"$MFPLAN\" script run scripts/lua/check-groundtruth-mutable-status-pins.lua -- \"$D/cases\" 2>/dev/null); rm -rf \"$D\"; case \"$out\" in violation:mutable-status-pin:1) echo 'ok: non-terminal status pin refused' ;; *) echo \"FAIL: a non-terminal status pin was not refused: $out\"; exit 1 ;; esac"
     timeout_ms: 20000
     expected_behavior: "ok: non-terminal status pin refused"
 
@@ -41,12 +41,12 @@ critical_path:
     # fine: before 865-x2mf a relative binary path inside the lookup's subshell
     # made every status resolve empty, every pin skip as "unknown packet", and
     # the verdict read `0 live-checked`.
-    command: "D=$(mktemp -d); mkdir -p \"$D/plan\" \"$D/cases\"; printf 'plan_index:\\n  version: v1\\n  steps:\\n    - packet_id: hermetic-done-packet\\n      order: 9002\\n      title: \"terminal, owned by this fixture\"\\n      status: completed\\n      desired_release: v0.5\\n' > \"$D/plan/index.yaml\"; printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: hermetic-done-packet\\n          status: completed\\n' > \"$D/cases/case.yaml\"; out=$(TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT=\"$D\" scripts/check-groundtruth-mutable-status-pins.sh \"$D/cases\" 2>/dev/null); rm -rf \"$D\"; printf '%s' \"$out\" | grep -q '^ok:groundtruth-status-pins:1 live-checked' && echo 'ok: terminal status pin admitted'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; mkdir -p target; D=$(mktemp -d target/gt-pin.XXXXXX); mkdir -p \"$D/plan\" \"$D/cases\"; printf 'plan_index:\\n  version: v1\\n  steps:\\n    - packet_id: hermetic-done-packet\\n      order: 9002\\n      title: \"terminal, owned by this fixture\"\\n      status: completed\\n      desired_release: v0.5\\n' > \"$D/plan/index.yaml\"; printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: hermetic-done-packet\\n          status: completed\\n' > \"$D/cases/case.yaml\"; out=$(TILLANDSIAS_PLAN_BIN=\"$MFPLAN\" TILLANDSIAS_GROUNDTRUTH_LEDGER_ROOT=\"$PWD/$D\" \"$MFPLAN\" script run scripts/lua/check-groundtruth-mutable-status-pins.lua -- \"$D/cases\" 2>/dev/null); rm -rf \"$D\"; printf '%s' \"$out\" | grep -q '^ok:groundtruth-status-pins:1 live-checked' && echo 'ok: terminal status pin admitted'"
     timeout_ms: 20000
     expected_behavior: "ok: terminal status pin admitted"
 
   - step: "the REAL groundtruth corpus is clean (no live non-terminal status pins)"
-    command: "mf_stage prod 0 OUT -- scripts/check-groundtruth-mutable-status-pins.sh && mf_holds_ere OUT '^ok:groundtruth-status-pins:[0-9]+ live-checked' && echo 'ok: real corpus clean'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; mf_stage prod 0 OUT -- env TILLANDSIAS_PLAN_BIN=\"$MFPLAN\" \"$MFPLAN\" script run scripts/lua/check-groundtruth-mutable-status-pins.lua && mf_holds_ere OUT '^ok:groundtruth-status-pins:[0-9]+ live-checked' && echo 'ok: real corpus clean'"
     timeout_ms: 20000
     expected_behavior: "ok: real corpus clean"
 
@@ -68,4 +68,4 @@ observability:
     test: "groundtruth-no-mutable-status-pin-shape"
 
 rollback:
-  on_failure: "restore scripts/check-groundtruth-mutable-status-pins.sh and the rung1 de-pin from git history"
+  on_failure: "restore scripts/lua/check-groundtruth-mutable-status-pins.lua (ported from the .sh under 2066-obsv) and the rung1 de-pin from git history"

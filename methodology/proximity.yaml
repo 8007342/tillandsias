@@ -152,8 +152,8 @@ proximity:
       human: "Browse progress across releases from README-style markdown."
       agent: "Read deterministic JSON and choose the highest residual work."
     artifacts:
-      markdown_dashboard: "docs/convergence/centicolon-dashboard.md"
-      machine_summary: "docs/convergence/centicolon-dashboard.json"
+      markdown_dashboard: "target/convergence/centicolon-dashboard.md"
+      machine_summary: "target/convergence/centicolon-dashboard.json"
       per_release_summary: "target/convergence/summary.md"
       canonical_signature: "target/convergence/centicolon-signature.jsonl"
     renderer:
@@ -161,8 +161,8 @@ proximity:
       inputs:
         - "target/convergence/centicolon-signature.jsonl"
       outputs:
-        - "docs/convergence/centicolon-dashboard.md"
-        - "docs/convergence/centicolon-dashboard.json"
+        - "target/convergence/centicolon-dashboard.md"
+        - "target/convergence/centicolon-dashboard.json"
         - "target/convergence/summary.md"
     cadence:
       local:

@@ -2,15 +2,13 @@
 name: litmus:observability-convergence-shape
 spec: observability-convergence
 phase: pre-build
-description: Verify observability convergence scripts keep their spec trace hooks, dashboard contract is present in spec body and rendered artefacts, and source-of-truth integration is preserved.
+description: Verify observability convergence scripts keep their spec trace hooks, the dashboard is rendered under target/ and never committed (2066-obsv), its contract is present in the spec body and in a fresh render, and source-of-truth integration is preserved.
 severity: medium
 size: instant
 
 preconditions:
   - workspace contains scripts/release-preflight-local.sh
   - workspace contains scripts/update-convergence-dashboard.sh
-  - workspace contains docs/convergence/centicolon-dashboard.md
-  - workspace contains docs/convergence/centicolon-dashboard.json
   - shell utilities are available in PATH (grep, jq)
 
 critical_path:
@@ -23,13 +21,21 @@ critical_path:
     command: "grep -F 'Dashboard is a read-only projection' openspec/specs/observability-convergence/spec.md && grep -F 'Dashboard alert thresholds' openspec/specs/observability-convergence/spec.md && grep -F 'Dashboard trend metrics' openspec/specs/observability-convergence/spec.md"
     timeout_ms: 3000
 
+  - step: "a default render writes target/convergence and never docs/convergence (2066-obsv)"
+    # Behaviour, not source text: remove the local render, run the renderer with
+    # no MD_OUT/JSON_OUT, and check where it wrote. It regenerates the same local
+    # projection any CI run writes, from the real signature log.
+    command: "rm -f target/convergence/centicolon-dashboard.md target/convergence/centicolon-dashboard.json && env -u MD_OUT -u JSON_OUT TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && test -s target/convergence/centicolon-dashboard.md && test -s target/convergence/centicolon-dashboard.json && test ! -e docs/convergence/centicolon-dashboard.md && test ! -e docs/convergence/centicolon-dashboard.json && echo 'ok: dashboard rendered under target/, none committed'"
+    timeout_ms: 15000
+    expected_behavior: "ok: dashboard rendered under target/, none committed"
+
   - step: "verify rendered .md dashboard carries the auto-generation header and source-of-truth pointer"
-    command: "grep -F 'THIS FILE IS AUTO-GENERATED' docs/convergence/centicolon-dashboard.md && grep -F 'openspec/specs/knowledge-source-of-truth/spec.md' docs/convergence/centicolon-dashboard.md"
-    timeout_ms: 3000
+    command: "D=target/convergence/litmus-shape && mkdir -p $D && SOURCE=/dev/null MD_OUT=$D/d.md JSON_OUT=$D/d.json SUMMARY_OUT=$D/s.md TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && grep -F 'THIS FILE IS AUTO-GENERATED' $D/d.md && grep -F 'openspec/specs/knowledge-source-of-truth/spec.md' $D/d.md"
+    timeout_ms: 15000
 
   - step: "verify rendered .json dashboard exposes the dashboard contract, alert thresholds, and trend metrics"
-    command: "jq -e '.dashboard_contract.integration.source_of_truth == \"openspec/specs/knowledge-source-of-truth/spec.md\"' docs/convergence/centicolon-dashboard.json >/dev/null && jq -e '.alert_thresholds.red_below_percent_closed and .alert_thresholds.yellow_below_percent_closed' docs/convergence/centicolon-dashboard.json >/dev/null && jq -e 'has(\"trend_metrics\") and has(\"alert_level\")' docs/convergence/centicolon-dashboard.json >/dev/null"
-    timeout_ms: 5000
+    command: "D=target/convergence/litmus-shape && mkdir -p $D && SOURCE=/dev/null MD_OUT=$D/d.md JSON_OUT=$D/d.json SUMMARY_OUT=$D/s.md TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && jq -e '.dashboard_contract.integration.source_of_truth == \"openspec/specs/knowledge-source-of-truth/spec.md\"' $D/d.json >/dev/null && jq -e '.alert_thresholds.red_below_percent_closed and .alert_thresholds.yellow_below_percent_closed' $D/d.json >/dev/null && jq -e 'has(\"trend_metrics\") and has(\"alert_level\")' $D/d.json >/dev/null"
+    timeout_ms: 15000
 
   - step: "verify dashboard cheatsheet provenance is preserved"
     command: "grep -F '@trace spec:observability-convergence' docs/cheatsheets/centicolon-dashboard.md && grep -F 'Anti-Gaming Rules' docs/cheatsheets/centicolon-dashboard.md"
@@ -44,5 +50,5 @@ observability:
     test: "observability-convergence-shape"
 
 rollback:
-  on_failure: "inspect scripts/release-preflight-local.sh, scripts/update-convergence-dashboard.sh, and docs/convergence/ for drift; re-run scripts/update-convergence-dashboard.sh if the rendered artefacts are missing the contract sections"
-  command: "sed -n '1,40p' scripts/update-convergence-dashboard.sh && printf '\\n---\\n' && sed -n '1,40p' docs/convergence/centicolon-dashboard.md && printf '\\n---\\n' && jq '.dashboard_contract // \"missing\"' docs/convergence/centicolon-dashboard.json"
+  on_failure: "inspect scripts/release-preflight-local.sh and scripts/update-convergence-dashboard.sh for drift; re-run scripts/update-convergence-dashboard.sh (it writes target/convergence/) if a render is missing the contract sections"
+  command: "sed -n '1,40p' scripts/update-convergence-dashboard.sh && printf '\\n---\\n' && sed -n '1,40p' target/convergence/centicolon-dashboard.md && printf '\\n---\\n' && jq '.dashboard_contract // \"missing\"' target/convergence/centicolon-dashboard.json"
