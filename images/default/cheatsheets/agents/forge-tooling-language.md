@@ -14,6 +14,7 @@ tier: pull-on-demand
 summary_generated_by: hand-curated
 bundled_into_image: false
 committed_for_project: true
+pull_recipe: see-section-pull-on-demand
 ---
 # Tooling language in a forge: Lua > Rust > Go
 
@@ -43,3 +44,36 @@ All of `lua`, `cargo`, `rustc` and `go` are always on the forge PATH. The forge 
 ## Why
 
 A forge runs every process inside one fixed memory budget. A pool of Python `multiprocessing` workers with the `spawn` or `forkserver` start method puts a separate interpreter in each worker. On 2026-11-09 one forge stalled on exactly this kind of memory thrash. Lua stays small, and Rust and Go get parallelism from threads in a single process.
+
+## Pull on Demand
+
+> The languages are installed in the forge; only the upstream pages are not.
+> Pull the Python `multiprocessing` page when you need the start-method
+> details behind the "why" above. The proxy (HTTP_PROXY=http://proxy:3128)
+> handles the fetch.
+
+### Source
+
+- **Upstream URL(s):**
+  - `https://docs.python.org/3/library/multiprocessing.html`
+- **Archive type:** `single-html`
+- **Expected size:** `~0.5 MB`
+- **Cache target:** `~/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.python.org/3/library/multiprocessing.html`
+- **License:** see-license-allowlist
+- **License URL:** https://docs.python.org/3/license.html
+
+### Materialize recipe (agent runs this)
+
+```bash
+set -euo pipefail
+TARGET="$HOME/.cache/tillandsias/cheatsheets-pulled/$PROJECT/docs.python.org/3/library/multiprocessing.html"
+mkdir -p "$(dirname "$TARGET")"
+curl --fail --silent --show-error \
+  "https://docs.python.org/3/library/multiprocessing.html" \
+  -o "$TARGET"
+```
+
+### Generation guidelines (after pull)
+
+1. Read the pulled page for the start method your code uses.
+2. Cite it under `## Provenance` with `local: <cache target above>`.
