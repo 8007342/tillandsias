@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-restricted-weights-row-is-fetched-only-after-its-acknowledgement-through-the-model-hubs-tier
+    event:
+      type: completed
+      ts: "2026-11-10T07:22:38Z"
+      agent_id: linux-yoga-opus5-20261110t072237z
+      host: yoga
+      summary: |-
+        landed #1060 (b5db7999e); closure reproduced on trunk 951ef84ff 2026-11-10: cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias -- restricted_fetch -> 2 passed (a_restricted_row_is_fetched_only_with_its_acknowledgement_and_a_live_token: refused without the acknowledgement, without the token, fetched and hash-verified with both, refused on a wrong hash and a .th suffix, layout matches studio_key missing_weights; the_restricted_transport_goes_through_the_model_hubs_tier)
