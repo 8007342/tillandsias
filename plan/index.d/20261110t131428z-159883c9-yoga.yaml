@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: demucs-weights-are-converted-to-safetensors-registered-restricted-and-audio-separate-refuses-without-acknowledgement
+    field: status
+    value: completed
+    ts: "2026-11-10T13:14:28Z"
+    host: yoga
+
+events:
+  - packet_id: demucs-weights-are-converted-to-safetensors-registered-restricted-and-audio-separate-refuses-without-acknowledgement
+    event:
+      type: completed
+      ts: "2026-11-10T13:14:28Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: reproduced on trunk 5460adea3 (yoga toolbox): cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias -- audio_separate licence_consent -> 13 passed, 0 failed
+  - packet_id: demucs-weights-are-converted-to-safetensors-registered-restricted-and-audio-separate-refuses-without-acknowledgement
+    event:
+      type: note
+      ts: "2026-11-10T13:14:28Z"
+      host: yoga
+      summary: |-
+        landed by #1063 at 5684de3f9

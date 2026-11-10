@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tray-upgrade-hands-over-or-names-every-lane-still-served-by-an-older-launcher
+    field: status
+    value: implemented
+    ts: "2026-11-10T13:12:39Z"
+    host: lenovinha-silverblue
+
+events:
+  - packet_id: a-tray-upgrade-hands-over-or-names-every-lane-still-served-by-an-older-launcher
+    event:
+      type: note
+      ts: "2026-11-10T13:12:39Z"
+      host: lenovinha-silverblue
+      summary: |-
+        slice 1 #1061 at bc3efda03; slice 2 #1068 at 5460adea3
