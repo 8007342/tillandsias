@@ -647,13 +647,15 @@ else
     fail=$((fail + 1))
 fi
 
-if ! grep -qE 'deploy/observatorium|advance-deploy-ref' "$REAL_ROOT/scripts/promote-stable.sh"; then
-    printf 'ok   %-52s -> no reference left\n' "promote-stable.sh names no deploy ref"
-    pass=$((pass + 1))
-else
-    printf 'FAIL %-52s -> %s\n' "promote-stable.sh names no deploy ref" "$(grep -nE 'deploy/observatorium|advance-deploy-ref' "$REAL_ROOT/scripts/promote-stable.sh" | head -3 | tr '\n' ' ')"
-    fail=$((fail + 1))
-fi
+deploy_refs="$(grep -nE 'deploy/observatorium|advance-deploy-ref' "$REAL_ROOT/scripts/promote-stable.sh" || true)"
+case "$deploy_refs" in
+    '')
+        printf 'ok   %-52s -> no reference left\n' "promote-stable.sh names no deploy ref"
+        pass=$((pass + 1)) ;;
+    *)
+        printf 'FAIL %-52s -> %s\n' "promote-stable.sh names no deploy ref" "$(printf '%s\n' "$deploy_refs" | head -3 | tr '\n' ' ')"
+        fail=$((fail + 1)) ;;
+esac
 
 printf '\n%s/%s passed\n' "$pass" "$((pass + fail))"
 [ "$fail" -eq 0 ]
