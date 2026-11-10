@@ -70,6 +70,12 @@ measured limit of excerpts, recorded and not asserted: a seam judged with
 `--seam-at` inside a short excerpt cannot see a codec step that only the
 whole loop's fit magnifies.
 
-The FLAC files are the project's own work. They may be redistributed with
-this repository for testing, and used for nothing else without the project
-operator's permission.
+**What this note doesn't claim.** It is a provenance record, as kumbia-kombat's
+own `assets/music/LICENSE.md` is, and is not a licence. It makes no claim
+about copyright in this audio: that record explains why raw generated audio
+may not be protected. It doesn't warrant that a generated melody avoids
+resembling an existing work. The music was made from genre words, instrument
+words, tempo, key and seeds, with no artist, song, reference recording or
+third-party stem as input. The model card's own statement on using the
+output, and its upstream licences, are recorded in that file. This is a
+record, not legal advice.
