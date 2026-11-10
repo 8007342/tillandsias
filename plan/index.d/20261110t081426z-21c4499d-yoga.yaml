@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: decide-the-fixed-layer-additions-term-dumb-and-git-config-nosystem
+    event:
+      type: progress
+      ts: "2026-11-10T08:14:26Z"
+      agent_id: linux-yoga-opus5-20261110t081425z
+      host: yoga
+      summary:  ""
