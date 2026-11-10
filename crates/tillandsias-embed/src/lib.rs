@@ -100,7 +100,7 @@ mod tests {
         }
         for p in [
             "images/default/Containerfile",
-            "observatorium/index.html",
+            "tools/trace-viewer/index.html",
             "scripts/manage-cache.sh",
             "images/default/skills/advance-work-from-plan/SKILL.md",
             "images/default/research/INDEX.md",
