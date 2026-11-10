@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: check-plan-binary-current-reports-ok-on-a-content-stale-binary-and-never-rebuilds
+  order: 2068-9789
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - plan
+  - git-hooks
+  estimated_hours: 2
+  title: check-plan-binary-current.sh prints ok on a validator-surface-stale binary and never rebuilds, so the plan-only lane's remedy cannot clear its own refusal in a forge
+  context: 'Measured in the yolanda forge (WSL2, CARGO_TARGET_DIR=/home/forge/.cache/tillandsias-project/cargo/target, TILLANDSIAS_PLAN_BIN unset) on 2026-11-10 while filing 2067-8iyu. A plan-only push of one plan/index.d fragment to linux-next was refused: "plan-only lane: REFUSED — the resolved plan binary is STALE", resolved: $CARGO_TARGET_DIR/release/tillandsias-plan, via: embedded validator-surface hash — built-from=c88da1df5f569619 checkout=d13f320281ef3380. Its remedy and next-order''s both say scripts/check-plan-binary-current.sh "rebuilds and refreshes the installed copy". Running it (twice, on linux-next) printed stamped:plan-binary-validator-surface and ok:plan-binary-write-is-opt-in+role-satisfies ... arms=16/0 copies=3 path=/home/forge/.local/bin/tillandsias-plan, yet the release binary mtime stayed 2026-11-09T22:43:18 and the next push refused identically. Reading the script: it runs no cargo build; copies=3 is type -a counting PATH copies, not a refresh; its final ok verdict comes from the behaviour arms and does not fail when validator-surface-hash --check is not ok. The lane also printed "The resolved copy is ORPHANED: CARGO_TARGET_DIR is redirected to <the same directory the resolved copy is in>", which is false here, and suggested the debug build. Resolve order (scripts/plan-binary-probe.sh resolve_plan_binary): TILLANDSIAS_PLAN_BIN; $CARGO_TARGET_DIR/{release,debug}/tillandsias-plan[.exe]; ./target/{release,debug}/tillandsias-plan[.exe]; command -v tillandsias-plan, which on PATH resolves /home/forge/.local/bin (built from e2be3c0aad8184aa, 2026-11-08), then /usr/local/sbin and /usr/local/bin (a symlink to /usr/local/lib/tillandsias/policy-bin/tillandsias-plan, built from 429cc604161bbb6e).'
+  exit_criteria:
+  - 'check-plan-binary-current.sh either rebuilds (cargo build --release -p tillandsias-plan into the resolved CARGO_TARGET_DIR) or stops claiming it does, and never prints an ok verdict while validator-surface-hash --check on the judged binary is not ok.'
+  - 'The lane and next-order remedies name a command that clears the refusal they print.'
+  - 'The ORPHANED hint is not printed when the resolved copy lies under CARGO_TARGET_DIR.'
+  verifiable_closure: 'In a forge whose $CARGO_TARGET_DIR/release binary is validator-surface-stale for the checkout: the remedy command it names, run once, leaves validator-surface-hash --check ok and a plan-only fragment push is accepted; before the fix the same sequence refuses twice with the same built-from hash.'
+  provenance: yolanda forge 2026-11-10, filed at macuahuitl-fedora's request with the build hashes and resolve order.
+  events:
+  - type: created
+    ts: '2026-11-10T13:38:12Z'
+    host: yolanda
+    summary: filed with both build hashes, the lane's resolve order and the refresh script's no-rebuild ok
