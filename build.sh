@@ -6124,6 +6124,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Relay-preflight deleted-fixture check passed"
 
+    # ORDER 2065-skdk — relay-preflight runs its tray,listen-vsock pass for any
+    # tillandsias-headless source change, not only src/tray/ (#1034 was evicted
+    # at the land gate on tray tool-count pins its preflight never ran).
+    _step "Checking relay-preflight's tray pass trigger (2065-skdk)..."
+    if ! _run_lua_decider "scripts/lua/test-relay-preflight-tray-trigger.lua" 2>&1; then
+        _error "relay-preflight's tray,listen-vsock trigger skips a headless source change or runs for an unrelated one — see the FAIL lines above (2065-skdk)"
+        exit 1
+    fi
+    _info "Relay-preflight tray trigger check passed"
+
     # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
     # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.
     _step "Checking the discipline parser probes ruby by running it (1597-rrku)..."

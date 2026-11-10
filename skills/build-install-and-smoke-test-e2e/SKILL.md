@@ -3,6 +3,13 @@ name: build-install-and-smoke-test-e2e
 description: Build, install, and DESTRUCTIVELY smoke-test the current Tillandsias checkout on the host you are running on — Linux (Podman), macOS (Virtualization.framework VM), or Windows (WSL2). Detects the OS, builds + installs the locally built tray, irreversibly destroys the host's runtime substrate (Podman store / macOS VM dir / WSL2 distro), re-provisions from a pristine state, and — on Linux only — launches the forge with `/meta-orchestration`. Every issue observed is filed as a `plan/issues/` work packet.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Build, Install, and Smoke Test End-to-End (OS-aware)
 
 Validate the current checkout as a locally built operator workflow on **this

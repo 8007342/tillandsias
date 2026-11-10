@@ -8,6 +8,13 @@ metadata:
   invokedBy: /diagnose-forge
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 You are loading the **diagnose-forge** skill — the iterative forge improvement workflow for Big Pickle.
 
 This skill is designed for both unattended loop execution (`opencode run --command diagnose-forge`) and interactive TUI sessions (`/diagnose-forge`).
