@@ -27,11 +27,37 @@ import time
 SOCKET = os.environ.get("TILLANDSIAS_CONTROL_SOCKET", "/run/host/tillandsias-mcp/mcp.sock")
 PROJECT = os.environ.get("TILLANDSIAS_PROJECT", "")
 UNAVAILABLE = 69
+# 2069-f58n: how long the host may take to answer a request line. A socket
+# whose backlog accepts but which nothing serves (a tray mid handover) used to
+# hold this client in S with 0 s CPU for 40 min, and the forge test lock with it.
+REPLY_TIMEOUT_S = float(os.environ.get("TILLANDSIAS_FLUTTER_LANE_REPLY_TIMEOUT_S", "120") or 120)
+# A session whose host advertises heartbeat_s is silent after this many missed
+# beats. A host that advertises none (an older tray) is waited on as before.
+MISSED_BEATS = 4
 
 
 def die(msg):
     sys.stderr.write(f"flutter (tillandsias): {msg}\n")
     sys.exit(UNAVAILABLE)
+
+
+def silent(what, waited):
+    die(
+        f"host_lane=silent: the host accepted {what} on {SOCKET} but sent nothing for {waited:g} s "
+        "(the tray serving this lane is gone or restarting without serving it). "
+        "Retry; if it persists, restart the tray and tell the operator."
+    )
+
+
+def recv_reply(s, what):
+    """One recv bounded by REPLY_TIMEOUT_S; a silent host is a named error."""
+    s.settimeout(REPLY_TIMEOUT_S)
+    try:
+        return s.recv(65536)
+    except socket.timeout:
+        silent(what, REPLY_TIMEOUT_S)
+    finally:
+        s.settimeout(None)
 
 
 def connect():
@@ -61,7 +87,7 @@ def call(method, params, req_id=1):
         s.sendall((json.dumps({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}) + "\n").encode())
         buf = b""
         while b"\n" not in buf:
-            chunk = s.recv(65536)
+            chunk = recv_reply(s, params.get("name", method))
             if not chunk:
                 die("the host closed the connection without answering")
             buf += chunk
@@ -161,13 +187,16 @@ def run(argv):
 
     # The first line is the JSON-RPC answer: an error, or the session result.
     while b"\n" not in buf:
-        chunk = s.recv(65536)
+        chunk = recv_reply(s, "tillandsias/exec")
         if not chunk:
             die("the host closed the connection before the session started")
         buf += chunk
     first = next(frames())
     if "error" in first:
         die(first["error"].get("message", "the host refused the session"))
+    beat = (first.get("result") or {}).get("heartbeat_s")
+    silence = float(beat) * MISSED_BEATS if beat else None
+    heard = time.monotonic()
 
     def send(frame):
         try:
@@ -218,13 +247,16 @@ def run(argv):
                     return code
             watch = [s] + ([sys.stdin] if stdin_open else [])
             try:
-                ready, _, _ = select.select(watch, [], [])
+                ready, _, _ = select.select(watch, [], [], silence)
             except InterruptedError:
                 continue
+            if silence is not None and s not in ready and time.monotonic() - heard >= silence:
+                silent("the flutter session", silence)
             if s in ready:
                 chunk = s.recv(65536)
                 if not chunk:
                     return code
+                heard = time.monotonic()
                 buf += chunk
             if stdin_open and sys.stdin in ready:
                 data = os.read(sys.stdin.fileno(), 65536)
