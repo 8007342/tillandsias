@@ -211,6 +211,10 @@ const CK_FIELD: &str = "You may not use this tool to provide inference as a paid
 const CK_SEATS: &str = "If You are, or are using this tool on behalf of, a Legal Entity whose total gross revenue exceeded US $20,000,000 (twenty million US dollars) in its most recently completed fiscal year, the permissions in Section 1 do not apply unless that Legal Entity has purchased a seat of the CorridorKey plugin from the Licensor for each individual who uses this tool.";
 const CK_NC: &str = "This work is licensed under the Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International Public License [...] Use CorridorKey for whatever you'd like, including processing footage for commercial projects.";
 const MIT_NOTICE: &str = "The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.";
+// The Demucs README "License" section at adefossez/demucs commit 829d2189
+// (README sha256 2abed9c9…), quoted verbatim (2068-eeti).
+const DEMUCS_UNCLEAR: &str = "The license of the weights is not clear: MusDB contains some data that were only usable for research purpose. I sadly cannot help granting a license, both coming from Meta custom data, or from the original MusDB data.";
+const DEMUCS_6S: &str = "The 6 source variant of htdemucs was trained only on Meta internal dataset, which likely means CC-NC-BY license is applicable, as it was the case for all models released by FAIR.";
 const NVIDIA_UNREAD: &str = "the NVIDIA Open Model License Agreement (June 2024) is published only as a PDF at developer.download.nvidia.com, which this host could not fetch; its clauses are classed from the licence as remembered and are not quoted. Read it before relying on these classes.";
 
 /// The obligation table, keyed by licence id as the register spells it.
@@ -296,6 +300,25 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
                     detail: "US $20,000,000 gross revenue: a seat per user".into(),
                 },
                 CK_SEATS,
+            ),
+        ],
+        // 2068-eeti: Demucs htdemucs and htdemucs_6s. No licence is stated
+        // for the weights; the clauses are the maintainer's README "License"
+        // section (adefossez/demucs 829d2189). Operator ruling 2026-11-09:
+        // treat both as non-commercial, acknowledged per project.
+        "demucs-weights-unstated" => vec![
+            ob(
+                C::Attribution {
+                    text: "Demucs, Alexandre Défossez".into(),
+                },
+                DEMUCS_6S,
+            ),
+            ob(C::NonCommercial, DEMUCS_6S),
+            ob(
+                C::Review {
+                    clause: DEMUCS_UNCLEAR.into(),
+                },
+                DEMUCS_UNCLEAR,
             ),
         ],
         "mit" => vec![ob(C::Notice, MIT_NOTICE)],
@@ -1705,8 +1728,19 @@ pub(crate) mod tests {
             );
             assert_eq!(seed.slug(), slugify(&ack.covers[0]));
         }
-        // Every repo in the register is covered by one seed record.
+        // Every repo in the register is covered by one seed record, except
+        // Demucs: operator ruling 2026-11-09, acknowledged per project with
+        // NO standing grant (2068-eeti), so no seed may cover it.
         for r in &rows {
+            if r.spdx == "demucs-weights-unstated" {
+                assert!(
+                    !acks.iter().any(|a| a.covers.contains(&r.repo)),
+                    "{}: a standing seed covers {}; Demucs has no standing grant",
+                    r.name,
+                    r.repo
+                );
+                continue;
+            }
             assert!(
                 acks.iter()
                     .any(|a| a.covers.contains(&r.repo) && a.licence == r.spdx),
@@ -1753,17 +1787,25 @@ pub(crate) mod tests {
             fs::write(acks.join(signed.slug() + ".yaml"), signed.to_yaml()).unwrap();
         }
         let rows = parse_restricted(shipped).unwrap();
-        let artefacts: Vec<RestrictedArtefact> = rows
+        let to_artefact = |r: &RestrictedRow| RestrictedArtefact {
+            licence: r.spdx.clone(),
+            repo: r.repo.clone(),
+            revision: r.revision.clone(),
+            file: r.file.clone(),
+            sha256: r.sha256.clone(),
+        };
+        // The CorridorKey set the standing records cover; Demucs (2068-eeti)
+        // has no standing grant, so those records must NOT admit it.
+        let (demucs, ck): (Vec<&RestrictedRow>, Vec<&RestrictedRow>) = rows
             .iter()
-            .map(|r| RestrictedArtefact {
-                licence: r.spdx.clone(),
-                repo: r.repo.clone(),
-                revision: r.revision.clone(),
-                file: r.file.clone(),
-                sha256: r.sha256.clone(),
-            })
-            .collect();
+            .partition(|r| r.spdx == "demucs-weights-unstated");
+        let artefacts: Vec<RestrictedArtefact> = ck.into_iter().map(to_artefact).collect();
         assert!(artefacts.len() >= 30, "{}", artefacts.len());
+        assert_eq!(demucs.len(), 2, "htdemucs and htdemucs_6s");
+        let demucs: Vec<RestrictedArtefact> = demucs.into_iter().map(to_artefact).collect();
+        let err =
+            admits_restricted_in(&pinned, "demon_attack", &demucs, &acks, &verifier).unwrap_err();
+        assert!(err.contains("licence_acknowledgement_required"), "{err}");
 
         let ids =
             admits_restricted_in(&pinned, "demon_attack", &artefacts, &acks, &verifier).unwrap();

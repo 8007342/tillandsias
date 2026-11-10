@@ -135,6 +135,9 @@ mod licence_consent;
 // model-hubs tier with a single-use consent token.
 #[cfg(feature = "host-services")]
 mod restricted_fetch;
+// 2068-eeti: audio.separate (Demucs), the restricted fetch's first caller.
+#[cfg(feature = "host-services")]
+mod audio_separate;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(feature = "listen-vsock")]

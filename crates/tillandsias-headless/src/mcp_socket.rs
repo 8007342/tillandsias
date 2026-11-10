@@ -713,8 +713,9 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         }),
                     }
                 }
-                // 2055-grzz: one audio studio call, one appliance container.
-                "audio.transform" | "audio.detect_glitches" => {
+                // 2055-grzz: one audio studio call, one appliance container;
+                // 2068-eeti: audio.separate goes through the licence gate first.
+                "audio.transform" | "audio.detect_glitches" | "audio.separate" => {
                     let empty = serde_json::json!({});
                     let arguments = req["params"].get("arguments").unwrap_or(&empty);
                     match crate::audio_studio::call(tool_name, project_label, instance, arguments)

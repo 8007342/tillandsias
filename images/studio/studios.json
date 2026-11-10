@@ -289,7 +289,8 @@
       "status": "ready",
       "tools": [
         "audio.transform",
-        "audio.detect_glitches"
+        "audio.detect_glitches",
+        "audio.separate"
       ],
       "write_allowlist": []
     }

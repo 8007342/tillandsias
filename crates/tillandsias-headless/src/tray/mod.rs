@@ -5054,16 +5054,16 @@ mod tests {
             assert!(tools.contains(&gpu), "{gpu} (1957-emar): {tools:?}");
         }
         // 2055-grzz: the audio studio appliance's two tools.
-        for audio in ["audio.transform", "audio.detect_glitches"] {
+        for audio in ["audio.transform", "audio.detect_glitches", "audio.separate"] {
             assert!(tools.contains(&audio), "{audio} (2055-grzz): {tools:?}");
         }
         assert_eq!(
             tools.len() - cloudflare,
             // 1966-47vt: + cloud.usage when the store is built in.
             // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
-            // 2055-grzz: + audio.transform, audio.detect_glitches.
-            if cfg!(feature = "vault") { 51 } else { 50 },
-            "5 preview.* + toolchain.prepare + image.generate + 10 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart; 2002-stjb: + studio.queue_workflow, studio.job_status) + 13 browser.* + 4 webstudio.* + tillandsias.index + tillandsias.lane_version (2003-stbf) + audio.transform + audio.detect_glitches (2055-grzz) + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
+            // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
+            if cfg!(feature = "vault") { 52 } else { 51 },
+            "5 preview.* + toolchain.prepare + image.generate + 10 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart; 2002-stjb: + studio.queue_workflow, studio.job_status) + 13 browser.* + 4 webstudio.* + tillandsias.index + tillandsias.lane_version (2003-stbf) + audio.transform + audio.detect_glitches (2055-grzz) + audio.separate (2068-eeti) + 10 deprecated aliases (1969-7qm7) + gpu.status + gpu.unload_model (1957-emar) + cloud.usage under vault (1966-47vt), nothing else"
         );
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
@@ -5135,10 +5135,10 @@ mod tests {
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
                 // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
-                // 2055-grzz: + audio.transform, audio.detect_glitches.
+                // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
                 // 2002-stjb: + studio.queue_workflow, studio.job_status.
-                if cfg!(feature = "vault") { 51 } else { 50 },
-                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart), 13 browser.*, 4 webstudio.*, tillandsias.index, audio.transform + audio.detect_glitches (2055-grzz), the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
+                if cfg!(feature = "vault") { 52 } else { 51 },
+                "over the transport (beside the 1772-irs3 cloudflare family): 5 preview.*, toolchain.prepare, image.generate, 8 studio.* (1969-cfyt: + studio.start, studio.status; 1986-snpx: + studio.models; 1987-smnt: + studio.restart), 13 browser.*, 4 webstudio.*, tillandsias.index, audio.transform + audio.detect_glitches (2055-grzz), audio.separate (2068-eeti), the 10 deprecated flat aliases (1969-7qm7), gpu.status + gpu.unload_model (1957-emar), cloud.usage under vault (1966-47vt), got {tools:?}"
             );
             assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
             assert!(tools.contains(&"image.generate"), "1874-kkrc: {tools:?}");
@@ -5710,10 +5710,10 @@ mod tests {
                 tools.len() - cloudflare,
                 // 1966-47vt: + cloud.usage when the store is built in.
                 // 2003-stbf: + tillandsias.lane_version; 2002-stjb: + queue_workflow, job_status;
-                // 2055-grzz: + audio.transform, audio.detect_glitches.
+                // 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate.
                 // 2002-stjb: + studio.queue_workflow, studio.job_status.
-                if cfg!(feature = "vault") { 51 } else { 50 },
-                "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 2055-grzz: + audio.transform, audio.detect_glitches; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
+                if cfg!(feature = "vault") { 52 } else { 51 },
+                "1969-7qm7: + webstudio.* canonical names, tillandsias.index, 10 deprecated aliases; 2055-grzz: + audio.transform, audio.detect_glitches; 2068-eeti: + audio.separate; 1957-emar: + gpu.status, gpu.unload_model; 1966-47vt: + cloud.usage under vault"
             );
 
             drop(writer);
