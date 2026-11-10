@@ -1,0 +1,60 @@
+# @trace order:2068-cqis, order:2055-d9sa
+#
+# Regression pin for order 2068-cqis: audio.separate's studio half. Demucs
+# (torch 2.9.1+cpu, demucs 4.1.0) runs on CPU inside images/audio-studio from
+# safetensors ONLY: a .th, a wrong sha256 or weights of the wrong model are
+# refused, and torch.load is disabled before Demucs is imported (the arm
+# drives Demucs's OWN .th loader into the tripwire with a file that is not a
+# pickle). The pipeline arms use a randomly initialised model written as
+# safetensors in the image. The reconstruction arms (stems sum to the input
+# at >= 20 dB; the bass stem holds the 55 Hz) need the REGISTERED weights in
+# TILLANDSIAS_DEMUCS_WEIGHTS_DIR and answer could-not-run without them, never
+# ok. Red on trunk (no separate subcommand); a disabled tripwire and a
+# removed .th check each red one arm.
+name: litmus:audio-studio-separates-stems-from-safetensors-only
+spec: local-web-preview
+phase: pre-build
+description: >
+  Pin that audio-tool separate writes 4 (htdemucs) or 6 (htdemucs_6s) float
+  stems at 44.1 kHz stereo with the input's length, loads weights only from
+  the registered safetensors (wrong hash, .th and wrong-model weights
+  refused), never reaches torch.load, and with the registered weights sums
+  back to the input within 20 dB SNR.
+severity: high
+size: quick
+
+inputs:
+  - images/audio-studio/audio-tool.py
+  - images/audio-studio/Containerfile
+  - images/audio-studio/requirements.lock
+  - images/audio-studio/weights.tsv
+  - scripts/lua/test-audio-studio-separate.lua
+
+preconditions:
+  - podman is available and can build images/audio-studio; the tool runs in it with --network=none, never on the host
+  - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
+  - for the reconstruction arms, TILLANDSIAS_DEMUCS_WEIGHTS_DIR names the model cache's audio/demucs/ holding the registered files (fetched by audio.separate after the project's licence acknowledgement)
+
+critical_path:
+  - step: "4 and 6 stems from safetensors; wrong hash, .th, wrong model and torch.load refused; reconstruction >= 20 dB with the registered weights"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-audio-studio-separate.lua"
+    timeout_ms: 3600000
+    success_pattern: "ok:audio-studio-separate:9-arms"
+    failure_pattern: "violation:|FAIL:|could-not-run:"
+
+observability:
+  traces:
+    - "@trace order:2068-cqis"
+  expected_log: "ok:audio-studio-separate:9-arms"
+  log_fields:
+    spec: "local-web-preview"
+    test: "audio-studio-separate"
+    artifact: "images/audio-studio/audio-tool.py"
+
+rollback:
+  on_failure: >
+    A refusal arm red means a weights file other than the registered
+    safetensors can load, or torch.load is reachable: treat as a security
+    regression. A reconstruction arm red means the model, its loading (dtype,
+    strict state) or the normalisation undo changed.
+  command: "grep -n 'def load_demucs\\|def no_pickles\\|def separate' -A40 images/audio-studio/audio-tool.py"

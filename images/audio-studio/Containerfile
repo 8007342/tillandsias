@@ -18,9 +18,13 @@
 #   (scripts/lua/test-audio-studio-glitches.lua runs it in here).
 #
 # Run time: --network=none, --cap-drop=ALL, no-new-privileges, uid 1001, one
-# container per call (audio_studio.rs). No model weights: stem separation
-# (2055-d9sa) and generative tools (2055-dihg) bring theirs through the
-# model-hubs egress tier.
+# container per call (audio_studio.rs). No model weights, ever: stem
+# separation (2068-cqis: torch CPU + Demucs, below) reads the maintainer's
+# safetensors, fetched on the user's machine after the project's licence
+# acknowledgement (2068-ypgq) and bind-mounted READ-ONLY under /models for
+# that one call. audio-tool refuses any other file (a .th pickle, a wrong
+# sha256) and disables torch.load before Demucs is imported. Generative tools
+# (2055-dihg) bring theirs the same way.
 FROM docker.io/library/python:3.12.16-slim-bookworm
 # 1958-yfib: our own label, never the base's. The recipe is Tillandsias's
 # (GPL-3.0-or-later); the compound label names the GPL-2.0-or-later tools it is
@@ -38,10 +42,23 @@ RUN apt-get update \
     && sox --version && rubberband --version
 
 # Every Python package at an exact version, the transitive set included.
+# torch comes FIRST and ALONE from the pytorch CPU index (2068-cqis; the same
+# version CorridorKey pins, as its CPU build): --index-url, not
+# --extra-index-url, so nothing else can resolve there, and --no-deps, so its
+# dependencies come from the lock below. CPU only: a GPU separation run is a
+# later criterion of 2068-cqis, not this image.
+ARG TORCH_VERSION=2.9.1+cpu
+LABEL io.tillandsias.audio-studio.torch="${TORCH_VERSION}"
+RUN pip install --no-cache-dir --no-deps "torch==${TORCH_VERSION}" \
+        --index-url https://download.pytorch.org/whl/cpu
 COPY requirements.lock /opt/tillandsias/requirements.lock
+# pip check must find NOTHING broken except demucs's four deliberately absent
+# dependencies (requirements.lock says why); any other line fails the build.
 RUN pip install --no-cache-dir --no-deps -r /opt/tillandsias/requirements.lock \
-    && pip check \
-    && python -c "import numpy, scipy, librosa, soundfile, pyloudnorm; print('audio stack ok')"
+    && { pip check || true; } > /tmp/pip-check.txt \
+    && if grep -vxE 'demucs 4\.1\.0 requires (huggingface-hub|lameenc|pyyaml|sphn), which is not installed\.' /tmp/pip-check.txt; then exit 1; fi \
+    && rm /tmp/pip-check.txt \
+    && python -c "import numpy, scipy, librosa, soundfile, pyloudnorm, torch, safetensors, demucs.htdemucs, demucs.apply; assert not torch.cuda.is_available(); print('audio stack ok, torch', torch.__version__)"
 
 COPY audio-tool.py /opt/tillandsias/audio-tool.py
 RUN useradd -u 1001 -m -s /usr/sbin/nologin studio \

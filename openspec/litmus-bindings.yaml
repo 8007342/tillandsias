@@ -1134,6 +1134,7 @@ specs:
   - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
   - litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools
   - litmus:audio-studio-tiers
+  - litmus:audio-studio-separates-stems-from-safetensors-only
   - litmus:a-studio-launch-fails-by-stage-within-a-bound
   - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
   - litmus:flutter-shim-falls-back-or-refuses-typed

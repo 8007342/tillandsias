@@ -63,8 +63,16 @@ pub fn lane_volume(project: &str, instance: &str) -> String {
     format!("tillandsias-audio-{project}-{inst}")
 }
 
-/// The podman run argv (after `podman`) for one audio-tool call.
-pub fn run_args(volume: &str, image_tag: &str, tool_args: &[String]) -> Vec<String> {
+/// The podman run argv (after `podman`) for one audio-tool call. `ro` is
+/// (host file, container path) pairs bind-mounted READ-ONLY: audio.separate
+/// mounts exactly the verified weights file under /models (2068-cqis); every
+/// other call mounts nothing.
+pub fn run_args(
+    volume: &str,
+    image_tag: &str,
+    ro: &[(std::path::PathBuf, String)],
+    tool_args: &[String],
+) -> Vec<String> {
     let mut a: Vec<String> = [
         "run",
         "--rm",
@@ -87,6 +95,10 @@ pub fn run_args(volume: &str, image_tag: &str, tool_args: &[String]) -> Vec<Stri
     a.push("tillandsias.audio-studio=1".into());
     a.push("-v".into());
     a.push(format!("{volume}:{FORGE_AUDIO}"));
+    for (host, inside) in ro {
+        a.push("-v".into());
+        a.push(format!("{}:{inside}:ro", host.display()));
+    }
     a.push(image_tag.to_string());
     a.extend(tool_args.iter().cloned());
     a
@@ -115,6 +127,9 @@ mod tools {
     pub struct PodmanAppliance {
         pub volume: String,
         pub image_tag: String,
+        /// Read-only (host file, container path) mounts: empty except for
+        /// audio.separate's weights.
+        pub ro: Vec<(PathBuf, String)>,
     }
 
     impl Appliance for PodmanAppliance {
@@ -123,7 +138,7 @@ mod tools {
             // The client bound sits past the container's own deadline, so the
             // container is what times out and the client sees its exit.
             let out = crate::podman_command()
-                .args(run_args(&self.volume, &self.image_tag, tool_args))
+                .args(run_args(&self.volume, &self.image_tag, &self.ro, tool_args))
                 .output_bounded(Duration::from_secs(DEADLINE_SECS + 60))
                 .map_err(|e| format!("engine_failed: podman run {IMAGE}: {e}"))?;
             let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
@@ -246,7 +261,7 @@ mod tools {
         Ok((argv, Value::Object(echo)))
     }
 
-    fn ticket() -> String {
+    pub(crate) fn ticket() -> String {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
@@ -254,7 +269,7 @@ mod tools {
         format!("{:x}{:04x}", nanos, std::process::id() & 0xffff)
     }
 
-    fn stem(rel: &str) -> String {
+    pub(crate) fn stem(rel: &str) -> String {
         Path::new(rel)
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
@@ -262,7 +277,7 @@ mod tools {
             .unwrap_or_else(|| "audio".to_string())
     }
 
-    fn input_record(
+    pub(crate) fn input_record(
         host_dir: &Path,
         path: &str,
         rel: &str,
@@ -282,7 +297,7 @@ mod tools {
         ))
     }
 
-    fn record(
+    pub(crate) fn record(
         tool: &'static str,
         input: provenance::Input,
         input_host: &Path,
@@ -490,6 +505,7 @@ mod tools {
             let app = PodmanAppliance {
                 volume: lane_volume(project, instance),
                 image_tag: tag,
+                ro: Vec::new(),
             };
             if name == "audio.transform" {
                 transform(args, &app, &host_dir)
@@ -593,6 +609,7 @@ mod tests {
         let a = run_args(
             "tillandsias-audio-p-default",
             "tillandsias-audio-studio:v1",
+            &[],
             &["detect".into()],
         );
         for flag in [
@@ -621,6 +638,26 @@ mod tests {
         // 2041-jb57: the image declares the egress its argv enforces.
         assert_eq!(crate::egress::declared(IMAGE), Some(vec!["none"]));
         assert!(!crate::egress::wants_proxy(IMAGE));
+        // 2068-cqis: a weights mount is read-only, sits before the image,
+        // and no call without one mounts anything under /models.
+        assert!(!a.iter().any(|x| x.contains("/models")), "{a:?}");
+        let w = run_args(
+            "v",
+            "img",
+            &[(
+                std::path::PathBuf::from("/cache/audio/demucs/955717e8.safetensors"),
+                "/models/955717e8.safetensors".into(),
+            )],
+            &["separate".into()],
+        );
+        let at = w
+            .iter()
+            .position(|x| {
+                x == "/cache/audio/demucs/955717e8.safetensors:/models/955717e8.safetensors:ro"
+            })
+            .expect("the weights mount, read-only");
+        assert_eq!(w[at - 1], "-v");
+        assert!(at < w.iter().position(|x| x == "img").unwrap());
     }
 
     #[test]
