@@ -1,0 +1,89 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-10 at the coordinator's direction (macuahuitl-fedora), from the 2031-4p5h four-pass run of the 152 scripts/lua/test-*.lua fixtures at trunk e9841e243. Code is cited by symbol, never by line.
+packets:
+  - packet_id: tillandsias-trust-reports-trust-current-under-openssl-4
+    order: 2074-mhtj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, tls, openssl]
+    estimated_hours: 1
+    owned_files:
+      - images/default/cli/tillandsias-trust
+    title: "tillandsias-trust never reports trust-current under OpenSSL 4.x: facts() takes the CA fingerprint in the same call as -ext basicConstraints, which OpenSSL 4 prints differently from the plain -fingerprint check() reads off the bundle"
+    context: |
+      MEASURED on yoga 2026-11-10: scripts/lua/test-tillandsias-trust.lua arm 1 CURRENT fails in all four passes of the 2031-4p5h run ("got: 0 ok:trust-refreshed:<serial>-><same serial>"), so a bundle that already trusts the mounted CA is needlessly re-composed. Cause, reproduced with one self-signed CA on host OpenSSL 4.1.0 and the builder toolbox's 4.0.3: `openssl x509 -noout -fingerprint -sha256` prints the DER sha256 (equals `openssl x509 -outform der | sha256sum`), but the same call with `-ext basicConstraints` added prints a DIFFERENT fingerprint. facts() uses the -ext form for the mounted CA and check() the plain form for the bundle's tail, so they never match. The forge image's Debian OpenSSL 3 is presumably unaffected today; the tool breaks the day the base moves to 4.x, and the fixture is red on any 4.x host now.
+      Gate binding: litmus:forge-trust-refresh-cli (size small, phase pre-build). `./build.sh --check` does not run the litmus tiers, which is why lands stay green while the fixture is red on 4.x hosts.
+    exit_criteria:
+      - "test-tillandsias-trust.lua 7/7 on a host with OpenSSL 4.x, arm 1 reporting ok:trust-current. Pre-fix result: FAILS, 6 passed, arm 1 gets trust-refreshed A->A."
+    verifiable_closure: "litmus:forge-trust-refresh-cli — tillandsias-plan script run scripts/lua/test-tillandsias-trust.lua reports ok:tillandsias-trust:7 arms on OpenSSL 4.x; pre-fix result: FAILS (6 passed, arm 1)."
+    next_action: >
+      yoga: fix is on work/2074-mhtj (facts() takes its fingerprint from a separate plain call); 7/7 with it, 6 passed without, on yoga's OpenSSL 4.1.0.
+    provenance: |
+      yoga 2031-4p5h fixture census at trunk e9841e243; openssl reproduction in the scratchpad 2026-11-10.
+    events:
+      - type: filed
+        ts: "2026-11-10T08:30:00Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; yoga takes it"
+  - packet_id: gate-step-pipe-holder-fixture-flakes-under-a-competing-unwrapped-build
+    order: 2074-nmt5
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, tests, flake]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-gate-step-pipe-holder.lua
+    title: "test-gate-step-pipe-holder.lua failed once in four runs (arm 1 LEAK hit its 60 s bound, arm 2 CLEAN got code 0 in 35.8 s yet failed) with a competing-gate advisory naming an unwrapped build.sh in the checkout"
+    context: |
+      MEASURED on yoga 2026-11-10 (2031-4p5h census, scratch worktree at trunk e9841e243): pass base rc=1 refused:gate-step-pipe-holder:2-failed; passes base2, term and nosys rc=0 ok 3/3. The failing run's stdout: "FAIL: 1 LEAK a job left on the step's stdout is refused, named, and not waited for — code=nil ms=60003" and "FAIL: 2 CLEAN a job off the pipe does not refuse (negative control) — code=0 ms=35773"; its stderr opens with "competing-gate: a build.sh is running in this checkout with NO live wrapper (1141-vf9w) pid=2080441 ... advisory:competing-gate:1 (not blocking...)". Each arm executes the real `./build.sh --gate-steps` over a scratch root, so a stale or concurrent build.sh in the same checkout is a plausible cause, but it was not proven: the cause is NOT obvious, so no fix was attempted (coordinator 2026-11-10). No gate step or litmus binds this fixture (grep of scripts/gate-steps.d, build.sh, openspec/litmus-tests found none), so it is run only by hand.
+    exit_criteria:
+      - "The cause of the 2026-11-10 failure is named with a measurement (e.g. the run reproduced with a planted unwrapped build.sh in the checkout, or excluded), and the fixture either tolerates it or refuses it as could-not-run naming the competing process. Pre-fix result: FAILS, one red run of four with a competing-gate advisory."
+    unscoreable: |
+      flake: the failure appeared once in four runs; a closure must first reproduce it.
+    next_action: >
+      Reproduce with a planted unwrapped `build.sh` process in the checkout; if that is the cause, make the arm refuse could-not-run naming it.
+    provenance: |
+      yoga 2031-4p5h four-pass census, 2026-11-10; logs in the yoga scratchpad run/base/test-gate-step-pipe-holder.{out,err}.
+    events:
+      - type: filed
+        ts: "2026-11-10T08:30:00Z"
+        host: yoga
+        summary: "filed at the coordinator's direction with its log; cause not obvious, not fixed"
+  - packet_id: lua-fixtures-that-could-not-run-or-timed-out-on-a-yoga-host-census-name-their-missing-prerequisite
+    order: 2074-mfk5
+    status: ready
+    kind: audit
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tests, lua, host-tools]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/test-door-declared-artifact-sweep.lua
+    title: "Eleven Lua fixtures did not give a verdict in a host-side census of all 152 (yoga 2026-11-10): each named with its missing prerequisite, to decide which are host artefacts and which should resolve their own runner"
+    context: |
+      MEASURED on yoga 2026-11-10 (2031-4p5h census: `B script run <t>` on the HOST, not the builder toolbox, from a scratch worktree with no target/debug, PATH and TILLANDSIAS_PLAN_BIN set to the plan binary, TILLANDSIAS_SCRIPT_RUNNER_BIN NOT set, timeout 300 s). Every one of these was identical in all four passes:
+      - rc 3, TILLANDSIAS_SCRIPT_RUNNER_BIN unset: test-door-declared-artifact-sweep, test-door-index-lock-sweep, test-door-serial-lua-declaration, test-rust-lints. They do not fall back to TILLANDSIAS_PLAN_BIN; decide whether they should.
+      - rc 3, no target/debug/tillandsias (cargo build -p tillandsias-headless): test-image-build-scope, test-image-ensure-breaker, test-image-ensure-disk-preflight, test-memory-stall-named. A fresh-worktree artefact.
+      - rc 3, uv is not on PATH: test-uv-venv-survives-forge-replacement (the host has no uv; the toolbox may).
+      - rc 1, host has no cc: test-manifest-dir-env ("could not compile j20fprobe") and test-cheatsheet-index-byte-order (arms 1-2 "could not compile libc/nix"; arm 3, the podman-control-plane.md before podman.md byte-order pin, passes). The latter is gate step 575-1459-b5fh, which the gate runs inside the builder toolbox where cc exists, so trunk's gate is not red on it; a rc 1 here is the host, not the INDEX.
+      - rc 124 at the census's own 300 s cap: test-forge-oomd-avoid (two allocating containers in a MemoryHigh=200M slice waiting on systemd-oomd); it may simply need longer than 300 s.
+    exit_criteria:
+      - "Each fixture above is dispositioned on this row: host artefact (named), or changed to resolve its runner the way the others do, or to report could-not-run (not rc 1) when the host lacks cc. Pre-fix result: FAILS, undecided."
+    unscoreable: |
+      audit: the disposition is the deliverable.
+    next_action: >
+      Decide the TILLANDSIAS_SCRIPT_RUNNER_BIN fallback for the four door/lint fixtures first; the rest are host prerequisites.
+    provenance: |
+      yoga 2031-4p5h four-pass census at trunk e9841e243, 2026-11-10.
+    events:
+      - type: filed
+        ts: "2026-11-10T08:30:00Z"
+        host: yoga
+        summary: "filed at the coordinator's direction"
