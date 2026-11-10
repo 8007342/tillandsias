@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-10 at the coordinator's direction (macuahuitl-fedora, approving the 2068-ypgq criterion 3 amendment). Code is cited by symbol, never by line.
+packets:
+  - packet_id: corridorkey-weight-set-becomes-admissible-only-after-three-operator-rulings
+    order: 2071-um56
+    status: blocked
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [models, licence, egress, studio]
+    estimated_hours: 6
+    depends_on:
+      - a-restricted-weights-row-is-fetched-only-after-its-acknowledgement-through-the-model-hubs-tier
+    owned_files:
+      - images/models/licence-register-restricted.tsv
+      - images/imagegen-corridorkey/weights.tsv
+    title: "CorridorKey's 33-file weight set becomes admissible to the restricted fetch only after three operator rulings: the NVIDIA licence text pinned, which file kinds are admitted, and whether storage.googleapis.com joins an egress tier"
+    context: |
+      Needs the operator; do not build any part until the operator rules on it (coordinator macuahuitl-fedora 2026-11-10). FOUND by yoga taking 2068-ypgq: no fetcher can admit the shipped set (licence-register-restricted.tsv and images/imagegen-corridorkey/weights.tsv at aebc92e31).
+      (1) LICENCE TEXT. 29 of 33 rows are nvidia/C-RADIOv4-SO400M under nvidia-open-model-license with licence_sha256 pending:<developer.download.nvidia.com PDF>; admit_restricted_row never admits a pending row, so studio_key::call refuses consent_required for every project. Someone must fetch and read the NVIDIA Open Model License, pin its hash, and class its obligations (NVIDIA_UNREAD in licence_consent.rs says they are classed from memory).
+      (2) FILE KINDS. ALLOWED_SUFFIXES is .safetensors and .gguf (ruling 2026-11-10). The set also has 27 .py/.json files (C-RADIO trust_remote_code modules and configs), vfms/moge/model.pt (a pickle), and the RVM .npz (numpy, which can hold pickled objects). Coordinator default: .json data may be admitted; .py code and .pt/.npz pickles are converted or refused, as Demucs is (2068-eeti). The operator decides.
+      (3) EGRESS. RVM is the GCS object storage.googleapis.com/representations4d/...npz, and storage.googleapis.com is in no tier (images/proxy/tiers/model-hubs.txt). Adding it widens egress for every image that declares the tier.
+    exit_criteria:
+      - "Each of (1), (2) and (3) has an operator ruling recorded in this row before any of it is built."
+      - "With the rulings applied, admits_restricted admits the CorridorKey set for a project holding a matching acknowledgement, and the 2068-ypgq fetch writes every admitted file where studio_key's missing_weights looks, so studio_key::call reaches the job. Pre-fix result: FAILS, consent_required on the pending C-RADIO rows."
+    verifiable_closure: "Operator-gated: the rulings are recorded in the row. Then studio_key::call against the shipped register and a fetched cache reaches the stub engine (no consent_required, no weights_missing)."
+    unscoreable: |
+      operator-gated: the three rulings come first, and nothing is built before them.
+    next_action: >
+      Waits for the operator's rulings on (1) the NVIDIA licence text, (2) the admitted file kinds, and (3) storage.googleapis.com.
+    provenance: |
+      yoga source read of licence_consent::admit_restricted_row, imagegen_models::ALLOWED_SUFFIXES, studio_key::call and the restricted register at aebc92e31; macuahuitl-fedora relay 2026-11-10.
+    events:
+      - type: filed
+        ts: "2026-11-10T04:27:10Z"
+        host: yoga
+        summary: "filed p2 blocked on three operator rulings, at the coordinator's direction"
