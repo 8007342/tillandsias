@@ -9,6 +9,29 @@ tillandsias.org repository, not this one.
 Nothing proposed here refuses a push. Every new check is a report; turning one
 into a refusal is a bar raise for the operator.
 
+## Operator decisions, 2026-11-11 (relayed by the coordinator)
+
+- The spec proposal `obligation-evidence-contract` is **approved**. The
+  umbrella `2080-3tzc` is completed on that approval and its dependent rows are
+  claimable.
+- The denominator change to (obligation, platform) cells, default all three
+  platforms, is **approved**. It takes effect at the first release cut made
+  after every row of the measure story (story 1 below) has landed on trunk.
+  Until then the published headline stays in obligations; at that cut the
+  snapshot records the scope change and prints both units once.
+- Design floor hosts are yoga (Linux), yolanda (Windows) and
+  tlatoanis-macbook-air (macOS). A platform cell's evidence should be
+  producible on that platform's floor host. This touches `2080-axw3` (its real
+  records come from the floor hosts) and the reading of every platform cell.
+- Near-zero idle overhead, no polling, exponential backoff where waiting cannot
+  be avoided. Nothing in this order runs while idle: the witness is emitted
+  once at the end of a run, readers consume committed files, and a missing
+  witness is an `unmeasured` cell, never a wait. Recorded on `2080-h3mb` and in
+  the change's design.
+- Left open, standing as proposed, carried by row `2081-2wf3`: which platform a
+  WSL or forge record fills; unsigned witnesses first; whether an increase ever
+  refuses.
+
 ## What was measured, and where
 
 Trunk `e1f8d7f01`, a Linux host, `scripts/centicolon-grade.sh` with a plan
@@ -268,24 +291,27 @@ witness and register pages; `2080-r6hs` bar-raise records; `2080-xvup`
 declare or withdraw; `2080-y9c5` stability and unknown events; `2080-zk9f`
 public text.
 
-Five rows depend directly on the umbrella's approval (and others through them); the rest are report-only or follow
-directly from the 2026-11-11 ruling and are claimable now.
+Five rows depended directly on the umbrella's approval (and others through
+them). It was given on 2026-11-11, so no row of this order waits on the
+operator; each waits only on the rows it depends on.
 
 ## Not settled
 
 1. **WSL and forge records.** Which platform cell may a record made inside WSL
-   on a Windows host, or inside a forge container, fill? Proposed: the
-   bare-metal host's platform for WSL; none for a forge unless the host
-   platform is passed in. Needs the operator and a host that can run the gate
-   on Windows to confirm what the WSL run actually exercises.
+   on a Windows host, or inside a forge container, fill? Proposed, not ruled:
+   the bare-metal host's platform for WSL; none for a forge unless the host
+   platform is passed in. The Windows floor host should confirm what the WSL
+   run actually exercises. Carried by `2081-2wf3`.
 2. **Who signs a witness.** An approval key needs a user check per signature
-   and does not fit an unattended gate. Proposed: unsigned first, labelled.
+   and does not fit an unattended gate. Proposed, not ruled: unsigned first,
+   labelled. Carried by `2081-2wf3`.
 3. **Where witnesses are committed**, and whether the plan-only push lane
-   should admit that directory.
-4. **When the denominator changes** from obligations to cells (which release
-   cut), since the public headline changes meaning.
+   should admit that directory. To settle when `2080-h3mb` is claimed.
+4. **When the denominator changes.** Settled 2026-11-11: the first release cut
+   after the measure story lands (see the decisions above).
 5. **Whether non-increase ever refuses**, and against which number that bar
-   raise is decided.
+   raise is decided. Proposed, not ruled: it stays a report. Carried by
+   `2081-2wf3`.
 6. **Tests that are not litmus steps.** The grader sees only litmus files.
    Cargo tests and Lua fixtures earn nothing unless a litmus step runs them.
    Not addressed by this order; it may be most of the real test population.

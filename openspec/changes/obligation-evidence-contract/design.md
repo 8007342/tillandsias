@@ -122,20 +122,45 @@ register cannot overstate.
 
 Rollback at any step is a revert: nothing refuses a push.
 
+## Operator decisions (2026-11-11, relayed by the coordinator)
+
+- **This change is approved.** The umbrella row `2080-3tzc` is completed on
+  that approval.
+- **The denominator change is approved**: the unit becomes the (obligation,
+  platform) cell, default scope all three platforms (D1, D3).
+  **The cut:** the first release cut made after every row of the measure story
+  has landed on trunk (tasks 1.1, 2.1, 2.2, 2.3, 3.1, 4.1, 4.2, 4.3, 6.1). It
+  is stated as a condition and not a version, because cuts are made daily and
+  the version is not known in advance. Before that cut the published headline
+  stays in obligations. At that cut the snapshot records the scope change and
+  prints both units once; after it, only cells.
+- **Design floor hosts**: yoga (Linux), yolanda (Windows),
+  tlatoanis-macbook-air (macOS). A platform cell's evidence is expected to be
+  producible on that platform's floor host: a test that only a larger host can
+  run does not fill the cell for the floor. Rows stay tagged by capability; the
+  names are today's holders of the three floor roles.
+- **Near-zero idle overhead; no polling; exponential backoff where waiting
+  cannot be avoided.** Nothing in this change runs while idle. The witness is
+  emitted once, at the end of a run that already happened. The grader and the
+  site read committed files. No watcher, timer or daemon is added, and nothing
+  waits for a witness from another platform: a missing witness is an
+  `unmeasured` cell, not a wait.
+
 ## Open Questions
 
-These are for the operator; the umbrella row `2080-3tzc` closes when each has
-an answer here.
+Left open by the operator on 2026-11-11. Each stands as proposed, the rows
+proceed on the proposal, and row `2081-2wf3` carries them until ruled.
 
 1. A record made inside WSL on a Windows host, or inside a forge container:
-   which platform cell may it fill? Proposed: the bare-metal host's platform
-   for WSL; a forge record fills no cell unless the forge's host platform is
-   passed in.
+   which platform cell may it fill? Proposed, not ruled: the bare-metal host's
+   platform for WSL; a forge record fills no cell unless the forge's host
+   platform is passed in.
 2. Which key signs a witness? An approval key needs a user check per signature,
-   which does not fit an unattended gate. Proposed: unsigned witnesses first,
-   labelled; a per-host witness key later.
-3. Where are witnesses committed, and should the plan-only push lane admit that
-   directory?
-4. The denominator changes from obligations to cells. At which release cut?
-5. Does the non-increase check ever become a refusal, and against which number
-   is that bar raise decided?
+   which does not fit an unattended gate. Proposed, not ruled: unsigned
+   witnesses first, labelled; a per-host witness key later.
+3. Does the non-increase check ever become a refusal, and against which number
+   is that bar raise decided? Proposed, not ruled: it stays a report.
+
+Not put to the operator and still to settle when task 5.1 is claimed: the
+directory witnesses are committed to, and whether the plan-only push lane
+should admit it.

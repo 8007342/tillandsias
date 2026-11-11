@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-litmus-result-record-names-the-product-platform-separately-from-the-runner-regime
+    field: next_action
+    value: |-
+      Write scripts/lua/test-litmus-record-platform.lua red, then add the platform column where cycle-metrics.sh builds the timing-batch record. The record field is written by existing shell; port that emitter to Lua in this row if the edit exceeds one field.
+
+      [2026-11-11T18:56:54Z macuahuitl] OPERATOR RULING 2026-11-11 (relayed by the coordinator): the design floor host for each platform is yoga (Linux), yolanda (Windows) and tlatoanis-macbook-air (macOS). The two real records this row asks for come from the Windows and macOS floor hosts, and a Linux one from the Linux floor host is added. The WSL attribution stays as proposed (the bare-metal host's platform), not ruled.
+    ts: "2026-11-11T18:56:54Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-litmus-result-record-names-the-product-platform-separately-from-the-runner-regime
+    event:
+      type: note
+      ts: "2026-11-11T18:56:54Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-11-11: design floor hosts

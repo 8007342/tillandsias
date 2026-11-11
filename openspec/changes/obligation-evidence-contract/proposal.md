@@ -5,6 +5,10 @@ Umbrella packet: `2080-3tzc`. Source: the 2026-11-09 clean-room exercise
 2026-11-11 on per-platform obligations, and the research report
 `plan/issues/level5-obligation-defects-2026-11-11.md`.
 
+Status: approved by the operator on 2026-11-11 (relayed by the coordinator),
+together with the change of denominator to (obligation, platform) cells. The
+decisions and the questions still open are in `design.md`.
+
 ## Why
 
 The public level-5 document states a release rule ("non-increase of d_v") and a
