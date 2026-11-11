@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-host-push-keeps-no-approle-secret-on-disk-and-puts-none-on-an-argv
+    field: next_action
+    value: D3 is answered, the design must work with the tray down. Left to do, everything. First add the failing at-rest arm, and a second arm that requests a push certificate with no tray process running and succeeds. Then choose the tray-independent store and write the Rust subcommand. No bash, no jq, no secret on an argv.
+    ts: "2026-11-11T19:14:52Z"
+    host: macuahuitl
+    replaces_sha256: "81ea0a4e4f1baa933fc98483b129854744bff121725c0e8aae7f884e3e3c41ad"
+
+events:
+  - packet_id: medium-host-push-keeps-no-approle-secret-on-disk-and-puts-none-on-an-argv
+    event:
+      type: note
+      ts: "2026-11-11T19:14:52Z"
+      host: macuahuitl
+      summary: |-
+        the WAIT on D3 is discharged by the operator answer

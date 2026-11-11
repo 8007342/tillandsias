@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-host-push-keeps-no-approle-secret-on-disk-and-puts-none-on-an-argv
+    field: context
+    value: |-
+      Audit finding M2 (black-box M2 confirmed in part). mint_host_approle_document writes the role id and secret id to a plain 0600 file, never revoked or deleted. scripts/tillandsias-host-push-cert.sh then sends the secret id and the client token on curl argv, needs jq, and creates the ssh key with an empty passphrase. 1313-prin chose the file to keep the keyring off the push path; the 2026-10-19 ruling forbids it. The replacement is in Rust, with no new bash and no jq. Whether it may depend on a running tray is operator decision D3.
+
+
+      [2026-11-11T19:14:52Z macuahuitl] Operator ruling on D3, relayed by the coordinator 2026-11-11. Host push may NOT depend on a running tray. As restarting the tray does not bring down forges, a running forge with the tray down keeps its mirror and every facility it needs. So the replacement for the plain AppRole file is tray-independent and still leaves nothing in plaintext at rest. Asking the tray to sign the certificate is a refused shape; do not reopen it. Candidates to weigh, none chosen here, the credential in the OS keyring read by the Rust subcommand, or a long-lived helper that is not the tray. The 1313-prin concern stands, a keyring read on the push path must be bounded and must not abort the keyring.
+    ts: "2026-11-11T19:14:52Z"
+    host: macuahuitl
+
+events:
+  - packet_id: medium-host-push-keeps-no-approle-secret-on-disk-and-puts-none-on-an-argv
+    event:
+      type: note
+      ts: "2026-11-11T19:14:52Z"
+      host: macuahuitl
+      summary: |-
+        D3 answered

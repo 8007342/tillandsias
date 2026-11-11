@@ -175,8 +175,9 @@ Each stage lands alone and leaves the product working.
    the shell-to-lua backlog)
 5. **One GitHub reader.** The repository listing and the credential verdict
    move into the tray process, so the mirror is the only container that reads
-   the GitHub token. Host push asks the tray to sign its certificate: no
-   AppRole file, no bash, no jq. (2080-74wk, 2080-swqp)
+   the GitHub token. Host push requests its certificate from a Rust
+   subcommand that works with the tray down (D3): no plaintext AppRole file,
+   no bash, no jq. (2080-74wk, 2080-swqp)
 6. **One delivery function.** Runtime secrets are owner-only; the router gets
    its own narrow socket. (2080-fqvh, 2080-jmve, 2080-v5ns)
 7. **Sign-out and honest wipe.** A sign-out verb for every provider; the wipe
@@ -205,6 +206,11 @@ wire (972-umik).
   if that breaks a provider CLI's own refresh?
 - D3. May host push depend on a running tray (the tray signs the certificate
   on request), replacing the plain AppRole file?
+  ANSWERED 2026-11-11 (relayed by the coordinator): no. As restarting the
+  tray does not bring down forges, a running forge with the tray down keeps
+  its mirror and every facility it needs. The replacement is tray-independent
+  and still leaves nothing in plaintext at rest. 2080-swqp moved to ready;
+  "the tray signs the certificate" is a refused shape.
 - D4. The black-box session printed the enclave CA key and one mirror AppRole
   pair into its own transcript. Re-minting the CA and letting that secret id
   expire is the operator's call; this audit touched neither.
@@ -215,8 +221,13 @@ wire (972-umik).
 - D5. A device-flow client cannot revoke a GitHub App user token (revocation
   needs the client secret). Is "delete locally and show the GitHub settings
   page" acceptable as GitHub sign-out?
+  ANSWERED 2026-11-11: approved, with that wording. 2080-57jp moved to ready.
 - D6. May a wipe leave one persisted, non-secret cause record (the open
   audit-persistence question), or tray event only?
+  ANSWERED 2026-11-11: approved. One persisted record holding cause class,
+  timestamp and version only; no account name, repository name, path with a
+  user name, host name beyond a class, or token fragment. A test asserts the
+  record's field allowlist (added to 2080-i4ga).
 - D7. Turning mlock on makes Vault's memory unswappable. Acceptable on
   floor-tier hosts?
 
