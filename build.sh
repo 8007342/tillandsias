@@ -4373,7 +4373,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a run against HEAD can only print ok:, and a check that only ever prints
     # ok: on a healthy tree cannot be told from a broken one.
     _step "Checking the release-ledger distillation advisory (914-nkc4)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-distillation-advisory.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-ledger-distillation-advisory.lua" 2>&1; then
         _error "the ledger-distillation advisory regressed — the release ledger can again outgrow its own policy with nothing reporting it"
         exit 1
     fi

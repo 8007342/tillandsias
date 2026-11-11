@@ -377,7 +377,6 @@ scripts scripts/check-groundtruth-regime-invariance.sh 3
 scripts scripts/check-host-tools.sh 105
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
-scripts scripts/check-ledger-distillation.sh 2
 scripts scripts/check-litmus-mutation-arms-mutate.sh 3
 scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-long-running-view.sh 21
@@ -698,7 +697,6 @@ scripts scripts/test-land-notice-names-unrun-litmus.sh 2
 scripts scripts/test-land-queue.sh 1
 scripts scripts/test-land-verdict-through-a-pipe.sh 1
 scripts scripts/test-lane-instrument-vs-ledger.sh 6
-scripts scripts/test-ledger-distillation-advisory.sh 1
 scripts scripts/test-ledger-prose-roundtrip.sh 8
 scripts scripts/test-ledger-ts-guard.sh 2
 scripts scripts/test-ledger-write-reaches-its-reader.sh 22
