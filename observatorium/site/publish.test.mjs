@@ -14,6 +14,18 @@ import {fileURLToPath} from 'node:url';
 import {publish} from './publish.mjs';
 import {verifyDeploy} from './verify.mjs';
 
+// A hermetic git for the whole file. publish() spawns git with process.env, so
+// the identity its deploy commit is written under, and any signing or hook
+// config, would otherwise come from the host: on a host with no global
+// user.email (the tillandsias-builder toolbox) the commit failed "Author
+// identity unknown" and three tests reddened gate step 930 (#1083). node --test
+// runs each file in its own process, so this reaches only these tests;
+// publish.mjs itself still commits as the operator when run for real.
+Object.assign(process.env, {
+  GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+  GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
+});
+
 const app = fileURLToPath(new URL('..', import.meta.url));
 const TAG = 'v56.11.7.1';
 const REF = 'refs/heads/deploy/observatorium';

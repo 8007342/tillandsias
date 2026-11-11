@@ -17,7 +17,9 @@
 -- reporter is forced so the counts are parseable.
 --
 -- ARMS:
---   1 REAL     the suite passes here, with at least one test and no failure
+--   1 REAL     the suite passes here, with at least one test and no failure,
+--              under an empty HOME and GIT_CONFIG_NOSYSTEM=1 (no host git
+--              identity or config reaches it; #1083)
 --   2 CONTROL  a scratch suite of one passing and one failing test, run the
 --              same way, exits non-zero and reports exactly pass 1 fail 1: a
 --              failing test reds this step, and the patterns are globbed
@@ -59,10 +61,10 @@ local patterns = {}
 for p in script:sub(#"node --test " + 1):gmatch("%S+") do patterns[#patterns + 1] = p end
 
 -- Run `node --test` over patterns in cwd; returns code, tests, pass, fail, stdout.
-local function suite(cwd, pats)
+local function suite(cwd, pats, envt)
     local argv = { "node", "--test", "--test-reporter=tap" }
     for _, p in ipairs(pats) do argv[#argv + 1] = p end
-    local r = proc.run({ argv = argv, cwd = cwd, timeout_ms = 300000 })
+    local r = proc.run({ argv = argv, cwd = cwd, env = envt, timeout_ms = 300000 })
     local outp = r.stdout or ""
     local code = r.status == "exited" and r.code or -1
     return code, tonumber(outp:match("\n# tests (%d+)")), tonumber(outp:match("\n# pass (%d+)")),
@@ -77,17 +79,25 @@ local function arm(name, cond, got)
     end
 end
 
-local code, tests, pass, fail, outp = suite(ROOT .. "/observatorium", patterns)
+local REL = "target/plan-scratch/observatorium-npm-test-" .. time.iso_utc():gsub("[^%w]", "") .. "-" .. tostring(math.random(100000, 999999))
+fs.mkdir(REL)
+
+-- The suite runs under an EMPTY home with no system git config, so a host's
+-- global git identity, signing or hook config cannot make it pass. #1083: the
+-- publish tests committed under the ambient identity, passed on every host with
+-- a global user.email, and failed only in the tillandsias-builder toolbox.
+fs.mkdir(REL .. "/home")
+local HERMETIC = { HOME = ROOT .. "/" .. REL .. "/home", XDG_CONFIG_HOME = ROOT .. "/" .. REL .. "/home/.config",
+    GIT_CONFIG_NOSYSTEM = "1" }
+local code, tests, pass, fail, outp = suite(ROOT .. "/observatorium", patterns, HERMETIC)
 local real_ok = code == 0 and (tests or 0) > 0 and fail == 0 and pass == tests
-arm("1 REAL the observatorium suite passes", real_ok,
+arm("1 REAL the observatorium suite passes under an empty home", real_ok,
     "rc=" .. code .. " tests=" .. tostring(tests) .. " pass=" .. tostring(pass) .. " fail=" .. tostring(fail))
 if not real_ok then
     local lines = text.lines(outp)
     for i = math.max(1, #lines - 60), #lines do log.raw("  | " .. lines[i]) end
 end
 
-local REL = "target/plan-scratch/observatorium-npm-test-" .. time.iso_utc():gsub("[^%w]", "") .. "-" .. tostring(math.random(100000, 999999))
-fs.mkdir(REL)
 fs.write(REL .. "/pass.test.mjs", "import test from 'node:test';\ntest('passes', () => {});\n")
 fs.write(REL .. "/fail.test.mjs", "import test from 'node:test';\nimport assert from 'node:assert/strict';\ntest('fails', () => { assert.equal(1, 2); });\n")
 local c2, t2, p2, f2 = suite(ROOT .. "/" .. REL, { "*.test.mjs" })
