@@ -1,0 +1,281 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Stories licence-in-repo-v05, floor-capability-v05, forge-safety-v05 —
+# 2026-11-11 blind-design triage (order 2080-294s).
+packets:
+  - packet_id: the-triage-of-the-2026-11-11-blind-design-exercise-is-recorded-with-its-outputs
+    order: 2080-294s
+    status: in_review
+    kind: docs
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [plan, triage]
+    estimated_hours: 3
+    title: |
+      The 2026-11-11 blind-design exercise (four designs, two judges, a black-box audit, 19 operator questions) is triaged into stories, reprioritised rows and open questions, and its outputs are copied out of scratch.
+    context: |
+      Deliverables: plan/issues/blind-design-triage-2026-11-11.md and plan/issues/blind-design-2026-11-11/. Credential items are in 2080-yvby (PR #1087); level-5 grader items in 2080-3tzc (PR #1086).
+    exit_criteria:
+      - 'the triage file and the copied outputs exist; no copied file carries a secret value'
+    verifiable_closure: 'bash — test -f plan/issues/blind-design-triage-2026-11-11.md && test -d plan/issues/blind-design-2026-11-11'
+    unscoreable: 'no litmus exists for this one-line check; the claimer runs the command in verifiable_closure and records its output as evidence.'
+    next_action: 'Review the draft PR; land through the queue.'
+    provenance: macuahuitl-fedora triage lead 2026-11-11.
+    depends_on: []
+    related: [2080-yvby, 2080-3tzc]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed and moved to in_review with the triage commit}
+  - packet_id: licence-acknowledgements-live-in-the-project-repository-and-the-gate-reads-them-from-git
+    order: 2080-qqsm
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: licence-in-repo-v05
+    capability_tags: [licence, openspec, rust, git]
+    estimated_hours: 5
+    title: |
+      The restricted-fetch gate reads acknowledgements from a state-dir copy (<state dir>/licence-acknowledgements/<project>/), which a state or vault wipe loses; per the 2026-11-11 ruling the record of truth is licences/acknowledgements/ in the project repository, and the gate reads it from the project's git, never a copy.
+    context: |
+      openspec/changes/licence-acknowledgements-in-repo (filed with this triage). Supersedes the state-dir copy that 1958-fc3y describes. accept-licence step 4 already commits the record into the project; the gate does not read it there.
+    exit_criteria:
+      - 'with the state-dir copy deleted, a fetch whose project repository holds a valid committed record is admitted; today it is refused'
+      - 'holds on Linux, macOS and Windows independently'
+    verifiable_closure: 'cargo test -p tillandsias-headless licence_consent — admits from a committed record with no state-dir copy; red today'
+    next_action: 'Nothing is done. Implement tasks 1.x of openspec/changes/licence-acknowledgements-in-repo.'
+    provenance: operator ruling 2026-11-11; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1956-ecpb, 1958-fc3y, 1954-dvz9, 1958-22yh]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: a-licence-record-is-valid-only-when-the-commit-that-added-it-is-signed-by-a-committed-signer
+    order: 2081-qndc
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: licence-in-repo-v05
+    capability_tags: [licence, signing, rust, git]
+    estimated_hours: 5
+    title: |
+      A licence record's signature verifies against allowed_signers in the host state dir, which a vault or state wipe loses; the signers are committed beside the records (licences/allowed_signers), the record verifies against the signer set as of the commit that added it, and a vault wipe makes a new key without invalidating earlier records (OQ-19 answer a).
+    context: |
+      openspec/changes/licence-acknowledgements-in-repo. licence_consent::Verifier::for_host reads <state dir>/approvals/allowed_signers today. Git history is the durable record: removing a signer later never invalidates a record added while it was listed.
+    exit_criteria:
+      - 'after deleting the host allowed_signers and re-enrolling a new key, an old committed record still verifies and a record signed by a key never committed is refused; today the first is refused'
+    verifiable_closure: 'cargo test -p tillandsias-headless licence_consent — history-anchored verification fixture over a scratch repository; red today'
+    next_action: 'Nothing is done.'
+    provenance: operator ruling 2026-11-11; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [licence-acknowledgements-live-in-the-project-repository-and-the-gate-reads-them-from-git]
+    related: [1958-22yh]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: existing-state-dir-licence-records-are-migrated-into-their-project-repositories
+    order: 2080-ryc8
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    story: licence-in-repo-v05
+    capability_tags: [licence, migration, rust]
+    estimated_hours: 2
+    title: |
+      Records written only to <state dir>/licence-acknowledgements/ before the change would be lost on the next wipe; a one-shot migration commits each into its project's licences/acknowledgements/ (unchanged bytes, one commit per project) and reports any record whose project it cannot find.
+    context: |
+      openspec/changes/licence-acknowledgements-in-repo task group 3.
+    exit_criteria:
+      - 'a scratch state dir with two records for two projects ends as two commits, one per project, and an orphan is named in the report; today no migration exists'
+    unscoreable: 'unpinnable-until-the-guard-exists: the migration fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: operator ruling 2026-11-11; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [licence-acknowledgements-live-in-the-project-repository-and-the-gate-reads-them-from-git]
+    related: [1958-fc3y]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: linux-probes-ram-and-accelerator-class-and-warns-once-in-plain-words-below-the-floor
+    order: 2080-u86h
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: floor-capability-v05
+    capability_tags: [accelerator, installer, tray, rust, linux]
+    estimated_hours: 3
+    title: |
+      Linux: the design floor is 16 GB RAM and an accelerator (iGPU, discrete GPU or NPU); install and tray probe both, and below the floor install still proceeds with one plain warning about resources instead of silence or refusal.
+    context: |
+      Operator refinement 2026-11-11. Reuse accel_probe (system_ram_gb, accel fields; 803-r8u4, 856-xvr2) and the capability document; do not write a second probe. Installer rules: no prompt, one sentence (installer-is-for-end-users-no-prompts).
+    exit_criteria:
+      - 'with a faked 8 GB / no-accelerator probe, install.sh and the tray each emit exactly one warning sentence and install succeeds; with a faked 16 GB + iGPU probe nothing is printed; today there is no floor check'
+    unscoreable: 'unpinnable-until-the-guard-exists: the faked-probe fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: operator refinement 2026-11-11 via coordinator; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [803-r8u4, 856-xvr2, 802-2536]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: macos-probes-ram-and-accelerator-class-and-warns-once-in-plain-words-below-the-floor
+    order: 2080-ugz6
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    story: floor-capability-v05
+    capability_tags: [accelerator, installer, tray, macos]
+    estimated_hours: 3
+    title: |
+      macOS: the same floor probe (unified memory and Metal GPU / Neural Engine class) and one plain warning below the floor in the installer and the tray.
+    context: |
+      macOS twin of 2080-u86h; reuse the tray-side Metal probe work of 657-zm2n.
+    exit_criteria:
+      - 'a faked below-floor probe yields exactly one warning and a completed install; today no floor check'
+    unscoreable: 'unpinnable-until-the-guard-exists: the faked-probe fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: operator refinement 2026-11-11; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-u86h, 657-zm2n]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: windows-probes-ram-and-accelerator-class-and-warns-once-in-plain-words-below-the-floor
+    order: 2080-w2ni
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    story: floor-capability-v05
+    capability_tags: [accelerator, installer, tray, windows]
+    estimated_hours: 3
+    title: |
+      Windows: the same floor probe (RAM, GPU via DXGI, NPU presence) and one plain warning below the floor in install-windows.ps1 and the tray.
+    context: |
+      Windows twin of 2080-u86h; the NPU state from 793-ee2g and 858-tnnv.
+    exit_criteria:
+      - 'a faked below-floor probe yields exactly one warning and a completed install; today no floor check'
+    unscoreable: 'unpinnable-until-the-guard-exists: the faked-probe fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: operator refinement 2026-11-11; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-u86h, 793-ee2g, 858-tnnv]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: below-the-floor-local-inference-is-off-by-default-on-every-platform
+    order: 2080-wc2c
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    story: floor-capability-v05
+    capability_tags: [inference, accelerator, rust]
+    estimated_hours: 3
+    title: |
+      On a host below the floor the inference engine still starts with the session; below the floor it does not start by default, on Linux, macOS and Windows each, and nothing else breaks.
+    context: |
+      Operator refinement 2026-11-11. Interacts with the GPU arbiter (1957-emar), host-native sidecars (483, 657-s6g8) and NPU containers (543). Also serves the idle ruling.
+    exit_criteria:
+      - 'per platform, with a faked below-floor probe a session start leaves no inference container or sidecar running and a forge still launches; above the floor the current behaviour holds; today inference starts regardless'
+    unscoreable: 'unpinnable-until-the-guard-exists: the per-platform fixture is the deliverable.'
+    next_action: 'Nothing is done. After the probe rows.'
+    provenance: operator refinement 2026-11-11; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [linux-probes-ram-and-accelerator-class-and-warns-once-in-plain-words-below-the-floor]
+    related: [1957-emar, 483, 543, 657-s6g8]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: an-agent-can-start-local-inference-on-demand-below-the-floor-and-is-told-it-will-be-slow
+    order: 2080-wf7p
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: floor-capability-v05
+    capability_tags: [inference, mcp, cli, rust]
+    estimated_hours: 3
+    title: |
+      With inference off below the floor, an agent has no way to ask for it; an MCP tool and a CLI verb start it on demand and return a structured performance warning (floor fields that failed) with the endpoint.
+    context: |
+      Operator refinement 2026-11-11. Same idle class as other on-demand services (1800-465n): it stops again when idle.
+    exit_criteria:
+      - 'per platform, below the floor, the MCP call starts the engine and returns a result carrying performance_warning naming RAM or accelerator; above the floor no warning; today no such tool or verb'
+    unscoreable: 'unpinnable-until-the-guard-exists: the tool fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: operator refinement 2026-11-11; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [below-the-floor-local-inference-is-off-by-default-on-every-platform]
+    related: [1800-465n, 1957-emar]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: stop-all-reset-and-enclave-restart-name-the-live-agents-and-unpushed-commits-they-would-destroy-and-refuse-without-consent
+    order: 2080-xydi
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    story: forge-safety-v05
+    capability_tags: [tray, cli, forge, ux]
+    estimated_hours: 4
+    title: |
+      An operator-approved vault and CA rotation on 2026-11-11 ran --stop-all and --reset-guest and killed a visual-chess forge with live agents, losing its unpushed work; stop-all, reset and enclave restart name each forge with a live agent session or unpushed commits and refuse unless the user confirms for those named forges.
+    context: |
+      Incident 2026-11-11 (coordinator). Symbols: reset_guest_main and reset_guest_async in the macOS tray; the Linux and Windows stop-all and reset paths. Unattended callers get a refusal with the names, never a silent kill.
+    exit_criteria:
+      - 'per platform, a fixture with one forge holding an unpushed commit makes --stop-all and --reset-guest exit non-zero naming that forge, and proceed only with an explicit per-forge confirmation; today both proceed'
+    unscoreable: 'unpinnable-until-the-guard-exists: the refusal fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: incident 2026-11-11 via coordinator; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1437-av8u, 1437-3iux]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: unpushed-mirror-refs-and-agent-transcripts-survive-a-guest-reset-or-are-exported-first
+    order: 2080-ybu9
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    story: forge-safety-v05
+    capability_tags: [git-mirror, forge, vm]
+    estimated_hours: 4
+    title: |
+      A guest reset wiped the forge-cache volume and the mirror, losing unpushed refs and agent transcripts; before a reset the product pushes or exports every unpushed mirror ref and the live sessions' transcripts to a host location the user is told about.
+    context: |
+      Incident 2026-11-11. Tension with forge-logs-die-with-the-forge: transcripts are exported only by an explicit reset of a live forge, kept for the user, never collected. Multi-machine: an export may go to the Pi-fleet mirror (1548-7onc) when present.
+    exit_criteria:
+      - 'per platform, a fixture with an unpushed mirror ref and a live transcript runs reset and afterwards the ref is on the host (or upstream) and the transcript is at the named path; today both are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the reset fixture is the deliverable.'
+    next_action: 'Nothing is done. Confirm with the operator that exporting transcripts on reset does not conflict with the log ruling.'
+    provenance: incident 2026-11-11 via coordinator; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-xydi, 1548-7onc]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: the-launcher-passes-name-remote-control-continue-and-resume-through-to-claude
+    order: 2081-877k
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: forge-safety-v05
+    capability_tags: [forge, claude, launcher]
+    estimated_hours: 2
+    title: |
+      entrypoint-forge-claude.sh has no path for harness flags, so a forge Claude session cannot be named, put under remote control, or continued or resumed after a restart; the launcher passes --name, --remote-control and --continue/--resume through.
+    context: |
+      Incident follow-up 2026-11-11. The pass-through lives in the Rust launcher with an allowlist; the entrypoint only forwards. Port, do not grow, the shell (2080-iseg).
+    exit_criteria:
+      - 'a launch with each allowlisted flag shows it on the claude argv inside the forge; an unlisted flag is refused; today none reaches claude'
+    unscoreable: 'unpinnable-until-the-guard-exists: the argv fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: incident 2026-11-11 via coordinator; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-xydi]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}

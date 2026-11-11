@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: selinux-from-audit-to-enforcement-starting-with-the-forge-container-because-the-policy-sources-already-exist-unloaded-while-one-spec-mandates-label-disable-as-a-security-default-and-another-spec-asserts-guarantees-that-cannot-hold-under-it
+    field: next_action
+    value: 'blind-design triage 2026-11-11 (2080-294s): this row and 1693-9qfb / the label=disable mandate pull opposite ways; reconcile before either is picked up. label=disable is in the credential audit order 2080-yvby scope.'
+    ts: "2026-11-11T19:03:06Z"
+    host: macuahuitl-fedora

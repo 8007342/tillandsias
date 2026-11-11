@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: credential-lifecycle-audit-milestone
+    field: next_action
+    value: 'blind-design triage 2026-11-11 (2080-294s): use plan/issues/blind-design-2026-11-11/judge-2-comparison.md section 3 as the starting map; the instrument is the credential census 2080-xz8m (order 2080-yvby, PR #1087).'
+    ts: "2026-11-11T19:03:06Z"
+    host: macuahuitl-fedora

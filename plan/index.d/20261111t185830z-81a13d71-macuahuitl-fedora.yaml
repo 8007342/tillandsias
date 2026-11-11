@@ -1,0 +1,216 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story idle-floor-v05 — 2026-11-11 blind-design triage (order 2080-294s).
+# Operator ruling 2026-11-11: near-zero idle overhead for EVERYTHING; avoid polling;
+# unavoidable polling uses exponential backoff; measured per platform on the design
+# floor (16 GB RAM + an accelerator; yoga, yolanda, tlatoanis-macbook-air as examples).
+packets:
+  - packet_id: every-periodic-wakeup-in-the-product-is-in-one-inventory-and-an-unlisted-one-is-red
+    order: 2080-9ijy
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    story: idle-floor-v05
+    capability_tags: [polling, tray, lua, ratchet]
+    estimated_hours: 4
+    title: |
+      No list names the product's periodic wakeups, so nobody can approve them under the polling ruling: one committed Lua table names each cadence, its owner, wakeups per hour, whether it runs with zero containers and the approval it rests on, and a check is red on a periodic loop the table does not name.
+    context: |
+      Both judges (judge 1 packet 8a, judge 2 G11). Known unlisted loops at e886f596c: memory_stall_watch INTERVAL 15 s (lists containers each pass, 240 an hour), the lane-freshness 60 s loop, PTY_HEARTBEAT_INTERVAL 30 s, the external-logs auditor at 60 s by spec. Extends 1919-gshp (tray no-polling check to images) and the 1919 polling epic; this is the inventory those checks need. Scope: tray, headless, both guest agents, every image entrypoint.
+    exit_criteria:
+      - 'the check fails on today''s tree naming at least the three loops above; it passes once each is either removed or listed with an approval or an exponential-backoff marker'
+      - 'the check reports the population it scanned (files and loops, non-zero)'
+    unscoreable: 'unpinnable-until-the-guard-exists: the check is the deliverable; write it in the same commit and move this text into verifiable_closure.'
+    next_action: 'Nothing is done. Write the Lua scanner over crates/ and images/ for interval constants and sleep loops; watch it go red on the three named loops.'
+    provenance: blind-design judges 1 and 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1919-gshp, 1919-misc, 1919-exec, 154, 156]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: the-memory-stall-watch-waits-on-a-kernel-pressure-event-instead-of-listing-containers-every-15-seconds
+    order: 2080-9wex
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: idle-floor-v05
+    capability_tags: [polling, tray, rust, linux]
+    estimated_hours: 3
+    title: |
+      memory_stall_watch wakes every 15 s and lists containers each pass even with nothing running; it waits on a PSI memory trigger (Linux, and inside each guest) and does nothing between events.
+    context: |
+      Judge 2 G11 second arm. Linux exposes /proc/pressure/memory triggers that block in poll() until a threshold is crossed. Where no trigger is available, the fallback backs off exponentially from 15 s, never a fixed short cadence. Holds separately in the macOS guest and Windows distro (both run Linux kernels).
+    exit_criteria:
+      - 'with no container under pressure, the watch makes zero wakeups in ten minutes (counted with a wakeup counter in a test build); today it makes 40'
+      - 'an induced pressure event is still reported within one trigger window'
+    verifiable_closure: 'cargo test -p tillandsias-headless memory_stall_watch wakeup-count test; red on the 15 s interval'
+    next_action: 'Nothing is done. Add a wakeup counter and the ten-minute test under a simulated clock first.'
+    provenance: blind-design judge 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-9ijy]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: the-lane-freshness-loop-and-the-pty-heartbeat-stop-waking-a-quiet-forge-on-fixed-short-cadences
+    order: 2080-a9tb
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    story: idle-floor-v05
+    capability_tags: [polling, mcp, rust]
+    estimated_hours: 3
+    title: |
+      The lane-freshness loop wakes every 60 s and PTY_HEARTBEAT_INTERVAL every 30 s whether or not anything changed; freshness is driven by the commit and mirror events it already has, and the heartbeat backs off exponentially while the session is quiet.
+    context: |
+      Judge 1 packet 8. Symbols in mcp_socket.rs and pty_handler.rs. A dead peer must still be found: the backoff is capped and reset on any traffic.
+    exit_criteria:
+      - 'a quiet forge session for ten minutes under a simulated clock records at most 5 heartbeat wakeups and zero freshness wakeups without a commit; today 20 and 10'
+      - 'a killed peer is still detected within the cap'
+    verifiable_closure: 'cargo test -p tillandsias-headless quiet-session wakeup test; red on today''s fixed intervals'
+    next_action: 'Nothing is done. Write the simulated-clock test first.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-9ijy]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: linux-idle-overhead-is-measured-on-a-floor-host-in-three-states-against-a-committed-number
+    order: 2080-anej
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: idle-floor-v05
+    capability_tags: [measurement, tray, linux, floor-host]
+    estimated_hours: 4
+    title: |
+      Linux: nothing measures idle overhead; a measurement step records tray and service RSS and wakeups per minute for ten minutes in three states (tray only; services up, no forge; one forge idle) on a floor-class Linux host and writes a verdict against a committed number, and adding a one-second timer makes it red.
+    context: |
+      Both judges (judge 1 packet 8b-c, judge 2 G10). One live sample: tray Pss 16.6 MB, 36 threads, about 22 context switches a second with one forge up. OQ-1/OQ-2 are answered (floor = 16 GB + accelerator; near-zero binds everything), so the number is proposed in the row and confirmed by the operator. The measurer is Rust or Lua, not shell. Every obligation holds per platform: macOS and Windows have their own rows.
+    exit_criteria:
+      - 'the step writes a per-state verdict with the regime attached (host, kernel, state); a mutation adding a one-second timer to the tray turns it red; today there is no step and no number'
+    unscoreable: 'unpinnable-until-the-guard-exists: the measurement step is the deliverable; write it in the same commit.'
+    next_action: 'Nothing is done. Build the measurer, run it once on a floor-class Linux host, propose the number to the operator as one plain ask.'
+    provenance: blind-design judges 1 and 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-9ijy, 1800-465n]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: macos-idle-overhead-is-measured-on-a-floor-host-in-three-states-including-the-guest
+    order: 2080-ari8
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: macos
+    story: idle-floor-v05
+    capability_tags: [measurement, tray, macos, vm, floor-host]
+    estimated_hours: 4
+    title: |
+      macOS: the same three-state idle measurement as the Linux row, counting the Virtualization.framework guest's memory and wakeups as product overhead, against its own committed number.
+    context: |
+      Same instrument as 2080-anej, macOS lane; the guest is product overhead under the 2026-11-11 ruling.
+    exit_criteria:
+      - 'a per-state verdict that includes guest RSS; the one-second-timer mutation turns it red; today there is no step'
+    unscoreable: 'unpinnable-until-the-guard-exists: the measurement step is the deliverable.'
+    next_action: 'Nothing is done. Port the measurer after 2080-anej lands its format.'
+    provenance: blind-design triage 2080-294s (per-platform split).
+    depends_on: [linux-idle-overhead-is-measured-on-a-floor-host-in-three-states-against-a-committed-number]
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: windows-idle-overhead-is-measured-on-a-floor-host-in-three-states-including-the-distro
+    order: 2080-bbuu
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    story: idle-floor-v05
+    capability_tags: [measurement, tray, windows, wsl2, floor-host]
+    estimated_hours: 4
+    title: |
+      Windows: the same three-state idle measurement, counting the WSL2 VM (vmmem) as product overhead, against its own committed number.
+    context: |
+      Same instrument as 2080-anej, Windows lane.
+    exit_criteria:
+      - 'a per-state verdict that includes vmmem; the one-second-timer mutation turns it red; today there is no step'
+    unscoreable: 'unpinnable-until-the-guard-exists: the measurement step is the deliverable.'
+    next_action: 'Nothing is done. Port the measurer after 2080-anej lands its format.'
+    provenance: blind-design triage 2080-294s (per-platform split).
+    depends_on: [linux-idle-overhead-is-measured-on-a-floor-host-in-three-states-against-a-committed-number]
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: every-enclave-service-states-the-obligation-it-pays-for-when-it-starts-and-its-measured-idle-cost
+    order: 2080-bd3f
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    story: idle-floor-v05
+    capability_tags: [spec, metrics, services]
+    estimated_hours: 3
+    title: |
+      The service catalog says nothing about why each service runs or what it costs; each row names the obligation it pays for, when it starts (session, on demand, never at idle) and its measured idle RSS, and a check is red on a running tillandsias-* container with no row.
+    context: |
+      Judge 1 packet 13 (blind designer B's test: a service exists only if removing it breaks a named obligation on some platform). nix-cache, the router sidecar and inference start with the session today. Extends milestone 353; on-demand starts reuse the 1800-465n idle classes. Multi-machine: a row may say a service lives on the Pi fleet (1548-y56i, 1290-5833) rather than the laptop.
+    exit_criteria:
+      - 'a check lists running tillandsias-* containers and fails on one with no catalog row or a row with no obligation; today both fail'
+    unscoreable: 'unpinnable-until-the-guard-exists: the check is the deliverable.'
+    next_action: 'Nothing is done. Add the three columns to the catalog spec, then the Lua check.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [353, 1800-465n, 1290-5833]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: the-macos-guest-stops-when-no-forge-or-appliance-has-needed-it-for-the-idle-interval
+    order: 2080-dunr
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    story: idle-floor-v05
+    capability_tags: [vm, macos, tray]
+    estimated_hours: 5
+    title: |
+      The macOS guest runs for the tray's whole lifetime; with no forge and no appliance for the idle interval it stops, with one timer wakeup per idle period, and the next launch brings it back.
+    context: |
+      Both judges (judge 1 packet 12, judge 2 G16). OQ-2 answered 2026-11-11: near-zero binds the whole product, so a warm idle guest is overhead. Interval proposed in the row, confirmed by the operator. Related to 1560-73zh (guest watchdog on lost tray heartbeat) and 1498-fn96 (clean stop).
+    exit_criteria:
+      - 'with no forge open for the interval the VM process is absent and the next launch starts it; today it never stops while the tray runs'
+    unscoreable: 'unpinnable-until-the-guard-exists: the idle-stop arm is the deliverable.'
+    next_action: 'Nothing is done. Propose the interval; reuse the 1800-465n idle clock.'
+    provenance: blind-design judges 1 and 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1560-73zh, 1498-fn96, 1800-465n]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: the-windows-distro-stops-when-no-forge-or-appliance-has-needed-it-for-the-idle-interval
+    order: 2080-g4ru
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    story: idle-floor-v05
+    capability_tags: [wsl2, windows, tray]
+    estimated_hours: 4
+    title: |
+      The Windows distro runs for the tray's whole lifetime; with no forge and no appliance for the idle interval it is terminated (Stopped), and the next launch starts it.
+    context: |
+      Windows twin of 2080-dunr. Mind 1965-zrjq: a stopped distro must not lose its Vault handover.
+    exit_criteria:
+      - 'with no forge open for the interval wsl -l -v shows the distro Stopped and the next launch starts it; today it never stops while the tray runs'
+    unscoreable: 'unpinnable-until-the-guard-exists: the idle-stop arm is the deliverable.'
+    next_action: 'Nothing is done. After 2080-dunr fixes the interval.'
+    provenance: blind-design triage 2080-294s (per-platform split).
+    depends_on: []
+    related: [2080-dunr, 1965-zrjq]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
