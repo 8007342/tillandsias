@@ -163,7 +163,8 @@ Each stage lands alone and leaves the product working.
    folds into path A; path E and path L are deleted. (2080-dy3a, 2080-cbuq)
 2. **The tray stops being root.** The tray logs in with the role already
    provisioned for it; the root token is revoked after bootstrap and is not
-   kept. Gated on decision D1, because the share can mint a new root.
+   kept, and the share is not kept beside a token that can use it. Required
+   by the operator's answer to D1.
    (2080-yvby)
 3. **Forges stop writing credentials.** A broker verb on the lane socket takes
    a rotated sign-in from a forge, checks it is the same account for that
@@ -194,6 +195,11 @@ wire (972-umik).
   model on Linux? If yes, the share needs an OS-verified release (the
   approval key) and stage 2 is required. If no, H1 is an accepted residual
   and stage 2 is hygiene.
+  ANSWERED 2026-11-11 (relayed by the coordinator): a same-user host process
+  is a minor threat (accidental misuse, not hostile software), but containers
+  are protected as if hostile software were on the host, within reasonable
+  limits, and the stronger option is preferred where its cost is reasonable.
+  Stage 2 is required hardening. 2080-yvby moved from pending to ready.
 - D2. Until a provider gateway exists, may a forge keep a read-only copy of
   the complete sign-in document, or must refresh tokens stay on the host even
   if that breaks a provider CLI's own refresh?
@@ -202,6 +208,10 @@ wire (972-umik).
 - D4. The black-box session printed the enclave CA key and one mirror AppRole
   pair into its own transcript. Re-minting the CA and letting that secret id
   expire is the operator's call; this audit touched neither.
+  DONE 2026-11-11 by the operator: the intermediate CA was re-minted, the
+  vault was wiped by a guest reset (every AppRole minted again), and the
+  developer proxy `ca-key.pem` was deleted from the cache directory. 2080-m3kw
+  stands, because `ensure_dev_cache` writes that file again.
 - D5. A device-flow client cannot revoke a GitHub App user token (revocation
   needs the client secret). Is "delete locally and show the GitHub settings
   page" acceptable as GitHub sign-out?
