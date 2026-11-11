@@ -4816,7 +4816,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # count must not silently grow back: it went from 21 to 23 in the one day
     # between filing the packet and starting it.
     _step "Reporting litmus line-window pins (925-erjs, advisory)..."
-    _run bash "$SCRIPT_DIR/scripts/check-litmus-line-windows.sh" 2>&1 || true
+    _run_lua_decider "scripts/lua/check-litmus-line-windows.lua" 2>&1 || true
     _info "Litmus line-window report emitted"
 
     # Order 928-qm8k. A groundtruth case that asserts on ANSWER PROSE has a

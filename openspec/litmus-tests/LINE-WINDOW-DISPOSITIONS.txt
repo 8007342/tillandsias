@@ -1,6 +1,6 @@
 # Recorded dispositions for litmus critical_path steps that still assert
 # through a grep line window. Order 925-erjs; enforced by
-# scripts/check-litmus-line-windows.sh.
+# scripts/lua/check-litmus-line-windows.lua.
 #
 # FORMAT: one entry per test, `<test-file.yaml> | <reason>`, reason continued on
 # indented lines. Keyed by TEST rather than by line number, because line numbers
