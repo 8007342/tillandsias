@@ -229,7 +229,12 @@ wire (972-umik).
   user name, host name beyond a class, or token fragment. A test asserts the
   record's field allowlist (added to 2080-i4ga).
 - D7. Turning mlock on makes Vault's memory unswappable. Acceptable on
-  floor-tier hosts?
+  floor-tier hosts? **ANSWERED 2026-11-11 (operator):** keep
+  `disable_mlock`, because rootless podman cannot mlock without a host
+  memlock change, which no-sudo refuses. Instead the Vault container runs
+  with swap off for its cgroup (`--memory-swap` equal to `--memory`) and a
+  modest explicit memory limit; it uses about 42 MB today with no limit.
+  2080-v2z7 is moved to ready with that closure.
 
 ## 7. What was not verified
 

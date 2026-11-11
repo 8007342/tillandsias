@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-vault-memory-is-locked-so-it-cannot-reach-swap
+    field: unscoreable
+    value: ''
+    ts: "2026-11-11T19:59:18Z"
+    host: macuahuitl-fedora
+    replaces_sha256: "59a0d31ebbe97502fdc0b0a118bf9ea63c6dc0842c0a3e6b4b79ef66b46f7e15"
+
+events:
+  - packet_id: medium-vault-memory-is-locked-so-it-cannot-reach-swap
+    event:
+      type: note
+      ts: "2026-11-11T19:59:18Z"
+      host: macuahuitl-fedora
+      summary: |-
+        closure is now a run-args unit test plus podman inspect, not a future health line
