@@ -901,6 +901,7 @@ specs:
   - litmus:podman-web-launch-profile
   - litmus:podman-path-availability
   - litmus:opencode-vault-auth-content
+  - litmus:approval-broker-signs-an-action-bound-record
   coverage_ratio: 77
   last_verified: '2026-07-23'
 - spec_id: nix-builder

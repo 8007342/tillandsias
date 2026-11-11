@@ -701,8 +701,8 @@ line per the semantic-distillation policy.
 
 **You are TOLD when that threshold is crossed — you no longer have to notice it
 here** (order 914-nkc4). `scripts/release-preflight.sh` runs
-`scripts/check-ledger-distillation.sh`, which reports
-`due:ledger-distillation:<n>-rows:threshold=<t>` and names the destination line.
+`scripts/lua/check-ledger-distillation.lua` (ported from the .sh by 1879-5jkt), which reports
+`due:ledger-distillation:<n>-rows:threshold=<t> (advisory)` and names the destination line.
 It is ADVISORY and cannot refuse a cut: an over-long table costs a long README,
 never a false verdict. The threshold lives in that script rather than in this
 sentence, so the number cannot drift between the two. This paragraph used to be
