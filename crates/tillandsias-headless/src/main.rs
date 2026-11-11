@@ -131,6 +131,10 @@ mod studio_contract;
 // signed acknowledgement record, the obligations spec and the consent gate.
 #[cfg(feature = "host-services")]
 mod licence_consent;
+// 1879-5jkt: the approval broker (os-verified-approval-gates D1-D4): signs an
+// action-bound statement and admits it once. Uses licence_consent's verifier.
+#[cfg(feature = "host-services")]
+mod approval;
 // 2068-ypgq: the restricted-weights fetch behind the licence gate, on the
 // model-hubs tier with a single-use consent token.
 #[cfg(feature = "host-services")]
@@ -534,6 +538,22 @@ fn main() {
     // device catalogue is pure data; dispatched early, it touches nothing.
     if user_args.first().map(String::as_str) == Some("devices") {
         std::process::exit(run_devices_cli(&user_args[1..]));
+    }
+
+    // Order 1879-5jkt: `approval request|verify`. Dispatched early, on the host
+    // binary: it signs with the host's approval key, which never enters a forge.
+    if user_args.first().map(String::as_str) == Some("approval") {
+        #[cfg(feature = "host-services")]
+        std::process::exit(approval::run_cli(&user_args[1..]));
+        #[cfg(not(feature = "host-services"))]
+        {
+            println!("refused:approval:not-compiled");
+            eprintln!(
+                "  why: the approval broker is built with the host services, and this binary was built without them"
+            );
+            eprintln!("  remedy: use the tray build of tillandsias (--features tray)");
+            std::process::exit(2);
+        }
     }
 
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane

@@ -1,0 +1,46 @@
+# @trace spec:security-privacy-isolation, spec:approval-record, order:1879-5jkt
+#
+# Regression pin for order 1879-5jkt (openspec change
+# os-verified-approval-gates, D1-D4). `tillandsias approval request` signs a
+# canonical statement as SSHSIG with the host's approval key, after the user
+# check, and records it (state file, journal, git note on the approved
+# commit); `tillandsias approval verify` admits it once. The fixture uses a
+# test ed25519 key in place of the hardware key and stubs polkit's pkcheck.
+# It was red against trunk 50b517285 (`Unsupported option: --action`), and
+# red under two mutants: a verify that never spends the nonce (the second use
+# was admitted) and a software path with no polkit check (the denied request
+# was signed and recorded).
+name: litmus:approval-broker-signs-an-action-bound-record
+spec: security-privacy-isolation
+phase: post-build
+description: >
+  Pin that an approval is an SSHSIG over a canonical statement that stock
+  `ssh-keygen -Y verify -n tillandsias-approval@v1` accepts, that changing any
+  of target, to, expires or nonce breaks it, that it is admitted once, that
+  its note's first line carries no hash, that it publishes no host name, home
+  path or email, that a denied user check signs nothing, and that a host with
+  no enrolled signers neither signs nor admits.
+severity: high
+size: quick
+
+inputs:
+  - crates/tillandsias-headless/src/approval.rs
+  - crates/tillandsias-headless/src/licence_consent.rs
+  - scripts/lua/test-approval-broker.lua
+
+preconditions:
+  - the headless binary is built with the host services (target/debug/tillandsias from `cargo build -p tillandsias-headless --features tray`, or TILLANDSIAS_HEADLESS_BIN); the fixture skips otherwise
+  - ssh-keygen (OpenSSH 8.2 or later) is on PATH
+  - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "an approval verifies with stock ssh-keygen, is bound to its fields, is admitted once, and publishes no personal data"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-approval-broker.lua"
+    timeout_ms: 180000
+    success_pattern: "ok:approval-broker:16"
+    failure_pattern: "refused:|FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:security-privacy-isolation"
+  expected_log: "ok:approval-broker:16"
