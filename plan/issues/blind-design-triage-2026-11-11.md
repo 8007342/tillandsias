@@ -72,8 +72,21 @@ observability, idle overhead with no number, and complexity / shell growth.
 - **OQ-1** floor host → the capability floor above (refines option c).
 - **OQ-2** what near-zero binds → the whole product, every service (option b);
   numbers proposed by 2080-anej / 2080-ari8 / 2080-bbuu, confirmed by the operator.
-- **OQ-3** Linux desktop with no tray host → not ruled on in the 2026-11-11
-  rulings; **still open** (it was grouped with OQ-1..4 but nothing answers it).
+- **OQ-3** Linux host with no tray → answered later on 2026-11-11: it runs the
+  headless tillandsias, as the macOS VM and WSL2 guest do. The CLI works
+  normally (`tillandsias --claude --cloud 8007342/<project>` opens an
+  interactive terminal, and the GitHub and Cloudflare logins both work). The
+  Cloudflare login gives access to the work queue, so preview and dev
+  wrangler containers can be delegated to an always-on host, and public
+  hostnames such as alpha.demonattack.tlatoani.net map to it, so builds are
+  tested without Cloudflare build minutes. Filed: 2082-fidv (every tray
+  action has a CLI equivalent) and 2082-tusw (wrangler job types on the
+  queue). Annotated rather than refiled: 378 (public hostname through a
+  tunnel), 1291-38mt (Pi aarch64 install), 1548-5t00 (the queue).
+- **Credential audit D7** (order 2080-yvby, PR #1087) answered: the Vault
+  container runs with swap off (`--memory-swap` equal to `--memory`, with an
+  explicit memory limit), and `disable_mlock` stays, because rootless podman
+  cannot mlock without a host memlock change. Recorded on 2080-v2z7.
 - **OQ-4** more than one machine → yes, option (b), through the Cloudflare
   login, IPv6 discovery and the Pi fleet.
 - **OQ-19** licence key after a vault wipe → option (a): a new key, old records
@@ -81,7 +94,7 @@ observability, idle overhead with no number, and complexity / shell growth.
 
 ## Open operator questions
 
-OQ-3, OQ-5, OQ-6, OQ-7, OQ-8, OQ-9, OQ-10, OQ-11, OQ-12, OQ-13, OQ-14, OQ-15,
+OQ-5, OQ-6, OQ-7, OQ-8, OQ-9, OQ-10, OQ-11, OQ-12, OQ-13, OQ-14, OQ-15,
 OQ-16, OQ-17, OQ-18 (text in `blind-design-2026-11-11/operator-questions.md`).
 OQ-6 holds the Vault audit file retention; OQ-16 holds whether a sign-in can
 stay out of the forge; OQ-17/18 set the ceiling of the threat model (2080-996d).
