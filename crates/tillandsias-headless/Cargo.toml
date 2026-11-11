@@ -98,6 +98,9 @@ tillandsias-vault-client = { path = "../tillandsias-vault-client" }
 # 1954-btht: the tray fixture drives the real dbusmenu interface over a
 # private peer-to-peer bus (no session bus, no desktop). Test-only feature.
 zbus = { version = "4.4.0", default-features = false, features = ["tokio", "p2p"] }
+# 1880-9wpd: the stand-in FIDO2 authenticator (examples/sk_stub.rs) signs
+# ed25519 with ring, already in the lockfile through rustls. Test-only.
+ring = "0.17"
 
 [target.'cfg(unix)'.dependencies]
 # Used by the in-VM PTY handler (control-wire-pty-attach Tasks 4.x):
@@ -138,3 +141,10 @@ vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs", "keyring"]
 
 [lints]
 workspace = true
+
+# 1880-9wpd: a stand-in FIDO2 authenticator (OpenSSH sk-api provider) for the
+# approval fixture: `ssh-keygen -w target/debug/examples/libsk_stub.so`.
+# Never shipped.
+[[example]]
+name = "sk_stub"
+crate-type = ["cdylib"]

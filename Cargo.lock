@@ -3392,6 +3392,7 @@ dependencies = [
  "png 0.18.1",
  "qrcode",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "sha2",
