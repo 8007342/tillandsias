@@ -9,6 +9,7 @@ This project depends on adefossez/HTDemucs and adefossez/HTDemucs-6s and must no
 ## Requirements
 
 ### Requirement: Attribution
+<!-- req-id: 2453acd0 -->
 
 The project SHALL show the attribution "Demucs, Alexandre Défossez" wherever it credits the work it is built on, for as long as it depends on adefossez/HTDemucs and adefossez/HTDemucs-6s.
 
@@ -21,6 +22,7 @@ How this project honours it: _to be written by the project owner; for example "t
 - **THEN** "Demucs, Alexandre Défossez" is among them
 
 ### Requirement: Non-commercial
+<!-- req-id: 19fbaf33 -->
 
 The project SHALL NOT use adefossez/HTDemucs and adefossez/HTDemucs-6s for commercial advantage or monetary compensation beyond what the licence permits; the acknowledgement records use `non-sale`.
 
@@ -33,6 +35,7 @@ How this project honours it: _to be written by the project owner; for example "t
 - **THEN** it is offered without sale of the artefact or of outputs the licence reserves
 
 ### Requirement: Review
+<!-- req-id: 4244d3e4 -->
 
 The project owner SHALL read this clause of the licence of adefossez/HTDemucs and adefossez/HTDemucs-6s and classify it before relying on the artefact: The license of the weights is not clear: MusDB contains some data that were only usable for research purpose. I sadly cannot help granting a license, both coming from Meta custom data, or from the original MusDB data.
 
