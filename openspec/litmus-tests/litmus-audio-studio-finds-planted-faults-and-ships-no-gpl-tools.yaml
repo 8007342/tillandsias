@@ -1,4 +1,4 @@
-# @trace order:2055-grzz
+# @trace order:2055-grzz, order:2078-kmbx
 name: litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools
 spec: local-web-preview
 phase: pre-build
@@ -11,10 +11,10 @@ preconditions:
   - podman is available and can build images/audio-studio (first build pulls the pinned Python base and Debian packages; later runs reuse the layer cache); the detector runs in it with --network=none, never on the host
 
 critical_path:
-  - step: "five planted faults found at their ranges, the clean control (looped) silent, each planted fault asserted in the samples first"
+  - step: "five planted faults found at their ranges, the clean control (looped) silent, each planted fault asserted in the samples first; the 2072-tap8 drum loops; and (2078-kmbx) eleven real kumbia excerpts, hash- and size-checked, each judged at its loop point (clean rolled/crossfaded/shipped wraps, a cut wrap, HPSS parts, a planted click and dropout)"
     command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-audio-studio-glitches.lua"
     timeout_ms: 1800000
-    expected_behavior: "ok:audio-studio-glitches:11-arms"
+    expected_behavior: "ok:audio-studio-glitches:48-arms"
 
   - step: "each named transform runs in the appliance and does what it says by measurement: -20 LUFS, rubberband 1.5x duration, decodable opus and aac of the input's length, sox 22050 Hz; an existing output and a path outside /work/tmp/audio are refused inside"
     command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-audio-studio-transforms.lua"
@@ -34,7 +34,7 @@ critical_path:
 observability:
   traces:
     - "@trace order:2055-grzz"
-  expected_log: "ok:audio-studio-glitches:11-arms"
+  expected_log: "ok:audio-studio-glitches:48-arms"
   log_fields:
     spec: "local-web-preview"
     test: "audio-studio-finds-planted-faults-and-ships-no-gpl-tools"
