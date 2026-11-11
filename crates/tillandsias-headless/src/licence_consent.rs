@@ -632,6 +632,25 @@ impl Acknowledgement {
 /// One record per licence TEXT (a record binds one licence hash), so the one
 /// grant is four records: CorridorKey 2.0 and its three foundation models.
 /// They are the seeds in `licences/acknowledgements/`.
+/// 2068-eeti, operator rulings 2026-11-09 and 2026-11-11: Demucs has no
+/// standing grant. A Demucs record must name one project and a dated expiry.
+/// Returns the reason a record breaks that rule, or None.
+pub fn demucs_grant_refusal(ack: &Acknowledgement) -> Option<String> {
+    if ack.licence != "demucs-weights-unstated" {
+        return None;
+    }
+    if ack.expiry == "standing" {
+        return Some("demucs: no standing grant; give a dated expiry".into());
+    }
+    if !ack.scope.starts_with("project:") {
+        return Some(format!(
+            "demucs: scope {:?} is not one project; acknowledge per project",
+            ack.scope
+        ));
+    }
+    None
+}
+
 pub fn operator_standing_acknowledgements() -> Vec<Acknowledgement> {
     let seed = |licence: &str, licence_sha256: &str, repo: &str| Acknowledgement {
         licence: licence.into(),
@@ -1750,6 +1769,37 @@ pub(crate) mod tests {
                 r.spdx
             );
         }
+    }
+
+    /// 2068-eeti, operator ruling 2026-11-11: Demucs is acknowledged per
+    /// project with a dated expiry. The committed record is project-scoped and
+    /// dated; a standing or operator-projects Demucs record is refused.
+    #[test]
+    fn demucs_records_are_per_project_and_dated_never_standing() {
+        let committed = Acknowledgement::from_yaml(include_str!(
+            "../../../licences/acknowledgements/adefossez-htdemucs.yaml"
+        ))
+        .unwrap();
+        assert_eq!(committed.licence, "demucs-weights-unstated");
+        assert_eq!(demucs_grant_refusal(&committed), None);
+        assert!(!committed.signature.is_empty(), "the record is signed");
+
+        let standing = Acknowledgement {
+            expiry: "standing".into(),
+            ..committed.clone()
+        };
+        assert!(demucs_grant_refusal(&standing).is_some());
+        let operator_wide = Acknowledgement {
+            scope: "operator-projects".into(),
+            ..committed.clone()
+        };
+        assert!(demucs_grant_refusal(&operator_wide).is_some());
+        // Not Demucs: the rule does not apply.
+        let other = Acknowledgement {
+            licence: "mit".into(),
+            ..standing
+        };
+        assert_eq!(demucs_grant_refusal(&other), None);
     }
 
     /// The one-call gate studio_key.rs uses (1956-ucix): with the four signed
