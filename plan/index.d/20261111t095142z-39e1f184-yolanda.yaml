@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: observatorium-rebuild-as-static-html-published-manually
+    field: status
+    value: completed
+    ts: "2026-11-11T09:51:42Z"
+    host: yolanda
+
+events:
+  - packet_id: observatorium-rebuild-as-static-html-published-manually
+    event:
+      type: completed
+      ts: "2026-11-11T09:51:42Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: 50b517285: litmus:stable-channel-shape 5/5 PASS (step 4 'no automation writes the observatorium deploy ref' OK); cd observatorium && npm test 67 pass 0 fail; scripts/test-promote-stable-evidence-gate.sh 30/30 passed incl. 'a promotion never moves deploy/observatorium'
+  - packet_id: observatorium-rebuild-as-static-html-published-manually
+    event:
+      type: note
+      ts: "2026-11-11T09:51:42Z"
+      host: yolanda
+      summary: |-
+        all five PRs (#1069 #1073 #1076 #1077 #1079) and task 3.6 (#1083, gate step 930-2066-obsv) landed; closure reproduced on trunk 50b517285 by yolanda
