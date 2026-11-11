@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: glitch-detector-fixture-reads-real-kumbia-loop-excerpts-beside-its-synthetic-arms
+    field: status
+    value: completed
+    ts: "2026-11-11T20:48:08Z"
+    host: yoga
+
+events:
+  - packet_id: glitch-detector-fixture-reads-real-kumbia-loop-excerpts-beside-its-synthetic-arms
+    event:
+      type: completed
+      ts: "2026-11-11T20:48:08Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: landed 58a629386 (#1081); trunk 91760d2e7 scripts/lua/test-audio-studio-glitches.lua -> ok:audio-studio-glitches:48-arms; #10/#11 codec steps recorded as a measured limit, not asserted (coordinator ruling)
