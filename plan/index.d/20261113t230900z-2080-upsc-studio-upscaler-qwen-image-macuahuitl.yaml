@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-13 to give PR #1093's admission work a landable order. Code is cited by symbol, never by line.
+packets:
+  - packet_id: studio-admits-real-esrgan-x4plus-and-full-qwen-image-t2i
+    order: 2080-upsc
+    status: in_progress
+    kind: change
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, models, licence]
+    estimated_hours: 1
+    size: S
+    implementer_tier: sonnet
+    owned_files:
+      - images/imagegen/models.tsv
+      - images/models/licence-register.tsv
+      - images/imagegen-studio/extra_model_paths.yaml
+    title: "The GPU studio admits Real-ESRGAN x4plus (BSD-3) and the full Qwen-Image 2512 fp8 T2I model (Apache-2.0), operator-approved 2026-11-13"
+    context: |
+      Operator-approved 2026-11-13 via the coordinator. Comfy-Org/Real-ESRGAN RealESRGAN_x4plus.safetensors (BSD-3) for UpscaleModelLoader / ImageUpscaleWithModel, mapped upscale_models -> I1/upscale_models; Comfy-Org/Qwen-Image qwen_image_2512_fp8_e4m3fn (Apache-2.0, ungated) as I1/qwen-image beside the existing TE and VAE rows. Both pinned by revision, sha256 and size in models.tsv and the licence register.
+    exit_criteria:
+      - "images/models/licence-register.tsv carries rows RealESRGAN-x4plus and Qwen-Image-2512. Pre-fix result: FAILS (neither row on linux-next before this change)."
+    unscoreable: "pinned model and licence TSV rows; the only scoring is a live studio fetch of multi-GB weights by sha256, which no litmus runs"
+    next_action: >
+      Land work/2080-upsc into linux-next; then a studio on a stable release must fetch both models by their pinned sha256.
+    provenance: |
+      PR #1093 (work/studio-upscaler), macuahuitl 2026-11-13; Hugging Face Hub API reads recorded in the TSV comments.
+    events:
+      - type: filed
+        ts: "2026-11-13T23:09:06Z"
+        host: macuahuitl
+        summary: "order minted for the Real-ESRGAN and Qwen-Image admission (was PR #1093 without an order)"
