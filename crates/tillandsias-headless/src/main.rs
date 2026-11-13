@@ -242,6 +242,11 @@ pub mod cloudflare_oauth;
 // storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
 #[cfg(feature = "vault")]
 mod cloudflare_login;
+// @trace order:2080-dhzf — `--huggingface-login [--via device|paste]` and
+// `--huggingface-logout`: the device grant over cloudflare_oauth's core, or a
+// pasted token; stored only in Vault. Needs Vault, so `vault`-gated.
+#[cfg(feature = "vault")]
+mod huggingface_login;
 // @trace order:1506-q7ab — `--msg-serve [--once]`: the same-host mover of the
 // fleet message bus (fsync-then-ack between lane mailboxes, attribution by
 // mount, TTL sweep, wake socket) and the per-forge lane mount. No network.
@@ -412,6 +417,27 @@ fn main() {
     if user_args.iter().any(|a| a == "--help" || a == "-h") {
         print_usage(version);
         return;
+    }
+
+    // Order 2080-dhzf: `--huggingface-login` / `--huggingface-logout`,
+    // dispatched early like the Cloudflare login below.
+    if user_args
+        .iter()
+        .any(|a| a == "--huggingface-login" || a == "--huggingface-logout")
+    {
+        #[cfg(feature = "vault")]
+        std::process::exit(huggingface_login::run_cli(&user_args));
+        #[cfg(not(feature = "vault"))]
+        {
+            eprintln!("refused:huggingface-login:vault-not-compiled");
+            eprintln!(
+                "  why: the Hugging Face token is stored only in Vault, and this binary was built without the `vault` feature"
+            );
+            eprintln!(
+                "  remedy: use a default build of tillandsias (the `vault` feature is on by default)"
+            );
+            std::process::exit(2);
+        }
     }
 
     // Order 1505-kc5f: `--cloudflare-login` / `--cloudflare-logout`. Dispatched
@@ -1114,6 +1140,9 @@ fn main() {
         // here too so no reorder can make them `Unsupported option`.
         "--cloudflare-login",
         "--cloudflare-logout",
+        // Order 2080-dhzf: dispatched early (huggingface_login::run_cli).
+        "--huggingface-login",
+        "--huggingface-logout",
         "--via",
         // Order 1966-47vt: dispatched early (cloud_usage::call_live).
         "--cloud-usage",
@@ -2109,6 +2138,8 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cloudflare-login [--via device|loopback|qr|paste] [--debug]");
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
+    println!("       tillandsias --huggingface-login [--via device|paste] [--debug]");
+    println!("       tillandsias --huggingface-logout [--debug]");
     println!("       tillandsias --cloud-usage [--debug]");
     println!("       tillandsias --fs-stall-check [--gap-secs N]");
     println!("       tillandsias --memory-protection <container>");
@@ -2206,6 +2237,11 @@ fn print_usage(version: &str) {
     println!(
         "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
     );
+    println!(
+        "  --huggingface-login Sign in to Hugging Face (OAuth device flow when an app client id is configured, else paste a \
+         Read token on the terminal) and keep the token in Vault only; host-side huggingface.co downloads send it"
+    );
+    println!("  --huggingface-logout Delete the stored Hugging Face sign-in from Vault");
     println!(
         "  --msg-serve    Run the same-host mover of the fleet message bus in the foreground: deliver every lane's outbox \
          into the destination lanes on this host, ack after fsync, sweep at TTL (the tray runs one itself). \

@@ -2618,6 +2618,148 @@ fn cloudflare_refresh_failure_reason(err: &str) -> String {
     "refresh-transport".into()
 }
 
+// ── Hugging Face (order 2080-dhzf) ────────────────────────────────────────
+// @trace order:2080-dhzf
+
+/// Where the Hugging Face sign-in lives: ONE record (access token, optional
+/// refresh token and expiry, how it was obtained). Only the host binary reads
+/// it, through the root token, for huggingface.co downloads; no Vault policy
+/// grants it to a service and no forge is ever handed it (HF_TOKEN is a
+/// scrubbed credential in tillandsias-plan child_env). Operator ruling
+/// 2026-10-19: no plaintext at rest, so there is no file fallback.
+pub const HUGGINGFACE_TOKEN_PATH: &str = "secret/huggingface/token";
+
+/// The stored Hugging Face sign-in. No derived `Debug`: the hand-written one
+/// redacts both tokens.
+#[derive(Clone, PartialEq, Eq)]
+pub struct HuggingFaceToken {
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    /// Unix seconds; `None` for a pasted user access token (no expiry).
+    pub expires_at: Option<u64>,
+    /// `device` or `paste`.
+    pub source: String,
+}
+
+impl std::fmt::Debug for HuggingFaceToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HuggingFaceToken")
+            .field("access_token", &"<redacted>")
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "<redacted>"),
+            )
+            .field("expires_at", &self.expires_at)
+            .field("source", &self.source)
+            .finish()
+    }
+}
+
+impl HuggingFaceToken {
+    /// The Vault record.
+    pub fn record(&self) -> serde_json::Value {
+        let mut m = serde_json::Map::new();
+        m.insert("access_token".into(), self.access_token.clone().into());
+        if let Some(r) = &self.refresh_token {
+            m.insert("refresh_token".into(), r.clone().into());
+        }
+        if let Some(e) = self.expires_at {
+            m.insert("expires_at".into(), e.into());
+        }
+        m.insert("source".into(), self.source.clone().into());
+        serde_json::Value::Object(m)
+    }
+
+    /// Parse a record; `None` when it holds no usable access token.
+    pub fn from_record(v: &serde_json::Value) -> Option<Self> {
+        let access_token = v["access_token"]
+            .as_str()
+            .filter(|s| !s.is_empty())?
+            .to_string();
+        Some(Self {
+            access_token,
+            refresh_token: v["refresh_token"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+            expires_at: v["expires_at"].as_u64(),
+            source: v["source"].as_str().unwrap_or("unknown").to_string(),
+        })
+    }
+
+    /// Usable for a request at `now`: no expiry, or at least a minute left.
+    pub fn usable_at(&self, now: u64) -> bool {
+        self.expires_at.is_none_or(|e| e > now.saturating_add(60))
+    }
+}
+
+/// Vault as the Hugging Face login sees it; errors are reason tokens.
+pub trait HuggingFaceTokenStore {
+    /// `Ok(None)` ONLY when Vault answered that the record does not exist.
+    fn read_token(&self) -> Result<Option<HuggingFaceToken>, String>;
+    /// Write and confirm (read back and compare).
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String>;
+    /// Destroy every version and confirm; an absent record is `Ok`.
+    fn delete_record(&self, path: &str) -> Result<(), String>;
+}
+
+pub fn store_huggingface_token(
+    store: &dyn HuggingFaceTokenStore,
+    token: &HuggingFaceToken,
+) -> Result<(), String> {
+    if token.access_token.is_empty() {
+        return Err("token-empty".into());
+    }
+    store.write_record(HUGGINGFACE_TOKEN_PATH, token.record())
+}
+
+pub fn delete_huggingface_token(store: &dyn HuggingFaceTokenStore) -> Result<(), String> {
+    store.delete_record(HUGGINGFACE_TOKEN_PATH)
+}
+
+/// The live store: the same Vault, root token, lease and confirm-after-write
+/// rules as [`VaultCloudflareTokenStore`] (whose path-generic write and delete
+/// it reuses), reading its own record.
+pub struct VaultHuggingFaceTokenStore {
+    pub debug: bool,
+    /// A fetch never starts Vault (it reads only if Vault is up); the login
+    /// and logout may.
+    pub may_start_vault: bool,
+}
+
+impl VaultHuggingFaceTokenStore {
+    fn inner(&self) -> VaultCloudflareTokenStore {
+        VaultCloudflareTokenStore {
+            debug: self.debug,
+            may_start_vault: self.may_start_vault,
+        }
+    }
+}
+
+impl HuggingFaceTokenStore for VaultHuggingFaceTokenStore {
+    fn read_token(&self) -> Result<Option<HuggingFaceToken>, String> {
+        vault_up_or_start_unless(
+            crate::read_only_process() || !self.may_start_vault,
+            || container_running(VAULT_CONTAINER_NAME),
+            || ensure_vault_running(self.debug),
+        )?;
+        let (_stability, rt, client) = self.inner().client()?;
+        match rt.block_on(client.read_secret(HUGGINGFACE_TOKEN_PATH)) {
+            Ok(v) => Ok(HuggingFaceToken::from_record(&v)),
+            Err(VaultError::NotFound(_)) => Ok(None),
+            Err(e) => Err(cloudflare_vault_reason(&e).into()),
+        }
+    }
+
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+        CloudflareTokenStore::write_record(&self.inner(), path, value)
+    }
+
+    fn delete_record(&self, path: &str) -> Result<(), String> {
+        CloudflareTokenStore::delete_record(&self.inner(), path)
+    }
+}
+
 /// May a refresh token be POSTed to this endpoint? https anywhere; plain http
 /// only to a loopback host (the fixtures' fake). A userinfo component
 /// (`http://127.0.0.1@elsewhere/`) is refused. The login (1505-kc5f) applies
