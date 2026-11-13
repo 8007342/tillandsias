@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-13 recording a first-hand operator ruling. Code is cited by symbol, never by line.
+packets:
+  - packet_id: forge-and-studio-containers-launch-uncapped-by-operator-ruling-and-the-kernel-arbitrates
+    order: 2080-b982
+    status: in_progress
+    kind: change
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, cgroups, podman, studio]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-core/src/forge_budget.rs
+      - crates/tillandsias-core/src/preflight.rs
+      - crates/tillandsias-headless/src/imagegen_studio.rs
+      - crates/tillandsias-headless/src/audio_studio.rs
+      - openspec/specs/forge-hot-cold-split/spec.md
+    title: "Forge, GPU image studio and audio studio containers launch with no memory.max, memory.high, memory.swap.max or pids cap (operator ruling 2026-11-13)"
+    context: |
+      OPERATOR RULING 2026-11-13 (first-hand, relayed by the macuahuitl coordinator): "Do we need to limit the forges at all? Let them hog all available resources freely. Let's see how the Linux kernel handles it."
+      This supersedes, for forges, the ForgeBudget tiers of 1375-xxzj (memory.max / memory.high / memory.swap.max / pids.max) and the forge-hot-cold-split `--memory = sum(tmpfs) + 256 MB` ceiling. ForgeBudget::podman_args for a forge budget now emits only --memory-reservation (memory.low, a protection), --cgroup-conf=memory.high=max, --cgroup-conf=memory.swap.max=max and --pids-limit=-1 (overriding the containers.conf pids default). Siblings (ForgeBudget::sibling: browser windows, web previews) stay capped. StudioBudget::podman_args (GPU studio) drops --memory, --cpus and the numeric memory.high / swap; it keeps memory.low 0 and --oom-score-adj=1000. The audio studio's --pids-limit=512 becomes -1. The model-fetch helper in imagegen_models (curl, 256m / 64 pids) keeps its cap: it only fetches.
+      Measured 2026-11-13 on macuahuitl (podman, crun, cgroup v2 rootless): with these flags memory.max, memory.high, memory.swap.max and pids.max read `max` in BOTH the libpod-<id>.scope and its nested `container` cgroup, where crun writes the limits (the coordinator found `podman update` had changed only the outer scope).
+    exit_criteria:
+      - "ForgeBudget::for_host(..).podman_args() carries no --memory=, --memory-swap or numeric --pids-limit; it carries memory.high=max, memory.swap.max=max and --pids-limit=-1. Pre-fix result: FAILS (it emitted --memory=6144m and --pids-limit=8192)."
+      - "The real forge launch argv builders (forge_budget_argv_tests) and the GPU studio run_args carry no memory cap."
+    verifiable_closure: "cargo test -p tillandsias-core --lib forge_budget::tests::a_forge_budget_is_uncapped"
+    next_action: >
+      Land work/forge-uncapped-resources (PR into linux-next), then on a stable release launch a forge and read memory.max, memory.high, memory.swap.max and pids.max in its nested `container` cgroup: all must read max.
+    provenance: |
+      Operator ruling 2026-11-13, first-hand to the coordinator; macuahuitl measurement of a throwaway forge-image container's scope and nested container cgroup, 2026-11-13.
+    events:
+      - type: filed
+        ts: "2026-11-13T22:30:00Z"
+        host: macuahuitl
+        summary: "operator ruling 2026-11-13 recorded: forges and studios uncapped; implemented on work/forge-uncapped-resources"
