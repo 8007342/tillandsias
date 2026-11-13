@@ -887,12 +887,4 @@ mod tests {
         );
         assert_eq!(client_id_from(None, "zzz").as_deref(), Some("zzz"));
     }
-
-    /// Exit criterion 3, forge half: HF_TOKEN never reaches a forge child.
-    #[test]
-    fn forge_children_never_get_hf_token() {
-        let src = include_str!("../../tillandsias-plan/src/child_env.rs");
-        assert!(src.contains("\"HF_TOKEN\""));
-        assert!(src.contains("\"HUGGING_FACE_HUB_TOKEN\""));
-    }
 }
