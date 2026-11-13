@@ -229,3 +229,5 @@ comfyui-core	LoadAudio
 comfyui-core	VAEEncodeAudio
 comfyui-core	TrimAudioDuration
 comfyui-core	AudioConcat
+# demon_attack headroom workflow: attenuate before integer export (comfy_extras/nodes_audio.py at the pinned v0.40.0: node_id AudioAdjustVolume :721).
+comfyui-core	AudioAdjustVolume

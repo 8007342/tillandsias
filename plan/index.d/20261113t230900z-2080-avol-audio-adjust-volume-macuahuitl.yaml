@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-13 to give PR #1091 a landable order. Code is cited by symbol, never by line.
+packets:
+  - packet_id: studio-node-allowlist-admits-core-audio-adjust-volume
+    order: 2080-avol
+    status: in_progress
+    kind: change
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, comfyui]
+    estimated_hours: 1
+    size: S
+    implementer_tier: haiku
+    owned_files:
+      - images/imagegen-studio/node-classes.tsv
+    title: "The GPU studio node allowlist admits ComfyUI core node AudioAdjustVolume"
+    context: |
+      The demon_attack headroom workflow attenuates audio before integer export with the ComfyUI core node AudioAdjustVolume (comfy_extras/nodes_audio.py at the pinned v0.40.0). The studio's node-classes.tsv allowlist did not list it, so the studio refused the workflow. One comfyui-core row pins it.
+    exit_criteria:
+      - "images/imagegen-studio/node-classes.tsv carries the row `comfyui-core<TAB>AudioAdjustVolume`. Pre-fix result: FAILS (no such row on linux-next before this change)."
+    unscoreable: "a single data row in an allowlist TSV; no litmus scores a data row and the studio admission check needs a running GPU studio"
+    next_action: >
+      Land work/2080-avol into linux-next; then an installed tray built from that tree must admit a workflow using AudioAdjustVolume.
+    provenance: |
+      PR #1091 (work/studio-audio-adjust-volume), macuahuitl 2026-11-13.
+    events:
+      - type: filed
+        ts: "2026-11-13T23:09:06Z"
+        host: macuahuitl
+        summary: "order minted for the AudioAdjustVolume allowlist row (was PR #1091 without an order)"
