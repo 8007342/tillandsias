@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: workspace-crates-with-no-dependents-and-the-orphan-litmus-directory-are-deleted-or-given-a-stated-reason
+    event:
+      type: progress
+      ts: "2026-11-14T23:16:10Z"
+      agent_id: windows-yolanda-claude-20261114t231610z
+      host: yolanda
+      summary: |-
+        implemented on work/2080-8i25 (7d693c98c), draft PR 1108: check-workspace-members-used.lua wired into build.sh --check; pre-fix refused crates/tillandsias-litmus, and fleet-core with allowlist emptied; orphan dir deleted, litmus-framework refs fixed, fleet-core allowlisted (1548-9n28). preflight refused=0 ran=254.
