@@ -26609,9 +26609,15 @@ mod tests {
                 assert!(
                     !a.contains("seccomp")
                         && !a.contains("--privileged")
-                        && !a.contains("unconfined"),
+                        && !a.contains("unconfined")
+                        // 2022-89hm: the host approval signer (CID 2, 42440)
+                        // rests on this barrier too. SYS_ADMIN can install a
+                        // seccomp-free child; a vsock device bypasses it.
+                        && !a.contains("sys_admin")
+                        && !a.contains("/dev/vsock")
+                        && !a.contains("/dev/vhost-vsock"),
                     "forge {lane} carries {arg:?}: it would undo the only barrier between a \
-                     forge and AF_VSOCK"
+                     forge and AF_VSOCK (guest control 42420, host approval signer 42440)"
                 );
             }
         }
