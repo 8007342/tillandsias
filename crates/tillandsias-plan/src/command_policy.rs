@@ -2124,6 +2124,8 @@ mod tests {
             &["tillandsias", "--claude-login"],
             &["tillandsias", "--cloudflare-login"],
             &["tillandsias", "--cloudflare-logout"],
+            &["tillandsias", "--huggingface-login"],
+            &["tillandsias", "--huggingface-logout"],
             &["tillandsias", "--antigravity-login"],
             &["TILLANDSIAS-WINDOWS-TRAY.EXE", "--github-login"],
             &["tillandsias-macos-tray", "--github-login=x"],

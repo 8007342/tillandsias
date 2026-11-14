@@ -460,6 +460,44 @@ pub struct ProxyTransport {
     /// The squid port: 3128 (the plain proxy) or an egress tier's port, such
     /// as [`MODEL_HUBS_PORT`]. A tier port holds the client to its tier by name.
     pub proxy_port: u16,
+    /// Order 2080-dhzf: send the operator's Hugging Face token (read from
+    /// Vault on the host, [`hf_auth_header`]) on downloads from
+    /// `https://huggingface.co`. Off in tests.
+    pub hf_auth: bool,
+}
+
+/// Order 2080-dhzf: is `url` on `https://huggingface.co` itself? Exact host,
+/// https only, no userinfo and no port, so a look-alike
+/// (`huggingface.co.evil`, `evil/huggingface.co`, `user@huggingface.co`)
+/// never receives the token.
+pub fn is_huggingface_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    authority.eq_ignore_ascii_case("huggingface.co")
+}
+
+/// The header line curl reads from stdin (`--header @-`), or `None` when the
+/// URL is not huggingface.co or there is no token: then the download is
+/// unauthenticated, exactly as before. curl (>= 7.58) does not carry a custom
+/// Authorization header across a redirect to another host, so the CDN a
+/// `resolve/` URL redirects to never sees it.
+pub fn hf_auth_header(url: &str, token: Option<&str>) -> Option<String> {
+    let t = token.filter(|t| !t.is_empty() && !t.contains(['\r', '\n']))?;
+    is_huggingface_url(url).then(|| format!("Authorization: Bearer {t}\n"))
+}
+
+/// The host's stored Hugging Face token for a fetch (never starts Vault).
+fn hf_token_for_fetch() -> Option<String> {
+    #[cfg(feature = "vault")]
+    {
+        crate::huggingface_login::token_for_fetch()
+    }
+    #[cfg(not(feature = "vault"))]
+    {
+        None
+    }
 }
 
 impl ProxyTransport {
@@ -471,6 +509,7 @@ impl ProxyTransport {
                 // launch-images-ok: image.generate is served only to a running forge, whose enclave already runs the git mirror from this image
                 .unwrap_or_else(|| crate::versioned_image_tag("git", crate::VERSION.trim())),
             proxy_port: PLAIN_PROXY_PORT,
+            hf_auth: true,
         }
     }
 
@@ -485,6 +524,12 @@ impl ProxyTransport {
     }
 
     pub fn podman_args(&self, url: &str, dest: &Path) -> Vec<String> {
+        self.podman_args_with(url, dest, false)
+    }
+
+    /// `authorized`: the container reads one header line from stdin
+    /// (`podman run -i`, `curl --header @-`), so the token is never in argv.
+    pub fn podman_args_with(&self, url: &str, dest: &Path, authorized: bool) -> Vec<String> {
         let dir = dest.parent().unwrap_or(Path::new("."));
         let name = dest
             .file_name()
@@ -514,8 +559,14 @@ impl ProxyTransport {
             .map(|a| a.replace(&plain, &tier))
             .collect();
         args.splice(args.len() - 2..args.len() - 2, with_env.drain(..));
+        if authorized {
+            args.insert(2, "--interactive".into());
+        }
+        args.push(self.image.clone());
+        if authorized {
+            args.extend(["--header".into(), "@-".into()]);
+        }
         args.extend([
-            self.image.clone(),
             "--fail".into(),
             "--location".into(),
             "--retry".into(),
@@ -533,6 +584,32 @@ impl ProxyTransport {
 
 impl Transport for ProxyTransport {
     fn fetch(&self, url: &str, dest: &Path, on_percent: &mut dyn FnMut(u8)) -> Result<(), String> {
+        let header = if self.hf_auth && is_huggingface_url(url) {
+            hf_auth_header(url, hf_token_for_fetch().as_deref())
+        } else {
+            None
+        };
+        if let Some(h) = header {
+            let mut last: Option<u8> = None;
+            let r = run_streamed_input(
+                &self.podman_args_with(url, dest, true),
+                Some(h.as_bytes()),
+                &mut |row| {
+                    if let Some(p) = meter_percent(row)
+                        && last != Some(p)
+                    {
+                        last = Some(p);
+                        on_percent(p);
+                    }
+                },
+            );
+            if r.is_ok() {
+                return r;
+            }
+            // A revoked or expired token must not break a public download:
+            // retry once without it (the error text names no token).
+            eprintln!("note:huggingface-fetch:authorized-download-failed:retrying-unauthenticated");
+        }
         let mut last: Option<u8> = None;
         run_streamed(&self.podman_args(url, dest), &mut |row| {
             if let Some(p) = meter_percent(row)
@@ -552,14 +629,32 @@ impl Transport for ProxyTransport {
 /// the imagegen lane (fetch and generate share it); its lifetime is the
 /// request's, ended by the process exiting.
 pub fn run_streamed(args: &[String], on_row: &mut dyn FnMut(&str)) -> Result<(), String> {
+    run_streamed_input(args, None, on_row)
+}
+
+/// [`run_streamed`], writing `input` to the child's stdin first (then closing
+/// it). Used for the Hugging Face header, which must not be in argv.
+pub fn run_streamed_input(
+    args: &[String],
+    input: Option<&[u8]>,
+    on_row: &mut dyn FnMut(&str),
+) -> Result<(), String> {
     let mut cmd = crate::podman_command();
     cmd.args(args)
-        .stdin(std::process::Stdio::null())
+        .stdin(if input.is_some() {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
     let mut child = cmd
         .spawn_caller_owned_lifetime()
         .map_err(|e| format!("podman: {e}"))?;
+    if let (Some(bytes), Some(mut stdin)) = (input, child.stdin.take()) {
+        // Dropped at the end of this block: curl sees EOF after the header.
+        let _ = stdin.write_all(bytes);
+    }
     // stdout drains on its own thread so neither pipe can fill and block.
     let (tx, rx) = std::sync::mpsc::channel::<String>();
     let mut readers = Vec::new();
@@ -914,11 +1009,61 @@ mod tests {
         assert_eq!(meter_percent("100 1280M  100 1280M"), Some(100));
     }
 
+    /// Order 2080-dhzf: the bearer goes only to https://huggingface.co.
+    #[test]
+    fn huggingface_login_header_goes_only_to_huggingface_co() {
+        let t = Some("hf_TOKEN");
+        assert_eq!(
+            hf_auth_header("https://huggingface.co/a/b/resolve/main/f.gguf", t).as_deref(),
+            Some("Authorization: Bearer hf_TOKEN\n")
+        );
+        assert!(hf_auth_header("https://HuggingFace.co/x", t).is_some());
+        for url in [
+            "http://huggingface.co/x",
+            "https://huggingface.co.evil.example/x",
+            "https://evil.example/huggingface.co/x",
+            "https://user@huggingface.co/x",
+            "https://huggingface.co:8443/x",
+            "https://cdn-lfs.huggingface.co/x",
+            "https://github.com/x",
+        ] {
+            assert_eq!(hf_auth_header(url, t), None, "{url}");
+        }
+        assert_eq!(hf_auth_header("https://huggingface.co/x", None), None);
+        assert_eq!(
+            hf_auth_header("https://huggingface.co/x", Some("a\nb")),
+            None
+        );
+    }
+
+    /// The authorized form keeps the token out of argv and the image name in
+    /// place; the unauthorized form is unchanged.
+    #[test]
+    fn huggingface_login_token_is_never_in_argv() {
+        let t = ProxyTransport {
+            image: "img:tag".into(),
+            proxy_port: PLAIN_PROXY_PORT,
+            hf_auth: true,
+        };
+        let dest = Path::new("/c/models/imagegen/I0/f.part");
+        let plain = t.podman_args("https://huggingface.co/x", dest);
+        assert!(!plain.iter().any(|a| a == "--interactive" || a == "@-"));
+        let a = t.podman_args_with("https://huggingface.co/x", dest, true);
+        assert!(a.contains(&"--interactive".to_string()));
+        let img = a.iter().position(|s| s == "img:tag").unwrap();
+        let h = a.iter().position(|s| s == "--header").unwrap();
+        assert_eq!(a[h + 1], "@-");
+        assert!(h > img && a.iter().position(|s| s == "--interactive").unwrap() < img);
+        assert!(!a.join(" ").contains("Bearer"));
+        assert_eq!(a.last().unwrap(), "https://huggingface.co/x");
+    }
+
     #[test]
     fn the_proxy_transport_reaches_out_only_through_the_proxy() {
         let t = ProxyTransport {
             image: "img:tag".into(),
             proxy_port: PLAIN_PROXY_PORT,
+            hf_auth: false,
         };
         let a = t.podman_args(
             "https://huggingface.co/x",

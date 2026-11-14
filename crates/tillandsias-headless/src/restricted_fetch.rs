@@ -745,6 +745,7 @@ pub(crate) mod tests {
         let t = crate::imagegen_models::ProxyTransport {
             image: "img:tag".into(),
             proxy_port: crate::imagegen_models::MODEL_HUBS_PORT,
+            hf_auth: false,
         };
         let a = t.podman_args(
             "https://huggingface.co/x",

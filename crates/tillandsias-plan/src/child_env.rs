@@ -1151,6 +1151,18 @@ mod tests {
         }
     }
 
+    /// Order 2080-dhzf: the host's Hugging Face sign-in never reaches a forge
+    /// child; both Hub token names are credentials and never pass.
+    #[test]
+    fn huggingface_tokens_never_reach_a_child() {
+        for n in ["HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"] {
+            assert!(credential_shape(n).is_some(), "{n}");
+            assert!(matches!(hard_block(n), Some(Block::Never(_))), "{n}");
+        }
+        // Negative control: a non-credential Hub variable is not blocked as one.
+        assert!(credential_shape("HF_HOME").is_none());
+    }
+
     #[test]
     fn the_credential_shape_follows_each_rule_and_the_locator_suffixes() {
         for t in CREDENTIAL_TERMINAL {
