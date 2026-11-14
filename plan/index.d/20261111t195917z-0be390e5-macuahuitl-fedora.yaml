@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-vault-memory-is-locked-so-it-cannot-reach-swap
+    field: verifiable_closure
+    value: 'D7 answered 2026-11-11: podman inspect of tillandsias-vault shows HostConfig.MemorySwap equal to HostConfig.Memory and Memory non-zero (a modest explicit limit; Vault uses about 42 MB today with no limit). Pre-fix: FAILS, there is no memory or swap cap. A run-args unit test over the Vault launch asserts --memory and --memory-swap with equal values. The mlock exit criteria are retired by the ruling.'
+    ts: "2026-11-11T19:59:17Z"
+    host: macuahuitl-fedora
+    replaces_sha256: "fa6fc5f876928779e84882116c047928282e5b35cf4dab504471218af51a8157"
+
+events:
+  - packet_id: medium-vault-memory-is-locked-so-it-cannot-reach-swap
+    event:
+      type: note
+      ts: "2026-11-11T19:59:17Z"
+      host: macuahuitl-fedora
+      summary: |-
+        operator answer D7: swap off by cgroup, not mlock

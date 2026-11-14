@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: high-the-tray-authenticates-to-vault-with-its-own-scoped-token-and-no-root-token-is-kept
+    field: context
+    value: |-
+      Audit finding H1 and H1b. read_and_handover_root_token stores the root token and the single unseal share in one keyring service, and about twenty host call sites authenticate as root. Policy::Tray is loaded and given an AppRole that nothing logs in with. heal_stale_root_token can mint a new root from the share alone, so this row is worth doing only together with the operator's answer to decision D1 in the audit (is a same-user process inside the threat model on Linux). Do not weaken the wipe rule and do not add a recovery step.
+
+
+      [2026-11-11T19:02:10Z macuahuitl] Operator ruling on D1, relayed by the coordinator 2026-11-11. A same-user host process is a minor threat (accidental misuse, not hostile software), but containers are protected as if hostile software were on the host, within reasonable limits; prefer the stronger option where the cost is reasonable. So this row is REQUIRED hardening, not hygiene, and it has three parts. No root token is stored. The tray runs on its own scoped role. The unseal share is not kept in the same store entry set as any token that can use it. The share part needs its own failing test, because heal_stale_root_token can mint a root from the share alone.
+    ts: "2026-11-11T19:02:10Z"
+    host: macuahuitl
+
+events:
+  - packet_id: high-the-tray-authenticates-to-vault-with-its-own-scoped-token-and-no-root-token-is-kept
+    event:
+      type: note
+      ts: "2026-11-11T19:02:10Z"
+      host: macuahuitl
+      summary: |-
+        D1 answered
