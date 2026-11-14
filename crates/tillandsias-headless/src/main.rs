@@ -6039,9 +6039,8 @@ fn build_stack_common_args(
         // sighting, 2026-08-10). This is a fork-bomb ceiling, not a scheduler:
         // size it above the workload's honest peak.
     ];
-    // ORDER 1375-xxzj: the forge cgroup budget — memory.max/high/low,
-    // memory.swap.max and pids.max = clamp(512·nproc, 4096, 16384), which
-    // keeps the 4096 floor above.
+    // ORDER 1375-xxzj, uncapped by the operator ruling 2026-11-13: memory.low
+    // only; memory.max/high/swap.max and pids.max are all `max`.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     args.extend(oom_slice_args());
     args.extend(proxy_env_args());
@@ -11308,8 +11307,8 @@ fn build_opencode_forge_args(
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
     ];
-    // Same budget as build_stack_common_args (1375-xxzj; the 4096 pids floor of
-    // 667-se87 is kept by the clamp): this lane hosts workspace builds too.
+    // Same uncapped forge budget as build_stack_common_args (ruling 2026-11-13):
+    // this lane hosts workspace builds too.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     args.extend(oom_slice_args());
     match mode {
@@ -22460,7 +22459,7 @@ fn build_forge_agent_run_args_with_vault(
         // forge. The rationale travels with EVERY site now; a fix whose
         // comment rides only some copies makes the missed ones look
         // intentional.
-        // ORDER 1375-xxzj: the full cgroup budget; its pids clamp keeps the 4096 floor.
+        // Operator ruling 2026-11-13: the forge is uncapped (memory.low only, pids max).
         .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host())
         // 1913-ebv8: in tillandsias.slice, where oomd ranks this forge last.
         .cgroup_parent(oom_slice());
@@ -40837,10 +40836,19 @@ mod forge_budget_argv_tests {
     fn assert_budget(what: &str, args: &[String]) {
         let budget = ForgeBudget::for_this_host().podman_args();
         assert!(
-            budget.iter().any(|a| a.starts_with("--memory="))
-                && budget.iter().any(|a| a.contains("memory.high="))
-                && budget.iter().any(|a| a.contains("memory.swap.max=")),
-            "ForgeBudget::podman_args() no longer names --memory / memory.high / memory.swap.max: {budget:?}"
+            budget.iter().any(|a| a == "--cgroup-conf=memory.high=max")
+                && budget
+                    .iter()
+                    .any(|a| a == "--cgroup-conf=memory.swap.max=max")
+                && budget.iter().any(|a| a == "--pids-limit=-1"),
+            "ForgeBudget::podman_args() no longer writes the uncapped forge contract: {budget:?}"
+        );
+        // Operator ruling 2026-11-13: no forge argv carries a memory cap.
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.starts_with("--memory=") || a.starts_with("--memory-swap")),
+            "{what}: forge argv carries a memory cap; argv={args:?}"
         );
         for flag in &budget {
             assert!(

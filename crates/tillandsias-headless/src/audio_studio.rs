@@ -81,7 +81,8 @@ pub fn run_args(
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--security-opt=label=disable",
-        "--pids-limit=512",
+        // Operator ruling 2026-11-13: studios are uncapped like forges.
+        "--pids-limit=-1",
         "--oom-score-adj=1000",
     ]
     .iter()
