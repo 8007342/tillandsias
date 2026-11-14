@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed 2026-11-14 from the demon_attack forge deaths at 21:38:55Z. Code is cited by symbol, never by line.
+packets:
+  - packet_id: studio-restart-must-not-force-remove-the-project-network-that-the-forges-are-attached-to
+    order: 2083-stnw
+    status: completed
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, imagegen, mcp, podman]
+    estimated_hours: 1
+    title: "studio.restart killed every forge of the project: imagegen_studio::stop ran podman network rm -f on the studio network the forges are attached to"
+    context: |
+      Incident 2026-11-14 21:38:55Z: a forge agent called studio.restart; both demon_attack forge containers died in the same second with SIGTERM (claude exit 143) and the studio came back at 21:38:57. Cause by symbol: the studio.restart arm in mcp_socket calls imagegen_studio::stop, which ended with podman network rm -f on network_name(project). podman's --force removes every container using the network, and imagegen_studio::reattach connects the project's forges to it.
+      Fix: stop builds its network argvs through the pure function imagegen_studio::stop_network_argvs (router disconnect, then network rm), neither forced. A plain rm fails while a forge is attached and the network stays; the forge-teardown call in main.rs runs only after the project's forge names are gone, so it still removes the network then.
+    exit_criteria:
+      - "imagegen_studio test studio_teardown_never_force_removes_the_network asserts no argv from stop_network_argvs carries -f or --force and that a network rm is present. Pre-fix result: FAILS (the rm argv carried -f); verified red by restoring -f, green after."
+    verifiable_closure: "cargo test -p tillandsias-headless --all-features --bin tillandsias studio_teardown_never passes; on hardware, studio.restart from a running forge leaves the forge running."
+    next_action: "Nothing left in code. On the next stable, call studio.restart from a forge and confirm the forge and its siblings survive."
+    provenance: "live incident 2026-11-14 21:38:55Z on the demon_attack project, relayed by the coordinator"
+    events:
+      - type: completed
+        ts: "2026-11-14T21:45:00Z"
+        host: macuahuitl
+        summary: "fixed: studio network teardown never forces; test red pre-fix, green after"
