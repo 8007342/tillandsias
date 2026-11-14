@@ -7,6 +7,7 @@
                                        fail on a node dir not in the manifest,
                                        a node at a different commit, a missing
                                        node, or any ComfyUI-Manager path under root
+  digest  <dir>                        print a vendored node dir's tree digest
   selftest <manifest>                  run verify against six synthetic image
                                        roots: the manifest set must pass, each
                                        drift must fail with its own violation
@@ -16,7 +17,9 @@ Runs only inside the studio's Python base image, never on the host
 
 Exit 0 and one ok: line on success; exit 1 and one violation: line per finding.
 """
+import hashlib
 import os
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -38,6 +41,28 @@ def load(manifest):
     return nodes
 
 
+VENDORED = "vendored:"
+
+
+def tree_digest(path):
+    """40-hex digest of a vendored node dir: sha1 over the sorted lines
+    `<relative path>\0<sha256 of the bytes>\n`, __pycache__ excluded. It
+    stands in for the git commit a cloned node is pinned by (2090-ausx)."""
+    h = hashlib.sha1()
+    rows = []
+    for dirpath, dirnames, filenames in os.walk(path):
+        dirnames[:] = sorted(d for d in dirnames if d not in IGNORED)
+        for name in filenames:
+            if name == STAMP or name.endswith(".pyc"):
+                continue
+            full = os.path.join(dirpath, name)
+            with open(full, "rb") as f:
+                rows.append(f"{os.path.relpath(full, path)}\0{hashlib.sha256(f.read()).hexdigest()}\n")
+    for r in sorted(rows):
+        h.update(r.encode())
+    return h.hexdigest()
+
+
 def run(*argv):
     subprocess.run(argv, check=True)
 
@@ -46,13 +71,22 @@ def install(manifest, custom_nodes):
     base = os.path.dirname(os.path.abspath(manifest))
     for n in load(manifest):
         dest = os.path.join(custom_nodes, n["name"])
-        run("git", "clone", "--filter=blob:none", "--quiet", n["repo"], dest)
-        run("git", "-C", dest, "checkout", "--quiet", "--detach", n["commit"])
-        head = subprocess.run(["git", "-C", dest, "rev-parse", "HEAD"],
-                              check=True, capture_output=True, text=True).stdout.strip()
-        if head != n["commit"]:
-            sys.exit(f"violation:custom-nodes:clone-not-at-pinned-commit:{n['name']}:{head}")
-        run("rm", "-rf", os.path.join(dest, ".git"))
+        if n["repo"].startswith(VENDORED):
+            # 2090-ausx: a node pack reviewed in this repository, copied from
+            # the build context and pinned by its tree digest.
+            shutil.copytree(os.path.join(base, n["repo"][len(VENDORED):]), dest,
+                            ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            got = tree_digest(dest)
+            if got != n["commit"]:
+                sys.exit(f"violation:custom-nodes:vendored-tree-not-at-pinned-digest:{n['name']}:{got}")
+        else:
+            run("git", "clone", "--filter=blob:none", "--quiet", n["repo"], dest)
+            run("git", "-C", dest, "checkout", "--quiet", "--detach", n["commit"])
+            head = subprocess.run(["git", "-C", dest, "rev-parse", "HEAD"],
+                                  check=True, capture_output=True, text=True).stdout.strip()
+            if head != n["commit"]:
+                sys.exit(f"violation:custom-nodes:clone-not-at-pinned-commit:{n['name']}:{head}")
+            run("rm", "-rf", os.path.join(dest, ".git"))
         with open(os.path.join(dest, STAMP), "w") as f:
             f.write(n["commit"] + "\n")
         lock = os.path.join(base, n["lock"])
@@ -168,6 +202,8 @@ if __name__ == "__main__":
         install(sys.argv[2], sys.argv[3])
     elif len(sys.argv) == 5 and sys.argv[1] == "verify":
         sys.exit(verify(sys.argv[2], sys.argv[3], sys.argv[4]))
+    elif len(sys.argv) == 3 and sys.argv[1] == "digest":
+        print(tree_digest(sys.argv[2]))
     elif len(sys.argv) == 3 and sys.argv[1] == "selftest":
         sys.exit(selftest(sys.argv[2]))
     else:
