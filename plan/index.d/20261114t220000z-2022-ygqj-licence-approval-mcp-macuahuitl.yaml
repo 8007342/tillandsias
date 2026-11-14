@@ -1,0 +1,114 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-14, on operator report (high priority).
+# Operator, verbatim: "I cannot copy that text from the screen into the clipboard.
+# This is the stupidest interaction in the world ever. How could this have been
+# considered a complete feature?!"
+# Carried: .claude/skills/accept-licence/SKILL.md (the skill already promises the flow these packets build).
+packets:
+- packet_id: licence-acknowledgement-signing-makes-the-operator-copy-bytes-by-hand-add-an-mcp-tool-the-tray-signs
+  order: 2022-ygqj
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [mcp, approval, licence, forge, tray]
+  size: L
+  implementer_tier: sonnet
+  estimated_hours: 8
+  title: No MCP approval tool exists, so a forge agent cannot get a licence acknowledgement signed without the operator moving bytes by hand
+  context: >-
+    OPERATOR-REPORTED 2026-11-14, high priority. Licence acknowledgement signing (skill
+    .claude/skills/accept-licence) on macOS: the statement goes INTO the Mac by a typed
+    heredoc; the allowed-signers line from `tillandsias-tray --approval-enrol <slug>` and the
+    armored SSHSIG from `--approval-sign <slug> <file>` must come OUT by copying text off the
+    screen into a forge inside tillandsias-vm. The Mac and the forge share no folder, and the
+    text cannot be copied from the screen at all. There is NO MCP tool for approvals (grep for
+    "approval." in the MCP tool tables finds none), so the skill promises a flow no tool
+    implements. Code: crates/tillandsias-macos-tray/src/approval_signer.rs (enrol_main,
+    sign_main), main.rs (--approval-enrol/--approval-sign);
+    crates/tillandsias-headless/src/licence_consent.rs (Acknowledgement, statement_text,
+    project_acknowledgement_dir, admits_restricted); crates/tillandsias-headless/src/approval.rs.
+    SPLIT: this packet is the MCP plumbing and record flow (any host; the signer is a trait
+    with a stub). Sibling packets: 2022-89hm (macOS Touch ID signer behind it) and 2022-hn2k
+    (cross-host allowed-signers propagation).
+  exit_criteria:
+  - 'A forge MCP tool (licence.acknowledge, or approval.sign) exists and is listed by tools/list. It takes {project, licence row id, scope, use, expiry}. Today it does not exist, so a test that calls it fails with unknown tool.'
+  - 'The host side builds the canonical statement itself via Acknowledgement::statement_text from the row id and parameters; the agent supplies no statement text, so an agent cannot get arbitrary text signed. Test: a call carrying extra statement bytes is refused or the bytes are ignored and absent from the signed payload.'
+  - 'The host shows the licence clauses verbatim in a native dialog before signing; a refusal or timeout returns a typed denial and writes nothing (no record, no allowed_signers line).'
+  - 'On approval the host enrols the per-repo key if absent, appends its allowed-signers line to the host allowed_signers, writes the record into project_acknowledgement_dir(<project>), and returns the record YAML in the MCP result; admits_restricted then returns true for that project and row on that host, and returned false before the call.'
+  - 'END-TO-END on a real host: an agent in a forge obtains a record that `ssh-keygen -Y verify` passes, and the operator typed nothing and copied nothing, only the OS approval gesture. A run whose transcript shows a heredoc, a paste or a copied signature line FAILS this criterion.'
+  - 'The accept-licence SKILL.md is updated to call the tool and drops the manual enrol/sign/copy steps; no step in it asks the operator to move text.'
+  verifiable_closure: 'Transcript of an agent in a forge calling the MCP tool on a real host, the OS approval gesture being the only operator action, followed by ssh-keygen -Y verify output and admits_restricted true. Plus the cargo test for the tool contract.'
+  unscoreable: 'none.'
+  next_action: 'Read crates/tillandsias-headless/src/approval.rs and how existing MCP tools reach a host-side dialog (the tray-hosted dialogs), then add the tool with a Signer trait; leave Linux a typed unsupported unless 2022-hn2k has landed a Linux signer.'
+  provenance: macuahuitl-fedora 2026-11-14, on operator report; carried skill .claude/skills/accept-licence.
+  events:
+  - {type: filed, ts: '2026-11-14T22:00:00Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: macos-tray-signs-licence-approvals-with-touch-id-in-process-for-the-mcp-tool-with-no-cli-copy-step
+  order: 2022-89hm
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, touch-id, approval, tray, secure-enclave]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 6
+  title: macOS tray approval signer is reachable only by CLI flags that print to the screen; make it an in-process signer behind the MCP tool
+  context: >-
+    OPERATOR-REPORTED 2026-11-14 (see 2022-ygqj for the verbatim words). On macOS the signer
+    exists only as `tillandsias-tray --approval-enrol <slug>` and `--approval-sign <slug> <file>`
+    (crates/tillandsias-macos-tray/src/approval_signer.rs enrol_main, sign_main; main.rs) which
+    print the allowed-signers line and the armored SSHSIG to the terminal for the operator to
+    copy into a forge. The forge is inside tillandsias-vm and shares no folder with the Mac.
+    Needed: the same enrol and sign as an in-process Signer the tray calls when the MCP tool of
+    2022-ygqj arrives over the host channel, with the native clause dialog and Touch ID, and the
+    result returned over that channel, never printed. Depends on 2022-ygqj for the tool
+    contract (blocked on its Signer trait, not on its end-to-end).
+  exit_criteria:
+  - 'With the tray running, an MCP approval call from a forge shows a native dialog with the licence clauses verbatim and a Touch ID prompt, and returns the signed record. Today no call path exists; only the CLI flags do.'
+  - 'Enrol for a new project slug happens inside the same call (no separate --approval-enrol step); the allowed-signers line is returned in the result and installed in the host allowed_signers.'
+  - 'Nothing is printed for the operator to copy: stdout and the dialog carry no signature or key text the operator is asked to transcribe. A run needing a clipboard FAILS.'
+  - 'Cancelling Touch ID or the dialog yields a typed denial and no key use; the key is not exercised without the biometric (verified on a real Mac, not a mocked LAContext).'
+  - 'The old --approval-enrol/--approval-sign flags either remain as thin wrappers over the same signer or are removed; there is no second implementation of statement building or signing.'
+  verifiable_closure: 'Real-Mac run: forge agent calls the MCP tool, Touch ID is the only operator action, ssh-keygen -Y verify passes on the returned record.'
+  unscoreable: 'Needs real Touch ID hardware; a VM or CI run cannot close it.'
+  next_action: 'Read approval_signer.rs enrol_main/sign_main and factor the shared core into a function returning values instead of printing, then implement the Signer trait from 2022-ygqj over it.'
+  provenance: macuahuitl-fedora 2026-11-14, on operator report; carried skill .claude/skills/accept-licence.
+  events:
+  - {type: filed, ts: '2026-11-14T22:00:01Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: a-licence-record-signed-on-one-host-must-verify-on-another-so-allowed-signers-lines-travel-with-the-project
+  order: 2022-hn2k
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [approval, licence, multi-host, ssh-signature]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 5
+  title: A licence record signed on the Mac cannot be verified on Linux without a hand-added allowed_signers line
+  context: >-
+    OPERATOR-REPORTED 2026-11-14 (see 2022-ygqj). This Linux host has NO enrolled approval key,
+    and its allowed_signers trusts only the Mac's tillandsias-slug key, so a new per-repo key
+    needs a manual line added. PR 1090 did this by hand: a signers file committed in the
+    project and pinned by fingerprint. Plan: the MCP result of 2022-ygqj also carries the
+    signers line; the agent commits it as a signers file in the project next to the record; a
+    verifier on another host trusts a signers line only if its key fingerprint is pinned (in
+    the committed record or an operator-controlled pin), never merely because the file is in
+    the tree, so a project commit cannot grant itself trust. Also covers the Linux signer
+    (polkit or FIDO2) so a Linux host can enrol and sign itself.
+  exit_criteria:
+  - 'A record signed on the Mac verifies on this Linux host with NO manual edit of the host allowed_signers. Today it fails: the Mac per-repo key is not in this host allowed_signers.'
+  - 'The signers line travels as a committed project file pinned by key fingerprint; a signers file whose fingerprint does not match the pin is rejected (negative arm: a commit adding a forged line fails verification).'
+  - 'admits_restricted on the Linux host consults the pinned committed signers and returns true for the Mac-signed record and false for the forged one.'
+  - 'A Linux host can enrol and sign its own approval (polkit or FIDO2 gesture only), or the packet records the exact capability that is missing as a blocker naming a capability, not a host.'
+  verifiable_closure: 'Two-host run: record signed on macOS, verified on Linux via admits_restricted with no manual step, plus the forged-line negative arm.'
+  unscoreable: 'none.'
+  next_action: 'Read PR 1090 for the hand-built signers file shape and the fingerprint pin, then specify where the pin lives so a project commit cannot self-grant trust.'
+  provenance: macuahuitl-fedora 2026-11-14, on operator report; carried skill .claude/skills/accept-licence.
+  events:
+  - {type: filed, ts: '2026-11-14T22:00:02Z', host: macuahuitl, summary: filed p1 ready}
