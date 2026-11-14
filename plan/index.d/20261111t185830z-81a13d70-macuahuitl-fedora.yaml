@@ -1,0 +1,148 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story blind-sec-v05 — 2026-11-11 blind-design triage (order 2080-294s).
+# Credential items are in the credential audit order 2080-yvby (PR #1087), not refiled here.
+packets:
+  - packet_id: each-projects-forge-and-mirror-share-a-network-no-other-project-is-on
+    order: 2080-2wwn
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: blind-sec-v05
+    capability_tags: [podman, network, git-mirror, rust]
+    estimated_hours: 5
+    title: |
+      Every forge, mirror, login container, inference engine and router sits on the one shared enclave network, so project A's forge can reach project B's mirror; each project's forge and mirror get a network of their own. Security High.
+    context: |
+      Both judges (judge 1 packet 2, judge 2 G1). ENCLAVE_NET is the only network in the run arguments; enclave_network_name exists with no caller; spec:podman-idiomatic-patterns already names a per-project network. The unauthenticated receive-pack itself belongs to the credential auditor and to 451; this row only shrinks who can reach a mirror. Multi-machine ruling 2026-11-11: name and address the network so it can later take a /64 from the host's ULA /56 (1800-zk9i, 1800-pj2x) and so a Pi-fleet mirror (1548-7onc) can replace the local one; no single-host-only naming. Narrow slice of 1800-gjqq and 1684-tx37; does not wait for them. Holds separately in the macOS and Windows guests.
+    exit_criteria:
+      - 'a unit test building run arguments for two projects asserts the two forges share no network and neither forge network contains the other project''s mirror; today both are exactly tillandsias-enclave'
+      - 'live arm on each platform: from forge A, git ls-remote against project B''s mirror fails to connect (record the pre-fix result first)'
+      - 'project A clone and push still work'
+    verifiable_closure: 'cargo test -p tillandsias-headless — per-project network run-args test; red on today''s ENCLAVE_NET-only arguments'
+    next_action: 'Nothing is done. Run the live cross-project ls-remote once on today''s build and record refused/read/write/unreachable; then write the run-args test.'
+    provenance: blind-design judges 1 and 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [451, 1800-gjqq, 1684-tx37, 1800-zk9i, 1800-pj2x, 1548-7onc]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: the-podman-secrets-migration-change-is-rewritten-against-the-no-plaintext-at-rest-ruling
+    order: 2080-4m4j
+    status: ready
+    kind: docs
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: blind-sec-v05
+    capability_tags: [openspec, credentials, podman]
+    estimated_hours: 1
+    title: |
+      The open OpenSpec change podman-secrets-migration still proposes podman secret create for tokens and certificates, and podman's default file driver stores secret bytes in plaintext on disk, against the no-plaintext-credentials-at-rest ruling; close it or rewrite it with the ruling cited.
+    context: |
+      Judge 1 packet 5. 1808-k54d covers the two main specs that describe podman secrets; this row is the open change under openspec/changes/podman-secrets-migration. The 0444 mode of runtime secret files is the credential auditor's.
+    exit_criteria:
+      - 'openspec/changes/podman-secrets-migration is archived as rejected, or its proposal names an encrypted-at-rest store and cites no-plaintext-credentials-at-rest; today the proposal says podman secret create tillandsias-github-token'
+    verifiable_closure: 'bash — grep -c "podman secret create tillandsias-github-token" over openspec/changes/podman-secrets-migration returns 0'
+    unscoreable: 'no litmus exists for this one-line check; the claimer runs the command in verifiable_closure and records its output as evidence.'
+    next_action: 'Nothing is done. Decide close vs rewrite; close is expected because 1118-fqfk already chose the store.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1808-k54d, 1118-fqfk, 2080-naqg]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: images-that-sit-next-to-credentials-build-from-digest-pinned-bases
+    order: 2080-73qx
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: blind-sec-v05
+    capability_tags: [supply-chain, containers, lua]
+    estimated_hours: 2
+    title: |
+      The vault, mirror, proxy, router, inference and forge images build FROM tags (hashicorp/vault:1.18, alpine, caddy:2-alpine, fedora-minimal:44) resolved on each user's machine; only four digests are pinned. Security Medium.
+    context: |
+      Judge 2 G8. images/image-pins.yaml holds four digests and the pin check only validates pins that exist. Mind 1716-t2gi: a single-platform digest builds the wrong architecture, so pins must be manifest-list digests (aarch64 macOS guest, x86_64 Linux and Windows).
+    exit_criteria:
+      - 'the Lua pin check fails when any FROM in images/{vault,git,proxy,router,inference,default}/Containerfile lacks @sha256:; today it passes with tags'
+      - 'each pinned image still builds on Linux x86_64, in the macOS aarch64 guest and in the Windows distro'
+    verifiable_closure: 'the extended Lua pin check exits non-zero on today''s Containerfiles and zero after pinning'
+    unscoreable: 'unpinnable-until-the-guard-exists: the extended pin check is part of the deliverable; move this into a litmus in the same commit.'
+    next_action: 'Nothing is done. Extend the pin check to require a digest on every FROM in the six image directories, watch it fail, then pin manifest-list digests.'
+    provenance: blind-design judge 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1716-t2gi]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: nothing-the-launcher-wrote-about-a-forge-is-left-after-the-forge-is-removed
+    order: 2080-7pa3
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    story: blind-sec-v05
+    capability_tags: [logging, privacy, podman, rust]
+    estimated_hours: 2
+    title: |
+      terminal_handoff appends each forge's diverted launcher output to attached-sessions/<container>.log under the state directory, mode 0644, and keeps it after the forge is gone, against the ruling that forge logs die with the forge. Security Low (privacy).
+    context: |
+      Both judges (judge 1 packet 9 transcript arm, judge 2 G13); symbol terminal_handoff::attached_session_log_path. The debug flags in the same finding are the credential auditor's. The Vault audit file (527 MB, unrotated) depends on open operator question OQ-6 and is not decided here.
+    exit_criteria:
+      - 'while a forge runs its attached-session file is 0600; after it exits and is removed no file for that container remains (checked over a counted, non-zero set); today the file stays at 0644'
+      - 'the same holds in the macOS guest and the Windows distro'
+    verifiable_closure: 'cargo test -p tillandsias-headless — a terminal_handoff removal test; red on today''s keep-forever path'
+    next_action: 'Nothing is done. Write the removal test against attached_session_log_path, then delete on forge removal and open the file 0600.'
+    provenance: blind-design judges 1 and 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: the-linux-and-macos-installers-verify-the-cosign-bundle-with-a-pinned-identity
+    order: 2080-8mc8
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: blind-sec-v05
+    capability_tags: [installer, release, supply-chain]
+    estimated_hours: 3
+    title: |
+      No installer verifies the cosign bundle the release publishes; after the checksum refusals of 1068-phrh, install.sh and the macOS installer verify the signature with the pinned workflow identity and refuse with one plain sentence when they cannot. Security Medium.
+    context: |
+      Judge 1 packet 7, slice 2. 1068-phrh owns the three checksum skips (including installing when SHA256SUMS is missing); 1562-hsa8 owns the Windows installer; 1490-aqc7 owns --update. Per installer-is-for-end-users-no-prompts: no prompt, one sentence. The verifier must not need cosign on the user's host (1324-ujvb): verify in the binary (Rust) or in a container.
+    exit_criteria:
+      - 'a fixture serving a release whose bundle does not verify makes install.sh and the macOS installer exit non-zero with one sentence and leave no binary; today both install'
+    unscoreable: 'unpinnable-until-the-guard-exists: the tampered-bundle fixture is the deliverable; write it in the same commit and move this text into verifiable_closure.'
+    next_action: 'Nothing is done. Land after 1068-phrh; write the tampered-bundle fixture first.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [the-default-install-path-skips-verification-three-ways-and-never-consumes-the-published-signature]
+    related: [1562-hsa8, 1490-aqc7, 1324-ujvb]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: a-written-threat-model-binds-each-boundary-to-a-named-check
+    order: 2080-996d
+    status: ready
+    kind: design
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: blind-sec-v05
+    capability_tags: [spec, security, operator-decision]
+    estimated_hours: 3
+    title: |
+      No spec states the actors, assets and boundaries Tillandsias defends; a threat-model spec names them, records the operator's answers on a same-user attacker and on disk encryption, and a lint fails when a boundary has no check.
+    context: |
+      Judge 1 packet 11. Start from the blind security design (copied to plan/issues/blind-design-2026-11-11/). OQ-17 and OQ-18 are still open and are recorded as open, not decided. Multi-machine is in scope (2026-11-11): the Cloudflare login, IPv6 discovery and the Pi fleet are boundaries too. Lint in Lua.
+    exit_criteria:
+      - 'openspec/specs/threat-model/spec.md exists and a Lua lint fails when a named boundary has no bound check; today there is no document, so the lint fails'
+    unscoreable: 'unpinnable-until-the-guard-exists: the lint is the deliverable; write it in the same commit.'
+    next_action: 'Nothing is done. Draft the spec from the blind threat model; leave OQ-17 and OQ-18 as named open questions.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [590-z3jh]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}

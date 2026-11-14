@@ -1,0 +1,189 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story footprint-hygiene-v05 — 2026-11-11 blind-design triage (order 2080-294s).
+packets:
+  - packet_id: shell-shipped-inside-images-has-a-line-floor-that-only-falls
+    order: 2080-iseg
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: footprint-hygiene-v05
+    capability_tags: [shell-to-lua, images, lua, ratchet]
+    estimated_hours: 2
+    title: |
+      images/ ships 25,363 lines of shell in 107 files to every user's machine (lib-common.sh alone about 6,000) and nothing stops it growing; a committed line floor for images/**/*.sh fails when the count rises, and ports go to Lua, Rust or Go.
+    context: |
+      Judge 2 G14; counted on linux-next e1f8d7f01 with git ls-files images/*.sh. Existing floors (2049-74tx and the carried-obligation backlog) count call sites, not lines. Ports ride as carried obligations (backlog-moves-by-carried-obligations).
+    exit_criteria:
+      - 'a Lua check compares the images shell line count with a committed floor and fails when it rises; a mutation adding one line to an image script turns it red; today there is no line floor'
+    unscoreable: 'unpinnable-until-the-guard-exists: the ratchet is the deliverable; write it in the same commit.'
+    next_action: 'Nothing is done. Commit floor 25363 with the check.'
+    provenance: blind-design judge 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2049-74tx, 1577-568c]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: total-repository-shell-has-a-line-based-ratchet-toward-lua-rust-and-go
+    order: 2080-jjaz
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: footprint-hygiene-v05
+    capability_tags: [shell-to-lua, lua, ratchet]
+    estimated_hours: 2
+    title: |
+      Tracked shell went from about 49k to 210,639 lines in 90 days; a repository-wide line floor fails when shell grows, so new tooling is written in Lua, Rust or Go and ports lower the floor.
+    context: |
+      Judge 2 G14; 210,639 lines counted on linux-next e1f8d7f01. Same mechanism as 2080-iseg over every tracked .sh; the floor only moves down in a commit that ports.
+    exit_criteria:
+      - 'a Lua check fails when tracked shell lines exceed the committed floor; adding one line turns it red; today no line floor exists'
+    unscoreable: 'unpinnable-until-the-guard-exists: the ratchet is the deliverable.'
+    next_action: 'Nothing is done. Ship with 2080-iseg in one check.'
+    provenance: blind-design judge 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-iseg, 1962-2upv]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: the-three-python-files-in-studio-images-are-ported-or-carry-a-dated-waiver
+    order: 2080-jw9m
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: footprint-hygiene-v05
+    capability_tags: [no-python, images, lua]
+    estimated_hours: 2
+    title: |
+      images/audio-studio/audio-tool.py, images/imagegen-studio/custom-nodes.py and probe-placement.py (about 1,100 lines) run in studio images against the no-Python rule with no recorded waiver.
+    context: |
+      Judge 2 G14. ComfyUI custom nodes may be a library-forced case (2067-faum: Python only when a library forces it); that is a dated waiver, not silence.
+    exit_criteria:
+      - 'git ls-files images/*.py is empty, or each file is named in a waiver list with a date and the library that forces it, and the no-python check reads that list; today three files, no list'
+    verifiable_closure: 'the no-python check fails on today''s three unlisted files'
+    unscoreable: 'unpinnable-until-the-guard-exists: the waiver-list arm of the no-python check is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judge 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2067-faum, 1899-gqk6, 1301-ie39]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: a-cheatsheet-staged-into-the-forge-without-provenance-or-past-its-age-is-an-error-or-labelled-stale
+    order: 2080-kkki
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    story: footprint-hygiene-v05
+    capability_tags: [cheatsheets, policy, lua]
+    estimated_hours: 3
+    title: |
+      29 of 256 cheatsheets have no Provenance heading and 185 were last verified in April or May; the source check exits zero; a sheet staged into the forge image without provenance fails the check, and one older than a ruled age is shown to agents as stale.
+    context: |
+      Judge 1 packet 19 and the judge 2 staleness arm for 588-8mh8. Explicit exemption list for index and template files. Child of 588-8mh8.
+    exit_criteria:
+      - 'the check exits non-zero over a counted population for a staged sheet with no provenance; a sheet past the age reads stale in tellme; today both pass silently'
+    unscoreable: 'unpinnable-until-the-guard-exists: the check arms are the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judges 1 and 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [588-8mh8, 888-jfsz]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: the-wsl-bash-cheatsheet-stops-telling-agents-to-use-podman-machine
+    order: 2080-kmbn
+    status: ready
+    kind: docs
+    priority: p3
+    desired_release: v0.5
+    pickup_role: windows
+    story: footprint-hygiene-v05
+    capability_tags: [cheatsheets, windows, wsl2]
+    estimated_hours: 1
+    title: |
+      docs/cheatsheets/wsl-bash.md (last_verified 2026-04-27) still describes podman machine init/start as the Windows path; Tillandsias runs its own WSL2 distro, so the sheet misleads every agent that reads it.
+    context: |
+      Found by blind designer A (answers.md). Re-verify against the Windows tray's distro provisioning and refresh provenance.
+    exit_criteria:
+      - 'grep -c "podman machine" docs/cheatsheets/wsl-bash.md is 0 or each mention is marked as not the Tillandsias path, and last_verified is refreshed with a fetched source; today three mentions present it as the path'
+    verifiable_closure: 'bash — grep -c "podman machine init" docs/cheatsheets/wsl-bash.md returns 0'
+    unscoreable: 'no litmus exists for this one-line check; the claimer runs the command in verifiable_closure and records its output as evidence.'
+    next_action: 'Nothing is done.'
+    provenance: blind designer A; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [588-8mh8]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p3 from the 2026-11-11 blind-design triage}
+  - packet_id: public-modules-of-tillandsias-logging-with-no-consumer-are-wired-or-removed
+    order: 2080-mcws
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    story: footprint-hygiene-v05
+    capability_tags: [dead-code, rust, logging]
+    estimated_hours: 3
+    title: |
+      aggregator, sampler, span_context, surface and schema_validation in tillandsias-logging (about 3k lines) have no user outside the crate, enclave_network_name has no caller and control_dispatch is STAGED under allow(dead_code) since May.
+    context: |
+      Judge 2 G15. Extends 577 (container_profile). enclave_network_name gets its caller from 2080-2wwn.
+    exit_criteria:
+      - 'a check lists public modules of tillandsias-logging and fails on one with no non-test reference outside the crate; today it fails on five; control_dispatch::decide_route is called by both dispatchers or removed'
+    unscoreable: 'unpinnable-until-the-guard-exists: the check is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judge 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [577, 2080-2wwn]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p3 from the 2026-11-11 blind-design triage}
+  - packet_id: decision-prebuilt-signed-images-by-digest-or-local-builds-measured-on-a-floor-host
+    order: 2080-n2ge
+    status: ready
+    kind: decision
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    story: footprint-hygiene-v05
+    capability_tags: [operator-decision, release, images, measurement]
+    estimated_hours: 3
+    title: |
+      All three blind designs pull prebuilt images; the product builds every image on the user's machine. One measured comparison on a floor-class host (install to first usable forge, local build versus pull, download size) is put to the operator as one plain ask.
+    context: |
+      Judge 1 packet 17. Must respect one-cloud-build-per-day and cloud-builds-are-intentional-only. No code until ruled.
+    exit_criteria:
+      - 'a dated measurement on a floor-class host with both numbers and an operator ruling recorded in this row; today neither exists'
+    unscoreable: 'operator decision; closes on the recorded ruling.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: blind-design-exercises-start-from-a-context-without-claude-md-memory-or-skill-list
+    order: 2080-nrgw
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    story: footprint-hygiene-v05
+    capability_tags: [process]
+    estimated_hours: 2
+    title: |
+      Every 2026-11-11 blind designer saw CLAUDE.md, the memory index and the skill list, so eight of thirty-two rubric rows could not measure independence; the blind launcher produces a session whose first-turn context contains none of the three.
+    context: |
+      Judge 1 packet 20 and the contamination caveat in plan/issues/blind-design-triage-2026-11-11.md.
+    exit_criteria:
+      - 'the designer''s first message lists what it was given and names none of the three; today all three are injected'
+    unscoreable: 'process change; evidence is the next exercise''s first-turn transcript.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p3 from the 2026-11-11 blind-design triage}
