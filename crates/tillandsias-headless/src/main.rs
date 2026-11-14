@@ -237,6 +237,8 @@ pub mod cloudflare_names;
 // `pub` so the redirect-receiver packet (1505-kc5f) and the rotation
 // scheduler (siblings under 1505-sm2j) can reach it.
 pub mod cloudflare_oauth;
+// 1829-guit: Access service tokens held only in the vault (unwired; see its header).
+mod cloudflare_access_tokens;
 // @trace order:1505-kc5f — `--cloudflare-login [--via device|loopback|qr|paste]` and
 // `--cloudflare-logout`: the three redirect receivers over cloudflare_oauth,
 // storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
