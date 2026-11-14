@@ -578,5 +578,4 @@ scripts/test-wsl2-builder-shell-options.sh
 scripts/test-wt-reparse-scan.sh
 scripts/test-yaml-reader-availability.sh
 scripts/verify-closure.sh
-scripts/verify-image-usable.sh
 scripts/verify-version-monotonic.sh

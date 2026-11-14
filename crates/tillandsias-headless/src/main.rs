@@ -41570,7 +41570,7 @@ mod keep_id_warm_tests {
     /// after each successful build's aliases (plain and after an overlay heal,
     /// never on a Skip or Retag of a present image), and build-image.sh runs
     /// its shell twin, which asks podman the same question, after the image
-    /// passes verify-image-usable.sh. NEGATIVE CONTROL: the shell twin creates
+    /// passes _verify_image_usable. NEGATIVE CONTROL: the shell twin creates
     /// nothing on a store that shifts, or that cannot say.
     #[test]
     fn init_and_build_image_builds_are_keep_id_warm() {
@@ -41611,7 +41611,7 @@ mod keep_id_warm_tests {
 
         let script = include_str!("../../../scripts/build-image.sh");
         let usable = script
-            .find("\"$SCRIPT_DIR/verify-image-usable.sh\" \"$IMAGE_TAG\"")
+            .find("_verify_image_usable \"$IMAGE_TAG\" >/dev/null")
             .expect("build-image.sh checks usability");
         let call = script
             .find("\n    _warm_keep_id_mapping \"$IMAGE_TAG\"")
