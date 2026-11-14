@@ -32,13 +32,24 @@ packets:
     SPLIT: this packet is the MCP plumbing and record flow (any host; the signer is a trait
     with a stub). Sibling packets: 2022-89hm (macOS Touch ID signer behind it) and 2022-hn2k
     (cross-host allowed-signers propagation).
+    HEADLINE REQUIREMENT (operator UX ruling 2026-11-14, verbatim): "I should tell the agent
+    as vaguely as I fucking can 'yo lets accept depry and herpy licenses, duh' and the agents
+    prompt should give me all the acknowledgeables in a prompt window, for me to read and scroll
+    to the bottom, press touch id, and closes the window. A user who barely understands their
+    phone would never run this kind of flow." Vague intent in, resolved licences out; ONE native
+    window per request listing every acknowledgeable; zero terminal, zero paste, zero copy; the
+    acceptance test is a non-technical user.
   exit_criteria:
-  - 'A forge MCP tool (licence.acknowledge, or approval.sign) exists and is listed by tools/list. It takes {project, licence row id, scope, use, expiry}. Today it does not exist, so a test that calls it fails with unknown tool.'
+  - 'HEADLINE, END-TO-END ON A REAL HOST, NON-TECHNICAL USER: the transcript of one run shows EXACTLY ONE user utterance (vague, e.g. "yo lets accept depry and herpy licenses, duh") and EXACTLY ONE biometric touch, and ends with verified records committed in the project. A transcript with a second user message, any user-typed id/slug/scope/use/expiry, a terminal, a heredoc, a paste or a copied line FAILS. Today this fails at the first step: no tool exists.'
+  - 'Vague intent in, resolved licences out: the agent maps fuzzy names ("depry and herpy", "the music stuff", "everything demon attack needs") to register rows itself, by fuzzy and semantic match plus the project pending licence_acknowledgement_required refusals, and proposes defaults from policy (non-sale, one year; standing only where the policy allows). Test: given the register and a fuzzy phrase, the resolved row set equals the expected set; an unresolvable phrase yields one plain-words question to the user, never an id prompt.'
+  - 'ONE native window per request lists EVERY acknowledgeable in the batch (possibly several licences): each licence verbatim clauses, the artefacts, and the scope and use in plain words. The approve control is DISABLED until the user has scrolled to the bottom (test: approve is inert at scroll offset 0 and live at the end; a window too short to scroll enables on first full view). One biometric (Touch ID, Windows Hello or polkit) signs ALL licences in the batch, then the window closes. Cancel or close signs nothing and writes nothing. A run that opens one window per licence FAILS.'
+  - 'Zero terminal, zero paste, zero copy: per-repo key enrolment happens silently inside the same flow; the agent receives the records over MCP and commits them; nothing is printed that anyone is asked to transcribe.'
+  - 'A forge MCP tool (licence.acknowledge, or approval.sign) exists and is listed by tools/list. It takes the project and a BATCH of resolved licence row ids with proposed scope/use/expiry defaults. Today it does not exist, so a test that calls it fails with unknown tool.'
   - 'The host side builds the canonical statement itself via Acknowledgement::statement_text from the row id and parameters; the agent supplies no statement text, so an agent cannot get arbitrary text signed. Test: a call carrying extra statement bytes is refused or the bytes are ignored and absent from the signed payload.'
   - 'The host shows the licence clauses verbatim in a native dialog before signing; a refusal or timeout returns a typed denial and writes nothing (no record, no allowed_signers line).'
   - 'On approval the host enrols the per-repo key if absent, appends its allowed-signers line to the host allowed_signers, writes the record into project_acknowledgement_dir(<project>), and returns the record YAML in the MCP result; admits_restricted then returns true for that project and row on that host, and returned false before the call.'
   - 'END-TO-END on a real host: an agent in a forge obtains a record that `ssh-keygen -Y verify` passes, and the operator typed nothing and copied nothing, only the OS approval gesture. A run whose transcript shows a heredoc, a paste or a copied signature line FAILS this criterion.'
-  - 'The accept-licence SKILL.md is updated to call the tool and drops the manual enrol/sign/copy steps; no step in it asks the operator to move text.'
+  - 'The accept-licence SKILL.md carries no manual enrol/sign/copy step (this PR already makes it say "not available on this host yet; tell the user it is coming"); when the tool ships, the "NOT AVAILABLE" status section is replaced by the tool call, and no step asks the user to move text.'
   verifiable_closure: 'Transcript of an agent in a forge calling the MCP tool on a real host, the OS approval gesture being the only operator action, followed by ssh-keygen -Y verify output and admits_restricted true. Plus the cargo test for the tool contract.'
   unscoreable: 'none.'
   next_action: 'Read crates/tillandsias-headless/src/approval.rs and how existing MCP tools reach a host-side dialog (the tray-hosted dialogs), then add the tool with a Signer trait; leave Linux a typed unsupported unless 2022-hn2k has landed a Linux signer.'
@@ -67,8 +78,13 @@ packets:
     2022-ygqj arrives over the host channel, with the native clause dialog and Touch ID, and the
     result returned over that channel, never printed. Depends on 2022-ygqj for the tool
     contract (blocked on its Signer trait, not on its end-to-end).
+    UX RULING 2026-11-14 (see 2022-ygqj): one native window per request listing every
+    acknowledgeable, approve disabled until scrolled to the bottom, one Touch ID, window closes;
+    a user who barely understands their phone must be able to run it.
   exit_criteria:
-  - 'With the tray running, an MCP approval call from a forge shows a native dialog with the licence clauses verbatim and a Touch ID prompt, and returns the signed record. Today no call path exists; only the CLI flags do.'
+  - 'HEADLINE, real Mac, non-technical user: one user utterance and one Touch ID touch produce verified records for the whole batch; a transcript with a terminal, paste, copy or a second prompt FAILS. Today only the CLI flags exist, which fail this by construction.'
+  - 'ONE native window per request (not per licence) lists every licence in the batch with verbatim clauses, artefacts, and scope and use in plain words; the approve button is disabled until the scroll view reaches the bottom; a single Touch ID signs every statement in the batch; the window then closes; cancel signs nothing and does not touch the key.'
+  - 'With the tray running, an MCP approval call from a forge shows that window and returns the signed records. Today no call path exists.'
   - 'Enrol for a new project slug happens inside the same call (no separate --approval-enrol step); the allowed-signers line is returned in the result and installed in the host allowed_signers.'
   - 'Nothing is printed for the operator to copy: stdout and the dialog carry no signature or key text the operator is asked to transcribe. A run needing a clipboard FAILS.'
   - 'Cancelling Touch ID or the dialog yields a typed denial and no key use; the key is not exercised without the biometric (verified on a real Mac, not a mocked LAContext).'
@@ -101,7 +117,11 @@ packets:
     the committed record or an operator-controlled pin), never merely because the file is in
     the tree, so a project commit cannot grant itself trust. Also covers the Linux signer
     (polkit or FIDO2) so a Linux host can enrol and sign itself.
+    UX RULING 2026-11-14 (see 2022-ygqj): the same one-utterance, one-window, one-touch flow
+    must work on Linux with polkit or FIDO2, and propagation must be invisible to the user.
   exit_criteria:
+  - 'HEADLINE, Linux host, non-technical user: the transcript of one run shows exactly one user utterance and one polkit or FIDO2 touch, ONE window listing every licence in the batch with approve disabled until scrolled to the bottom, and verified committed records; no terminal, paste or copy. Today this host has no enrolled approval key and no tool, so it fails.'
+  - 'Propagation is invisible: the user is never asked to add, paste or fetch a signers line; the agent commits it from the MCP result and the verifying host trusts it by pinned fingerprint.'
   - 'A record signed on the Mac verifies on this Linux host with NO manual edit of the host allowed_signers. Today it fails: the Mac per-repo key is not in this host allowed_signers.'
   - 'The signers line travels as a committed project file pinned by key fingerprint; a signers file whose fingerprint does not match the pin is rejected (negative arm: a commit adding a forged line fails verification).'
   - 'admits_restricted on the Linux host consults the pinned committed signers and returns true for the Mac-signed record and false for the forged one.'
@@ -112,3 +132,43 @@ packets:
   provenance: macuahuitl-fedora 2026-11-14, on operator report; carried skill .claude/skills/accept-licence.
   events:
   - {type: filed, ts: '2026-11-14T22:00:02Z', host: macuahuitl, summary: filed p1 ready}
+- packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+  order: 2083-nfne
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [incident, approval, credential, security, licence]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 6
+  title: INCIDENT 2026-11-14 - the approval key's public key and the SSHSIG reached the forge by clipboard and chat paste, so the consent gate verified against a key delivered by the same paste
+  context: >-
+    P0 INCIDENT, operator 2026-11-14: "THAT'S EXTREMELY FUCKED UP!!! ... this is the stupidest
+    weakest most terrible way in which Tillandsias has ever handled a credential." Demucs
+    acknowledgement for demon_attack, signed on the Mac. (1) The tray never showed the clauses;
+    the operator saw only a chat paraphrase and the statement was typed in by heredoc. (2) The
+    accept-licence skill said `ssh-keygen -Y sign -f <key>` but the real path is
+    `tillandsias-tray --approval-enrol/--approval-sign`, documented nowhere forge-side. (3) The
+    enrol line and SSHSIG went to stdout only, no MCP result, no drop directory. (4) The PUBLIC
+    key and the SSHSIG travelled through the macOS clipboard and a pasted chat message into a
+    Claude transcript; no private key left the Secure Enclave, but the trust anchor of a consent
+    gate arrived over an unauthenticated channel and the forge verified against a key delivered
+    by the same paste. (5) Touch ID was not the end of the flow; pasting came after it. (6) The
+    coordinator sent "stop" after the operator had already signed, then "finish". Post-mortem:
+    plan/issues/licence-acknowledgement-trust-anchor-pasted-incident-2026-11-14.md. Linked to
+    2022-ygqj, 2022-89hm, 2022-hn2k (the tool that removes the paste); this packet is the
+    security invariant and must not wait for them. Carried skill .claude/skills/accept-licence.
+  exit_criteria:
+  - 'allowed_signers lines can only be added by the host own enrol path: a test that appends a pasted or agent-written line (via the file, the approval env override, or any tool the agent can reach) is refused or flagged and the gate does not admit a record verified only against it. Today a hand-added line is trusted, so the test fails.'
+  - 'Every allowed_signers line carries host-enrol provenance (written by the enrol path, with a fingerprint the host can re-derive); a line without provenance is flagged unattested and admits_restricted refuses records that verify only against it, with the existing Mac-enrolled slug line handled explicitly (re-enrol or documented grandfather).'
+  - 'The accept-licence skill can never instruct a manual or terminal flow: a guard greps the skill for ssh-keygen -Y sign, --approval-enrol, --approval-sign, heredoc and paste/copy instructions and fails if any appears outside a prohibition sentence, with a population assert (it must find the prohibition section). Red on the pre-fix skill, which carried ssh-keygen -Y sign.'
+  - 'A post-mortem exists in plan/issues (this PR files it) and its open questions are each answered or filed.'
+  - 'The tray displays the licence clauses verbatim before any signature; a chat paraphrase is never the only place clauses are shown (covered end to end by 2022-ygqj).'
+  verifiable_closure: 'The refused-line test red on the pre-fix code and green after, the skill guard red on the pre-fix skill and green after, and the post-mortem file present.'
+  unscoreable: 'none.'
+  next_action: 'Read crates/tillandsias-headless/src/approval.rs for how allowed_signers is read and appended, then write the test that appends a pasted line and show it admitted today before gating it on host-enrol provenance.'
+  provenance: macuahuitl-fedora 2026-11-14, from the operator incident report relayed by the coordinator.
+  events:
+  - {type: filed, ts: '2026-11-14T22:00:03Z', host: macuahuitl, summary: filed p0 ready}
