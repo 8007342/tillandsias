@@ -3892,6 +3892,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    if ! _run_lua_decider "scripts/lua/check-workspace-members-used.lua" 2>&1; then
+        _error "a workspace member has no dependent, no binary and no allowlist reason, or a crates/ directory has no Cargo.toml (2080-8i25)"
+        exit 1
+    fi
+
     if ! _run_lua_decider "scripts/lua/check-smoke-agent-prompt-is-minimal.lua" 2>&1; then
         _error "a smoke skill hands its forge agent the /meta-orchestration loop — a smoke spends one short turn on the shared hosted model (1941-smkp)"
         exit 1
