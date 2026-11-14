@@ -13,7 +13,7 @@
 //! `ssh-keygen -Y verify`, and only then are records written where the gate
 //! reads them. A denial writes nothing.
 //!
-//! @trace spec:third-party-licence-consent, spec:os-verified-approval-gates
+//! Design: openspec/changes/os-verified-approval-gates (approval-attestation).
 
 use std::collections::BTreeMap;
 use std::path::Path;

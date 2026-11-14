@@ -46,7 +46,7 @@ pub const PREVIEW_RELAY_VSOCK_PORT: u32 = 42430;
 /// `ApprovalRequest` and gets one JSON-line `ApprovalOutcome` back
 /// (`approval_wire`). The tray serves it with the Touch ID signer.
 ///
-/// @trace spec:vsock-transport, spec:third-party-licence-consent
+/// @trace spec:vsock-transport
 pub const APPROVAL_SIGNER_VSOCK_PORT: u32 = 42440;
 
 /// Order 1794-rf3a (b): the host loopback port a VM guest's preview is

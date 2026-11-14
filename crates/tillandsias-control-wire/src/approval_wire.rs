@@ -15,7 +15,7 @@
 //! on every host with a stub signer; the macOS Touch ID signer lives in the
 //! tray (`approval_signer.rs`).
 //!
-//! @trace spec:third-party-licence-consent, spec:os-verified-approval-gates
+//! Design: openspec/changes/os-verified-approval-gates (approval-attestation).
 
 use serde::{Deserialize, Serialize};
 
