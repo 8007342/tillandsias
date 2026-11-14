@@ -1,0 +1,762 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-13 from operator direction (cleanup and simplify infra and runtime). Triage: plan/issues/infra-cleanup-triage-2026-11-13.md. Code is cited by symbol, never by line.
+packets:
+  # ---------------- Stream A: forge cold storage ----------------
+  - packet_id: forge-gets-a-disk-backed-cold-volume-at-home-forge-cold-announced-by-tillandsias-cold
+    order: 2080-4t5d
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage, disk]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 5
+    depends_on: []
+    title: "Every forge gets a disk-backed cold volume at /home/forge/cold, created and removed with the forge, and the environment names it in TILLANDSIAS_COLD"
+    context: |
+      Operator ruling 2026-11-13: the forge /home/forge/src tmpfs is expensive RAM and holds hot-path source only; builds, blobs, temp and worktrees go to cheap disk. Today no cold mount point exists: openspec/specs/forge-hot-cold-split names four HOT paths and says everything else is COLD without giving it a place, and nothing in the tree mentions TILLANDSIAS_COLD.
+      This is the operator's ruling applied to the OpenSpec change forge-storage-single-root-and-disk-discipline task group 2 (tasks 2.1 to 2.3, a per-lane scratch volume at /home/forge/scratch). Do NOT build a second volume: rename or fold those tasks so one per-forge volume exists, named cold, next to prepare_forge_ram_workspace and remove_source_volume_if_present. Relates to 1866-ubtc and 1878-2cwt; 2065-5vcv is its obsoleted evidence row.
+    exit_criteria:
+      - "A fixture over the forge create argv asserts a named volume mounted at /home/forge/cold, TILLANDSIAS_COLD=/home/forge/cold in the environment, and the volume removed when the forge is removed. Pre-fix result: FAILS, no such mount or variable exists."
+    verifiable_closure: "A fixture over the forge create and remove argv shows the cold volume mounted, TILLANDSIAS_COLD set, and the volume deleted on removal. Pre-fix result: FAILS (no cold mount, no variable)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Fold tasks 2.1 to 2.3 of forge-storage-single-root-and-disk-discipline into this row (name cold, not scratch), write the argv fixture first and watch it fail, then add the volume beside the source-volume create and remove."
+    provenance: "Operator direction 2026-11-13; triage plan/issues/infra-cleanup-triage-2026-11-13.md report A; tree read at origin/linux-next."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream A1)"
+
+  - packet_id: forge-build-output-temp-and-agent-worktrees-are-redirected-to-the-cold-volume
+    order: 2080-wbcw
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage, disk, build]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 5
+    depends_on:
+      - forge-gets-a-disk-backed-cold-volume-at-home-forge-cold-announced-by-tillandsias-cold
+    title: "Inside a forge, cargo build output, TMPDIR, Flutter and Gradle build directories and agent worktrees are created under the cold volume, not under /home/forge/src or /tmp"
+    context: |
+      With the cold volume in place (A1) the agent shell environment must point the heavy writers at it: CARGO_TARGET_DIR, TMPDIR, the Flutter build and .dart_tool locations, GRADLE_USER_HOME and the Gradle build dir, and the directory agent worktrees are created in. The three-agent Flutter run in 2065-5vcv filled the 1.5 GB source tmpfs at .dart_tool and build output of 40 to 110 MB per worktree. The OpenSpec change task 2.3 moves TMPDIR in lib-common.sh; this row widens it.
+    exit_criteria:
+      - "In a forge agent shell, CARGO_TARGET_DIR, TMPDIR, the Gradle and Flutter build locations all resolve under TILLANDSIAS_COLD, and a new agent worktree is created under it. Pre-fix result: FAILS, they resolve under /home/forge/src or /tmp."
+    verifiable_closure: "A fixture sourcing the forge shell environment prints each variable and asserts the cold prefix; a three-worktree Flutter web build completes with src below 50 percent. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After A1: write the environment fixture first, then export the variables where lib-common.sh exports TMPDIR today and point the worktree helper at the cold directory."
+    provenance: "Operator direction 2026-11-13; 2065-5vcv evidence; triage report A."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream A2)"
+
+  - packet_id: forge-git-directory-moves-off-the-source-tmpfs-and-the-stale-source-sizing-rule-is-replaced
+    order: 2080-d83n
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage, rust]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 5
+    depends_on:
+      - forge-gets-a-disk-backed-cold-volume-at-home-forge-cold-announced-by-tillandsias-cold
+    owned_files:
+      - crates/tillandsias-core/src/config.rs
+    title: "The forge's .git directory lives on cold disk instead of the source tmpfs, and compute_source_budget_with sizes the tmpfs for hot source only, without the half-of-memory clamp or the pack-size times four rule"
+    context: |
+      compute_source_budget_with clamps its result to memory_max_mib / 2, and the base compute_source_budget multiplies the pack size by hot_path_inflation and floors it at hot_path_source_floor_mb. Those rules sized a tmpfs that also held builds and worktrees. Once builds, blobs and worktrees leave (A2) and .git moves to cold, the tmpfs holds working-tree source only and the old rules size something that no longer exists.
+      Keep the 2006-srcr high-water and declared-need inputs only if they still mean something for source; otherwise retire them with the rule and say so.
+    exit_criteria:
+      - "A unit test asserts that compute_source_budget_with for a 10 MB pack with a 4 GiB memory_max returns a size derived from working-tree source and NOT from pack times inflation or memory_max / 2; and a launch fixture shows the project .git directory on a non-tmpfs mount. Pre-fix result: FAILS on both."
+    verifiable_closure: "cargo test -p tillandsias-core source_budget exits 0 with the new tests, and the launch fixture reports the .git directory off tmpfs. Pre-fix result: FAILS (the clamp and the multiplier decide the value; .git is on the tmpfs)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After A1: write the two tests first and watch them fail, then relocate the gitdir (check the mirror clone path and the credential guard still resolve it) and rewrite the budget function."
+    provenance: "Operator direction 2026-11-13; compute_source_budget_with read in crates/tillandsias-core/src/config.rs; triage report A."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream A3)"
+
+  - packet_id: forge-df-helper-warns-and-exits-one-at-eighty-percent-and-the-welcome-banner-shows-real-sizes
+    order: 2080-c4qv
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage, disk, lua]
+    size: S
+    implementer_tier: sonnet
+    estimated_hours: 3
+    depends_on:
+      - forge-gets-a-disk-backed-cold-volume-at-home-forge-cold-announced-by-tillandsias-cold
+    title: "A forge-df helper prints used and free for src, cold, /tmp and the overlay, warns and exits 1 when any is at or above 80 percent, and forge-welcome.sh prints the real sizes at start"
+    context: |
+      The pre-build warning half of 2065-5vcv (a check that warns above 80 percent) was never built. The helper is a Rust-hosted Lua script run through the Lua runner (no new shell, no jq); the banner in images/default/forge-welcome.sh calls it. The disk line in the startup context from 1878-2cwt task 5.3 should reuse the same helper rather than a second df parser.
+    exit_criteria:
+      - "forge-df exits 0 below 80 percent and 1 at 80 percent or above on a fixture df table, printing which mount tripped, and the banner shows the measured size of src and cold. Pre-fix result: FAILS, neither exists."
+    verifiable_closure: "A fixture feeding a canned df table to forge-df asserts exit 0 at 79 percent and exit 1 at 80 percent with the mount named; a banner fixture asserts the size line. Pre-fix result: FAILS (no helper)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Write the fixture first; implement as a Lua script under scripts/lua; call it from the banner."
+    provenance: "Operator direction 2026-11-13; 2065-5vcv exit criterion; triage report A."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream A4)"
+
+  - packet_id: forge-guidance-seeds-teach-agents-that-src-is-hot-only-and-everything-heavy-goes-to-cold
+    order: 2080-vzda
+    status: ready
+    kind: documentation
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, guidance, seeds]
+    size: S
+    implementer_tier: haiku
+    estimated_hours: 3
+    depends_on:
+      - forge-build-output-temp-and-agent-worktrees-are-redirected-to-the-cold-volume
+    title: "An agent landing in a forge is told, by the forge-quick-intro skill, the opencode instructions, forge-agent-guidance and a new forge CLAUDE.md and AGENTS.md seed, that src is hot source only and builds, blobs, temp and worktrees go to cold"
+    context: |
+      Operator ruling: agents must learn this on landing. Four places carry forge guidance today (the forge-quick-intro skill in skills/ and the per-agent skill directories, the opencode instructions in images/default/opencode.json, images/default/config-overlay/mcp/forge-agent-guidance.md) and there is no forge-side CLAUDE.md or AGENTS.md seed at all. Each gets one short paragraph naming TILLANDSIAS_COLD and forge-df, with research/cheatsheet provenance per the docs policy.
+    exit_criteria:
+      - "A fixture greps the built forge image seeds and asserts each of the five files mentions TILLANDSIAS_COLD and forge-df, and a forge CLAUDE.md and AGENTS.md seed exists in the image. Pre-fix result: FAILS, no seed carries either name and the two seeds do not exist."
+    verifiable_closure: "A seed fixture asserts the five files name TILLANDSIAS_COLD and forge-df. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After A2 and A4 land the names are real; write the fixture first, then the paragraphs."
+    provenance: "Operator direction 2026-11-13; triage report A."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream A5)"
+
+  - packet_id: forge-hot-cold-split-spec-names-the-cold-volume-and-the-obsoleted-tmpfs-row-points-at-its-successors
+    order: 2080-ekm9
+    status: ready
+    kind: spec
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, spec, storage]
+    size: S
+    implementer_tier: sonnet
+    estimated_hours: 2
+    depends_on:
+      - forge-gets-a-disk-backed-cold-volume-at-home-forge-cold-announced-by-tillandsias-cold
+    title: "The forge-hot-cold-split spec defines the cold tier at /home/forge/cold with what goes there, its bound litmus asserts the mount, and the already-obsoleted 2065-5vcv row records its successors"
+    context: |
+      openspec/specs/forge-hot-cold-split/spec.md lists the four HOT paths and says all other paths remain COLD but defines no cold mount, and its /home/forge/src row still describes compute_hot_budget sizing. 2065-5vcv is ALREADY status obsoleted (duplicate of 1878-2cwt, 1866-ubtc and the forge-storage change); the operator asked to close it, so no reopening: this row appends a note event on it naming the successors (A1 to A5) and reconciles the spec.
+    exit_criteria:
+      - "The spec has a COLD requirement with a scenario naming /home/forge/cold and TILLANDSIAS_COLD, the bound litmus asserts the mount, and 2065-5vcv carries a note event naming 2080-4t5d. Pre-fix result: FAILS, the spec has no cold mount scenario."
+    verifiable_closure: "grep of openspec/specs/forge-hot-cold-split/spec.md finds the cold requirement and its litmus step passes. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After A1 lands; edit the spec and its bound litmus together."
+    provenance: "Operator direction 2026-11-13; 2065-5vcv status read from the folded ledger."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream A6)"
+
+  # ---------------- Stream B: shell to Lua ----------------
+  - packet_id: every-lua-script-and-shell-helper-is-listed-with-its-help-by-a-generated-index-agents-reach-through-mcp-and-the-forge-startup-context
+    order: 2080-k54x
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, tooling, mcp, discoverability]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 6
+    title: "A generator emits an INDEX of every scripts/lua script and its --help text, an MCP tool serves it, and the forge startup context points at it, so an agent can find what exists before writing another"
+    context: |
+      scripts/lua holds 290 scripts and there is no shared library or index; every new fixture re-writes arm, run, git and read helpers because nobody can see them. Discovery is the first lever and costs no behaviour change. The runtime is mlua via tillandsias-plan script run; the generator should be a script on that runtime (no new shell, no jq).
+    exit_criteria:
+      - "The generator emits an index listing every scripts/lua script with a one-line purpose, a guard fails when a script is added without a header the generator can read, and the project-info MCP answers a find-a-script question from it. Pre-fix result: FAILS, no index, no header contract, no MCP tool."
+    verifiable_closure: "Running the generator over scripts/lua lists 290 or more entries and a fixture adding a headerless script makes the guard exit 1. Pre-fix result: FAILS (no generator)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Define the one-line header grammar, write the guard fixture first, generate, then expose through MCP and the startup context."
+    provenance: "Triage report B; scripts/lua count read 2026-11-13. Child of 1443-6r3q by theme."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B1)"
+
+  - packet_id: lua-scripts-share-one-common-library-with-verdict-and-fixture-modules-behind-a-require-loader
+    order: 2080-zcur
+    status: ready
+    kind: design
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, tooling, library]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 6
+    title: "A lib/lua/common directory provides verdict and fixture modules, and the Lua runner resolves require against it, so scripts stop carrying private copies"
+    context: |
+      There is no shared Lua library today (no lib/lua directory); the runner is tillandsias-plan script run. Modules needed first: verdict (the closed ok/fail/refused vocabulary and exit mapping) and fixture (arm, run, temp repo, assertions). The loader must also work in a forge (shipped-module guard of 2048-wu3h is the model).
+    exit_criteria:
+      - "A script that does require common.verdict and require common.fixture runs under script run and a test asserts the module paths resolve. Pre-fix result: FAILS, module not found."
+    verifiable_closure: "script run on a fixture script requiring common.verdict and common.fixture exits 0. Pre-fix result: FAILS (module not found)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Read 2048-wu3h's helper mode and shipped-module guard first; reuse, do not fork."
+    provenance: "Triage report B."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B2)"
+
+  - packet_id: duplicated-local-helpers-named-arm-run-git-and-read-across-lua-scripts-are-replaced-by-the-common-modules
+    order: 2080-xziq
+    status: ready
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, tooling, dedupe]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 6
+    depends_on:
+      - lua-scripts-share-one-common-library-with-verdict-and-fixture-modules-behind-a-require-loader
+    title: "Lua scripts that each define their own local arm, run, git or read function use the common module instead, and a guard fails when one reappears"
+    context: |
+      The audit found the same four locals copied across scripts. Count them with a grep for local function definitions of those names under scripts/lua before and after; the guard counts duplicates and ratchets down.
+    exit_criteria:
+      - "A guard counts scripts under scripts/lua that define a local arm, run, git or read; it passes at zero after the change. Pre-fix result: FAILS at the current non-zero count."
+    verifiable_closure: "The duplicate-local guard exits 0 at zero duplicates. Pre-fix result: FAILS (non-zero count today)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After B2; write the counting guard first and record the pre-fix number in its output."
+    provenance: "Triage report B."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B3)"
+
+  - packet_id: ten-shell-test-fixtures-are-ported-to-lua-as-a-pilot-that-measures-the-cost-of-a-port
+    order: 2080-553e
+    status: ready
+    kind: pilot
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, testing, shell-to-lua]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 8
+    depends_on:
+      - lua-scripts-share-one-common-library-with-verdict-and-fixture-modules-behind-a-require-loader
+    title: "Ten shell test fixtures are ported to Lua on the common modules, each keeping its mutation control, and the pilot records lines before and after and the hours spent"
+    context: |
+      Test fixtures are 57 percent of the bash growth, so they are the right pilot. Each port must keep the same arms and the same verdicts (a port that weakens an arm is a regression, not a cleanup); the pilot's output is the cost number B7 and B9 need. Choose fixtures that do not need the toolbox or a container.
+    exit_criteria:
+      - "Ten named fixtures exist as Lua, their shell originals are deleted, the same arms fail under the same mutations, and the pilot note records bash lines removed and Lua lines added. Pre-fix result: FAILS, zero ported."
+    verifiable_closure: "Each ported fixture runs under script run and a mutation of its subject turns it red. Pre-fix result: FAILS (no Lua version exists)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After B2. Pick the ten, port with mutation controls, record the numbers."
+    provenance: "Triage report B."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B4)"
+
+  - packet_id: ledger-and-git-lua-modules-replace-the-lib-shell-libraries-that-fixtures-source
+    order: 2080-vxrh
+    status: ready
+    kind: refactor
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, ledger, git]
+    size: L
+    implementer_tier: sonnet
+    estimated_hours: 10
+    depends_on:
+      - ten-shell-test-fixtures-are-ported-to-lua-as-a-pilot-that-measures-the-cost-of-a-port
+    title: "Ledger and git Lua modules exist and the lib-*.sh shell libraries that scripts source are retired once nothing sources them"
+    context: |
+      The shell-out counter for images/default/lib-*.sh already exists as a carried-obligation backlog row. The modules wrap tillandsias-plan json get (no jq) and a typed git argv.
+    exit_criteria:
+      - "The ledger and git modules exist with fixtures, and the count of scripts sourcing a lib-*.sh falls to zero for the retired libraries. Pre-fix result: FAILS, modules absent and the libraries are sourced."
+    verifiable_closure: "grep for sourcing of the retired libraries finds zero and the module fixtures pass. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After the B4 pilot shows the port cost; retire one library per PR."
+    provenance: "Triage report B."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B5)"
+
+  - packet_id: a-guard-fails-a-new-lua-or-shell-fixture-that-runs-outside-the-toolbox-when-it-needs-one
+    order: 2080-s2fd
+    status: ready
+    kind: guard
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, toolbox, guard]
+    size: S
+    implementer_tier: sonnet
+    estimated_hours: 3
+    title: "A toolbox guard fails a script that calls a toolbox-only tool without the ensure_toolbox include or its Lua equivalent"
+    context: |
+      Standing rule: tools run in the toolbox or podman, scripts include ensure_toolbox.sh. The Lua runtime needs the same contract before ports multiply.
+    exit_criteria:
+      - "A fixture with a script calling a toolbox-only tool without the include makes the guard exit 1 and the same script with the include exits 0. Pre-fix result: FAILS, no guard covers Lua scripts."
+    verifiable_closure: "The guard fixture's two arms pass. Pre-fix result: FAILS (no Lua arm)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Read toolbox_first_scripts.rule via methodology_ask first; extend the existing guard rather than add one."
+    provenance: "Triage report B."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B6)"
+
+  - packet_id: shell-test-fixtures-are-ported-to-lua-in-waves-sized-by-the-pilot
+    order: 2080-38yx
+    status: ready
+    kind: refactor
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, testing, shell-to-lua]
+    size: L
+    implementer_tier: sonnet
+    estimated_hours: 20
+    depends_on:
+      - ten-shell-test-fixtures-are-ported-to-lua-as-a-pilot-that-measures-the-cost-of-a-port
+    title: "Shell test fixtures are ported to Lua in waves, each wave sized from the pilot's measured cost and each wave net-negative in bash lines"
+    context: |
+      Fixtures are 57 percent of the 66K net bash growth in 60 days. Waves are bundles of 6 to 10 fixtures by theme (host-cycle bundle norm). A wave is accepted only if bash lines fall.
+    exit_criteria:
+      - "Total bash lines under scripts fall by at least the first wave's target recorded in the pilot note, measured by line count before and after. Pre-fix result: FAILS, no wave has landed."
+    verifiable_closure: "A line-count comparison of scripts/*.sh before and after wave one shows the stated reduction. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After B4; set wave size from the pilot's hours per fixture."
+    provenance: "Triage report B."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B7)"
+
+  - packet_id: lib-common-forge-plan-and-project-info-shell-wrappers-move-to-lua-after-the-five-hot-helpers
+    order: 2080-zadh
+    status: ready
+    kind: refactor
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [forge, lua, startup, mcp]
+    size: L
+    implementer_tier: sonnet
+    estimated_hours: 12
+    depends_on:
+      - forge-lua-helpers-migrate-five-hot-image-helpers-to-the-lua-runner-with-a-helper-mode-a-shipped-module-guard-and-a-monotone-shell-out-ratchet
+    title: "images/default/lib-common.sh, forge-plan.sh and project-info.sh run as Lua on the helper mode, extending the existing forge-lua-helpers change"
+    context: |
+      2048-wu3h (OpenSpec change forge-lua-helpers) moves five hot helpers and adds script run --helper, a shipped-module guard and a shell-out ratchet. This row is the next slice under the same change: the three larger shell files the forge sources at startup. Add the slice to that change's tasks rather than start a second change.
+    exit_criteria:
+      - "The three files no longer exist as shell in the image, the forge starts and answers a plan question and a project question through the Lua versions, and the shell-out ratchet count falls. Pre-fix result: FAILS, all three are shell."
+    verifiable_closure: "find of the three names in images/default returns only Lua and the startup fixture passes. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "After 2048-wu3h lands its helper mode; append tasks to openspec/changes/forge-lua-helpers/tasks.md."
+    provenance: "Triage report B; 2048-wu3h in the folded ledger (ready)."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream B8)"
+
+  - packet_id: a-whole-repo-no-net-new-bash-ratchet-enforces-the-shell-to-lua-backlog
+    order: 2080-y8h7
+    status: blocked
+    kind: guard
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [lua, ratchet, governance]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 6
+    depends_on:
+      - ten-shell-test-fixtures-are-ported-to-lua-as-a-pilot-that-measures-the-cost-of-a-port
+    title: "BLOCKED on operator approval: a whole-repo guard refuses a push that adds net bash lines, enforcing the shell-to-lua backlog"
+    context: |
+      Needs the operator; do not build any part until the operator rules on it. Enforcing the backlog (today advisory) raises the bar for every contributor, and bar_raise_governance.authority says raising the bar is a one-off scope expansion the Tlatoani must approve every time. The staged direction is advisory, then gentle (due PRs carry one item or a Carried-Waiver trailer), then enforced. The pilot (B4) gives the cost evidence the operator needs to decide.
+    exit_criteria:
+      - "The operator's ruling is recorded in this row before any of it is built."
+      - "With the ruling applied, a push adding net bash lines (not offset by a Lua port or a Carried-Waiver trailer) is refused with a why and a remedy. Pre-fix result: FAILS, such a push is accepted."
+    verifiable_closure: "Operator-gated: the ruling is recorded. Then a fixture push adding 50 bash lines is refused and the same push with a Carried-Waiver trailer is accepted. Pre-fix result: FAILS, accepted."
+    unscoreable: |
+      operator-gated: the approval comes first, and nothing is built before it.
+    next_action: "Waits for the operator's ruling on enforcing the backlog (after the B4 pilot numbers)."
+    provenance: "Operator direction 2026-11-13 (file as BLOCKED); methodology convergence.yaml bar_raise_governance.authority."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed blocked on operator approval, as directed (stream B9)"
+
+  # ---------------- Stream C: infra simplification ----------------
+  - packet_id: unrotated-metrics-jsonl-files-are-size-capped-and-a-target-directory-size-sweep-exists
+    order: 2080-zzv2
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [metrics, disk, hygiene]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 6
+    owned_files:
+      - crates/tillandsias-plan/src/command_policy.rs
+    title: "command-policy-audit.jsonl and the other metrics jsonl files rotate at a size cap, and a sweep reports and trims target/ when it passes a size bound"
+    context: |
+      MEASURED 2026-11-13: .cache/metrics/command-policy-audit.jsonl is 3.46 GB in the checkout and the per-host copy the runtime resolves to (~/.cache/tillandsias/metrics/command-policy-audit.jsonl) is 13.3 GB on the operator desktop; it is written by command_policy.rs (AUDIT_BASENAME) and nothing rotates it. Also unrotated: tillandsias-timing (161 MB), forge-expert-usage (84 MB), litmus-step-timing (51 MB). target/ is reported at 405 GB. Disk fill-ups have frozen the operator desktop before, so this is p1.
+      Rotation must keep the audit's purpose (a decision log): keep the latest N MB and one compressed generation, never lose a line mid-write, and say so in the file's header or a sidecar.
+    exit_criteria:
+      - "A fixture writing audit lines past the cap leaves the active file under the cap plus one rotated generation, with no line lost across the boundary; the same cap applies to the other three jsonl writers; and a target sweep exits 1 above a size bound. Pre-fix result: FAILS, the file grows without bound."
+    verifiable_closure: "cargo test -p tillandsias-plan command_policy audit_rotation exits 0 and the sweep fixture exits 1 above the bound. Pre-fix result: FAILS (no rotation, no sweep)."
+    next_action: "Write the rotation fixture first, rotate in the audit writer, then the three metrics writers, then the sweep. Do NOT delete the operator's existing 13 GB file without telling them; it is host state."
+    provenance: "du and ls on 2026-11-13; AUDIT_BASENAME in crates/tillandsias-plan/src/command_policy.rs."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed p1 from the 2026-11-13 cleanup triage (stream C1)"
+
+  - packet_id: build-check-drops-from-about-28-minutes-by-moving-the-two-slowest-steps-off-the-default-tier
+    order: 2080-h5i9
+    status: blocked
+    kind: build-velocity
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build, velocity, gates]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 6
+    depends_on:
+      - change-class-gate-selector
+    title: "NEEDS OPERATOR APPROVAL: ./build.sh --check drops from about 28 minutes by moving the 212 second project-info grep-recall step and the 94 second litmus-selection-equivalence step to the release tier or touched-path scope"
+    context: |
+      Needs the operator; do not build any part until the operator rules on it. Moving a step out of the default gate lowers what --check proves on every push, which is a bar decision (bar_raise_governance.authority; the precedent is 765-xpct, change-class-gate-selector, which scoped two guards and was approved). The two steps are measured by the audit at 212 s and 94 s; re-measure with the 1008-85ry and 697-s3by timing ledger before the operator decides, and name which regression class each step uniquely catches so the operator sees what the saved minutes cost.
+    exit_criteria:
+      - "The operator's ruling per step is recorded in this row before any of it is built."
+      - "With the ruling applied, a --check run with no touched path in either step's scope skips both and the total wall falls by at least the measured step time, while a touched-path run still executes them. Pre-fix result: FAILS, both run on every check."
+    verifiable_closure: "Operator-gated: the ruling is recorded. Then two --check timing records (untouched scope and touched scope) show the steps skipped and run respectively. Pre-fix result: FAILS, always run."
+    unscoreable: |
+      operator-gated: the approval comes first, and nothing is built before it.
+    next_action: "Waits for the operator's ruling, per 765-xpct precedent. Re-measure both steps first so the ask is a plain sentence with numbers."
+    provenance: "Operator direction 2026-11-13; audit step timings; 765-xpct is the precedent."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed blocked on operator approval (stream C2)"
+
+  - packet_id: workspace-crates-with-no-dependents-and-the-orphan-litmus-directory-are-deleted-or-given-a-stated-reason
+    order: 2080-8i25
+    status: ready
+    kind: cleanup
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [rust, workspace, cleanup]
+    size: S
+    implementer_tier: sonnet
+    estimated_hours: 4
+    title: "crates/tillandsias-litmus (no Cargo.toml, not a member) is deleted with its methodology references fixed, and tillandsias-fleet-core (a member with no dependents) is deleted or kept with a recorded reason; static-server and observatorium.sh are evaluated"
+    context: |
+      Symbol-level check on 2026-11-13, not name grep. tillandsias-litmus is a directory holding README.md and src/mock/podman.rs.example only; it is referenced as paths by methodology/litmus-framework.yaml and methodology/litmus-centicolon-wiring.yaml (fix those). tillandsias-fleet-core (lib.rs and score.rs, about 400 lines) has no dependent in any Cargo.toml or Rust source; only its own manifest, the workspace member list, a comment in plan/fleet/services.yaml and the closed 1548 fragments mention it. It is NOT dead by intent: 1548-9n28 designed it to run unchanged in a Cloudflare Worker (wasm32 build proven). Decision needed: delete (it is in git history) or keep with a one-line reason a guard accepts. tillandsias-static-server is alive (observatorium.sh builds and runs it): evaluate only.
+    exit_criteria:
+      - "A guard asserts every workspace member has a dependent, a binary target, or an allowlist entry with a reason; and no directory under crates/ lacks a Cargo.toml. Pre-fix result: FAILS on fleet-core and on the litmus directory."
+    verifiable_closure: "The member-dependents guard exits 0 after the change. Pre-fix result: FAILS naming tillandsias-fleet-core and crates/tillandsias-litmus."
+    unscoreable: "unpinnable-until-the-test-exists: the member-dependents guard is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Write the guard first and watch it name both; then delete or allowlist."
+    provenance: "Cargo.toml member list, grep for fleet_core and fleet-core over Rust, toml, sh, lua, yaml, nix on 2026-11-13."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C3)"
+
+  - packet_id: openspec-changes-untouched-for-thirty-days-are-archived-closed-or-marked-active-by-a-standing-check
+    order: 2080-w8jh
+    status: ready
+    kind: cleanup
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [openspec, hygiene]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 5
+    title: "OpenSpec changes with no commit in 30 days are archived, closed with a tombstone, or marked active, and a standing check keeps the list short"
+    context: |
+      git log shows about 20 active changes untouched for over 30 days (oldest nanoclawv2-orchestration at 146 days) plus 11 never touched since before June; the audit counted 12 by another measure, so the check states its definition (last commit touching the change directory). 981-a4t4 and its per-change triage rows own the over-90-day slice; this row owns 30 to 90 days and the standing check. Old drafts close with a tombstone per the operator's MinMax ruling; do not delete history.
+    exit_criteria:
+      - "A check lists changes with no commit in 30 days and exits 1 unless each is archived, tombstoned or carries an active-until marker. Pre-fix result: FAILS, about 20 are listed."
+    verifiable_closure: "The staleness check exits 0 after triage. Pre-fix result: FAILS with the list."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Write the check first (it prints the list), then triage each with the openspec-archive-change skill; ask the operator only for changes whose tasks are partly live."
+    provenance: "git log over openspec/changes on 2026-11-13; 981-a4t4."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C4)"
+
+  - packet_id: one-verified-model-fetcher-replaces-the-four-that-each-carry-their-own-licence-and-checksum-path
+    order: 2080-5xkd
+    status: ready
+    kind: refactor
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [models, licences, fetch, risk-high]
+    size: L
+    implementer_tier: opus
+    estimated_hours: 16
+    title: "HIGH RISK: one verified model fetcher serves imagegen_models, restricted_fetch, the llama-server lane and enclave-fetch, with every licence gate and checksum behaving exactly as today"
+    context: |
+      Four fetch paths each verify and gate differently. Merging them is a simplification only if no licence gate weakens: the restricted register, licence_consent acknowledgement, the egress tiers and the accept-licence skill must behave byte for byte. Characterise first: a fixture per fetcher recording its refusals (licence_acknowledgement_required, pending licence hash, disallowed suffix) must pass before and after. Do not start before 2071-um56 (operator rulings on CorridorKey) and 2080-dhzf (Hugging Face login) land, because both touch these paths.
+    exit_criteria:
+      - "A characterisation suite of every current refusal across the four fetchers passes before the merge and after it, and exactly one fetch implementation remains. Pre-fix result: FAILS, four implementations exist."
+    verifiable_closure: "The characterisation suite exits 0 on the merged fetcher and a grep finds one fetch implementation. Pre-fix result: FAILS (four)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Write the characterisation suite on today's code first; no merge until it is green and reviewed against the licence register."
+    provenance: "Triage report C; operator licence rulings in memory (no licence without operator)."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C5)"
+
+  - packet_id: the-images-web-container-merges-into-web-wrangler-so-one-web-image-exists
+    order: 2080-6364
+    status: ready
+    kind: cleanup
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [images, web, cleanup]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 5
+    title: "images/web (an httpd image) is merged into images/web-wrangler so one web image is built, embedded and shipped"
+    context: |
+      Both directories exist and both are embedded by crates/tillandsias-embed/build.rs. Before merging, read what launches each (the apache enclave member and the deploy lane differ) and keep both behaviours behind one image with two entrypoints, or document why not.
+    exit_criteria:
+      - "images/web no longer exists, the embed list names one web image, and the web launch and wrangler deploy fixtures both pass. Pre-fix result: FAILS, two web images are embedded."
+    verifiable_closure: "Directory check plus the two launch fixtures. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Map each image's consumers first (grep of the image names), then merge."
+    provenance: "Directory and embed list read 2026-11-13."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C6)"
+
+  - packet_id: cloudflare-and-provider-login-modules-share-one-login-flow-after-the-hugging-face-login-lands
+    order: 2080-238r
+    status: ready
+    kind: refactor
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [vault, oauth, login, cleanup]
+    size: L
+    implementer_tier: sonnet
+    estimated_hours: 10
+    title: "The Cloudflare and other provider login modules share one login flow (device code, browser, token paste, vault write), sequenced after the in-flight Hugging Face login"
+    context: |
+      2080-dhzf (Hugging Face login) is in flight and adds another login shape; do not touch its files until it lands, then fold the common flow out of it and the Cloudflare and provider logins (run_provider_login). Credentials stay vault-only; no weakening of any fail-closed gate for a test.
+    exit_criteria:
+      - "Each login module is a thin configuration over one shared flow, and a count of distinct login state machines is one. Pre-fix result: FAILS, several."
+    verifiable_closure: "The login conformance fixtures for each provider pass over the shared flow and a grep finds one flow implementation. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Waits for 2080-dhzf; then inventory the state machines."
+    provenance: "Triage report C; 2080-dhzf in the folded ledger (ready)."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C7)"
+
+  - packet_id: the-forge-image-stack-is-slimmed-from-its-six-gigabyte-base
+    order: 2080-w7hb
+    status: ready
+    kind: optimization
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [images, forge, size]
+    size: L
+    implementer_tier: sonnet
+    estimated_hours: 12
+    title: "The forge-base image (6.1 GB) is slimmed by measuring its layers and moving rarely used toolchains to on-demand layers"
+    context: |
+      Measure first (podman image history per layer), then decide per layer: keep, move to on-demand ensure, or drop. Do not remove a tool agents rely on without checking the forge-quick-intro list; the rebuild is long, so detach it past the tool cap and keep the debug cache.
+    exit_criteria:
+      - "forge-base is at most 4.5 GB and a layer-size report is committed beside the image. Pre-fix result: FAILS at 6.1 GB."
+    verifiable_closure: "podman image inspect forge-base reports a size at or under 4.5 GB. Pre-fix result: FAILS (6.1 GB)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Produce the layer report first; propose which layers move before touching the Containerfile."
+    provenance: "Audit figure 6.1 GB (not re-measured here)."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C8)"
+
+  - packet_id: idle-studio-and-flutter-containers-are-evicted-by-the-idle-reaper
+    order: 2080-tiw8
+    status: ready
+    kind: fix
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [containers, idle, resources]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 5
+    title: "Studio and Flutter containers that sit idle past a threshold are stopped by the idle reaper and restart on next use"
+    context: |
+      An OpenSpec change idle-container-reaper exists; check whether it already covers studio and flutter container kinds before writing code and extend it if so rather than add a second reaper.
+    exit_criteria:
+      - "A fixture with a studio and a flutter container idle past the threshold shows both stopped by the reaper and a next request starting them. Pre-fix result: FAILS, they keep running."
+    verifiable_closure: "The reaper fixture asserts both kinds are reaped and restart. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Read openspec/changes/idle-container-reaper first."
+    provenance: "Audit; operator desktop idle containers."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C9)"
+
+  - packet_id: guards-that-test-a-spelling-instead-of-the-behaviour-are-replaced-by-behavioural-checks
+    order: 2080-5qje
+    status: ready
+    kind: cleanup
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [guards, litmus, quality]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 8
+    title: "Guards that pass by finding a spelling in a source file (representation-testing) are inventoried and each is replaced by a check that exercises the behaviour or is deleted"
+    context: |
+      Known class: litmus assertions that grep a source window or a function name and go vacuous on rename (see 528 source-window, 828-itr9, 753-ii5f). An inventory comes first; replacement is per guard and each replacement must go red under a mutation of the behaviour (a mutation must reach, and the guard must survive it).
+    exit_criteria:
+      - "An inventory lists every guard whose only assertion is a grep for a literal in source; the count after the change is zero or each remaining one has a recorded reason. Pre-fix result: FAILS, the list is non-empty and unrecorded."
+    verifiable_closure: "The inventory script exits 0 with each remaining entry carrying a reason. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Write the inventory script; start with the guards already named in 528, 828-itr9 and 753-ii5f."
+    provenance: "Triage report C."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C10)"
+
+  - packet_id: plan-issues-steps-and-the-base-index-are-compacted-or-pruned-with-answerability-preserved
+    order: 2080-jrvv
+    status: ready
+    kind: cleanup
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [plan, hygiene, ledger]
+    size: M
+    implementer_tier: sonnet
+    estimated_hours: 8
+    title: "plan/issues, plan/steps and plan/index.yaml are pruned or compacted by archiving closed material, with every packet id still answerable from the archive"
+    context: |
+      The base index.yaml is tens of thousands of lines and plan/issues holds about 760 files. Use the existing archiver and compaction tooling (archive-plan-packets.sh, tillandsias-plan compact) on a host that can afford the full gate; compaction is append-only history, so archive, never rewrite. The archive-answerability guard (it copies the tree and has a 1 GB bound) must stay green.
+    exit_criteria:
+      - "plan/index.yaml and plan/issues shrink by a stated amount and every archived packet id still resolves through plan_answer. Pre-fix result: FAILS, no reduction recorded."
+    verifiable_closure: "Line count and file count of the three paths before and after, plus an answerability probe over a sample of archived ids. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "Record the before numbers, run the archiver in check mode, review, then archive."
+    provenance: "Triage report C."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C11)"
+
+  - packet_id: a-repo-root-allowlist-guard-fails-when-a-new-top-level-file-or-directory-appears
+    order: 2080-empx
+    status: ready
+    kind: guard
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [repo, hygiene, guard]
+    size: S
+    implementer_tier: haiku
+    estimated_hours: 2
+    title: "A repo-root allowlist guard lists the approved top-level entries and fails when a new file or directory appears at the root"
+    context: |
+      The root already holds many yaml and md files (AGENTS.md, CODEX.md, GEMINI.md, PRIVACY.md and more). Seed the allowlist from the tree as it is today after the operator or coordinator prunes obvious clutter, so the guard starts green and only blocks growth. Adding an entry is a deliberate one-line change with a reason.
+    exit_criteria:
+      - "A fixture adding a new top-level file makes the guard exit 1 naming it, and the real tree exits 0 with the seeded allowlist. Pre-fix result: FAILS, no guard exists."
+    verifiable_closure: "Both fixture arms pass. Pre-fix result: FAILS (no guard)."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture or guard named in verifiable_closure is this row first deliverable and is written in the same commit as the change it tests (1136-n8sh)."
+    next_action: "List the root, seed the allowlist, write the two arms."
+    provenance: "Triage report C."
+    events:
+      - type: filed
+        ts: "2026-11-13T23:30:00Z"
+        host: macuahuitl
+        summary: "filed from the 2026-11-13 cleanup triage (stream C12)"
+
+events:
+  - packet_id: forge-src-tmpfs-fills-under-multi-agent-flutter-2065-5vcv
+    event:
+      type: note
+      ts: "2026-11-13T23:30:00Z"
+      host: macuahuitl
+      summary: "Already obsoleted (duplicate of 1878-2cwt, 1866-ubtc and openspec forge-storage task group 2); NOT reopened. Cleanup triage 2026-11-13 stream A carries its intent forward: 2080-4t5d cold volume, 2080-wbcw redirects, 2080-d83n .git and sizing, 2080-c4qv forge-df and banner, 2080-vzda guidance seeds, 2080-ekm9 spec."
+  - packet_id: forge-lua-helpers-migrate-five-hot-image-helpers-to-the-lua-runner-with-a-helper-mode-a-shipped-module-guard-and-a-monotone-shell-out-ratchet
+    event:
+      type: note
+      ts: "2026-11-13T23:30:00Z"
+      host: macuahuitl
+      summary: "Cleanup triage 2026-11-13 stream B8 (2080-zadh) is the next slice under this change: lib-common.sh, forge-plan.sh and project-info.sh. It depends on this row and does not repeat its five helpers."
+  - packet_id: lua-bash-replacement-and-policies-2026-09-27
+    event:
+      type: note
+      ts: "2026-11-13T23:30:00Z"
+      host: macuahuitl
+      summary: "Cleanup triage 2026-11-13 stream B (2080-k54x to 2080-y8h7) files nine shell-to-Lua children by theme: index, common modules, dedupe, fixture pilot, ledger and git modules, toolbox guard, test waves, forge helpers, and the blocked whole-repo ratchet."
