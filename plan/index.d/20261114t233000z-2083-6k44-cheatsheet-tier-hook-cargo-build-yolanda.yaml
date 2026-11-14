@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-14 from the coordinator's overlooked-debt hunt (candidate 3).
+packets:
+  - packet_id: the-pre-commit-cheatsheet-tier-phase-stops-running-cargo-build-on-every-commit
+    order: 2083-6k44
+    status: ready
+    kind: perf
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [hooks, pre-commit, cheatsheets, perf]
+    size: S
+    implementer_tier: sonnet
+    estimated_hours: 3
+    title: "The pre-commit cheatsheet_tier_check phase reuses a current tillandsias-policy binary instead of running cargo build -p tillandsias-policy on every commit"
+    context: |
+      scripts/hooks/pre-commit-openspec.sh's cheatsheet_tier_check phase runs
+      scripts/check-cheatsheet-tiers.sh, which calls cargo build --quiet -p
+      tillandsias-policy before every check. On yolanda (Windows) the phase reports
+      7513ms against its 900ms budget (8.3x) on every commit; it is also a
+      shared-target writer (1499-m9fj audit), so a commit made while a gate builds
+      contends for the same target dir. 734-sjb3 (done) fixed the spec sweep, not
+      this phase. Coordinator direction: build once keyed by an input digest, or
+      reuse the installed/resolved binary, never cargo build per commit.
+    exit_criteria:
+      - "With a current tillandsias-policy binary, the hook phase invokes no cargo process. Pre-fix result: FAILS, cargo build runs every time."
+      - "With the policy sources changed since the binary was built, the phase rebuilds or reports a named stale verdict, never a silent pass on old code."
+    verifiable_closure: "A fixture runs the phase twice with a PATH cargo shim that records calls: the second run records zero cargo calls; after touching a policy source it records one build or prints stale:. Pre-fix result: FAILS, two cargo calls."
+    unscoreable: "unpinnable-until-the-test-exists: the fixture is this row's first deliverable (1136-n8sh)."
+    next_action: "Write the cargo-shim fixture first and watch it count two calls; then gate the build on an input digest of crates/tillandsias-policy (or resolve via plan-binary-probe)."
+    provenance: "pre-commit hook phase timing printed on yolanda commits 2026-11-14 (cheatsheet_tier_check took 7513ms); scripts/check-cheatsheet-tiers.sh body."
+    events:
+      - type: filed
+        ts: "2026-11-14T23:30:00Z"
+        host: yolanda
+        summary: "filed from the overlooked-debt hunt; coordinator approved filing"
