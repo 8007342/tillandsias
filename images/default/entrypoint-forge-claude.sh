@@ -208,6 +208,19 @@ claude_forge_args=()
 if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
     claude_forge_args+=(--dangerously-skip-permissions)
 fi
+# Remote Control by default (2026-11-13): the launcher sets
+# TILLANDSIAS_CLAUDE_SESSION_NAME=<project>-forge for `--claude` (opt out with
+# `--no-remote-control`). Joined only when the installed claude advertises
+# --remote-control; otherwise fall back silently to a plain session.
+append_claude_remote_control_args() {
+    local name="${TILLANDSIAS_CLAUDE_SESSION_NAME:-}"
+    [ -n "$name" ] || return 0
+    local help
+    help="$("$CC_BIN" --help 2>/dev/null)" || true
+    case "$help" in *--remote-control*) ;; *) return 0 ;; esac
+    claude_forge_args+=(--remote-control "$name" --name "$name")
+}
+append_claude_remote_control_args
 # Coordinator-minted sessions (2026-08-31): an initial prompt threaded from
 # `tillandsias <project> --claude --prompt "<text>"` opens the INTERACTIVE
 # session with the message already submitted — typically "report to the
