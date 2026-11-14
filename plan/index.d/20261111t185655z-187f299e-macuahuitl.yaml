@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-platform-run-exports-an-in-toto-witness-statement-with-no-host-identity
+    field: next_action
+    value: |-
+      Write the witness emit tests red in crates/tillandsias-plan, then the verb.
+
+      [2026-11-11T18:56:55Z macuahuitl] OPERATOR RULING 2026-11-11 (relayed by the coordinator): near-zero idle overhead, no polling, exponential backoff where waiting is unavoidable. For this row: the witness is emitted once, at the end of a run that already happened; no watcher, timer or daemon is added, and nothing waits for a witness to appear. Signing stays as proposed: unsigned first.
+    ts: "2026-11-11T18:56:55Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-platform-run-exports-an-in-toto-witness-statement-with-no-host-identity
+    event:
+      type: note
+      ts: "2026-11-11T18:56:55Z"
+      host: macuahuitl
+      summary: |-
+        operator ruling 2026-11-11: no polling, near-zero idle overhead

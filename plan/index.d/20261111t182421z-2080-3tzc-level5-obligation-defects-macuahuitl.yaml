@@ -1,0 +1,697 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Order 2080: the six open points of the 2026-11-09 clean-room exercise on the
+# level-5 obligations document. Report: plan/issues/level5-obligation-defects-2026-11-11.md
+# Spec proposal: openspec/changes/obligation-evidence-contract (umbrella 2080-3tzc).
+# Three host-cycle stories: measure (9 rows), evidence (7 rows), publish (6 rows).
+packets:
+  - packet_id: level-5-obligation-evidence-contract-release-distance-per-platform-cells-rungs-and-witnesses
+    order: 2080-3tzc
+    status: pending
+    kind: design
+    priority: p1
+    desired_release: v0.5
+    pickup_role: operator
+    size: L
+    capability_tags: [centicolon, methodology, openspec, design]
+    estimated_hours: 2
+    related: [1395-88tp, 1395-ue3i, 1395-64r7, 2066-obsv]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "Obligation evidence contract: a defined release distance, one status per obligation and platform, a rule for each of the seven rungs, scenario-level binding and exportable witnesses"
+    context: |
+      The 2026-11-09 clean-room exercise found six defects in what the level-5
+      obligations document promises, and none had a plan row. Measured on trunk
+      e1f8d7f01 with scripts/centicolon-grade.sh: 1574 obligations, 0 satisfied,
+      1569 with reason no-binding, 3 of 629 litmus files carry a requirement
+      key, 3 of 7 rungs are assigned by any code, the grade has no platform
+      dimension, and a pass has no exportable witness. Operator ruling
+      2026-11-11: an obligation holds independently on each of Linux, macOS and
+      Windows; a platform-specific obligation declares its scope; an aggregate
+      never masks a platform failure. The proposal, design and tasks are on
+      work/2080-3tzc-l5def. Nothing in it enables a refusal on push.
+    exit_criteria:
+      - "The operator approves, rejects or amends openspec/changes/obligation-evidence-contract, and the five open questions in the report's last section are answered in design.md. Today the change is unreviewed."
+    verifiable_closure: "The change's design.md records the operator's decision and an answer to each open question, and every row of order 2080 that depends on this one is either ready or obsoleted with the reason."
+    unscoreable: |
+      awaiting-operator-ruling: this row is a spec proposal asking approve,
+      reject or amend. No implementation is claimed.
+    next_action: >
+      Operator: read plan/issues/level5-obligation-defects-2026-11-11.md, then
+      openspec/changes/obligation-evidence-contract/design.md, and approve,
+      reject or amend. The five questions at the end of the report need an answer.
+    provenance: "Filed 2026-11-11 by the research and planning lead on macuahuitl from plan/issues/observatorium-blind-design-2026-11-09 and the operator ruling of 2026-11-11."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed pending: obligation evidence contract proposal, with 22 implementation rows under order 2080"
+
+  # ---- Story 1: measure (the instrument) ----
+  - packet_id: release-distance-d-v-is-defined-in-methodology-and-the-grade-names-its-policy
+    order: 2080-46gg
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, methodology]
+    estimated_hours: 2
+    depends_on: [level-5-obligation-evidence-contract-release-distance-per-platform-cells-rungs-and-witnesses]
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The release distance d_v is defined in methodology/math-foundations.yaml, and the grade JSON and verdict line name the policy it was computed under"
+    context: "Point 1. The release rule is non-increase of d_v and d_v is defined nowhere. The only live number is the unweighted count the observe function in centicolon-grade-observed.lua returns as R. Fix: d_v is the count of required cells below the bar under a named policy (first policy name unweighted-positive-test/1); the weighted table in methodology is labelled not-implemented. Task 1.1 of the change."
+    exit_criteria:
+      - "tillandsias-plan methodology release_distance.definition returns the definition, and grade.json carries policy, bar, d_v and denominator. Pre-fix: the methodology path has no match and grade.json has no policy key, so the fixture FAILS."
+      - "The verdict line of centicolon-grade.sh ends with policy=<name>; a consumer that reads R still finds it."
+    verifiable_closure: "The fixture runs the grade over a two-obligation corpus and asserts the four fields and the policy token on the verdict line; against today's observed grader it fails on the missing policy key."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-release-distance.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-release-distance.lua red against today's grade.json, then add the release_distance block to methodology/math-foundations.yaml and the fields to the observed grader."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 1.1 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready behind 2080-3tzc from task 1.1"
+
+  - packet_id: a-litmus-step-binds-one-scenario-and-a-requirement-key-alone-earns-traced-only
+    order: 2080-4tg9
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, litmus]
+    estimated_hours: 3
+    depends_on: [level-5-obligation-evidence-contract-release-distance-per-platform-cells-rungs-and-witnesses]
+    related: [2080-3tzc, 1395-64r7, 1395-88tp]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "A litmus step binds one scenario with a scenario key, and a requirement key alone earns traced and nothing higher"
+    context: "Point 2. In centicolon-grade-static.lua the refs table is keyed by req-id, so one requirement-keyed green step promotes every scenario under that requirement. Only 5 obligations are bound today and 0 are satisfied, so changing the granularity now loses no credit; after the population is bound it would cost a rewrite of every key. This row should land before the pilot 1395-64r7 writes its keys. Task 2.1."
+    exit_criteria:
+      - "A fixture corpus with one requirement, two scenarios and one enforced, reachable, green step keyed by requirement only grades both scenarios traced with reason requirement-level-only. Pre-fix: both are positively_tested, so the fixture FAILS."
+      - "With a scenario key naming the first scenario, exactly that scenario is positively_tested; a scenario value that resolves to nothing is refused by name."
+    verifiable_closure: "The three fixture arms (requirement-only, scenario-keyed, unresolved scenario value) pass; the first arm is red on today's static grader."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-scenario-binding.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-scenario-binding.lua with the requirement-only arm red, then key candidates by obligation id in the static grader's refs table."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 2.1 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready behind 2080-3tzc from task 2.1"
+
+  - packet_id: unbound-obligations-are-counted-per-spec-and-offered-as-a-carried-obligation-backlog
+    order: 2080-4yw9
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, gate]
+    estimated_hours: 2
+    related: [2080-3tzc, 1570-k5yt]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "Unbound obligations are counted per spec by one Lua check, and the count is proposed as a carried-obligation backlog at the advisory stage"
+    context: "Point 2. 1569 of 1574 obligations have reason no-binding and nothing counts them where a change author sees it. The carried-obligations rule (methodology/convergence.yaml carried_obligations) already makes a change that touches a backlog's area carry one item; an unbound-obligations backlog whose area is openspec/specs and openspec/litmus-tests would move the population with ordinary work. Adding a backlog at the advisory stage is a report; moving it to gentle is the operator's stage change. Task 2.2."
+    exit_criteria:
+      - "The check prints ok:unbound-obligations:total=<n> specs=<m> and one line per spec with its unbound count, sorted by count, and its total equals the grade's no-binding count on the same tree. Pre-fix: no such check exists, so the fixture FAILS."
+      - "check-carried-obligations.lua's ok line ends with a counter for the new backlog. Pre-fix: it reports no such counter."
+    verifiable_closure: "A fixture corpus with three specs and known unbound counts yields those counts; a mutation that adds a scenario key lowers one count by one."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-unbound-obligations.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-unbound-obligations.lua red, then scripts/lua/check-unbound-obligations.lua reading target/centicolon/static.json, then add the advisory backlog entry."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 2.2 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 2.2"
+
+  - packet_id: a-bind-candidates-report-lists-existing-enforced-steps-for-each-unbound-scenario
+    order: 2080-zsf5
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, litmus]
+    estimated_hours: 2
+    depends_on: [a-litmus-step-binds-one-scenario-and-a-requirement-key-alone-earns-traced-only]
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "A bind-candidates report lists, for each unbound scenario, the enforced steps in litmus files already bound to its spec"
+    context: "Point 2, the optimization. openspec/litmus-bindings.yaml already binds 149 specs to litmus files at spec level, so for most unbound scenarios the test probably exists and only the key is missing. A report that pairs each unbound scenario with the enforced, reachable steps of its spec's bound files turns binding into a review of a short list. It proposes and never writes a key: whether a step tests a scenario is a judgement. Task 2.3."
+    exit_criteria:
+      - "For a fixture spec with two unbound scenarios and one bound litmus file holding one enforced and one unenforced step, the report lists the enforced step under both scenarios and omits the unenforced one. Pre-fix: no such report exists, so the fixture FAILS."
+    verifiable_closure: "The fixture passes, and on the real tree the report prints the number of unbound scenarios with at least one candidate step and the number with none."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-bind-candidates.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-bind-candidates.lua red, then the report over static.json and the bindings registry."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 2.3 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 2.3"
+
+  - packet_id: the-extractor-emits-a-declared-platform-scope-for-every-obligation
+    order: 2080-5vcj
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, openspec]
+    estimated_hours: 3
+    depends_on: [level-5-obligation-evidence-contract-release-distance-per-platform-cells-rungs-and-witnesses]
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The extractor emits a platform scope for every obligation: all three by default, narrower only where the spec declares it"
+    context: "Point 4, operator ruling 2026-11-11. centicolon-extract.lua emits no platform field. A spec such as macos-native-tray holds on one platform and nothing says so. Fix: a platforms line in the spec's Status block (closed vocabulary linux, macos, windows), overridable by a platforms comment beside a req-id; default is all three; an unknown token or an empty scope is refused by name. Task 4.1."
+    exit_criteria:
+      - "Every row of obligations.json carries a platforms list. Pre-fix: no row has the field, so the fixture FAILS."
+      - "A fixture spec with platforms macos yields rows scoped to macos only; a spec naming freebsd is refused with the spec and token named; a spec with no line yields all three."
+      - "macos-native-tray and each other spec the claimer finds to be platform-specific carries its platforms line, listed in the completion event."
+    verifiable_closure: "The four fixture arms pass (default, declared, per-requirement override, unknown token refused), and the default arm is red on today's extractor."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-platform-scope.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-platform-scope.lua red, then parse the platforms line in the extractor's status reader."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 4.1 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready behind 2080-3tzc from task 4.1"
+
+  - packet_id: a-litmus-result-record-names-the-product-platform-separately-from-the-runner-regime
+    order: 2080-axw3
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [litmus, centicolon, windows, macos, linux]
+    estimated_hours: 3
+    related: [2080-3tzc, 1395-88tp]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "A litmus result record names the product platform (linux, macos, windows) in its own field, separate from the runner regime"
+    context: "Point 4. The per-test record cycle-metrics.sh emits carries regime (linux, darwin, msys). On a Windows host the gate re-executes inside WSL, so its records say linux; regime therefore cannot attribute a pass to Windows. Fix: the runner writes platform from the bare-metal host family, passed into a WSL re-exec explicitly, and keeps regime as it is. A record with no platform earns no cell. Task 4.2."
+    exit_criteria:
+      - "A fixture run with the host family forced to windows and the regime linux emits a record with platform windows and regime linux. Pre-fix: the record has no platform field, so the fixture FAILS."
+      - "One real record from a host that can run the gate on macOS and one from a host that can run it on Windows (through WSL) are pasted in the completion event, showing platform macos and platform windows."
+    verifiable_closure: "The fixture passes on the three forced host families; the two real records are quoted with their producing command."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-litmus-record-platform.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-litmus-record-platform.lua red, then add the platform column where cycle-metrics.sh builds the timing-batch record. The record field is written by existing shell; port that emitter to Lua in this row if the edit exceeds one field."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 4.2 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 4.2"
+
+  - packet_id: the-observed-grader-holds-one-state-per-obligation-and-platform-and-the-aggregate-is-the-minimum
+    order: 2080-87z2
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon]
+    estimated_hours: 4
+    depends_on:
+      - the-extractor-emits-a-declared-platform-scope-for-every-obligation
+      - a-litmus-result-record-names-the-product-platform-separately-from-the-runner-regime
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The observed grader holds one state per (obligation, platform) cell, and an obligation's aggregate is the minimum over its required cells"
+    context: "Point 4. The observe function keeps one latest record per (step, digest) across all hosts and promotes the obligation on any green one, so a Linux pass satisfies an obligation for macOS and Windows. Fix: latest is keyed by platform as well; the output carries a cells list; the aggregate is the minimum over required platforms; a required platform with no record has reason unmeasured; records without a platform are counted as unattributed. The host field stays out of the output. Task 4.3."
+    exit_criteria:
+      - "An all-platform obligation with a green linux record only: the linux cell is positively_tested, the macos and windows cells keep their state with reason unmeasured, and the aggregate is below the bar. Pre-fix: the obligation is positively_tested, so the fixture FAILS."
+      - "Green on linux and macos and failed on windows: the aggregate is below the bar and its reason names windows."
+      - "A macos-scoped obligation with a green macos record is satisfied; a green linux record for it earns nothing."
+    verifiable_closure: "The three arms and an unattributed-record arm pass; arm one is red on today's observed grader."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-platform-cells.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-platform-cells.lua with arm one red, then key the latest table by platform in the observe function."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 4.3 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 4.3"
+
+  - packet_id: the-grade-histogram-carries-all-seven-rungs-and-names-the-unassigned-ones
+    order: 2080-cjtf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon]
+    estimated_hours: 2
+    depends_on: [level-5-obligation-evidence-contract-release-distance-per-platform-cells-rungs-and-witnesses]
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The grade histogram carries all seven rungs, assigns absent, and lists by name every rung no rule assigns yet"
+    context: "Point 3. ObligationState in obligation.rs has seven variants; the hist table in the observe function has three keys. A reader cannot tell a rung with zero obligations from a rung nothing can assign. Fix: seven keys always; absent is assigned to an identifier a binding key or the committed baseline names that the extractor does not emit (today these are only refusal lines); unassigned_rungs lists the rungs whose rule is not implemented, and shrinks as the evidence story lands. Task 3.1."
+    exit_criteria:
+      - "grade.json histogram has seven keys and unassigned_rungs lists negatively_tested, runtime_observed and evidence_bundled. Pre-fix: three keys and no such list, so the fixture FAILS."
+      - "A fixture step keyed to an identifier the extractor does not emit yields absent=1 for that identifier."
+    verifiable_closure: "Both arms pass, and the fixture also asserts the rung names equal ObligationState's as_str values in order."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-seven-rungs.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-seven-rungs.lua red, then widen the hist table and add unassigned_rungs."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 3.1 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready behind 2080-3tzc from task 3.1"
+
+  - packet_id: a-measurability-register-lists-each-level-5-obligation-with-its-measuring-field-or-the-reason-it-has-none
+    order: 2080-cpyd
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [lua, observatorium, methodology]
+    estimated_hours: 3
+    related: [2080-3tzc, 2066-obsv]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "A committed measurability register lists each of the 29 level-5 obligations with the grade field that measures it, or unmeasured with the reason"
+    context: "Point 6. The derivation in plan/issues/observatorium-blind-design-2026-11-09 found 11 of 29 obligations unmeasurable as written, and that finding lives only in a report. Fix: observatorium/data/measurability.yaml with one entry per obligation (id, statement, measured_by or unmeasured with reason and what would make it measurable), and a Lua check that fails when an entry is missing or names a field the grade output lacks. The register is the place each later row of this order moves an entry from unmeasured to measured. Task 6.1."
+    exit_criteria:
+      - "The check prints ok:measurability-register:entries=29 measured=<m> unmeasured=<u>. Pre-fix: no register and no check exist, so the fixture FAILS."
+      - "An entry whose measured_by names a field absent from grade.json fails the check with the entry named; a register with 28 entries fails."
+    verifiable_closure: "The fixture's three arms (complete register, dangling field, missing entry) pass, and the real register's printed counts are quoted in the completion event."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-measurability-register.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-measurability-register.lua red, then the register from the report's point 6 table and the check."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 6.1 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 6.1"
+
+  # ---- Story 2: evidence (rungs, witness, baseline) ----
+  - packet_id: negatively-tested-is-assigned-from-a-green-writing-mutation-arm-bound-to-the-same-scenario
+    order: 2080-e36r
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, litmus]
+    estimated_hours: 3
+    depends_on:
+      - a-litmus-step-binds-one-scenario-and-a-requirement-key-alone-earns-traced-only
+      - the-observed-grader-holds-one-state-per-obligation-and-platform-and-the-aggregate-is-the-minimum
+    related: [2080-3tzc, 1059-pb2j]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "negatively_tested is assigned to a cell that has a green, writing mutation-arm step bound to the same scenario on the same platform"
+    context: "Point 3. The rule was designed in plan/issues/centicolon-enforceable-metric-design-2026-09-26.md section 4.3 and never built. It reuses the mutation-arm name pattern and the writes rule of check-litmus-mutation-arms-mutate.sh instead of deciding them again. Task 3.2."
+    exit_criteria:
+      - "A scenario with a green bound step and a green bound mutation-arm step that writes grades negatively_tested on that platform. Pre-fix: the grade has no such state, so the fixture FAILS."
+      - "The same arm with a command that writes nothing leaves the cell at positively_tested; an arm green on linux does not raise the macos cell."
+    verifiable_closure: "The three arms pass, and unassigned_rungs no longer lists negatively_tested."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-negative-rung.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-negative-rung.lua red, then mark mutation-arm candidates in the static grader."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 3.2 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 3.2"
+
+  - packet_id: runtime-observed-is-assigned-from-a-green-release-tier-runtime-record-bound-to-the-scenario
+    order: 2080-e3ii
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, litmus, release]
+    estimated_hours: 3
+    depends_on: [negatively-tested-is-assigned-from-a-green-writing-mutation-arm-bound-to-the-same-scenario]
+    related: [2080-3tzc, 1174-6r4k]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "runtime_observed is assigned to a cell that has a green record from a runtime or post-build test bound to the scenario, from a release-tier run"
+    context: "Point 3. Designed in section 4.4 of the 2026-09-26 design and never built. The static grader's tier_of function already separates pre-build from the other phases; the missing parts are the phase on the candidate and the release-tier condition on the record. Task 3.3."
+    exit_criteria:
+      - "A negatively_tested cell with a green record from a phase runtime file bound to the scenario, recorded in a release-tier run, grades runtime_observed. Pre-fix: no such state is produced, so the fixture FAILS."
+      - "The same record from a pre-build-only run earns nothing above negatively_tested."
+    verifiable_closure: "Both arms pass, and unassigned_rungs no longer lists runtime_observed."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-runtime-rung.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-runtime-rung.lua red, then carry phase and run tier into the candidate and the record."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 3.3 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 3.3"
+
+  - packet_id: a-platform-run-exports-an-in-toto-witness-statement-with-no-host-identity
+    order: 2080-h3mb
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [rust, plan, centicolon, attestation]
+    estimated_hours: 4
+    depends_on: [a-litmus-result-record-names-the-product-platform-separately-from-the-runner-regime]
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "A platform run exports a witness: an in-toto Statement whose subjects are the litmus and spec digests and whose predicate lists platform, tier, revision and per-test results, with no host identity"
+    context: "Point 5. The results stream is a host-local timing log, so no other host and no reader can check a pass. Fix: a tillandsias-plan witness emit verb (Rust) that turns one platform's results stream into one Statement (in-toto Statement v1, a test-result-shaped predicate) and refuses to write a host name, a user name or an absolute path. plan/attestations already holds per-platform JSON stamps with source digests; the witness follows that precedent with a standard envelope. Task 5.1."
+    exit_criteria:
+      - "witness emit over a fixture stream writes a statement whose _type is https://in-toto.io/Statement/v1, whose subjects carry sha256 digests of the litmus and spec files, and whose predicate names the platform. Pre-fix: the verb does not exist, so the test FAILS."
+      - "A stream whose records carry host produces a statement without it; a candidate containing a home-directory path is refused with the field named."
+      - "The same stream emitted twice yields byte-identical statements."
+    verifiable_closure: "The crate's witness tests cover the three criteria; the first fails to compile or run before the verb exists."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix adds the witness module and its tests to crates/tillandsias-plan in the same commit and moves this closure onto the test name."
+    next_action: "Write the witness emit tests red in crates/tillandsias-plan, then the verb."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 5.1 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 5.1"
+
+  - packet_id: a-witness-is-verified-offline-against-repository-bytes-and-reports-its-strength
+    order: 2080-hnit
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [rust, plan, centicolon, attestation, security]
+    estimated_hours: 4
+    depends_on: [a-platform-run-exports-an-in-toto-witness-statement-with-no-host-identity]
+    related: [2080-3tzc, 1879-5jkt]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "A witness is verified offline against the repository's bytes at its revision, and the verifier reports its strength as unsigned or signed without inflating it"
+    context: "Point 5. Verification needs only the witness, the repository and, when signed, an allowed-signers file. The signature form is SSHSIG, which the approval gates already use, under its own namespace so an approval key's signature is never mistaken for a witness. Which key signs a witness is an open question for the operator (report, last section); until answered the verb ships with unsigned verification and the signed path behind the same interface. Task 5.2."
+    exit_criteria:
+      - "witness verify on a statement whose litmus subject has different bytes at the revision reports subject-digest-mismatch for that subject. Pre-fix: the verb does not exist, so the test FAILS."
+      - "A signed statement with one result flipped fails signature verification; an unsigned statement is reported with strength unsigned and never signed."
+    verifiable_closure: "The crate's witness verify tests cover matching digests, a mismatched digest, a tampered signed statement and the strength report."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix adds the verify tests to crates/tillandsias-plan in the same commit and moves this closure onto the test name."
+    next_action: "Write the witness verify tests red, then the verb; leave the signer choice to the operator's answer."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 5.2 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 5.2"
+
+  - packet_id: the-grader-reads-verified-witnesses-from-every-platform-and-assigns-evidence-bundled
+    order: 2080-jfuf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, attestation]
+    estimated_hours: 4
+    depends_on:
+      - a-witness-is-verified-offline-against-repository-bytes-and-reports-its-strength
+      - the-observed-grader-holds-one-state-per-obligation-and-platform-and-the-aggregate-is-the-minimum
+      - runtime-observed-is-assigned-from-a-green-release-tier-runtime-record-bound-to-the-scenario
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The grader reads verified witnesses as record sources for every platform, and assigns evidence_bundled to a runtime_observed cell a verified witness covers"
+    context: "Points 3, 4 and 5 meet here. Today the grading host sees only its own log, so macOS and Windows cells can never be filled on the host that cuts the release. With witnesses as record sources, each platform's run reaches the grader as a committed file. evidence_bundled is then the cell whose records are covered by a verified witness. Task 5.3."
+    exit_criteria:
+      - "Given a linux log and a verified macos witness, the macos cell of a bound scenario is positively_tested. Pre-fix: the grader takes one results file and has no platform cells, so the fixture FAILS."
+      - "A witness that fails verification contributes no record; a runtime_observed cell covered by a verified witness grades evidence_bundled and unassigned_rungs is empty."
+    verifiable_closure: "The fixture's three arms (witness as record source, unverified witness ignored, evidence_bundled assigned) pass."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-witness-records.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-witness-records.lua red, then accept a witness directory in the grade pipeline's results stage."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 5.3 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 5.3"
+
+  - packet_id: the-release-cut-commits-per-cell-obligation-rows-without-host-names
+    order: 2080-k87a
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [observatorium, node, release, centicolon]
+    estimated_hours: 3
+    depends_on: [the-observed-grader-holds-one-state-per-obligation-and-platform-and-the-aggregate-is-the-minimum]
+    related: [2080-3tzc, 2066-obsv]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The release cut commits one row per (obligation, platform) cell beside the aggregate snapshot, with the host name stripped"
+    context: "Points 1 and 4. observatorium/history/snapshots.jsonl keeps only the aggregate per release; the per-obligation rows the grader prints on every run are discarded, so no per-obligation comparison across releases is possible and one gain can hide one loss. Fix: the release snapshot step also writes the cell rows (id, platform, state, reason, policy) for that tag, with no host field. Task 1.2."
+    exit_criteria:
+      - "A release snapshot run over a fixture grade writes a cells file for the tag whose row count equals the grade's cell count and in which no row has a host key. Pre-fix: only the aggregate row is written, so the test FAILS."
+      - "A grade row carrying host is written without it, and the test asserts the absence."
+    verifiable_closure: "The observatorium test suite gains the two cases and they pass; the first is red before the snapshot step writes cells."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix adds the cases to observatorium's existing node test suite in the same commit and moves this closure onto the test name."
+    next_action: "Add the red test beside the existing release-snapshot tests in observatorium, then write the cells file in the snapshot step. This is the existing Node site; no new shell."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 1.2 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 1.2"
+
+  - packet_id: the-release-non-increase-check-reads-the-committed-baseline-not-a-per-checkout-file
+    order: 2080-kugs
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    size: M
+    implementer_tier: sonnet
+    capability_tags: [lua, centicolon, release, gate]
+    estimated_hours: 3
+    depends_on:
+      - the-release-cut-commits-per-cell-obligation-rows-without-host-names
+      - release-distance-d-v-is-defined-in-methodology-and-the-grade-names-its-policy
+    related: [2080-3tzc, 1395-ue3i]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The release non-increase check compares cells against the committed baseline of the previous release, and reports added, retired and regressed cells separately"
+    context: "Point 1. check-centicolon-ratchet.lua reads its previous state from last.txt under the untracked centicolon output directory, so a fresh clone has regime baseline and can never see a regression, and the rule the level-5 document calls mechanically checkable is not checked against any release. Fix: the comparison baseline is the committed cells file of the previous release; last.txt stays as the within-checkout advisory. The check is a report; refusing on it is a bar raise for the operator. Task 1.3."
+    exit_criteria:
+      - "With no last.txt and a committed baseline holding cell X at positively_tested, a current grade with X at declared prints a warn line with regressed=1 and X named. Pre-fix: the regime is baseline and nothing is reported, so the fixture FAILS."
+      - "One cell up and one cell down with d_v unchanged still reports regressed=1; a baseline under another policy reports policy-changed and no comparison."
+    verifiable_closure: "The fixture's three arms pass; arm one is red on today's ratchet."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-centicolon-release-baseline.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-centicolon-release-baseline.lua red, then read the committed cells file in the ratchet."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 1.3 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 1.3"
+
+  # ---- Story 3: publish and document ----
+  - packet_id: the-observatorium-shows-per-platform-counts-and-its-honesty-check-refuses-a-masking-aggregate
+    order: 2080-mi5f
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [observatorium, node]
+    estimated_hours: 3
+    depends_on: [the-release-cut-commits-per-cell-obligation-rows-without-host-names]
+    related: [2080-3tzc, 2066-obsv]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The observatorium shows satisfied counts per platform, and its honesty check fails a page that prints an aggregate without them or above the smallest of them"
+    context: "Point 4, the last clause of the ruling. The site's honesty module already fails the build on rules such as a ratio without its integers; this adds the platform rule. A platform with no measurement is shown as not measured, never as zero and never omitted. Task 4.4."
+    exit_criteria:
+      - "A view whose aggregate satisfied count exceeds the smallest per-platform count fails the honesty check with the rule named. Pre-fix: the check has no such rule, so the test FAILS."
+      - "The home and obligations pages render three platform columns from a fixture cells file, with not measured where a platform has no record."
+    verifiable_closure: "The observatorium test suite gains the lint case and the render case and both pass."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix adds the cases to observatorium's honesty and pages test files in the same commit and moves this closure onto the test names."
+    next_action: "Add the red honesty test, then the rule and the columns."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 4.4 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 4.4"
+
+  - packet_id: the-observatorium-publishes-witnesses-and-labels-unwitnessed-cells-claimed-by-grader
+    order: 2080-n5z6
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [observatorium, node, attestation]
+    estimated_hours: 3
+    depends_on:
+      - the-grader-reads-verified-witnesses-from-every-platform-and-assigns-evidence-bundled
+      - a-measurability-register-lists-each-level-5-obligation-with-its-measuring-field-or-the-reason-it-has-none
+    related: [2080-3tzc, 2066-obsv]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The observatorium publishes each release's witnesses under its data route with the verify command, labels a cell without one as claimed by the grader, and renders the measurability register"
+    context: "Points 5 and 6. A reader should be able to download a witness and check it with the repository alone. A cell with no witness is honest only if it says who claims it. The register page shows which level-5 obligations are measured and which are not, and why. Task 5.4."
+    exit_criteria:
+      - "The build copies a fixture release's witnesses into the site's data route and the release page links each with the verify command. Pre-fix: the build has no witness input, so the test FAILS."
+      - "A cell at or above positively_tested with no witness renders the words claimed by the grader; the measurability page lists 29 entries."
+    verifiable_closure: "The observatorium test suite gains the three cases and they pass."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix adds the cases to observatorium's build and pages test files in the same commit and moves this closure onto the test names."
+    next_action: "Add the red build test for the witness route, then the page changes."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 5.4 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 5.4"
+
+  - packet_id: bar-raises-are-exported-with-their-approval-record-and-a-raise-without-one-is-reported
+    order: 2080-r6hs
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [lua, methodology, gate]
+    estimated_hours: 2
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "Bar raises are exported from approved_bar_raises with their approval record, and an entry missing approver, date or proposal is reported by name"
+    context: "Point 6, level-5 obligation 6 (the bar is raised only by operator decision). The derivation called it unmeasurable because the public document names no evidence form. The repository has one: approved_bar_raises in methodology/convergence.yaml, each entry with approved_by, approved_at and proposal. Nothing checks the entries are complete or exports them. Task 6.2."
+    exit_criteria:
+      - "The check prints ok:bar-raise-records:entries=<n> and one exported row per entry. Pre-fix: no such check exists, so the fixture FAILS."
+      - "A fixture entry with no proposal, or whose proposal path does not exist, is reported with the entry's id."
+    verifiable_closure: "The fixture's arms (complete, missing field, dangling proposal) pass, and the real ledger's count is quoted in the completion event."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix writes scripts/lua/test-bar-raise-records.lua in the same commit and moves this closure onto it."
+    next_action: "Write scripts/lua/test-bar-raise-records.lua red, then scripts/lua/check-bar-raise-records.lua; then move the register entry for obligation 6 to measured."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 6.2 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 6.2"
+
+  - packet_id: methodology-declares-or-withdraws-the-cycle-bound-k-the-complexity-unit-workstream-residuals-and-bar-granularity
+    order: 2080-xvup
+    status: ready
+    kind: design
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [methodology, design]
+    estimated_hours: 3
+    depends_on: [level-5-obligation-evidence-contract-release-distance-per-platform-cells-rungs-and-witnesses]
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "Methodology either declares or withdraws four quantities nothing can measure: the cycle bound K, the unit of the complexity ratio, per-workstream residuals, and whether the bar is global or per obligation"
+    context: "Point 6. Four level-5 obligations rest on a quantity that is never fixed: K in the conditional cycle bound, complexity in methodology_complexity_constraint (a ratio of two undefined quantities with a 5000-line flag), residuals for workstreams that have no obligation membership, and the configured bar. The report recommends: K withdrawn as a number (cycles since last decrease is printed instead), complexity defined as counted lines over named globs with an advisory counter, workstream residuals withdrawn until a workstream has obligations, the bar global and named by the policy. Each is the operator's wording to approve. Task 6.3."
+    exit_criteria:
+      - "tillandsias-plan methodology answers a path for each of the four with either a definition and its measuring command, or the word withdrawn and the reason. Pre-fix: none of the four paths resolves to either, so the check in the completion event FAILS."
+      - "The measurability register entry for each of the four obligations cites that path."
+    verifiable_closure: "The four methodology paths are quoted with their output in the completion event, and the register check stays green with the four entries updated."
+    unscoreable: "methodology-wording-needs-operator-approval: the deliverable is four decisions in methodology text; the register check from 2080-cpyd is the mechanical part and is cited at closure."
+    next_action: "Draft the four blocks in methodology/math-foundations.yaml and methodology/convergence.yaml on a work ref and ask the operator to approve the wording."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 6.3 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready behind 2080-3tzc from task 6.3"
+
+  - packet_id: the-grade-exports-a-refine-fixed-point-signal-and-the-ledger-exports-unknown-event-intake-counts
+    order: 2080-y9c5
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    size: S
+    implementer_tier: sonnet
+    capability_tags: [rust, plan, centicolon]
+    estimated_hours: 3
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The grade exports whether the last refine run was a fixed point, and the ledger exports unknown-event intake and classification counts"
+    context: "Point 6, level-5 obligations 5 and 29. Refiner's refine method in obligation.rs already returns a RefineOutcome that distinguishes a fixed point from an unstable run, and no command prints it. Unknown events are named across methodology/proximity.yaml as open_unknown_events and no export counts them. Both are measurable with a small export. Task 6.4."
+    exit_criteria:
+      - "A plan verb prints stable=<true|false> for a rule set and state, and unknown_events_in=<n> classified=<m> for the ledger. Pre-fix: neither output exists, so the tests FAIL."
+      - "The measurability register entries for obligations 5 and 29 name those fields and the register check passes."
+    verifiable_closure: "The crate tests cover a fixed point, an unstable run and a ledger with two unknown events of which one is classified."
+    unscoreable: "unpinnable-until-the-guard-exists: the fix adds the tests to crates/tillandsias-plan in the same commit and moves this closure onto the test names."
+    next_action: "Write the two crate tests red, then the export. First settle how an unknown event is recorded in the ledger today; if it has no record form, say so in the row and file the form as its own row."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 6.4 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 6.4"
+
+  - packet_id: the-public-level-5-text-states-the-defined-release-distance-per-platform-status-and-the-measurability-register
+    order: 2080-zk9f
+    status: ready
+    kind: enhancement
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    size: S
+    capability_tags: [website, docs]
+    estimated_hours: 2
+    depends_on:
+      - release-distance-d-v-is-defined-in-methodology-and-the-grade-names-its-policy
+      - the-observed-grader-holds-one-state-per-obligation-and-platform-and-the-aggregate-is-the-minimum
+      - a-measurability-register-lists-each-level-5-obligation-with-its-measuring-field-or-the-reason-it-has-none
+    related: [2080-3tzc]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "The public level-5 page states the defined release distance, that status is per platform, and links the measurability register in place of claims nothing measures"
+    context: "Points 1, 4 and 6 as the public reads them. The level-5 page lives in the tillandsias.org repository (docs/matrix/level-5-phd.md), not here, and is updated through the website queue by an agent in that project's forge. It must not say more than the instrument does: it changes only after the methodology text and the per-platform grade have landed here."
+    exit_criteria:
+      - "The page's release-rule section cites the methodology definition of d_v with its policy name, says status is held per platform, and links the register. Today it says d is unspecified and has no platform statement."
+      - "Each of the 11 obligations the register lists as unmeasured is marked so on the page, or removed."
+    verifiable_closure: "The site repository's commit is cited in the completion event with the three quoted passages."
+    unscoreable: "other-repository: the deliverable is a text change in the tillandsias.org repository, which this repository's gates cannot read."
+    next_action: "After the three dependencies land, queue the page update for the website forge with the methodology path and the register file as its sources."
+    provenance: "Filed 2026-11-11 on macuahuitl from task 6.5 of openspec/changes/obligation-evidence-contract/tasks.md."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:24:21Z"
+        host: macuahuitl
+        summary: "filed ready from task 6.5"
