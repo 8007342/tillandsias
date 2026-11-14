@@ -89,6 +89,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "declared-closures-check",
     "dependencies-of",
     "decompose",
+    "disk-preflight",
     "discipline",
     "policy",
     "expert-context-pack",
@@ -386,6 +387,13 @@ const USAGE: &str = concat!(
     "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
+    "           disk-preflight [--repo D] [--target D] [--l0] [--dry-run]\n",
+    "                                     ORDER 1878-2cwt. Before a new worktree: when free\n",
+    "                                     space on --target (default --repo, default .) is\n",
+    "                                     below max(2 GiB, 15%) (--l0: 25%), evict CLEAN and\n",
+    "                                     PUSHED worktrees, oldest HEAD first. Prints ok:disk-\n",
+    "                                     preflight:... (exit 0) or refused:disk-low:<path>:<free>\n",
+    "                                     (exit 1). Never evicts dirty or unpushed worktrees.\n",
     "           decompose <query...>      adversarial query decomposition via LLM\n",
     "                                     (order 920-pxg6). Returns a JSON array of\n",
     "                                     {prompt, kind} variants for concurrent dispatch.\n",
@@ -432,6 +440,7 @@ const USAGE: &str = concat!(
     "                                     returns collected envelope on stdout.\n",
     "           validate-yaml <file>...   ORDER 746-htj9. Load each file with serde_yaml and\n",
     "                                     report ok:yaml-loads / blocked:yaml-load-failed /\n",
+    "                                     blocked:yaml-empty (zero bytes or whitespace only) /\n",
     "                                     blocked:yaml-unreadable. THE sanctioned YAML reader:\n",
     "                                     no interpreter (yq, ruby) exists in all three\n",
     "                                     environments the gates run in; this binary does.\n",
@@ -4027,6 +4036,16 @@ fn yaml_read_dispatch(subcommand: &str, args: &[String]) {
             let mut failed = false;
             for file in files {
                 match std::fs::read_to_string(file) {
+                    // ORDER 1117-66qv. serde_yaml loads the EMPTY document as
+                    // `Null`, so a zero-byte file (a heredoc that never wrote)
+                    // used to answer `ok:yaml-loads` — the strongest verdict
+                    // this reader emits, for a file with nothing in it. Empty
+                    // is its own verdict, distinct from load failure and from
+                    // the valid empty document a writer could mean.
+                    Ok(text) if text.trim().is_empty() => {
+                        println!("blocked:yaml-empty:{file}: file is empty or whitespace only");
+                        failed = true;
+                    }
                     Ok(text) => match serde_yaml::from_str::<serde_yaml::Value>(&text) {
                         Ok(_) => println!("ok:yaml-loads:{file}"),
                         Err(err) => {
@@ -5021,7 +5040,7 @@ fn run_run_verb(args: &[String]) -> ! {
     use tillandsias_plan::run_verb as rv;
     let usage = || -> ! {
         eprintln!(
-            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
+            "usage: tillandsias-plan run [--json] [--caller run|mcp] [--cwd P] [--env K=V]… [--env-profile NAME]… [--env-inherit NAME]… [--timeout-ms N] [--capture-bytes N] [--stdin-file F] -- <argv…>\n\
              \x20 argv is argv: there is no command-string form and no --shell.\n\
              \x20 --json prints one object (run_id,status,code,signal,ok,stdout,stderr,truncated,wall_ms,argv,policy) and\n\
              \x20 exits 0 whenever a child ran, 1 for a policy refusal, 4 for consent, 2 for usage.\n\
@@ -5030,6 +5049,8 @@ fn run_run_verb(args: &[String]) -> ! {
              \x20 --timeout-ms defaults to 300000 (300 s); a long run (a full gate) MUST pass its own, or 0 for none.\n\
              \x20 The child env is scrubbed: passed (when set) PATH HOME TMPDIR CARGO_TARGET_DIR XDG_RUNTIME_DIR\n\
              \x20 DBUS_SESSION_BUS_ADDRESS TILLANDSIAS_*; fixed LC_ALL=C LANG=C TZ=UTC; all else dropped (use --env K=V).\n\
+             \x20 --env-profile NAME / --env-inherit NAME pass named caller variables (child_env::ENV_INHERIT_PROFILES);\n\
+             \x20 a class-A name (loader, shell-init, program-naming, credential-shape) is refused declared or per call.\n\
              \x20 --caller names the door in the audit log: run (default) or mcp (project-info run_command).\n\
              \x20 A child the verb kills (the deadline) is timed_out on every locus. {}: on Windows a child\n\
              \x20 killed from OUTSIDE (MSYS kill) reads as exited with the MSYS code (2304 for SIGKILL), undecoded.",
@@ -5038,6 +5059,8 @@ fn run_run_verb(args: &[String]) -> ! {
         std::process::exit(2);
     };
     let mut spec = rv::RunSpec::new(Vec::new());
+    let mut env_profiles: Vec<String> = Vec::new();
+    let mut env_inherit: Vec<String> = Vec::new();
     let mut json = false;
     let mut caller = "run";
     let mut i = 0;
@@ -5094,6 +5117,10 @@ fn run_run_verb(args: &[String]) -> ! {
                 _ => usage(),
             },
             "--cwd" => spec.cwd = Some(PathBuf::from(v)),
+            // ORDER 2031-dwwy: the declared inherit layer, the same table and
+            // hard block as a script header's @env-profile / @env-inherit.
+            "--env-profile" => env_profiles.push(v.to_string()),
+            "--env-inherit" => env_inherit.push(v.to_string()),
             "--env" => {
                 let Some((k, val)) = v.split_once('=') else {
                     usage()
@@ -5125,13 +5152,28 @@ fn run_run_verb(args: &[String]) -> ! {
     if !saw_dd || spec.argv.is_empty() {
         usage();
     }
-    let outcome = rv::execute(&spec, caller);
+    let outcome = match tillandsias_plan::child_env::Declared::validate(&env_profiles, &env_inherit)
+    {
+        Ok((declared, notes)) => {
+            for n in notes {
+                eprintln!("{n}");
+            }
+            spec.declared = declared;
+            rv::execute(&spec, caller)
+        }
+        Err(r) => rv::RunOutcome::EnvRefused(r),
+    };
     if json {
         let (value, code) = rv::outcome_json(&spec, &outcome);
         println!("{value}");
         std::process::exit(code);
     }
     match outcome {
+        // A class-A name declared or set per call (2031-dwwy): named, never valued.
+        rv::RunOutcome::EnvRefused(r) => {
+            eprintln!("{}", r.lines());
+            std::process::exit(1);
+        }
         rv::RunOutcome::Refused(d) => {
             eprintln!("{}", d.token);
             if let Some(w) = &d.why {
@@ -5228,7 +5270,20 @@ fn run_classify_bash(args: &[String]) -> ! {
             let c = bp::classify(cmd, &ctx);
             bp::log_decision(&ctx, cmd, c.verdict.as_str(), &c.rule, false);
             match c.verdict {
-                bp::Verdict::Allow => std::process::exit(0),
+                // ORDER 2065-baby (operator approval 2026-11-09): in a FORGE, a
+                // removal whose every target is inside a safe root is answered
+                // `allow`, so Claude Code's own deletion prompt does not stop
+                // it. Anything else stays silent and Claude Code decides.
+                bp::Verdict::Allow => {
+                    let roots = tillandsias_plan::safe_roots::SafeRoots::forge();
+                    if let Some(answer) =
+                        tillandsias_plan::safe_roots::hook_allow(ctx.host_kind, cmd, &cwd, &roots)
+                    {
+                        bp::log_decision(&ctx, cmd, "allow", "safe-root-removal", false);
+                        println!("{answer}");
+                    }
+                    std::process::exit(0);
+                }
                 bp::Verdict::Deny => {
                     eprintln!("{}", c.token);
                     if let Some(w) = &c.why {
@@ -9283,6 +9338,67 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
             // was observed — an index reached through a probe path yielded
             // confidence=exact with a citation `verify-answer` refused.
             emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
+        }
+        "disk-preflight" => {
+            use tillandsias_plan::disk_preflight as dp;
+            let mut repo = PathBuf::from(".");
+            let mut target: Option<PathBuf> = None;
+            let (mut l0, mut dry) = (false, false);
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--repo" | "--target" if i + 1 < args.len() => {
+                        let v = PathBuf::from(&args[i + 1]);
+                        if args[i] == "--repo" {
+                            repo = v
+                        } else {
+                            target = Some(v)
+                        }
+                        i += 1;
+                    }
+                    "--l0" => l0 = true,
+                    "--dry-run" => dry = true,
+                    other => {
+                        eprintln!(
+                            "usage: tillandsias-plan disk-preflight [--repo D] [--target D] [--l0] [--dry-run] (unknown {other:?})"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+            let target = target.unwrap_or_else(|| repo.clone());
+            let Some(wts) = dp::list_worktrees(&repo) else {
+                println!("refused:disk-preflight:not-a-repo:{}", repo.display());
+                std::process::exit(2);
+            };
+            let out = dp::run(
+                &wts,
+                l0,
+                || dp::space_of(&target),
+                |p| {
+                    if dry {
+                        println!("would-evict:{}", p.display());
+                        true
+                    } else {
+                        dp::remove_worktree(&repo, p)
+                    }
+                },
+            );
+            for p in match &out {
+                dp::Outcome::Ok { evicted, .. } | dp::Outcome::DiskLow { evicted, .. } if !dry => {
+                    evicted.as_slice()
+                }
+                _ => &[],
+            } {
+                println!("evicted:{}", p.display());
+            }
+            println!("{}", dp::verdict(&target, &out));
+            std::process::exit(if matches!(out, dp::Outcome::Ok { .. }) {
+                0
+            } else {
+                1
+            });
         }
         "decompose" => {
             // ORDER 920-pxg6. LLM-based adversarial query decomposition.

@@ -1,0 +1,54 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-08 while surveying the image's shared libraries
+# for the shell-to-Lua helper migration (order 2048-wu3h).
+packets:
+  - packet_id: forge-image-omits-lib-ledger-freshness-lib-experts-probe-and-lib-mcp-build-id-so-the-startup-context-and-both-mcp-servers-silently-degrade
+    order: 2047-ci2k
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    size: S
+    capability_tags: [forge, image, mcp, startup, packaging]
+    estimated_hours: 2
+    related: [835-h2wq, 718-ja7g, 823-u3k9]
+    owned_files:
+      - images/default/Containerfile
+    title: "The forge image omits lib-ledger-freshness.sh, lib-experts-probe.sh and lib-mcp-build-id.sh, so the startup context drops ledger freshness and both MCP servers report the tier probe and build id as unknown"
+    context: |
+      images/default/Containerfile copies each shared library into
+      /usr/local/lib/tillandsias/ by name. Three libraries sourced in the image
+      are not copied: lib-ledger-freshness.sh (sourced by
+      lib-common.sh::inject_startup_context), and lib-experts-probe.sh and
+      lib-mcp-build-id.sh (sourced by config-overlay/mcp/forge-plan.sh and
+      project-info.sh). Measured in the live forge 2026-11-08: all three are
+      MISSING from /usr/local/lib/tillandsias/, while the nine other lib-*.sh
+      are present. lib-common's [ -r ] guard drops the ledger-freshness line
+      silently; forge-plan.sh substitutes "TIER PROBE: unavailable"; both
+      servers' tillandsias_mcp_build_id returns unknown, which
+      check-mcp-live-build.sh can only read as "could not tell". The commits
+      that added the libs (a50096a8c for 823-u3k9, 28ef92ce6 for 718-ja7g) did
+      not touch the Containerfile; the MCP wrappers' source-tree path
+      ../../lib-*.sh resolves in a checkout, where their tests run, so the image
+      path was never exercised. Full report:
+      plan/issues/forge-image-omits-three-sourced-libs-2026-11-08.md
+    exit_criteria:
+      - "A guard enumerates every lib-*.sh sourced by images/default/lib-common.sh and the two MCP wrappers and every COPY lib-*.sh line in images/default/Containerfile, and refuses naming any sourced lib the image does not copy. Pre-fix result: FAILS naming lib-ledger-freshness.sh, lib-experts-probe.sh and lib-mcp-build-id.sh. After the three COPY lines are added it is green, and adding a new sourced lib without a COPY line fails it."
+    verifiable_closure: "A guard enumerates every lib-*.sh sourced by images/default/lib-common.sh and the two MCP wrappers and every COPY lib-*.sh line in images/default/Containerfile, and refuses naming any sourced lib the image does not copy. Pre-fix result: FAILS naming lib-ledger-freshness.sh, lib-experts-probe.sh and lib-mcp-build-id.sh. After the three COPY lines are added it is green, and adding a new sourced lib without a COPY line fails it."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the guard named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Write the guard named in the exit criterion first and watch it fail on
+      today's Containerfile, then add the three COPY lines.
+      lib-ledger-freshness.sh, lib-experts-probe.sh and lib-mcp-build-id.sh are
+      copied to /usr/local/lib/tillandsias/ beside lib-common.sh.
+    provenance: |
+      Filed from the live forge on macuahuitl 2026-11-08 during the order
+      2048-wu3h survey; report plan/issues/forge-image-omits-three-sourced-libs-2026-11-08.md.
+    events:
+      - type: filed
+        ts: "2026-11-08T05:11:14Z"
+        host: macuahuitl
+        agent_id: forge-forge-tillandsias-opencode-20261108t035123z
+        summary: "filed ready: three sourced libs are absent from /usr/local/lib/tillandsias/ in the live forge"

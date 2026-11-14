@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-audio-studio-separates-a-mix-into-4-or-6-stems-with-demucs-on-cpu-from-safetensors-weights
+    field: next_action
+    value: |-
+      Pin torch (CPU wheel) and demucs in requirements.lock (licences: BSD-3 and MIT, both permissive), confirm the image still ships no GPL tools, and write the CPU separation fixture.
+
+
+      [2026-11-10T13:15:18Z yoga] claimed by yoga 2026-11-10 at macuahuitl-fedora's direction after #1063 landed; branch work/2068-cqis. CPU first; weights loaded only from the pinned Hub safetensors, torch.load never called.
+    ts: "2026-11-10T13:15:18Z"
+    host: yoga
+
+events:
+  - packet_id: the-audio-studio-separates-a-mix-into-4-or-6-stems-with-demucs-on-cpu-from-safetensors-weights
+    event:
+      type: progress
+      ts: "2026-11-10T13:15:18Z"
+      host: yoga
+      summary: |-
+        status 'Pin torch (CPU wheel) and demucs in requirements.lock (licences: BSD-3 and MIT, both permissive), confirm the image still ships no GPL tools, and write the CPU separation fixture.
+        
+        
+        [2026-11-10T13:15:18Z yoga] claimed by yoga 2026-11-10 at macuahuitl-fedora's direction after #1063 landed; branch work/2068-cqis. CPU first; weights loaded only from the pinned Hub safetensors, torch.load never called.' (not terminal) with evidence_refs: coordinator relay 2026-11-10

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-cpu-and-memory-budgets-are-not-honest-to-the-jobs-inside-2067-dwqd
+    event:
+      type: progress
+      ts: "2026-11-10T01:20:48Z"
+      agent_id: linux-yoga-opus5-20261110t012048z
+      host: yoga
+      summary: |-
+        PR 3 (stacked on #1053, local/2067-dwqd-guard, pushes to work/2067-dwqd once #1053 lands): forge-guard is images/default/cli/forge-guard in stock Lua 5.4 plus flock(1). LANGUAGE: Lua, per the operator ruling of 2026-11-09 (Lua, then Rust, then Go; Python only where a library forces it), and the forge image's lua has no luaposix, so flock/sleep/kill are execs and /proc and cgroup reads are io.open. Clean-room from this row; demon_attack tools/forge-guard (GPL-3.0) was not read. litmus:forge-guard 13/13 inside forge-base with --cpus=2 and memory.high 256 MiB; three mutations red their arms.

@@ -41,6 +41,38 @@ pub fn cache_root_from(xdg_cache_home: Option<PathBuf>, home: Option<PathBuf>) -
     std::env::temp_dir().join("tillandsias")
 }
 
+/// The cache root for callers about to DESTROY something under it (order
+/// 1315-d4qd, case 2). A reset deletes `fallback_*` credential copies and
+/// `vault-data` here; with neither XDG_CACHE_HOME nor HOME set, [`cache_root`]
+/// silently answers the temp dir, so the reset would announce and clear temp
+/// paths while the real copies stay. A destructive path has no silent default.
+pub fn cache_root_for_destruction() -> Result<PathBuf, String> {
+    cache_root_for_destruction_from(
+        std::env::var_os("XDG_CACHE_HOME").map(PathBuf::from),
+        std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from),
+    )
+}
+
+/// The pure half of [`cache_root_for_destruction`].
+pub fn cache_root_for_destruction_from(
+    xdg_cache_home: Option<PathBuf>,
+    home: Option<PathBuf>,
+) -> Result<PathBuf, String> {
+    let set = |p: &Option<PathBuf>| p.as_ref().is_some_and(|p| !p.as_os_str().is_empty());
+    if set(&xdg_cache_home) || set(&home) {
+        return Ok(cache_root_from(xdg_cache_home, home));
+    }
+    Err(format!(
+        "refused:reset-state:no-cache-root — XDG_CACHE_HOME and HOME are both unset or empty, \
+         so the cache root would be {} (the temp-dir fallback). REFUSING to announce or destroy \
+         anything: the real credential copies and vault-data would be left untouched while this \
+         reported success. Re-run with HOME set.",
+        std::env::temp_dir().join("tillandsias").display()
+    ))
+}
+
 /// Adopt a pre-XDG cache directory instead of orphaning it (order 815-gdjk:
 /// "the model-cache move handled rather than orphaning an existing
 /// download" — 1.5 GB on the CPU tier today, tens of GB once the GPU tier
@@ -84,6 +116,28 @@ pub fn adopt_legacy_cache(legacy: &std::path::Path, new: &std::path::Path) -> Pa
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 1315-d4qd case 2: the temp-dir fallback is refused for destruction,
+    /// and an empty value counts as unset.
+    #[test]
+    fn a_destructive_caller_never_gets_the_temp_fallback() {
+        let err = cache_root_for_destruction_from(None, None).unwrap_err();
+        assert!(
+            err.starts_with("refused:reset-state:no-cache-root"),
+            "{err}"
+        );
+        assert!(
+            cache_root_for_destruction_from(Some(PathBuf::new()), Some(PathBuf::new())).is_err()
+        );
+        assert_eq!(
+            cache_root_for_destruction_from(None, Some(PathBuf::from("/h"))).unwrap(),
+            PathBuf::from("/h/.cache/tillandsias")
+        );
+        assert_eq!(
+            cache_root_for_destruction_from(Some(PathBuf::from("/x")), None).unwrap(),
+            PathBuf::from("/x/tillandsias")
+        );
+    }
 
     #[test]
     fn xdg_wins_home_falls_back_temp_is_last() {

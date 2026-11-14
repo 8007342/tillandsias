@@ -253,28 +253,22 @@ impl StudioBudget {
         Self::for_host(total, available, nproc)
     }
 
-    /// Each cgroup file written exactly (see forge_budget on `--memory-swap`).
+    /// Operator ruling 2026-11-13 (forge-uncapped-resources): the GPU studio
+    /// is uncapped like the forge. No memory.max, memory.high, swap or pids
+    /// cap and no `--cpus`; it still reserves nothing (memory.low 0) and keeps
+    /// `--oom-score-adj=1000` in [`run_args`], so the kernel kills it before
+    /// the forge. The sizes above are kept only as advisory figures.
     pub fn podman_args(&self) -> Vec<String> {
         vec![
-            format!("--memory={}m", self.memory_max_mib),
             "--memory-reservation=0".to_string(),
-            format!(
-                "--cgroup-conf=memory.high={}",
-                self.memory_high_mib * 1024 * 1024
-            ),
-            format!(
-                "--cgroup-conf=memory.swap.max={}",
-                self.swap_max_mib * 1024 * 1024
-            ),
-            format!("--cpus={}", self.cpus),
+            "--cgroup-conf=memory.high=max".to_string(),
+            "--cgroup-conf=memory.swap.max=max".to_string(),
+            "--pids-limit=-1".to_string(),
         ]
     }
 
     pub fn describe(&self) -> String {
-        format!(
-            "memory.high={} MiB, memory.max={} MiB, swap={} MiB, cpus={}, oom_score_adj=1000",
-            self.memory_high_mib, self.memory_max_mib, self.swap_max_mib, self.cpus
-        )
+        "uncapped (memory.high/max, swap, pids = max), oom_score_adj=1000".to_string()
     }
 }
 
@@ -586,13 +580,10 @@ mod tests {
         );
         assert!(a.contains(&"--oom-score-adj=1000".to_string()));
         assert!(a.contains(&"nvidia.com/gpu=all".to_string()));
-        let high: u64 = a
-            .iter()
-            .find_map(|s| s.strip_prefix("--cgroup-conf=memory.high="))
-            .unwrap()
-            .parse()
-            .unwrap();
-        assert_eq!(high, budget.memory_high_mib * 1024 * 1024);
+        assert!(
+            a.contains(&"--cgroup-conf=memory.high=max".to_string()),
+            "{a:?}"
+        );
         assert!(
             !run_args(&p, "proj", "v", false, &budget).contains(&"nvidia.com/gpu=all".to_string())
         );
@@ -853,14 +844,19 @@ mod tests {
         for flag in [
             "--oom-score-adj=1000".to_string(),
             "--memory-reservation=0".to_string(),
-            "--memory=6750m".to_string(),
-            format!("--cgroup-conf=memory.high={}", 5_400u64 * 1024 * 1024),
-            format!("--cgroup-conf=memory.swap.max={}", 6_750u64 * 1024 * 1024),
-            "--cpus=8".to_string(),
+            "--cgroup-conf=memory.high=max".to_string(),
+            "--cgroup-conf=memory.swap.max=max".to_string(),
+            "--pids-limit=-1".to_string(),
         ] {
             assert!(a.contains(&flag), "missing {flag}: {a:?}");
         }
-        assert!(!a.iter().any(|s| s.starts_with("--memory-swap")), "{a:?}");
-        assert!(budget.describe().contains("memory.max=6750 MiB"));
+        // Operator ruling 2026-11-13: the studio carries no cap at all.
+        assert!(
+            !a.iter().any(|s| s.starts_with("--memory=")
+                || s.starts_with("--memory-swap")
+                || s.starts_with("--cpus")),
+            "{a:?}"
+        );
+        assert!(budget.describe().starts_with("uncapped"));
     }
 }

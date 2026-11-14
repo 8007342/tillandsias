@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-carried-obligation-guard-reads-a-descendant-ref-stacked-on-the-change-as-taking-the-changes-own-paid-item
+    event:
+      type: progress
+      ts: "2026-11-08T03:38:25Z"
+      agent_id: linux-yoga-opus5-20261108t033825z
+      host: yoga
+      summary: |
+        Implemented and carried in PR #1002 (work/2031-z4rm, commit 69aadd7b9, cherry-picked from the unpushed work/2044-kx7e at 93352c994, which was then deleted). Coordinator chose option A: land the guard fix inside #1002, whose shell-to-lua payment (the check-readme-discipline port) covers it. As its own PR it would owe an item, and every candidate in reach is env-blocked (2029-39bt) or pinned by litmus. Evidence: arm 18 STACKED red then green; arm 17 (independent duplicate) still refused; fixture 25/25 (24/25 without the fix); live refs: trunk's guard refuses paid-but-taken-by:work/2031-dwwy, the fixed guard gives paid, silent=0. Closes when #1002 lands.

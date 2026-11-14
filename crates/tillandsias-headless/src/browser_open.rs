@@ -1670,7 +1670,9 @@ mod tests {
                 "--add-host=www.acme.localhost:10.89.1.2",
                 // 1725-wkfl: every dev service the router serves, from its list.
                 "--add-host=flutter.acme.localhost:10.89.1.2",
-                "--add-host=comfyui.acme.localhost:10.89.1.2"
+                "--add-host=comfyui.acme.localhost:10.89.1.2",
+                // 2067-uc3k: the web-studio window.
+                "--add-host=studio.acme.localhost:10.89.1.2"
             ]
         );
         assert!(

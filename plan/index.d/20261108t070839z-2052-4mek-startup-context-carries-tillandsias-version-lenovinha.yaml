@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-forge-startup-context-carries-the-tillandsias-version-and-tray-build-that-lane-version-reports
+    order: 2052-4mek
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, startup-context, diagnostics]
+    estimated_hours: 1
+    title: |
+      .forge-startup-context.md says "Version: unknown" and carries no tray_build, while tillandsias.lane_version reports 56.11.7.1+c474319801a94594; the startup context should carry the same version and tray_build
+    context: |
+      MEASURED in a relaunched client forge (relayed by coordinator macuahuitl-fedora, 2026-11-08). The startup context printed "Version: unknown" and had no tray_build line, while the lane_version MCP tool in the same forge answered 56.11.7.1+c474319801a94594.
+      CAUSE, read from images/default/lib-common.sh (write_startup_context): the Version line is read from the PROJECT checkout's VERSION file (cat "$project_dir/VERSION", line 5398 on c6c0c7d94). A client project has no VERSION file, so it says unknown for every non-Tillandsias project, and nothing writes the Tillandsias build at all. Two different facts share one label.
+    exit_criteria:
+      - 'the startup context carries the Tillandsias version and tray_build, from the same source tillandsias.lane_version reads, on separate labelled lines; a project VERSION, when present, stays on its own line named as the project version'
+      - 'RED FIRST: a fixture writes the startup context for a project with no VERSION file and asserts the Tillandsias version line equals what lane_version reports; it fails on the pre-fix tree (Version: unknown, no tray_build)'
+      - 'NEGATIVE CONTROL: when the Tillandsias version cannot be read, the line names why, never a plausible-looking value'
+    verifiable_closure: 'the fixture above, plus a real lane launch where the startup context and lane_version agree'
+    unscoreable: 'none.'
+    provenance: client forge field report via coordinator macuahuitl-fedora 2026-11-08; filed by lenovinha.
+    depends_on: []
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-08T07:08:39Z', host: lenovinha, summary: filed p3 ready at the coordinator's request}

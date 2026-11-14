@@ -74,11 +74,23 @@ pub struct VzRuntime {
     /// restore so the configuration matches the saved one.
     #[cfg(target_os = "macos")]
     identity: std::sync::Mutex<Option<boot::MachineIdentity>>,
+    /// 2066-d7g7: true once THIS runtime's `start()` has taken over the
+    /// per-launch boot artifacts (cidata.iso, vm-swap.img). Only the owner
+    /// removes them; a bystander runtime on the same root leaves them alone.
+    #[cfg(target_os = "macos")]
+    owns_boot_artifacts: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(target_os = "macos")]
 impl Drop for VzRuntime {
     fn drop(&mut self) {
+        // 2066-d7g7: a runtime that never started this VM owns none of its files.
+        if !self
+            .owns_boot_artifacts
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return;
+        }
         let cidata_path = self.image_root.join("cidata.iso");
         if cidata_path.exists() {
             let _ = std::fs::remove_file(&cidata_path);
@@ -391,6 +403,8 @@ impl VzRuntime {
             restore_from: std::sync::Mutex::new(None),
             #[cfg(target_os = "macos")]
             identity: std::sync::Mutex::new(None),
+            #[cfg(target_os = "macos")]
+            owns_boot_artifacts: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -543,6 +557,77 @@ impl VzRuntime {
         let _ = std::fs::rename(path, &prev);
     }
 
+    /// How many crashed-boot consoles a rebuild keeps (2029-ku5y).
+    pub const CRASHED_CONSOLES_KEPT: usize = 3;
+
+    /// 2029-ku5y: before a rebuild wipes the guest, keep its console instead
+    /// of deleting it. After a CLEAN stop it becomes `console.log.prev`
+    /// (the existing two-generation policy). After an UNCLEAN stop — the
+    /// running marker is still there — it is kept as
+    /// `console.crashed-<epoch>.log`, the newest
+    /// [`Self::CRASHED_CONSOLES_KEPT`] of which survive, so the boot that
+    /// broke is never displaced by the rebuild that follows it.
+    ///
+    /// MEASURED 2026-11-07 (v56.11.7.1 smoke): a force-stop at 22:15Z, then a
+    /// rebuild, left one console.log and no .prev; the only kernel record of
+    /// the 22:11 failure (2029-b87w) was gone. Best-effort: a failure here
+    /// must never block the rebuild.
+    fn keep_console_before_wipe(&self) {
+        let log = self.console_log_path();
+        if !log.exists() {
+            return;
+        }
+        if previous_stop_was_unclean(&self.image_root) {
+            let since = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let mut dest = self.image_root.join(format!("console.crashed-{since}.log"));
+            let mut n = 1;
+            while dest.exists() {
+                dest = self
+                    .image_root
+                    .join(format!("console.crashed-{since}-{n}.log"));
+                n += 1;
+            }
+            let _ = std::fs::rename(&log, &dest);
+            self.prune_crashed_consoles();
+        } else {
+            let _ = std::fs::rename(&log, log.with_extension("log.prev"));
+        }
+    }
+
+    /// The kept crashed-boot consoles, oldest first.
+    pub fn crashed_console_paths(&self) -> Vec<PathBuf> {
+        let mut v: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(&self.image_root)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| {
+                let n = e.file_name().to_string_lossy().into_owned();
+                n.starts_with("console.crashed-") && n.ends_with(".log")
+            })
+            .map(|e| {
+                let t = e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH);
+                (t, e.path())
+            })
+            .collect();
+        v.sort();
+        v.into_iter().map(|(_, p)| p).collect()
+    }
+
+    fn prune_crashed_consoles(&self) {
+        let all = self.crashed_console_paths();
+        if all.len() > Self::CRASHED_CONSOLES_KEPT {
+            for old in &all[..all.len() - Self::CRASHED_CONSOLES_KEPT] {
+                let _ = std::fs::remove_file(old);
+            }
+        }
+    }
+
     /// Path of the early-boot serial console log.
     pub fn console_log_path(&self) -> PathBuf {
         self.image_root.join("console.log")
@@ -639,6 +724,9 @@ impl VzRuntime {
     ///
     /// @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     pub fn wipe_provisioned_artifacts(&self) -> std::io::Result<()> {
+        // 2029-ku5y: the console of the boot being wiped is evidence, most of
+        // all after an unclean stop. Keep it BEFORE the marker goes.
+        self.keep_console_before_wipe();
         for required in [
             self.rootfs_image_path(),
             self.kernel_path(),
@@ -652,7 +740,6 @@ impl VzRuntime {
         }
         for best_effort in [
             self.rootfs_image_path().with_extension("qcow2"),
-            self.console_log_path(),
             self.image_root.join("cidata.iso"),
             // 1377-hcnv: the swap image goes with the VM it served.
             self.image_root.join(SWAP_IMAGE_FILE),
@@ -1556,6 +1643,22 @@ systemctl restart systemd-journald || true
 # systemd-shutdown messages are captured. It takes effect at the next boot,
 # which is why the journal forward above stays.
 grubby --update-kernel=ALL --args="console=hvc0" || true
+
+# ORDER 2029-b87w. KERNEL FAULT REPORTS GO TO hvc0 DIRECTLY, NOT ONLY VIA
+# JOURNALD. console=hvc0 above routes the kernel's console, but at the default
+# console loglevel (4) the "segfault at ... ip ..." lines are KERN_INFO and are
+# dropped from the console; they reached console.log only through journald,
+# which is exactly what stops answering when the guest wedges (the 2026-11-07
+# folio/btrfs hang). Console loglevel 7 prints INFO and above; fatal signals
+# are reported by the kernel itself; a task blocked 60 s prints its stack.
+# Effective now (sysctl --system) and on every later boot.
+cat > /etc/sysctl.d/90-tillandsias-console.conf << 'EOF'
+kernel.printk = 7 4 1 7
+kernel.print-fatal-signals = 1
+kernel.hung_task_timeout_secs = 60
+kernel.hung_task_warnings = 20
+EOF
+sysctl --system >/dev/null 2>&1 || true
 
 # ORDER 1642-cc54. A CLEAN POWER-OFF THE HOST CAN TRUST.
 # MEASURED 2026-10-12 (console=hvc0 + initcall_debug, three tray quits): the
@@ -3649,6 +3752,8 @@ impl VmRuntime for VzRuntime {
         // stop(). Boot without it rather than refuse to boot when it cannot be
         // made or no tier fits.
         let swap_image = self.image_root.join(boot::SWAP_IMAGE_FILE);
+        self.owns_boot_artifacts
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         let free = boot::free_bytes_at(&self.image_root);
         let swap_disk = if restoring.is_some() && swap_image.exists() {
             // 1918-vzsr: the restored guest has this image swapped on.
@@ -4415,6 +4520,29 @@ impl VmRuntime for VzRuntime {
 
 #[cfg(test)]
 mod tests {
+    /// 2066-d7g7: a runtime that never started this VM must not delete the
+    /// live VM's swap image or cidata when it is dropped. Every short-lived
+    /// VzRuntime on the same image_root (exec-guest, diagnose, tests) used to
+    /// unlink the running guest's vm-swap.img, hiding its blocks from du.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn dropping_a_runtime_that_never_started_leaves_the_live_vms_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let swap = dir.path().join(SWAP_IMAGE_FILE);
+        let cidata = dir.path().join("cidata.iso");
+        std::fs::write(&swap, b"live").unwrap();
+        std::fs::write(&cidata, b"live").unwrap();
+        drop(VzRuntime::new(3, dir.path().to_path_buf()));
+        assert!(
+            swap.exists(),
+            "a bystander runtime unlinked the live swap image"
+        );
+        assert!(
+            cidata.exists(),
+            "a bystander runtime removed the live cidata"
+        );
+    }
+
     use super::*;
 
     /// VZ calls in `text` that are NOT inside an `on_vm_queue(...)` call
@@ -5230,6 +5358,74 @@ mod tests {
         );
     }
 
+    /// 2029-b87w: kernel fault reports must reach hvc0 without journald.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn provision_user_data_sends_kernel_faults_to_the_serial_console() {
+        let script = provision_user_data("off");
+        let conf = ["/etc/sysctl.d/", "90-tillandsias-console.conf"].concat();
+        let at = script.find(&conf).expect("the console sysctl drop-in");
+        let body = &script[at..];
+        for line in [
+            ["kernel.printk", " = 7 4 1 7"].concat(),
+            ["kernel.print-fatal-signals", " = 1"].concat(),
+            ["kernel.hung_task_timeout_secs", " = 60"].concat(),
+        ] {
+            assert!(body.contains(&line), "{line} missing");
+        }
+        assert!(
+            body.contains(&["sysctl --system", " >/dev/null"].concat()),
+            "applied now, not only next boot"
+        );
+    }
+
+    /// Order 309 (macOS half, audited by 2055-jiu2): the guest's headless unit
+    /// must not carry the hardening that wedged headless-driven podman on
+    /// Windows (2026-07-12): a cap-stripped or no-new-privileges uid-0 podman
+    /// selects ROOTLESS mode, finds an empty store and fails every vault and
+    /// lane ensure. Audited 2026-11-08: the macOS unit carries none of these,
+    /// so the hazard is absent; this pins it absent until the
+    /// listener/orchestrator split (or podman-socket delegation) lands and
+    /// the directives return as joint-presence pins, as on Windows.
+    /// Read from the RENDERED provisioning script, and the needles are
+    /// assembled, so the test cannot match its own text.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_guest_headless_unit_keeps_full_root_for_podman() {
+        let script = provision_user_data("off");
+        let open = [
+            "cat > /etc/systemd/system/",
+            "tillandsias-headless.service << 'EOF'",
+        ]
+        .concat();
+        let start = script.find(&open).expect("the headless unit heredoc");
+        let body = &script[start + open.len()..];
+        let unit = &body[..body.find("\nEOF\n").expect("the unit's EOF")];
+        assert!(
+            unit.contains("ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock"),
+            "found the right unit"
+        );
+        for directive in [
+            "NoNewPrivileges",
+            "CapabilityBoundingSet",
+            "AmbientCapabilities",
+            "ProtectSystem",
+            "ProtectHome",
+            "PrivateTmp",
+            "PrivateDevices",
+            "RestrictNamespaces",
+            "SystemCallFilter",
+            "User",
+            "DynamicUser",
+        ] {
+            let needle = [directive, "="].concat();
+            assert!(
+                !unit.lines().any(|l| l.trim_start().starts_with(&needle)),
+                "{needle} in the guest headless unit would make uid-0 podman go rootless (order 309)"
+            );
+        }
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
     fn provision_user_data_upgrades_the_guest_os_before_installing() {
@@ -5489,8 +5685,48 @@ mod tests {
         ] {
             assert!(!gone.exists(), "{} must be deleted", gone.display());
         }
+        // 2029-ku5y: the console is kept, not deleted (clean stop -> .prev).
+        assert_eq!(
+            std::fs::read(rt.console_log_path().with_extension("log.prev")).unwrap(),
+            b"x"
+        );
         assert!(sibling.exists(), "unrelated sibling state must survive");
         assert!(tmp.path().exists(), "image_root itself must survive");
+    }
+
+    /// 2029-ku5y: start, crash (marker left), rebuild, start, crash, rebuild:
+    /// both crashed boots' consoles survive, and only the newest
+    /// CRASHED_CONSOLES_KEPT are kept.
+    #[test]
+    fn rebuild_after_unclean_stop_keeps_the_crashed_console() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(7, tmp.path().to_path_buf());
+        for boot in 0..5 {
+            std::fs::write(rt.console_log_path(), format!("boot {boot} panic")).unwrap();
+            mark_vm_running(tmp.path()).unwrap();
+            rt.wipe_provisioned_artifacts().unwrap();
+            assert!(!rt.console_log_path().exists());
+            assert!(
+                !previous_stop_was_unclean(tmp.path()),
+                "wipe clears the marker"
+            );
+            if boot == 1 {
+                let kept: Vec<String> = rt
+                    .crashed_console_paths()
+                    .iter()
+                    .map(|p| std::fs::read_to_string(p).unwrap())
+                    .collect();
+                assert_eq!(kept, ["boot 0 panic", "boot 1 panic"]);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(15));
+        }
+        let kept: Vec<String> = rt
+            .crashed_console_paths()
+            .iter()
+            .map(|p| std::fs::read_to_string(p).unwrap())
+            .collect();
+        assert_eq!(kept, ["boot 2 panic", "boot 3 panic", "boot 4 panic"]);
+        assert!(!rt.console_log_path().with_extension("log.prev").exists());
     }
 
     /// The wipe is idempotent: a never-provisioned (or half-wiped) root

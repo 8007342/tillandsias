@@ -1,0 +1,23 @@
+# Gate step 2066-obsv — data, not code (order 1072-b7eq).
+#
+# The observatorium's own suite (`cd observatorium && npm test`: the static
+# site generator, the honesty lint that fails the build closed, and the manual
+# publish/verify tools) runs in the gate, so a change to observatorium/ cannot
+# land with it red (task 3.6 of openspec/changes/observatorium-static-html).
+# The fixture reads the test script from observatorium/package.json and runs it
+# with node directly (no npm, no shell glob), then runs a planted
+# one-pass-one-fail suite the same way and requires it to red.
+#
+# STEP_SKIP_EXIT=3 is the fixture's could-not-run: no node >= 22 on PATH (the
+# package's engines floor). Any other non-zero exit is a refusal.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the observatorium test suite passes (2066-obsv)"
+STEP_LUA="scripts/lua/test-observatorium-npm-test.lua"
+STEP_ERROR="the observatorium test suite failed, or the fixture no longer reds a failing test (2066-obsv) — see the FAIL lines and node's output above; reproduce with: cd observatorium && npm test"
+STEP_OK="observatorium test suite passed"
+STEP_SKIP_EXIT=3
+STEP_SKIP_DESC="no node >= 22 on PATH, so the observatorium suite could not run"
+# The record below was taken at 03a00a19a, before arm 1 ran under an empty
+# HOME (#1083); the hermetic run has been measured on linux only so far.
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-10 darwin ok:observatorium-npm-test:67 tests (work/2066-obsv @ 03a00a19a, node v26.13.0, rc=0, both arms ok)"

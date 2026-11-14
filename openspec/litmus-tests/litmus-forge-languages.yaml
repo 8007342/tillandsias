@@ -1,0 +1,36 @@
+# @trace spec:default-image, order:2067-faum
+#
+# Lua, Rust and Go are always in the forge (operator ruling 2026-11-09):
+# lua, cargo, rustc and go resolve on the forge PATH, and the forge image
+# build refuses to finish without them. The decider is
+# scripts/lua/check-forge-languages.lua; the controls prove it refuses a PATH
+# that lacks one of them, through stub directories.
+name: litmus:forge-languages
+spec: default-image
+phase: pre-build
+description: >
+  The forge's preferred tooling languages (Lua, Rust, Go) are present: the
+  checker refuses a PATH missing lua, cargo, rustc or go, accepts one that has
+  all four, and the forge Containerfile guards the build on them.
+severity: high
+size: instant
+
+critical_path:
+  - step: "2067-faum: a PATH holding lua, cargo, rustc and go is accepted"
+    timeout_ms: 20000
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-fl.XXXXXX); mkdir -p \"$T/a\" \"$T/b\"; for t in lua cargo; do printf '#!/bin/sh\\n' > \"$T/a/$t\"; chmod +x \"$T/a/$t\"; done; for t in rustc go; do printf '#!/bin/sh\\n' > \"$T/b/$t\"; chmod +x \"$T/b/$t\"; done; out=$(TILLANDSIAS_FORGE_LANG_PATH=\"$PWD/$T/a:$PWD/$T/b\" tillandsias-plan script run scripts/lua/check-forge-languages.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 0 ] && [ \"$out\" = 'ok:forge-languages:lua,cargo,rustc,go' ] && echo 'ok: all four languages accepted' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    expected_behavior: "ok: all four languages accepted"
+
+  - step: "2067-faum NEGATIVE CONTROL: a PATH without go (and with a non-executable rustc) is refused"
+    timeout_ms: 20000
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-fl.XXXXXX); mkdir -p \"$T/a\"; for t in lua cargo; do printf '#!/bin/sh\\n' > \"$T/a/$t\"; chmod +x \"$T/a/$t\"; done; printf 'x\\n' > \"$T/a/rustc\"; out=$(TILLANDSIAS_FORGE_LANG_PATH=\"$PWD/$T/a\" tillandsias-plan script run scripts/lua/check-forge-languages.lua 2>/dev/null); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && [ \"$out\" = 'violation:forge-languages:missing:rustc,go' ] && echo 'ok: missing languages refused' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    expected_behavior: "ok: missing languages refused"
+
+  - step: "2067-faum: the forge image build is guarded on the four commands"
+    timeout_ms: 20000
+    command: "out=$(tillandsias-plan script run scripts/lua/check-forge-languages.lua --containerfile 2>/dev/null); rc=$?; [ \"$rc\" -eq 0 ] && [ \"$out\" = 'ok:forge-languages:build-guarded' ] && echo 'ok: build guarded' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    expected_behavior: "ok: build guarded"
+
+observability:
+  traces:
+    - "@trace spec:default-image"

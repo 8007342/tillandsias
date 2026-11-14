@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 at lenovinha's and the operator's request (forges on the latest opencode, safely). Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-opencode-release-pin-is-bumped-automatically-only-after-the-contract-probe-passes-on-the-new-release
+    order: 2041-c92g
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, opencode, release, testing]
+    estimated_hours: 4
+    title: "The opencode release pin is bumped automatically, and only after the harness contract probe passes on the new release"
+    context: |
+      Operator direction 2026-11-08: forges run the latest opencode, and npm keeps them on old versions. Measured the same day: npm opencode-ai stopped at 1.19.5 (2026-10-28), while upstream anomalyco/opencode is at v2.2.6 (2026-11-06T23:37Z). PR #999 (lenovinha, work/2027-e2cf) pins 2.2.6 from the GitHub release tarball, with sha256 checked per asset against values pinned in the tree, failing closed, and choosing x64 or x64-baseline by avx2. A pinned harness never moves by itself, and @latest broke the lane once (order 284). This row is the bump path. A bump changes three lines together, harness_release_pin and the two sha256 entries in harness_release_sha256. It must only happen once the harness contract probe (order 439: the flags we pass, run and serve, OPENCODE_AUTH_CONTENT, the config overlay keys, the model id) passes on the candidate release.
+    exit_criteria:
+      - "A fixture serves a fake release feed with a newer version and its assets. Case 1: the bump job verifies both assets' sha256 against the release digests, runs the contract probe on the downloaded binary, and on a pass writes harness_release_pin plus both sha256 lines in ONE change. Case 2: a candidate whose probe fails, or whose digest is missing or mismatched, leaves all three lines untouched and reports the reason by name. Case 3: running the job twice on the same release changes nothing the second time. Pre-fix result: FAILS, no bump job exists."
+    verifiable_closure: "A fixture serves a fake release feed with a newer version and its assets. Case 1: the bump job verifies both assets' sha256 against the release digests, runs the contract probe on the downloaded binary, and on a pass writes harness_release_pin plus both sha256 lines in ONE change. Case 2: a candidate whose probe fails, or whose digest is missing or mismatched, leaves all three lines untouched and reports the reason by name. Case 3: running the job twice on the same release changes nothing the second time. Pre-fix result: FAILS, no bump job exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      After #999 lands, decide where the job runs (the daily maintenance skill, or a release-preflight step) and write the fake-feed fixture first.
+    provenance: |
+      lenovinha COORD 2026-11-08 (asked for this row); operator direction 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T01:44:22Z"
+        host: yoga
+        summary: "filed at lenovinha's request while #999 retargets to the 2.2.6 tarball"

@@ -9,7 +9,9 @@
 # (it hard-fails on the vendor CA bundle), so the state grammar would only ever
 # be grep-pinned. This helper has no import-time side effects, so
 # litmus:inference-model-preload-policy can run it directly with a stubbed
-# `curl` and assert EVERY branch of the grammar. No python, no jq.
+# `curl` and assert EVERY branch of the grammar. No python, no jq. Since
+# 2049-y7k8 the probe body is lua/inference-state.lua (`script run --helper`);
+# a stub curl on PATH still reaches it, because the Lua child keeps PATH.
 #
 # PINNED GRAMMAR — the human string:
 #   READY (models=<N>, warm=<csv>)
@@ -45,6 +47,7 @@
 #   endpoint-http-error  curl 22 — served a non-2xx
 #   probe-tool-missing   no curl in this image
 #   probe-error-<n>      any other curl exit n (still named, still falsifiable)
+#   probe-error-helper   the Lua helper ran but printed no state (2049-y7k8)
 #
 # Order 392a extends the order-392 READY / NOT-READY tokens rather than
 # replacing them: an endpoint that answers but serves NO model is not useful to
@@ -61,58 +64,54 @@ tillandsias_inference_state() {
     TILLANDSIAS_INFERENCE_REASON="-"
     TILLANDSIAS_INFERENCE_STATUS=""
 
-    if ! command -v curl >/dev/null 2>&1; then
-        TILLANDSIAS_INFERENCE_REASON="probe-tool-missing"
-        TILLANDSIAS_INFERENCE_STATUS="NOT-READY (probe-tool-missing: curl is absent from this image)"
-        _tillandsias_inference_emit
-        return 0
-    fi
-
-    _tis_out=""
-    _tis_rc=0
-    # 1s budget: this probe is a report, never a gate.
-    _tis_out="$(curl -fsS --max-time 1 "${TILLANDSIAS_INFERENCE_ENDPOINT}/api/tags" 2>&1)" || _tis_rc=$?
-
-    if [ "$_tis_rc" -ne 0 ]; then
-        case "$_tis_rc" in
-            6 | 7) TILLANDSIAS_INFERENCE_REASON="endpoint-unreachable" ;;
-            28) TILLANDSIAS_INFERENCE_REASON="endpoint-timeout" ;;
-            22) TILLANDSIAS_INFERENCE_REASON="endpoint-http-error" ;;
-            *) TILLANDSIAS_INFERENCE_REASON="probe-error-${_tis_rc}" ;;
-        esac
-        TILLANDSIAS_INFERENCE_STATUS="NOT-READY (${TILLANDSIAS_INFERENCE_REASON}: ${_tis_out:-curl exit ${_tis_rc}})"
-        # Order 521: an engine the container REFUSED to execute (payload digest
-        # mismatch, a stale or tampered cached engine) also reads as an
-        # unreachable endpoint from here — the evidence is in the inference
-        # container, so name where it is rather than leave "unreachable" alone.
-        if [ "$TILLANDSIAS_INFERENCE_REASON" = "endpoint-unreachable" ]; then
-            TILLANDSIAS_INFERENCE_STATUS="${TILLANDSIAS_INFERENCE_STATUS%)} — if the engine refused its payload: \`podman logs tillandsias-inference | grep reason=engine-\`)"
-        fi
-        _tillandsias_inference_emit
-        return 0
-    fi
-
-    # /api/tags emits one "name" key per installed model. Splitting on commas
-    # puts each JSON field on its own line, so a sed capture is enough — no
-    # JSON parser, no external tooling.
-    _tis_names="$(printf '%s' "$_tis_out" | tr ',' '\n' \
-        | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' | sort -u)"
-    for _tis_n in $_tis_names; do
-        TILLANDSIAS_INFERENCE_MODELS=$((TILLANDSIAS_INFERENCE_MODELS + 1))
-        if [ "$TILLANDSIAS_INFERENCE_WARM" = "-" ]; then
-            TILLANDSIAS_INFERENCE_WARM="$_tis_n"
-        else
-            TILLANDSIAS_INFERENCE_WARM="${TILLANDSIAS_INFERENCE_WARM},${_tis_n}"
-        fi
+    # ORDER 2049-y7k8 (openspec forge-lua-helpers D3.1): the probe and the
+    # parse are lua/inference-state.lua on `tillandsias-plan script run
+    # --helper`; this function keeps its name, its variables and its grammar.
+    # The module sits beside this file (images/default/lua/ in a checkout,
+    # /usr/local/lib/tillandsias/lua/ in the image). There is no second
+    # implementation: without the runner or the module this reports the same
+    # named reason the old code gave when its tool was absent.
+    _tis_self="${BASH_SOURCE:-$0}"
+    _tis_lua=""
+    for _tis_c in "${_tis_self%/*}/lua/inference-state.lua" /usr/local/lib/tillandsias/lua/inference-state.lua; do
+        if [ -r "$_tis_c" ]; then _tis_lua="$_tis_c"; break; fi
     done
-
-    if [ "$TILLANDSIAS_INFERENCE_MODELS" -gt 0 ]; then
-        TILLANDSIAS_INFERENCE_STATE="ready"
-        TILLANDSIAS_INFERENCE_STATUS="READY (models=${TILLANDSIAS_INFERENCE_MODELS}, warm=${TILLANDSIAS_INFERENCE_WARM})"
-    else
-        TILLANDSIAS_INFERENCE_REASON="no-models"
-        TILLANDSIAS_INFERENCE_STATUS="NOT-READY (no-models: endpoint is serving but no model is cached — preload pending, a lazy/off preload policy, or a failed pull. THESE ARE DIFFERENT FAULTS: run \`podman logs tillandsias-inference | grep reason=pull-failed\` — a \`reason=pull-failed-tls-untrusted\` line means the enclave CA is not trusted by the engine, NOT an empty cache (order 525))"
+    _tis_plan="${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}"
+    if [ -z "$_tis_lua" ] || ! command -v "$_tis_plan" >/dev/null 2>&1; then
+        TILLANDSIAS_INFERENCE_REASON="probe-tool-missing"
+        if [ -z "$_tis_lua" ]; then _tis_missing="lua/inference-state.lua"; else _tis_missing="$_tis_plan"; fi
+        TILLANDSIAS_INFERENCE_STATUS="NOT-READY (probe-tool-missing: ${_tis_missing} is absent from this image)"
+        _tillandsias_inference_emit
+        return 0
     fi
+
+    _tis_vals="$("$_tis_plan" script run --helper "$_tis_lua" -- "$TILLANDSIAS_INFERENCE_ENDPOINT" 2>/dev/null)" || _tis_vals=""
+    # Five lines in a fixed order (the module's header): state, models, warm,
+    # reason, status. read -r, no eval, no sed.
+    {
+        IFS= read -r _tis_state
+        IFS= read -r _tis_models
+        IFS= read -r _tis_warm
+        IFS= read -r _tis_reason
+        IFS= read -r _tis_status
+    } <<EOF
+$_tis_vals
+EOF
+    case "$_tis_state" in
+        ready | not-ready) ;;
+        *)
+            # The runner ran but produced no grammar: named, never a guess.
+            TILLANDSIAS_INFERENCE_REASON="probe-error-helper"
+            TILLANDSIAS_INFERENCE_STATUS="NOT-READY (probe-error-helper: ${_tis_lua} printed no inference state)"
+            _tillandsias_inference_emit
+            return 0
+            ;;
+    esac
+    TILLANDSIAS_INFERENCE_STATE="$_tis_state"
+    TILLANDSIAS_INFERENCE_MODELS="${_tis_models:-0}"
+    TILLANDSIAS_INFERENCE_WARM="${_tis_warm:--}"
+    TILLANDSIAS_INFERENCE_REASON="${_tis_reason:--}"
+    TILLANDSIAS_INFERENCE_STATUS="$_tis_status"
     _tillandsias_inference_emit
     return 0
 }

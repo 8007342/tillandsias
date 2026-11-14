@@ -1,0 +1,190 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-08 from the curated-egress research the coordinator assigned.
+packets:
+- packet_id: the-proxy-allowlist-is-split-into-tier-files-served-per-tier-port
+  order: 2041-i3nk
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [proxy, squid, security]
+  estimated_hours: 5
+  title: "Split images/proxy/allowlist.txt into per-tier files and serve each declared tier set on its own Squid port"
+  context: "Every proxied runtime container shares one 119-domain list on port 3128."
+  exit_criteria:
+  - "allowlist.txt is split into images/proxy/tiers/<tier>.txt along its sections; a litmus check pins union == previous list."
+  - "Squid ports per tier set are generated at start from the tier files and matched with myportname + ssl::server_name; 3128 keeps serving the union."
+  verifiable_closure: "A proxy fixture: an assets-port client reaches fonts.googleapis.com and is refused pypi.org."
+  unscoreable: 'none.'
+  next_action: "allowlist.txt is split into images/proxy/tiers/<tier>.txt along its sections; a litmus check pins union == previous list."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research
+- packet_id: every-image-and-studio-declares-its-egress-tiers
+  order: 2041-jb57
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [headless, images, studios, security]
+  estimated_hours: 5
+  title: "Every image and studio declares egress tiers; headless wires the network and proxy port from the declaration; undeclared means none"
+  context: "Proxy env is hard-wired (main.rs, remote_projects.rs); studios.json has no egress field."
+  exit_criteria:
+  - "images/<image>/egress.yaml and a studios.json `egress` field (build-studio-registry.lua refuses a studio without one); a litmus check refuses an image dir without egress.yaml."
+  - "headless gives each container the network and proxy URL its tiers imply; an undeclared container gets an internal network and no proxy env."
+  verifiable_closure: "A launch fixture per tier, plus the vault launched with no egress."
+  unscoreable: 'none.'
+  next_action: "images/<image>/egress.yaml and a studios.json `egress` field (build-studio-registry.lua refuses a studio without one); a litmus check refuses an image dir without egress.yaml."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research
+- packet_id: agents-fetch-docs-and-feeds-through-an-enclave-fetch-mcp-service
+  order: 2041-csm4
+  status: ready
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [mcp, forge, security, research]
+  estimated_hours: 8
+  title: "An enclave-fetch MCP service gives agents fetch, feed and docs from a curated catalog, outside the forge's shell egress"
+  context: "Agents cannot read documentation or research the web (2037-4ptq): everything off the allowlist is a connection reset."
+  exit_criteria:
+  - "A sibling enclave-fetch container serves MCP fetch(url) (HTML to Markdown, capped and paged), feed(name) and docs(library, query); it fetches catalog sources only, refuses private/loopback/metadata IPs after resolving and pins the connection, obeys robots.txt, and sends no cookies or credentials."
+  - "The forge's MCP config lists it; a forge agent fetches a catalog docs page."
+  verifiable_closure: "A forge agent turn that fetches a docs page through the service, with its audit record."
+  unscoreable: 'none.'
+  next_action: "A sibling enclave-fetch container serves MCP fetch(url) (HTML to Markdown, capped and paged), feed(name) and docs(library, query); it fetches catalog sources only, refuses private/loopback/metadata IPs after resolving and pins the connection, obeys robots.txt, and sends no cookies or credentials."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research
+- packet_id: the-fetch-service-searches-with-a-vault-held-key
+  order: 2041-u7pm
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [mcp, vault, research]
+  estimated_hours: 4
+  title: "enclave-fetch offers search(query) with the provider key held in Vault; result URLs are fetchable for that session"
+  context: "Research needs search; the key must never enter a forge."
+  exit_criteria:
+  - "search(query) calls a configured search API with the key read from Vault inside the service; URLs it returns become fetchable for that session (bounded, expiring); a test proves the forge environment never holds the key."
+  verifiable_closure: "A forge search plus a fetch of a result URL, with the forge env checked for the key."
+  unscoreable: 'none.'
+  next_action: "search(query) calls a configured search API with the key read from Vault inside the service; URLs it returns become fetchable for that session (bounded, expiring); a test proves the forge environment never holds the key."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research
+- packet_id: egress-is-rate-limited-and-audited-per-client
+  order: 2041-9aiq
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [proxy, mcp, observability]
+  estimated_hours: 3
+  title: "Per-client rate limits and audit logs on both the proxy and the fetch service"
+  context: "Neither the proxy nor any harness's fetch documents per-client limits or an audit trail."
+  exit_criteria:
+  - "Squid delay_pools per tier port, and logformat with client, port (tier), SNI and verdict; enclave-fetch per-client limits and a JSONL audit log (client, tool, URL, bytes, verdict)."
+  verifiable_closure: "A burst fixture that hits the limit, plus the audit lines."
+  unscoreable: 'none.'
+  next_action: "Squid delay_pools per tier port, and logformat with client, port (tier), SNI and verdict; enclave-fetch per-client limits and a JSONL audit log (client, tool, URL, bytes, verdict)."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research
+- packet_id: refused-egress-is-offered-to-the-operator-for-approval
+  order: 2041-j6yt
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tray, proxy, ux, security]
+  estimated_hours: 5
+  title: "A refused destination is queued in the tray for session or permanent approval, recorded with provenance; never auto-allowed"
+  context: "Each new need means a hand edit of allowlist.txt today."
+  exit_criteria:
+  - "Proxy and fetch-service refusals surface in the tray as \"<container> asked for <host>\"; session approval expires; permanent approval writes a tier or catalog entry with who, when and why; nothing is allowed without the operator."
+  verifiable_closure: "A live refusal approved from the tray, and the written entry."
+  unscoreable: 'none.'
+  next_action: "Proxy and fetch-service refusals surface in the tray as \"<container> asked for <host>\"; session approval expires; permanent approval writes a tier or catalog entry with who, when and why; nothing is allowed without the operator."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research
+- packet_id: the-proxy-refuses-a-connect-whose-target-does-not-match-its-sni
+  order: 2041-8azp
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [proxy, squid, security]
+  estimated_hours: 3
+  title: "The proxy refuses a spliced CONNECT whose target does not resolve from the SNI (SNI spoofing)"
+  context: "Splice decisions use the client-supplied SNI, which can be forged (Squid SslPeekAndSplice docs); host_verify_strict covers Host, not SNI, and is gone in Squid v8."
+  exit_criteria:
+  - "A CONNECT to an IP that is not in the SNI's resolution is refused with refused:egress:sni-mismatch; a forged-SNI fixture is red before the fix and green after."
+  verifiable_closure: "The fixture against the built proxy image."
+  unscoreable: 'none.'
+  next_action: "A CONNECT to an IP that is not in the SNI's resolution is refused with refused:egress:sni-mismatch; a forged-SNI fixture is red before the fix and green after."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research
+- packet_id: package-traffic-goes-through-sibling-registry-mirrors
+  order: 2041-54ce
+  status: ready
+  kind: feature
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [proxy, cache, registries]
+  estimated_hours: 8
+  title: "Sibling pull-through mirrors for npm, PyPI, Go and crates replace direct registry egress"
+  context: "The registries tier is the largest hand-kept part of the list."
+  exit_criteria:
+  - "Pull-through mirrors run as siblings and forges point their package managers at them; the registries tier shrinks to the mirrors' upstreams; a cold install through each mirror succeeds."
+  verifiable_closure: "A forge cold install per ecosystem through the mirrors."
+  unscoreable: 'none.'
+  next_action: "Pull-through mirrors run as siblings and forges point their package managers at them; the registries tier shrinks to the mirrors' upstreams; a cold install through each mirror succeeds."
+  provenance: "Operator direction 2026-11-08 via coordinator macuahuitl-fedora: \"Every service and container we launch needs its own curated access level\"; agents get web search and fetch \"through MCP services that wrap curated outgoing routes\"; the allowlist \"must scale without manual curation\", fail closed, TLS integrity, no credentials leave. Research: cheatsheets/security/agent-web-access-patterns.md, cheatsheets/security/per-workload-egress-tiers.md. Spec: openspec/changes/curated-egress-tiers."
+  spec: openspec/changes/curated-egress-tiers
+  events:
+  - type: filed
+    ts: '2026-11-08T01:47:47Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the curated-egress research

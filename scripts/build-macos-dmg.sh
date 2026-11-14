@@ -96,13 +96,20 @@ if [[ "$DMG_SIGN_IDENTITY" != "-" ]]; then
     codesign --verify --strict --verbose=2 dist/Tillandsias.dmg >&2 \
         || die "the DMG signature did not verify after signing"
 
-    if [[ -n "${TILLANDSIAS_NOTARY_KEY:-}" && -n "${TILLANDSIAS_NOTARY_KEY_ID:-}" \
+    # ORDER 2031-z4rm: TILLANDSIAS_NOTARY_KEY_FILE, reading the old
+    # TILLANDSIAS_NOTARY_KEY for one transition window (see build-macos-tray.sh).
+    NOTARY_KEY_FILE="${TILLANDSIAS_NOTARY_KEY_FILE:-}"
+    if [[ -z "$NOTARY_KEY_FILE" && -n "${TILLANDSIAS_NOTARY_KEY:-}" ]]; then
+        NOTARY_KEY_FILE="$TILLANDSIAS_NOTARY_KEY"
+        say "warn: TILLANDSIAS_NOTARY_KEY is deprecated (2031-z4rm); export TILLANDSIAS_NOTARY_KEY_FILE instead"
+    fi
+    if [[ -n "$NOTARY_KEY_FILE" && -n "${TILLANDSIAS_NOTARY_KEY_ID:-}" \
           && -n "${TILLANDSIAS_NOTARY_ISSUER:-}" ]]; then
         command -v xcrun >/dev/null || die "xcrun not in PATH (needed to notarize the DMG)"
         say "notarize dmg: submitting (this waits for Apple's verdict)"
         # A DMG is submitted directly — unlike the .app, it needs no ditto zip.
         xcrun notarytool submit dist/Tillandsias.dmg \
-            --key "$TILLANDSIAS_NOTARY_KEY" \
+            --key "$NOTARY_KEY_FILE" \
             --key-id "$TILLANDSIAS_NOTARY_KEY_ID" \
             --issuer "$TILLANDSIAS_NOTARY_ISSUER" \
             --wait >&2 \
@@ -114,7 +121,7 @@ if [[ "$DMG_SIGN_IDENTITY" != "-" ]]; then
             || die "spctl rejected the stapled DMG"
         say "notarize dmg: accepted and stapled"
     else
-        say "notarize dmg: SKIPPED (TILLANDSIAS_NOTARY_KEY/_KEY_ID/_ISSUER not all set)"
+        say "notarize dmg: SKIPPED (TILLANDSIAS_NOTARY_KEY_FILE/_KEY_ID/_ISSUER not all set)"
         say "                the DMG is signed but NOT notarized — Gatekeeper still blocks a quarantined copy"
     fi
 else

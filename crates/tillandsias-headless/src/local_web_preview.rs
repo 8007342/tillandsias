@@ -1308,7 +1308,8 @@ fn certificate_args(
 /// `*.<project>.localhost` wildcard, so the leaf vouches only for hosts the
 /// router actually serves for this project.
 // 1985-stdu: `comfyui` is the project's studio window (network-limited).
-pub(crate) const DEV_SERVICES: &[&str] = &["flutter", "comfyui"];
+// 2067-uc3k: `studio` is the web-studio lane's window (TLS-only, network-limited).
+pub(crate) const DEV_SERVICES: &[&str] = &["flutter", "comfyui", "studio"];
 
 /// Every host the router serves over TLS for `project`: `www` and each dev
 /// service. The ONE list: the leaf's subjectAltName and the WebKit window's
@@ -1561,6 +1562,83 @@ pub(crate) fn add_network_limited_route(
     cidr: &str,
     debug: bool,
 ) -> Result<String, String> {
+    limited_route(service, project, upstream, port, cidr, false, debug)
+}
+
+/// ORDER 2067-uc3k: the web-studio lane's window, `studio.<project>`.
+/// Operator ruling 2026-11-10: "Full https only, and nothing required from the
+/// user at runtime". So it is served on the preview TLS listener ONLY (no
+/// plain :8080 site, no OTP gate), to callers in `cidr` (the project's studio
+/// network: the router, and each browser.open window's forwarder) and to no
+/// one else. It replaces the OTP route the `--studio` lane used to hold under
+/// the same name. Returns the window URL.
+pub(crate) fn add_studio_route(
+    project: &str,
+    upstream: &str,
+    port: u16,
+    cidr: &str,
+    debug: bool,
+) -> Result<String, String> {
+    limited_route(STUDIO_SERVICE, project, upstream, port, cidr, true, debug)
+}
+
+/// 2067-uc3k: the router service the web-studio window is served under.
+pub(crate) const STUDIO_SERVICE: &str = "studio";
+
+/// 2067-uc3k: the studio window's URL on the preview TLS listener `port`.
+pub(crate) fn studio_url_on(project: &str, port: u16) -> String {
+    format!(
+        "https://{}.localhost:{port}/",
+        subdomain(STUDIO_SERVICE, project)
+    )
+}
+
+/// 2067-uc3k: whether the studio route of `project` is in the router's table
+/// AND its upstream answers, asked from INSIDE the router (the route admits
+/// only the project's network, so a host-side probe would get 403 by design).
+/// Any status 200..499 counts: the studio front answers, whatever the path.
+pub(crate) fn studio_answers(project: &str) -> bool {
+    let sub = subdomain(STUDIO_SERVICE, project);
+    let Some(route) = read_routes(false)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|r| r.subdomain == sub && r.preview_tls && r.tls_only)
+    else {
+        return false;
+    };
+    let endpoint = format!("http://{}:{}/", route.upstream_host, route.port);
+    podman_at(
+        Step::Ready,
+        &[
+            "exec",
+            "tillandsias-router",
+            "curl",
+            "--noproxy",
+            "*",
+            "-s",
+            "-o",
+            "/dev/null",
+            "--max-time",
+            "2",
+            "-w",
+            "%{http_code}",
+            &endpoint,
+        ],
+    )
+    .ok()
+    .and_then(|code| code.trim().parse::<u16>().ok())
+    .is_some_and(|c| (200..500).contains(&c))
+}
+
+fn limited_route(
+    service: &str,
+    project: &str,
+    upstream: &str,
+    port: u16,
+    cidr: &str,
+    tls_only: bool,
+    debug: bool,
+) -> Result<String, String> {
     ensure_router(project, debug)?;
     let _lock = crate::resource_lock::acquire(
         "preview-router",
@@ -1570,6 +1648,7 @@ pub(crate) fn add_network_limited_route(
     let mut route = crate::RouterRoute::public_service(subdomain(service, project), upstream, port);
     route.preview_tls = true;
     route.allow_cidr = Some(cidr.to_string());
+    route.tls_only = tls_only;
     let mut routes = read_routes(debug)?;
     routes.retain(|r| r.subdomain != route.subdomain);
     routes.push(route);
@@ -2408,7 +2487,25 @@ async fn reload_inner(project: &str, instance: &str, debug: bool) -> Result<Valu
         "" => None,
         dir => Some(validate_app_dir(dir)?),
     };
-    publish_locked(project, instance, runtime, app_dir.as_deref(), debug).await
+    publish_locked(project, instance, runtime, app_dir.as_deref(), debug)
+        .await
+        .map_err(|e| explain_reload_app_dir(e, app_dir.as_deref()))
+}
+
+/// Order 2065-pu7j: reload republishes the app_dir RECORDED when the preview
+/// started. When that directory has since been deleted (a Flutter clean, a
+/// removed worktree), the bare "not a directory" refusal read as if the
+/// agent had passed a bad argument to reload, which takes none. Name the
+/// recorded directory and the way out. The `invalid_app_dir: ` prefix is kept.
+fn explain_reload_app_dir(err: String, recorded: Option<&str>) -> String {
+    match recorded {
+        Some(dir) if err.starts_with("invalid_app_dir: ") => format!(
+            "{err}. preview.reload republishes the app_dir this preview was started with ({dir:?}), \
+             and that directory is gone; rebuild it, or call preview.start with the current app_dir \
+             (omit app_dir to publish the project root)"
+        ),
+        _ => err,
+    }
 }
 
 /// Called only after the launcher proves no forge remains for this lane. This
@@ -3267,6 +3364,23 @@ mod tests {
         }
     }
 
+    /// 2065-pu7j: a reload whose recorded app_dir vanished names that
+    /// directory and the way out; other errors pass through unchanged.
+    #[test]
+    fn a_reload_whose_recorded_app_dir_vanished_says_so() {
+        let gone = "invalid_app_dir: \"build/web\" is not a directory in the project".to_string();
+        let msg = explain_reload_app_dir(gone.clone(), Some("build/web"));
+        assert!(msg.starts_with(&gone), "{msg}");
+        assert!(msg.contains("started with (\"build/web\")"), "{msg}");
+        assert!(msg.contains("preview.start"), "{msg}");
+        assert_eq!(explain_reload_app_dir(gone.clone(), None), gone);
+        let other = "not_running: no preview to reload".to_string();
+        assert_eq!(
+            explain_reload_app_dir(other.clone(), Some("build/web")),
+            other
+        );
+    }
+
     /// 1788-qlwq slice 11: a root-index app named by app_dir (a Flutter
     /// build/web) is served WHOLE, so canvaskit/, music/, version.json and
     /// .wasm resolve; kumbia-kombat measured 404s on every subdirectory but
@@ -3804,6 +3918,32 @@ mod tests {
             crate::local_projects::ram_workspace_volume("a", "b-c")
         );
         with_stub("exit 0", |_| {
+            // with_stub's scratch is the std temp dir: tmpfs on a Fedora host,
+            // DISK inside a forge (yolanda, 2026-11-10: "no tmpfs to hold the
+            // preview leaf key"), so this check's premise rode on the
+            // substrate. Give the leaves a tmpfs home of their own, a private
+            // scratch under /dev/shm, removed with the test. Without any tmpfs
+            // the publish branch cannot be exercised: inside a container that
+            // is skipped by name; on a host it stays a failure below.
+            let shm = tempfile::tempdir_in("/dev/shm")
+                .ok()
+                .filter(|d| crate::on_tmpfs(d.path()));
+            match &shm {
+                Some(d) => unsafe {
+                    std::env::set_var("TILLANDSIAS_TEST_PREVIEW_TLS_SHM", d.path());
+                },
+                None if Path::new("/run/.containerenv").exists()
+                    || Path::new("/.dockerenv").exists() =>
+                {
+                    eprintln!(
+                        "SKIP: source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only: \
+                         no tmpfs in this container (/dev/shm absent or not tmpfs), so the TLS \
+                         publish branch cannot be exercised here; a host run covers it"
+                    );
+                    return;
+                }
+                None => {}
+            }
             let root = router_dir();
             std::fs::create_dir_all(root.join("preview-tls")).unwrap();
             std::fs::write(root.join("preview-tls-port"), "18443").unwrap();
@@ -4018,7 +4158,7 @@ mod tests {
         );
         assert_eq!(
             preview_san("macron.dev"),
-            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost,DNS:comfyui.macron.dev.localhost"
+            "DNS:www.macron.dev.localhost,DNS:flutter.macron.dev.localhost,DNS:comfyui.macron.dev.localhost,DNS:studio.macron.dev.localhost"
         );
         assert!(
             !preview_san("proj").contains('*'),
@@ -4047,13 +4187,14 @@ mod tests {
                 "www.devxsd-gamejam.localhost",
                 "flutter.devxsd-gamejam.localhost",
                 "comfyui.devxsd-gamejam.localhost",
+                "studio.devxsd-gamejam.localhost",
             ]
         {
             misses.push(format!("preview_hosts: {hosts:?}"));
         }
         let san = preview_san(project);
         if san
-            != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost,DNS:comfyui.devxsd-gamejam.localhost"
+            != "DNS:www.devxsd-gamejam.localhost,DNS:flutter.devxsd-gamejam.localhost,DNS:comfyui.devxsd-gamejam.localhost,DNS:studio.devxsd-gamejam.localhost"
         {
             misses.push(format!("leaf SAN: {san}"));
         }

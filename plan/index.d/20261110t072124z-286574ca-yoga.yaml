@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-names-that-are-not-credentials-are-not-spelled-like-one
+    field: next_action
+    value: |-
+      yoga takes this first after 2031-h5ru: rename TILLANDSIAS_WRAPPER_TOKEN to _WRAPPER_MARK and TILLANDSIAS_NOTARY_KEY to _KEY_FILE.
+
+
+      [2026-11-10T07:21:24Z yoga] CLOSURE SWEEP 2026-11-10 (yoga, trunk b5db7999e): NOT closed. Landed #1002 (028eb730b). Two of three criteria reproduce: test-env-namespace-hygiene.lua -> ok:env-namespace-hygiene:4 (with TILLANDSIAS_PLAN_BIN named), and bash scripts/test-dispatch-reap.sh -> PASS 14/14. The third FAILS as written: /usr/bin/grep -rn 'TILLANDSIAS_WRAPPER_TOKEN\|TILLANDSIAS_NOTARY_KEY\b' scripts crates prints 30 lines, not nothing. They are deliberate: the retired names are still MATCHED for a transition window (lib-dispatch-reap.sh, check-no-competing-gate.sh, build-macos-tray.sh and build-macos-dmg.sh deprecation warnings), the hygiene guard's own rename table, their tests, and child_env.rs classing them. Close when the transition window ends and those reads are removed, or when the coordinator or operator amends the criterion to exclude the compat reads.
+    ts: "2026-11-10T07:21:24Z"
+    host: yoga
+
+events:
+  - packet_id: tillandsias-names-that-are-not-credentials-are-not-spelled-like-one
+    event:
+      type: progress
+      ts: "2026-11-10T07:21:24Z"
+      host: yoga
+      summary: |-
+        status 'yoga takes this first after 2031-h5ru: rename TILLANDSIAS_WRAPPER_TOKEN to _WRAPPER_MARK and TILLANDSIAS_NOTARY_KEY to _KEY_FILE.
+        
+        
+        [2026-11-10T07:21:24Z yoga] CLOSURE SWEEP 2026-11-10 (yoga, trunk b5db7999e): NOT closed. Landed #1002 (028eb730b). Two of three criteria reproduce: test-env-namespace-hygiene.lua -> ok:env-namespace-hygiene:4 (with TILLANDSIAS_PLAN_BIN named), and bash scripts/test-dispatch-reap.sh -> PASS 14/14. The third FAILS as written: /usr/bin/grep -rn 'TILLANDSIAS_WRAPPER_TOKEN\|TILLANDSIAS_NOTARY_KEY\b' scripts crates prints 30 lines, not nothing. They are deliberate: the retired names are still MATCHED for a transition window (lib-dispatch-reap.sh, check-no-competing-gate.sh, build-macos-tray.sh and build-macos-dmg.sh deprecation warnings), the hygiene guard's own rename table, their tests, and child_env.rs classing them. Close when the transition window ends and those reads are removed, or when the coordinator or operator amends the criterion to exclude the compat reads.' (not terminal) with evidence_refs: closure sweep on trunk b5db7999e 2026-11-10

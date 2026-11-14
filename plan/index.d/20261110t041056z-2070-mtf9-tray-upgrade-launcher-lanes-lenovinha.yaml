@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: a-tray-upgrade-hands-over-or-names-every-lane-still-served-by-an-older-launcher
+    order: 2070-mtf9
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, mcp-socket, lane, upgrade, reliability]
+    estimated_hours: 4
+    title: |
+      After a tray upgrade, lanes still served by a live older launcher (its exe deleted) are never re-adopted or reported, so their forges talk to the old build indefinitely
+    context: |
+      MEASURED on macuahuitl 2026-11-09 by coordinator macuahuitl-fedora. The new tray v56.11.10.1, started about 17:50Z, logged no line about the demon_attack lane, lane adoption or flutter. /run/user/1000/tillandsias/mcp/demon_attack-default/mcp.sock (created Nov 8 21:45) and its push-events socket were still listened on by the OLD 56.11.9.1 launcher, pid 1020477, whose exe was deleted. kumbias was the same until its window was relaunched, and its audio.* calls answered "this app 56.11.9.1 older than images 56.11.10.1". Adoption (adopt_marked_lanes in mcp_socket.rs) only reclaims tray-marked lanes whose socket refuses; lane_accepting treats a successful connect() as served, so a live old listener is never questioned. This is the path behind the 2069-f58n client hang.
+    exit_criteria:
+      - 'red first: a lane served by a process whose build identity differs from the tray (the 1961-8ats lane_server_build answer) is reported by the tray after it starts, naming the lane, the old build and its pid'
+      - 'the tray hands over such a lane or offers the operator a one-click relaunch; it never kills a launcher whose forge session is live without consent'
+      - 'tillandsias-doctor shows a lane served by an older build as its own named state'
+    verifiable_closure: 'the fixture red before and green after; one upgrade on a host with a launcher-served lane showing the named report'
+    unscoreable: 'none.'
+    next_action: 'Read adopt_marked_lanes and lane_server_build; write a fixture with a fake old-build listener on a lane socket.'
+    provenance: coordinator macuahuitl-fedora 2026-11-09 measurements; filed by lenovinha-silverblue.
+    depends_on: []
+    related: [2069-f58n]
+    events:
+      - {type: filed, ts: '2026-11-10T04:10:56Z', host: lenovinha-silverblue, summary: filed p1 ready by lenovinha-silverblue}

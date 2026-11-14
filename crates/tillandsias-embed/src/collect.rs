@@ -24,7 +24,7 @@ pub fn collect_all(repo_root: &Path) -> Vec<Asset> {
         "",
         &mut assets,
     );
-    collect_legacy_observatorium(repo_root, &mut assets);
+    collect_trace_viewer(repo_root, &mut assets);
     collect_assets(
         &repo_root.join("skills"),
         &repo_root.join("skills"),
@@ -58,11 +58,12 @@ pub fn collect_all(repo_root: &Path) -> Vec<Asset> {
     assets
 }
 
-// @trace spec:observatorium-dashboard
-// The embedded legacy page is independent of the Flutter dashboard. Never
-// recursively package its SDK caches, dependencies or generated web artifact.
-pub fn collect_legacy_observatorium(repo_root: &Path, out: &mut Vec<Asset>) {
-    for directory in ["observatorium", "observatorium/lib"] {
+// @trace spec:clickable-trace-index, order:2066-obsv
+// The project trace viewer --observatorium serves. It lives in
+// tools/trace-viewer/, apart from observatorium/ (the static release site),
+// and only these four files are embedded: never a dependency or build output.
+pub fn collect_trace_viewer(repo_root: &Path, out: &mut Vec<Asset>) {
+    for directory in ["tools/trace-viewer", "tools/trace-viewer/lib"] {
         let path = repo_root.join(directory);
         let meta = fs::symlink_metadata(&path)
             .unwrap_or_else(|e| panic!("metadata {}: {e}", path.display()));
@@ -73,10 +74,10 @@ pub fn collect_legacy_observatorium(repo_root: &Path, out: &mut Vec<Asset>) {
         );
     }
     for rel in [
-        "observatorium/index.html",
-        "observatorium/lib/chart.umd.js",
-        "observatorium/lib/highlight.min.css",
-        "observatorium/lib/highlight.min.js",
+        "tools/trace-viewer/index.html",
+        "tools/trace-viewer/lib/chart.umd.js",
+        "tools/trace-viewer/lib/highlight.min.css",
+        "tools/trace-viewer/lib/highlight.min.js",
     ] {
         let path = repo_root.join(rel);
         let meta = fs::symlink_metadata(&path)
@@ -177,7 +178,7 @@ mod tests {
     use std::os::unix::fs::symlink;
 
     #[test]
-    fn legacy_assets_ignore_dashboard_dependencies_but_reject_selected_symlinks() {
+    fn trace_viewer_assets_ignore_dependencies_but_reject_selected_symlinks() {
         let root = std::env::temp_dir().join(format!(
             "observatorium-embed-{}-{}",
             std::process::id(),
@@ -186,36 +187,43 @@ mod tests {
                 .unwrap()
                 .as_nanos()
         ));
-        fs::create_dir_all(root.join("observatorium/lib")).unwrap();
-        fs::create_dir_all(root.join("observatorium/node_modules/.bin")).unwrap();
+        fs::create_dir_all(root.join("tools/trace-viewer/lib")).unwrap();
+        fs::create_dir_all(root.join("tools/trace-viewer/node_modules/.bin")).unwrap();
         for rel in [
             "index.html",
             "lib/chart.umd.js",
             "lib/highlight.min.css",
             "lib/highlight.min.js",
         ] {
-            fs::write(root.join("observatorium").join(rel), "legacy asset").unwrap();
+            fs::write(
+                root.join("tools/trace-viewer").join(rel),
+                "trace viewer asset",
+            )
+            .unwrap();
         }
         symlink(
             "../wrangler/bin/wrangler.js",
-            root.join("observatorium/node_modules/.bin/wrangler"),
+            root.join("tools/trace-viewer/node_modules/.bin/wrangler"),
         )
         .unwrap();
         let mut assets = Vec::new();
-        collect_legacy_observatorium(&root, &mut assets);
+        collect_trace_viewer(&root, &mut assets);
         assert_eq!(assets.len(), 4);
+        assert!(
+            assets
+                .iter()
+                .all(|asset| asset.dest.starts_with("tools/trace-viewer/")),
+            "the trace viewer is embedded under tools/trace-viewer/, never observatorium/ (2066-obsv)"
+        );
         assert!(
             assets
                 .iter()
                 .all(|asset| !asset.dest.contains("node_modules"))
         );
-        let selected = root.join("observatorium/lib/chart.umd.js");
+        let selected = root.join("tools/trace-viewer/lib/chart.umd.js");
         fs::remove_file(&selected).unwrap();
         symlink("highlight.min.js", &selected).unwrap();
-        assert!(
-            std::panic::catch_unwind(|| collect_legacy_observatorium(&root, &mut Vec::new()))
-                .is_err()
-        );
+        assert!(std::panic::catch_unwind(|| collect_trace_viewer(&root, &mut Vec::new())).is_err());
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: agents-fetch-docs-and-feeds-through-an-enclave-fetch-mcp-service
+    event:
+      type: note
+      ts: "2026-11-08T03:38:02Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Part 1 is PR #1009 (stacked on #1006): crate tillandsias-enclave-fetch plus images/enclave-fetch (catalog.yaml, egress [siblings, research]). The MCP-over-HTTP tools catalog/fetch/feed/docs check every hop against the catalog, refuse non-public addresses, pin the connection, obey robots.txt, send no cookies or credentials, cap the body and convert to Markdown, and write a JSONL audit record. Measured on macOS in direct mode: real fetches of doc.rust-lang.org, the Rust blog feed and docs.python.org worked and example.com was refused. STILL NEEDS LINUX: (1) build the image with the musl binary in its context; (2) launch it on the enclave network with TILLANDSIAS_FETCH_PROXY pointing at the research tier port; (3) add http://enclave-fetch:8790/mcp to the forge MCP configs (claude, codex, antigravity, opencode); (4) a forge agent turn that fetches a catalog docs page, plus its audit line. Known gap: in proxy mode squid does the resolution, so the pin is squid's until 8azp.

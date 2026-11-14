@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: watch-the-paired-ca-and-vault-leaf-tests-intermittently-fail-under-openssl-4-with-unable-to-get-passphrase
+    order: 2059-eij5
+    status: ready
+    kind: watch
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [vault, tls, macos, flaky]
+    estimated_hours: 1
+    title: "Watch: a_reminted_ca_keeps_the_replaced_one_trusted_until_the_leaf_is_reissued and ca_and_vault_leaf_mints_leave_no_plaintext_key_where_the_store_is_inactive intermittently fail under OpenSSL 4 with 'unable to get passphrase'"
+    context: "Observed 2026-11-08 on tlatoanis-macbook-air (darwin, Homebrew OpenSSL 4.1.0) while developing 2058-xduu: 3 failures of the two tests run together, at the Vault leaf sign (main.rs ensure_vault_tls_leaf call). With the sign's stderr shown, openssl printed 'Could not find or decode CA private key ... intermediate.key', then 'UI routines:open_console' and 'unable to get passphrase', as if -passin env:TILLANDSIAS_KEY_PASS found the variable unset. No warn:ca-key-pass-unavailable was printed. Not reproduced afterwards in 26 runs: trunk 0/10, the 2058-xduu branch 0/10, 4 runs alternating LibreSSL and OpenSSL PATHs, and 3 runs right after forced recompiles. Each test passed when run alone. Both tests hold env_lock() and podman_seam_lock(). Under cfg(test) session() is None and the passphrase lives in process memory (at_rest CACHE / TEST_LOOKUP), so the suspects are that shared process state or the env var not reaching the child."
+    exit_criteria:
+      - "A recurrence is captured with openssl's stderr, the value of key_in_args() and whether pass_env() was empty at the sign, enough to name the cause; or 50 consecutive paired runs on darwin pass and the row is closed as not reproducible."
+    verifiable_closure: "The row carries either a captured recurrence with a named cause or the 50-run clean measurement."
+    unscoreable: 'none.'
+    next_action: "On a recurrence, rerun with the sign's stderr shown and record key_in_args/pass_env at the call."
+    provenance: "Filed at macuahuitl-fedora's request (2026-11-08) by tlatoanis-macbook-air claude, so a recurrence has a home."
+    events:
+    - type: filed
+      ts: '2026-11-08T12:32:46Z'
+      host: tlatoanis-macbook-air
+      summary: "filed watch: 3 intermittent unable-to-get-passphrase failures under OpenSSL 4, 0 in 26 runs since"

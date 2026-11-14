@@ -10,7 +10,7 @@
 #     bash scripts/check-no-competing-gate.sh
 #     could-not-run:competing-gate:no-host-side-assertion
 #       (this caller did not assert --host-side <pid>; ...)          rc=3
-#     TOOLBOX_PATH=<unset> container=<unset> TILLANDSIAS_WRAPPER_TOKEN=<unset>
+#     TOOLBOX_PATH=<unset> container=<unset> TILLANDSIAS_WRAPPER_MARK=<unset> (and the retired TILLANDSIAS_WRAPPER_TOKEN)
 #
 # That token is this file's vocabulary for a caller that OMITTED something, and
 # its sibling refusal says "FIX THE CALL SITE" outright. It was printed on a
@@ -41,7 +41,7 @@ ok()  { pass=$((pass + 1)); echo "  PASS  $1"; }
 bad() { fail=$((fail + 1)); echo "  FAIL  $1"; }
 
 # run <args...> ; sets RC and OUT. env -u so an inherited token cannot leak in.
-run() { OUT="$(env -u TILLANDSIAS_WRAPPER_TOKEN bash "$CHECK" "$@" 2>&1)"; RC=$?; }
+run() { OUT="$(env -u TILLANDSIAS_WRAPPER_MARK -u TILLANDSIAS_WRAPPER_TOKEN bash "$CHECK" "$@" 2>&1)"; RC=$?; }
 
 echo "arm 1 — an UNDISPATCHED caller gets a cause naming that, not a missing assertion"
 run --caller-context undispatched

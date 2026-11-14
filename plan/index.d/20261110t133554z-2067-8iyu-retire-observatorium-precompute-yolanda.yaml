@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: retire-observatorium-precompute-and-its-projection-tests
+  order: 2067-8iyu
+  status: ready
+  kind: chore
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - node
+  - observatorium
+  estimated_hours: 2
+  title: observatorium/metrics/precompute.mjs is run by no build after 2066-obsv; retire it, keeping the evidence semantics its tests guard
+  context: 'Order 2066-obsv (PR 3) replaced the Flutter dashboard with observatorium/site/ and removed the deploy-time live collection, so nothing invokes metrics/precompute.mjs any more. Its project() is still imported by metrics/evidence.test.mjs and metrics/metrics.test.mjs, whose cases guard evidence semantics (zero-earned release honesty, malformed release evidence becomes a gap, scope and epoch changes stay separate, the headline is the latest release cut). Deleting the module outright would delete that coverage, so 2066-obsv kept it.'
+  exit_criteria:
+  - 'Every evidence property a precompute-based test asserts is asserted against observatorium/site/view.mjs (deriveView) or metrics/evidence.mjs instead, or is recorded as no longer applicable (live display-only observation) with the reason.'
+  - 'metrics/precompute.mjs and the tests that only exercise it are deleted; npm test in observatorium stays green.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fix writes openspec/litmus-tests/litmus-observatorium-evidence-semantics.yaml in the same commit (1136-n8sh)'
+  verifiable_closure: 'git grep precompute -- observatorium returns nothing; cd observatorium && npm test passes; the moved cases fail against a view.mjs that maps a null histogram to 0 or joins two epochs.'
+  provenance: yolanda forge 2026-11-10, follow-up agreed with macuahuitl-fedora while shipping 2066-obsv PR 3.
+  events:
+  - type: created
+    ts: '2026-11-10T13:35:54Z'
+    host: yolanda
+    summary: filed as the 2066-obsv follow-up for the now-unused precompute module

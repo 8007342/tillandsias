@@ -3,6 +3,13 @@ name: build-windows-tray
 description: Build + install the windows-tray release binary on the local Windows host, post-install --diagnose verify, and file findings in ./plan/ for future fixing.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # /build-windows-tray
 
 A canonical, fine-tunable workflow for the **windows host's** daily build+install
@@ -19,6 +26,19 @@ the workflow is reviewable + improvable.
 ## Working dir
 
 `C:/Users/bullo/src/tillandsias`
+
+## Credentials: the operator signs in, never you (2028-j4a7)
+
+A reset in this run wipes the Vault, and the run needs credentials again
+afterwards. **Never start a sign-in yourself.** That means no `tillandsias` or
+tray with any `--*-login`/`--*-logout` flag, and no `gh auth login|refresh`. Never
+read a device code or a sign-in URL from a log, and never relay one to the
+operator. Instead, launch the published tray (or leave it running) and tell the
+operator that the credential step is waiting for them. Record that step as
+blocked/UNMEASURED until they have signed in from the tray. Read-only
+`gh auth status` is fine. The Bash-tool hook refuses these flows
+(`refused:bash-policy:no-credential-mutation`), and the rule is
+`methodology/philosophy.yaml` `agents_never_sign_in`.
 
 ## Steps
 

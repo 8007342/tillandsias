@@ -3,6 +3,13 @@ name: smoke-curl-install-and-test-e2e
 description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-installs the latest release binary from GitHub, does a full `podman system reset --force`, runs `tillandsias --debug --init` from a pristine state, and (if init is clean) launches `tillandsias --cloud 8007342/tillandsias --opencode` with ONE short fixed smoke prompt (run the credential guard, reply with a fixed token; never the /meta-orchestration loop, 1941-smkp). Every issue observed — by this skill's agent during install/reset/init, or by the agent's one turn inside the forge — is filed as a plan/issues work packet for later pickup by /advance-work-from-plan.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Smoke: Curl-Install and Test End-to-End
 
 This skill validates that a **published release** actually works for a real
@@ -128,6 +135,19 @@ the state that looks cold and is not (drill: plan/issues/fleet-restart-2026-09-1
 On macOS, the destructive substrate is the Tillandsias Virtualization.framework
 state and cache directories. On Windows, it is the `tillandsias` WSL2 distro and
 download cache.
+
+## Credentials: the operator signs in, never you (2028-j4a7)
+
+A reset in this run wipes the Vault, and the run needs credentials again
+afterwards. **Never start a sign-in yourself.** That means no `tillandsias` or
+tray with any `--*-login`/`--*-logout` flag, and no `gh auth login|refresh`. Never
+read a device code or a sign-in URL from a log, and never relay one to the
+operator. Instead, launch the published tray (or leave it running) and tell the
+operator that the credential step is waiting for them. Record that step as
+blocked/UNMEASURED until they have signed in from the tray. Read-only
+`gh auth status` is fine. The Bash-tool hook refuses these flows
+(`refused:bash-policy:no-credential-mutation`), and the rule is
+`methodology/philosophy.yaml` `agents_never_sign_in`.
 
 ## 0 — Pre-flight
 

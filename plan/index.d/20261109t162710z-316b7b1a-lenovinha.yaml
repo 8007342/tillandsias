@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-github-copilot-harness-lane-at-parity-with-the-codex-claude-and-antigravity-lanes
+    event:
+      type: decision
+      ts: "2026-11-09T16:27:10Z"
+      agent_id: linux-lenovinha-opus5-20261109t162710z
+      host: lenovinha
+      summary: |
+        OPERATOR RULING, first-hand to the coordinator session (macuahuitl-fedora), 2026-11-08: Option B, a device-code login at parity with codex and claude. The operator chose it KNOWING that the scopes of the token it yields are UNVERIFIED. This is a GitHub OAuth token from the Copilot CLI app, and it may reach GitHub APIs beyond Copilot; it is the first GitHub token the forge holds. Hard constraints: (1) `copilot login --device-code` runs in a throwaway container with COPILOT_HOME on tmpfs; (2) the token is harvested straight into Vault, and no plaintext file ever reaches disk; (3) each launch injects it from Vault, as COPILOT_GITHUB_TOKEN or restored into a tmpfs COPILOT_HOME; (4) other lanes cannot read it (a Vault policy scoped to the copilot lane); (5) the #1008 command policy keeps refusing agent-run logins, --copilot-login included. The device-code flow is the operator's to run. The alternative offered and not taken: a fine-grained PAT with only the Copilot Requests permission.

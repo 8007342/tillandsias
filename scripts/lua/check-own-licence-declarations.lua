@@ -52,6 +52,7 @@ local VENDORED = {
     { "images/imagegen/tiers.tsv", "the tier table, same licences" },
     { "cheatsheets/license-allowlist.toml", "publisher licence classification" },
     { "docs/credits/stack.v1.json", "the generated ledger of upstream licences" },
+    { "tests/fixtures/audio/kumbia/LICENSE.md", "2078-kmbx: the provenance note for the kumbia music excerpts (the Kumbia Kombat project's own renders), asked for by the operator ruling of 2026-11-10; it claims no licence of its own" },
 }
 local function vendored(path)
     for _, v in ipairs(VENDORED) do

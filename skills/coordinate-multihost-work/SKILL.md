@@ -3,6 +3,13 @@ name: coordinate-multihost-work
 description: Coordinate Tillandsias Linux, Windows, and macOS implementation agents by auditing shared plan/methodology ledgers, analyzing sibling branch git history, reconciling stale work queues, mediating concurrent conflicts or thrashing, tracking convergence velocity metrics, enforcing finite-time convergence guarantees, and pushing coordination updates. Designed to run hourly to ensure continuous cooperation and unblocking.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Coordinate Multi-Host Work
 
 Run a short, durable coordination pass for the Tillandsias Linux, Windows, and macOS implementation agents. The goal is to keep agents unblocked, ensure their sibling `./plan` states cooperate, and strictly guarantee convergence on the specs in finite time.
@@ -275,7 +282,7 @@ Before shaping work, run the first-pass reconciliation and carry its
 candidates into the handoff:
 
 ```bash
-scripts/check-stale-ready-rows.sh          # stale-candidate:<order>:<n>:<sha> … then ok:stale-ready-rows:<c>/<ready>:pass=cites-order
+tillandsias-plan script run scripts/lua/check-stale-ready-rows.lua  # stale-candidate:<order>:<n>:<sha> … then ok:stale-ready-rows:<c>/<ready>:pass=cites-order
 ```
 
 and the landed-work-ref pass beside it (1934-mxxc, report-only Lua):

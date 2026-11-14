@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: preview-tls-publish-test-owns-its-tmpfs-home-instead-of-riding-the-host-temp-dir
+    field: status
+    value: completed
+    ts: "2026-11-10T18:33:35Z"
+    host: yoga
+
+events:
+  - packet_id: preview-tls-publish-test-owns-its-tmpfs-home-instead-of-riding-the-host-temp-dir
+    event:
+      type: completed
+      ts: "2026-11-10T18:33:35Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: toolbox run -c tillandsias-builder env TMPDIR=<btrfs dir> cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias -- local_web_preview: 42 passed, 0 failed @ b7c850d59
+  - packet_id: preview-tls-publish-test-owns-its-tmpfs-home-instead-of-riding-the-host-temp-dir
+    event:
+      type: note
+      ts: "2026-11-10T18:33:35Z"
+      host: yoga
+      summary: |-
+        landed in #1072 (da46043fc); on trunk b7c850d59 with TMPDIR on btrfs the TLS-publish test passes (local_web_preview 42 passed), the forge-shaped red is gone

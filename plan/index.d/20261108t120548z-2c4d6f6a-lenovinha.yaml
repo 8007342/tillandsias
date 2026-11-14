@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-test-that-writes-a-stub-podman-then-executes-it-fails-with-text-file-busy-when-a-parallel-test-forks-in-between
+    field: status
+    value: blocked
+    ts: "2026-11-08T12:05:48Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-test-that-writes-a-stub-podman-then-executes-it-fails-with-text-file-busy-when-a-parallel-test-forks-in-between
+    event:
+      type: progress
+      ts: "2026-11-08T12:05:48Z"
+      host: lenovinha
+      summary: |-
+        status 'blocked' (not terminal) with evidence_refs: PR #1030 queued to land (work/1478-9r6f at 681155b7e)
+  - packet_id: a-test-that-writes-a-stub-podman-then-executes-it-fails-with-text-file-busy-when-a-parallel-test-forks-in-between
+    event:
+      type: note
+      ts: "2026-11-08T12:05:48Z"
+      host: lenovinha
+      summary: |-
+        waiting on #1030 to land; flip to implemented with its merge sha

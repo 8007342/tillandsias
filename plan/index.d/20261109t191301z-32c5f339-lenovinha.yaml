@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-github-copilot-harness-lane-at-parity-with-the-codex-claude-and-antigravity-lanes
+    event:
+      type: progress
+      ts: "2026-11-09T19:13:01Z"
+      agent_id: linux-lenovinha-opus5-20261109t191301z
+      host: lenovinha
+      summary: |
+        PART 1 LANDED: 159f11226 land(1038): work/2063-nfag into linux-next. In trunk now: the command policy refuses an agent-run copilot login/logout; require_copilot fetches releases/latest v1 verified against the API digest and SHA256SUMS.txt, with last-good rollback (litmus:forge-copilot-harness, 6 arms); and the first-use shim's EPOCHSECONDS change. The row stays in_progress. Part 2 (entrypoint, per-lane Vault auth, ForgeAgentMode::Copilot, --copilot and --copilot-login, trays, providers egress, docs) follows on work/2063-nfag-lane.

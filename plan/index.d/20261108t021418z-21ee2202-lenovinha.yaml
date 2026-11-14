@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cloud-lane-sizes-its-source-tmpfs-from-the-config-on-the-branch-the-forge-checks-out
+    event:
+      type: progress
+      ts: "2026-11-08T02:14:18Z"
+      agent_id: linux-lenovinha-opus5-20261108t021418z
+      host: lenovinha
+      summary: |
+        RECURRENCE MEASURED 2026-11-08T02:13Z (forge field report via coordinator macuahuitl-fedora): /home/forge/src was again 1.5 GB and reached 100%, and git then failed in every worktree. What filled it: toolchain test outputs (about 160 MB per run), project copies made because toolchains run only under src (2035-trxp), and 146 MB of tmp_pack left by failed git writes. Still not established: whether the forge was built with #982, and whether this was a cloud or a local lane. The launcher log line naming the branch src_mb was read from decides that. If the line is present and names the right branch, the declared size is not reaching this lane, and that is a new defect.

@@ -73,6 +73,12 @@ def facts(pem, what):
     if code != 0:
         raise Refusal("ca_trust_invalid", f"{what} has expired")
     serial = next((l.split("=", 1)[1] for l in out.splitlines() if l.startswith("serial=")), "?")
+    # The fingerprint comes from its own call, the same form check() uses for
+    # the bundle. OpenSSL 4.x (4.0.3 and 4.1.0, measured 2026-11-10) prints a
+    # DIFFERENT -fingerprint when -ext is in the same call: only the plain
+    # form equals the DER sha256, so the two never matched and "current" was
+    # never detected.
+    code, out, _ = openssl(["x509", "-noout", "-fingerprint", "-sha256"], pem)
     fp = next((l.split("=", 1)[1] for l in out.splitlines() if "Fingerprint=" in l), "")
     return serial.strip(), fp.strip()
 

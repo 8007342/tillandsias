@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: demucs-weights-are-converted-to-safetensors-registered-restricted-and-audio-separate-refuses-without-acknowledgement
+    field: context
+    value: |-
+      Coordinator ruling 2026-11-10: keep ALLOWED_SUFFIXES; convert the Demucs weights to safetensors in a one-off auditable step, pin each converted file by sha256 in the register next to the upstream .th hash it came from, and load only the safetensors. weights_only=True is not a substitute (a weaker gate).
+      Operator ruling 2026-11-09: both models are treated as non-commercial behind accept-licence per project (no standing grant). The weights' licence is unstated; the register's licence text is the maintainer's README statement ("The license of the weights is not clear: MusDB contains some data that were only usable for research purpose"; htdemucs_6s "was trained only on Meta internal dataset, which likely means CC-NC-BY license is applicable"), hashed at a pinned revision. Upstream files: htdemucs 955717e8-8726e21a.th, htdemucs_6s 5c90dfd2-34c22ccb.th.
+
+
+      [2026-11-10T06:44:08Z yoga] RULING 2026-11-10 (coordinator macuahuitl-fedora, on yoga's proposal), criterion 1 amended: each register row pins the MAINTAINER'S Hub safetensors (repo, revision, file, sha256), and the context records the upstream .th id it corresponds to. No conversion step. The optional unpickle audit is skipped: the maintainer's own safetensors at a pinned revision and hash is the provenance, and a pickle does not come onto any machine, even sandboxed. Hub state read 2026-11-10 via the API (?blobs=true): adefossez/HTDemucs at cbc8a9b1a87023b7fd74e7b3412e6321c0eab003 holds 955717e8.safetensors (84025440 B, sha256 d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd; upstream .th 955717e8-8726e21a); adefossez/HTDemucs-6s at 3c5ee475be622df764938de97e4281a7b07ffa58 holds 5c90dfd2.safetensors (54885744 B, sha256 d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411; upstream .th 5c90dfd2-34c22ccb). Both ungated; the class and init args are JSON in the safetensors metadata.
+    ts: "2026-11-10T06:44:08Z"
+    host: yoga
+
+events:
+  - packet_id: demucs-weights-are-converted-to-safetensors-registered-restricted-and-audio-separate-refuses-without-acknowledgement
+    event:
+      type: progress
+      ts: "2026-11-10T06:44:08Z"
+      host: yoga
+      summary: |-
+        status 'Coordinator ruling 2026-11-10: keep ALLOWED_SUFFIXES; convert the Demucs weights to safetensors in a one-off auditable step, pin each converted file by sha256 in the register next to the upstream .th hash it came from, and load only the safetensors. weights_only=True is not a substitute (a weaker gate).
+        Operator ruling 2026-11-09: both models are treated as non-commercial behind accept-licence per project (no standing grant). The weights' licence is unstated; the register's licence text is the maintainer's README statement ("The license of the weights is not clear: MusDB contains some data that were only usable for research purpose"; htdemucs_6s "was trained only on Meta internal dataset, which likely means CC-NC-BY license is applicable"), hashed at a pinned revision. Upstream files: htdemucs 955717e8-8726e21a.th, htdemucs_6s 5c90dfd2-34c22ccb.th.
+        
+        
+        [2026-11-10T06:44:08Z yoga] RULING 2026-11-10 (coordinator macuahuitl-fedora, on yoga's proposal), criterion 1 amended: each register row pins the MAINTAINER'S Hub safetensors (repo, revision, file, sha256), and the context records the upstream .th id it corresponds to. No conversion step. The optional unpickle audit is skipped: the maintainer's own safetensors at a pinned revision and hash is the provenance, and a pickle does not come onto any machine, even sandboxed. Hub state read 2026-11-10 via the API (?blobs=true): adefossez/HTDemucs at cbc8a9b1a87023b7fd74e7b3412e6321c0eab003 holds 955717e8.safetensors (84025440 B, sha256 d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd; upstream .th 955717e8-8726e21a); adefossez/HTDemucs-6s at 3c5ee475be622df764938de97e4281a7b07ffa58 holds 5c90dfd2.safetensors (54885744 B, sha256 d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411; upstream .th 5c90dfd2-34c22ccb). Both ungated; the class and init args are JSON in the safetensors metadata.' (not terminal) with evidence_refs: coordinator ruling relayed 2026-11-10; Hub API read of adefossez/HTDemucs and HTDemucs-6s

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-open-pr-through-the-tray-2065-ccx9
+    order: 2065-ccx9
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, tray, github]
+    estimated_hours: 4
+    title: "A forge-side 'open PR' request through the tray; no gh token in the forge"
+    context: "The forge is credential-free by design. The tray opens the PR with the operator's host-side credential after showing it to the operator. Reported 2026-11-09 by the demon_attack forge session (demon-attack-3e). Packet: plan/issues/forge-open-pr-through-the-tray-2026-11-09.md."
+    exit_criteria:
+      - "A forge agent opens a draft PR for a pushed work ref with no credential in the forge, and the tray shows the request first."
+    verifiable_closure: "A forge agent opens a draft PR for a pushed work ref with no credential in the forge, and the tray shows the request first."
+    unscoreable: 'none.'
+    next_action: "Design the control-wire request and the tray approval surface."
+    provenance: "Filed at macuahuitl-fedora's request (2026-11-09) by tlatoanis-macbook-air claude, from the demon-attack-3e forge session's report."
+    events:
+    - type: filed
+      ts: '2026-11-09T19:08:22Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the demon-attack-3e forge gap report"

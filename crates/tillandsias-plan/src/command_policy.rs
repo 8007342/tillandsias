@@ -501,8 +501,57 @@ fn is_consent_grant(argv: &[String]) -> bool {
     w.len() >= 3 && w[0] == "policy" && w[1] == "consent" && w[2] == "grant"
 }
 
+/// The argv a launch wrapper runs: `nohup`, `setsid`, `exec`, `command`,
+/// `sudo [opts]`, `env [opts] [NAME=value]…` and `timeout [opts] <duration>`
+/// are skipped, so a sign-in started in the background (`nohup tillandsias
+/// --github-login &`, the 2028-j4a7 incident's shape) is still seen.
+fn unwrap_launcher(argv: &[String]) -> &[String] {
+    let mut i = 0;
+    while let Some(a) = argv.get(i) {
+        match program_name(a).as_str() {
+            "nohup" | "setsid" | "exec" | "command" | "sudo" | "env" => {
+                i += 1;
+                while argv
+                    .get(i)
+                    .is_some_and(|w| w.starts_with('-') || w.contains('='))
+                {
+                    i += 1;
+                }
+            }
+            "timeout" => {
+                i += 1;
+                while let Some(w) = argv.get(i).filter(|w| w.starts_with('-')) {
+                    // -k/-s and --kill-after/--signal take the next word
+                    i += if matches!(w.as_str(), "-k" | "-s" | "--kill-after" | "--signal") {
+                        2
+                    } else {
+                        1
+                    };
+                }
+                i += 1; // the duration
+            }
+            _ => break,
+        }
+    }
+    argv.get(i..).unwrap_or(&[])
+}
+
+/// copilot options that take the next word, so `copilot -p login` is a
+/// prompt, not the login subcommand.
+const COPILOT_VALUE_FLAGS: &[&str] = &[
+    "-p",
+    "--prompt",
+    "--model",
+    "--agent",
+    "--add-dir",
+    "--log-dir",
+    "--log-level",
+    "--config-dir",
+];
+
 fn is_credential_mutation(argv: &[String]) -> Option<&'static str> {
-    let prog = program_name(&argv[0]);
+    let argv = unwrap_launcher(argv);
+    let prog = program_name(argv.first()?);
     let args = &argv[1..];
     match prog.as_str() {
         "gh" => {
@@ -524,6 +573,32 @@ fn is_credential_mutation(argv: &[String]) -> Option<&'static str> {
             let w = positional_words(args, &[]);
             if w.first() == Some(&"login") {
                 return Some("vault");
+            }
+        }
+        // ORDER 2063-nfag: the vendor CLI's own sign-in. `copilot login`
+        // stores its token in a plaintext file under COPILOT_HOME when no
+        // credential store exists (every forge); the operator signs in with
+        // `tillandsias --copilot-login`, which harvests straight to Vault.
+        "copilot" => {
+            let w = positional_words(args, COPILOT_VALUE_FLAGS);
+            if matches!(w.first(), Some(&"login") | Some(&"logout")) {
+                return Some("copilot");
+            }
+        }
+        // ORDER 2028-j4a7: the launcher's and the trays' sign-in flags
+        // (--github-login, --codex-login, --claude-login, --cloudflare-login,
+        // --antigravity-login, ... and their --*-logout). Matched by shape so a
+        // new provider's flag is covered the day it is added.
+        "tillandsias"
+        | "tillandsias-tray"
+        | "tillandsias-macos-tray"
+        | "tillandsias-windows-tray" => {
+            let sign_in = args.iter().take_while(|a| a.as_str() != "--").any(|a| {
+                let flag = a.split_once('=').map_or(a.as_str(), |(f, _)| f);
+                flag.starts_with("--") && (flag.ends_with("-login") || flag.ends_with("-logout"))
+            });
+            if sign_in {
+                return Some("tillandsias");
             }
         }
         _ => {}
@@ -701,10 +776,11 @@ pub fn floor_decide(req: &Request, protected: &[String]) -> Option<Decision> {
     }
     if let Some(tool) = is_credential_mutation(&req.argv) {
         let remedy = match tool {
-            "gh" => {
-                "GitHub tokens arrive only from the operator, on stdin: \
-                     `tillandsias --github-login --with-token` (never an agent; a re-auth on \
-                     one host evicts the token on every other, 1025-a896); the read-only \
+            "gh" | "tillandsias" | "copilot" => {
+                "agents never start or relay a sign-in flow: the OPERATOR signs in from \
+                     the tray (2028-j4a7). Stop and report the credential step blocked; do \
+                     not run the login, read its device code or relay it. A re-auth on one \
+                     host evicts the token on every other (1025-a896); the read-only \
                      `gh auth status` is allowed"
             }
             "git" => {
@@ -2035,6 +2111,89 @@ mod tests {
             tok(&["gh", "auth", "status"], HostKind::Forge),
             "ok:policy:allow:default"
         );
+    }
+
+    /// ORDER 2028-j4a7. An agent ran `tillandsias-tray --github-login` and relayed
+    /// the device code; every sign-in flow is the operator's, from the tray.
+    #[test]
+    fn agent_run_sign_in_flows_are_denied_and_read_only_calls_are_not() {
+        for a in [
+            &["tillandsias-tray", "--github-login"][..],
+            &["tillandsias", "--github-login", "--with-token"],
+            &["./target/release/tillandsias", "--codex-login"],
+            &["tillandsias", "--claude-login"],
+            &["tillandsias", "--cloudflare-login"],
+            &["tillandsias", "--cloudflare-logout"],
+            &["tillandsias", "--huggingface-login"],
+            &["tillandsias", "--huggingface-logout"],
+            &["tillandsias", "--antigravity-login"],
+            &["TILLANDSIAS-WINDOWS-TRAY.EXE", "--github-login"],
+            &["tillandsias-macos-tray", "--github-login=x"],
+            &["gh", "auth", "login"],
+            &["gh", "auth", "refresh", "-s", "repo"],
+            &["nohup", "tillandsias", "--github-login"],
+            &["env", "FOO=1", "gh", "auth", "login"],
+            &[
+                "timeout",
+                "-k",
+                "5",
+                "60",
+                "tillandsias-tray",
+                "--github-login",
+            ],
+        ] {
+            for k in [HostKind::Forge, HostKind::BareMetal] {
+                assert_eq!(
+                    tok(a, k),
+                    "refused:policy:no-credential-mutation",
+                    "{a:?} on {k:?}"
+                );
+            }
+        }
+        for a in [
+            &["gh", "auth", "status"][..],
+            &["gh", "pr", "view", "1"],
+            &["tillandsias", "--version"],
+            &["tillandsias", "--diagnose"],
+            &["tillandsias-plan", "status", "2028-j4a7"],
+        ] {
+            assert_eq!(tok(a, HostKind::Forge), "ok:policy:allow:default", "{a:?}");
+        }
+    }
+
+    /// ORDER 2063-nfag. The copilot lane's sign-in is the operator's
+    /// `tillandsias --copilot-login` (device code, token straight to Vault).
+    /// An agent running the vendor CLI's own `copilot login` would leave the
+    /// token in a plaintext file under COPILOT_HOME, so it is refused too;
+    /// running copilot itself is not.
+    #[test]
+    fn an_agent_run_copilot_login_is_denied_and_running_copilot_is_not() {
+        for a in [
+            &["tillandsias", "--copilot-login"][..],
+            &["copilot", "login"],
+            &["copilot", "login", "--device-code"],
+            &["/usr/local/bin/copilot", "login", "--with-token"],
+            &["copilot", "logout"],
+            &["nohup", "copilot", "login"],
+            &["env", "COPILOT_HOME=/tmp/x", "copilot", "login"],
+        ] {
+            for k in [HostKind::Forge, HostKind::BareMetal] {
+                assert_eq!(
+                    tok(a, k),
+                    "refused:policy:no-credential-mutation",
+                    "{a:?} on {k:?}"
+                );
+            }
+        }
+        for a in [
+            &["copilot", "--version"][..],
+            &["copilot", "-p", "explain login flows"],
+            &["copilot", "-p", "login"],
+            &["copilot", "help", "environment"],
+            &["copilot", "--resume"],
+        ] {
+            assert_eq!(tok(a, HostKind::Forge), "ok:policy:allow:default", "{a:?}");
+        }
     }
 
     #[test]

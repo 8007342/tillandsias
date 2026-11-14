@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-local-vision-model-is-not-used-as-a-visual-fault-pre-filter-until-one-is-measured-fit
+    order: 2050-fs44
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [research, inference, vision, forge]
+    estimated_hours: 3
+    title: |
+      The local vision model qwen2.5vl:7b is not fit as a visual-fault pre-filter (every flag false, every real fault missed); evaluate a stronger local VLM against a labelled set, or drop that use
+    context: |
+      MEASURED in a forge client batch (relayed by coordinator macuahuitl-fedora, 2026-11-08). Used as a pre-filter for figure faults, qwen2.5vl:7b gave false flags on every frame it flagged and missed every real figure fault, in two runs: 8 of 8 and 17 of 17 judgments false. A pre-filter that is always wrong costs review time and gives false assurance, so its current verdict is NOT FIT for this use.
+      This is the model 1990-vmpn provisions for forge image review. That row is about provisioning, not fitness; whatever it provisions should not be offered as a fault pre-filter until a model passes the bar below.
+    exit_criteria:
+      - 'a labelled set of frames (real faults and clean frames, from the measured batches, no client content committed: hashes and labels only, or a synthetic equivalent) and a scoring script give precision and recall for a model on it'
+      - 'qwen2.5vl:7b is scored on it and the result recorded (expected: unfit), and at least one stronger local VLM that fits the GPU tier is scored the same way'
+      - 'a decision is recorded: adopt the model that clears a stated bar (precision and recall both stated before scoring), or drop the visual-fault pre-filter use and say so where forge agents read their tools'
+    verifiable_closure: 'the scoring script run on the labelled set prints precision and recall for each model scored, and the decision row cites those numbers'
+    unscoreable: 'needs GPU-tier hardware and a labelled frame set; the decision is a judgement against a bar set before scoring.'
+    next_action: 'Collect the measured batches into a labelled set (hashes and labels), then score qwen2.5vl:7b to reproduce the finding.'
+    provenance: forge client batch via coordinator macuahuitl-fedora 2026-11-08; filed by lenovinha.
+    depends_on: []
+    related: [1990-vmpn]
+    events:
+      - {type: filed, ts: '2026-11-08T06:23:19Z', host: lenovinha, summary: filed research p2 ready at the coordinator's request; qwen2.5vl 7b measured 8 of 8 and 17 of 17 false}
+  - packet_id: the-cloudflare-tools-name-a-build-one-way-and-accept-both-names
+    order: 2051-cbid
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [cloudflare, mcp, forge]
+    estimated_hours: 1
+    title: |
+      The Cloudflare tools name a build two ways: cloudflare.builds_list returns build_uuid, and the build tools take build_id; name one and accept both
+    context: |
+      MEASURED in a forge client batch (relayed by coordinator macuahuitl-fedora, 2026-11-08): an agent copied build_uuid from builds_list into the build lookup and had to discover the build_id name. In crates/tillandsias-headless/src/cloudflare_mcp.rs the argument is build_id (Arg::BuildId) while the list passes Cloudflare's build_uuid through unchanged.
+      NOTE, upstream and not this row's to fix: the Workers Builds queue waited about 7 minutes before a build started in the same batch. There is no cloud-build cheatsheet to record it on (cheatsheets/cloud holds free-tier limits and Workers static assets only), so it is recorded here.
+    exit_criteria:
+      - 'one name is the documented one in every tool schema and result (a build listed by builds_list shows that name)'
+      - 'the build tools accept both build_id and build_uuid; given both with different values they refuse with a one-line error naming both'
+      - 'RED FIRST: a test passes the build_uuid from builds_list to the build lookup and fails on the pre-fix tree'
+    verifiable_closure: 'the cloudflare_mcp tests: builds_list then a build lookup with the listed field name succeeds, with either name, against the fake Cloudflare'
+    unscoreable: 'none.'
+    provenance: forge client batch via coordinator macuahuitl-fedora 2026-11-08; filed by lenovinha.
+    depends_on: []
+    related: []
+    events:
+      - {type: filed, ts: '2026-11-08T06:23:19Z', host: lenovinha, summary: filed p3 ready at the coordinator's request; builds queue wait noted}

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 from a smoke reply of tillandsias-yoga-forge. Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-host-tools-index-names-studio-key-footage-to-a-forge-whose-tools-list-does-not-carry-it
+    order: 2033-khsj
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [mcp, agent, ux]
+    estimated_hours: 1
+    title: "The host-tools index tells a forge agent about studio.key_footage even when tools/list does not expose it"
+    context: |
+      Measured 2026-11-08T00:44Z by the forge agent on yoga (tillandsias-yoga-forge, linux-next 7d18c6e41): the server instructions (host_tools grouped index, the studio.* row's starts text) say studio.run_workflow and studio.key_footage queue GPU work, but the forge's tools/list has no studio_key_footage. mcp_socket's tools/list pushes studio_key::descriptor() only when studio_key::enabled(project, instance) holds (the CorridorKey lane is gated), while the index text is unconditional. An agent told about a tool it cannot call either fails the call or asks the operator to run something.
+    exit_criteria:
+      - "A cargo test drives initialize and tools/list on a lane where studio_key::enabled is false and asserts the instructions do not name studio.key_footage, or name it together with the condition that enables it; on a lane where it is true both name it. Pre-fix result: FAILS, the instructions name it while tools/list omits it."
+    verifiable_closure: "A cargo test drives initialize and tools/list on a lane where studio_key::enabled is false and asserts the instructions do not name studio.key_footage, or name it together with the condition that enables it; on a lane where it is true both name it. Pre-fix result: FAILS, the instructions name it while tools/list omits it."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Make host_tools::instructions take the lane's enabled set (or append the enabling condition to the key_footage mention); write the two-lane test first.
+    provenance: |
+      SMOKE-REPLY from tillandsias-yoga-forge to yoga, 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T00:45:32Z"
+        host: yoga
+        summary: "filed from the forge agent's smoke reply"

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: glitch-detector-reports-nothing-on-percussive-controls-and-still-catches-planted-faults
+    field: status
+    value: completed
+    ts: "2026-11-10T13:14:27Z"
+    host: yoga
+
+events:
+  - packet_id: glitch-detector-reports-nothing-on-percussive-controls-and-still-catches-planted-faults
+    event:
+      type: completed
+      ts: "2026-11-10T13:14:27Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: reproduced on trunk 5460adea3 (yoga, 2026-11-10): tillandsias-plan script run scripts/lua/test-audio-studio-glitches.lua -> ok:audio-studio-glitches:23-arms; arms red against pre-fix audio-tool.py measured on #1062
+  - packet_id: glitch-detector-reports-nothing-on-percussive-controls-and-still-catches-planted-faults
+    event:
+      type: note
+      ts: "2026-11-10T13:14:27Z"
+      host: yoga
+      summary: |-
+        landed by #1062 at eb8971068

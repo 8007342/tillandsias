@@ -67,6 +67,16 @@
 # was computed over the full 270,086,372-byte object on 2026-11-02.
 # The licence hash is the SPDX CC-BY-4.0 text.
 #
+# Demucs (2068-eeti, 2055-d9sa): licence id demucs-weights-unstated. The
+# weights' licence is UNSTATED; the text the obligations were read from is the
+# maintainer's README "License" section, and licence_sha256 hashes that README
+# whole at github.com/adefossez/demucs commit 829d21890023800713e5dd231c67e43ecc06069b
+# (2026-10-26, read 2026-11-10). Operator ruling 2026-11-09: both models are
+# non-commercial behind accept-licence per project, no standing grant. The rows
+# are the maintainer's own safetensors on the Hub (coordinator ruling
+# 2026-11-10); the upstream .th pickles are never fetched. Generated from
+# images/audio-studio/weights.tsv, which must agree.
+#
 #name	repo	revision	file	sha256	spdx	gated	card	obligations	licence_sha256
 CorridorKey-2.0	nikopueringer/CorridorKey2.0	cf44a8db3f024bb49fd59daa408848ccf05f7477	weights/corridorkey_v2.safetensors	c43596de98cc8866d577c8a9f9ea239acdf3f7a130ff24e25db4375a50590436	corridor-key-licence-2.0	false	https://huggingface.co/nikopueringer/CorridorKey2.0	attribution{CorridorKey};notice;share-alike;non-commercial;no-redistribution;field-of-use;seat-or-revenue-threshold{US $20,000,000 gross revenue: a seat per user}	c92ce56f64162b231c7ce08ce3ed7d8cae15f01a560ca05a8e8db67878eb0065
 CorridorKey-2.0	nikopueringer/CorridorKey2.0	cf44a8db3f024bb49fd59daa408848ccf05f7477	weights/foundation_stats.safetensors	924783ceddd293fd470126332ce328166faea6c4c8d2f36402d5b95187166af3	corridor-key-licence-2.0	false	https://huggingface.co/nikopueringer/CorridorKey2.0	attribution{CorridorKey};notice;share-alike;non-commercial;no-redistribution;field-of-use;seat-or-revenue-threshold{US $20,000,000 gross revenue: a seat per user}	c92ce56f64162b231c7ce08ce3ed7d8cae15f01a560ca05a8e8db67878eb0065
@@ -101,3 +111,5 @@ C-RADIOv4-SO400M	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad
 C-RADIOv4-SO400M	nvidia/C-RADIOv4-SO400M	c0457f5dc26ca145f954cd4fc5bb6114e5705ad8	vfms/cradio/C-RADIOv4-SO400M/vitdet.py	5b83b4c7b90b797d854a6da2fd4093ce9210a52533d3f7ba6bf505793b6c68c3	nvidia-open-model-license	false	https://huggingface.co/nvidia/C-RADIOv4-SO400M	attribution{Licensed by NVIDIA Corporation under the NVIDIA Open Model License};notice;use-restriction-passdown;field-of-use;review{licence text not fetched from this host}	pending:https://developer.download.nvidia.com/licenses/nvidia-open-model-license-agreement-june-2024.pdf
 MoGe-2-ViT-B	Ruicheng/moge-2-vitb-normal	ca5f0e07ff01d3e5a364c1d954ed12ee1814b368	vfms/moge/model.pt	16b8110e86d5dc5a849db120ca96ef3a223fd30b0c9146d1d81db504073da5f6	mit	false	https://huggingface.co/Ruicheng/moge-2-vitb-normal	notice	ad7d951c80c5fc2b2bce035f2041bc0a0dbf9028c8ecc4c9a8e1fba8130b6b59
 RVM-small	google-deepmind/representations4d	md5:ZJb6kj8+tasiJbVeplXu7Q==	vfms/rvm/pretrain_rvm_small16_256_204031069.npz	8821ba9f5d983b9a3746bb5fe86b9c2ea834fe9985ab7b02438b917438bf2ede	cc-by-4.0	false	https://github.com/google-deepmind/representations4d	attribution;notice	d557539df68e771cc1eedcc91d13f70fca930e508d11eedcafa4b15db49e3744
+htdemucs	adefossez/HTDemucs	cbc8a9b1a87023b7fd74e7b3412e6321c0eab003	955717e8.safetensors	d9fa14133cfcc034a6758923bb3a8ca9f8dfd0b582134643bbf83f72c17576dd	demucs-weights-unstated	false	https://huggingface.co/adefossez/HTDemucs	attribution{Demucs, Alexandre Défossez};non-commercial;review{the weights licence is unstated by the maintainer: research-only MusDB data and Meta internal data}	2abed9c9af52efd786e5f1f04f50e60b7f0dd754eb773df24ef7ebd045706324
+htdemucs_6s	adefossez/HTDemucs-6s	3c5ee475be622df764938de97e4281a7b07ffa58	5c90dfd2.safetensors	d2a1745f0744721f6b8ca5bf469b67c651ea5ed1b52998cab033b2158609d411	demucs-weights-unstated	false	https://huggingface.co/adefossez/HTDemucs-6s	attribution{Demucs, Alexandre Défossez};non-commercial;review{the weights licence is unstated by the maintainer: research-only MusDB data and Meta internal data}	2abed9c9af52efd786e5f1f04f50e60b7f0dd754eb773df24ef7ebd045706324

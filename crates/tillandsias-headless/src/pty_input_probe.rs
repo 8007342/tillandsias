@@ -166,11 +166,12 @@ pub fn probe_process_group(pgid: i32) -> InputState {
         SyscallStop::Running => InputState::NotBlocked,
         SyscallStop::Unavailable => InputState::Unknown,
         SyscallStop::Blocked { number, arg0 } => {
-            // `libc::SYS_read` is resolved per-architecture at compile time —
-            // 0 on x86-64 but 63 on aarch64, and this guest runs on both.
-            // Hardcoding 0 would have made the probe silently useless on ARM,
-            // in the NotBlocked direction where nothing would report it.
-            if number != libc::SYS_read {
+            // The syscall numbers are resolved per-architecture at compile
+            // time (`read` is 0 on x86-64 but 63 on aarch64, and this guest
+            // runs on both). Hardcoding them would have made the probe
+            // silently useless on ARM, in the NotBlocked direction where
+            // nothing would report it.
+            if !reads_its_first_fd(number) {
                 return InputState::NotBlocked;
             }
             if arg0 < 0 {
@@ -191,6 +192,27 @@ pub fn probe_process_group(pgid: i32) -> InputState {
             }
         }
     }
+}
+
+/// The syscalls that read input from the descriptor in their FIRST argument.
+///
+/// Order 2062-qsga. `read` alone was the whole set until GNU coreutils 9.11's
+/// `cat` was MEASURED on yoga (2026-11-08) blocked on a PTY in `splice`
+/// (x86-64 syscall 275, `fd_in` 0): the probe called it NotBlocked and every
+/// Linux gate with that coreutils went red. Any reader at a prompt is waiting
+/// for input whichever read-family call it chose, so all of them count; the fd
+/// still decides (a pipe, socket or file stays NotBlocked).
+#[cfg(target_os = "linux")]
+pub fn reads_its_first_fd(number: i64) -> bool {
+    [
+        libc::SYS_read,
+        libc::SYS_readv,
+        libc::SYS_pread64,
+        libc::SYS_preadv,
+        libc::SYS_preadv2,
+        libc::SYS_splice,
+    ]
+    .contains(&number)
 }
 
 /// Is this `/proc/<pid>/fd/<n>` link target a pseudo-terminal?
@@ -229,6 +251,35 @@ mod tests {
         assert_eq!(parse_syscall_line("-1 0x0 0x0"), SyscallStop::Unavailable);
         assert_eq!(parse_syscall_line(""), SyscallStop::Unavailable);
         assert_eq!(parse_syscall_line("garbage"), SyscallStop::Unavailable);
+    }
+
+    /// 2062-qsga: every read-family syscall counts as reading its first fd,
+    /// including the `splice` coreutils 9.11's `cat` blocks in (x86-64 275,
+    /// measured), and a wait that is not a read never does.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn every_read_family_syscall_reads_its_first_fd_and_a_wait_does_not() {
+        for n in [
+            libc::SYS_read,
+            libc::SYS_readv,
+            libc::SYS_pread64,
+            libc::SYS_preadv,
+            libc::SYS_preadv2,
+            libc::SYS_splice,
+        ] {
+            assert!(reads_its_first_fd(n), "syscall {n}");
+        }
+        #[cfg(target_arch = "x86_64")]
+        assert!(reads_its_first_fd(275), "the measured splice line");
+        // NEGATIVE CONTROL: sleeping and polling are not reading.
+        for n in [
+            libc::SYS_clock_nanosleep,
+            libc::SYS_ppoll,
+            libc::SYS_pselect6,
+            libc::SYS_write,
+        ] {
+            assert!(!reads_its_first_fd(n), "syscall {n}");
+        }
     }
 
     /// Which descriptor targets count as a terminal. A pipe or a socket must

@@ -1,5 +1,11 @@
 //! ORDER 1375-xxzj — a forge is a cgroup BUDGET, not a ceiling.
 //!
+//! SUPERSEDED FOR FORGES by the operator ruling of 2026-11-13: "Let them hog
+//! all available resources freely. Let's see how the Linux kernel handles
+//! it." A forge's [`ForgeBudget::podman_args`] now writes no memory.max,
+//! memory.high, memory.swap.max or pids cap (only memory.low). The tiers
+//! below still size siblings ([`ForgeBudget::sibling`]) and memory.low.
+//!
 //! Design: plan/issues/forge-memory-swap-architecture-design-2026-09-26.md
 //! §3 and §6. A forge gets `memory.max` (the hard OOM backstop), `memory.high`
 //! (throttle-and-reclaim, the kernel's main control, where tmpfs pages spill
@@ -34,6 +40,11 @@ pub struct ForgeBudget {
     pub memory_low_mib: u64,
     pub swap_max_mib: u64,
     pub pids_max: u32,
+    /// Operator ruling 2026-11-13 (forge-uncapped-resources): a FORGE is not
+    /// capped — no memory.max, memory.high, memory.swap.max or pids.max; the
+    /// kernel arbitrates. Only [`Self::sibling`] budgets set this, so browser
+    /// windows and previews keep their caps below the forge.
+    pub capped: bool,
 }
 
 const GIB: u64 = 1024;
@@ -82,6 +93,7 @@ impl ForgeBudget {
             memory_low_mib: low,
             swap_max_mib: swap,
             pids_max: pids_max_for(nproc),
+            capped: false,
         }
     }
 
@@ -122,12 +134,28 @@ impl ForgeBudget {
             memory_low_mib: 0,
             swap_max_mib: (self.swap_max_mib * percent.min(100) / 100).max(64),
             pids_max,
+            capped: true,
         }
     }
 
     /// The podman flags that set this budget, each cgroup file written
     /// exactly (see the module note on `--memory-swap`).
+    ///
+    /// An uncapped (forge) budget writes `max` to memory.high and
+    /// memory.swap.max, `--pids-limit=-1` (pids.max=max, overriding the
+    /// containers.conf default) and no `--memory` (memory.max stays max). It
+    /// keeps `memory.low`, a protection rather than a cap. Measured
+    /// 2026-11-13 on macuahuitl: these flags leave `max` on BOTH the libpod
+    /// scope and its nested `container` cgroup, where crun writes the limits.
     pub fn podman_args(&self) -> Vec<String> {
+        if !self.capped {
+            return vec![
+                format!("--memory-reservation={}m", self.memory_low_mib),
+                "--cgroup-conf=memory.high=max".to_string(),
+                "--cgroup-conf=memory.swap.max=max".to_string(),
+                "--pids-limit=-1".to_string(),
+            ];
+        }
         vec![
             format!("--memory={}m", self.memory_max_mib),
             format!("--memory-reservation={}m", self.memory_low_mib),
@@ -246,18 +274,43 @@ mod tests {
         assert_eq!(pids_max_for(64), 16384);
     }
 
+    // @trace spec:forge-hot-cold-split (Scenario "a forge argv carries no memory or pids cap")
+    /// Operator ruling 2026-11-13: a forge budget emits NO memory.max,
+    /// memory.high, memory.swap.max or pids cap. Fails on the pre-ruling code,
+    /// which emitted --memory=6144m and --pids-limit=8192 here.
     #[test]
-    fn swap_is_never_expressed_through_memory_swap() {
+    fn a_forge_budget_is_uncapped() {
         let args = ForgeBudget::for_host(16, 13_811).podman_args();
+        assert_eq!(
+            args,
+            vec![
+                "--memory-reservation=2048m".to_string(),
+                "--cgroup-conf=memory.high=max".to_string(),
+                "--cgroup-conf=memory.swap.max=max".to_string(),
+                "--pids-limit=-1".to_string(),
+            ]
+        );
+        for a in &args {
+            assert!(
+                !a.starts_with("--memory=") && !a.starts_with("--memory-swap"),
+                "{a}"
+            );
+        }
+    }
+
+    /// Siblings keep their caps, each cgroup file written exactly.
+    #[test]
+    fn a_sibling_stays_capped_without_memory_swap() {
+        let args = ForgeBudget::for_host(16, 13_811)
+            .sibling(50, 256)
+            .podman_args();
         assert!(
             args.iter().all(|a| !a.starts_with("--memory-swap")),
             "{args:?}"
         );
-        assert!(args.contains(&"--cgroup-conf=memory.swap.max=8589934592".to_string()));
-        assert!(args.contains(&"--cgroup-conf=memory.high=5475663872".to_string()));
-        assert!(args.contains(&"--memory=6144m".to_string()));
-        assert!(args.contains(&"--memory-reservation=2048m".to_string()));
-        assert!(args.contains(&"--pids-limit=8192".to_string()));
+        assert!(args.contains(&"--memory=3072m".to_string()), "{args:?}");
+        assert!(args.contains(&"--cgroup-conf=memory.swap.max=4294967296".to_string()));
+        assert!(args.contains(&"--pids-limit=256".to_string()));
     }
 
     #[test]

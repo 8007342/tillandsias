@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-10 at the coordinator's direction (macuahuitl-fedora), from a failure the yolanda forge found. Code is cited by symbol, never by line.
+packets:
+  - packet_id: preview-tls-publish-test-owns-its-tmpfs-home-instead-of-riding-the-host-temp-dir
+    order: 2075-ljwp
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tests, preview, forge]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/local_web_preview.rs
+    title: "local_web_preview::tests::source_tuple_names_do_not_alias_and_tls_publish_is_loopback_only fails inside a forge (router_not_ready: no tmpfs to hold the preview leaf key): with_stub points the runtime dir and the shm root at the std temp dir, which is tmpfs on a Fedora host and disk in a forge"
+    context: |
+      Found by the yolanda forge (macuahuitl-fedora relay 2026-11-10): under the tray,listen-vsock feature set the test panics at its Linux assertion "Linux lost the tmpfs home for preview leaves: Err(router_not_ready: no tmpfs to hold the preview leaf key; it is never written to disk (1901-bnif))". The production refusal is correct; the TEST's premise rode on the substrate: with_stub sets XDG_RUNTIME_DIR and TILLANDSIAS_TEST_PREVIEW_TLS_SHM to tempfile::tempdir(), i.e. /tmp, tmpfs on Fedora and disk in a forge.
+      Reproduced on yoga 2026-11-10 by simulating the forge's disk temp dir: toolbox run ... env TMPDIR=<a btrfs dir under target/> cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias -- source_tuple_names_do_not_alias fails with the same message; with TMPDIR=/tmp it passes.
+    exit_criteria:
+      - "The test passes with the std temp dir on disk (TMPDIR on btrfs) and on tmpfs, by giving the leaves a private tmpfs scratch under /dev/shm; inside a container with no tmpfs at all it skips with a named reason; on a host with no tmpfs it still fails. Pre-fix result: FAILS with TMPDIR on disk (router_not_ready)."
+    verifiable_closure: "cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias -- local_web_preview passes with TMPDIR on a disk directory and with TMPDIR=/tmp. Pre-fix result: FAILS with TMPDIR on disk, at the Linux tmpfs-home assertion."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: a cargo unit test, run by the gate's tray,listen-vsock suite; the simulated-forge run is the closure's measurement (1136-n8sh).
+    next_action: >
+      yoga: fix on work/2075-ljwp (the test takes a /dev/shm scratch as its shm root; named skip only inside a container without tmpfs).
+    provenance: |
+      macuahuitl-fedora relay 2026-11-10 (yolanda forge failure); yoga reproduction with TMPDIR on disk at trunk 5fc203864.
+    events:
+      - type: filed
+        ts: "2026-11-10T13:43:00Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; yoga takes it"

@@ -274,14 +274,24 @@ echo "$ENTITLE_DUMP" | grep -q 'com.apple.security.virtualization' \
 # cannot staple an archive, so stapling after packaging would silently produce
 # an un-stapled release that works only while Apple's notary service is
 # reachable — the kind of green that fails in someone else's airport lounge.
-if [[ "$SIGN_IDENTITY" != "-" && -n "${TILLANDSIAS_NOTARY_KEY:-}" \
+# ORDER 2031-z4rm: the .p8 path is TILLANDSIAS_NOTARY_KEY_FILE. It used to be
+# TILLANDSIAS_NOTARY_KEY, a name spelled like a credential although it holds a
+# path, which the Lua door's credential filter would drop. The old name is read
+# for one transition window, with a warning, so a Mac whose environment still
+# exports it keeps notarizing.
+NOTARY_KEY_FILE="${TILLANDSIAS_NOTARY_KEY_FILE:-}"
+if [[ -z "$NOTARY_KEY_FILE" && -n "${TILLANDSIAS_NOTARY_KEY:-}" ]]; then
+    NOTARY_KEY_FILE="$TILLANDSIAS_NOTARY_KEY"
+    say "warn: TILLANDSIAS_NOTARY_KEY is deprecated (2031-z4rm); export TILLANDSIAS_NOTARY_KEY_FILE instead"
+fi
+if [[ "$SIGN_IDENTITY" != "-" && -n "$NOTARY_KEY_FILE" \
       && -n "${TILLANDSIAS_NOTARY_KEY_ID:-}" && -n "${TILLANDSIAS_NOTARY_ISSUER:-}" ]]; then
     command -v xcrun >/dev/null || die "xcrun not in PATH (needed to notarize)"
     NOTARY_ZIP="$DIST/Tillandsias-notarize.zip"
     say "notarize: submitting (this waits for Apple's verdict)"
     ditto -c -k --keepParent "$APP" "$NOTARY_ZIP"
     if ! xcrun notarytool submit "$NOTARY_ZIP" \
-            --key "$TILLANDSIAS_NOTARY_KEY" \
+            --key "$NOTARY_KEY_FILE" \
             --key-id "$TILLANDSIAS_NOTARY_KEY_ID" \
             --issuer "$TILLANDSIAS_NOTARY_ISSUER" \
             --wait >&2; then
@@ -296,7 +306,7 @@ if [[ "$SIGN_IDENTITY" != "-" && -n "${TILLANDSIAS_NOTARY_KEY:-}" \
     spctl -a -vvv -t exec "$APP" >&2 || die "spctl assessment rejected the stapled app"
     say "notarize: accepted and stapled"
 elif [[ "$SIGN_IDENTITY" != "-" ]]; then
-    say "notarize: SKIPPED (identity set, but TILLANDSIAS_NOTARY_KEY/_KEY_ID/_ISSUER not all set)"
+    say "notarize: SKIPPED (identity set, but TILLANDSIAS_NOTARY_KEY_FILE/_KEY_ID/_ISSUER not all set)"
     say "          the app is Developer-ID signed but NOT notarized — Gatekeeper will still block a quarantined copy"
 fi
 

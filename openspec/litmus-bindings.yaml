@@ -326,6 +326,8 @@ specs:
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
+  - litmus:forge-lib-copies
+  - litmus:forge-languages
   - litmus:forge-lua-tooling
   - litmus:claude-launch-stability-shape
   - litmus:harness-curl-install-shape
@@ -340,6 +342,8 @@ specs:
   - litmus:forge-policy-binary-discoverability
   - litmus:forge-plan-binary-on-path
   - litmus:npm-harness-install-idempotent-shape
+  - litmus:forge-opencode-is-pinned
+  - litmus:forge-copilot-harness
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:provider-usage-limit
@@ -488,6 +492,7 @@ specs:
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
   - litmus:json-get-help-names-its-subset
+  - litmus:json-get-parity-binary-swap
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -518,6 +523,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-src-room
+  - litmus:forge-guard
   - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
@@ -592,6 +598,7 @@ specs:
   - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:git-mirror-ready-before-retry-push
   - litmus:git-mirror-warm-start-keeps-tracking-refs
+  - litmus:git-mirror-vault-sink-wait-is-an-event
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
   - litmus:mirror-relay-state
@@ -894,6 +901,7 @@ specs:
   - litmus:podman-web-launch-profile
   - litmus:podman-path-availability
   - litmus:opencode-vault-auth-content
+  - litmus:approval-broker-signs-an-action-bound-record
   coverage_ratio: 77
   last_verified: '2026-07-23'
 - spec_id: nix-builder
@@ -1013,6 +1021,9 @@ specs:
   - litmus:proxy-permissive-port-not-silently-unrouted
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
+  - litmus:proxy-allowlist-from-tiers
+  - litmus:proxy-tier-ports-live
+  - litmus:egress-declarations
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
@@ -1122,6 +1133,9 @@ specs:
   - litmus:web-audio-serving
   - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
+  - litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools
+  - litmus:audio-studio-tiers
+  - litmus:audio-studio-separates-stems-from-safetensors-only
   - litmus:a-studio-launch-fails-by-stage-within-a-bound
   - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
   - litmus:flutter-shim-falls-back-or-refuses-typed
@@ -1321,6 +1335,7 @@ specs:
   - litmus:observability-metrics-shape
   - litmus:runtime-bringup-step-timers
   - litmus:guest-container-metrics-wire-shape
+  - litmus:memory-stall-named
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: podman-secrets-integration
@@ -1350,6 +1365,7 @@ specs:
   - litmus:vault-github-token-capture-shape
   - litmus:codex-device-auth-shape
   - litmus:provider-device-auth-shape
+  - litmus:copilot-vault-auth
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex

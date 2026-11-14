@@ -412,8 +412,11 @@ fi
 # noticed — which is the condition the row names, not evidence against it.
 # Reports only: table length costs a long README, never a false verdict, and a
 # cut must never be refused over it.
-if [[ -x "$REPO_ROOT/scripts/check-ledger-distillation.sh" ]]; then
-    bash "$REPO_ROOT/scripts/check-ledger-distillation.sh" --ref HEAD >&2 || true
+# Ported to Lua by 1879-5jkt; it runs on the plan binary resolved above.
+if [[ -n "$_plan_bin" ]]; then
+    "$_plan_bin" script run "$REPO_ROOT/scripts/lua/check-ledger-distillation.lua" -- --ref HEAD >&2 || true
+else
+    echo "could-not-run:ledger-distillation:no-plan-binary" >&2
 fi
 
 echo "ok:release-preflight"

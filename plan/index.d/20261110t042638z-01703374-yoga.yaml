@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-restricted-weights-row-is-fetched-only-after-its-acknowledgement-through-the-model-hubs-tier
+    field: context
+    value: |-
+      FOUND 2026-11-10 by yoga while taking 2055-d9sa. licence_consent::admits_restricted gates a restricted row, but nothing downloads one: studio_key::call answers "weights_missing: ... fetched on this machine by the consent-gated fetch (order 1956-ecpb), never bundled" after the gate, and 1956-ecpb's criteria cover the gate only. The one fetcher, imagegen_models::ensure_files_registered, reads the permissive register only, and goes through ProxyTransport on the plain proxy port, not the model-hubs tier (build-proxy-allowlist.lua names 3134, the code uses 3128).
+      ALLOWED_SUFFIXES stays .safetensors and .gguf (coordinator ruling 2026-11-10): a pickle is never fetched or loaded.
+
+
+      [2026-11-10T04:26:38Z yoga] CRITERION 3 AMENDED 2026-11-10 (yoga, approved by macuahuitl-fedora): exit criterion 3 ("CorridorKey's studio_key::call reaches the job (not weights_missing) once its rows are fetched") is superseded by: "the fetcher writes each row to <models_dir>/<subdir>/<file>, the layout studio_key's missing_weights reads, proven on a fixture register". The shipped CorridorKey set cannot be admitted by any fetcher today. 29 C-RADIO rows carry licence_sha256 pending:, which admit_restricted_row never admits. 27 files are .py or .json, MoGe is model.pt (a pickle) and RVM is .npz, all outside ALLOWED_SUFFIXES. RVM is served from storage.googleapis.com, which is not in the model-hubs tier. That admissibility is order 2071-um56, held for the operator. Criteria 1 and 2 are unchanged.
+    ts: "2026-11-10T04:26:38Z"
+    host: yoga
+
+events:
+  - packet_id: a-restricted-weights-row-is-fetched-only-after-its-acknowledgement-through-the-model-hubs-tier
+    event:
+      type: progress
+      ts: "2026-11-10T04:26:38Z"
+      host: yoga
+      summary: |-
+        status 'FOUND 2026-11-10 by yoga while taking 2055-d9sa. licence_consent::admits_restricted gates a restricted row, but nothing downloads one: studio_key::call answers "weights_missing: ... fetched on this machine by the consent-gated fetch (order 1956-ecpb), never bundled" after the gate, and 1956-ecpb's criteria cover the gate only. The one fetcher, imagegen_models::ensure_files_registered, reads the permissive register only, and goes through ProxyTransport on the plain proxy port, not the model-hubs tier (build-proxy-allowlist.lua names 3134, the code uses 3128).
+        ALLOWED_SUFFIXES stays .safetensors and .gguf (coordinator ruling 2026-11-10): a pickle is never fetched or loaded.
+        
+        
+        [2026-11-10T04:26:38Z yoga] CRITERION 3 AMENDED 2026-11-10 (yoga, approved by macuahuitl-fedora): exit criterion 3 ("CorridorKey's studio_key::call reaches the job (not weights_missing) once its rows are fetched") is superseded by: "the fetcher writes each row to <models_dir>/<subdir>/<file>, the layout studio_key's missing_weights reads, proven on a fixture register". The shipped CorridorKey set cannot be admitted by any fetcher today. 29 C-RADIO rows carry licence_sha256 pending:, which admit_restricted_row never admits. 27 files are .py or .json, MoGe is model.pt (a pickle) and RVM is .npz, all outside ALLOWED_SUFFIXES. RVM is served from storage.googleapis.com, which is not in the model-hubs tier. That admissibility is order 2071-um56, held for the operator. Criteria 1 and 2 are unchanged.' (not terminal) with evidence_refs: macuahuitl-fedora relay 2026-11-10 approving the criterion 3 amendment; licence-register-restricted.tsv at aebc92e31

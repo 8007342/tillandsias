@@ -4,6 +4,7 @@ members = [
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-embed",
+    "crates/tillandsias-enclave-fetch",
     "crates/tillandsias-headless",
     "crates/tillandsias-host-shell",
     "crates/tillandsias-exec",

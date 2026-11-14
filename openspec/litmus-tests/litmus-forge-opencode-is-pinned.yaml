@@ -1,0 +1,40 @@
+# @trace spec:default-image
+# @trace order:2027-e2cf
+#
+# Cold Linux lanes died on their model request with "EPROTO: The TLS handshake
+# failed" in 5 of 6 runs from 2026-10-31, and nothing in the proxy or forge
+# network path had changed. The forge installed opencode-ai@latest from npm, so
+# the client moved with no commit. npm's opencode-ai also stopped at 1.19.5
+# (2026-10-28), while upstream shipped 2.x as GitHub release tarballs. The
+# operator ruled (2026-11-08): off npm; LATEST on every launch, verified against
+# the release's published digest; last-good rollback; each lane refreshes only
+# its own harness (a claude lane installed agy and codex). Red before 2027-e2cf:
+# all 11 behaviour arms fail on trunk; MARKER and V2 (the operator follows the
+# upstream marker; v2 waits for 2042-44v9) fail on the highest-release resolver.
+name: litmus:forge-opencode-is-pinned
+spec: default-image
+phase: pre-build
+description: The forge resolves the latest opencode release (upstream's releases/latest marker, per the operator; a marked release that is not a full v1.y.z, such as a v2, a prerelease, a draft or another tag family, is refused before download until 2042-44v9 closes) from the GitHub API and verifies its tarball against the release's published sha256, failing closed on a mismatch or a missing digest. It records a version that passes the health probe as last-good and rolls back to last-good when a fresh version fails. It picks the baseline asset on a CPU without AVX2, does no network within the check TTL, and falls back to last-good when offline. Each lane refreshes only its own harness.
+severity: high
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, sed, tar, jq and sha256sum (or shasum); stub curl, uname and npm on a scratch PATH (no network)
+
+critical_path:
+  - step: "latest resolved, verified and recorded; baseline on no-avx2; digest mismatch refused; no digest refused; failed probe rolls back; current does not download; TTL does no network; offline uses last-good; lanes refresh only their own harness; unpinned npm named; require_opencode wired; the marked release installs; a marked v2 or non-full release is refused before download"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-opencode-is-pinned.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:forge-opencode-is-pinned:13 arms"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "thirteen arms: LATEST, BASELINE, TAMPER, NODIGEST, ROLLBACK, CURRENT, TTL, OFFLINE, LANE, UNPINNED, WIRED, MARKER, V2"
+  log_fields:
+    spec: "default-image"
+    test: "forge-opencode-is-pinned"
+
+rollback:
+  on_failure: "read the FAIL lines; the installer is _require_release_harness and the lane scoping is ensure_forge_harnesses <lane>, both in images/default/lib-common.sh"
+  command: "grep -nE '_require_release_harness|ensure_forge_harnesses' images/default/lib-common.sh"

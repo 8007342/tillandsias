@@ -427,8 +427,8 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # environment instead, forwarded by the TILLANDSIAS_ namespace above, so the
 # kill set is exactly this dispatch's tree and can never be another's.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-dispatch-reap.sh"
-TILLANDSIAS_WRAPPER_TOKEN="$(tillandsias_dispatch_token)"
-export TILLANDSIAS_WRAPPER_TOKEN
+TILLANDSIAS_WRAPPER_MARK="$(tillandsias_dispatch_token)"
+export TILLANDSIAS_WRAPPER_MARK
 
 # The reap itself lives in lib-dispatch-reap.sh, NOT here: scripts/
 # with-wsl2-builder.sh dispatches the same way and has the same defect, and
@@ -462,12 +462,12 @@ export TILLANDSIAS_WRAPPER_TOKEN
 # survivor can be found by hand.
 _tb_on_signal() {
     local rc=0
-    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN" || rc=$?
+    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_MARK" || rc=$?
     if [ "$rc" -ne 0 ]; then
         echo "[tillandsias-builder] refused:dispatch-reap-incomplete: could not confirm the container-side tree was reaped (rc=$rc)." >&2
         echo "  A CANCELLED GATE MAY STILL BE RUNNING in this checkout, holding the same tree." >&2
         echo "  Find it:  ps -eo pid,ppid,etime,cmd | grep 'build.sh --check'" >&2
-        echo "  Its processes carry TILLANDSIAS_WRAPPER_TOKEN=$TILLANDSIAS_WRAPPER_TOKEN" >&2
+        echo "  Its processes carry TILLANDSIAS_WRAPPER_MARK=$TILLANDSIAS_WRAPPER_MARK" >&2
         echo "  SIGTERM has been measured inert on a survivor; SIGKILL the pid and its children." >&2
     fi
     exit 143
@@ -499,7 +499,7 @@ ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 _tb_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
     # ASSERT HOST-SIDE AND HAND OVER OUR OWN PID. $$ here is the host-side shell
-    # that minted TILLANDSIAS_WRAPPER_TOKEN above and is about to dispatch, so
+    # that minted TILLANDSIAS_WRAPPER_MARK above and is about to dispatch, so
     # it is exactly the process whose readability decides whether the check can
     # see the class of process its verdict depends on. The check verifies our
     # environ is readable AND carries that token; if it cannot read us it says

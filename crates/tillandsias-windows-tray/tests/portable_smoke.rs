@@ -100,7 +100,7 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
 }
 
 /// Agents-first inversion (tray-ux, operator 2026-09-22): Cloud's children
-/// are the 7 agent rows in canonical order, each opening the project list.
+/// are the 8 agent rows in canonical order, each opening the project list.
 /// Leaf ids are unchanged (`project.cloud.<name>.<verb>`).
 #[test]
 fn agent_picker_lists_three_agents_in_canonical_order() {
@@ -139,6 +139,7 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
             "codex",
             "opencode",
             "antigravity",
+            "copilot",
             "opencode-web",
             "observatorium",
             "maintenance"

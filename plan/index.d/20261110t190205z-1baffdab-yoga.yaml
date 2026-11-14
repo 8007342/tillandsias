@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: glitch-detector-fixture-reads-real-kumbia-loop-excerpts-beside-its-synthetic-arms
+    field: next_action
+    value: |-
+      Ask kumbias-forge for the excerpt set (which loops, which loop points, and the render each came from); cut the excerpts inside the audio studio; add the files, their hashes and LICENSE.md; add the arms.
+
+
+      [2026-11-10T19:02:05Z yoga] 2026-11-10 excerpt set agreed with kumbias-forge (12 cuts, 13 files; 48 kHz stereo float WAV sources under its /work/tmp/audio/calib/). "wrap" = last 48000 samples + first 48000, loop point at 1.000 s. CLEAN (no loop_seam): 1 garden--low--rolled n=2425263 (v2 0.26x; a beat-grid click, keep only if inside); 2 bar--low--rolled n=2684272 (0.49x); 3 billiards--mid--rolled n=3225600 (0.22x); 4 loops/billiards--mid n=3225600 (0.23x, shipped Opus, 960-aligned); 5 bar-mid-src--xfade20 n=2608302 (0.05x); 6 garden-mid-src--xfade20 n=2351020 (0.07x; reports click+clipping, check if inside). FINDING: 7 planted/bar--low--offwrap n=2674265 loop_seam 6.90x; 8 planted/bar--low--rolled--click03 at 10.758 s +-1 s click; 9 planted/bar--low--rolled--dropout1ms at 20.300 s +-1 s dropout; 10 loops/comedor--low n=2972903 loop_seam 9.47x (shipped Opus codec step); 11 loops/salon--low n=2446726 (corrected; 2447040 is the unshipped 960-aligned length) loop_seam 3.95x; 12 billiards--mid--perc and --harm n=3225600 loop_seam 40.9x/60.4x (HPSS not circular). Re-check all at SEAM_FACTOR 1.5. LICENSE: Kumbia Kombat room themes; ACE-Step 1.5 XL turbo (Comfy-Org/ACE-Step-1.5 rev 371bb1680f8c, Apache-2.0), ComfyUI v0.40.0 via studio.run_workflow, pipeline 56.11.6.2; parents garden/bar/billiards 2026-11-07 (seeds 1054986036/1610602055/2355447521), salon 2026-11-07T20:54:06Z, comedor 2026-11-08T01:18:21Z; tiers via audio.transform 2026-11-09; game mix mixrs 2026-11-10. BLOCKER: the files are not on yoga; asked kumbias-forge to cut them in its studio and push excerpts + manifest to a kumbia-repo branch.
+    ts: "2026-11-10T19:02:05Z"
+    host: yoga
+
+events:
+  - packet_id: glitch-detector-fixture-reads-real-kumbia-loop-excerpts-beside-its-synthetic-arms
+    event:
+      type: progress
+      ts: "2026-11-10T19:02:05Z"
+      host: yoga
+      summary: |-
+        status 'Ask kumbias-forge for the excerpt set (which loops, which loop points, and the render each came from); cut the excerpts inside the audio studio; add the files, their hashes and LICENSE.md; add the arms.
+        
+        
+        [2026-11-10T19:02:05Z yoga] 2026-11-10 excerpt set agreed with kumbias-forge (12 cuts, 13 files; 48 kHz stereo float WAV sources under its /work/tmp/audio/calib/). "wrap" = last 48000 samples + first 48000, loop point at 1.000 s. CLEAN (no loop_seam): 1 garden--low--rolled n=2425263 (v2 0.26x; a beat-grid click, keep only if inside); 2 bar--low--rolled n=2684272 (0.49x); 3 billiards--mid--rolled n=3225600 (0.22x); 4 loops/billiards--mid n=3225600 (0.23x, shipped Opus, 960-aligned); 5 bar-mid-src--xfade20 n=2608302 (0.05x); 6 garden-mid-src--xfade20 n=2351020 (0.07x; reports click+clipping, check if inside). FINDING: 7 planted/bar--low--offwrap n=2674265 loop_seam 6.90x; 8 planted/bar--low--rolled--click03 at 10.758 s +-1 s click; 9 planted/bar--low--rolled--dropout1ms at 20.300 s +-1 s dropout; 10 loops/comedor--low n=2972903 loop_seam 9.47x (shipped Opus codec step); 11 loops/salon--low n=2446726 (corrected; 2447040 is the unshipped 960-aligned length) loop_seam 3.95x; 12 billiards--mid--perc and --harm n=3225600 loop_seam 40.9x/60.4x (HPSS not circular). Re-check all at SEAM_FACTOR 1.5. LICENSE: Kumbia Kombat room themes; ACE-Step 1.5 XL turbo (Comfy-Org/ACE-Step-1.5 rev 371bb1680f8c, Apache-2.0), ComfyUI v0.40.0 via studio.run_workflow, pipeline 56.11.6.2; parents garden/bar/billiards 2026-11-07 (seeds 1054986036/1610602055/2355447521), salon 2026-11-07T20:54:06Z, comedor 2026-11-08T01:18:21Z; tiers via audio.transform 2026-11-09; game mix mixrs 2026-11-10. BLOCKER: the files are not on yoga; asked kumbias-forge to cut them in its studio and push excerpts + manifest to a kumbia-repo branch.' (not terminal) with evidence_refs: kumbias-forge messages 2026-11-10 (excerpt list + salon n correction)

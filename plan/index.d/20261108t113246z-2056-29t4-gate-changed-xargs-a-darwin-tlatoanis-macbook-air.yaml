@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-changed-uses-gnu-xargs-a-so-on-darwin-every-path-reads-unmapped-and-the-1916-tsel-guard-fails-three-arms
+    order: 2056-29t4
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, macos, portability]
+    estimated_hours: 1
+    title: "gate-changed.sh pipes its source list through GNU-only xargs -a, so on darwin no input is extracted and ./build.sh --check fails the 1916-tsel guard"
+    context: "Measured 2026-11-08T11:32:46Z on tlatoanis-macbook-air (linux-next 29f2c719e, darwin 27.2.0): ./build.sh --check exits 1 at 'Checking --changed selects checks by their inputs (1916-tsel)', with arms 1, 2 and 9 failing as select:all reason=unmapped:data/a.txt. scripts/gate-changed.sh line 135 runs 'xargs -a \"$WORK/srcs\" grep ...' with 2>/dev/null and || true. BSD xargs has no -a ('xargs: invalid option -- a'), so the token table is empty, every path is unmapped, and --changed silently falls back to the full gate. The check stops there, so nothing after it in --check runs on darwin, including the 2031-dwwy env-block census."
+    exit_criteria:
+      - "On darwin the 1916-tsel fixture passes 9/9 and the build.sh --check step after it runs. On Linux it still passes 9/9. Pre-fix result: FAILS on darwin with 3-of-9."
+    verifiable_closure: "bash scripts/test-gate-changed-selects-by-input.sh on darwin prints 9 ok arms."
+    unscoreable: 'none.'
+    next_action: "Feed the list on stdin instead (xargs grep ... < srcs), which works with both GNU and BSD xargs."
+    provenance: "Found by tlatoanis-macbook-air claude while running the 2031-dwwy census for macuahuitl-fedora (2026-11-08)."
+    events:
+    - type: filed
+      ts: '2026-11-08T11:32:46Z'
+      host: tlatoanis-macbook-air
+      summary: "filed ready: gate-changed's xargs -a is GNU-only, so the 1916-tsel guard is red on darwin"

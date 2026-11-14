@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: decide-the-fixed-layer-additions-term-dumb-and-git-config-nosystem
+    event:
+      type: progress
+      ts: "2026-11-10T08:41:42Z"
+      agent_id: linux-yoga-opus5-20261110t084142z
+      host: yoga
+      summary: |-
+        DARWIN PASS (tlatoanis-macbook-air, 2026-11-10, trunk e9841e243, Apple Git-157 / git 2.54.0), same rule and command as the yoga pass, under a PATH without agent CLIs: 152 fixtures, 19 noisy, GIT_CONFIG_NOSYSTEM=1 changed 0 (stderr-only 0). `git config --system --list` is empty there, but Apple git reads a built-in config from the CommandLineTools gitconfig (credential.helper, init.defaultbranch), and GIT_CONFIG_NOSYSTEM=1 hides it (credential.helper set -> rc 1). DECISION written into design.md §9 Q4, NO to both: TERM=dumb buys nothing (TERM is class B, children already see it unset), and GIT_CONFIG_NOSYSTEM=1 buys no measured determinism while dropping a door child's keychain helper and default branch on macOS. PR #1067 (work/2031-4p5h @ ba2f796d1).
