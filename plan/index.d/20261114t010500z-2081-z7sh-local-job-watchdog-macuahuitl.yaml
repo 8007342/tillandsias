@@ -1,0 +1,226 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-13 from the operator's first-hand direction. Code is cited by symbol, never by line.
+# Design: openspec/changes/local-job-watchdog/ and plan/issues/local-job-watchdog-design-2026-11-13.md
+packets:
+  - packet_id: a-forge-hands-a-long-running-job-to-a-local-watchdog-instead-of-polling-it-from-the-cloud
+    order: 2081-z7sh
+    status: ready
+    kind: design
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, tray, inference, design]
+    estimated_hours: 3
+    size: S
+    implementer_tier: opus
+    title: "DESIGN FIRST - a forge agent hands a long-running job to a local watchdog (rules, then a tiny offline model, then one escalation) instead of waking a cloud agent to look at it"
+    context: "Operator 2026-11-13, first-hand: containers should have NPU and GPU access; a watchdog for local agents with tiny models running locally, and MCP tools whose descriptions state cost, when to use and when to prefer, so cloud minutes are not spent babysitting long-running jobs; re-research zeroclaw; find the minimalist zero-credentials offline container on NPU, GPU, CPU in that fallback order. The same day a cloud agent attended a multi-hour render batch with a scheduled wake every 20 to 30 minutes. The design is filed with this row: rules decide first, a tiny local model in a no-network container chooses only among verdicts the rules allow (ok, restart, escalate), restart runs only the argv the agent declared, and the cadence is one re-armed deadline timer per job (default 10 minutes, floor 2). Nothing is built. The cadence is new and needs the operator's approval before any child is claimed."
+    exit_criteria:
+      - "Each of the seven questions in the design's section 10 carries an operator ruling recorded as an event on this row, and the change's proposal, design, spec and tasks agree with the rulings. Pre-fix result: FAILS, no ruling exists."
+    verifiable_closure: "The operator's rulings as events on this row, and the amended change."
+    unscoreable: "operator-decision: the closure is the operator's rulings on seven questions; no script can produce or check them."
+    next_action: "Left: the operator reads openspec/changes/local-job-watchdog/design.md section 10 and rules on the seven questions, the cadence first. Then amend the change and release the children. Build nothing before that."
+    provenance: "Operator first-hand 2026-11-13 via coordinator macuahuitl; host probe and external research of the same day in plan/issues/local-job-watchdog-design-2026-11-13.md."
+    related: [2014-slpw, 2012-kuw4, 2012-sc0l, 2002-stjb, 1957-emar, 1921-yxki, 1913-q2z4, 2014-f45n]
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p1 ready with the design, the spec delta and seven children; awaiting operator review"
+  - packet_id: watch-register-attends-a-declared-job-by-rules-alone-and-restarts-it-only-by-its-declared-argv
+    order: 2081-v7qx
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, mcp, forge, events]
+    estimated_hours: 12
+    size: L
+    implementer_tier: sonnet
+    title: "watch.register, watch.status, watch.cancel and watch.list attend a declared job by rules alone: exit events and one deadline timer, restart only by the declared argv within a budget, escalate when the rules cannot tell"
+    context: "The hands of the watchdog, with no model. host_tools.rs GROUPS and the lane socket carry no watch tool today; studio_jobs.rs gives one tool's batch a ticket (studio.queue_workflow) and nothing restarts a dead batch. Rules-only already covers the common cases of the 2026-11-13 render batch: finished, progressing, and exited clean with work left. An ambiguous episode (a non-zero exit, a stall) escalates until the judge exists. Design sections 2, 3, 4 and 8. The registry survives a tray restart, re-attaching by pid and process start time as dead_run.rs identifies a run."
+    exit_criteria:
+      - "A fixture job that exits 0 after 4 of 10 checklist lines is run again by its declared argv, byte for byte, and reaches 10 of 10; watch.status then reports done. Pre-fix result: FAILS, the lane socket's tools/list carries no watch tool and nothing runs the job again."
+      - "A job that dies on every start is restarted at most 3 times and then reports escalated; a control arm with the budget raised through the fixture seam restarts a fourth time. Pre-fix result: FAILS, no watch exists."
+      - "A registration whose command is one string, whose progress path leaves the workspace through a symlink, or whose stall interval is 1 minute is refused, each with its own named reason, and nothing is started. Pre-fix result: FAILS, all three are refused alike as an unknown tool."
+      - "Over 30 minutes of fixture time with a 2 minute interval and steady progress, the watch records at most 16 timer wakeups and no judge request. Pre-fix result: FAILS, no watch and no counter exist."
+      - "Lane B asking watch.status for lane A's watch id is answered as for an unknown id. Pre-fix result: FAILS, no watch exists."
+    verifiable_closure: "The watchdog module's fixture transcript with all five arms. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the watchdog module and its tests land with the fix; the claimer writes the test names here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for the operator's cadence ruling on 2081-z7sh, then build the registry, the rules table and the four tools."
+    provenance: "Design filed 2026-11-13 from operator direction; openspec/changes/local-job-watchdog."
+    related: [2002-stjb, 1913-q2z4, 1800-465n]
+    depends_on: [a-forge-hands-a-long-running-job-to-a-local-watchdog-instead-of-polling-it-from-the-cloud]
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p1 ready, waits on the operator's cadence ruling"
+  - packet_id: the-watch-tool-descriptions-state-cost-preference-use-cases-and-limits-so-agents-choose-a-watch-over-a-wake-loop
+    order: 2081-ic4j
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [mcp, docs, forge]
+    estimated_hours: 3
+    size: S
+    implementer_tier: haiku
+    title: "The watch tool descriptions, the host tool index and the forge instructions state what a watch costs, when to prefer it over a wake loop, what it is for and what it cannot do"
+    context: "Operator 2026-11-13 asked for the MCP tools and their affordances on cost, when to use, when to prefer and use cases. An agent chooses a tool from its description. host_tools.rs GROUPS already gives each group a does, starts and use_when line; the watch group and the watch.register and watch.status descriptions are written out in design section 7. The forge instructions under images/default and skills/forge-quick-intro name no way to attend a long job today."
+    exit_criteria:
+      - "The lane socket's initialize instructions carry a watch line naming a long job with progress in a file, that a healthy watch costs no cloud tokens, and the timer wake it replaces; a test asserts the three and fails when any one is removed. Pre-fix result: FAILS, GROUPS has no watch row."
+      - "The watch.register description states the three things the watchdog can do, the four it cannot, the jobs it is not for and that an escalation cannot yet wake an ended session; watch.status says it is free and not for a timer. Pre-fix result: FAILS, neither description exists."
+      - "The forge instructions and the forge-quick-intro skill name watch.register for a long job. Pre-fix result: FAILS, a search of both for watch.register finds nothing."
+    verifiable_closure: "The host_tools test output and the two instruction files. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the test lands with the descriptions; the claimer writes its name here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for 2081-v7qx's tools, then add the group row, the descriptions and the two instruction edits."
+    provenance: "Design filed 2026-11-13 from operator direction; openspec/changes/local-job-watchdog design section 7."
+    related: [2081-v7qx]
+    depends_on: [watch-register-attends-a-declared-job-by-rules-alone-and-restarts-it-only-by-its-declared-argv]
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p1 ready, waits on 2081-v7qx"
+  - packet_id: a-watch-reports-done-or-stuck-exactly-once-on-the-lane-connection-the-lane-inbox-and-the-desktop
+    order: 2081-bdss
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, messaging, events]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    title: "A watch reports done or stuck exactly once per episode: an MCP notification on the live lane connection, a fleet message in the lane inbox with its receipt, and one curated desktop sentence"
+    context: "Escalation is the only point where a cloud agent is reached, so it must arrive once and carry the evidence. The channels exist: lane_events.rs writes notifications/message to live lane connections, the msg_send store (1506-ssb5, 2011-amqd) gives a lane inbox with receipts, and the tray has notify_memory_stall as a notifier precedent. Waking a session that ended its turn is 2012-kuw4 and 2014-slpw; this row delivers the message they wake on and does not build a second wake path. Job output is quoted as untrusted data. Design section 4."
+    exit_criteria:
+      - "A fixture job stuck past its deadline for an hour of fixture time yields exactly one escalation in the lane inbox with a delivery receipt, one notification on a live lane connection and one notifier call. Pre-fix result: FAILS, nothing is sent."
+      - "A finished job yields exactly one done message on the same three channels. Pre-fix result: FAILS, nothing is sent."
+      - "A log line that reads as an instruction to the agent appears only inside the message's untrusted-output block. Pre-fix result: FAILS, no message exists."
+    verifiable_closure: "Fixture transcript with the three arms. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture lands with the fix; the claimer writes its name here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for 2081-v7qx's verdicts, then wire the three channels."
+    provenance: "Design filed 2026-11-13 from operator direction; openspec/changes/local-job-watchdog design section 4."
+    related: [2012-kuw4, 2014-slpw, 2011-amqd]
+    depends_on: [watch-register-attends-a-declared-job-by-rules-alone-and-restarts-it-only-by-its-declared-argv]
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p1 ready, waits on 2081-v7qx"
+  - packet_id: the-watchdog-judge-model-is-chosen-by-its-score-on-a-labelled-set-of-job-bundles-smallest-first
+    order: 2081-ngd8
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [inference, research, cpu-ok]
+    estimated_hours: 8
+    size: M
+    implementer_tier: sonnet
+    title: "The watchdog's judge model is chosen by measurement: a labelled set of job bundles, and each tier's accuracy, wrong-ok count, latency and memory on CPU, smallest first"
+    context: "The judge stays off until a model passes. Candidates, all Apache-2.0 and ungated (read from the Hugging Face model API 2026-11-13): J0 Qwen2.5-0.5B-Instruct Q4_K_M, already pinned in images/inference/tiers/gguf-pins.tsv; J1 Qwen3-0.6B Q8_0, 639 MB; J2 Qwen3-1.7B Q8_0, 1.83 GB. The July NPU proof found a 0.6B model reliable when handed narrowed facts and unreliable when asked to find them, so the bundle is small and pre-digested. The dangerous error is a wrong ok, which hides a dead job. 2012-sc0l measures the same T0 file for the wake classifier and can share the harness. Published tool-calling scores do not apply: the judge calls no tool."
+    exit_criteria:
+      - "A committed labelled set of at least 40 bundles covers a dead worker with a transient error, a dead worker with a fatal error, alive and slow, alive and stuck, an out-of-memory loop, finished, and a log tail carrying an instruction, each with its allowed verdicts and the expected one. Pre-fix result: FAILS, no set exists."
+      - "For J0, J1 and J2 on CPU on a named host, the record states accuracy on the set, the wrong-ok count, median and 95th-percentile seconds per verdict, resident memory and cold start, and names the smallest tier that meets the bar the record states, or says none does. Pre-fix result: FAILS, no measurement exists."
+    verifiable_closure: "The labelled set and the measurement record in plan/issues. Pre-fix result: FAILS."
+    unscoreable: "measurement: the closure is a measured record on real hardware; the scoring script lands with it and the claimer names it here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: build the labelled set from the 2026-11-13 render batch's failure shapes, then score J0 first."
+    provenance: "Design filed 2026-11-13 from operator direction; model facts in plan/issues/local-job-watchdog-design-2026-11-13.md."
+    related: [2012-sc0l, 546]
+    depends_on: [a-forge-hands-a-long-running-job-to-a-local-watchdog-instead-of-polling-it-from-the-cloud]
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p2 ready"
+  - packet_id: the-watchdog-judge-runs-in-a-container-with-no-network-no-credential-and-a-schema-bound-answer
+    order: 2081-bgh8
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [inference, containers, security, llama-cpp]
+    estimated_hours: 10
+    size: L
+    implementer_tier: sonnet
+    title: "The watchdog's judge is a lane of the inference image with no network, no credential, a read-only root and a UNIX socket, and its answer is bound by a schema to the verdicts the rules allow"
+    context: "The only part of the watchdog that reads untrusted job output with a model, so the part that can neither reach anything nor act. llama-server binds a UNIX socket when its host ends in .sock, constrains output by a JSON schema, unloads after an idle time and has an offline switch (llama.cpp server README, read 2026-11-13). It is a lane of the existing image in the way llama-server-lane.sh is, serving only a model pinned in tiers/gguf-pins.tsv. It starts on demand and stops when idle. Zeroclaw was considered and not used: an agent runtime configured down is a larger trusted base than a fixed prompt with no tools. Design section 5."
+    exit_criteria:
+      - "Inspecting the running judge shows network mode none, a read-only root, no capability, a non-root user and an environment with no token, key or proxy variable; the arm fails when the fixture gives the container a network. Pre-fix result: FAILS, no judge container exists."
+      - "For every bundle of 2081-ngd8's labelled set, including those whose log tail carries an instruction, the answer parses under the schema and its verdict is a member of that bundle's allowed set. Pre-fix result: FAILS, no judge exists."
+      - "Started with a model that has no pin row, the lane refuses with a named reason and a dying fixture job escalates with the judge named unavailable. Pre-fix result: FAILS, no judge exists."
+    verifiable_closure: "Fixture transcript with the three arms and the container inspection. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture lands with the fix; the claimer writes its name here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for 2081-ngd8 to name a tier and 2081-v7qx to supply the rules, then build the lane."
+    provenance: "Design filed 2026-11-13 from operator direction; openspec/changes/local-job-watchdog design section 5."
+    related: [482, 2014-slpw]
+    depends_on: [the-watchdog-judge-model-is-chosen-by-its-score-on-a-labelled-set-of-job-bundles-smallest-first, watch-register-attends-a-declared-job-by-rules-alone-and-restarts-it-only-by-its-declared-argv]
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p2 ready, waits on 2081-ngd8 and 2081-v7qx"
+  - packet_id: the-watchdog-judge-takes-the-gpu-only-when-it-is-free-and-uncontended-and-never-delays-a-render
+    order: 2081-fqw3
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [gpu, nvidia-gpu, scheduler, inference]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    title: "The watchdog's judge takes the GPU only when free memory covers it and nobody waits, never evicts and never queues, so a render is never delayed by a verdict"
+    context: "One GPU job at a time, and renders first. gpu_queue.rs offers wait_for_gpu, which queues, and Arbiter::admit, which evicts a resident LLM; neither fits a background judge. Measured 2026-11-13 on macuahuitl: 22.9 of 24.5 GiB held, 21.0 GiB by one resident LLM, so today the judge would run on CPU. The order is NPU, GPU, CPU with each step taken only when honestly available; watch.status names the tier that decided. On CPU the judge is held to 4 threads at the lowest priority. 1921-yxki is the general lease arbiter for imagegen, vision and music at v0.8; this row asks only for the non-evicting, non-waiting admission the judge needs and should be folded into that arbiter if it lands first. Design section 6."
+    exit_criteria:
+      - "With one render holding the device and a second waiting, a verdict completes on CPU and the second render starts no later than in a control run with no watchdog, within the fixture's stated tolerance. Pre-fix result: FAILS, no judge exists and gpu_queue has no admission that neither waits nor evicts."
+      - "With a resident LLM holding all but 1 GiB, gpu.status lists the same holders before and after a verdict, and watch.status reports cpu for it. Pre-fix result: FAILS, no judge exists."
+      - "With the device free, a verdict runs on it, gpu.status lists the judge while loaded and not afterwards. Pre-fix result: FAILS, no judge exists."
+    verifiable_closure: "Fixture transcript with the three arms. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture lands with the fix; the claimer writes its name here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for 2081-bgh8, then add the admission and the placement order."
+    provenance: "Design filed 2026-11-13 from operator direction; openspec/changes/local-job-watchdog design section 6."
+    related: [1957-emar, 1955-rjv3, 1921-yxki]
+    depends_on: [the-watchdog-judge-runs-in-a-container-with-no-network-no-credential-and-a-schema-bound-answer]
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p2 ready, waits on 2081-bgh8"
+  - packet_id: an-intel-npu-compiles-and-runs-a-pinned-small-model-from-a-rootless-container-or-the-blocker-is-named
+    order: 2081-4cpi
+    status: ready
+    kind: research
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [npu, intel-npu, inference, research]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    title: "RESEARCH - an Intel NPU compiles and runs a pinned small model from a rootless container, with tokens per second against CPU, or the record names what blocks it and the licence of each file the fix needs"
+    context: "Measured 2026-11-13 on a host with an Intel Core Ultra 7 265KF (NPU PCI id 8086:AD1D, OpenVINO device architecture 3720, intel_vpu bound, /dev/accel/accel0 world read-write): a rootless container with only the accel device passed, SELinux enforcing, lists the NPU through OpenVINO 2026.4.1, and compiling the smallest model fails with ZE_RESULT_ERROR_UNSUPPORTED_FEATURE while NPU_COMPILER_VERSION reads 0. Fedora's intel-npu-driver ships only libze_intel_npu.so and no graph compiler; the PyPI wheel lacks the plugin's compiler loader library. Intel's linux-npu-driver releases carry the compiler as a separate package, validated against OpenVINO 2026.3.1 at driver 1.38.0. llama.cpp's OpenVINO backend lists NPUs with one slot and a small fixed context. accel_probe.rs enumerate_npus reports every NPU usable false with engine-missing, which this measurement confirms from the Intel side. No sudo and no layering on the host: the fix is files in a container image, and a licence outside the permissive list needs the operator."
+    exit_criteria:
+      - "A record shows, from a rootless container on a host with an Intel NPU, a pinned model compiled for the NPU answering one schema-bound verdict, with prefill and decode tokens per second there and on CPU; or it names the exact blocker with its error text and the licence of each file a fix would add to an image. Pre-fix result: FAILS, the 2026-11-13 compile failed as quoted in the context."
+      - "The record states what it changes for orders 481, 542 and 543, and what enumerate_npus would need to report this device usable. Pre-fix result: FAILS, no such record exists."
+    verifiable_closure: "The research record in plan/issues with the measurement or the named blocker. Pre-fix result: FAILS."
+    unscoreable: "measurement: the closure is a measured record on real hardware with an Intel NPU; no script on a host without one can produce it."
+    next_action: "Nothing is built. Left: read the licence of Intel's NPU compiler package, then try it in a throwaway container with the accel device and record the result either way."
+    provenance: "Host probe 2026-11-13 by the filing session on macuahuitl; plan/issues/local-job-watchdog-design-2026-11-13.md."
+    related: [481, 542, 543, 546, 2014-f45n]
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-11-14T01:05:00Z"
+        host: macuahuitl
+        summary: "filed p2 ready with the measured compile failure"
