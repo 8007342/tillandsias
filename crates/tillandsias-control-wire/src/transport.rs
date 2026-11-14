@@ -41,6 +41,14 @@ pub const CONTROL_WIRE_VSOCK_PORT: u32 = 42420;
 /// @trace spec:vsock-transport, spec:local-web-preview
 pub const PREVIEW_RELAY_VSOCK_PORT: u32 = 42430;
 
+/// Orders 2022-ygqj / 2022-89hm: the HOST's approval signer, dialled by the
+/// guest headless at CID 2. One connection carries one JSON-line
+/// `ApprovalRequest` and gets one JSON-line `ApprovalOutcome` back
+/// (`approval_wire`). The tray serves it with the Touch ID signer.
+///
+/// @trace spec:vsock-transport, spec:third-party-licence-consent
+pub const APPROVAL_SIGNER_VSOCK_PORT: u32 = 42440;
+
 /// Order 1794-rf3a (b): the host loopback port a VM guest's preview is
 /// served on. The tray binds `127.0.0.1` at this port and relays to
 /// [`PREVIEW_RELAY_VSOCK_PORT`]; the guest names it in every preview URL, so

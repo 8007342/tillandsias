@@ -65,6 +65,17 @@ unsafe extern "C" {
         sig_cap: usize,
         sig_len: *mut usize,
     ) -> i32;
+    fn tla_se_sign_batch(
+        blob: *const u8,
+        blob_len: usize,
+        msgs: *const u8,
+        lens: *const usize,
+        count: usize,
+        reason: *const std::ffi::c_char,
+        sig_out: *mut u8,
+        sig_cap: usize,
+    ) -> i32;
+    fn tla_approval_window(title: *const std::ffi::c_char, body: *const std::ffi::c_char) -> i32;
     #[cfg(test)]
     fn tla_sw_sign(
         raw: *const u8,
@@ -90,6 +101,8 @@ fn ffi_error(what: &str, code: i32) -> String {
             "the stored key could not be loaded (enrolled on another Mac, or the fingerprints changed)"
         }
         -6 => "signing was cancelled or not authorised",
+        -8 => "Touch ID was cancelled or failed",
+        -9 => "the approval window was asked for on the main thread",
         _ => "unknown failure",
     };
     format!("{what}: {why} (code {code})")
@@ -311,6 +324,128 @@ pub(crate) fn sign(path: &Path, message: &[u8], reason: &str) -> Result<String, 
         return Err(ffi_error("signing", rc));
     }
     armor(&x963, &sig[..n])
+}
+
+/// The strength word recorded for a Secure Enclave key behind Touch ID (or
+/// the Mac password where no finger is enrolled).
+pub(crate) const STRENGTH: &str = "hardware-biometric";
+
+/// Sign every message with ONE Touch ID. Returns one armored SSHSIG per
+/// message, in order; a cancelled Touch ID signs nothing.
+pub(crate) fn sign_batch(
+    path: &Path,
+    messages: &[&[u8]],
+    reason: &str,
+) -> Result<Vec<String>, String> {
+    let blob = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let x963 = public_key(path)?;
+    let data: Vec<Vec<u8>> = messages.iter().map(|m| signed_data(m)).collect();
+    let lens: Vec<usize> = data.iter().map(Vec::len).collect();
+    let flat: Vec<u8> = data.concat();
+    let reason =
+        std::ffi::CString::new(reason).map_err(|_| "the reason has a NUL byte".to_string())?;
+    let mut sigs = vec![0u8; 64 * data.len()];
+    // SAFETY: the buffers outlive the call and their capacities are passed.
+    let rc = unsafe {
+        tla_se_sign_batch(
+            blob.as_ptr(),
+            blob.len(),
+            flat.as_ptr(),
+            lens.as_ptr(),
+            lens.len(),
+            reason.as_ptr(),
+            sigs.as_mut_ptr(),
+            sigs.len(),
+        )
+    };
+    if rc != 0 {
+        return Err(ffi_error("signing", rc));
+    }
+    sigs.chunks(64).map(|s| armor(&x963, s)).collect()
+}
+
+/// Show the one approval window and block this (non-main) thread until the
+/// user approves or cancels. `true` only for approve.
+pub(crate) fn approval_window(title: &str, body: &str) -> Result<bool, String> {
+    let t = std::ffi::CString::new(title).map_err(|_| "title has a NUL byte".to_string())?;
+    let b = std::ffi::CString::new(body).map_err(|_| "body has a NUL byte".to_string())?;
+    // SAFETY: both strings outlive the call.
+    match unsafe { tla_approval_window(t.as_ptr(), b.as_ptr()) } {
+        1 => Ok(true),
+        0 => Ok(false),
+        rc => Err(ffi_error("showing the approval window", rc)),
+    }
+}
+
+/// Orders 2022-89hm / 2022-ygqj: the in-process Touch ID signer behind the
+/// approval MCP tool. One request opens ONE window listing every item; the
+/// key is enrolled silently if absent; one Touch ID signs the whole batch.
+/// Cancel never touches the key. Nothing is printed.
+pub(crate) struct TouchIdSigner;
+
+use tillandsias_control_wire::approval_wire::{ApprovalOutcome, ApprovalRequest, ApprovalSigner};
+
+impl ApprovalSigner for TouchIdSigner {
+    fn sign_batch(&self, request: &ApprovalRequest) -> ApprovalOutcome {
+        let fail = |reason: String| ApprovalOutcome::Denied { reason };
+        if let Err(e) = request.validate() {
+            return fail(e);
+        }
+        let path = match key_path(&request.repo_slug) {
+            Ok(p) => p,
+            Err(e) => return fail(e),
+        };
+        // Enrolment creates the key without a prompt; reading its public half
+        // needs none either. The key is used only after the window approves.
+        let x963 = match enrol(&path) {
+            Ok(x) => x,
+            Err(e) => return ApprovalOutcome::Unsupported { reason: e },
+        };
+        let title = format!("Tillandsias \u{2014} licences for {}", request.project);
+        match approval_window(&title, &request.display_text()) {
+            Ok(true) => {}
+            Ok(false) => return fail("the window was cancelled; nothing was signed".into()),
+            Err(e) => return fail(e),
+        }
+        let msgs: Vec<&[u8]> = request
+            .items
+            .iter()
+            .map(|i| i.statement.as_bytes())
+            .collect();
+        let reason = format!(
+            "accept {} licence(s) for {}",
+            request.items.len(),
+            request.project
+        );
+        match sign_batch(&path, &msgs, &reason) {
+            Ok(signatures) => ApprovalOutcome::Approved {
+                allowed_signers_line: allowed_signers_line(&x963, &request.repo_slug),
+                signatures,
+                strength: STRENGTH.into(),
+            },
+            Err(e) => fail(e),
+        }
+    }
+}
+
+/// Register [`TouchIdSigner`] as the VM's approval service on
+/// `APPROVAL_SIGNER_VSOCK_PORT`. Each connection is one batch: one window,
+/// one Touch ID. Requests are served one at a time so two windows never
+/// race for the same finger.
+pub(crate) fn register_vsock_service() {
+    use tillandsias_control_wire::transport::APPROVAL_SIGNER_VSOCK_PORT;
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    tillandsias_vm_layer::transport_macos::register_approval_service(
+        APPROVAL_SIGNER_VSOCK_PORT,
+        std::sync::Arc::new(|mut stream: std::os::unix::net::UnixStream| {
+            let _turn = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
+            if let Err(e) =
+                tillandsias_control_wire::approval_wire::serve_one(&mut stream, &TouchIdSigner)
+            {
+                tracing::warn!(%e, "approval signer: connection failed");
+            }
+        }),
+    );
 }
 
 /// `--approval-enrol <owner/name>`: create that repo's key if needed and

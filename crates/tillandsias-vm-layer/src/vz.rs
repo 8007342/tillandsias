@@ -57,6 +57,10 @@ pub struct VzRuntime {
     /// lives exactly as long as the VM: dropping it deregisters the port.
     #[cfg(target_os = "macos")]
     host_listener: std::sync::Mutex<Option<vm_handle::HostListenerHandle>>,
+    /// Orders 2022-ygqj / 2022-89hm: the approval signer listener, bound at
+    /// start when the tray registered the service. Lives as long as the VM.
+    #[cfg(target_os = "macos")]
+    approval_listener: std::sync::Mutex<Option<vm_handle::HostListenerHandle>>,
     /// When true, `start()` routes the guest serial console (early-boot getty +
     /// kernel) to `console.log` instead of the host process stderr. Headless CLI
     /// modes (`--exec-guest`, `--github-login`) set this so the getty's terminal
@@ -398,6 +402,8 @@ impl VzRuntime {
             vm: std::sync::Mutex::new(None),
             #[cfg(target_os = "macos")]
             host_listener: std::sync::Mutex::new(None),
+            #[cfg(target_os = "macos")]
+            approval_listener: std::sync::Mutex::new(None),
             serial_to_log: std::sync::atomic::AtomicBool::new(false),
             shutdown_token: std::sync::Mutex::new(None),
             restore_from: std::sync::Mutex::new(None),
@@ -436,6 +442,9 @@ impl VzRuntime {
     #[cfg(target_os = "macos")]
     pub fn release_saved(&self) {
         if let Ok(mut l) = self.host_listener.lock() {
+            l.take();
+        }
+        if let Ok(mut l) = self.approval_listener.lock() {
             l.take();
         }
         if let Ok(mut slot) = self.vm.lock() {
@@ -3947,6 +3956,44 @@ impl VmRuntime for VzRuntime {
                     "[vz] host vsock: TILLANDSIAS_HOST_VSOCK_PORT={port_s:?} is not a port \
                      number; not listening"
                 ),
+            }
+        }
+
+        // Orders 2022-ygqj / 2022-89hm: the approval signer's port, bound
+        // only when the tray registered the service (never in CLI modes).
+        // A failure is loud but does not fail the boot, like the port above.
+        #[cfg(target_os = "macos")]
+        if let Some((port, handler)) = crate::transport_macos::approval_service() {
+            let (ltx, lrx) = std::sync::mpsc::channel();
+            let vm_for_listen = vm_handle::VmHandle(vm.clone());
+            boot::dispatch_to_main_queue(move || vm_for_listen.bind_host_listener(port, ltx));
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                if let Ok(result) = lrx.try_recv() {
+                    match result.and_then(|mut h| {
+                        h.0.serve_with(handler.clone()).map_err(|e| e.to_string())?;
+                        Ok(h)
+                    }) {
+                        Ok(h) => {
+                            eprintln!("[vz] approval signer: listening on vsock port {port}");
+                            if let Ok(mut g) = self.approval_listener.lock() {
+                                *g = Some(h);
+                            }
+                        }
+                        Err(e) => eprintln!(
+                            "[vz] approval signer: FAILED to listen on port {port}: {e}. \
+                             Licence approvals from the forge will report the signer unreachable."
+                        ),
+                    }
+                    break;
+                }
+                if Instant::now() >= deadline {
+                    eprintln!(
+                        "[vz] approval signer: bind did not complete within 5s on port {port}"
+                    );
+                    break;
+                }
+                boot::pump_cf_loop_for(Duration::from_millis(50));
             }
         }
 

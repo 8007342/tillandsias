@@ -93,6 +93,12 @@ pub(crate) const GROUPS: &[Group] = &[
         use_when: "the project commits ComfyUI workflows or art family specs under art/",
     },
     Group {
+        prefix: "licence.*",
+        does: "accept third-party model licences for this project: one host window lists every licence verbatim, the user scrolls to the end and approves with ONE Touch ID, and the signed records come back to commit",
+        starts: "licence.acknowledge opens the approval window on the host and signs nothing unless the user approves",
+        use_when: "a fetch was refused with licence_acknowledgement_required, or the user asks (however vaguely) to accept licences; resolve their words to register rows yourself and never ask them for ids, scope or expiry",
+    },
+    Group {
         prefix: "browser.*",
         does: "open and drive browser windows ON THE HOST for project-local URLs (the forge has no browser binary)",
         starts: "browser.open starts a host browser window (visible or headless); dev: true adds CDP, eval, console and network tails",

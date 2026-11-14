@@ -62,6 +62,12 @@ pub fn run() -> ! {
     // AppKit's immediate terminate:. Held for the life of the run loop.
     let _app_delegate = crate::app_delegate::install(mtm, &app);
 
+    // Orders 2022-ygqj / 2022-89hm: the guest's licence-approval tool reaches
+    // this tray's Touch ID signer over vsock. Registered before any VM start
+    // so the port is bound with the VM; served only in tray mode, where the
+    // NSApplication run loop can show the window.
+    crate::approval_signer::register_vsock_service();
+
     // Per-process Tokio runtime, shared with the TrayActionHost so it
     // can spawn worker tasks for VM lifecycle calls without blocking
     // the AppKit main thread. Stays alive for the lifetime of the

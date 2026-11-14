@@ -280,7 +280,13 @@ fn build_approval_signer() {
     assert!(status.success(), "approval signer: swiftc failed on {src}");
     println!("cargo:rustc-link-search=native={}", out_dir.display());
     println!("cargo:rustc-link-lib=static=tla_approval_signer");
-    for fw in ["CryptoKit", "LocalAuthentication", "Security", "Foundation"] {
+    for fw in [
+        "CryptoKit",
+        "LocalAuthentication",
+        "Security",
+        "Foundation",
+        "AppKit",
+    ] {
         println!("cargo:rustc-link-lib=framework={fw}");
     }
     let info = Command::new("swiftc")

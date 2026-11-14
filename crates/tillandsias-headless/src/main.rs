@@ -130,6 +130,7 @@ mod studio_contract;
 // 1956-ecpb (implements 1954-dvz9): the restricted licence register, the
 // signed acknowledgement record, the obligations spec and the consent gate.
 #[cfg(feature = "host-services")]
+mod licence_approval;
 mod licence_consent;
 // 1879-5jkt: the approval broker (os-verified-approval-gates D1-D4): signs an
 // action-bound statement and admits it once. Uses licence_consent's verifier.

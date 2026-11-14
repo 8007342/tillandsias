@@ -596,6 +596,26 @@ impl VsockAcceptDelegate {
 /// main runloop runs continuously, and should not have the problem — that is
 /// REASONED, not measured, and needs its own proof before anything depends on
 /// it.
+/// A service for accepted guest connections (`HostVsockListener::serve_with`).
+pub type HostConnectionHandler =
+    std::sync::Arc<dyn Fn(std::os::unix::net::UnixStream) + Send + Sync + 'static>;
+
+/// Orders 2022-ygqj / 2022-89hm: the approval signer service, registered by
+/// the tray before the VM starts. `VzRuntime::start` binds
+/// `approval_port` only when one is registered, so CLI modes that never
+/// show a window never listen.
+static APPROVAL_SERVICE: std::sync::OnceLock<(u32, HostConnectionHandler)> =
+    std::sync::OnceLock::new();
+
+/// Register the host approval service (first registration wins).
+pub fn register_approval_service(port: u32, handler: HostConnectionHandler) {
+    let _ = APPROVAL_SERVICE.set((port, handler));
+}
+
+pub(crate) fn approval_service() -> Option<(u32, HostConnectionHandler)> {
+    APPROVAL_SERVICE.get().cloned()
+}
+
 pub struct HostVsockListener {
     device: Retained<VZVirtioSocketDevice>,
     port: u32,
@@ -709,6 +729,33 @@ impl HostVsockListener {
             .take()
             .ok_or_else(|| io::Error::other("this listener is already forwarding"))?;
         let _ = crate::host_vsock_forward::spawn_forwarder(rx, target);
+        Ok(())
+    }
+
+    /// Orders 2022-ygqj / 2022-89hm: serve every accepted connection with
+    /// `handler`, each on its own thread (a handler may block on a window
+    /// and a Touch ID for as long as the user reads). Refuses a second drain
+    /// for the same reason `forward_to` does.
+    pub fn serve_with(&mut self, handler: HostConnectionHandler) -> io::Result<()> {
+        let rx = self
+            .rx
+            .take()
+            .ok_or_else(|| io::Error::other("this listener is already being drained"))?;
+        std::thread::Builder::new()
+            .name(format!("host-vsock-serve-{}", self.port))
+            .spawn(move || {
+                while let Ok(fd) = rx.recv() {
+                    let h = handler.clone();
+                    // SAFETY: `fd` is the owned duplicate the accept delegate made.
+                    let owned = unsafe {
+                        <std::os::fd::OwnedFd as std::os::fd::FromRawFd>::from_raw_fd(fd)
+                    };
+                    let stream = std::os::unix::net::UnixStream::from(owned);
+                    let _ = std::thread::Builder::new()
+                        .name("host-vsock-conn".into())
+                        .spawn(move || h(stream));
+                }
+            })?;
         Ok(())
     }
 

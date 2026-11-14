@@ -497,6 +497,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::pixel_finish::descriptor());
             // 1959-xsy5 (D13): the review contact sheet, beside it.
             tools.push(crate::contact_sheet::descriptor());
+            // 2022-ygqj / 2022-89hm: licence acceptance, one window one touch.
+            tools.push(crate::licence_approval::descriptor());
             // 1956-ucix: the CorridorKey 2.0 proof of concept, listed ONLY for
             // a project with `[imagegen] corridorkey = true` (no automatic
             // wiring for other users until Corridor has seen the demo).
@@ -933,6 +935,20 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         crate::toolchain_exec::prepare(&req["params"]["arguments"], debug)
                     )
                 }),
+                // 2022-ygqj / 2022-89hm: one window, one biometric, the batch.
+                crate::licence_approval::TOOL_NAME => {
+                    match crate::licence_approval::call_on_host(
+                        project_label,
+                        &req["params"]["arguments"],
+                    ) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
                 "preview.status" => {
                     match rt.block_on(crate::local_web_preview::status(project_label, instance)) {
                         Ok(result) => serde_json::json!({

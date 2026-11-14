@@ -123,3 +123,180 @@ public func tla_sw_sign(
     else { return errBuffer }
     return 0
 }
+
+// ---------------------------------------------------------------------------
+// Orders 2022-89hm / 2022-ygqj: one window, one Touch ID, the whole batch.
+// ---------------------------------------------------------------------------
+
+import AppKit
+
+private let errCancelled: Int32 = -8
+
+/// Sign `count` messages with ONE LocalAuthentication evaluation: the context
+/// is evaluated once (one Touch ID, or the password where no finger is
+/// enrolled), then every signature reuses it with no further prompt. `msgs`
+/// is the messages back to back; `lens` their lengths. Writes 64 bytes of
+/// r||s per message into `sigOut` (cap >= 64 * count). A failed or
+/// cancelled evaluation signs nothing and returns errCancelled.
+@_cdecl("tla_se_sign_batch")
+public func tla_se_sign_batch(
+    _ blob: UnsafePointer<UInt8>, _ blobLen: Int,
+    _ msgs: UnsafePointer<UInt8>, _ lens: UnsafePointer<Int>, _ count: Int,
+    _ reason: UnsafePointer<CChar>,
+    _ sigOut: UnsafeMutablePointer<UInt8>, _ sigCap: Int
+) -> Int32 {
+    if sigCap < 64 * count { return errBuffer }
+    let context = LAContext()
+    let why = String(cString: reason)
+    var policyErr: NSError?
+    let policy: LAPolicy = context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &policyErr)
+        ? .deviceOwnerAuthenticationWithBiometrics : .deviceOwnerAuthentication
+    let done = DispatchSemaphore(value: 0)
+    var ok = false
+    context.evaluatePolicy(policy, localizedReason: why) { success, _ in
+        ok = success
+        done.signal()
+    }
+    done.wait()
+    if !ok { return errCancelled }
+    let data = Data(bytes: blob, count: blobLen)
+    guard let key = try? SecureEnclave.P256.Signing.PrivateKey(
+        dataRepresentation: data, authenticationContext: context
+    ) else { return errLoad }
+    var sigs: [Data] = []
+    var off = 0
+    for i in 0..<count {
+        let n = lens[i]
+        let m = Data(bytes: msgs + off, count: n)
+        off += n
+        guard let sig = try? key.signature(for: m) else { return errSign }
+        sigs.append(sig.rawRepresentation)
+    }
+    for (i, s) in sigs.enumerated() {
+        if s.count != 64 { return errSign }
+        s.copyBytes(to: sigOut + 64 * i, count: 64)
+    }
+    return 0
+}
+
+/// The approval window's controller: approve stays disabled until the text
+/// has been scrolled to the bottom (a text short enough to need no scroll
+/// enables on first full view).
+private final class ApprovalWindowController: NSObject, NSWindowDelegate {
+    let window: NSWindow
+    let scroll: NSScrollView
+    let approve: NSButton
+    var result: Int32 = 0
+    var finished = false
+    let onDone: (Int32) -> Void
+
+    init(title: String, body: String, onDone: @escaping (Int32) -> Void) {
+        self.onDone = onDone
+        window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 620, height: 560),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered, defer: false)
+        window.title = title
+        scroll = NSScrollView(frame: NSRect(x: 20, y: 64, width: 580, height: 476))
+        scroll.hasVerticalScroller = true
+        scroll.autoresizingMask = [.width, .height]
+        let text = NSTextView(frame: NSRect(x: 0, y: 0, width: 580, height: 476))
+        text.isEditable = false
+        text.isSelectable = true
+        text.font = NSFont.systemFont(ofSize: 14)
+        text.string = body
+        text.textContainerInset = NSSize(width: 8, height: 8)
+        text.isVerticallyResizable = true
+        text.autoresizingMask = [.width]
+        scroll.documentView = text
+        approve = NSButton(title: "Approve with Touch ID", target: nil, action: nil)
+        approve.frame = NSRect(x: 420, y: 16, width: 180, height: 32)
+        approve.bezelStyle = .rounded
+        approve.keyEquivalent = "\r"
+        approve.isEnabled = false
+        approve.autoresizingMask = [.minXMargin]
+        let cancel = NSButton(title: "Cancel", target: nil, action: nil)
+        cancel.frame = NSRect(x: 320, y: 16, width: 96, height: 32)
+        cancel.bezelStyle = .rounded
+        cancel.keyEquivalent = "\u{1b}"
+        cancel.autoresizingMask = [.minXMargin]
+        let hint = NSTextField(labelWithString: "Scroll to the end to approve.")
+        hint.frame = NSRect(x: 20, y: 22, width: 290, height: 20)
+        super.init()
+        approve.target = self
+        approve.action = #selector(onApprove)
+        cancel.target = self
+        cancel.action = #selector(onCancel)
+        window.delegate = self
+        let content = window.contentView!
+        content.addSubview(scroll)
+        content.addSubview(approve)
+        content.addSubview(cancel)
+        content.addSubview(hint)
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(onScroll),
+            name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+    }
+
+    func show() {
+        window.center()
+        window.level = .floating
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        text_layout()
+        onScroll()
+    }
+
+    private func text_layout() {
+        if let tv = scroll.documentView as? NSTextView, let lm = tv.layoutManager, let tc = tv.textContainer {
+            lm.ensureLayout(for: tc)
+        }
+    }
+
+    @objc func onScroll() {
+        guard let doc = scroll.documentView else { return }
+        let visible = scroll.contentView.documentVisibleRect
+        // 4pt slack so a fractional scroll position still counts as the end.
+        if visible.maxY >= doc.bounds.height - 4 { approve.isEnabled = true }
+    }
+
+    func finish(_ r: Int32) {
+        if finished { return }
+        finished = true
+        result = r
+        NotificationCenter.default.removeObserver(self)
+        window.delegate = nil
+        window.orderOut(nil)
+        onDone(r)
+    }
+
+    @objc func onApprove() { if approve.isEnabled { finish(1) } }
+    @objc func onCancel() { finish(0) }
+    func windowWillClose(_ notification: Notification) { finish(0) }
+}
+
+private var liveControllers: [ApprovalWindowController] = []
+
+/// Show ONE approval window with `body` and block the CALLING thread (never
+/// the main thread) until the user approves (1) or cancels/closes (0).
+/// Returns -9 if called on the main thread, which would deadlock.
+@_cdecl("tla_approval_window")
+public func tla_approval_window(_ title: UnsafePointer<CChar>, _ body: UnsafePointer<CChar>) -> Int32 {
+    if Thread.isMainThread { return -9 }
+    let t = String(cString: title)
+    let b = String(cString: body)
+    let done = DispatchSemaphore(value: 0)
+    var out: Int32 = 0
+    DispatchQueue.main.async {
+        let c = ApprovalWindowController(title: t, body: b) { r in
+            out = r
+            liveControllers.removeAll { $0.finished }
+            done.signal()
+        }
+        liveControllers.append(c)
+        c.show()
+    }
+    done.wait()
+    return out
+}
