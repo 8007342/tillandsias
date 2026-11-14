@@ -138,6 +138,15 @@ with an attribution obligation, or the restricted register); CLAP
 admissible when its slice lands; `microsoft/msclap` reads ms-pl: not used).
 Demucs: unchanged, restricted, never acknowledged here.
 
+Update 2026-11-14 (operator approval via the coordinator): cc-by-4.0 joins
+the accepted set (`imagegen_tiers::PERMISSIVE_LICENCES`,
+`check-model-licence-register.lua`) with its attribution obligation, and the
+register now carries Audiobox Aesthetics `model.safetensors` (cc-by-4.0, the
+credit line in the row's comment), both CLAP checkpoints (apache-2.0;
+`pytorch_model.bin` pickles, so admitted but not fetchable until a
+safetensors export is pinned) and VoxCPM2 `model.safetensors` (apache-2.0; its
+`audiovae.pth` pickle is not registered).
+
 ## Risks / Trade-offs
 
 - [Pure-numpy DSP is slower than JUCE/LSP] → 1 ms block envelopes; heavy

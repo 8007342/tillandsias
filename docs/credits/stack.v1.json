@@ -10671,6 +10671,12 @@
       "to": "src:https://github.com/lldacing/ComfyUI_BiRefNet_ll"
     },
     {
+      "from": "image:imagegen-studio",
+      "kind": "plugin",
+      "optional": true,
+      "to": "src:vendored:nodes/tillandsias_audio"
+    },
+    {
       "from": "image:inference",
       "kind": "base-image",
       "optional": false,
@@ -18816,6 +18822,12 @@
       "from": "media:imagegen-models",
       "kind": "runtime-download",
       "optional": true,
+      "to": "model:Comfy-Org/Real-ESRGAN"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
       "to": "model:Comfy-Org/Wan-2.2"
     },
     {
@@ -18852,7 +18864,25 @@
       "from": "media:imagegen-models",
       "kind": "runtime-download",
       "optional": true,
+      "to": "model:facebook/audiobox-aesthetics"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
       "to": "model:h94/IP-Adapter"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:laion/clap-htsat-unfused"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:laion/larger_clap_music"
     },
     {
       "from": "media:imagegen-models",
@@ -18877,6 +18907,12 @@
       "kind": "runtime-download",
       "optional": true,
       "to": "model:nerijs/pixel-art-xl"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:openbmb/VoxCPM2"
     },
     {
       "from": "media:imagegen-models",
@@ -33180,6 +33216,7 @@
       ],
       "source": "images/models/licence-register.tsv",
       "tiers": [
+        "I1/qwen-image",
         "I1/qwen-image-te",
         "I1/qwen-image-vae"
       ],
@@ -33204,6 +33241,26 @@
         "I1/qwen-image-edit"
       ],
       "version": "f68ace85e60b4a02a323e394253731947657b7d2"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/Comfy-Org/Real-ESRGAN",
+      "homepage_kind": "model-card",
+      "id": "model:Comfy-Org/Real-ESRGAN",
+      "license": "bsd-3-clause",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "RealESRGAN-x4plus",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/upscale_models"
+      ],
+      "version": "5fd49b7b278836f48af63ecd314d0f98ab336105"
     },
     {
       "gated": false,
@@ -33327,6 +33384,24 @@
     },
     {
       "gated": false,
+      "homepage": "https://huggingface.co/facebook/audiobox-aesthetics",
+      "homepage_kind": "model-card",
+      "id": "model:facebook/audiobox-aesthetics",
+      "license": "cc-by-4.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Audiobox-Aesthetics",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [],
+      "version": "9b1dd8e5df9af7216e836a98974fe3b82c56ded6"
+    },
+    {
+      "gated": false,
       "homepage": "https://huggingface.co/h94/IP-Adapter",
       "homepage_kind": "model-card",
       "id": "model:h94/IP-Adapter",
@@ -33345,6 +33420,42 @@
         "I1/ipadapter"
       ],
       "version": "018e402774aeeddd60609b4ecdb7e298259dc729"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/laion/clap-htsat-unfused",
+      "homepage_kind": "model-card",
+      "id": "model:laion/clap-htsat-unfused",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "CLAP-HTSAT-unfused",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [],
+      "version": "8fa0f1c6d0433df6e97c127f64b2a1d6c0dcda8a"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/laion/larger_clap_music",
+      "homepage_kind": "model-card",
+      "id": "model:laion/larger_clap_music",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "CLAP-larger-music",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [],
+      "version": "a0b4534a14f58e20944452dff00a22a06ce629d1"
     },
     {
       "gated": false,
@@ -33425,6 +33536,24 @@
         "I1/lora"
       ],
       "version": "8bf4a4d9ea283e00a51fafda8e0539f8248ea037"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/openbmb/VoxCPM2",
+      "homepage_kind": "model-card",
+      "id": "model:openbmb/VoxCPM2",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "VoxCPM2",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [],
+      "version": "7936080b41163874f38610f46f438e2c0757f9fd"
     },
     {
       "gated": false,
@@ -60665,6 +60794,22 @@
       "version": "unknown"
     },
     {
+      "homepage": "vendored:nodes/tillandsias_audio",
+      "homepage_kind": "repository",
+      "id": "src:vendored:nodes/tillandsias_audio",
+      "license": "GPL-3.0-or-later",
+      "license_family": "strong-copyleft",
+      "link": "container-image",
+      "link_note": "ComfyUI custom node cloned at a pinned commit into the studio image",
+      "name": "tillandsias_audio",
+      "optional": true,
+      "pulled_by": [
+        "image:imagegen-studio"
+      ],
+      "source": "images/imagegen-studio/custom-nodes.toml",
+      "version": "e926c0b813c8ff79c83059bf24666ad8fcd9fcfd"
+    },
+    {
       "homepage_kind": "none",
       "id": "studio:audio",
       "license": "GPL-3.0-or-later",
@@ -60820,15 +60965,15 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3106,
+    "edges": 3112,
     "license_families": {
       "model": 7,
-      "permissive": 1706,
+      "permissive": 1711,
       "service": 15,
-      "strong-copyleft": 24,
+      "strong-copyleft": 25,
       "unknown": 162,
       "weak-copyleft": 20
     },
-    "nodes": 1934
+    "nodes": 1940
   }
 }
