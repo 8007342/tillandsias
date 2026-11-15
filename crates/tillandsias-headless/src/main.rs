@@ -7096,6 +7096,12 @@ mod seed_staleness_tests {
     }
 }
 
+/// 2092-crun: mount-point parent for runtime-secret FILE binds in read-only
+/// containers. crun 1.31 cannot create a bind target file on a read-only
+/// rootfs; a tmpfs here is writable, holds nothing itself, and is shadowed by
+/// the ro binds podman mounts on top of it.
+const RUN_SECRETS_TMPFS: &str = "/run/secrets:rw,noexec,nosuid,nodev,size=1m,mode=0755";
+
 /// Mint the per-project git-mirror Vault Agent auto-auth credential.
 ///
 /// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
@@ -7397,6 +7403,12 @@ fn build_git_run_args(
         // image directory.
         "--tmpfs".into(),
         "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777".into(),
+        // 2092-crun: crun 1.31 no longer creates a FILE mount point on a
+        // read-only rootfs ("open .../merged/run/secrets/vault-approle: No such
+        // file or directory", exit 127). A tmpfs at /run/secrets gives every
+        // runtime-secret bind below a writable parent to create its target in.
+        "--tmpfs".into(),
+        RUN_SECRETS_TMPFS.into(),
         "--volume".into(),
         format!("{mirror_volume}:/srv/git"),
         "--env".into(),
@@ -16516,6 +16528,9 @@ fn build_ssh_lane_sidecar_run_args(
         "--read-only".into(),
         "--tmpfs".into(),
         "/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777".into(),
+        // 2092-crun: see build_git_run_args.
+        "--tmpfs".into(),
+        RUN_SECRETS_TMPFS.into(),
         "--volume".into(),
         format!("{}:/ssh-agent", ssh_lane_agent_volume(project_name)),
         "--volume".into(),
@@ -33549,6 +33564,34 @@ mod tests {
             !args.iter().any(|a| a == "--no-healthcheck"),
             "the git SERVICE must keep its HEALTHCHECK: {args:?}"
         );
+    }
+
+    #[test]
+    fn git_run_args_give_secret_file_binds_a_writable_parent() {
+        // 2092-crun: crun 1.31 refuses to create a file mount point on the
+        // read-only rootfs, so the mirror died at start (exit 127) whenever a
+        // runtime secret was bound under /run/secrets.
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            Some("s-relay"),
+            None,
+        );
+        assert!(args.iter().any(|a| a == "--read-only"));
+        let at = args
+            .windows(2)
+            .position(|w| w[0] == "--tmpfs" && w[1].starts_with("/run/secrets:"))
+            .expect("a read-only mirror must carry a /run/secrets tmpfs");
+        let bind = args
+            .iter()
+            .position(|a| a.contains(":/run/secrets/vault-approle:"))
+            .expect("the relay secret is bound under /run/secrets");
+        assert!(at < bind, "the tmpfs must precede the binds it parents");
     }
 
     #[test]
