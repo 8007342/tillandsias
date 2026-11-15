@@ -12,12 +12,19 @@ preconditions:
   - workspace contains images/default/entrypoint-forge-claude.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
   - workspace contains scripts/test-claude-forge-bypass-preaccepted.sh
+  - workspace contains scripts/test-claude-forge-remote-control-args.sh
 
 critical_path:
   - step: "order 1437-y2wu: bypass-permissions consent pre-accepted, forge-gated, additive (6 fixture arms, incl. entrypoint wiring order)"
     command: "bash scripts/test-claude-forge-bypass-preaccepted.sh"
     timeout_ms: 60000
     success_pattern: "PASS: claude forge bypass-permissions consent pre-accepted"
+    failure_pattern: "FAIL:"
+
+  - step: "Claude forge joins Remote Control as <project>-forge when supported (3 fixture arms + wiring)"
+    command: "bash scripts/test-claude-forge-remote-control-args.sh"
+    timeout_ms: 30000
+    success_pattern: "PASS: claude forge remote-control args"
     failure_pattern: "FAIL:"
 
   - step: "forge image installs Claude TUI and terminfo runtime"

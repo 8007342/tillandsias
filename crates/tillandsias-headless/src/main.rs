@@ -1087,6 +1087,13 @@ fn main() {
         .position(|a| a == "--prompt")
         .and_then(|i| user_args.get(i + 1).map(|p| p.to_string()));
 
+    if user_args.iter().any(|a| a == "--no-remote-control") {
+        // SAFETY: single-threaded argument parsing, before any subsystem runs.
+        unsafe {
+            std::env::set_var(NO_REMOTE_CONTROL_ENV, "1");
+        }
+    }
+
     let known_flags = [
         // ORDER 1286-4437, ADDED AFTER A RELEASE SHIPPED WITHOUT THEM. Both
         // reset flags are parsed above (`--reset-guest` and `--reset-state`),
@@ -1176,6 +1183,7 @@ fn main() {
         "--observatorium",
         "--port",
         "--prompt",
+        "--no-remote-control",
         "--cache-clear",
         "--cache-verify",
         "--listen-vsock",
@@ -2155,7 +2163,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --stop-all");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
-    println!("       tillandsias --claude <project> [--debug|--diagnostics]");
+    println!("       tillandsias --claude <project> [--no-remote-control] [--debug|--diagnostics]");
     println!("       tillandsias --bash <project> [--debug|--diagnostics]");
     println!("       tillandsias --copilot <project> [--debug|--diagnostics]");
     println!(
@@ -10440,6 +10448,53 @@ fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
 /// Instance-scoped so two concurrent workers do not collide on the enclave
 /// network's DNS. Sharing a hostname would make container-to-container
 /// resolution non-deterministic between workers.
+/// Set by `--no-remote-control`; suppresses TILLANDSIAS_CLAUDE_SESSION_NAME.
+const NO_REMOTE_CONTROL_ENV: &str = "TILLANDSIAS_NO_REMOTE_CONTROL";
+
+/// `<project>-forge`, the Remote Control / session name for a Claude forge.
+/// Takes the last path segment (so `owner/project` names the project) and
+/// sanitises it to `[a-z0-9._-]`.
+fn claude_forge_session_name(project_name: &str) -> String {
+    let slug: String = project_name
+        .rsplit('/')
+        .next()
+        .unwrap_or(project_name)
+        .chars()
+        .map(|c| {
+            let c = c.to_ascii_lowercase();
+            if c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let slug = if slug.is_empty() {
+        "project".to_string()
+    } else {
+        slug
+    };
+    format!("{slug}-forge")
+}
+
+#[cfg(test)]
+mod claude_forge_session_name_tests {
+    use super::claude_forge_session_name;
+
+    #[test]
+    fn sanitises_owner_project_slug() {
+        assert_eq!(
+            claude_forge_session_name("8007342/Tillandsias"),
+            "tillandsias-forge"
+        );
+        assert_eq!(
+            claude_forge_session_name("My Proj!.v2"),
+            "my-proj-.v2-forge"
+        );
+        assert_eq!(claude_forge_session_name(""), "project-forge");
+    }
+}
+
 fn forge_hostname(project_name: &str) -> String {
     sanitize_hostname(&format!("forge-{project_name}{}", forge_instance_suffix()))
 }
@@ -22706,6 +22761,16 @@ fn build_forge_agent_run_args_with_vault(
         && matches!(mode, ForgeAgentMode::Claude)
     {
         spec = spec.env("TILLANDSIAS_CLAUDE_PROMPT", prompt);
+    }
+    // Remote Control by default for the Claude lane (2026-11-13): the
+    // entrypoint joins the session to Remote Control named `<project>-forge`
+    // so a coordinator can message it without the operator typing
+    // /remote-control. `--no-remote-control` opts out.
+    if matches!(mode, ForgeAgentMode::Claude) && std::env::var_os(NO_REMOTE_CONTROL_ENV).is_none() {
+        spec = spec.env(
+            "TILLANDSIAS_CLAUDE_SESSION_NAME",
+            claude_forge_session_name(project_name),
+        );
     }
 
     for (name, value) in
