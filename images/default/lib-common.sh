@@ -5427,8 +5427,8 @@ inject_startup_context() {
     # Order 1878-2cwt 5.3: the disk line. The plan binary computes it
     # (disk-preflight --dry-run evicts nothing); shell only relays its verdict.
     local _disk_line _disk_out _disk_n
-    _disk_out="$("$FORGE_EXPERTS_BIN_DIR/tillandsias-plan" disk-preflight --repo "$project_dir" --target /home/forge/src --l0 --dry-run 2>/dev/null)"
-    _disk_n="$(printf '%s\n' "$_disk_out" | grep -c '^would-evict:')"
+    _disk_out="$("$FORGE_EXPERTS_BIN_DIR/tillandsias-plan" disk-preflight --repo "$project_dir" --target /home/forge/src --l0 --dry-run 2>/dev/null || true)"
+    _disk_n="$(printf '%s\n' "$_disk_out" | grep -c '^would-evict:' || true)"
     _disk_line="$(printf '%s\n' "$_disk_out" | tail -n 1)"
     [[ -n "$_disk_line" ]] || _disk_line="refused:disk-low:/home/forge/src:unknown (disk-preflight unavailable)"
     _disk_line="${_disk_line} would_evict=${_disk_n:-0}"
