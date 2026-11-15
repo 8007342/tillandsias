@@ -38,20 +38,20 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "enum LeafAction"
 
-  - step: "Req Home Menu: 7 LeafAction variants (Claude/Codex/OpenCode/Antigravity/OpenCodeWeb/Observatorium/Maintenance)"
+  - step: "Req Home Menu: 8 LeafAction variants (Claude/Codex/OpenCode/Antigravity/Copilot/OpenCodeWeb/Observatorium/Maintenance)"
     # Pin all 7 variant names so a refactor dropping any deployed
     # menu leaf surfaces fast.
-    command: "for v in Claude Codex OpenCode Antigravity OpenCodeWeb Observatorium Maintenance; do grep -Eq \"^    $v,\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: LeafAction::$v variant missing\"; exit 1; }; done && echo \"ok: 7 LeafAction variants\""
+    command: "for v in Claude Codex OpenCode Antigravity Copilot OpenCodeWeb Observatorium Maintenance; do grep -Eq \"^    $v,\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: LeafAction::$v variant missing\"; exit 1; }; done && echo \"ok: 8 LeafAction variants\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req Home Menu: LeafAction::ALL constant lists all 7 variants in canonical offset order"
+  - step: "Req Home Menu: LeafAction::ALL constant lists all 8 variants in canonical offset order"
     # The ALL array is the static-pre-built-menu's iteration order.
-    # Pinning by `const ALL: [LeafAction; 7]` literal catches a
+    # Pinning by `const ALL: [LeafAction; 8]` literal catches a
     # regression that silently shrinks the array.
-    command: "grep -F 'const ALL: [LeafAction; 7]' crates/tillandsias-headless/src/tray/mod.rs"
+    command: "c(){ v=$(awk '/^enum LeafAction \\{/,/^}/ { if ($0 ~ /^    [A-Z][A-Za-z]*,/) k++ } END { print k+0 }' \"$1\"); n=$(sed -n 's/.*const ALL: \\[LeafAction; \\([0-9]*\\)\\].*/\\1/p' \"$1\"); [ -n \"$n\" ] && [ \"$v\" = \"$n\" ] && [ \"$n\" = 8 ]; }; M=crates/tillandsias-headless/src/tray/mod.rs; c \"$M\" || { echo 'FAIL: LeafAction::ALL length differs from the enum variant count'; exit 1; }; T=$(mktemp); sed 's/const ALL: \\[LeafAction; 8\\]/const ALL: [LeafAction; 7]/' \"$M\" > \"$T\"; if c \"$T\"; then rm -f \"$T\"; echo 'FAIL: negative control: a short ALL was not caught'; exit 1; fi; rm -f \"$T\"; echo 'ok: ALL: [LeafAction; 8] covers every variant (negative control must fail and did)'"
     timeout_ms: 3000
-    expected_behavior: "ALL: [LeafAction; 7]"
+    expected_behavior: "ALL: [LeafAction; 8]"
 
   - step: "Req Startup Menu: 'By Tlatoāni' attribution literal in menu construction"
     # Spec § Req 1 Menu element 3: `Version & Attribution` —
@@ -94,7 +94,7 @@ rollback:
     A `spec:simplified-tray-ux` surface drifted. Restore `enum
     LeafAction` with the 7 variants {Claude, Codex, OpenCode,
     Antigravity, OpenCodeWeb, Observatorium, Maintenance}; the
-    `const ALL: [LeafAction; 7]` constant; the `By Tlatoāni`
+    `const ALL: [LeafAction; 8]` constant; the `By Tlatoāni`
     attribution literal; the docblock pinning Version + Quit
     Tillandsias menu IDs (30 + 31); the LeafAction offset table
     (+0 Claude through +6 Maintenance, +7 submenu node).
