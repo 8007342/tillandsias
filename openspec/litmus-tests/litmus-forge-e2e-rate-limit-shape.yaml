@@ -62,8 +62,13 @@ critical_path:
   # (b), 2093-hbaw). The wrapper's own behaviour is still pinned above; the
   # launch-through-wrapper check moved to the post-release smoke (2093-clds).
 
-  - step: "smoke runs are marker-gated and delta-steps skip on mode=smoke"
-    command: "grep -Fq 'MO-SMOKE: PASS' scripts/litmus-opencode-e2e-launch.sh && c=$(grep -c 'opencode-e2e-mode' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml); [ \"$c\" -ge 3 ] && echo 'ok: smoke-gated' || { echo \"FAIL: mode-file references=$c\"; exit 1; }"
+  # 2093-vvnk: the "delta-steps skip on mode=smoke" half (>=3 opencode-e2e-mode
+  # references in litmus-opencode-prompt-e2e-shape.yaml) was DROPPED with those
+  # delta steps (ruling (b), 2093-hbaw; named in 2093-clds). The marker gate in
+  # the launch wrapper is still pinned here.
+  - step: "smoke runs are marker-gated (the launch wrapper requires MO-SMOKE: PASS)"
+    # NEGATIVE CONTROL: the same check over a copy with the marker removed must fail.
+    command: "W=scripts/litmus-opencode-e2e-launch.sh; grep -Fq 'MO-SMOKE: PASS' \"$W\" || { echo 'FAIL: the launch wrapper no longer gates smoke on MO-SMOKE: PASS'; exit 1; }; T=$(mktemp); sed 's/MO-SMOKE: PASS/MO-SMOKE: X/g' \"$W\" > \"$T\"; if grep -Fq 'MO-SMOKE: PASS' \"$T\"; then rm -f \"$T\"; echo 'FAIL: negative control: a wrapper without the marker still passed'; exit 1; fi; rm -f \"$T\"; echo 'ok: smoke-gated (negative control must fail and did)'"
     timeout_ms: 3000
     expected_behavior: "ok: smoke-gated"
 
