@@ -1071,6 +1071,31 @@ get_test_inputs() {
 # cross `/`: `crates/*` means "anything under crates/", which is the reading an
 # annotator intends. Stated here because the opposite assumption would silently
 # narrow a glob and skip a test that should have run.
+# ORDER 2093-aggt (A): a fixture that runs the real ./build.sh with a gate flag
+# re-runs its gate-touch (1599-egzz) on this checkout mid-suite, after which
+# scripts/tillandsias-podman refuses every podman call by name (1270-5mz8):
+# four podman-class reds in the 2026-11-16 macuahuitl cut gate. Before each
+# test, when NO prebuilt podman-cli is newer than its sources, rebuild the
+# debug one. A fresh prebuilt costs one `find -newer -quit`; the shim's own
+# refusal is unchanged outside this runner.
+litmus_refresh_stale_podman_cli() {
+    local _base="${CARGO_TARGET_DIR:-$PROJECT_ROOT/target}" _cand _p _seen=0
+    [[ "$_base" = /* ]] || _base="$PROJECT_ROOT/$_base"
+    for _p in release debug; do
+        _cand="$_base/$_p/tillandsias-podman-cli"
+        [[ -x "$_cand" ]] || continue
+        _seen=1
+        [[ -z "$(find "$PROJECT_ROOT/crates/tillandsias-podman-cli" "$PROJECT_ROOT/crates/tillandsias-podman" \
+            -type f -newer "$_cand" -print -quit 2>/dev/null || true)" ]] && return 0
+    done
+    [[ "$_seen" = 1 ]] || return 0
+    if (cd "$PROJECT_ROOT" && cargo build -q -p tillandsias-podman-cli </dev/null >/dev/null 2>&1); then
+        printf 'podman-cli: rebuilt-stale-prebuilt-before-test (2093-aggt)\n' >&2
+    else
+        printf 'podman-cli: rebuild-failed-before-test — the shim will refuse it by name (1270-5mz8)\n' >&2
+    fi
+}
+
 litmus_inputs_intersect_diff() {
     local globs="$1" changed="$2"
     local g p
@@ -2480,6 +2505,7 @@ run_tests_for_spec() {
             fi
         fi
 
+        litmus_refresh_stale_podman_cli
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
         # @trace spec:spec-traceability

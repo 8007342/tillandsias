@@ -62,7 +62,11 @@ end
 
 local function run(a)
     return proc.run({ argv = { "bash", a .. "/scripts/tillandsias-podman", "raw", "ps" },
-        env = { PATH = a .. "/bin:" .. (os.getenv and os.getenv("PATH") or "/usr/bin:/bin") },
+        -- 2093-aggt (B): a gate exports CARGO_TARGET_DIR (the shared target,
+        -- 1807-shtg), and the shim checks it FIRST, so the scratch tree ran the
+        -- real prebuilt and arm 2 read rc=0 with no marker. Clear it here.
+        env = { PATH = a .. "/bin:" .. (os.getenv and os.getenv("PATH") or "/usr/bin:/bin"),
+            CARGO_TARGET_DIR = "" },
         timeout_ms = 60000 })
 end
 

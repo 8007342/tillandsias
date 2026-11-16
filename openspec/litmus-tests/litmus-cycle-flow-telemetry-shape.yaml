@@ -39,32 +39,31 @@ preconditions:
   - shell utilities (grep, mktemp) are available in PATH
 
 critical_path:
+  # 2093-aggt: every step points ALL of cycle-metrics.sh's logs at /dev/null
+  # first (a step's own VAR=fixture still wins), so no step reads the live
+  # telemetry logs: 19.0 s / 11.9 s on macuahuitl's 683,776-record timing log,
+  # 262 ms on fixtures.
   - step: "--emit-flow appends one record carrying the pinned packet-flow grammar"
-    command: "F=$(mktemp); TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --emit-flow host=linux-mutable batch_epic=E batch_seed=42 batch_size=3 budget=3 claimed=3 completed=2 filed=1 commits=5 plan_open=118 plan_total=800 >/dev/null 2>&1; out=$(cat $F); rm -f $F; echo \"$out\" | jq -e 'has(\"ts\") and .host==\"linux-mutable\" and .batch_epic==\"E\" and .batch_seed==\"42\" and .batch_size==3 and .budget==3 and .claimed==3 and .completed==2 and .filed==1 and .commits==5 and .plan_open==118 and .plan_total==800' >/dev/null 2>&1 && echo 'ok: flow record grammar' || { echo \"observed=$out\"; echo 'fail: flow record grammar'; }"
+    command: "export TILLANDSIAS_CONTEXT_LOG=/dev/null TILLANDSIAS_CYCLE_FLOW_LOG=/dev/null TILLANDSIAS_EXPERT_HEALTH_LOG=/dev/null TILLANDSIAS_EXPERT_USAGE_LOG=/dev/null TILLANDSIAS_TIMING_LOG=/dev/null TILLANDSIAS_TOKENS_LOG=/dev/null; F=$(mktemp); TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --emit-flow host=linux-mutable batch_epic=E batch_seed=42 batch_size=3 budget=3 claimed=3 completed=2 filed=1 commits=5 plan_open=118 plan_total=800 >/dev/null 2>&1; out=$(cat $F); rm -f $F; echo \"$out\" | jq -e 'has(\"ts\") and .host==\"linux-mutable\" and .batch_epic==\"E\" and .batch_seed==\"42\" and .batch_size==3 and .budget==3 and .claimed==3 and .completed==2 and .filed==1 and .commits==5 and .plan_open==118 and .plan_total==800' >/dev/null 2>&1 && echo 'ok: flow record grammar' || { echo \"observed=$out\"; echo 'fail: flow record grammar'; }"
     timeout_ms: 10000
     expected_behavior: "ok: flow record grammar"
 
   - step: "the flow: line computes a ROLLING average over the log (not the last row, not call volume)"
     # Two fixture cycles: completed 1 then 2 (avg 1.5), commits 3 then 5 (avg 4).
-    command: "F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"1\",\"batch_size\":1,\"budget\":1,\"claimed\":1,\"completed\":1,\"filed\":0,\"commits\":3,\"plan_open\":120,\"plan_total\":800}\\n{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"2\",\"batch_size\":3,\"budget\":3,\"claimed\":3,\"completed\":2,\"filed\":1,\"commits\":5,\"plan_open\":118,\"plan_total\":800}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *cycles=2*avg_completed_per_cycle=1.5*avg_commits_per_cycle=4*) echo 'ok: rolling average' ;; *) echo \"observed=$out expected cycles=2 avg_completed_per_cycle=1.5 avg_commits_per_cycle=4\"; echo 'fail: rolling average' ;; esac"
+    command: "export TILLANDSIAS_CONTEXT_LOG=/dev/null TILLANDSIAS_CYCLE_FLOW_LOG=/dev/null TILLANDSIAS_EXPERT_HEALTH_LOG=/dev/null TILLANDSIAS_EXPERT_USAGE_LOG=/dev/null TILLANDSIAS_TIMING_LOG=/dev/null TILLANDSIAS_TOKENS_LOG=/dev/null; F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"1\",\"batch_size\":1,\"budget\":1,\"claimed\":1,\"completed\":1,\"filed\":0,\"commits\":3,\"plan_open\":120,\"plan_total\":800}\\n{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"2\",\"batch_size\":3,\"budget\":3,\"claimed\":3,\"completed\":2,\"filed\":1,\"commits\":5,\"plan_open\":118,\"plan_total\":800}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *cycles=2*avg_completed_per_cycle=1.5*avg_commits_per_cycle=4*) echo 'ok: rolling average' ;; *) echo \"observed=$out expected cycles=2 avg_completed_per_cycle=1.5 avg_commits_per_cycle=4\"; echo 'fail: rolling average' ;; esac"
     # Budget RESTORED to 10000 ms (1236-bmjh, yoga 2026-10-15). It was elevated
     # to 300000 ms on 2026-09-17, when scripts/cycle-metrics.sh took 29,908 ms
     # on a quiet host. What brought this step back: --no-experts --experts-only exits after the telemetry lines (orders 1245, 1105-h8vr), so the step reads only its fixture flow log and no ledger at all.
     # Measured: max 3757 ms over 6 runs in yoga's .cache/metrics/
     # litmus-step-timing.jsonl (mixed quiet/gate regime), timing log 116,745
     # records, ledger 4,567 fragments.
-    # Budget RAISED to 30000 ms (2093-pcli, macuahuitl 2026-11-15): 19,000 ms
-    # standalone, a TIMEOUT in --ci-full. A scaling regression, not load: the
-    # other sections still read the live logs (timing log 683,776 records,
-    # experts log 868,202 calls; one jq -s slurp is 5.6 s). The bump only buys
-    # time; 2093-aggt makes the step input-bounded on a fixed fixture.
-    timeout_ms: 30000
+    timeout_ms: 10000
     expected_behavior: "ok: rolling average"
 
   - step: "overhead_ratio is total commits per total completed (the number 682-yiz7 consumes)"
     # commits 3+5=8, completed 1+2=3, ratio 8/3=2.67 (2dp). Falls as greedier
     # batches amortize the fixed per-cycle cost.
-    command: "F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *overhead_ratio=2.67*) echo 'ok: overhead_ratio' ;; *) echo \"observed=$out expected overhead_ratio=2.67\"; echo 'fail: overhead_ratio' ;; esac"
+    command: "export TILLANDSIAS_CONTEXT_LOG=/dev/null TILLANDSIAS_CYCLE_FLOW_LOG=/dev/null TILLANDSIAS_EXPERT_HEALTH_LOG=/dev/null TILLANDSIAS_EXPERT_USAGE_LOG=/dev/null TILLANDSIAS_TIMING_LOG=/dev/null TILLANDSIAS_TOKENS_LOG=/dev/null; F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *overhead_ratio=2.67*) echo 'ok: overhead_ratio' ;; *) echo \"observed=$out expected overhead_ratio=2.67\"; echo 'fail: overhead_ratio' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: overhead_ratio"
 
@@ -74,17 +73,17 @@ critical_path:
     # the plain count is 4. Measured 2026-08-16 on windows: a pre-push merge of
     # origin/linux-next made the plain count report 24 where the cycle had made
     # 3 commits + 1 merge, skewing overhead_ratio (682-yiz7's input) by 6x.
-    command: "d=$(mktemp -d); git init -q -b work \"$d/repo\"; mkdir -p \"$d/repo/scripts\"; cp scripts/cycle-metrics.sh scripts/plan-binary-probe.sh \"$d/repo/scripts/\"; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m base; git -C \"$d/repo\" tag base; git -C \"$d/repo\" checkout -q -b side; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m s1; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m s2; git -C \"$d/repo\" checkout -q work; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m w1; git -C \"$d/repo\" -c user.email=l@t -c user.name=l merge -q --no-ff -m m side; out=$(cd \"$d/repo\" && TILLANDSIAS_EXPERT_USAGE_LOG=$d/none1 TILLANDSIAS_CYCLE_FLOW_LOG=$d/none2 TILLANDSIAS_TIMING_LOG=$d/none3 bash scripts/cycle-metrics.sh base 2>/dev/null | grep '^repo:'); rm -rf \"$d\"; case \"$out\" in *commits_this_cycle=2*) echo 'ok: first-parent commits' ;; *) echo \"observed=$out expected commits_this_cycle=2 (w1 + merge; the 2 merged side commits are sibling work)\"; echo 'fail: merged-in sibling commits inflate commits_this_cycle' ;; esac"
+    command: "export TILLANDSIAS_CONTEXT_LOG=/dev/null TILLANDSIAS_CYCLE_FLOW_LOG=/dev/null TILLANDSIAS_EXPERT_HEALTH_LOG=/dev/null TILLANDSIAS_EXPERT_USAGE_LOG=/dev/null TILLANDSIAS_TIMING_LOG=/dev/null TILLANDSIAS_TOKENS_LOG=/dev/null; d=$(mktemp -d); git init -q -b work \"$d/repo\"; mkdir -p \"$d/repo/scripts\"; cp scripts/cycle-metrics.sh scripts/plan-binary-probe.sh \"$d/repo/scripts/\"; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m base; git -C \"$d/repo\" tag base; git -C \"$d/repo\" checkout -q -b side; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m s1; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m s2; git -C \"$d/repo\" checkout -q work; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m w1; git -C \"$d/repo\" -c user.email=l@t -c user.name=l merge -q --no-ff -m m side; out=$(cd \"$d/repo\" && TILLANDSIAS_EXPERT_USAGE_LOG=$d/none1 TILLANDSIAS_CYCLE_FLOW_LOG=$d/none2 TILLANDSIAS_TIMING_LOG=$d/none3 bash scripts/cycle-metrics.sh base 2>/dev/null | grep '^repo:'); rm -rf \"$d\"; case \"$out\" in *commits_this_cycle=2*) echo 'ok: first-parent commits' ;; *) echo \"observed=$out expected commits_this_cycle=2 (w1 + merge; the 2 merged side commits are sibling work)\"; echo 'fail: merged-in sibling commits inflate commits_this_cycle' ;; esac"
     timeout_ms: 30000
     expected_behavior: "ok: first-parent commits"
 
   - step: "an absent flow log reports source=absent with no fabricated numbers"
-    command: "F=$(mktemp -u); out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); case \"$out\" in *cycles=0*overhead_ratio=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
+    command: "export TILLANDSIAS_CONTEXT_LOG=/dev/null TILLANDSIAS_CYCLE_FLOW_LOG=/dev/null TILLANDSIAS_EXPERT_HEALTH_LOG=/dev/null TILLANDSIAS_EXPERT_USAGE_LOG=/dev/null TILLANDSIAS_TIMING_LOG=/dev/null TILLANDSIAS_TOKENS_LOG=/dev/null; F=$(mktemp -u); out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --no-experts --experts-only 2>/dev/null | grep '^flow:'); case \"$out\" in *cycles=0*overhead_ratio=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
     timeout_ms: 10000
     expected_behavior: "ok: absent honest"
 
   - step: "a logging failure (unwritable flow log path) does NOT fail the cycle"
-    command: "TILLANDSIAS_CYCLE_FLOW_LOG=/proc/1/nope-cannot-write.jsonl scripts/cycle-metrics.sh --emit-flow host=h completed=1 commits=2 >/dev/null 2>&1; rc=$?; if [ $rc -eq 0 ]; then echo 'ok: emit survives unwritable log'; else echo \"observed rc=$rc expected 0\"; echo 'fail: a metric must not fail the cycle it measures'; fi"
+    command: "export TILLANDSIAS_CONTEXT_LOG=/dev/null TILLANDSIAS_CYCLE_FLOW_LOG=/dev/null TILLANDSIAS_EXPERT_HEALTH_LOG=/dev/null TILLANDSIAS_EXPERT_USAGE_LOG=/dev/null TILLANDSIAS_TIMING_LOG=/dev/null TILLANDSIAS_TOKENS_LOG=/dev/null; TILLANDSIAS_CYCLE_FLOW_LOG=/proc/1/nope-cannot-write.jsonl scripts/cycle-metrics.sh --emit-flow host=h completed=1 commits=2 >/dev/null 2>&1; rc=$?; if [ $rc -eq 0 ]; then echo 'ok: emit survives unwritable log'; else echo \"observed rc=$rc expected 0\"; echo 'fail: a metric must not fail the cycle it measures'; fi"
     timeout_ms: 10000
     expected_behavior: "ok: emit survives unwritable log"
 
