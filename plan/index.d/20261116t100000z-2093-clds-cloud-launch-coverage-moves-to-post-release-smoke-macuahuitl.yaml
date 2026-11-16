@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Linux) at the coordinator's ruling (option b) during the 2026-11-16 cut triage.
+packets:
+- packet_id: cloud-launch-coverage-moves-to-post-release-smoke
+  order: 2093-clds
+  status: ready
+  kind: test
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [litmus, smoke, e2e, release]
+  estimated_hours: 4
+  title: 'Cloud-launch coverage for opencode-prompt, container-start-health and forge-diagnostics moves to a post-release smoke'
+  context: 'Local-checkout launch is retired: `tillandsias .` exits 2 with "launching from a local checkout (''.'') is no longer supported". Three post-build litmus launched that way and went red in the 2026-11-16 cut gate. Coordinator ruling: the release gate makes no GitHub push and no OpenCode call, so 2093-loc pinned the refusal and kept only launcher-free arms. COVERAGE GAP, these steps were DROPPED from the release gate:
+    litmus:opencode-prompt-e2e-shape steps 3 "record pre-smoke HEAD for delta comparison", 4 "record pre-smoke remote branch head for push verification", 5 "launch forge with meta-orchestration prompt (full-or-smoke, rate-limited, liveness-extended)", 6 "verify local HEAD advanced since smoke start", 7 "verify a plan/ file was updated (ledger or finding filed)", 8 "verify remote branch HEAD advanced";
+    litmus:container-start-health steps 2 "launch forge with --diagnostics, capturing the idiomatic launch-event stream (stderr)", 3 "at least one container reached state=running via the idiomatic layer", 4 "NO container reported an INFRA launch failure (agent-process exits excluded)", 5 "the forge-agent stage launched (running, exited, or ran-to-process-exit)", 6 "events came from the idiomatic layer (no raw-podman bypass signature)", 7 "non-blocking annex piggyback: capture diagnostics summary if first in cycle, else dedup-skip", 8 "annex produced a raw log, skip note, OR distill summary (any cycle outcome is fine)";
+    litmus:forge-diagnostics-e2e steps 1 "reset the cycle dedupe marker ONLY when a fresh capture is allowed", 2 "run the non-blocking diagnostics annex (one forge launch + dedup + distill; rate-limited)", 3 "validate output is parseable JSON with diagnostics_timestamp field (newest VALID capture, <24h)", 4-6 "container-start health: ..." (running event, no INFRA failure, forge-agent stage launched).
+    Kept in the gate: the pinned refusal, the forge image reaching running through podman with no launcher, and the --diagnostics envelope line.'
+  exit_criteria:
+  - 'smoke-curl-install-and-test-e2e, run on the STABLE release against a dedicated scratch repo in smoke mode (no pushes to the product repo), carries arms equivalent to every dropped step named in context: idiomatic container_launch running/no-infra-failure/agent-stage events, a valid diagnostics JSON capture, and the prompt launch reaching FORGE_EXIT=0. Each arm reports its own verdict line in the smoke report.'
+  verifiable_closure: 'A smoke-curl-install-and-test-e2e report on a stable release carrying one verdict line per dropped step.'
+  unscoreable: 'none.'
+  next_action: 'Add the cloud-launch arms to skills/smoke-curl-install-and-test-e2e against a scratch repo in smoke mode; keep scripts/forge-diagnostics-annex.sh usable from the smoke with --cloud.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-16 ruling (b) on gate-eight reds 3, 5 and 8.'
+  events:
+  - type: filed
+    ts: '2026-11-16T10:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the 2026-11-16 cut triage
