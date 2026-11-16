@@ -516,7 +516,28 @@ litmus_args_for_phase() {
     printf '%s\0' "${args[@]}"
 }
 
+# ORDER 2093-pcli: the litmus shim refuses a podman-cli prebuilt older than
+# any source under its two crates (1270-5mz8), and build.sh's gate-touch
+# (1599-egzz) bumps the mtime of every tracked file at gate start. build.sh's
+# own _run_litmus_phase rebuilds the prebuilt first; this runner did not, so
+# every --ci-full pre-build litmus saw podman refused by name (12 reds and
+# podman-path-availability on macuahuitl, three gates, 2026-11-15). Build it
+# once here too; cargo is a no-op when the prebuilt is already current.
+_LITMUS_PODMAN_CLI_READY=0
+ensure_litmus_podman_cli() {
+    [ "$_LITMUS_PODMAN_CLI_READY" = 1 ] && return 0
+    _LITMUS_PODMAN_CLI_READY=1
+    local _pc_rc=0
+    cargo build -q -p tillandsias-podman-cli || _pc_rc=$?
+    if [ "$_pc_rc" -eq 0 ]; then
+        echo "podman-cli: built-before-litmus-shim (local-ci; cargo build -p tillandsias-podman-cli rc=0; 2093-pcli)"
+    else
+        echo "podman-cli: build-failed-before-litmus-shim rc=$_pc_rc (local-ci) — the shim will refuse a stale prebuilt by name (1270-5mz8)"
+    fi
+}
+
 run_litmus_phase() {
+    ensure_litmus_podman_cli
     local phase="$1"
     local log_file="$2"
     shift 2

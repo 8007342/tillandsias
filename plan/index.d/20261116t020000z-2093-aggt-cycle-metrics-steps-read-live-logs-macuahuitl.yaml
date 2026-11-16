@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Linux) at the coordinator's ruling during the 2026-11-15 cut triage.
+packets:
+- packet_id: cycle-metrics-litmus-steps-are-input-bounded
+  order: 2093-aggt
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [litmus, telemetry, ci]
+  estimated_hours: 2
+  title: The cycle-flow and build-test-timing litmus steps run scripts/cycle-metrics.sh over the live telemetry logs, so their cost grows with the logs
+  context: 'Step 2 of litmus:cycle-flow-telemetry-shape and of litmus:build-test-timing-telemetry-shape each pin one log to a 2-4 row fixture, but every other section of cycle-metrics.sh still reads the live logs. On macuahuitl (timing log 683,776 records, experts log 868,202 calls) they took 19.0 s and 11.9 s against a 10 s budget; yoga measured under 4 s at 116,745 records on 2026-10-15. 2093-pcli raised both budgets to 30 s as a stopgap.'
+  exit_criteria:
+  - 'Both steps run cycle-metrics.sh with every log it reads pointed at a fixed fixture (or a section selector that skips the others), and each step finishes under 2 s on macuahuitl with its budget restored to 10 s.'
+  verifiable_closure: 'litmus:cycle-flow-telemetry-shape'
+  unscoreable: 'none.'
+  next_action: 'Add a section selector or per-log fixture env to scripts/cycle-metrics.sh; point both steps at it; restore timeout_ms 10000.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-15 ruling on cut-gate reds 1 and 2.'
+  events:
+  - type: filed
+    ts: '2026-11-16T02:00:00Z'
+    host: macuahuitl
+    summary: filed ready from the 2026-11-15 cut-gate triage

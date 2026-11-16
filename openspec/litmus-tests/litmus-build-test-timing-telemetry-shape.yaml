@@ -67,7 +67,12 @@ critical_path:
     # Measured: max 2699 ms over 6 runs in yoga's .cache/metrics/
     # litmus-step-timing.jsonl (mixed quiet/gate regime), timing log 116,745
     # records, ledger 4,567 fragments.
-    timeout_ms: 10000
+    # Budget RAISED to 30000 ms (2093-pcli, macuahuitl 2026-11-15): 11,900 ms
+    # standalone, a TIMEOUT in --ci-full. A scaling regression, not load: the
+    # other sections still read the live logs (timing log 683,776 records,
+    # experts log 868,202 calls; one jq -s slurp is 5.6 s). The bump only buys
+    # time; 2093-aggt makes the step input-bounded on a fixed fixture.
+    timeout_ms: 30000
     expected_behavior: "ok: rolling namespaced averages"
 
   - step: "an absent timing log reports source=absent with no fabricated numbers"
