@@ -88,6 +88,12 @@ local function git(args)
     return r.code == 0, text.trim(r.stdout or ""), r
 end
 git({ "init", "-q", "-b", "linux-next" })
+-- 2093-post: the broker's own `git notes append` inherits no -c identity, so
+-- the scratch repo carries one. Without it the fixture passed only where the
+-- ambient git config had an identity, and refused note-failed in the builder
+-- toolbox the release gate runs in ("Author identity unknown").
+git({ "config", "user.name", "fixture" })
+git({ "config", "user.email", "fixture@local" })
 fs.write(REL .. "/repo/a.txt", "a\n")
 git({ "add", "-A" }); git({ "commit", "-qm", "A" })
 local _, FROM = git({ "rev-parse", "HEAD" })
