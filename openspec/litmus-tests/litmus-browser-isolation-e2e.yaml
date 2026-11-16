@@ -34,8 +34,12 @@ critical_path:
     timeout_ms: 20000
     expected_behavior: "OK"
 
+  # 2093-am6t: publish on an EPHEMERAL host port (127.0.0.1::80). The fixed
+  # 127.0.0.1:8080 collided with the live tillandsias-router on a host running
+  # a forge (podman run exit 126); every request here goes over the enclave
+  # network, never the host port.
   - step: "launch router container (Caddy reverse proxy)"
-    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && : > /tmp/tillandsias-router-e2e/dynamic.Caddyfile && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -p 127.0.0.1:8080:80 -v /tmp/tillandsias-router-e2e:/run/router:rw \"$ROUTER_IMG\" > /tmp/litmus-router-e2e.log 2>&1; _rc=$?; head -1 /tmp/litmus-router-e2e.log; exit $_rc"
+    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && : > /tmp/tillandsias-router-e2e/dynamic.Caddyfile && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -p 127.0.0.1::80 -v /tmp/tillandsias-router-e2e:/run/router:rw \"$ROUTER_IMG\" > /tmp/litmus-router-e2e.log 2>&1; _rc=$?; head -1 /tmp/litmus-router-e2e.log; exit $_rc"
     timeout_ms: 10000
     expected_behavior: "podman prints the new container id (64 hex) on stdout and exits 0"
     # ORDER 1252-znbn. MEASURED on pirria 2026-09-20: `podman run -d` prints

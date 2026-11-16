@@ -47,6 +47,9 @@ local function running(name)
 end
 
 if not run({ "getfattr", "--version" }).ok then
+    -- 2093-am6t: fail closed, and say where getfattr comes from.
+    out.line("  why: getfattr (package attr) is not on PATH, so the oomd-avoid xattr cannot be read")
+    out.line("  remedy: the tillandsias-builder toolbox provisions attr (scripts/with-tillandsias-builder.sh); re-run it, or install attr where this runs")
     verdict.emit("could-not-run:forge-oomd-avoid:no-getfattr", 2)
 end
 local mgr = text.trim(run({ "podman", "info", "--format", "{{.Host.CgroupManager}}" }).stdout or "")
