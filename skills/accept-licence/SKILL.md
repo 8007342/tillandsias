@@ -1,6 +1,6 @@
 ---
 name: accept-licence
-description: Accept a third-party licence for a model or tool whose terms are outside the permissive list (non-commercial, share-alike, seat thresholds, OpenRAIL use restrictions, CorridorKey). Shows the licence verbatim through the tray, takes the OS-verified signed approval (Windows Hello, Touch ID, fingerprint, FIDO) through the approval gates, and commits the acknowledgement record plus an obligations spec into the agreeing project in one signed commit. Use when a fetch is refused with licence_acknowledgement_required, or when a project adds a restricted artefact. Works for any project in a Tillandsias forge.
+description: Accept a third-party licence for a model or tool whose terms are outside the permissive list (non-commercial, share-alike, seat thresholds, OpenRAIL use restrictions, CorridorKey). Shows the licence verbatim through the tray, takes an OS-verified human-presence gate (Windows Hello, Touch ID, polkit fingerprint) through the approval gates (operator ruling 2026-11-16: the gate, not the signer), and commits the acknowledgement record plus an obligations spec into the agreeing project in one signed commit. Use when a fetch is refused with licence_acknowledgement_required, or when a project adds a restricted artefact. Works for any project in a Tillandsias forge.
 license: MIT
 metadata:
   author: tillandsias
@@ -80,7 +80,9 @@ licenses, duh". The user is never asked for ids, slugs, scope, use or expiry.
    shows ONE native window listing every acknowledgeable: each licence's
    verbatim clauses, the artefacts, and the scope and use in plain words. The
    approve control stays disabled until the user has scrolled to the bottom.
-   Touch ID, Windows Hello or polkit signs all of them and the window closes.
+   One Touch ID, Windows Hello or polkit fingerprint check releases the host
+   key that signs all of them (STORED mode; the key proves a human gate ran,
+   not who the human is: operator ruling 2026-11-16) and the window closes.
    Cancel signs nothing. You build no statement text; the tray builds it
    (`licence_consent::Acknowledgement::statement_text`).
 3. The tray enrols the per-repo key silently if needed and returns the signed
