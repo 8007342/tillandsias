@@ -25,7 +25,6 @@ scripts/check-spec-index-resolution-agreement.sh 2
 scripts/check-tracked-files-unwritten.sh 1
 scripts/check-windows-tray-clippy.sh 1
 scripts/clamp-ca-material.sh 1
-scripts/claude-mcp.sh 2
 scripts/cycle-preflight.sh 2
 scripts/diagnose-proxy.sh 1
 scripts/e2e-preflight.sh 1
