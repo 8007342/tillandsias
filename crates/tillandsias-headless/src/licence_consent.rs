@@ -707,7 +707,7 @@ pub fn obligations_spec(artefact: &str, licence_id: &str, obligations: &[Obligat
     s.push_str("## Purpose\n\n");
     s.push_str(&format!(
         "This project depends on {artefact} and must now adhere to {list}, the obligations its licence `{licence_id}` carries. \
-         The acknowledgement that accepted the licence is under `licences/acknowledgements/`, signed with an OS-verified key and committed with this spec. \
+         The acknowledgement that accepted the licence is under `licences/acknowledgements/`, approved by a human (the merge of its licence pull request, or an OS-verified signature) and committed with this spec. \
          Tillandsias records these obligations; honouring them over the project's lifetime is the project's own work, and each requirement below says how.\n\n"
     ));
     s.push_str("## Requirements\n\n");
@@ -836,6 +836,105 @@ fn scenario_body(o: &Obligation, artefact: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// The licence pull request (order 2094-h3rq)
+// ---------------------------------------------------------------------------
+
+/// What the accept-licence skill opens in the PROJECT repo: head
+/// `licences/<licence id>`, base the default branch. The skill only opens
+/// it; the human merge in the GitHub web UI is the approval.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LicencePr {
+    pub head: String,
+    pub title: String,
+    pub body: String,
+    /// `(path in the project repo, content)`.
+    pub files: Vec<(String, String)>,
+}
+
+/// The licence text file the PR quotes, beside the record.
+pub fn licence_text_path(licence_id: &str) -> String {
+    format!("licences/texts/{}.md", slugify(licence_id))
+}
+
+/// Render the licence PR. `licence_text` must hash to `ack.licence_sha256`
+/// (a record against other bytes is refused here, not at merge time);
+/// `promises` is the plain-language list of what the user agrees to, one
+/// sentence each.
+pub fn licence_pr(
+    ack: &Acknowledgement,
+    artefact: &str,
+    licence_text: &[u8],
+    licence_url: &str,
+    obligations: &[Obligation],
+    promises: &[String],
+) -> Result<LicencePr, String> {
+    use sha2::Digest as _;
+    let got = format!("{:x}", sha2::Sha256::digest(licence_text));
+    if got != ack.licence_sha256 {
+        return Err(format!(
+            "licence text hashes to {got}, not the pinned {}; nothing rendered",
+            ack.licence_sha256
+        ));
+    }
+    let text = String::from_utf8_lossy(licence_text);
+    let id = slugify(&ack.licence);
+    let record_path = format!("{ACK_REPO_DIR}/{}.yaml", ack.slug());
+    let spec_path = format!("openspec/specs/third-party-licence-{id}/spec.md");
+    let text_path = licence_text_path(&ack.licence);
+    let mut body = String::new();
+    body.push_str(&format!(
+        "## Accept the {} licence for {artefact}\n\n",
+        ack.licence
+    ));
+    body.push_str("**Pressing Merge on this pull request is your acceptance.** Nothing else asks you; nobody can press it for you (agents are refused).\n\n");
+    body.push_str("### What you promise, in plain words\n\n");
+    for p in promises {
+        body.push_str(&format!("- {p}\n"));
+    }
+    body.push_str(&format!(
+        "\nScope: `{}` · use: `{}` · until: `{}`\n\n",
+        ack.scope, ack.r#use, ack.expiry
+    ));
+    body.push_str("### What this records\n\n");
+    body.push_str(&format!(
+        "| File | What it is |\n|---|---|\n| `{record_path}` | the acknowledgement the licence gate reads once merged |\n| `{spec_path}` | the obligations this project now carries, one requirement each |\n| `{text_path}` | the licence text, verbatim |\n\n"
+    ));
+    body.push_str(&format!(
+        "The licence text is pinned: sha256 `{}`, from <{licence_url}>. If the text below differs by one byte, the hash differs and the gate refuses the record.\n\n",
+        ack.licence_sha256
+    ));
+    body.push_str("### Obligations\n\n");
+    for o in obligations {
+        if o.clause.is_empty() {
+            body.push_str(&format!("- **{}**\n", o.class.title()));
+        } else {
+            body.push_str(&format!("- **{}**: \"{}\"\n", o.class.title(), o.clause));
+        }
+    }
+    body.push_str("\n<details><summary>The licence, verbatim</summary>\n\n");
+    body.push_str("````text\n");
+    body.push_str(&text);
+    if !text.ends_with('\n') {
+        body.push('\n');
+    }
+    body.push_str("````\n\n</details>\n\n");
+    body.push_str("---\nOpened by the accept-licence skill. Until a human merges this in the GitHub web UI, the licence gate admits nothing. Closing it unmerged declines.\n");
+    Ok(LicencePr {
+        head: format!("{LICENCE_HEAD_PREFIX}{id}"),
+        title: format!("Accept the {} licence for {artefact}", ack.licence),
+        body,
+        files: vec![
+            (record_path, ack.to_yaml()),
+            (
+                spec_path,
+                obligations_spec(artefact, &ack.licence, obligations),
+            ),
+            (text_path, text.into_owned()),
+        ],
+    })
+}
+
+// ---------------------------------------------------------------------------
 // The gate
 // ---------------------------------------------------------------------------
 
@@ -845,12 +944,38 @@ fn scenario_body(o: &Obligation, artefact: &str) -> String {
 #[derive(Debug, Clone)]
 pub struct Verifier {
     pub allowed_signers: PathBuf,
+    /// When set (order 2094-h3rq), the approval is a human GitHub merge, not
+    /// a signature: records are read from the gate's default branch, and the
+    /// project dir and `signature` are not consulted. When unset, the SSHSIG
+    /// path is unchanged: an unsigned record admits nothing.
+    pub merge_gate: Option<MergeGate>,
 }
 
 impl Verifier {
     pub fn new(allowed_signers: &Path) -> Self {
         Self {
             allowed_signers: allowed_signers.to_path_buf(),
+            merge_gate: None,
+        }
+    }
+
+    /// The merge gate over `gate` (order 2094-h3rq).
+    pub fn merged(gate: MergeGate) -> Self {
+        Self {
+            allowed_signers: PathBuf::new(),
+            merge_gate: Some(gate),
+        }
+    }
+
+    /// The gate a project's request goes through on this host. With
+    /// `TILLANDSIAS_LICENCE_ACK_REPO` naming the project's checkout or mirror
+    /// clone, the merge gate over its default branch; a repo whose default
+    /// branch cannot be resolved admits nothing (an unreadable gate is a
+    /// refusal, never a fall back to a weaker one). Otherwise the SSHSIG gate.
+    pub fn for_project_host() -> Result<Self, String> {
+        match std::env::var_os("TILLANDSIAS_LICENCE_ACK_REPO") {
+            Some(repo) => Ok(Self::merged(MergeGate::for_repo(Path::new(&repo))?)),
+            None => Ok(Self::for_host()),
         }
     }
 
@@ -915,6 +1040,236 @@ impl Verifier {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The merge gate (order 2094-h3rq)
+// ---------------------------------------------------------------------------
+
+/// Where acknowledgement records live inside a project repo.
+pub const ACK_REPO_DIR: &str = "licences/acknowledgements";
+
+/// The head-branch prefix the accept-licence skill opens its PRs from.
+pub const LICENCE_HEAD_PREFIX: &str = "licences/";
+
+/// The approval behind an admitted record when the gate is the merge gate:
+/// a human merged the project's `licences/<id>` pull request into the default
+/// branch. Everything but `merged_by` is read from the repo, offline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeEvidence {
+    pub pr: u64,
+    pub merge_sha: String,
+    /// The merge commit's committer date (GitHub writes it at merge time).
+    pub merged_at: String,
+    /// Only from the online check (`gh api .../pulls/<n>`). `None` offline:
+    /// git does not carry who pressed Merge, and the gate never guesses.
+    pub merged_by: Option<String>,
+    /// `offline`, `online-confirmed`, or `online-unavailable: <why>`.
+    pub check: String,
+}
+
+/// The merge gate: admits only a record present on `default_ref` of `repo`
+/// (the project's checkout or mirror clone) that arrived there in a GitHub
+/// pull-request merge and is unchanged since. A record only in the working
+/// tree, or only on an unmerged branch, admits nothing.
+#[derive(Debug, Clone)]
+pub struct MergeGate {
+    pub repo: PathBuf,
+    /// e.g. `origin/main`; [`MergeGate::for_repo`] resolves `origin/HEAD`.
+    pub default_ref: String,
+    /// `owner/name` for the optional online check; `None` = offline only.
+    pub github_repo: Option<String>,
+}
+
+fn git_out(repo: &Path, args: &[&str]) -> Result<String, String> {
+    let out = Command::new("git")
+        .arg("-C")
+        .arg(repo)
+        .args(args)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("git: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// `#123` from `Merge pull request #123 from owner/licences/x` (a merge
+/// commit, whose head must be a licences/ branch) or from a squash subject
+/// ending `(#123)`.
+fn pr_from_subject(subject: &str, parents: usize) -> Option<u64> {
+    if parents == 2 {
+        let rest = subject.strip_prefix("Merge pull request #")?;
+        let (num, from) = rest.split_once(" from ")?;
+        let (_owner, head) = from.split_once('/')?;
+        if !head.starts_with(LICENCE_HEAD_PREFIX) {
+            return None;
+        }
+        return num.parse().ok();
+    }
+    if parents == 1 {
+        let s = subject.trim_end();
+        let inner = s.strip_suffix(')')?;
+        let idx = inner.rfind("(#")?;
+        return inner[idx + 2..].parse().ok();
+    }
+    None
+}
+
+impl MergeGate {
+    /// `repo` with its default branch resolved from `origin/HEAD`, and the
+    /// GitHub `owner/name` read from the `origin` URL when it is GitHub.
+    pub fn for_repo(repo: &Path) -> Result<Self, String> {
+        let head = git_out(
+            repo,
+            &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        )
+        .map_err(|e| format!("cannot resolve the default branch (origin/HEAD): {e}"))?;
+        let url = git_out(repo, &["remote", "get-url", "origin"]).unwrap_or_default();
+        let github_repo = url
+            .trim()
+            .trim_end_matches(".git")
+            .split_once("github.com")
+            .map(|(_, r)| r.trim_start_matches([':', '/']).to_string())
+            .filter(|r| r.split('/').count() == 2);
+        Ok(Self {
+            repo: repo.to_path_buf(),
+            default_ref: head.trim().to_string(),
+            github_repo,
+        })
+    }
+
+    /// Every record on the default branch (NOT the working tree).
+    pub fn records(&self) -> Vec<(String, Acknowledgement)> {
+        let mut out = Vec::new();
+        let Ok(list) = git_out(
+            &self.repo,
+            &[
+                "ls-tree",
+                "--name-only",
+                &format!("{}:{ACK_REPO_DIR}", self.default_ref),
+            ],
+        ) else {
+            return out;
+        };
+        for name in list.lines() {
+            let Some(slug) = name.strip_suffix(".yaml") else {
+                continue;
+            };
+            let spec = format!("{}:{ACK_REPO_DIR}/{name}", self.default_ref);
+            if let Ok(text) = git_out(&self.repo, &["show", &spec])
+                && let Ok(a) = Acknowledgement::from_yaml(&text)
+            {
+                out.push((slug.to_string(), a));
+            }
+        }
+        out
+    }
+
+    /// The evidence that `slug`'s record reached the default branch through a
+    /// GitHub PR merge, or why it did not.
+    pub fn evidence(&self, slug: &str) -> Result<MergeEvidence, String> {
+        let path = format!("{ACK_REPO_DIR}/{slug}.yaml");
+        let log = git_out(
+            &self.repo,
+            &[
+                "log",
+                "--first-parent",
+                "--diff-filter=AM",
+                "-n1",
+                "--format=%H%x00%P%x00%cn%x00%ce%x00%cI%x00%s",
+                &self.default_ref,
+                "--",
+                &path,
+            ],
+        )?;
+        let line = log.trim_end_matches('\n');
+        if line.is_empty() {
+            return Err(format!(
+                "{path} is not on the default branch {}: an unmerged pull request admits nothing",
+                self.default_ref
+            ));
+        }
+        let f: Vec<&str> = line.split('\0').collect();
+        if f.len() != 6 {
+            return Err(format!("unreadable git log line for {path}"));
+        }
+        let (sha, parents, cn, ce, date, subject) = (f[0], f[1], f[2], f[3], f[4], f[5]);
+        let nparents = parents.split_whitespace().count();
+        if cn != "GitHub" || ce != "noreply@github.com" {
+            return Err(format!(
+                "{path} last changed on {} in {sha} committed by {cn} <{ce}>, not by a GitHub pull-request merge",
+                self.default_ref
+            ));
+        }
+        let raw = git_out(&self.repo, &["cat-file", "commit", sha])?;
+        if !raw.lines().any(|l| l.starts_with("gpgsig ")) {
+            return Err(format!(
+                "{sha} claims GitHub as committer but carries no GitHub signature"
+            ));
+        }
+        let Some(pr) = pr_from_subject(subject, nparents) else {
+            return Err(format!(
+                "{sha} is not a merge of a {LICENCE_HEAD_PREFIX} pull request (subject {subject:?})"
+            ));
+        };
+        let mut ev = MergeEvidence {
+            pr,
+            merge_sha: sha.to_string(),
+            merged_at: date.to_string(),
+            merged_by: None,
+            check: "offline".into(),
+        };
+        if let Some(gh) = &self.github_repo
+            && std::env::var_os("TILLANDSIAS_LICENCE_ACK_ONLINE").is_some()
+        {
+            match online_pr(gh, pr) {
+                Ok((merged, merge_sha, by)) => {
+                    if !merged || merge_sha != ev.merge_sha {
+                        return Err(format!(
+                            "GitHub says PR #{pr} merged={merged} merge_commit_sha={merge_sha}, not {}",
+                            ev.merge_sha
+                        ));
+                    }
+                    ev.merged_by = Some(by);
+                    ev.check = "online-confirmed".into();
+                }
+                // No network is not a pass and not a refusal: the offline
+                // evidence stands, labelled, and merged_by stays unknown.
+                Err(e) => ev.check = format!("online-unavailable: {e}"),
+            }
+        }
+        Ok(ev)
+    }
+}
+
+/// `(merged, merge_commit_sha, merged_by)` for PR `n` of `owner/name`, read
+/// through `gh api` (a read; never a merge).
+fn online_pr(github_repo: &str, n: u64) -> Result<(bool, String, String), String> {
+    let out = Command::new("gh")
+        .args([
+            "api",
+            &format!("repos/{github_repo}/pulls/{n}"),
+            "--jq",
+            "[.merged, .merge_commit_sha, (.merged_by.login // \"\")] | @tsv",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("gh: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let s = String::from_utf8_lossy(&out.stdout);
+    let f: Vec<&str> = s.trim_end().split('\t').collect();
+    if f.len() != 3 {
+        return Err(format!("unexpected gh api output {s:?}"));
+    }
+    Ok((f[0] == "true", f[1].to_string(), f[2].to_string()))
+}
+
 /// What an admitted fetch carries into provenance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Admission {
@@ -923,6 +1278,8 @@ pub struct Admission {
     pub acknowledged_by: Option<String>,
     pub acknowledgement_slug: Option<String>,
     pub obligations: Vec<ObligationClass>,
+    /// The merge that approved the record, under the merge gate.
+    pub merge: Option<MergeEvidence>,
 }
 
 /// Read every `*.yaml` under `dir` that parses as an acknowledgement.
@@ -989,6 +1346,7 @@ pub fn register_admits_with_consent_in(
                 acknowledged_by: None,
                 acknowledgement_slug: None,
                 obligations: Vec::new(),
+                merge: None,
             });
         }
         Err(e) => e,
@@ -1053,7 +1411,13 @@ fn admit_restricted_row(
     }
     let now = chrono::Utc::now();
     let mut reasons: Vec<String> = Vec::new();
-    for (slug, ack) in read_acknowledgements(project_ack_dir) {
+    // Under the merge gate the records come from the default branch, never
+    // from the working tree or a state-dir copy (order 2094-h3rq).
+    let records = match &verifier.merge_gate {
+        Some(g) => g.records(),
+        None => read_acknowledgements(project_ack_dir),
+    };
+    for (slug, ack) in records {
         if !ack.covers.iter().any(|c| c == &r.repo) {
             continue;
         }
@@ -1079,13 +1443,25 @@ fn admit_restricted_row(
             reasons.push(format!("{slug}: expired at {}", ack.expiry));
             continue;
         }
-        match verifier.verify(&ack.statement_text(), &ack.signature, &ack.grantor) {
-            Ok(()) => {
+        let approved = match &verifier.merge_gate {
+            Some(g) => g.evidence(&slug).map(Some),
+            None => verifier
+                .verify(&ack.statement_text(), &ack.signature, &ack.grantor)
+                .map(|()| None),
+        };
+        match approved {
+            Ok(merge) => {
                 return Ok(Admission {
                     licence: r.spdx.clone(),
-                    acknowledged_by: Some(ack.grantor.clone()),
+                    acknowledged_by: Some(
+                        merge
+                            .as_ref()
+                            .and_then(|m| m.merged_by.clone())
+                            .unwrap_or_else(|| ack.grantor.clone()),
+                    ),
                     acknowledgement_slug: Some(slug),
                     obligations: r.obligations.clone(),
+                    merge,
                 });
             }
             Err(e) => reasons.push(format!("{slug}: {e}")),
@@ -1146,12 +1522,15 @@ pub fn admits_restricted(
     project: &str,
     artefacts: &[RestrictedArtefact],
 ) -> Result<Vec<String>, String> {
+    let verifier = Verifier::for_project_host().map_err(|e| {
+        format!("consent_required: {project}: the licence gate cannot read its repo: {e}")
+    })?;
     admits_restricted_in(
         RESTRICTED_REGISTER_TSV,
         project,
         artefacts,
         &project_acknowledgement_dir(project),
-        &Verifier::for_host(),
+        &verifier,
     )
 }
 
@@ -1333,6 +1712,299 @@ pub(crate) mod tests {
 
     /// 1954-dvz9's named test: the same non-commercial row is refused without
     /// an acknowledgement in the project and admitted with a signed one.
+    fn git(repo: &Path, committer: (&str, &str), args: &[&str]) -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "init.defaultBranch=main",
+            ])
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "owner")
+            .env("GIT_AUTHOR_EMAIL", "owner@example.invalid")
+            .env("GIT_COMMITTER_NAME", committer.0)
+            .env("GIT_COMMITTER_EMAIL", committer.1)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("git");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    const OWNER: (&str, &str) = ("owner", "owner@example.invalid");
+    const WEB_FLOW: (&str, &str) = ("GitHub", "noreply@github.com");
+
+    /// A merge commit of `head` into `origin/main` with `committer`, signed
+    /// (a gpgsig header, as GitHub's web-flow writes) when `signed`.
+    fn merge_into_main(
+        repo: &Path,
+        head: &str,
+        subject: &str,
+        committer: (&str, &str),
+        signed: bool,
+    ) {
+        let tree = git(repo, OWNER, &["rev-parse", &format!("{head}^{{tree}}")]);
+        let base = git(repo, OWNER, &["rev-parse", "refs/remotes/origin/main"]);
+        let tip = git(repo, OWNER, &["rev-parse", head]);
+        let c = git(
+            repo,
+            committer,
+            &["commit-tree", &tree, "-p", &base, "-p", &tip, "-m", subject],
+        );
+        let sha = if signed {
+            let raw = git(repo, OWNER, &["cat-file", "commit", &c]);
+            let (hdr, body) = raw.split_once("\n\n").unwrap();
+            let signed = format!(
+                "{hdr}\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n wsBcBAABCAAQBQJfixture\n -----END PGP SIGNATURE-----\n\n{body}\n"
+            );
+            let p = repo.join(".git").join("signed-commit");
+            fs::write(&p, signed).unwrap();
+            git(
+                repo,
+                OWNER,
+                &["hash-object", "-t", "commit", "-w", p.to_str().unwrap()],
+            )
+        } else {
+            c
+        };
+        git(
+            repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", &sha],
+        );
+    }
+
+    /// ORDER 2094-h3rq: the merge gate admits a record only once a GitHub
+    /// pull-request merge put it on the default branch. Every record here is
+    /// UNSIGNED, so nothing but the merge can be what admits it.
+    #[test]
+    fn the_merge_gate_admits_only_a_record_merged_into_the_default_branch() {
+        let dir = disk_scratch("merge");
+        let repo = dir.join("project");
+        fs::create_dir_all(&repo).unwrap();
+        git(&repo, OWNER, &["init", "-q"]);
+        fs::write(repo.join("README"), "demo\n").unwrap();
+        git(&repo, OWNER, &["add", "README"]);
+        git(&repo, OWNER, &["commit", "-qm", "base"]);
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let base = git(&repo, OWNER, &["rev-parse", "refs/remotes/origin/main"]);
+        let reset = || {
+            git(
+                &repo,
+                OWNER,
+                &["update-ref", "refs/remotes/origin/main", &base],
+            )
+        };
+        let gate = MergeGate::for_repo(&repo).unwrap();
+        assert_eq!(gate.default_ref, "origin/main");
+        let verifier = Verifier::merged(gate);
+        let row = nc_row();
+        let ack = nc_ack("project:demo");
+        assert!(ack.signature.is_empty());
+        let admit = || {
+            register_admits_with_consent_in(
+                crate::imagegen_models::register_tsv(),
+                RESTRICTED,
+                &row,
+                // The project dir holds the record too: it must not count.
+                &repo.join(ACK_REPO_DIR),
+                "project:demo",
+                &verifier,
+            )
+        };
+
+        // The PR branch carries the record; the working tree has it checked out.
+        git(
+            &repo,
+            OWNER,
+            &["checkout", "-qb", "licences/cc-by-nc-sa-4.0"],
+        );
+        fs::create_dir_all(repo.join(ACK_REPO_DIR)).unwrap();
+        let rel = format!("{ACK_REPO_DIR}/{}.yaml", ack.slug());
+        fs::write(repo.join(&rel), ack.to_yaml()).unwrap();
+        git(&repo, OWNER, &["add", &rel]);
+        git(&repo, OWNER, &["commit", "-qm", "licence: cc-by-nc-sa-4.0"]);
+
+        // An open, unmerged PR admits nothing, though the file is right there.
+        let err = admit().unwrap_err();
+        assert!(err.contains("licence_acknowledgement_required"), "{err}");
+
+        // A merge an agent made and pushed (land-queue shape) is not a GitHub merge.
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #7 from o/licences/cc-by-nc-sa-4.0",
+            ("land-queue", "land-queue@localhost"),
+            false,
+        );
+        let err = admit().unwrap_err();
+        assert!(err.contains("not by a GitHub pull-request merge"), "{err}");
+
+        // GitHub's committer without GitHub's signature is a forgery.
+        reset();
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #7 from o/licences/cc-by-nc-sa-4.0",
+            WEB_FLOW,
+            false,
+        );
+        let err = admit().unwrap_err();
+        assert!(err.contains("no GitHub signature"), "{err}");
+
+        // The web-UI merge admits it, with the evidence.
+        reset();
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #7 from o/licences/cc-by-nc-sa-4.0",
+            WEB_FLOW,
+            true,
+        );
+        let ok = admit().unwrap();
+        let m = ok.merge.clone().expect("merge evidence");
+        assert_eq!(m.pr, 7);
+        assert_eq!(
+            m.merge_sha,
+            git(&repo, OWNER, &["rev-parse", "refs/remotes/origin/main"])
+        );
+        assert!(!m.merged_at.is_empty());
+        // Offline, who pressed Merge is unknown, never guessed.
+        assert_eq!(m.merged_by, None);
+        assert_eq!(m.check, "offline");
+
+        // Edited on the default branch after the merge: the merge no longer
+        // vouches for these bytes.
+        git(
+            &repo,
+            OWNER,
+            &["checkout", "-q", "--detach", "refs/remotes/origin/main"],
+        );
+        let mut edited = nc_ack("project:demo");
+        edited.r#use = "commercial".into();
+        fs::write(repo.join(&rel), edited.to_yaml()).unwrap();
+        git(&repo, OWNER, &["commit", "-qam", "widen use"]);
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        let err = admit().unwrap_err();
+        assert!(err.contains("not by a GitHub pull-request merge"), "{err}");
+    }
+
+    #[test]
+    fn the_licence_pr_quotes_the_pinned_text_and_refuses_other_bytes() {
+        use sha2::Digest as _;
+        let text = b"LICENCE TEXT\nline two\n";
+        let mut ack = nc_ack("project:demo");
+        ack.licence_sha256 = format!("{:x}", sha2::Sha256::digest(text));
+        let obl = obligations_for(&ack.licence);
+        let promises = vec!["I will not sell anything made with it.".to_string()];
+        let pr = licence_pr(
+            &ack,
+            "fixture/nc-weights",
+            text,
+            "https://example.invalid/l",
+            &obl,
+            &promises,
+        )
+        .unwrap();
+        assert_eq!(pr.head, "licences/cc-by-nc-sa-4-0");
+        assert!(
+            pr.body
+                .contains("Pressing Merge on this pull request is your acceptance")
+        );
+        assert!(pr.body.contains("LICENCE TEXT\nline two\n"));
+        assert!(pr.body.contains(&ack.licence_sha256));
+        let (rec_path, rec) = &pr.files[0];
+        assert_eq!(rec_path, &format!("{ACK_REPO_DIR}/{}.yaml", ack.slug()));
+        assert_eq!(Acknowledgement::from_yaml(rec).unwrap(), ack);
+        assert_eq!(pr.files[2].1.as_bytes(), text);
+        let err =
+            licence_pr(&ack, "x", b"LICENCE TEXT\nline 2\n", "u", &obl, &promises).unwrap_err();
+        assert!(err.contains("not the pinned"), "{err}");
+    }
+
+    /// The skill's DRY RUN: render a licence PR to a local dir, opening
+    /// nothing. Inputs from the environment (TILLANDSIAS_LICENCE_PR_DRY_RUN=
+    /// <out dir>, plus _TEXT, _URL, _LICENCE, _REPO, _SCOPE, _HOST, _PROMISES
+    /// as lines). Run: cargo test -p tillandsias-headless --features
+    /// host-services licence_pr_dry_run -- --ignored
+    #[test]
+    #[ignore = "a renderer driven by env, not a check"]
+    fn licence_pr_dry_run() {
+        use sha2::Digest as _;
+        let env = |k: &str| std::env::var(format!("TILLANDSIAS_LICENCE_PR_DRY_RUN{k}")).unwrap();
+        let out = PathBuf::from(env(""));
+        let text = fs::read(env("_TEXT")).unwrap();
+        let ack = Acknowledgement {
+            licence: env("_LICENCE"),
+            licence_sha256: format!("{:x}", sha2::Sha256::digest(&text)),
+            covers: vec![env("_REPO")],
+            grantor: "project-owner".into(),
+            scope: env("_SCOPE"),
+            r#use: "non-sale".into(),
+            expiry: "standing".into(),
+            signed_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            strength: "github-merge".into(),
+            host: env("_HOST"),
+            signature: String::new(),
+        };
+        let promises: Vec<String> = env("_PROMISES").lines().map(str::to_string).collect();
+        let obl = obligations_for(&ack.licence);
+        let pr = licence_pr(&ack, &env("_REPO"), &text, &env("_URL"), &obl, &promises).unwrap();
+        for (p, c) in &pr.files {
+            let dst = out.join("files").join(p);
+            fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            fs::write(dst, c).unwrap();
+        }
+        fs::write(out.join("pr-body.md"), &pr.body).unwrap();
+        fs::write(
+            out.join("pr-meta.txt"),
+            format!(
+                "head: {}\nbase: <default branch>\ntitle: {}\n",
+                pr.head, pr.title
+            ),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_merge_commit_from_a_non_licences_head_is_not_a_licence_approval() {
+        assert_eq!(
+            pr_from_subject("Merge pull request #7 from o/licences/llama3", 2),
+            Some(7)
+        );
+        assert_eq!(
+            pr_from_subject("Merge pull request #7 from o/work/x", 2),
+            None
+        );
+        assert_eq!(pr_from_subject("licence: fish (#12)", 1), Some(12));
+        assert_eq!(pr_from_subject("licence: fish", 1), None);
+    }
+
     #[test]
     fn register_admits_nc_row_only_with_recorded_acknowledgement() {
         let dir = disk_scratch("nc");

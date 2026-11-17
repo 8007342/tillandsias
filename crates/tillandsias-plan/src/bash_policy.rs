@@ -23,6 +23,9 @@
 //!   7 a token-shaped literal on the command line                  deny
 //!   8 a whole-command-line kill (pkill -f, killall -r), directly or
 //!     inside a shell string: it kills its own shell (1724-kcj4)   deny
+//!   9 an agent merge: `gh pr merge` naming a licences/ head, or the
+//!     merge API (REST PUT pulls/N/merge, GraphQL mergePullRequest)
+//!     for any PR (2094-h3rq)                                       deny
 //! ANYTHING ELSE IS ALLOWED: a bridge that refuses what it does not understand
 //! stops the fleet.
 
@@ -501,6 +504,84 @@ fn self_matching_kill(argv: &[String], depth: u8) -> Option<String> {
         .find_map(|stage| self_matching_kill(&argv_of(stage), depth + 1))
 }
 
+/// SHAPE 9 (order 2094-h3rq): an agent merging a pull request. The human merge
+/// of a `licences/<id>` PR in the GitHub web UI IS the licence approval gate,
+/// so an agent must never perform it. What the hook can see:
+/// - `gh pr merge <selector>` whose selector names a `licences/` head: refused.
+///   A bare number or URL does not name its head and the hook makes no network
+///   call, so `gh pr merge 12` is NOT refused here (the release skill merges
+///   that way); that gap is recorded in the approval-merge-gate spec.
+/// - the merge API for ANY pull request (REST `pulls/<n>/merge` with PUT or a
+///   body, GraphQL `mergePullRequest`/`enablePullRequestAutoMerge`): refused,
+///   because the hook cannot see which PR's head it names. No skill merges
+///   through the API.
+fn agent_merge(argv: &[String]) -> Option<String> {
+    let mut i = 0;
+    while i < argv.len() {
+        match cp::program_name(&argv[i]).as_str() {
+            "sudo" | "env" | "nohup" | "exec" | "command" | "timeout" => i += 1,
+            _ => break,
+        }
+        while i < argv.len() && (argv[i].starts_with('-') || argv[i].contains('=')) {
+            i += 1;
+        }
+    }
+    let argv = argv.get(i..)?;
+    let prog = cp::program_name(argv.first()?);
+    let rest = &argv[1..];
+    let merge_path = Regex::new(r"(^|/)pulls/[^/\s]+/merge/?(\?.*)?$").expect("static regex");
+    let is_write = |args: &[String]| {
+        args.windows(2).any(|w| {
+            matches!(w[0].as_str(), "-X" | "--method" | "--request")
+                && w[1].eq_ignore_ascii_case("PUT")
+        }) || args.iter().any(|a| {
+            let l = a.to_ascii_lowercase();
+            l == "-xput"
+                || l == "--method=put"
+                || l == "--request=put"
+                || matches!(
+                    a.as_str(),
+                    "-f" | "-F" | "--field" | "--raw-field" | "--input" | "-d" | "--data"
+                )
+                || a.starts_with("--field=")
+                || a.starts_with("--raw-field=")
+                || a.starts_with("--input=")
+        })
+    };
+    match prog.as_str() {
+        "gh" => {
+            let sub: Vec<&str> = rest.iter().map(String::as_str).collect();
+            if sub.len() >= 2 && sub[0] == "pr" && sub[1] == "merge" {
+                if let Some(head) = sub[2..].iter().find(|a| a.contains("licences/")) {
+                    return Some(format!("gh pr merge {head}"));
+                }
+                return None;
+            }
+            if sub.first() == Some(&"api") {
+                if rest.iter().any(|a| {
+                    a.contains("mergePullRequest") || a.contains("enablePullRequestAutoMerge")
+                }) {
+                    return Some("gh api graphql mergePullRequest".into());
+                }
+                if let Some(p) = rest.iter().find(|a| merge_path.is_match(a))
+                    && is_write(rest)
+                {
+                    return Some(format!("gh api {p} (PUT)"));
+                }
+            }
+            None
+        }
+        "curl" | "wget" | "http" | "xh" => {
+            if rest.iter().any(|a| a.contains("mergePullRequest")) {
+                return Some(format!("{prog} graphql mergePullRequest"));
+            }
+            let p = rest.iter().find(|a| merge_path.is_match(a))?;
+            is_write(rest).then(|| format!("{prog} {p} (PUT)"))
+        }
+        _ => None,
+    }
+}
+
 /// Expand a leading `~` and `$VAR` / `${VAR}` / `${VAR:-default}` from the
 /// environment. `None` when the word depends on something the hook cannot know
 /// before the shell runs: an unset variable, `$(…)`, a backtick, or `$` followed
@@ -710,6 +791,15 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
                         "`{how}` matches against whole command lines, and the shell running this command carries the pattern in its own argv, so it kills its own shell (exit 144, 1724-kcj4)"
                     ),
                     "find the process first, then kill it by PID, skipping your own shell: `pgrep -f PATTERN` lists candidates, `kill <pid>` ends the one you mean ($$ is your own shell)",
+                );
+            }
+            if let Some(how) = agent_merge(&argv) {
+                return Classification::deny(
+                    "no-agent-merge",
+                    &format!(
+                        "`{how}` merges a pull request as an agent; the human merge of a licences/ PR in the GitHub web UI is the licence approval gate (2094-h3rq), and the merge API is refused for every PR because the hook cannot see which head it names"
+                    ),
+                    "never merge: give the user the PR URL and let them press Merge in the GitHub web UI",
                 );
             }
             // A plain shell string is the bridge's business only in shape 6.
@@ -1054,6 +1144,36 @@ mod tests {
             );
         }
         for cmd in ["gh auth status", "gh pr view 999", "tillandsias --version"] {
+            assert_eq!(classify(cmd, &c).verdict, Verdict::Allow, "{cmd}");
+        }
+    }
+
+    /// ORDER 2094-h3rq: the human merge of a licences/ PR is the gate.
+    #[test]
+    fn the_hook_refuses_agent_merges_of_licence_prs_and_the_merge_api() {
+        let c = ctx();
+        for cmd in [
+            "gh pr merge licences/fish-audio-research-license --merge",
+            "gh pr merge --squash licences/llama3",
+            "cd /x && gh pr merge https://github.com/o/r/tree/licences/x",
+            "gh api -X PUT repos/o/r/pulls/12/merge",
+            "gh api --method PUT /repos/o/r/pulls/12/merge -f merge_method=merge",
+            "gh api repos/o/r/pulls/12/merge -f commit_title=x",
+            "gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:\"x\"}){clientMutationId}}'",
+            "curl -X PUT -H 'Accept: application/vnd.github+json' https://api.github.com/repos/o/r/pulls/3/merge",
+            "env GH_TOKEN_FILE=x gh api -X PUT repos/o/r/pulls/12/merge",
+        ] {
+            let k = classify(cmd, &c);
+            assert_eq!(k.verdict, Verdict::Deny, "{cmd}");
+            assert_eq!(k.token, "refused:bash-policy:no-agent-merge", "{cmd}");
+        }
+        for cmd in [
+            "gh pr create --head licences/x --base main --title t --body-file b.md",
+            "gh pr view 12 --json mergedBy,mergeCommit",
+            "gh api repos/o/r/pulls/12/merge",
+            "gh api repos/o/r/pulls/12 --jq .merged_by.login",
+            "gh pr merge 12 --merge",
+        ] {
             assert_eq!(classify(cmd, &c).verdict, Verdict::Allow, "{cmd}");
         }
     }
