@@ -24,8 +24,8 @@
 //!   8 a whole-command-line kill (pkill -f, killall -r), directly or
 //!     inside a shell string: it kills its own shell (1724-kcj4)   deny
 //!   9 an agent merge: `gh pr merge` naming a licences/ head, or the
-//!     merge API (REST PUT pulls/N/merge, GraphQL mergePullRequest)
-//!     for any PR (2094-h3rq)                                       deny
+//!     merge (gh pr merge N, REST pulls/N/merge, GraphQL) whose head
+//!     the hook resolves to licences/ or cannot resolve (2094-h3rq) deny
 //! ANYTHING ELSE IS ALLOWED: a bridge that refuses what it does not understand
 //! stops the fleet.
 
@@ -504,82 +504,219 @@ fn self_matching_kill(argv: &[String], depth: u8) -> Option<String> {
         .find_map(|stage| self_matching_kill(&argv_of(stage), depth + 1))
 }
 
-/// SHAPE 9 (order 2094-h3rq): an agent merging a pull request. The human merge
-/// of a `licences/<id>` PR in the GitHub web UI IS the licence approval gate,
-/// so an agent must never perform it. What the hook can see:
-/// - `gh pr merge <selector>` whose selector names a `licences/` head: refused.
-///   A bare number or URL does not name its head and the hook makes no network
-///   call, so `gh pr merge 12` is NOT refused here (the release skill merges
-///   that way); that gap is recorded in the approval-merge-gate spec.
-/// - the merge API for ANY pull request (REST `pulls/<n>/merge` with PUT or a
-///   body, GraphQL `mergePullRequest`/`enablePullRequestAutoMerge`): refused,
-///   because the hook cannot see which PR's head it names. No skill merges
-///   through the API.
+/// SHAPE 9 (order 2094-h3rq, coordinator ruling 2026-11-17): an agent merging
+/// a licence pull request. The human merge of a `licences/<id>` PR in the
+/// GitHub web UI IS the licence approval, so no agent may perform it.
+/// - `gh pr merge` whose selector names a `licences/` head: refused here, from
+///   the words alone ([`agent_merge`]).
+/// - every other merge — `gh pr merge <n|url|branch|nothing>`, the REST
+///   `pulls/<n>/merge` endpoint (any method or flags, through `gh api` or a
+///   raw HTTP client) and GraphQL `mergePullRequest` /
+///   `enablePullRequestAutoMerge` — is a [`MergeTarget`] whose head the HOOK
+///   resolves through `gh` ([`merge_lookup_argv`]) before allowing it
+///   ([`judge_merge`]). A lookup that fails or times out REFUSES (fail
+///   closed); a head starting `licences/` refuses.
 fn agent_merge(argv: &[String]) -> Option<String> {
-    let mut i = 0;
-    while i < argv.len() {
-        match cp::program_name(&argv[i]).as_str() {
-            "sudo" | "env" | "nohup" | "exec" | "command" | "timeout" => i += 1,
-            _ => break,
-        }
-        while i < argv.len() && (argv[i].starts_with('-') || argv[i].contains('=')) {
-            i += 1;
+    let i = argv.iter().position(|a| cp::program_name(a) == "gh")?;
+    let rest = &argv[i + 1..];
+    if rest.len() >= 2 && rest[0] == "pr" && rest[1] == "merge" {
+        if let Some(head) = rest[2..].iter().find(|a| a.contains("licences/")) {
+            return Some(format!("gh pr merge {head}"));
         }
     }
-    let argv = argv.get(i..)?;
-    let prog = cp::program_name(argv.first()?);
-    let rest = &argv[1..];
-    let merge_path = Regex::new(r"(^|/)pulls/[^/\s]+/merge/?(\?.*)?$").expect("static regex");
-    let is_write = |args: &[String]| {
-        args.windows(2).any(|w| {
-            matches!(w[0].as_str(), "-X" | "--method" | "--request")
-                && w[1].eq_ignore_ascii_case("PUT")
-        }) || args.iter().any(|a| {
-            let l = a.to_ascii_lowercase();
-            l == "-xput"
-                || l == "--method=put"
-                || l == "--request=put"
-                || matches!(
-                    a.as_str(),
-                    "-f" | "-F" | "--field" | "--raw-field" | "--input" | "-d" | "--data"
+    None
+}
+
+/// A merge whose head the hook must resolve before it can allow it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeTarget {
+    /// `gh pr merge <selector>` (`""` = the current branch's PR).
+    PrCli { selector: String, repo: Option<String> },
+    /// REST `repos/<owner>/<name>/pulls/<n>/merge` (repo `None` when the path
+    /// is the `{owner}/{repo}` placeholder form or relative).
+    Rest { repo: Option<String>, number: String },
+    /// GraphQL merge; `node_id` is the pull request's node id when the
+    /// command spells it literally.
+    Graphql { node_id: Option<String> },
+}
+
+impl MergeTarget {
+    fn label(&self) -> String {
+        match self {
+            MergeTarget::PrCli { selector, .. } if selector.is_empty() => {
+                "gh pr merge (current branch)".into()
+            }
+            MergeTarget::PrCli { selector, .. } => format!("gh pr merge {selector}"),
+            MergeTarget::Rest { number, .. } => format!("the merge API for pull {number}"),
+            MergeTarget::Graphql { .. } => "GraphQL mergePullRequest".into(),
+        }
+    }
+}
+
+/// Every merge in `cmd` the hook must resolve (see [`agent_merge`]).
+pub fn merge_targets(cmd: &str) -> Vec<MergeTarget> {
+    let rest_path =
+        Regex::new(r"(?:repos/([^/\s]+/[^/\s]+)/)?pulls/(\d+)/merge/?(?:\?.*)?$").expect("static");
+    let node = Regex::new(r#"pullRequestId\s*:\s*\\?"([A-Za-z0-9_=-]+)\\?""#).expect("static");
+    let mut out = Vec::new();
+    for p in &lex(cmd).pipelines {
+        for stage in p {
+            let argv = argv_of(stage);
+            if let Some(g) = argv.iter().find(|a| {
+                a.contains("mergePullRequest") || a.contains("enablePullRequestAutoMerge")
+            }) {
+                out.push(MergeTarget::Graphql {
+                    node_id: node.captures(g).map(|c| c[1].to_string()),
+                });
+                continue;
+            }
+            if let Some(c) = argv.iter().find_map(|a| rest_path.captures(a)) {
+                let repo = c
+                    .get(1)
+                    .map(|m| m.as_str().to_string())
+                    .filter(|r| !r.contains('{'));
+                out.push(MergeTarget::Rest {
+                    repo,
+                    number: c[2].to_string(),
+                });
+                continue;
+            }
+            let Some(i) = argv.iter().position(|a| cp::program_name(a) == "gh") else {
+                continue;
+            };
+            let rest = &argv[i + 1..];
+            if rest.len() < 2 || rest[0] != "pr" || rest[1] != "merge" {
+                continue;
+            }
+            let mut selector = String::new();
+            let mut repo = None;
+            let mut j = 2;
+            while j < rest.len() {
+                let a = rest[j].as_str();
+                match a {
+                    "-R" | "--repo" => {
+                        repo = rest.get(j + 1).cloned();
+                        j += 2;
+                        continue;
+                    }
+                    "-b" | "--body" | "-F" | "--body-file" | "-t" | "--subject"
+                    | "--match-head-commit" | "-A" | "--author-email" => {
+                        j += 2;
+                        continue;
+                    }
+                    _ => {}
+                }
+                if let Some(r) = a.strip_prefix("--repo=") {
+                    repo = Some(r.to_string());
+                } else if !a.starts_with('-') && selector.is_empty() {
+                    selector = a.to_string();
+                }
+                j += 1;
+            }
+            if selector.contains("licences/") {
+                continue; // agent_merge refuses it from the words alone
+            }
+            out.push(MergeTarget::PrCli { selector, repo });
+        }
+    }
+    out
+}
+
+/// The `gh` argv whose stdout is the target's head ref name, or `None` when
+/// the command does not say enough to look it up (which refuses).
+pub fn merge_lookup_argv(t: &MergeTarget) -> Option<Vec<String>> {
+    let s = |x: &str| x.to_string();
+    match t {
+        MergeTarget::PrCli { selector, repo } => {
+            let mut v = vec![s("pr"), s("view")];
+            if !selector.is_empty() {
+                v.push(selector.clone());
+            }
+            if let Some(r) = repo {
+                v.extend([s("-R"), r.clone()]);
+            }
+            v.extend([s("--json"), s("headRefName"), s("--jq"), s(".headRefName")]);
+            Some(v)
+        }
+        MergeTarget::Rest { repo, number } => {
+            let mut v = vec![s("pr"), s("view"), number.clone()];
+            if let Some(r) = repo {
+                v.extend([s("-R"), r.clone()]);
+            }
+            v.extend([s("--json"), s("headRefName"), s("--jq"), s(".headRefName")]);
+            Some(v)
+        }
+        MergeTarget::Graphql { node_id } => {
+            let id = node_id.as_ref()?;
+            Some(vec![
+                s("api"),
+                s("graphql"),
+                s("-f"),
+                format!("query={{node(id:\"{id}\"){{... on PullRequest{{headRefName}}}}}}"),
+                s("--jq"),
+                s(".data.node.headRefName"),
+            ])
+        }
+    }
+}
+
+/// Judge a merge from its head lookup. `Err` (failed, timed out, or no
+/// lookup possible) REFUSES: fail closed. An empty head refuses too.
+pub fn judge_merge(t: &MergeTarget, lookup: Result<String, String>) -> Option<Classification> {
+    let what = t.label();
+    match lookup {
+        Err(e) => Some(Classification::deny(
+            "no-agent-merge",
+            &format!(
+                "`{what}`: the hook could not resolve the pull request's head to rule out a licence PR ({e}); it fails closed (2094-h3rq)"
+            ),
+            "retry when GitHub is reachable; and never merge a licences/ PR: give the user its URL and let them press Merge in the GitHub web UI",
+        )),
+        Ok(out) => {
+            let head = out.lines().next().unwrap_or("").trim().to_string();
+            if head.is_empty() {
+                return judge_merge(t, Err("empty head ref".into()));
+            }
+            head.starts_with("licences/").then(|| {
+                Classification::deny(
+                    "no-agent-merge",
+                    &format!(
+                        "`{what}` merges head `{head}`, a licence PR: the human merge in the GitHub web UI is the approval (2094-h3rq)"
+                    ),
+                    "never merge a licence PR: give the user its URL and let them press Merge in the GitHub web UI",
                 )
-                || a.starts_with("--field=")
-                || a.starts_with("--raw-field=")
-                || a.starts_with("--input=")
-        })
-    };
-    match prog.as_str() {
-        "gh" => {
-            let sub: Vec<&str> = rest.iter().map(String::as_str).collect();
-            if sub.len() >= 2 && sub[0] == "pr" && sub[1] == "merge" {
-                if let Some(head) = sub[2..].iter().find(|a| a.contains("licences/")) {
-                    return Some(format!("gh pr merge {head}"));
-                }
-                return None;
-            }
-            if sub.first() == Some(&"api") {
-                if rest.iter().any(|a| {
-                    a.contains("mergePullRequest") || a.contains("enablePullRequestAutoMerge")
-                }) {
-                    return Some("gh api graphql mergePullRequest".into());
-                }
-                if let Some(p) = rest.iter().find(|a| merge_path.is_match(a))
-                    && is_write(rest)
-                {
-                    return Some(format!("gh api {p} (PUT)"));
-                }
-            }
-            None
+            })
         }
-        "curl" | "wget" | "http" | "xh" => {
-            if rest.iter().any(|a| a.contains("mergePullRequest")) {
-                return Some(format!("{prog} graphql mergePullRequest"));
-            }
-            let p = rest.iter().find(|a| merge_path.is_match(a))?;
-            is_write(rest).then(|| format!("{prog} {p} (PUT)"))
-        }
-        _ => None,
     }
+}
+
+/// The hook's resolution: run `gh` (bounded by `timeout 10`) for each merge
+/// target and judge it. `gh_program` is `gh` in production.
+pub fn resolve_merges(cmd: &str, gh_program: &str) -> Option<Classification> {
+    for t in merge_targets(cmd) {
+        let lookup = match merge_lookup_argv(&t) {
+            None => Err("the command does not name the pull request literally".to_string()),
+            Some(argv) => match std::process::Command::new("timeout")
+                .arg("10")
+                .arg(gh_program)
+                .args(&argv)
+                .stdin(std::process::Stdio::null())
+                .output()
+            {
+                Err(e) => Err(format!("gh: {e}")),
+                Ok(o) if !o.status.success() => Err(format!(
+                    "gh exited {} {}",
+                    o.status.code().map_or("by signal".into(), |c| c.to_string()),
+                    String::from_utf8_lossy(&o.stderr).trim()
+                )),
+                Ok(o) => Ok(String::from_utf8_lossy(&o.stdout).into_owned()),
+            },
+        };
+        if let Some(c) = judge_merge(&t, lookup) {
+            return Some(c);
+        }
+    }
+    None
 }
 
 /// Expand a leading `~` and `$VAR` / `${VAR}` / `${VAR:-default}` from the
@@ -797,7 +934,7 @@ pub fn classify(cmd: &str, ctx: &Context) -> Classification {
                 return Classification::deny(
                     "no-agent-merge",
                     &format!(
-                        "`{how}` merges a pull request as an agent; the human merge of a licences/ PR in the GitHub web UI is the licence approval gate (2094-h3rq), and the merge API is refused for every PR because the hook cannot see which head it names"
+                        "`{how}` merges a licences/ pull request as an agent; the human merge in the GitHub web UI is the licence approval (2094-h3rq)"
                     ),
                     "never merge: give the user the PR URL and let them press Merge in the GitHub web UI",
                 );
@@ -1150,32 +1287,79 @@ mod tests {
 
     /// ORDER 2094-h3rq: the human merge of a licences/ PR is the gate.
     #[test]
-    fn the_hook_refuses_agent_merges_of_licence_prs_and_the_merge_api() {
+    fn a_licences_head_named_in_gh_pr_merge_is_refused_from_its_words() {
         let c = ctx();
         for cmd in [
             "gh pr merge licences/fish-audio-research-license --merge",
             "gh pr merge --squash licences/llama3",
             "cd /x && gh pr merge https://github.com/o/r/tree/licences/x",
-            "gh api -X PUT repos/o/r/pulls/12/merge",
-            "gh api --method PUT /repos/o/r/pulls/12/merge -f merge_method=merge",
-            "gh api repos/o/r/pulls/12/merge -f commit_title=x",
-            "gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:\"x\"}){clientMutationId}}'",
-            "curl -X PUT -H 'Accept: application/vnd.github+json' https://api.github.com/repos/o/r/pulls/3/merge",
-            "env GH_TOKEN_FILE=x gh api -X PUT repos/o/r/pulls/12/merge",
         ] {
             let k = classify(cmd, &c);
             assert_eq!(k.verdict, Verdict::Deny, "{cmd}");
             assert_eq!(k.token, "refused:bash-policy:no-agent-merge", "{cmd}");
+            assert!(merge_targets(cmd).is_empty(), "{cmd}");
         }
         for cmd in [
             "gh pr create --head licences/x --base main --title t --body-file b.md",
             "gh pr view 12 --json mergedBy,mergeCommit",
-            "gh api repos/o/r/pulls/12/merge",
-            "gh api repos/o/r/pulls/12 --jq .merged_by.login",
             "gh pr merge 12 --merge",
         ] {
             assert_eq!(classify(cmd, &c).verdict, Verdict::Allow, "{cmd}");
         }
+    }
+
+    #[test]
+    fn every_other_merge_form_is_a_target_the_hook_resolves() {
+        let pr = |s: &str, r: Option<&str>| MergeTarget::PrCli {
+            selector: s.into(),
+            repo: r.map(String::from),
+        };
+        let rest = |r: Option<&str>, n: &str| MergeTarget::Rest {
+            repo: r.map(String::from),
+            number: n.into(),
+        };
+        for (cmd, want) in [
+            ("gh pr merge 12 --merge", pr("12", None)),
+            ("gh pr merge --squash -R o/r 12", pr("12", Some("o/r"))),
+            ("gh pr merge --auto", pr("", None)),
+            ("gh api -X PUT repos/o/r/pulls/12/merge", rest(Some("o/r"), "12")),
+            ("gh api repos/o/r/pulls/12/merge", rest(Some("o/r"), "12")),
+            ("gh api repos/{owner}/{repo}/pulls/9/merge -f x=y", rest(None, "9")),
+            (
+                "curl -X PUT https://api.github.com/repos/o/r/pulls/3/merge",
+                rest(Some("o/r"), "3"),
+            ),
+            (
+                "gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:\"PR_kw1\"}){clientMutationId}}'",
+                MergeTarget::Graphql { node_id: Some("PR_kw1".into()) },
+            ),
+            (
+                "gh api graphql -F query=@merge.graphql -f x=mergePullRequest",
+                MergeTarget::Graphql { node_id: None },
+            ),
+        ] {
+            assert_eq!(merge_targets(cmd), vec![want], "{cmd}");
+        }
+        assert!(merge_targets("gh pr view 12").is_empty());
+        assert!(merge_targets("gh api repos/o/r/pulls/12").is_empty());
+    }
+
+    #[test]
+    fn a_merge_is_judged_by_its_resolved_head_and_fails_closed() {
+        let t = MergeTarget::Rest {
+            repo: Some("o/r".into()),
+            number: "12".into(),
+        };
+        // Forced error branch first: the guard is reached and refuses.
+        let k = judge_merge(&t, Err("timed out".into())).expect("fail closed");
+        assert_eq!(k.token, "refused:bash-policy:no-agent-merge");
+        assert!(k.remedy.unwrap().contains("retry when GitHub is reachable"));
+        assert!(judge_merge(&t, Ok(String::new())).is_some(), "empty head");
+        let k = judge_merge(&t, Ok("licences/llama3\n".into())).expect("licence head");
+        assert_eq!(k.token, "refused:bash-policy:no-agent-merge");
+        assert!(judge_merge(&t, Ok("release/version-bump-1\n".into())).is_none());
+        // A GraphQL merge that does not spell its node id cannot be looked up.
+        assert!(merge_lookup_argv(&MergeTarget::Graphql { node_id: None }).is_none());
     }
 
     /// ORDER 1621-bvb2, with the roots named rather than inherited: beneath the
