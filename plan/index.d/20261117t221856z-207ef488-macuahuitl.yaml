@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:56Z"
+    host: macuahuitl
+
+events:
+  - packet_id: tillandsias-plan-coordinator-client-with-rate-limit-adaptive-heartbeat-busy-backoff-batching-and-offline-fallback-to-the-git-ledger-plus-mcp-tool
+    event:
+      type: note
+      ts: "2026-11-17T22:18:56Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1826-gi8e commit c4f489ab21d6 (1826-gi8e in its subject) reached linux-next at 4c8c2ccc42bc. Status moves to implemented, not completed: the exit criteria were not re-run.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: release-nix-cache-save-fails-tar-exit-2-incompatible-installer
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:19:11Z"
+    host: macuahuitl
+
+events:
+  - packet_id: release-nix-cache-save-fails-tar-exit-2-incompatible-installer
+    event:
+      type: note
+      ts: "2026-11-17T22:19:11Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1933-ysbq commit 29d8a30223b0 (1933-ysbq in its subject) reached linux-next at d4245b3dfc7d. Status moves to implemented, not completed: the exit criteria were not re-run.
