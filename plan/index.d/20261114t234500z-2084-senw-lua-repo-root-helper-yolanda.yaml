@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-14 from a finding while writing 2083-6k44's fixture; coordinator asked for it.
+packets:
+  - packet_id: lua-scripts-resolve-the-repo-root-through-one-common-helper-that-is-absolute-on-every-host
+    order: 2084-senw
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [lua, windows, fixture-hygiene, shell-to-lua]
+    size: S
+    implementer_tier: sonnet
+    estimated_hours: 3
+    depends_on: [lua-scripts-share-one-common-library-with-verdict-and-fixture-modules-behind-a-require-loader]
+    title: "lib/lua/common gains a repo_root() helper built on git rev-parse --show-toplevel, and Lua fixtures stop deriving the root from pwd -P or handing a relative path to a bash -c string"
+    context: |
+      Measured on yolanda (msys, native tillandsias-plan.exe runner) 2026-11-14 while writing
+      test-cheatsheet-hook-phases-scoped.lua (2083-6k44). Two idioms mis-resolve there, both
+      SILENTLY:
+      (1) proc.run({argv={"bash","-c","cd 'target/...' && bash hook"}}): the runner's PATH can reach a
+          bash that resolves the relative path elsewhere; the hook never ran, so every arm counted
+          0 calls and a positive control was the only thing that noticed.
+      (2) ROOT from proc.run({argv={"pwd","-P"}}): under MSYS this prints /c/Users/..., which the
+          native runner then refuses as a RELATIVE cwd ("proc.run: cwd '/c/...' is relative").
+      git rev-parse --show-toplevel prints C:/... on Windows and /... on Linux: absolute to the
+      runner on both. On linux-next 2026-11-14: 12 scripts/lua/test-*.lua take ROOT from pwd -P
+      (test-agy-install-cached, test-configure-ollama-affordances, test-dev-inference-ensure-
+      affordances, test-gate-podman-mode-configuration, test-git-mirror-ready-before-retry-push,
+      test-git-mirror-vault-sink-wait-is-an-event, test-git-mirror-warm-start-keeps-tracking-refs,
+      test-harness-refresh-lock-owner, test-openspec-pin-affordances, test-promote-stable-
+      affordances, test-skills-single-source-affordances, test-spec-index-ensure-affordances).
+      Whether each one is actually wrong on Windows depends on whether ROOT reaches a cwd or a
+      native argv; audit each, do not assume. The shell-to-lua migration (lenovinha, 2080-zcur
+      family) should port onto this helper rather than copy either idiom.
+    exit_criteria:
+      - "lib/lua/common exposes repo_root(), absolute under the native Windows runner and on Linux, and a fixture asserts it is accepted as proc.run cwd on both. Pre-fix result: FAILS, no helper exists."
+      - "A guard refuses a scripts/lua file that takes the repo root from pwd -P (comments stripped). Pre-fix result: FAILS naming the 12 files above."
+    verifiable_closure: "The pwd -P guard exits 0 over scripts/lua and the helper fixture passes on msys and in the Linux guest. Pre-fix result: FAILS, 12 files named."
+    unscoreable: "unpinnable-until-the-test-exists: the guard and fixture are this row's first deliverables (1136-n8sh)."
+    next_action: "After 2080-zcur lands lib/lua/common: add repo_root(), write the guard red against the 12, convert them, run both regimes. Coordinate with lenovinha so the migration uses the helper."
+    provenance: "yolanda 2026-11-14, work/2083-6k44 fixture iterations; git grep over origin/linux-next scripts/lua."
+    events:
+      - type: filed
+        ts: "2026-11-14T23:45:00Z"
+        host: yolanda
+        summary: "filed at coordinator request; not claimed (yolanda at WIP 3)"

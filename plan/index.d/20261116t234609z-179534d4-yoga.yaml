@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    field: status
+    value: in_progress
+    ts: "2026-11-16T23:46:09Z"
+    host: yoga
+
+events:
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    event:
+      type: note
+      ts: "2026-11-16T23:46:09Z"
+      host: yoga
+      summary: |-
+        claimed for cycle 2026-11-16 by yoga-silverblue implementer, operator authorised, coordinator macuahuitl-fedora assigned
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    event:
+      type: note
+      ts: "2026-11-16T23:46:09Z"
+      host: yoga
+      summary: |-
+        wip-override by yoga: p0 incident assigned by coordinator macuahuitl-fedora with operator authorisation — admitted past: refused:set-field:wip-limit:5/5 — yoga already holds 5 in_progress packet(s) outside a story: 1827-3rj4, 1903-sj5t, 1908-9q4c, 1911-3gqy, 1957-msjs (1367-2sbc; the limit is 5, from methodology/distributed-work.yaml packet_discipline.wip_limit).

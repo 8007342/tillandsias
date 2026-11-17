@@ -47,6 +47,9 @@ local function running(name)
 end
 
 if not run({ "getfattr", "--version" }).ok then
+    -- 2093-am6t: fail closed, and say where getfattr comes from.
+    out.line("  why: getfattr (package attr) is not on PATH, so the oomd-avoid xattr cannot be read")
+    out.line("  remedy: the tillandsias-builder toolbox provisions attr (scripts/with-tillandsias-builder.sh); re-run it, or install attr where this runs")
     verdict.emit("could-not-run:forge-oomd-avoid:no-getfattr", 2)
 end
 local mgr = text.trim(run({ "podman", "info", "--format", "{{.Host.CgroupManager}}" }).stdout or "")
@@ -59,7 +62,10 @@ end
 
 -- ARM 1: one pressure run per placement of the mark.
 local set = run({ "systemctl", "--user", "--no-ask-password", "set-property", "--runtime", SLICE,
-    "MemoryHigh=200M", "ManagedOOMMemoryPressure=kill",
+    -- 2093-am6t: MemorySwapMax=0 keeps the fixture hermetic. With host swap
+    -- free (55 GiB on macuahuitl), the throttled scopes swapped out and never
+    -- crossed the pressure limit: "neither-killed" in both arms.
+    "MemoryHigh=200M", "MemorySwapMax=0", "ManagedOOMMemoryPressure=kill",
     "ManagedOOMMemoryPressureLimit=20%", "ManagedOOMMemoryPressureDurationSec=5s" })
 if not set.ok then
     verdict.emit("could-not-run:forge-oomd-avoid:set-property", 2)

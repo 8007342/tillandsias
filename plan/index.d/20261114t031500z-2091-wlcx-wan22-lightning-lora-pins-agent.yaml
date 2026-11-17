@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: studio-admits-wan22-lightning-4step-loras
+    order: 2091-wlcx
+    status: in_progress
+    kind: change
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, models, licence]
+    estimated_hours: 1
+    size: S
+    implementer_tier: sonnet
+    owned_files:
+      - images/imagegen/models.tsv
+      - images/models/licence-register.tsv
+    title: "The GPU studio admits the lightx2v Wan2.2 Lightning 4-step LoRAs (high and low noise, Apache-2.0) for Fun VACE in-betweens"
+    context: |
+      demon_attack wants the Wan 2.2 lightx2v 4-step distillation LoRA for Wan2.2 Fun VACE 14B fp8 in-betweens. lightx2v/Wan2.2-Lightning (Apache-2.0 on the card, ungated) Wan2.2-T2V-A14B-4steps-lora-rank64-Seko-V1.1 high_noise_model and low_noise_model are pinned by revision, sha256 and size as I1/lora rows beside the Qwen Lightning LoRAs. LoraLoaderModelOnly is already in node-classes.tsv and the loras folder already maps to I1/lora, so no node or path change is needed.
+    exit_criteria:
+      - "images/models/licence-register.tsv carries rows Wan2.2-Lightning-T2V-A14B-high-noise and Wan2.2-Lightning-T2V-A14B-low-noise. Pre-fix result: FAILS (neither row on linux-next before this change)."
+    unscoreable: "pinned model and licence TSV rows; the only scoring is a live studio fetch of the weights by sha256, which no litmus runs"
+    next_action: >
+      Land work/2091-wlcx into linux-next; then a studio on a stable release must fetch both LoRAs by their pinned sha256.
+    provenance: |
+      demon_attack request relayed 2026-11-14; Hugging Face Hub API reads recorded in the TSV comments.
+    events:
+      - type: filed
+        ts: "2026-11-14T03:15:00Z"
+        host: agent
+        summary: "order minted for the Wan2.2 Lightning LoRA admission"

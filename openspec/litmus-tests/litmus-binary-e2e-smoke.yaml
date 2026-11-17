@@ -18,7 +18,7 @@ caveats:
 
 critical_path:
   - step: "verify binary exists and is executable"
-    command: "test -x \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" && echo OK"
+    command: "test -x \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" && { mount > \"${TMPDIR:-/tmp}/litmus-e2e-mounts-before\" 2>/dev/null || true; } && echo OK"
     timeout_ms: 3000
     success_pattern: "OK"
     failure_pattern: "cannot access"
@@ -39,7 +39,10 @@ critical_path:
     failure_pattern: "LEAK"
 
   - step: "verify no stale mounts after status-check"
-    command: "MOUNT_COUNT=$(mount 2>/dev/null | grep -c 'tillandsias' || true); [[ $MOUNT_COUNT -eq 0 ]] && echo 'CLEAN: 0 mounts' || (echo \"LEAK: $MOUNT_COUNT mounts found\"; exit 1)"
+    # 2093-post: count only mounts the status-check ADDED. Host storage can
+    # legitimately mount over tillandsias-named paths (macuahuitl's RAID binds
+    # ~/.cache/tillandsias/* and target/), which read as 10 false LEAKs.
+    command: "B=\"${TMPDIR:-/tmp}/litmus-e2e-mounts-before\"; A=\"${TMPDIR:-/tmp}/litmus-e2e-mounts-after\"; N=\"${TMPDIR:-/tmp}/litmus-e2e-mounts-new\"; test -f \"$B\" || { echo 'LEAK: no baseline from step 1'; exit 1; }; mount > \"$A\" 2>/dev/null; grep -vxFf \"$B\" \"$A\" > \"$N\"; MOUNT_COUNT=$(grep -c 'tillandsias' \"$N\"); [[ $MOUNT_COUNT -eq 0 ]] && echo 'CLEAN: 0 new mounts' || { echo \"LEAK: $MOUNT_COUNT new mounts\"; grep 'tillandsias' \"$N\"; exit 1; }"
     timeout_ms: 5000
     success_pattern: "CLEAN"
     failure_pattern: "LEAK"

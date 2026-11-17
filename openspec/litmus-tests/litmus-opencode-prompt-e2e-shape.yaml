@@ -34,83 +34,22 @@ preconditions:
   - scripts/meta-orchestration-worktree-guard.sh and scripts/test-worktree-boundary-guard.sh exist
 
 critical_path:
-  # Hermetic fixture (order 614-2gqx): reproduce the early-normal-provider-
-  # exit breach shapes and prove the gate fails loud on each — before any
-  # live launch. Uses a fake remote probe; never touches a remote.
+  # 2093-loc: local-checkout launch is retired, so the old steps 3-8 (record
+  # HEADs, launch '.' with /meta-orchestration, assert local/plan/remote deltas)
+  # moved to the post-release smoke (order 2093-clds). The release gate makes no
+  # GitHub push and no OpenCode call.
   - step: "run full-mode terminal attestation fixture"
     command: "scripts/test-mo-full-attest.sh"
     timeout_ms: 60000
-    # Not pinned to a scenario COUNT: the self-mode boundary scenarios (order
-    # 717-3bvv) are only attestable from a non-main branch, so the count is a
-    # property of the checkout, not of the gate. The fixture names what it
-    # skipped in the same line.
     expected_behavior: "PASS: mo-full-attest fixture"
-
-  # Startup-boundary guard (order 717-3bvv): a cycle that never snapshotted must
-  # be named as such, and a cycle that did must still verify clean. Hermetic —
-  # builds a throwaway git repo under TMPDIR.
   - step: "run startup-boundary guard fixture"
     command: "scripts/test-worktree-boundary-guard.sh"
     timeout_ms: 60000
     expected_behavior: "PASS: worktree-boundary-guard fixture"
-
-  - step: "record pre-smoke HEAD for delta comparison"
-    command: "git rev-parse HEAD > /tmp/opencode-e2e-head-before && echo \"ok: recorded $(cat /tmp/opencode-e2e-head-before)\""
-    timeout_ms: 5000
-    expected_behavior: "ok:"
-
-  # Record the CURRENT BRANCH's remote ref, not `ls-remote origin HEAD`:
-  # origin HEAD tracks the default branch (main), which a working-branch push
-  # never moves — that mismatch made STEP 6 a deterministic false negative
-  # (plan order 262). test -s fails loud here if the branch has no remote
-  # counterpart yet, instead of handing STEP 6 an empty before-file.
-  - step: "record pre-smoke remote branch head for push verification"
-    command: "git ls-remote origin \"refs/heads/$(git rev-parse --abbrev-ref HEAD)\" | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && test -s /tmp/opencode-e2e-remote-head-before && echo 'ok: remote branch head recorded'"
-    timeout_ms: 15000
-    expected_behavior: "ok:"
-
-  # Order 265 wiring (liveness-extended budget) + operator directive
-  # 2026-07-11 (token rate limiting): the launch logic lives in
-  # scripts/litmus-opencode-e2e-launch.sh. A FULL /meta-orchestration
-  # cycle runs at most once per 4h per host (scripts/forge-e2e-rate-limit.sh
-  # class full-meta); rate-limited runs downgrade to the skill's Smoke Mode
-  # (verify-only, no plan drain, must print `MO-SMOKE: PASS`). The mode is
-  # written to /tmp/opencode-e2e-mode so the delta steps below can skip for
-  # smoke runs, which by design commit and push nothing. Full-mode runs
-  # additionally require the `MO-FULL:` terminal marker with a converging
-  # remote head (order 614-2gqx) — see scripts/mo-full-attest.sh.
-  - step: "launch forge with meta-orchestration prompt (full-or-smoke, rate-limited, liveness-extended)"
-    command: "scripts/litmus-opencode-e2e-launch.sh"
-    timeout_ms: 1560000
-    expected_behavior: "FORGE_EXIT=0"
-
-  # Steps 4-6 assert deltas produced by the in-forge cycle, which reach the
-  # host checkout asynchronously (git-mirror relay) relative to the forge
-  # session's exit. Each probe below re-samples with a bounded retry window
-  # (default 120s, poll 5s — scripts/litmus-git-delta-wait.sh) instead of one
-  # instantaneous sample; step timeout_ms leaves headroom above the window so
-  # a genuine miss reports FAIL, not a runner TIMEOUT. The helper also owns
-  # reading the before-sha files: the previous inline STEP 5 referenced
-  # $HEAD_BEFORE without populating it (steps are separate `bash -c`
-  # subshells), collapsing its range to HEAD..HEAD — a deterministic false
-  # negative, not a race (plan order 255).
-  # Smoke-mode runs are verify-only and push nothing, so each delta step
-  # skips (with an explicit marker) when STEP 3 recorded mode=smoke.
-  - step: "verify local HEAD advanced since smoke start"
-    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: HEAD advanced (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh local-head /tmp/opencode-e2e-head-before; fi"
-    timeout_ms: 150000
-    expected_behavior: "ok: HEAD advanced"
-
-  - step: "verify a plan/ file was updated (ledger or finding filed)"
-    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: plan/ changed (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh plan-commit /tmp/opencode-e2e-head-before; fi"
-    timeout_ms: 150000
-    expected_behavior: "ok: plan/ changed"
-
-  - step: "verify remote branch HEAD advanced"
-    command: "if [ \"$(cat /tmp/opencode-e2e-mode 2>/dev/null)\" = smoke ]; then echo 'ok: remote HEAD advanced (skipped — smoke mode, no deltas expected)'; else scripts/litmus-git-delta-wait.sh remote-head /tmp/opencode-e2e-remote-head-before; fi"
-    timeout_ms: 150000
-    expected_behavior: "ok: remote HEAD advanced"
-
+  - step: "a '.' launch is refused before any forge starts (exit 2, pinned message; was: launch forge with the meta-orchestration prompt)"
+    command: "E=\"${TMPDIR:-/tmp}/litmus-dot-launch.err\"; TILLANDSIAS_NO_TRAY=1 timeout 60 tillandsias . --opencode --diagnostics --port 19080 --prompt x >/dev/null 2>\"$E\"; rc=$?; [ \"$rc\" = 2 ] || { echo \"FAIL: '.' launch exited $rc, expected 2\"; exit 1; }; grep -qF \"Error: launching from a local checkout ('.') is no longer supported: Tillandsias does not mount or read a host checkout.\" \"$E\" || { echo 'FAIL: the local-checkout refusal message changed'; exit 1; }; if grep -q 'event:container_launch ' \"$E\"; then echo 'FAIL: a container launched before the refusal'; exit 1; fi; echo \"ok: '.' launch refused (exit 2, pinned message, no container launched)\""
+    timeout_ms: 90000
+    expected_behavior: "ok: '.' launch refused"
   - step: "cleanup temp files"
     command: "rm -f /tmp/opencode-e2e-head-before /tmp/opencode-e2e-remote-head-before /tmp/opencode-e2e-mode && echo \"ok: cleaned up\""
     timeout_ms: 3000

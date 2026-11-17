@@ -22,7 +22,11 @@ critical_path:
     expected_behavior: "ok: parse"
 
   - step: "ready landing listed, completed not, plan-only not a landing, body mention only with --cite message, total equals lines, exit 0"
-    command: "bash scripts/test-landed-but-open.sh 2>&1 | tail -n 1"
+    # 2093-aggt (D): the whole output, not its last line. This step went red
+    # only inside the 2026-11-16 cut gates (2/6, 3/6) and green standalone, in
+    # the gate env and in the builder toolbox; `tail -n 1` hid which arms
+    # failed, so the gate log now carries every FAIL arm.
+    command: "bash scripts/test-landed-but-open.sh 2>&1"
     timeout_ms: 60000
     expected_behavior: "PASS: landed-but-open"
 

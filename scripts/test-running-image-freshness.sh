@@ -64,11 +64,11 @@ echo "case 1 ok: usage errors exit 2"
 
 # --- case 2: nothing running is a skip, not a false failure -----------------
 set +e
-"$GATE" git >/dev/null 2>&1; RC=$?
+"$GATE" --name "$C_NAME" git >/dev/null 2>&1; RC=$?
 set -e
 [ "$RC" -eq 0 ] || fail "case2: no running container should exit 0, got $RC"
 set +e
-"$GATE" --require-running git >/dev/null 2>&1; RC=$?
+"$GATE" --require-running --name "$C_NAME" git >/dev/null 2>&1; RC=$?
 set -e
 [ "$RC" -eq 1 ] || fail "case2: --require-running with none up should exit 1, got $RC"
 echo "case 2 ok: absent container skips, --require-running fails loud"
@@ -95,7 +95,7 @@ podman ps --format '{{.Names}}' | grep -qx "$C_NAME" \
     || fail "case3 setup: synthetic stale container is not running"
 
 set +e
-OUT="$("$GATE" git 2>&1)"; RC=$?
+OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 1 ] || fail "case3: gate did not detect a stale running image (exit $RC). Output: $OUT"
 printf '%s' "$OUT" | grep -q "STALE" \
@@ -110,7 +110,7 @@ podman run -d --name "$C_NAME" --entrypoint sleep localhost/tillandsias-git:late
     || fail "case4 setup: could not start a container from the current image"
 
 set +e
-OUT="$("$GATE" git 2>&1)"; RC=$?
+OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 0 ] || fail "case4: current image should pass, got exit $RC. Output: $OUT"
 echo "case 4 ok: current running image passes"
@@ -136,7 +136,7 @@ podman run -d --name "$C_NAME" --entrypoint sleep "$UNIDENTIFIED_TAG" 300 >/dev/
     || fail "case5 setup: could not start the unidentified container"
 
 set +e
-OUT="$("$GATE" git 2>&1)"; RC=$?
+OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 0 ] || fail "case5: an unidentifiable image must not be reported as drift (exit $RC). Output: $OUT"
 printf '%s' "$OUT" | grep -qi "indeterminate" \
@@ -147,7 +147,7 @@ echo "case 5 ok: unidentifiable image is INDETERMINATE, not stale"
 
 # --- case 6: --strict turns indeterminate into a failure --------------------
 set +e
-"$GATE" --strict git >/dev/null 2>&1; RC=$?
+"$GATE" --strict --name "$C_NAME" git >/dev/null 2>&1; RC=$?
 set -e
 [ "$RC" -eq 3 ] || fail "case6: --strict must exit 3 on indeterminate, got $RC"
 echo "case 6 ok: --strict escalates indeterminate to exit 3"
