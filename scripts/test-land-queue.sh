@@ -375,6 +375,24 @@ case "$out7b" in
 $out7b" ;;
 esac
 
+# ARM 7c (2100-vkpg): A QUEUE OF ONLY DRAFTS LANDS NOTHING AND SAYS WHICH DRAFTS
+# IT PASSED OVER. Pre-fix the output was the bare "queue is empty" line, which is
+# how 18 drafts sat unlanded for weeks: this arm fails on that code.
+scaffold arm7c
+cat > "$GH_PRS" <<'JSON'
+[{"number":196,"headRefName":"work/1375-amye","isDraft":true},
+ {"number":42,"headRefName":"work/7001-aaaa","isDraft":true}]
+JSON
+out7c="$(run_queue)"; rc7c=$?
+if printf '%s' "$out7c" | grep -q 'advisory:land-queue:ignored-draft:#42:work/7001-aaaa' \
+   && printf '%s' "$out7c" | grep -q 'advisory:land-queue:ignored-draft:#196:work/1375-amye' \
+   && printf '%s' "$out7c" | grep -q 'ok:land-queue:0 ' && [ "$rc7c" -eq 0 ]; then
+    ok "ARM 7c: every ignored draft is named, and a drafts-only queue still exits 0 as empty"
+else
+    bad "ARM 7c: wanted an ignored-draft advisory for #42 and #196 plus ok:land-queue:0 (rc=$rc7c)
+$out7c"
+fi
+
 # ──────────────────────────────────────────────────────────── ARM 8
 # THE INVOKING CHECKOUT IS PUT BACK WHERE IT WAS.
 #
