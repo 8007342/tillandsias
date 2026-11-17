@@ -35388,6 +35388,39 @@ esac
         assert!(!args.iter().any(|arg| arg.starts_with("GEMINI_API_KEY=")));
     }
 
+    /// 2093-am6t: litmus:enclave-isolation step 4 used to grep tray/mod.rs
+    /// for the proxy literal; 776-jcf3 retired that tray launcher. This pins the
+    /// same property on the argv the forge launcher actually builds.
+    #[test]
+    fn forge_launch_argv_routes_through_the_enclave_proxy() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            Some(&PathBuf::from("/tmp/project")),
+            None,
+            "alpha",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        for expected in [
+            "http_proxy=http://proxy:3128",
+            "https_proxy=http://proxy:3128",
+            "HTTP_PROXY=http://proxy:3128",
+            "HTTPS_PROXY=http://proxy:3128",
+        ] {
+            assert!(
+                has_arg(&args, expected),
+                "forge launch argv must route egress through the enclave proxy: missing {expected}"
+            );
+        }
+    }
+
     #[test]
     fn opencode_without_vault_key_preserves_credential_free_lane() {
         let _env = env_lock();

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Linux) at the coordinator's ruling (b) during the 2026-11-16 cut triage.
+packets:
+- packet_id: browser-isolation-e2e-step13-stale-against-current-router
+  order: 2093-9jmw
+  status: ready
+  kind: test
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [litmus, router, e2e, otp]
+  estimated_hours: 4
+  title: 'browser-isolation-e2e step 13+ is stale against the current router (dynamic.Caddyfile in /run/router, sidecar OTP socket)'
+  context: |-
+    litmus:browser-isolation-e2e had never executed past its router launch in this architecture: the fixed host port 127.0.0.1:8080 collided with the live tillandsias-router. 2093-am6t fixed steps 4, 6, 7, 13 and 15's matching, and steps 1-12 now pass on macuahuitl and stay gating. Steps 13, 14 and 15 are QUARANTINED (`skip:quarantined:browser-isolation-stale-router 2093-9jmw`, named in the runner summary, never a pass). Each FAILS once this packet is done, until its original command (kept in a comment above the step) is restored and passes. Step 16 (cleanup) still runs.
+    Findings (macuahuitl, 2026-11-16, fixture containers up after step 12):
+    1. Wrong Caddyfile path: step 10 writes the route to /tmp/tillandsias-router-e2e/Caddyfile, which is mounted in the router at /run/router/Caddyfile, but the router serves /etc/caddy/Caddyfile (the stock file: "# The Caddyfile is an easy way to configure your Caddy web server."). Step 11 reloads /etc/caddy/Caddyfile, so the route is never loaded. /run/router holds Caddyfile and dynamic.Caddyfile; /etc/caddy holds Caddyfile and base.Caddyfile.
+    2. A fresh OTP instead of step 9's: steps 13 and 14 each mint a new token inline (OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]')) rather than sending the token step 9 pushed into the router sidecar.
+    3. HTTP=000 through the proxy: `podman exec tillandsias-test-forge-e2e curl -s -m 5 -w '\nHTTP=%{http_code}\n' -H "Cookie: tillandsias_session=x" http://opencode.test-project.localhost/ --proxy http://proxy:3128` printed HTTP=000 (no connection).
+  exit_criteria:
+  - 'litmus:browser-isolation-e2e passes in full (all 16 steps, quarantine removed) on macuahuitl: the route is loaded from the router''s real config path, the request carries the OTP step 9 pushed, and the E2E request returns 200 through the proxy.'
+  verifiable_closure: 'litmus:browser-isolation-e2e'
+  unscoreable: 'none.'
+  next_action: 'Rework steps 10-15 against the current router (write the route into /run/router/dynamic.Caddyfile as the product does, reuse step 9''s OTP, debug the proxy HTTP=000); remove the quarantine; prove it on macuahuitl.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-16 ruling (b) on the browser-isolation-e2e step-13 red.'
+  events:
+  - type: filed
+    ts: '2026-11-17T01:55:36Z'
+    host: macuahuitl
+    summary: filed ready (p1) from the 2026-11-16 cut triage; quarantines browser-isolation-e2e steps 13-15
