@@ -688,6 +688,8 @@ TESTS_SKIPPED=0
 # ORDER 1309-fhxb — STEP-level verdicts. Added beside the test-level counters,
 # never replacing them: every existing line keeps its format and position.
 STEPS_SKIPPED=0
+# 2093-gfak: quarantined tests, named in the summary (never counted as passes).
+QUARANTINED=()
 STEPS_ADVISORY=0
 TESTS_ADVISORY=0
 TESTS_VERDICT_SKIPPED=0
@@ -2230,6 +2232,8 @@ run_litmus_test_file() {
             if [[ "$step_verdict" == "skip" ]]; then
                 STEPS_SKIPPED=$((STEPS_SKIPPED+1)); _t_skip=$((_t_skip+1))
                 printf ' %b[SKIP]%b %s\n' "${YELLOW}" "${NC}" "$(grep -vE '^[[:space:]]*$' <<<"$step_output" | tail -n 1)" >&2
+                _q_last="$(grep -vE '^[[:space:]]*$' <<<"$step_output" | tail -n 1)"
+                [[ "$_q_last" == skip:quarantined:* ]] && QUARANTINED+=("$test_name ${_q_last#skip:}")
             else
                 STEPS_ADVISORY=$((STEPS_ADVISORY+1)); _t_advisory=$((_t_advisory+1))
                 printf ' %b[ADVISORY]%b %s\n' "${YELLOW}" "${NC}" "$(grep -vE '^[[:space:]]*$' <<<"$step_output" | tail -n 1)" >&2
@@ -2662,6 +2666,14 @@ print_summary() {
     # would make the test line's `skipped=` incommensurable with the step line's.
     # So: `skipped=` is VERDICT skips only, and `not-run=` is what was never
     # attempted. Neither is in the rate's denominator, and neither ever was.
+    # 2093-gfak: a quarantine is a known, cited, UNPROVEN property. Name each
+    # one so a green summary cannot hide it.
+    if [[ ${#QUARANTINED[@]} -gt 0 ]]; then
+        local _q
+        for _q in ${QUARANTINED[@]+"${QUARANTINED[@]}"}; do
+            printf '%bQuarantined%b: %s\n' "${YELLOW}" "${NC}" "$_q" >&2
+        done
+    fi
     printf '%bTest Verdicts%b: passed=%d advisory=%d skipped=%d not-run=%d failed=%d\n' "${BOLD}" "${NC}" \
         "$((TESTS_PASSED - TESTS_ADVISORY))" "${TESTS_ADVISORY:-0}" "${TESTS_VERDICT_SKIPPED:-0}" \
         "$(( ${TESTS_SKIPPED:-0} - ${TESTS_VERDICT_SKIPPED:-0} ))" "${TESTS_FAILED:-0}" >&2

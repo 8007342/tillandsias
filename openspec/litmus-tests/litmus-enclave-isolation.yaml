@@ -24,10 +24,13 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "HTTP_PROXY=http://proxy:3128"
 
-  - step: "verify the tray launcher keeps the same proxy reference"
-    command: "grep -F 'http://proxy:3128' crates/tillandsias-headless/src/tray/mod.rs"
-    timeout_ms: 5000
-    expected_behavior: "http://proxy:3128"
+  # 2093-am6t: 776-jcf3 retired the tray's local launcher, so the old grep of
+  # tray/mod.rs for the proxy literal had nothing to find. The property is now
+  # tested on the argv the forge launcher builds (a unit test, not a file grep).
+  - step: "verify the forge launcher's built argv routes egress through the enclave proxy"
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias forge_launch_argv_routes_through_the_enclave_proxy 2>&1"
+    timeout_ms: 600000
+    expected_behavior: "test result: ok. 1 passed"
 
 observability:
   traces:

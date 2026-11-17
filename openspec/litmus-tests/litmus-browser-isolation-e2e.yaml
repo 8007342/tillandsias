@@ -34,8 +34,12 @@ critical_path:
     timeout_ms: 20000
     expected_behavior: "OK"
 
+  # 2093-am6t: publish on an EPHEMERAL host port (127.0.0.1::80). The fixed
+  # 127.0.0.1:8080 collided with the live tillandsias-router on a host running
+  # a forge (podman run exit 126); every request here goes over the enclave
+  # network, never the host port.
   - step: "launch router container (Caddy reverse proxy)"
-    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && : > /tmp/tillandsias-router-e2e/dynamic.Caddyfile && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -p 127.0.0.1:8080:80 -v /tmp/tillandsias-router-e2e:/run/router:rw \"$ROUTER_IMG\" > /tmp/litmus-router-e2e.log 2>&1; _rc=$?; head -1 /tmp/litmus-router-e2e.log; exit $_rc"
+    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && : > /tmp/tillandsias-router-e2e/dynamic.Caddyfile && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -p 127.0.0.1::80 -v /tmp/tillandsias-router-e2e:/run/router:rw \"$ROUTER_IMG\" > /tmp/litmus-router-e2e.log 2>&1; _rc=$?; head -1 /tmp/litmus-router-e2e.log; exit $_rc"
     timeout_ms: 10000
     expected_behavior: "podman prints the new container id (64 hex) on stdout and exits 0"
     # ORDER 1252-znbn. MEASURED on pirria 2026-09-20: `podman run -d` prints
@@ -59,14 +63,14 @@ critical_path:
     assert_output_nonempty: true
 
   - step: "verify all 3 containers are running"
-    command: "for i in 1 2 3 4 5; do count=$(podman ps -a --filter 'name=tillandsias-test-.*-e2e' --format '{{.Names}}:{{.Status}}' | grep -Ec '(proxy|router|forge):Up'); if [ \"$count\" = \"3\" ]; then echo 3; exit 0; fi; sleep 1; done; podman ps -a --filter 'name=tillandsias-test-' --format '{{.Names}}:{{.Status}}'; echo \"count=$count\""
+    command: "for i in 1 2 3 4 5; do count=$(podman ps -a --filter 'name=tillandsias-test-.*-e2e' --format '{{.Names}}:{{.Status}}' | grep -Ec '(proxy|router|forge)-e2e:Up'); if [ \"$count\" = \"3\" ]; then echo 3; exit 0; fi; sleep 1; done; podman ps -a --filter 'name=tillandsias-test-' --format '{{.Names}}:{{.Status}}'; echo \"count=$count\""
     timeout_ms: 10000
     expected_behavior: "3"
 
   - step: "generate OTP token (base64url-encoded random 32 bytes)"
     command: "OTP_TOKEN=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && echo \"$OTP_TOKEN\" && [ ${#OTP_TOKEN} -ge 40 ]"
     timeout_ms: 5000
-    expected_behavior: "[A-Za-z0-9_-]{40,}"
+    success_pattern: "^[A-Za-z0-9_-]{40,}$"
 
   - step: "create mock OpenCode service inside forge (simple HTTP server)"
     command: "scripts/litmus-helper-browser-isolation.sh start-mock-opencode"
@@ -93,23 +97,41 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "READY"
 
+  # 2093-9jmw QUARANTINE (coordinator ruling 2026-11-16): stale against the
+  # current router (dynamic.Caddyfile in /run/router, sidecar OTP socket).
+  # FAILS once 2093-9jmw is done, until this original command is restored:
+  #   OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillands
+  #   ias-test-forge-e2e curl -s -w '\n%{http_code}' -H "Cookie: tillandsias_session=$OTP" http:
+  #   //opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2
   - step: "request from forge through proxy to router with valid OTP (E2E chain)"
-    command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '\\n%{http_code}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$(\"$MFPLAN\" status 2093-9jmw 2>/dev/null) || { echo \"FAIL: quarantine packet 2093-9jmw is not in the ledger\"; exit 1; }; set -- $R; S=\"${2:-}\"; [ -n \"$S\" ] || { echo \"FAIL: no status for quarantine packet 2093-9jmw\"; exit 1; }; if [ \"$S\" = done ] || [ \"$S\" = completed ] || [ \"$S\" = archived ]; then echo \"FAIL: quarantine expired: 2093-9jmw is $S, so restore this step's real command (kept in the comment above it) and make it pass\"; exit 1; fi; echo \"skip:quarantined:browser-isolation-stale-router 2093-9jmw (packet status=$S; the E2E route through the router is UNPROVEN: this step is stale against the current router design)\""
     timeout_ms: 5000
-    expected_behavior: "200|opencode-ready"
+    success_pattern: "200|opencode-ready"
 
+  # 2093-9jmw QUARANTINE (coordinator ruling 2026-11-16): stale against the
+  # current router (dynamic.Caddyfile in /run/router, sidecar OTP socket).
+  # FAILS once 2093-9jmw is done, until this original command is restored:
+  #   OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillands
+  #   ias-test-forge-e2e curl -s -w '%{time_total}' -H "Cookie: tillandsias_session=$OTP" http:/
+  #   /opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if (
+  #   $1 < 0.5) print "PASS"; else print "FAIL: " $1}'
   - step: "verify latency < 500ms for E2E request"
-    command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '%{time_total}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if ($1 < 0.5) print \"PASS\"; else print \"FAIL: \" $1}'"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$(\"$MFPLAN\" status 2093-9jmw 2>/dev/null) || { echo \"FAIL: quarantine packet 2093-9jmw is not in the ledger\"; exit 1; }; set -- $R; S=\"${2:-}\"; [ -n \"$S\" ] || { echo \"FAIL: no status for quarantine packet 2093-9jmw\"; exit 1; }; if [ \"$S\" = done ] || [ \"$S\" = completed ] || [ \"$S\" = archived ]; then echo \"FAIL: quarantine expired: 2093-9jmw is $S, so restore this step's real command (kept in the comment above it) and make it pass\"; exit 1; fi; echo \"skip:quarantined:browser-isolation-stale-router 2093-9jmw (packet status=$S; the E2E route through the router is UNPROVEN: this step is stale against the current router design)\""
     timeout_ms: 10000
     expected_behavior: "PASS"
 
+  # 2093-9jmw QUARANTINE (coordinator ruling 2026-11-16): stale against the
+  # current router (dynamic.Caddyfile in /run/router, sidecar OTP socket).
+  # FAILS once 2093-9jmw is done, until this original command is restored:
+  #   podman logs tillandsias-test-router-e2e 2>&1 | grep -i 'cookie\|otp\|validation' | head -1
+  #    || echo 'LOGS_OK'
   - step: "verify OTP validation logs are present in router"
-    command: "podman logs tillandsias-test-router-e2e 2>&1 | grep -i 'cookie\\|otp\\|validation' | head -1 || echo 'LOGS_OK'"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$(\"$MFPLAN\" status 2093-9jmw 2>/dev/null) || { echo \"FAIL: quarantine packet 2093-9jmw is not in the ledger\"; exit 1; }; set -- $R; S=\"${2:-}\"; [ -n \"$S\" ] || { echo \"FAIL: no status for quarantine packet 2093-9jmw\"; exit 1; }; if [ \"$S\" = done ] || [ \"$S\" = completed ] || [ \"$S\" = archived ]; then echo \"FAIL: quarantine expired: 2093-9jmw is $S, so restore this step's real command (kept in the comment above it) and make it pass\"; exit 1; fi; echo \"skip:quarantined:browser-isolation-stale-router 2093-9jmw (packet status=$S; the E2E route through the router is UNPROVEN: this step is stale against the current router design)\""
     timeout_ms: 5000
-    expected_behavior: "LOGS_OK|validation|cookie"
+    success_pattern: "LOGS_OK|validation|cookie"
 
   - step: "cleanup: remove containers"
-    command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
+    command: "podman rm -f -t 0 tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
     timeout_ms: 10000
     expected_behavior: "CLEANUP_OK"
 
@@ -130,4 +152,4 @@ observability:
 
 rollback:
   on_failure: "ensure all test containers and networks are cleaned; inspect router logs for OTP validation errors"
-  command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e /tmp/tillandsias-e2e-test-* 2>/dev/null; echo 'Test cleanup complete'"
+  command: "podman rm -f -t 0 tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e /tmp/tillandsias-e2e-test-* 2>/dev/null; echo 'Test cleanup complete'"
