@@ -6868,7 +6868,7 @@ fn project_has_platform_branches(project_path: &Path) -> bool {
 /// by then ~205 commits ahead.
 ///
 /// THE COST IS NOT ABSTRACT AND IT IS NOT "an old tree". `main` is not
-/// committable by contract: `scripts/check-committable-branch.sh` returns
+/// committable by contract: `scripts/lua/check-committable-branch.lua` returns
 /// `blocked:committable-cycle-on-main`, and direct pushes to `main` are
 /// forbidden outright. So a forge seeded from `main` cannot commit ANYTHING
 /// from its own checkout. That is the whole cycle lost unless the agent notices
@@ -34452,7 +34452,7 @@ mod tests {
         assert!(
             notice.contains("CANNOT COMMIT"),
             "the warning must state the CONSEQUENCE, not just the fact: a forge \
-             seeded from main is refused by check-committable-branch.sh and the \
+             seeded from main is refused by check-committable-branch.lua and the \
              whole cycle is lost unless the agent notices: {notice}"
         );
         assert!(
