@@ -300,7 +300,10 @@ mod tests {
 mod queue_guidance_tests {
     #[test]
     fn the_forge_guidance_and_quick_intro_name_the_queue() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
         for rel in [
             "images/default/config-overlay/mcp/forge-agent-guidance.md",
             "skills/forge-quick-intro/SKILL.md",

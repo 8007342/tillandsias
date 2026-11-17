@@ -1,6 +1,6 @@
 //! Orders 2094-ay52 and 2095-kgdj: the job admission queue, rules only.
 //!
-//! @trace order:2094-ay52, order:2095-kgdj, order:2094-65yz, spec:job-admission-queue
+//! @trace order:2094-ay52, order:2095-kgdj, order:2094-65yz
 //! (spec: openspec/changes/job-admission-and-host-watch, not yet archived)
 //!
 //! Nothing decided whether a heavy job may start: three forges and a host
