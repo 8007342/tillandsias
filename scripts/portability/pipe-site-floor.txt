@@ -650,7 +650,6 @@ scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
 scripts scripts/test-gate-divergence-is-declared.sh 6
 scripts scripts/test-gate-memory-refusal.sh 1
-scripts scripts/test-gate-stamp-movers-batching-is-equivalent.sh 10
 scripts scripts/test-gate-stamp-names-content-movers.sh 5
 scripts scripts/test-gate-stamp-portable-digest.sh 1
 scripts scripts/test-gate-stamp-scope.sh 9
@@ -720,7 +719,6 @@ scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-structured-assert.sh 1
 scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
-scripts scripts/test-locale-coverage.sh 9
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
 scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
