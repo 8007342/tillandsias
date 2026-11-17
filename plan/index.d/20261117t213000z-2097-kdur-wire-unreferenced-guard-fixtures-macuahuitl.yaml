@@ -2,7 +2,7 @@
 packets:
 - packet_id: fourteen-green-unreferenced-guard-fixtures-wired-into-a-litmus
   order: 2097-kdur
-  status: completed
+  status: in_progress
   kind: chore
   priority: p1
   desired_release: v0.5
@@ -24,4 +24,4 @@ packets:
   - type: filed
     ts: '2026-11-17T21:30:00Z'
     host: macuahuitl
-    summary: filed and completed with the wiring PR
+    summary: filed in_progress with the wiring PR
