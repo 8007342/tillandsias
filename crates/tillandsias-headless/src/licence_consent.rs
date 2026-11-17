@@ -229,7 +229,7 @@ const HIGGS_ATTRIBUTION: &str = "(B) prominently display \u{201c}Built with Higg
 const HIGGS_NOTICE: &str = "(A) provide a copy of this Agreement and the of Meta License \u{2019}s Llama 3 agreement with any such Higgs Materials";
 const HIGGS_FIELD: &str = "v. You will not use the Higgs Materials or any output or results of the Higgs Materials to improve any other large language model (excluding Boson Higgs Audio 2 or derivative works thereof).";
 const HIGGS_THRESHOLD: &str = "If the annual active users of the products or services made available by or for Licensee, or Licensee\u{2019}s affiliates, is greater than 100,000 annual active users in the preceding calendar year, you must request an expanded license from Boson AI";
-const HIGGS_LLAMA: &str = "The terms and conditions of the Meta License Agreement are hereby incorporated herein by reference and Unless stated otherwise below, its terms apply. (Meta Llama 3 Community License, meta-llama/llama3 LICENSE at a0940f9c, sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f; the Llama 3 Acceptable Use Policy it also incorporates is not pinned here.)";
+const HIGGS_LLAMA: &str = "The terms and conditions of the Meta License Agreement are hereby incorporated herein by reference and Unless stated otherwise below, its terms apply. (Meta Llama 3 Community License, meta-llama/llama3 LICENSE at a0940f9c, sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f; the Llama 3 Acceptable Use Policy it also incorporates is USE_POLICY.md at the same commit, sha256 716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c.)";
 /// The obligation table, keyed by licence id as the register spells it.
 /// An unknown id yields one review obligation naming it.
 pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
@@ -371,7 +371,7 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
             ),
             ob(
                 C::Review {
-                    clause: "incorporates the Meta Llama 3 Community License (sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f) and the Llama 3 Acceptable Use Policy (not pinned) by reference".into(),
+                    clause: "incorporates the Meta Llama 3 Community License (sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f) and the Llama 3 Acceptable Use Policy (sha256 716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c) by reference".into(),
                 },
                 HIGGS_LLAMA,
             ),
@@ -534,14 +534,18 @@ fn slugify(s: &str) -> String {
 }
 
 impl Acknowledgement {
-    /// The file stem: the artefact slug, or grantor-scope-expiry for a grant
-    /// covering several artefacts.
+    /// The file stem: `<licence-id>--` then the artefact slug, or
+    /// grantor-scope-expiry for a grant covering several artefacts.
     pub fn slug(&self) -> String {
-        if self.covers.len() == 1 {
+        // `<licence-id>--<artefact-slug>` (2094-h3rq): one repo can need
+        // several licence texts (Higgs v2: Boson, Llama 3), and a name keyed
+        // on the artefact alone made their PRs write one file.
+        let what = if self.covers.len() == 1 {
             slugify(&self.covers[0])
         } else {
             slugify(&format!("{}-{}-{}", self.grantor, self.scope, self.expiry))
-        }
+        };
+        format!("{}--{what}", slugify(&self.licence))
     }
 
     /// The canonical statement that is signed byte for byte (D3's shape).
@@ -2416,6 +2420,108 @@ pub(crate) mod tests {
         }
     }
 
+    /// demon_attack #4/#6/#7 (coordinator, 2026-11-17): Higgs v2 needs three
+    /// licence texts on ONE repo, and records named after the artefact alone
+    /// wrote the same file, so the PRs conflicted and a web-UI resolution
+    /// would overwrite a record. The file name carries the licence id.
+    #[test]
+    fn two_licences_on_one_repo_get_two_record_files() {
+        let repo = "bosonai/higgs-tts-2-3b-base";
+        let mut a = nc_ack("project:demo");
+        a.covers = vec![repo.into()];
+        a.licence = "boson-higgs-audio-2-community-license".into();
+        let mut b = a.clone();
+        b.licence = "meta-llama-3-community-license".into();
+        assert_ne!(a.slug(), b.slug(), "two licences, one file");
+        assert_eq!(
+            a.slug(),
+            "boson-higgs-audio-2-community-license--bosonai-higgs-tts-2-3b-base"
+        );
+        // The multi-cover form carries the licence id too.
+        let mut m = a.clone();
+        m.covers.push("bosonai/higgs-audio-v2-tokenizer".into());
+        let mut n = m.clone();
+        n.licence = "meta-llama-3-community-license".into();
+        assert_ne!(m.slug(), n.slug());
+        assert!(
+            m.slug()
+                .starts_with("boson-higgs-audio-2-community-license--")
+        );
+        // And the PRs' record paths differ.
+        use sha2::Digest as _;
+        let path_of = |ack: &Acknowledgement| {
+            let mut ack = ack.clone();
+            ack.licence_sha256 = format!("{:x}", sha2::Sha256::digest(b"T"));
+            licence_pr(&ack, repo, b"T", "u", &[], &[], &[])
+                .unwrap()
+                .files[0]
+                .0
+                .clone()
+        };
+        assert_ne!(path_of(&a), path_of(&b));
+    }
+
+    /// The merge evidence keys on the FILE the default branch holds, not on
+    /// [`Acknowledgement::slug`]: records merged under the old artefact-only
+    /// name (demon_attack #4, #5) still admit after the rename.
+    #[test]
+    fn an_old_name_record_merged_before_the_rename_still_admits() {
+        let dir = disk_scratch("merge-oldname");
+        let repo = dir.join("project");
+        fs::create_dir_all(&repo).unwrap();
+        git(&repo, OWNER, &["init", "-q"]);
+        git(
+            &repo,
+            OWNER,
+            &["commit", "-q", "--allow-empty", "-m", "base"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let ack = nc_ack("project:demo");
+        let old = "fixture-nc-weights";
+        assert_ne!(ack.slug(), old, "the premise: the name scheme changed");
+        git(
+            &repo,
+            OWNER,
+            &["checkout", "-qb", "licences/cc-by-nc-sa-4.0"],
+        );
+        fs::create_dir_all(repo.join(ACK_REPO_DIR)).unwrap();
+        let rel = format!("{ACK_REPO_DIR}/{old}.yaml");
+        fs::write(repo.join(&rel), ack.to_yaml()).unwrap();
+        git(&repo, OWNER, &["add", &rel]);
+        git(&repo, OWNER, &["commit", "-qm", "licence"]);
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #4 from o/licences/cc-by-nc-sa-4.0",
+            WEB_FLOW,
+            true,
+        );
+        let ok = register_admits_with_consent_in(
+            crate::imagegen_models::register_tsv(),
+            RESTRICTED,
+            &nc_row(),
+            &dir.join("none"),
+            "project:demo",
+            &Verifier::merged(MergeGate::for_repo(&repo).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(ok.acknowledgement_slug.as_deref(), Some(old));
+        assert_eq!(ok.merge.unwrap().pr, 4);
+    }
+
     #[test]
     fn a_merge_commit_from_a_non_licences_head_is_not_a_licence_approval() {
         assert_eq!(
@@ -2805,11 +2911,17 @@ pub(crate) mod tests {
         // The yaml record round-trips, and the committed seeds are the four
         // records of acknowledgement #1, unsigned.
         let seeds = [
-            include_str!("../../../licences/acknowledgements/nikopueringer-corridorkey2-0.yaml"),
-            include_str!("../../../licences/acknowledgements/nvidia-c-radiov4-so400m.yaml"),
-            include_str!("../../../licences/acknowledgements/ruicheng-moge-2-vitb-normal.yaml"),
             include_str!(
-                "../../../licences/acknowledgements/google-deepmind-representations4d.yaml"
+                "../../../licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml"
+            ),
+            include_str!(
+                "../../../licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml"
+            ),
+            include_str!(
+                "../../../licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml"
+            ),
+            include_str!(
+                "../../../licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml"
             ),
         ];
         let acks = operator_standing_acknowledgements();
@@ -2823,7 +2935,10 @@ pub(crate) mod tests {
                 seed.signature.is_empty(),
                 "the seed is signed by the operator, not by a build"
             );
-            assert_eq!(seed.slug(), slugify(&ack.covers[0]));
+            assert_eq!(
+                seed.slug(),
+                format!("{}--{}", slugify(&ack.licence), slugify(&ack.covers[0]))
+            );
         }
         // Every repo in the register is covered by one seed record, except
         // Demucs: operator ruling 2026-11-09, acknowledged per project with
@@ -2911,10 +3026,19 @@ pub(crate) mod tests {
         let ids =
             admits_restricted_in(&pinned, "demon_attack", &artefacts, &acks, &verifier).unwrap();
         assert_eq!(ids.len(), artefacts.len());
-        assert_eq!(ids[0], "nikopueringer-corridorkey2-0");
-        assert!(ids.iter().any(|i| i == "nvidia-c-radiov4-so400m"));
-        assert!(ids.iter().any(|i| i == "ruicheng-moge-2-vitb-normal"));
-        assert!(ids.iter().any(|i| i == "google-deepmind-representations4d"));
+        assert_eq!(
+            ids[0],
+            "corridor-key-licence-2-0--nikopueringer-corridorkey2-0"
+        );
+        assert!(
+            ids.iter()
+                .any(|i| i == "nvidia-open-model-license--nvidia-c-radiov4-so400m")
+        );
+        assert!(ids.iter().any(|i| i == "mit--ruicheng-moge-2-vitb-normal"));
+        assert!(
+            ids.iter()
+                .any(|i| i == "cc-by-4-0--google-deepmind-representations4d")
+        );
 
         // No record: refused, naming the first artefact.
         let err = admits_restricted_in(

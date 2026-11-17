@@ -7,7 +7,7 @@
 Operator direction 2026-11-16: the accept-licence skill SHALL be zero-setup.
 It SHALL open ONE pull request in the PROJECT repository, head
 `licences/<licence-id>`, base the project's default branch, carrying the
-acknowledgement record (`licences/acknowledgements/<slug>.yaml`), the
+acknowledgement record (`licences/acknowledgements/<licence-id>--<artefact-slug>.yaml`), the
 obligations spec (`openspec/specs/third-party-licence-<id>/spec.md`), the
 licence text verbatim (`licences/texts/<id>.md`) whose sha256 is the record's
 `licence_sha256`, and a plain-language summary of what the user promises. It
@@ -32,27 +32,42 @@ reads.
   register's `licence_sha256`
 - **THEN** nothing is rendered and no PR is opened
 
+#### Scenario: a licence that incorporates another quotes both
+
+- **WHEN** the licence incorporates another text by reference (Higgs Audio 2
+  incorporates the Meta Llama 3 Community License and its Acceptable Use
+  Policy)
+- **THEN** the PR quotes each incorporated text verbatim with its own pinned
+  sha256, and a mismatch on either renders nothing
+
 ### Requirement: the admit gate admits only a record merged into the default branch
 
-Under the merge gate (`TILLANDSIAS_LICENCE_ACK_REPO` names the project's
-checkout or mirror clone) the gate SHALL read records from the default
-branch (`origin/HEAD`), never from the working tree or a state-dir copy, and
-SHALL admit a record only when the last first-parent commit on the default
-branch that added or modified it is a GitHub pull-request merge: committer
+The gate's source SHALL be chosen from HOST state only. When the project's
+git mirror (`tillandsias-git-<project>`, `/srv/git/<project>`) answers
+through the host's podman, the gate SHALL read merged records from the
+mirror's default branch (`HEAD`), never from a working tree, and SHALL admit
+one only when the last first-parent commit on that branch that added or
+modified it is a GitHub pull-request merge: committer
 `GitHub <noreply@github.com>`, a `gpgsig` header, and the subject
 `Merge pull request #<n> from <owner>/licences/<id>` (or a squash subject
-ending `(#<n>)`). The admission SHALL carry the evidence: PR number, merge
-sha, merged_at (the merge commit's committer date), and merged_by.
+ending `(#<n>)`), AND GitHub's API (`gh api repos/<owner>/<name>/pulls/<n>`)
+says the PR is merged at that merge sha. No environment variable, forge
+request or forge-written file SHALL choose or override the source.
 
-These checks are OFFLINE. `merged_by` is not in git: offline it is reported
-unknown, never guessed. With `TILLANDSIAS_LICENCE_ACK_ONLINE` set, the gate
-reads `gh api repos/<owner>/<name>/pulls/<n>`; a PR GitHub says is unmerged,
-or whose merge sha differs, is refused; an unreachable API leaves the offline
-evidence standing, labelled `online-unavailable`, with merged_by unknown.
+GitHub's confirmation is REQUIRED for a mirror-read record because the
+mirror accepts forge pushes (relayed upstream), and a forge can push a
+commit whose committer name and `gpgsig` header merely LOOK like GitHub's;
+nothing offline verifies GitHub's signing key. So when GitHub is unreachable
+a mirror-read record admits nothing, with a remedy to retry; the gate never
+reports a pass it could not check. The admission SHALL carry PR number,
+merge sha, merged_at (the merge commit's committer date) and merged_by (from
+GitHub's answer).
 
-A repo whose default branch cannot be resolved SHALL refuse; it SHALL NOT
-fall back to the signature gate. Without `TILLANDSIAS_LICENCE_ACK_REPO` the
-SSHSIG gate is unchanged, so an unsigned record admits nothing there either.
+A mirror that answers but whose default branch cannot be resolved SHALL
+refuse; it SHALL NOT fall back. With no mirror, and for records in the
+host's acknowledgement dir, the SSHSIG gate is unchanged: a SIGNED record
+verifies against the host's enrolled signers, and an UNSIGNED record admits
+nothing outside the merge gate.
 
 #### Scenario: an open pull request admits nothing
 
@@ -71,20 +86,53 @@ SSHSIG gate is unchanged, so an unsigned record admits nothing there either.
 - **WHEN** a later direct commit on the default branch changes the record
 - **THEN** the gate refuses: the merge no longer vouches for those bytes
 
-### Requirement: agents never merge
+#### Scenario: GitHub unreachable
 
-The PreToolUse bash policy (`tillandsias-plan policy classify-bash`, rule
-`no-agent-merge`) SHALL refuse `gh pr merge` whose selector names a
-`licences/` head, and SHALL refuse the merge API for EVERY pull request
-(REST `PUT .../pulls/<n>/merge` or a call carrying a body, GraphQL
-`mergePullRequest` / `enablePullRequestAutoMerge`), because the hook cannot
-see which head a number names and makes no network call.
+- **WHEN** a structurally perfect merge is read from the mirror and GitHub
+  cannot confirm it
+- **THEN** the gate refuses and says to retry when GitHub is reachable
 
-#### Scenario: a merge by number is not refused by the hook
+### Requirement: agents never merge a licence pull request
 
-- **WHEN** an agent runs `gh pr merge 12`
-- **THEN** the hook allows it (the release skill merges that way); this is a
-  KNOWN GAP, covered only by the gate's merged_by check below
+The PreToolUse bash policy (`tillandsias-plan policy classify-bash --hook`,
+rule `no-agent-merge`; coordinator ruling 2026-11-17) SHALL refuse
+`gh pr merge` whose selector names a `licences/` head from its words alone.
+Every other merge form — `gh pr merge <number|url|branch>` or with no
+selector, the REST `pulls/<n>/merge` endpoint with any method or flags
+(through `gh api` or an HTTP client), and GraphQL `mergePullRequest` /
+`enablePullRequestAutoMerge` — SHALL be allowed ONLY after the hook resolves
+the pull request's head through `gh` (bounded by a 10 s timeout), and SHALL
+be refused when that head starts with `licences/`. The hook SHALL FAIL
+CLOSED: a lookup that fails, times out, returns an empty head, or cannot be
+formed (a GraphQL call that does not spell its pull request's node id)
+refuses, with the remedy "retry when GitHub is reachable". The `gh` the hook
+runs is the one on the hook process's PATH; no environment variable
+overrides it.
+
+#### Scenario: the lookup fails
+
+- **WHEN** an agent runs `gh pr merge 12` and the head lookup fails
+- **THEN** the hook refuses with `refused:bash-policy:no-agent-merge`
+
+#### Scenario: the release skill's merge
+
+- **WHEN** the release skill runs `gh pr merge <n>` for a
+  `release/version-bump-*` PR and GitHub answers
+- **THEN** the hook allows it
+
+### Requirement: KNOWN GAP, a squash merge does not name its head
+
+A squash merge's commit subject is the PR title with `(#<n>)`; it does not
+name the head branch. Offline, the gate SHALL NOT claim a squashed record
+came from a `licences/` PR; the online confirmation (merged at that sha) is
+what binds the record to PR #<n>, and the gate does not yet check that PR's
+head ref.
+
+#### Scenario: a squash-merged record
+
+- **WHEN** a record reached the default branch in a squash merge
+- **THEN** the admission names PR #<n> from the subject and relies on
+  GitHub's confirmation; it makes no claim about the head branch
 
 ### Requirement: KNOWN GAP, a host agent holding the operator token can merge
 
