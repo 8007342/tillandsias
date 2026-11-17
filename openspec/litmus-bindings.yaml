@@ -188,6 +188,7 @@ specs:
   - litmus:scorable-obligation-splitter
   - litmus:census-enforced-reachability-split
   - litmus:added-test-is-referenced-shape
+  - litmus:unreferenced-slow-and-regime-fixtures-run
   - litmus:verify-closure-shape
   - litmus:reset-flags-accepted
   - litmus:tool-materialization

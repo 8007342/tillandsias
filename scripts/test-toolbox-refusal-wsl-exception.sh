@@ -62,7 +62,17 @@ run_without_toolbox() {
 
     # No toolbox on PATH, and every skip-guard that could short-circuit the
     # decision explicitly cleared, so each arm reaches the branch it targets.
-    PATH="/usr/bin:/bin"     TILLANDSIAS_SKIP_TOOLBOX=     TOOLBOX_PATH=     container=         bash "$d/under-test.sh" true >"$d/out" 2>&1
+    # /usr/bin:/bin alone is NOT toolbox-free on a Fedora builder, which has
+    # /usr/bin/toolbox, so arm 2 failed on exactly the hosts the ruling is for
+    # (macuahuitl 2026-11-17, 2099-f982). Link every /usr/bin and /bin entry
+    # except toolbox into a farm and use that as PATH instead.
+    mkdir -p "$d/bin"
+    local e
+    for e in /usr/bin/* /bin/*; do
+        case "${e##*/}" in toolbox) continue ;; esac
+        [ -e "$d/bin/${e##*/}" ] || ln -s "$e" "$d/bin/${e##*/}" 2>/dev/null
+    done
+    PATH="$d/bin"     TILLANDSIAS_SKIP_TOOLBOX=     TOOLBOX_PATH=     container=         bash "$d/under-test.sh" true >"$d/out" 2>&1
     local rc=$?
     cat "$d/out"
     rm -rf "$d"

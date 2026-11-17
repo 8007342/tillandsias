@@ -67,20 +67,33 @@ if grep -q 'Delete :com.apple.security.get-task-allow' "$BUILD"; then
 else
     bad "build-macos-tray.sh no longer strips get-task-allow — notarization would reject every release"
 fi
-tmp_ent="$(mktemp -t seam-ent).plist"
-cp "$ENT" "$tmp_ent"
-/usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$tmp_ent" 2>/dev/null || true
-if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$tmp_ent" >/dev/null 2>&1; then
-    bad "get-task-allow SURVIVED the release derivation — notarization would reject this build"
+# The derivation arms need PlistBuddy, which only macOS ships. Off macOS they
+# are a NAMED skip: without this guard the get-task-allow arm passed VACUOUSLY
+# on Linux (Print failed for want of the tool) and the virtualization arm
+# failed for the same reason (2099-f982).
+if [ -x /usr/libexec/PlistBuddy ]; then
+    tmp_ent="$(mktemp -t seam-ent.XXXXXX)"
+    cp "$ENT" "$tmp_ent"
+    /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$tmp_ent" 2>/dev/null || true
+    if /usr/libexec/PlistBuddy -c "Print :com.apple.security.get-task-allow" "$tmp_ent" >/dev/null 2>&1; then
+        bad "get-task-allow SURVIVED the release derivation — notarization would reject this build"
+    else
+        ok "release entitlements drop get-task-allow"
+    fi
+    if /usr/libexec/PlistBuddy -c "Print :com.apple.security.virtualization" "$tmp_ent" >/dev/null 2>&1; then
+        ok "release entitlements KEEP com.apple.security.virtualization"
+    else
+        bad "virtualization entitlement was lost — the VM would refuse to start"
+    fi
+    rm -f "$tmp_ent"
 else
-    ok "release entitlements drop get-task-allow"
+    echo "skip: entitlement derivation arms — no /usr/libexec/PlistBuddy (not macOS)"
+    if grep -q '<key>com.apple.security.virtualization</key>' "$ENT"; then
+        ok "the entitlements source still declares com.apple.security.virtualization"
+    else
+        bad "the entitlements source lost com.apple.security.virtualization — the VM would refuse to start"
+    fi
 fi
-if /usr/libexec/PlistBuddy -c "Print :com.apple.security.virtualization" "$tmp_ent" >/dev/null 2>&1; then
-    ok "release entitlements KEEP com.apple.security.virtualization"
-else
-    bad "virtualization entitlement was lost — the VM would refuse to start"
-fi
-rm -f "$tmp_ent"
 
 # 5. Stapling happens BEFORE the tarball. `stapler` cannot staple an archive,
 #    so the reverse order ships an un-stapled app that works only while Apple's
