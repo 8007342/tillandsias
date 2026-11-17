@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-approval-key-is-a-windows-hello-key-credential-emitting-sshsig-after-measuring-the-signature-padding
+    field: next_action
+    value: |-
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+
+
+      [2026-11-16T23:53:25Z yoga] RE-SCOPED per operator ruling 2026-11-16 - Windows Hello human gate is the requirement, signer identity deferred - see approval-human-gate spec delta
+
+      [2026-11-17T00:17:44Z yoga] RE-SCOPED per operator clarification 2026-11-16 - primary Windows arm is a live Windows Hello RequestVerificationForWindowAsync(HWND) prompt run by the Windows tray, never the WSL2 guest - KeyCredentialManager signing moves to the Later section and the PKCS1 padding claim is UNVERIFIED - see approval-human-gate spec delta
+
+      [2026-11-17T01:00:55Z yoga] The human-gate spec (openspec/changes/os-verified-approval-gates/specs/approval-human-gate, operator ruling and clarification 2026-11-16) lands under order 2094-h3rq, draft PR #1121
+    ts: "2026-11-17T01:00:55Z"
+    host: yoga
+
+events:
+  - packet_id: windows-approval-key-is-a-windows-hello-key-credential-emitting-sshsig-after-measuring-the-signature-padding
+    event:
+      type: note
+      ts: "2026-11-17T01:00:55Z"
+      host: yoga
+      summary: |-
+        point at 2094-h3rq and PR 1121 for the human-gate spec

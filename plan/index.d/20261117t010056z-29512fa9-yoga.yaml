@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: licence-acknowledgement-signing-makes-the-operator-copy-bytes-by-hand-add-an-mcp-tool-the-tray-signs
+    field: next_action
+    value: |-
+      Read crates/tillandsias-headless/src/approval.rs and how existing MCP tools reach a host-side dialog (the tray-hosted dialogs), then add the tool with a Signer trait; leave Linux a typed unsupported unless 2022-hn2k has landed a Linux signer.
+
+      [2026-11-17T00:17:45Z yoga] RE-SCOPED per operator clarification 2026-11-16 - licence acceptance is handled by the merge-gated flow in specs/approval-merge-gate, not by tray signing - see approval-human-gate spec delta
+
+      [2026-11-17T01:00:56Z yoga] The human-gate spec (openspec/changes/os-verified-approval-gates/specs/approval-human-gate, operator ruling and clarification 2026-11-16) lands under order 2094-h3rq, draft PR #1121
+    ts: "2026-11-17T01:00:56Z"
+    host: yoga
+
+events:
+  - packet_id: licence-acknowledgement-signing-makes-the-operator-copy-bytes-by-hand-add-an-mcp-tool-the-tray-signs
+    event:
+      type: note
+      ts: "2026-11-17T01:00:56Z"
+      host: yoga
+      summary: |-
+        point at 2094-h3rq and PR 1121 for the human-gate spec
