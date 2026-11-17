@@ -143,8 +143,8 @@ frozen forge's pages can then be swapped out without being pulled back in.
 
 - The forge stays frozen until it is thawed from the tray. It is not thawed
   automatically: a forge that ran away once will do it again when resumed
-  unattended, and the choice of thaw or stop is the operator's (proposed;
-  see the open point at the end of section 10).
+  unattended, and the choice of thaw or stop is the operator's (approved
+  2026-11-17; section 10).
 - The forge's own lane and the tray report it as `frozen`. Its watches stop
   their timers while it is frozen, so a frozen job is not judged stalled.
 - A cloud agent attached to a frozen forge sees its tool calls hang. The
@@ -422,7 +422,7 @@ Linux first, for all three capabilities.
 The eight questions this design was filed with were ruled on 2026-11-17, in
 chat with the coordinator, who relayed the rulings to the filing session.
 They are also recorded as an event on the story packet 2094-65yz. The seven
-questions of 2081-z7sh are separate and still open.
+questions of 2081-z7sh were ruled the same day and are listed below.
 
 | # | Question | Ruling |
 |---|---|---|
@@ -439,9 +439,25 @@ Two later directions of the same day are folded in above and in section 11:
 every restriction is stated in the tool affordances themselves, and callers
 declare whether a job is idempotent.
 
-**One point the rulings leave open**, proposed here and not ruled: a frozen
-forge is thawed only by the operator from the tray, never automatically
-(section 3.2).
+**Thaw.** Approved 2026-11-17: a frozen forge is thawed only by the operator
+from the tray, never automatically (section 3.2).
+
+### The seven rulings on 2081-z7sh
+
+Given by the operator directly to the coordinator on 2026-11-17 and relayed;
+each is the recommendation as filed. They are recorded as an event on
+2081-z7sh. `openspec/changes/local-job-watchdog` itself is not edited by this
+change; amending its text with these rulings is that story's remaining task.
+
+| # | Question | Ruling |
+|---|---|---|
+| 1 | The watch cadence | **Approved:** one re-armed deadline timer per job, 10 minutes by default, never under 2 |
+| 2 | The restart budget | **Approved:** 3 restarts in 30 minutes, back-offs of 30 s, 2 min and 10 min |
+| 3 | Reaching a session that has ended its turn | **A desktop notification is enough**, with `watch.wait` as the working path |
+| 4 | The judge's first model | **Qwen2.5-0.5B**, promoted only on measurement |
+| 5 | Intel's NPU graph compiler | **Read its licence first; do not ship it before that** |
+| 6 | A host with no local inference | **Escalate** ambiguous episodes; do not refuse `watch.register` |
+| 7 | Zeroclaw | **Untouched** |
 
 ## 11. Affordances: every restriction is in the tools
 

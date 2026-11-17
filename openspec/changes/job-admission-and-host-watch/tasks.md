@@ -5,8 +5,8 @@ in design.md section 10 (2026-11-17) and as an event on 2094-65yz.
 
 Depends on `openspec/changes/local-job-watchdog`: 2081-v7qx (the watch
 registry and rules) lands before anything here is built, and 2081-bdss
-before any message is sent. That change's own seven questions are still
-open.
+before any message is sent. That change's own seven questions were ruled
+on 2026-11-17 (design.md section 10).
 
 Order of pickup: ay52 → kgdj, mzap and y2bb (parallel) → wq8z → dyvk. The
 five hardware packets are independent measurements and may run at any time
