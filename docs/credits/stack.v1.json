@@ -18900,6 +18900,12 @@
       "from": "media:imagegen-models",
       "kind": "runtime-download",
       "optional": true,
+      "to": "model:lightx2v/Wan2.2-Lightning"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
       "to": "model:madebyollin/sdxl-vae-fp16-fix"
     },
     {
@@ -33496,6 +33502,26 @@
         "I1/lora"
       ],
       "version": "d468c534b360e0754c6bf9e38ed49e1e09cd2e2a"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/lightx2v/Wan2.2-Lightning",
+      "homepage_kind": "model-card",
+      "id": "model:lightx2v/Wan2.2-Lightning",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Wan2.2-Lightning-T2V-A14B-high-noise",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/lora"
+      ],
+      "version": "18bccf8884ec0a078eed79785eb4ef13ea16ce1e"
     },
     {
       "gated": false,
@@ -60965,15 +60991,15 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3112,
+    "edges": 3113,
     "license_families": {
       "model": 7,
-      "permissive": 1711,
+      "permissive": 1712,
       "service": 15,
       "strong-copyleft": 25,
       "unknown": 162,
       "weak-copyleft": 20
     },
-    "nodes": 1940
+    "nodes": 1941
   }
 }

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-smoke-runbooks-windows-block-aborts-provisioning-on-a-benign-stderr-line-and-leaves-a-half-provisioned-guest-that-still-passes-the-freshness-assertion
+    event:
+      type: note
+      ts: "2026-11-17T16:53:31Z"
+      agent_id: windows-yolanda-claude-20261117t165331z
+      host: yolanda
+      summary: |-
+        RECURRED 2026-11-17 on yolanda, v56.11.17.2 smoke: the §3 Windows block extracted verbatim and run under Windows PowerShell 5.1 failed twice before provisioning: (1) parse errors, because the block's em-dashes in a BOM-less UTF-8 file are read as ANSI; (2) after adding a BOM, ErrorActionPreference=Stop turned the first --provision-once progress line on stderr into NativeCommandError, rc 1, no evidence files written. Under pwsh 7.7.0 the same file passed (provision_exit=0, Ready, diagnose version 56.11.17.2). Cheapest fix: say pwsh 7 in the runbook and assert PSVersion >= 7 at the top of each Windows block.
