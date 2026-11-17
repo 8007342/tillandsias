@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-17, at the coordinator's request (split from closed PR #1107).
+packets:
+- packet_id: forge-launches-may-not-carry-sys-admin-or-a-vsock-device-so-a-forge-cannot-reach-host-vsock
+  order: 2095-gq43
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [security, podman, forge, vsock, approval]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: The forge launch guard must also refuse SYS_ADMIN, /dev/vsock and /dev/vhost-vsock, not only seccomp overrides and --privileged
+  context: >-
+    Tray-enforced OS presence for in-forge agent actions (approval-human-gate) rests on one barrier: a forge
+    cannot open AF_VSOCK, so it cannot dial a host listener (guest control 42420, or a host approval
+    service) itself. Measured 2026-11-14 on the macOS guest: tillandsias-forge:latest with --cap-drop=ALL
+    and no-new-privileges gets EPERM on socket(AF_VSOCK). On Linux, rootless podman's stock seccomp
+    denies arg0==40 (macuahuitl). The existing guard no_forge_launch_carries_a_seccomp_override_or_privileged
+    (crates/tillandsias-headless/src/main.rs, 1722-bwy4) refused seccomp, --privileged and unconfined across
+    every forge builder and mode. It did not refuse CAP_SYS_ADMIN, which can install a seccomp-free child,
+    or a passed-through /dev/vsock or /dev/vhost-vsock, either of which bypasses the barrier.
+    PR #1128 (work/2095-gq43) extends the guard.
+  exit_criteria:
+  - 'The guard fails when any forge launch argv carries sys_admin, /dev/vsock or /dev/vhost-vsock (case-insensitive), across the same enumerated builders and modes. On the pre-fix code a forge argv with --cap-add=SYS_ADMIN or --device=/dev/vsock passes the guard; after the fix it fails it.'
+  - 'The vsock forwarder stays the only sanctioned exception (its derived seccomp profile), asserted in the same test.'
+  verifiable_closure: 'cargo test -p tillandsias-headless --features tray,listen-vsock --bin tillandsias no_forge_launch_carries passes on Linux (passed at 0862843bb, macuahuitl 2026-11-14).'
+  unscoreable: 'none.'
+  next_action: 'Land PR #1128 through the queue.'
+  provenance: macbookair-macos 2026-11-17, split from #1107 (closed, superseded by #1121) at the coordinator's request.
+  events:
+  - {type: filed, ts: '2026-11-17T06:00:00Z', host: macbookair, summary: filed with PR #1128}
