@@ -17,7 +17,6 @@ scripts/check-mcp-live-build.sh 1
 scripts/check-mcp-surface.sh 1
 scripts/check-mo-full-attestations.sh 1
 scripts/check-no-tracked-binaries.sh 1
-scripts/check-packet-tier-declared.sh 1
 scripts/check-plan-binary-current.sh 1
 scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
@@ -58,7 +57,6 @@ scripts/test-cache-semantics.sh 6
 scripts/test-census-enforced-reachability-split.sh 1
 scripts/test-check-credential-channel.sh 1
 scripts/test-check-installer-prompts.sh 1
-scripts/test-check-packet-tier-declared.sh 1
 scripts/test-check-stranded-in-progress.sh 1
 scripts/test-claude-forge-bypass-preaccepted.sh 1
 scripts/test-clear-vault-credentials-partial-is-nonzero.sh 1

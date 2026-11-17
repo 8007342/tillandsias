@@ -53,7 +53,6 @@ scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-opsx-generated-dirt.sh
-scripts/check-packet-tier-declared.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
@@ -132,7 +131,6 @@ scripts/test-check-engine-cpu-dispatch.sh
 scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-macos-stock-binaries.sh
 scripts/test-check-opsx-generated-dirt.sh
-scripts/test-check-packet-tier-declared.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
 scripts/test-claim-confirmation-names-the-earliest-claimant.sh

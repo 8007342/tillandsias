@@ -1917,7 +1917,7 @@ distributed_work:
         A claimer that disagrees with a tier writes `set-field <order>
         implementer_tier <t> --reason <why>`; a silent re-tier is a
         routing defect. Adoption is reported by
-        scripts/check-packet-tier-declared.sh (advisory until measured).
+        scripts/lua/check-packet-tier-declared.lua (advisory until measured).
 
   worker_agent_protocol:
     purpose: >
