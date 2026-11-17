@@ -1,6 +1,7 @@
 # Proposal — jobs wait their turn, host sessions get the watchdog, and the judge runs where each host has room (2094-65yz)
 
-Status: **proposed, design only.** Nothing is built. For operator review.
+Status: **design only; the eight questions were ruled on 2026-11-17**
+(design.md section 10). Nothing is built.
 
 @trace order:2094-65yz, order:2081-z7sh
 
@@ -48,7 +49,9 @@ are outside it:
   - Memory pressure arrives as a kernel event, not a poll. Under pressure
     the queue stops admitting. Under sustained pressure it stops one job
     that it started itself and puts it back in line with a back-off.
-  - It never stops a forge, an agent, or a job it did not start.
+  - It never kills a forge, an agent, or a job it did not start. As the
+    last resort, with no queued job left to stop, the tray freezes (does not
+    kill) the forge using the most memory and tells the operator.
   - An admitted job is a watch: the 2026-11-13 rules, restart budget and
     escalation apply to it unchanged.
 - **ADDED** capability `host-session-job-tools`:
@@ -96,11 +99,11 @@ are outside it:
   (the stall warning stays), 1913-ebv8 and 1913-fh6l (oomd posture and
   `memory.low`).
 - No bash is added. Jobs, classes, retry policies and placements are
-  declared data. Language: Rust, per `methodology.yaml`
-  `runtime_language_policy`; Go is not an accepted language in this
-  repository.
+  declared data. Language: Rust, because the babysitter lives in the tray.
+  The operator's language order is Lua, then Rust, then Go (relayed
+  2026-11-17); nothing here needs Go.
 
 Non-goals: fixing systemd-oomd (2093-gfak); governing a job that was not
-submitted through the queue; pausing or killing a forge; a scheduler across
+submitted through the queue; killing a forge; a scheduler across
 hosts; any cloud resource; a judge that takes a GPU from a render; the Apple
 Neural Engine; replacing `gpu_queue.rs` or `scripts/land-queue.sh`.

@@ -239,10 +239,12 @@ Two limits to state plainly:
 
 ## Language
 
-`methodology.yaml` `runtime_language_policy`: Rust; POSIX shell only to dispatch existing binaries;
-PowerShell only for Windows integration; anything else needs the operator. Go is not an accepted
-language here (the only `.go` file is a template for user projects), so the babysitter is Rust in
-the tray, beside `studio_jobs.rs` and `gpu_queue.rs`. Jobs, retry policies, classes and placements
+The operator's language order, relayed by the coordinator on 2026-11-17, is Lua, then Rust, then
+Go. (An earlier version of this note said Go is not accepted here; that was wrong. It was read
+from `methodology.yaml` `runtime_language_policy`, whose default list names Rust, POSIX shell that
+only dispatches existing binaries, and PowerShell for Windows integration, and does not yet state
+the order.) The babysitter is Rust because it lives in the tray, beside `studio_jobs.rs` and
+`gpu_queue.rs`; no Go is needed for it. Jobs, retry policies, classes and placements
 are declared as data: tool arguments and TSV rows, never a shell string. `convergence.yaml`
 `carried_obligations` puts `shell-to-lua` at the gentle stage; this work adds no shell, and each
 replaced waiter loop under `scripts/` is one item a later pull request can carry.

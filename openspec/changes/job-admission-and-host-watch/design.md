@@ -1,6 +1,7 @@
 # Design — jobs wait their turn, host sessions get the watchdog, and the judge runs where each host has room (2094-65yz)
 
-Status: **proposed, design only.** Nothing is built. For operator review.
+Status: **design only; the eight questions were ruled on 2026-11-17**
+(section 10). Nothing is built.
 
 @trace order:2094-65yz, order:2081-z7sh, order:2093-gfak, order:2067-dwqd
 
@@ -36,7 +37,8 @@ to pick one verdict from a set.
 |---|---|---|
 | `name` | yes | A short label for messages |
 | `command` | yes | An argv, under the same rules as `watch.register` |
-| `class` | yes | `light`, `build` or `heavy` (table below) |
+| `class` | yes | `light`, `build` or `heavy` (table below): the caller's estimate |
+| `idempotent` | yes | `true` when the command is safe to stop and run again from the start; `false` runs it once and never reruns it (section 11.2) |
 | `needs.memory_gib` | no | The job's own estimate. Raises the class's reserve; never lowers it |
 | `needs.gpu` | no | The job takes a GPU turn through `wait_for_gpu` after admission. The queue does not arbitrate the GPU |
 | `until`, `progress`, `retry`, `deadline_minutes` | no | Passed to the watch that attends the job |
@@ -45,10 +47,11 @@ It returns a ticket at once: an id, the state `queued`, and the position in
 the lane's line. It never blocks until admission.
 
 Refused at submission, each with a named reason: a `command` given as one
-string; more than 16 queued jobs for one lane; `needs.memory_gib` above the
+string; a missing `idempotent`; more than 16 queued jobs for one lane;
+`needs.memory_gib` above the
 host's total memory; an unknown class.
 
-### 2.2 Classes (proposed)
+### 2.2 Classes (approved as proposed, ruling 6)
 
 | Class | Meant for | Memory reserved at admission | Running at once on one host |
 |---|---|---|---|
@@ -120,7 +123,7 @@ On a calm host the wakeup count is zero.
 of 10 s; `tight` at 1.5 s of `some` stall in a window; `critical` at 1 s of
 `full` stall in each of 3 consecutive windows, or free swap under 10%. So at
 most 6 wakeups a minute while the host is actually stalling, and none
-otherwise. This is question 1.
+otherwise. Approved 2026-11-17 (ruling 1).
 
 ### 3.2 The ladder
 
@@ -129,7 +132,23 @@ otherwise. This is question 1.
 | `calm` | No trigger has fired for 60 s | Admits |
 | `tight` | A `some` trigger fired | Stops admitting. Running jobs continue |
 | `critical` | The `full` rule or the swap rule held | Stops one job (below), requeues it, tells its lane once |
-| still `critical` after 2 minutes | — | Stops one more, at most one every 2 minutes. When no queue-started job remains: one desktop notification naming the scope using the most memory, through the notifier `memory_stall_watch.rs` already uses. Then nothing |
+| still `critical` after 2 minutes | — | Stops one more, at most one every 2 minutes |
+| `critical` with no queue-started job left | — | **Last resort (ruling 3):** freezes the one forge scope holding the most memory and sends one desktop notification naming it and how to thaw it, through the notifier `memory_stall_watch.rs` already uses. At most one forge every 2 minutes |
+
+**Freeze, not kill.** The tray writes the forge scope's `cgroup.freeze`
+(owned by the user on macuahuitl, 2026-11-17; no root). Every process stays,
+with its memory; nothing is lost and nothing is restarted. A freeze stops
+the forge from taking more memory. It does not give memory back, though a
+frozen forge's pages can then be swapped out without being pulled back in.
+
+- The forge stays frozen until it is thawed from the tray. It is not thawed
+  automatically: a forge that ran away once will do it again when resumed
+  unattended, and the choice of thaw or stop is the operator's (proposed;
+  see the open point at the end of section 10).
+- The forge's own lane and the tray report it as `frozen`. Its watches stop
+  their timers while it is frozen, so a frozen job is not judged stalled.
+- A cloud agent attached to a frozen forge sees its tool calls hang. The
+  notification is what tells the operator why.
 
 **Which job is stopped.** Among jobs the queue started, the one in the lane
 whose scope holds the most memory (`memory.current`), and within that lane
@@ -148,13 +167,15 @@ the tray stops a job it started, by a path it owns, and the job is put back
 in line rather than lost.
 
 It does not fix 2093-gfak. A job started outside the queue is not governed,
-and a forge that runs away outside the queue still reaches the swap. The
-queue never stops a forge, an agent harness, or any process it did not
-start. Whether the tray may freeze a whole forge at `critical` when nothing
-else is left is question 3, and is not designed here.
+and a forge that runs away outside the queue is only caught by the last
+resort: it is frozen once the host is already stalling. The queue never
+kills a forge, an agent harness, or any process it did not start.
 
 The tool description therefore has to earn its use (section 6): an agent
 that starts a 20-thread build with a bare shell command has gained nothing.
+Queueing is voluntary at first and becomes mandatory for heavy commands in
+forges once the queue has proved itself (ruling 5); what "proved" means is
+a measurement the queue packet records, not designed here.
 
 ## 4. Host sessions
 
@@ -289,8 +310,10 @@ A `queue.*` row in `host_tools.rs` `GROUPS`:
 > shell) and its class: light, build or heavy. You get a ticket at once and
 > one message when it is admitted, done, requeued or stuck. If memory runs
 > short, a job started here may be stopped and started again later, so the
-> command must be safe to run again. The queue cannot run any other command,
-> and never stops your forge or you. Not for: a command that finishes in
+> command must be safe to run again. The queue cannot run any other command
+> and never kills your forge. Only if memory is critically short and no
+> queued job is left to stop, the forge using the most memory is frozen
+> until the user resumes it. Not for: a command that finishes in
 > under a minute; a job that cannot be restarted. To wait, call watch.wait
 > once; do not sleep and look.
 
@@ -311,11 +334,11 @@ host's name. First usable row wins; CPU is always last and always present.
 | Capability | Runtime | Where | Taken when | Fleet example | State on 2026-11-17 |
 |---|---|---|---|---|---|
 | Intel NPU with a compiler | llama.cpp's OpenVINO backend or OpenVINO Model Server | The judge container, `/dev/accel/accel0` | 2081-4cpi passes | macuahuitl | Blocked: no graph compiler, licence unread |
-| AMD XDNA2 NPU, Linux | FastFlowLM through Lemonade (order 543) | A container or the host, as 543 decides | 543 lands and the licence is accepted | yoga | Blocked: licence decision. Decode 51 to 53 tokens/s for Qwen3-0.6B was measured there on 2026-07-31 |
-| Integrated GPU beside a discrete GPU | llama-server on Vulkan, the device named explicitly | The judge container, `/dev/dri` (SLOT-4) | The integrated device is idle. The discrete device is never used by this row | lenovinha, yoga | [unmeasured] |
+| AMD XDNA2 NPU, Linux | FastFlowLM through Lemonade (order 543) | A container or the host, as 543 decides | 543 lands and the licence is accepted | yoga | Not taken: the licence is undecided (ruling 8); these hosts use the integrated GPU and CPU rows. Decode 51 to 53 tokens/s for Qwen3-0.6B was measured there on 2026-07-31 |
+| Integrated GPU beside a discrete GPU | llama-server on Vulkan, the device named explicitly | The judge container, `/dev/dri` (SLOT-4) | The integrated device is idle. The discrete device is never used by this row | lenovinha, yoga | Allowed (ruling 7); [unmeasured] |
 | Discrete GPU | As 2081 section 6: only when free and uncontended | The judge container | — | macuahuitl | Seldom taken, by design |
-| Apple Metal | llama-server or Ollama on the macOS host | Host process (7.3) | Question 4 is ruled yes | MacBook Air | [unmeasured] |
-| XDNA2 NPU or integrated GPU, Windows side | FastFlowLM through Lemonade, or llama-server on Vulkan | Host process (7.3) | Question 4 is ruled yes; for the NPU, the 543 licence too | yolanda | [unmeasured] |
+| Apple Metal | llama-server or Ollama on the macOS host | Host process (7.3) | Later (ruling 4), after the offline proof | MacBook Air | Starts on CPU in the guest; [unmeasured] |
+| XDNA2 NPU or integrated GPU, Windows side | FastFlowLM through Lemonade, or llama-server on Vulkan | Host process (7.3) | Later (ruling 4), after the offline proof; the NPU also needs the 543 licence | yolanda | Starts on CPU in the guest; [unmeasured] |
 | CPU | llama-server, 4 threads at most, lowest priority | The judge container (in the guest on macOS and Windows) | Always | every host | 42.9 tokens/s decode for Qwen2.5-0.5B on macuahuitl |
 | No engine | — | — | Rules only; ambiguous episodes escalate | esmeraldinha, MacBook Neo | As 2081 question 6 |
 
@@ -356,7 +379,8 @@ What replaces it, if the operator allows it at all:
 | Client | The tray | The tray only |
 
 If the proof cannot be made on a platform, the row is not taken there and
-the judge stays on CPU in the guest. This is question 4.
+the judge stays on CPU in the guest. Ruling 4: approved for later; every
+macOS and Windows host starts on CPU in the guest.
 
 The Apple Neural Engine is not proposed: the only language-model path found
 is beta, short-context and reported slower than Metal.
@@ -393,27 +417,94 @@ Linux first, for all three capabilities.
   on a real host of that tier, and the placement row is taken or refused by
   name (2094-s3ub, 2094-p3i3, 2094-zzg9, 2094-7t4f, 2094-3r2k).
 
-## 10. Questions for the operator
+## 10. Operator rulings (2026-11-17)
 
-These are in addition to the seven of 2081-z7sh, which still stand.
+The eight questions this design was filed with were ruled on 2026-11-17, in
+chat with the coordinator, who relayed the rulings to the filing session.
+They are also recorded as an event on the story packet 2094-65yz. The seven
+questions of 2081-z7sh are separate and still open.
 
-1. Is the pressure cadence approved: kernel pressure events in 10-second
-   windows, so at most 6 wakeups a minute while the computer is actually
-   stalling and none when it is calm; and `watch.wait` blocking up to 9
-   minutes per call?
-2. May the queue stop and requeue a job that it started itself when memory
-   is critically short, without asking first?
-3. When memory is critically short and no queued job is left to stop, should
-   the tray freeze the forge using the most memory, or only notify you?
-4. May the judge run as a host process on macOS and Windows, sandboxed with
-   no network, to reach Metal and the Windows-side NPU; or does it stay on
-   CPU inside the guest there?
-5. Should heavy commands inside forges (builds, test suites, image builds)
-   be required to go through the queue, or stay voluntary with the tool
-   description as the only steer?
-6. Are the three job classes and their memory reserves in section 2.2 the
-   right starting values?
-7. May the idle integrated GPU on a two-GPU laptop be used for the judge, as
-   the one exception to the discrete-GPU-preferred policy?
-8. For the two AMD NPUs: will you read and decide FastFlowLM's licence
-   (order 543), or should those hosts stay on CPU and integrated GPU?
+| # | Question | Ruling |
+|---|---|---|
+| 1 | The pressure cadence: kernel pressure events in 10-second windows, and `watch.wait` blocking up to 9 minutes | **Approved.** Events only while the computer is stalling |
+| 2 | May the queue stop and requeue a job it started itself, without asking? | **Approved** |
+| 3 | With memory critically short and no queued job left to stop: freeze the heaviest forge, or only notify? | **Freeze** (the cgroup freezer, never a kill) the forge using the most memory, and notify the operator |
+| 4 | A sandboxed, no-network judge as a host process on macOS and Windows? | **Approved for later.** Start on CPU in the guest |
+| 5 | Must heavy commands in forges go through the queue? | **Voluntary first, mandatory once proven** |
+| 6 | The three job classes and their reserves | **Approved as proposed** |
+| 7 | The idle integrated GPU on a two-GPU laptop for the judge | **Approved** |
+| 8 | FastFlowLM's licence for the AMD NPUs | **Undecided.** Those hosts stay on CPU and the integrated GPU |
+
+Two later directions of the same day are folded in above and in section 11:
+every restriction is stated in the tool affordances themselves, and callers
+declare whether a job is idempotent.
+
+**One point the rulings leave open**, proposed here and not ruled: a frozen
+forge is thawed only by the operator from the tray, never automatically
+(section 3.2).
+
+## 11. Affordances: every restriction is in the tools
+
+Operator requirement, 2026-11-17: an agent learns every restriction of this
+service from the tool descriptions, schemas and responses, without reading
+this design.
+
+### 11.1 What each surface must say
+
+| Restriction | In the description | In the schema | In responses |
+|---|---|---|---|
+| The queue may stop and requeue a job | `queue.submit` | `idempotent` (below) | A `requeued` message: reason, `retry_after_seconds`, requeues used of 3 |
+| A forge may be frozen as the last resort | `queue.submit`, the `queue.*` index row | — | A `frozen` state in `queue.status` and `watch.status` for the forge's own lane |
+| Job classes and memory ceilings | `queue.submit` names the three classes and what each is for | `class` is an enum; each value's description carries its reserve and running limit on this host | Every refusal and every `queue.status` of a waiting job carries `class_limits`: reserve, ceiling and running limit per class on this host |
+| Retry policy and what is never retried | `watch.register`, `queue.submit`: at most 3 restarts in 30 minutes; a full disk, exhausted memory and a refused permission are never retried | `retry` with its ceilings as schema bounds | An escalation names the never-retried literal that matched |
+| `watch.wait` blocks at most 9 minutes | `watch.wait` | `timeout_minutes` has a maximum of 9 | A timeout return says it was the bound, not an event |
+| A lane sees only its own jobs | `queue.status`, `queue.list`, `watch.status`, `watch.list` | — | Another lane's id answers as unknown |
+| Host lanes are attribution, not isolation | The host lane's `queue.submit` | — | — |
+
+Every refusal, from any tool here, has one shape: `reason` (a named code
+from a closed set), a one-sentence `message`, `retry_after_seconds` when
+waiting can help and absent when it cannot, and `class_limits` when the
+reason concerns a class, memory or the queue's length.
+
+The class figures in a description are computed for the host at start, so
+the text an agent reads is true of the computer it is on.
+
+### 11.2 Idempotent work, in bundles
+
+`queue.submit` gains two required statements from the caller:
+
+| Field | Meaning |
+|---|---|
+| `idempotent` | `true`: the command is safe to stop and run again from the start. `false`: it must run at most once |
+| `class` | The caller's estimate of the job's weight (section 2.2). An estimate, not a promise; the scope's ceiling is what is enforced |
+
+- An idempotent job may be stopped and requeued under pressure (section 3.2)
+  and restarted by the watch rules.
+- A job declared `idempotent: false` is never rerun by the service: no
+  requeue, no watch restart. It is run once. Under `critical` pressure it is
+  chosen for stopping only after every idempotent queue-started job, and if
+  it is stopped it ends as `failed` with the reason `stopped-memory`,
+  reported once with the evidence. It is never silently run again.
+- A submission that omits `idempotent` is refused with the reason
+  `idempotent-required`. There is no default: the caller has to decide.
+
+The description tells callers how to shape work:
+
+> Submit work that is safe to stop and start again from the beginning, in
+> bundles of a reasonable size: a job stopped for memory restarts from its
+> start, so one six-hour job loses up to six hours and twelve half-hour
+> bundles lose at most half an hour. Split a long test suite or batch into
+> bundles that each finish in about 30 minutes or less and each record their
+> own result; submit each as its own job. Say idempotent: false only for a
+> command that must not run twice (a publish, a migration); it will be run
+> once and, if it has to be stopped, reported as failed rather than rerun.
+
+"About 30 minutes" is a proposed figure.
+
+### 11.3 Where in-forge agents read it
+
+The tool list is the primary place. The same three sentences (queue heavy
+work; make it idempotent and bundle it; wait with `watch.wait`) go into the
+forge-facing guidance: `images/default/config-overlay/mcp/forge-agent-guidance.md`
+and the `forge-quick-intro` skill, in the pull request that lands the queue
+tools.
