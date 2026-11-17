@@ -10,6 +10,10 @@
 # fetched at run time. Its LICENSE ships in /opt/studio/grapesjs/vendor/LICENSE.
 ARG FORGE_IMAGE=localhost/tillandsias-forge
 FROM ${FORGE_IMAGE}
+# 1958-yfib: an image inherits its base layer's labels, so it states its own:
+# our recipe (GPL-3.0-or-later) AND what it mostly ships. GrapesJS 0.23.8 is BSD-3-Clause (LICENSE in the npm tarball).
+# Every component's licence: docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND BSD-3-Clause"
 
 ARG GRAPESJS_VERSION=0.23.8
 ARG GRAPESJS_INTEGRITY=sha512-4+HvGRnWK0IbFva2FUxu6GXA3/BFGq0vRaeJ8MhhFR5O42wq9T7rKxChYLKgEmplHb2ea9HsfIzJtsEibeYv7w==

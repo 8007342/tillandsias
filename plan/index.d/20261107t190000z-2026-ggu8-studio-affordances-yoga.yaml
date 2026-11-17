@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at operator request 2026-11-07 (studio affordances for automatic choice). Code is cited by symbol, never by line.
+packets:
+  - packet_id: every-studio-declares-what-content-it-is-good-for-so-an-agent-can-pick-or-recommend-one
+    order: 2026-ggu8
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [ux, agent, lua, mcp]
+    estimated_hours: 2
+    depends_on: [webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls]
+    title: "Every studio in the registry declares its affordances (content it is good for, not for, and what a save edits), and webstudio.options returns them so an agent can pick or recommend a studio for the active project"
+    context: |
+      Operator direction 2026-11-07: "make sure that the different available studio and authoring tools include their affordances in their descriptions, like which kind of content are they better at, so an agent could pick automatically an option, or recommend options for the active project." Today each registry entry (images/studio/registry.lua) carries a one-line brief and a frameworks list that only drives the detector's [Recommended]; when detection finds no framework, or the request is about a kind of content rather than a framework, the agent has nothing structured to choose by. Follows 2025-e6mi, which made webstudio.open launch from the lane.
+    exit_criteria:
+      - "build-studio-registry.lua refuses a studio whose good_for, not_for or edits is missing or empty, and the regenerated studios.json carries all three for every studio; a cargo test asserts webstudio.options returns good_for, not_for and edits for every option and that the webstudio.options descriptor tells the agent to choose by them when no option is [Recommended]. Pre-fix result: FAILS, the registry has no affordance fields."
+    verifiable_closure: "build-studio-registry.lua refuses a studio whose good_for, not_for or edits is missing or empty, and the regenerated studios.json carries all three for every studio; a cargo test asserts webstudio.options returns good_for, not_for and edits for every option and that the webstudio.options descriptor tells the agent to choose by them when no option is [Recommended]. Pre-fix result: FAILS, the registry has no affordance fields."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Land on work/2025-e6mi's PR or its own ref: add good_for/not_for/edits to registry.lua, require them in build-studio-registry.lua, regenerate, pass them through StudioOption, update the webstudio.options descriptor.
+    provenance: |
+      Filed at operator request 2026-11-07.
+    events:
+      - type: filed
+        ts: "2026-11-07T19:00:00Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-11-07"

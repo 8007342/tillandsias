@@ -41,6 +41,14 @@ pub enum Engine {
         upstream: &'static str,
         commit: &'static str,
     },
+    /// 2055-grzz: the audio studio appliance. `versions` is what audio-tool
+    /// reports for itself and every tool it ran (ffmpeg, sox, rubberband and
+    /// the Python stack); `op` and `params` are the call's.
+    AudioStudio {
+        versions: Value,
+        op: String,
+        params: Value,
+    },
 }
 
 impl Engine {
@@ -55,6 +63,14 @@ impl Engine {
             }),
             Engine::CorridorKey { upstream, commit } => json!({
                 "name": "corridorkey", "ref": upstream, "sha": commit, "nodes": [],
+            }),
+            Engine::AudioStudio {
+                versions,
+                op,
+                params,
+            } => json!({
+                "name": "audio-studio", "ref": versions["audio_tool"], "sha": null, "nodes": [],
+                "versions": versions, "op": op, "params": params,
             }),
         }
     }

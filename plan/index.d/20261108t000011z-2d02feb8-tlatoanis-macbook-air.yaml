@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: after-a-forge-image-build-every-new-process-in-the-macos-guest-segfaults
+    event:
+      type: note
+      ts: "2026-11-08T00:00:11Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        CORRECTION: the guest kernel was 6.19.10-300.fc44.aarch64 in every attempt (uname -a in evidence-folio-hang-20261107t233139z/guest-state.txt, and in the passing forge). 7.2.15 was my error: it was never measured in the guest and is not the host kernel (the host is Darwin). My 23:59Z note claiming the kernel changed between boots is wrong and withdrawn. What did change before the passing run: a full Mac restart and a macOS upgrade to 27.2.0 (the VZ host side). Suspects are now the VZ host or virtio-blk path, or 6.19.10 under a forge-build load, not a kernel version change.

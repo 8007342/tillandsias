@@ -171,11 +171,15 @@ specs:
   litmus_tests:
   - litmus:release-is-one-cloud-build
   - litmus:gate-step-private-metrics-fallback
+  - litmus:prebuilt-resolver-refuses-stale
+  - litmus:promote-stable-refusals-carry-affordance
   - litmus:script-run-verb
   - litmus:release-preflight-latest-read-bounded
   - litmus:pilot-lua-ports
   - litmus:shell-ratchet
   - litmus:source-agreement-lua-cutover
+  - litmus:own-licence-declarations
+  - litmus:stack-ledger-stages
   - litmus:pre-push-trailer-states-what-it-saw
   - litmus:land-refusals-carry-affordance
   - litmus:plan-fragments-lane-refusals-carry-affordance
@@ -317,10 +321,13 @@ specs:
   - litmus:agy-install-cached
   - litmus:opencode-render-probe-shape
   - litmus:forge-project-trust-seeds-shape
+  - litmus:forge-subagent-worktree-base-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
+  - litmus:forge-lib-copies
+  - litmus:forge-languages
   - litmus:forge-lua-tooling
   - litmus:claude-launch-stability-shape
   - litmus:harness-curl-install-shape
@@ -335,9 +342,12 @@ specs:
   - litmus:forge-policy-binary-discoverability
   - litmus:forge-plan-binary-on-path
   - litmus:npm-harness-install-idempotent-shape
+  - litmus:forge-opencode-is-pinned
+  - litmus:forge-copilot-harness
   - litmus:harness-crash-supervision-shape
   - litmus:forge-ledger-freshness-shape
   - litmus:provider-usage-limit
+  - litmus:provider-limit-relay
   - litmus:image-build-network-is-explicit
   - litmus:flaky-installs-background
   coverage_ratio: 80
@@ -468,6 +478,7 @@ specs:
   - litmus:tillandsias-doctor-names-every-fault
   - litmus:mcp-plan-resolver-pinning-shape
   - litmus:forge-environment-discoverability-shape
+  - litmus:spec-index-ensure-refusals-carry-affordance
   - litmus:forge-entrypoints-source-agent-profile
   - litmus:lane-observed-startup-log
   - litmus:onboarding-cold-start-discovery
@@ -481,6 +492,7 @@ specs:
   - litmus:mcp-server-request-fault-isolation
   - litmus:mcp-live-build-check-fixture
   - litmus:json-get-help-names-its-subset
+  - litmus:json-get-parity-binary-swap
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -511,6 +523,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-src-room
+  - litmus:forge-guard
   - litmus:forge-is-the-last-oomd-candidate
   - litmus:forge-hot-cold-split-shape
   - litmus:harness-contract-probe
@@ -585,6 +598,7 @@ specs:
   - litmus:git-mirror-seed-failure-surfaced-shape
   - litmus:git-mirror-ready-before-retry-push
   - litmus:git-mirror-warm-start-keeps-tracking-refs
+  - litmus:git-mirror-vault-sink-wait-is-an-event
   - litmus:forge-clone-reachability-probe-shape
   - litmus:forge-seeds-from-salvage-ref
   - litmus:mirror-relay-state
@@ -665,7 +679,9 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:inference-readiness-probe-shape
+  - litmus:dev-inference-ensure-refusals-carry-affordance
   - litmus:inference-deferred-model-pulls
+  - litmus:configure-ollama-refusals-carry-affordance
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
   - litmus:inference-tier-probe-shape
@@ -787,6 +803,9 @@ specs:
   - litmus:claim-wip-limit-shape
   - litmus:fragment-keys-are-read
   - litmus:gate-step-prefix-allocation
+  - litmus:gate-step-prefix-refusals-carry-affordance
+  - litmus:skills-single-source-refusals-carry-affordance
+  - litmus:tracked-files-unwritten-refusals-carry-affordance
   - litmus:methodology-accountability-shape
   - litmus:base-ledger-status-loss-shape
   - litmus:agent-identity-canonical-source-shape
@@ -821,6 +840,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:claims-refusals-carry-affordance
+  - litmus:select-work-batch-refusals-carry-affordance
+  - litmus:openspec-pin-refusals-carry-affordance
   - litmus:forge-expert-base-guard-shape
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape
@@ -880,6 +901,7 @@ specs:
   - litmus:podman-web-launch-profile
   - litmus:podman-path-availability
   - litmus:opencode-vault-auth-content
+  - litmus:approval-broker-signs-an-action-bound-record
   coverage_ratio: 77
   last_verified: '2026-07-23'
 - spec_id: nix-builder
@@ -999,6 +1021,9 @@ specs:
   - litmus:proxy-permissive-port-not-silently-unrouted
   - litmus:podman-egress-control-shape
   - litmus:proxy-crash-supervision-shape
+  - litmus:proxy-allowlist-from-tiers
+  - litmus:proxy-tier-ports-live
+  - litmus:egress-declarations
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
@@ -1108,6 +1133,10 @@ specs:
   - litmus:web-audio-serving
   - litmus:studio-saves-pass-one-guard-and-are-committed
   - litmus:comfyui-studio-is-a-sibling-behind-the-otp-route
+  - litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools
+  - litmus:audio-studio-tiers
+  - litmus:audio-studio-separates-stems-from-safetensors-only
+  - litmus:a-studio-launch-fails-by-stage-within-a-bound
   - litmus:a-studio-budget-derives-from-host-ram-and-ranks-below-the-forge
   - litmus:flutter-shim-falls-back-or-refuses-typed
   - litmus:preview-leaf-key-only-on-tmpfs
@@ -1306,6 +1335,7 @@ specs:
   - litmus:observability-metrics-shape
   - litmus:runtime-bringup-step-timers
   - litmus:guest-container-metrics-wire-shape
+  - litmus:memory-stall-named
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: podman-secrets-integration
@@ -1335,6 +1365,7 @@ specs:
   - litmus:vault-github-token-capture-shape
   - litmus:codex-device-auth-shape
   - litmus:provider-device-auth-shape
+  - litmus:copilot-vault-auth
   - litmus:vault-https-shape
   - litmus:vault-entrypoint-hardened-shape
   - litmus:vault-recreate-mutex

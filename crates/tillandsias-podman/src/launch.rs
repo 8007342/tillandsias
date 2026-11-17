@@ -412,7 +412,8 @@ mod tests {
         );
         let budget = tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args();
         assert!(
-            budget.iter().any(|a| a.starts_with("--memory=")),
+            budget.iter().any(|a| a == "--pids-limit=-1")
+                && !budget.iter().any(|a| a.starts_with("--memory=")),
             "{budget:?}"
         );
         for flag in &budget {

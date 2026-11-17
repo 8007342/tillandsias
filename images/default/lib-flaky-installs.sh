@@ -82,7 +82,10 @@ flaky_install_shim() {
     local f
     f="$(flaky_status_dir)/$name"
     mkdir -p "$shimdir" 2>/dev/null || return 0
-    cat >"$shimdir/$tool" <<EOF
+    # The read builtin takes the heredoc, so writing the shim forks nothing
+    # (forge-helper-shell lib-flaky-installs.sh:cat:1, 2067-dwqd).
+    local body
+    IFS= read -r -d '' body <<EOF || true
 #!/usr/bin/env bash
 # First-use shim for $tool, written by flaky_install_shim (order 1951-vv5m).
 # Answers only while the real $tool is absent from PATH.
@@ -92,11 +95,12 @@ real() {
     for p in \$PATH; do [ "\$p" = "\$shimdir" ] || rest="\${rest:+\$rest:}\$p"; done
     PATH="\$rest" command -v "\$tool"
 }
-deadline=\$(( \$(date +%s) + \${TILLANDSIAS_FLAKY_SHIM_WAIT_S:-30} ))
+# bash 5 EPOCHSECONDS: no date fork per poll (forge-helper-shell, 2063-nfag).
+deadline=\$(( EPOCHSECONDS + \${TILLANDSIAS_FLAKY_SHIM_WAIT_S:-30} ))
 while :; do
     r="\$(real)" && exec "\$r" "\$@"
     read -r state reason _ <"\$status" 2>/dev/null || state=absent
-    [ "\$state" = installing ] && [ "\$(date +%s)" -lt "\$deadline" ] || break
+    [ "\$state" = installing ] && [ "\$EPOCHSECONDS" -lt "\$deadline" ] || break
     sleep 1
 done
 case "\$state" in
@@ -111,5 +115,6 @@ case "\$state" in
         exit 127 ;;
 esac
 EOF
+    printf '%s' "$body" >"$shimdir/$tool"
     chmod 755 "$shimdir/$tool"
 }

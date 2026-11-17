@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-litmus-selection-parity-fixture-diffs-each-skipped-test-and-its-reason-not-only-the-totals
+    order: 2040-axdn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    pickup_role: linux
+    capability_tags: [litmus, testing, fail-loud, portability]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-litmus-runner-reads-without-jq.sh
+    title: |
+      The litmus selection-parity fixture (1375-6pnd) compares only totals, so a host-specific run-time skip shows up as an unexplained Total-line difference instead of a named skipped test with its reason
+    context: |
+      Follow-up to 1375-6pnd, which is completed. On #893 (1978-n8c6) the parity diff between lenovinha and macuahuitl differed only in the Total line. The cause was a run-time skip that happened only in no-jq mode on macuahuitl, and finding it took a separate investigation because the fixture compares counts, not the skipped tests or their reasons. That gap is what made #893 hard to diagnose. Requested as its own row by coordinator macuahuitl-fedora 2026-11-07.
+    exit_criteria:
+      - 'the parity comparison includes each skipped or not-run test with its reason, so that a difference names the test and both reasons'
+      - 'RED FIRST: a planted skip that happens in only one mode (jq vs no-jq) leaves the pre-fix fixture reporting only a Total difference; post-fix it names the test and the reason'
+      - 'NEGATIVE CONTROL: identical selections with identical skips still compare equal'
+    verifiable_closure: 'scripts/test-litmus-runner-reads-without-jq.sh, with a mode-specific planted skip, reports the skipped test and its reason in the diff, and still passes when both modes skip identically'
+    unscoreable: 'none.'
+    provenance: coordinator macuahuitl-fedora 2026-11-07, from #893's parity diagnosis; filed by lenovinha.
+    depends_on: []
+    related: [1375-6pnd, 1978-n8c6]
+    events:
+      - {type: filed, ts: '2026-11-08T01:07:31Z', host: lenovinha, summary: filed as its own row (1375-6pnd is completed) at the coordinator's request}

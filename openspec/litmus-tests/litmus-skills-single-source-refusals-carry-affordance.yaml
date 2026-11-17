@@ -1,0 +1,34 @@
+# @trace spec:methodology-accountability, order:1247-amcu, order:631-wpkd
+name: litmus:skills-single-source-refusals-carry-affordance
+spec: methodology-accountability
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/check-skills-single-source.sh says WHY it refused
+  and WHAT would make it not a refusal (1247-amcu): labelled "  why:" /
+  "  remedy:" stderr lines beside its unchanged one-line stdout verdict. The
+  fixture runs three refusals in scratch git repos (second-source, absolute
+  link, dangling link) and pins the rest statically: a verdict site added
+  later without an affordance fails.
+
+preconditions:
+  - workspace contains scripts/check-skills-single-source.sh
+  - workspace contains scripts/lua/test-skills-single-source-affordances.lua
+
+critical_path:
+  - step: "three link refusals carry why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-skills-single-source-affordances.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:skills-single-source-affordances:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "a skills-single-source refusal names its rule and how to clear it"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "skills-single-source-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in check-skills-single-source.sh ships without why/remedy"

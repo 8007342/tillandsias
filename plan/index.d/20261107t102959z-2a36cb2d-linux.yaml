@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: studio-pins-ip-adapter-plus-layerdiffuse-birefnet-nodes-and-weights-and-union-controlnet
+    field: status
+    value: completed
+    ts: "2026-11-07T10:29:59Z"
+    host: linux
+
+events:
+  - packet_id: studio-pins-ip-adapter-plus-layerdiffuse-birefnet-nodes-and-weights-and-union-controlnet
+    event:
+      type: completed
+      ts: "2026-11-07T10:29:59Z"
+      host: linux
+      summary: |-
+        status 'completed' with evidence_refs: ce7aade37 ok:studio-node-pins:15 arms:nodes=4 ok:model-licence-register:rows=41

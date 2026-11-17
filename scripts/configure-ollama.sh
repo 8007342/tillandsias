@@ -54,14 +54,7 @@ WANT_UNIT="${TILLANDSIAS_OLLAMA_INSTALL_UNIT:-1}"
 changed=0
 
 say() { printf '%s\n' "$*"; }
-
-host_kind() {
-    if [ -e /run/ostree-booted ] || command -v rpm-ostree >/dev/null 2>&1; then
-        echo "linux_immutable"
-    else
-        echo "linux_mutable"
-    fi
-}
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 
 api_up() { curl -fsS --max-time 3 "$ENDPOINT/api/version" >/dev/null 2>&1; }
 
@@ -92,16 +85,20 @@ if [ -x "$OLLAMA" ]; then
     say "  present: $OLLAMA ($("$OLLAMA" --version 2>/dev/null | head -1))"
 else
     if ! command -v curl >/dev/null 2>&1; then
+        # affordance-ok: the WHY and WHAT TO DO lines that follow explain this refusal
         say "blocked:configure-ollama:install-failed"
         say "  curl is required to fetch the runtime and is not on PATH."
-        say "  WHAT TO DO: install it, then re-run this script."
-        say "    $( [ "$(host_kind)" = linux_immutable ] && echo 'rpm-ostree install curl   # then reboot' || echo 'sudo dnf install -y curl' )"
+        say "  WHAT TO DO: do not install host tools; run this script inside the builder"
+        say "  toolbox, where curl exists. The toolbox shares $HOME, so the binary still lands"
+        say "  in $BIN_DIR on this host:"
+        say "    $REPO_ROOT/scripts/with-tillandsias-builder.sh $0"
         exit 1
     fi
-    mkdir -p "$BIN_DIR" || { say "blocked:configure-ollama:install-failed"; say "  cannot create $BIN_DIR"; exit 1; }
+    mkdir -p "$BIN_DIR" || { _afford "$BIN_DIR could not be created (a file in the way, or a read-only parent)" "remove what blocks $BIN_DIR, or set TILLANDSIAS_OLLAMA_BIN_DIR to a writable directory, then re-run"; say "blocked:configure-ollama:install-failed"; say "  cannot create $BIN_DIR"; exit 1; }
     say "  installing ollama into $BIN_DIR (no root, survives an ostree upgrade)"
     if ! curl -fsSL https://ollama.com/install.sh 2>/dev/null \
          | OLLAMA_INSTALL_DIR="$BIN_DIR" sh >/dev/null 2>&1; then
+        # affordance-ok: the WHY and WHAT TO DO lines that follow explain this refusal
         say "blocked:configure-ollama:no-network"
         say "  could not fetch https://ollama.com/install.sh"
         say "  WHY THIS IS NOT A LOCAL FAULT: nothing on this host is missing;"
@@ -111,7 +108,7 @@ else
         say "  single static binary and needs no package."
         exit 1
     fi
-    [ -x "$OLLAMA" ] || { say "blocked:configure-ollama:install-failed"; say "  installer ran but $OLLAMA is absent — see its output above"; exit 1; }
+    [ -x "$OLLAMA" ] || { _afford "ollama.com/install.sh exited 0 but left no executable at $OLLAMA" "run the installer by hand with OLLAMA_INSTALL_DIR=$BIN_DIR and read its output, or copy a working ollama binary to $OLLAMA"; say "blocked:configure-ollama:install-failed"; say "  installer ran but $OLLAMA is absent — see its output above"; exit 1; }
     changed=1
 fi
 
@@ -158,6 +155,7 @@ fi
 
 # ---- 3. the API ----------------------------------------------------------
 if api_up && container_holds_port; then
+    # affordance-ok: the WHY and WHAT TO DO lines that follow explain this refusal
     say "blocked:configure-ollama:container-holds-the-lane"
     say "  an engine is answering on $ENDPOINT, but it is a CONTAINER, not the"
     say "  bare-metal instance this script provides."
@@ -183,6 +181,7 @@ if ! api_up; then
     while [ "$_w" -lt 30 ]; do api_up && break; sleep 2; _w=$((_w + 2)); done
 fi
 if ! api_up; then
+    # affordance-ok: the WHY and WHAT TO DO lines that follow explain this refusal
     say "blocked:configure-ollama:api-unreachable"
     say "  the engine was started but $ENDPOINT never answered within 30s."
     say "  WHAT TO DO, in order:"
@@ -202,6 +201,7 @@ for m in $MODELS; do
     fi
     say "  pulling $m"
     if ! "$OLLAMA" pull "$m" >/dev/null 2>&1; then
+        # affordance-ok: the WHY and WHAT TO DO lines that follow explain this refusal
         say "blocked:configure-ollama:no-network"
         say "  the engine is up but '$m' could not be pulled."
         say "  WHAT TO DO: restore outbound HTTPS and re-run — every step above is"
@@ -225,6 +225,7 @@ else
 fi
 case "$_health" in
     ok:*) ;;
+    # affordance-ok: the WHY and WHAT TO DO lines that follow explain this refusal
     *) say "blocked:configure-ollama:api-unreachable"
        say "  configure completed but the tree's own health check disagrees:"
        say "    $_health"

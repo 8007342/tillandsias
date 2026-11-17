@@ -94,7 +94,7 @@ forge_step_done hot-paths
 # FIRST_RUN arch-aware prebuilt dev-tools into the persistent cache; backgrounded
 # so it never blocks the agent launch, and fail-soft. Started by
 # start_flaky_installs below (order 1951-vv5m).
-ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
+ensure_forge_harnesses opencode >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "opencode starting"

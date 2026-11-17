@@ -1,9 +1,9 @@
 ## 1. Linux: approval broker and record (order 1879-5jkt)
 
-- [ ] 1.1 Write the statement canonicaliser and a fixture that fails today (no `tillandsias approval` subcommand)
-- [ ] 1.2 Broker module in tillandsias-headless: nonce issue, expiry, single use, journal
-- [ ] 1.3 `tillandsias approval request|verify` CLI; SSHSIG via `ssh-keygen -Y sign/verify`, namespace `tillandsias-approval@v1`
-- [ ] 1.4 Note writer for `refs/notes/tillandsias/approvals` and the `Approved-by:` trailer
+- [x] 1.1 Write the statement canonicaliser and a fixture that fails today (no `tillandsias approval` subcommand)
+- [x] 1.2 Broker module in tillandsias-headless: nonce issue, expiry, single use, journal
+- [x] 1.3 `tillandsias approval request|verify` CLI; SSHSIG via `ssh-keygen -Y sign/verify`, namespace `tillandsias-approval@v1`
+- [x] 1.4 Note writer for `refs/notes/tillandsias/approvals` (append-only per commit) and the `Approved-by:` trailer text; host tools that make merge commits carry it once 4.3 wraps them
 
 ## 2. Linux: key enrolment (order 1880-9wpd)
 

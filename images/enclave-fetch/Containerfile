@@ -1,0 +1,21 @@
+# @trace spec:proxy-container, order:2041-csm4
+# enclave-fetch — the MCP service that gives forge agents fetch, feed and docs
+# from a curated catalog (openspec change curated-egress-tiers, decision 5).
+# The forge's shell never reaches research hosts; this container does, through
+# the proxy's research tier, and only for what catalog.yaml covers.
+#
+# The binary is the statically linked musl build of crates/tillandsias-enclave-fetch,
+# placed in the build context as `tillandsias-enclave-fetch` the same way the
+# router's sidecar is (scripts/build-sidecar.sh). TLS roots are compiled in
+# (reqwest rustls + webpki roots), so the image needs no CA bundle.
+FROM docker.io/library/alpine:3.22
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+COPY tillandsias-enclave-fetch /usr/local/bin/tillandsias-enclave-fetch
+COPY catalog.yaml /etc/tillandsias/fetch-catalog.yaml
+RUN chmod 0755 /usr/local/bin/tillandsias-enclave-fetch \
+ && adduser -D -H -u 10790 fetch
+USER 10790
+EXPOSE 8790
+ENV TILLANDSIAS_FETCH_LISTEN=0.0.0.0:8790 \
+    TILLANDSIAS_FETCH_CATALOG=/etc/tillandsias/fetch-catalog.yaml
+ENTRYPOINT ["/usr/local/bin/tillandsias-enclave-fetch"]

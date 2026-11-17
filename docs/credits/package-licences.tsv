@@ -1,0 +1,1555 @@
+# @trace order:1958-yfib
+# Distro package licences AS DECLARED BY THE PACKAGE MANAGER inside each locally built
+# Tillandsias image (scripts/lua/build-package-licence-register.lua). dpkg declares no
+# licence field, so Debian/Ubuntu rows say unknown. Columns: image	distro	package	version	licence
+chromium-core	fedora	abattis-cantarell-vf-fonts	0.301-17.fc44	OFL-1.1
+chromium-core	fedora	abseil-cpp	20260107.1-1.fc44	Apache-2.0 AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	alsa-lib	1.2.16.1-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	alternatives	1.33-5.fc44	GPL-2.0-only
+chromium-core	fedora	aribb24	1.0.3^20160216git5e9be27-5.fc44	LGPL-3.0-only
+chromium-core	fedora	at-spi2-core	2.60.7-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	atk	2.60.7-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	audit-libs	4.2.1-1.fc44	LGPL-2.0-or-later
+chromium-core	fedora	avahi-libs	0.9~rc2-8.fc44	LGPL-2.1-or-later AND LGPL-2.0-or-later AND BSD-2-Clause-Views AND MIT
+chromium-core	fedora	bash	5.3.9-3.fc44	GPL-3.0-or-later
+chromium-core	fedora	bluez-libs	5.87+1.git8750129efca8-1.fc44	GPL-2.0-or-later
+chromium-core	fedora	bubblewrap	0.12.0-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	bzip2-libs	1.0.8-23.fc44	BSD-4-Clause
+chromium-core	fedora	ca-certificates	2026.2.92_v9.0.319-2.fc44	MIT AND GPL-2.0-or-later
+chromium-core	fedora	cairo	1.18.6-1.fc44	LGPL-2.1-only OR MPL-1.1
+chromium-core	fedora	cairo-gobject	1.18.6-1.fc44	LGPL-2.1-only OR MPL-1.1
+chromium-core	fedora	chromium-common	156.0.8078.73-1.fc44	BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND IJG AND MIT AND GPL-2.0-or-later AND ISC AND OpenSSL AND (MPL-1.1 OR GPL-2.0-only OR LGPL-2.0-only)
+chromium-core	fedora	chromium-headless	156.0.8078.73-1.fc44	BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND IJG AND MIT AND GPL-2.0-or-later AND ISC AND OpenSSL AND (MPL-1.1 OR GPL-2.0-only OR LGPL-2.0-only)
+chromium-core	fedora	cjson	1.7.19-1.fc44	MIT
+chromium-core	fedora	codec2	1.2.0-9.fc44	LGPL-2.1-only
+chromium-core	fedora	coreutils	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	coreutils-common	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	cracklib	2.10.3-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	cracklib-dicts	2.10.3-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	crypto-policies	20251128-3.git19878fe.fc44	LGPL-2.1-or-later
+chromium-core	fedora	cryptsetup-libs	2.8.8-1.fc44	GPL-2.0-or-later WITH cryptsetup-OpenSSL-exception AND LGPL-2.1-or-later WITH cryptsetup-OpenSSL-exception
+chromium-core	fedora	curl	8.18.0-14.fc44	curl
+chromium-core	fedora	cyrus-sasl-lib	2.1.28-35.fc44	BSD-Attribution-HPND-disclaimer
+chromium-core	fedora	dbus	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+chromium-core	fedora	dbus-broker	37-8.fc44	Apache-2.0 AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND (Apache-2.0 OR LGPL-2.1-or-later)
+chromium-core	fedora	dbus-common	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+chromium-core	fedora	dbus-libs	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+chromium-core	fedora	default-fonts-core-sans	4.3-1.fc44	GPL-2.0-or-later
+chromium-core	fedora	device-mapper	1.02.212-2.fc44	GPL-2.0-only
+chromium-core	fedora	device-mapper-libs	1.02.212-2.fc44	LGPL-2.1-only
+chromium-core	fedora	diffutils	3.12-5.fc44	GPL-3.0-or-later
+chromium-core	fedora	dnf5	5.4.6.0-1.fc44	GPL-2.0-or-later
+chromium-core	fedora	double-conversion	3.4.0-3.fc44	BSD-3-Clause
+chromium-core	fedora	duktape	2.7.0-11.fc44	MIT
+chromium-core	fedora	elfutils-debuginfod-client	0.197-1.fc44	GPL-3.0-or-later AND (GPL-2.0-or-later OR LGPL-3.0-or-later)
+chromium-core	fedora	elfutils-default-yama-scope	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-core	fedora	elfutils-libelf	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-core	fedora	elfutils-libs	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-core	fedora	expat	2.9.0-1.fc44	MIT
+chromium-core	fedora	fdk-aac-free	2.0.3-2.fc44	FDK-AAC
+chromium-core	fedora	fedora-gpg-keys	44-2	MIT
+chromium-core	fedora	fedora-release-common	44-18	MIT
+chromium-core	fedora	fedora-release-container	44-18	MIT
+chromium-core	fedora	fedora-release-identity-container	44-18	MIT
+chromium-core	fedora	fedora-repos	44-2	MIT
+chromium-core	fedora	fftw-libs-single	3.3.10-17.fc44	GPL-2.0-or-later AND MIT AND BSD-2-Clause
+chromium-core	fedora	filesystem	3.18-52.fc44	LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	findutils	4.10.0-7.fc44	GPL-3.0-or-later
+chromium-core	fedora	flac-libs	1.5.0-8.fc44	BSD-3-Clause AND GPL-2.0-or-later AND GFDL-1.3-or-later
+chromium-core	fedora	fmt	11.2.0-4.fc44	MIT
+chromium-core	fedora	fontconfig	2.17.0-4.fc44	HPND AND LicenseRef-Fedora-Public-Domain AND Unicode-DFS-2016
+chromium-core	fedora	fonts-filesystem	5.0.0-2.fc44	MIT
+chromium-core	fedora	freetype	2.14.3-1.fc44	(FTL OR GPL-2.0-or-later) AND BSD-3-Clause AND MIT AND MIT-Modern-Variant AND LicenseRef-Fedora-Public-Domain AND Zlib
+chromium-core	fedora	fribidi	1.0.16-4.fc44	LGPL-2.1-or-later AND Unicode-DFS-2016
+chromium-core	fedora	game-music-emu	0.6.4-3.fc44	LicenseRef-Callaway-LGPLv2+
+chromium-core	fedora	gawk	5.3.2-3.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause
+chromium-core	fedora	gdbm-libs	1.23-11.fc44	GPL-3.0-or-later
+chromium-core	fedora	gdk-pixbuf2	2.44.6^really2.44.4-3.fc44	LGPL-2.1-or-later
+chromium-core	fedora	glib2	2.88.4-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	glibc	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-core	fedora	glibc-common	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-core	fedora	glibc-gconv-extra	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-core	fedora	glibc-langpack-en	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-core	fedora	glibc-minimal-langpack	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-core	fedora	glycin-libs	2.1.5-1.fc44	(MPL-2.0 OR LGPL-2.1-or-later) AND Apache-2.0 WITH LLVM-exception AND BSD-3-Clause AND CC0-1.0 AND GPL-3.0-or-later AND IJG AND ISC AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (BSD-2-Clause OR Apache-2.0 OR MIT) AND (BSD-3-Clause OR Apache-2.0) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)
+chromium-core	fedora	glycin-loaders	2.1.5-1.fc44	(MPL-2.0 OR LGPL-2.1-or-later) AND Apache-2.0 WITH LLVM-exception AND BSD-3-Clause AND CC0-1.0 AND GPL-3.0-or-later AND IJG AND ISC AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (BSD-2-Clause OR Apache-2.0 OR MIT) AND (BSD-3-Clause OR Apache-2.0) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)
+chromium-core	fedora	gmp	6.3.0-5.fc44	(LGPL-3.0-or-later OR GPL-2.0-or-later OR (LGPL-3.0-or-later AND GPL-2.0-or-later)) AND GFDL-1.3-invariants-or-later
+chromium-core	fedora	gnulib-l10n	20241231-2.fc44	LGPL-2.1-or-later
+chromium-core	fedora	gnutls	3.8.13-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+chromium-core	fedora	google-crc32c	1.1.2-13.fc44	BSD-3-Clause
+chromium-core	fedora	google-noto-fonts-common	20251201-2.fc44	OFL-1.1
+chromium-core	fedora	google-noto-sans-vf-fonts	20251201-2.fc44	OFL-1.1
+chromium-core	fedora	gpg-pubkey	36f612dcf27f7d1a48a835e4dbfcf71c6d9f90a6-6786af3b	pubkey
+chromium-core	fedora	graphite2	1.3.14-20.fc44	LGPL-2.1-or-later OR MPL-2.0 OR GPL-2.0-or-later
+chromium-core	fedora	grep	3.12-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND GPL-2.0-or-later AND LGPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+chromium-core	fedora	gsm	1.0.24-2.fc44	tu-berlin-2.0
+chromium-core	fedora	gzip	1.14-2.fc44	GPL-3.0-or-later AND GFDL-1.3-only
+chromium-core	fedora	harfbuzz	14.1.0-2.fc44	MIT-Modern-Variant
+chromium-core	fedora	highway	1.3.0-2.fc44	Apache-2.0
+chromium-core	fedora	hwdata	0.412-1.fc44	GPL-2.0-or-later
+chromium-core	fedora	ilbc	3.0.4-19.fc44	BSD-3-Clause
+chromium-core	fedora	intel-mediasdk	23.2.2-11.fc44	MIT
+chromium-core	fedora	intel-vpl-gpu-rt	26.3.4-1.fc44	MIT
+chromium-core	fedora	jansson	2.14-4.fc44	MIT AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	jbigkit-libs	2.1-33.fc44	GPL-2.0-or-later
+chromium-core	fedora	json-c	0.18-8.fc44	MIT
+chromium-core	fedora	kbd	2.9.0-4.fc44	GPL-2.0-or-later
+chromium-core	fedora	kbd-legacy	2.9.0-4.fc44	GPL-2.0-or-later
+chromium-core	fedora	kbd-misc	2.9.0-4.fc44	GPL-2.0-or-later
+chromium-core	fedora	keyutils-libs	1.6.3-7.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-core	fedora	kmod	34.2-4.fc44	GPL-2.0-or-later AND GPL-3.0-or-later AND FSFUL AND FSFULLRWD AND LGPL-2.1-only AND LGPL-2.1-or-later AND X11
+chromium-core	fedora	kmod-libs	34.2-4.fc44	GPL-2.0-or-later AND GPL-3.0-or-later AND FSFUL AND FSFULLRWD AND LGPL-2.1-only AND LGPL-2.1-or-later AND X11
+chromium-core	fedora	krb5-libs	1.22.2-4.fc44	Brian-Gladman-2-Clause AND BSD-2-Clause AND (BSD-2-Clause OR GPL-2.0-or-later) AND BSD-2-Clause-first-lines AND BSD-3-Clause AND BSD-4-Clause AND CMU-Mach-nodoc AND FSFULLRWD AND HPND AND HPND-export2-US AND HPND-export-US AND HPND-export-US-acknowledgement AND HPND-export-US-modify AND ISC AND MIT AND MIT-CMU AND OLDAP-2.8 AND OpenVision
+chromium-core	fedora	lame-libs	3.100-21.fc44	LGPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-core	fedora	lcms2	2.16-7.fc44	MIT AND GPL-3.0-or-later
+chromium-core	fedora	libX11	1.8.13-3.fc44	MIT AND X11
+chromium-core	fedora	libX11-common	1.8.13-3.fc44	MIT AND X11
+chromium-core	fedora	libX11-xcb	1.8.13-3.fc44	MIT AND X11
+chromium-core	fedora	libXNVCtrl	580.82.09-2.fc44	GPL-2.0-or-later
+chromium-core	fedora	libXau	1.0.12-4.fc44	MIT-open-group
+chromium-core	fedora	libXcomposite	0.4.6-7.fc44	MIT AND HPND-sell-variant
+chromium-core	fedora	libXdamage	1.1.6-7.fc44	HPND-sell-variant
+chromium-core	fedora	libXext	1.3.6-5.fc44	MIT-open-group AND X11 AND HPND AND HPND-sell-variant AND SMLNJ AND MIT AND ISC AND HPND-doc AND HPND-doc-sell
+chromium-core	fedora	libXfixes	6.0.1-7.fc44	MIT AND HPND-sell-variant
+chromium-core	fedora	libXft	2.3.8-10.fc44	HPND-sell-variant
+chromium-core	fedora	libXi	1.8.3-1.fc44	MIT-open-group AND SMLNJ AND MIT
+chromium-core	fedora	libXrandr	1.5.4-7.fc44	HPND-sell-variant
+chromium-core	fedora	libXrender	0.9.12-4.fc44	HPND-sell-variant
+chromium-core	fedora	libXtst	1.2.5-4.fc44	MIT-open-group AND HPND-sell-variant AND X11 AND HPND-doc AND HPND-doc-sell
+chromium-core	fedora	libXxf86vm	1.1.6-4.fc44	X11-distribute-modifications-variant
+chromium-core	fedora	libacl	2.4.0-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libaom	3.15.2-1.fc44	BSD-3-Clause
+chromium-core	fedora	libarchive	3.8.7-1.fc44	BSD-2-Clause AND FSFULLR AND GPL-2.0-or-later WITH Libtool-exception AND BSD-3-Clause AND FSFUL
+chromium-core	fedora	libaribcaption	1.1.1-4.fc44	MIT
+chromium-core	fedora	libasyncns	0.8-34.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libattr	2.6.0-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libavcodec-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-core	fedora	libavformat-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-core	fedora	libavutil-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-core	fedora	libblkid	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libbluray	1.4.0-3.fc44	LGPL-2.0-or-later
+chromium-core	fedora	libbpf	1.6.3-2.fc44	LGPL-2.1-only OR BSD-2-Clause
+chromium-core	fedora	libbrotli	1.2.1-1.fc44	MIT
+chromium-core	fedora	libcamera	0.7.2-2.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libcamera-ipa	0.7.2-2.fc44	LGPL-2.1-or-later AND BSD-2-Clause
+chromium-core	fedora	libcap	2.78-1.fc44	BSD-3-Clause OR GPL-2.0-only
+chromium-core	fedora	libcap-ng	0.9.6-1.fc44	LGPL-2.0-or-later
+chromium-core	fedora	libcbor	0.13.0-2.fc44	MIT
+chromium-core	fedora	libchromaprint	1.6.0-4.fc44	GPL-2.0-or-later
+chromium-core	fedora	libcom_err	1.47.3-4.fc44	MIT
+chromium-core	fedora	libcurl	8.18.0-14.fc44	curl
+chromium-core	fedora	libdatrie	0.2.14-2.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libdav1d	1.5.4-1.fc44	BSD-2-Clause AND ISC
+chromium-core	fedora	libdnf5	5.4.6.0-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libdnf5-cli	5.4.6.0-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libdrm	2.4.134-1.fc44	MIT
+chromium-core	fedora	libdvdnav	7.0.0-1.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-core	fedora	libdvdread	7.0.1-1.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later AND (GPL-2.0-only OR GPL-3.0-only) AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	libebur128	1.2.6-15.fc44	MIT
+chromium-core	fedora	libeconf	0.7.9-3.fc44	MIT
+chromium-core	fedora	libedit	3.1-59.20260512cvs.fc44	BSD-3-Clause AND BSD-2-Clause AND ISC
+chromium-core	fedora	libevent	2.1.13-1.fc44	BSD-3-Clause AND ISC AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	libfdisk	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libffi	3.5.2-2.fc44	MIT AND CC-PDDC AND (GPL-3.0-or-later WITH Texinfo-exception)
+chromium-core	fedora	libfido2	1.16.0-5.fc44	BSD-2-Clause
+chromium-core	fedora	libgcc	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+chromium-core	fedora	libgcrypt	1.12.2-1.fc44	BSD-3-Clause AND (BSD-3-Clause OR GPL-2.0-only) AND GPL-2.0-or-later AND LGPL-2.1-or-later AND LGPL-2.0-or-later AND MIT-Modern-Variant
+chromium-core	fedora	libglvnd	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-core	fedora	libglvnd-egl	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-core	fedora	libglvnd-gles	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-core	fedora	libglvnd-glx	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-core	fedora	libgomp	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+chromium-core	fedora	libgpg-error	1.58-2.fc44	LGPL-2.1-or-later AND (BSD-3-Clause OR LGPL-2.1-or-later) AND FSFULLR AND GPL-2.0-or-later
+chromium-core	fedora	libheif	1.23.7-1.fc44	LGPL-3.0-or-later and MIT
+chromium-core	fedora	libheif-ffmpeg	1.23.7-1.fc44	MIT
+chromium-core	fedora	libicu	77.1-3.fc44	Unicode-DFS-2016 AND BSD-2-Clause AND BSD-3-Clause AND NAIST-2003 AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	libidn2	2.3.8-3.fc44	(GPL-2.0-or-later OR LGPL-3.0-or-later) AND GPL-3.0-or-later
+chromium-core	fedora	libjpeg-turbo	3.1.3-1.fc44	Zlib AND BSD-3-Clause AND MIT AND IJG
+chromium-core	fedora	libjxl	0.11.2-1.fc44	BSD-3-Clause AND Apache-2.0 AND Zlib
+chromium-core	fedora	liblc3	1.1.3-7.fc44	Apache-2.0
+chromium-core	fedora	libldac	2.0.2.3-19.fc44	Apache-2.0
+chromium-core	fedora	libldb	4.24.7-1.fc44	LGPL-3.0-or-later
+chromium-core	fedora	liblerc	4.0.0-10.fc44	Apache-2.0
+chromium-core	fedora	libmodplug	0.8.9.0-29.fc44	LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	libmodulemd	2.15.3-1.fc44	MIT
+chromium-core	fedora	libmount	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libnghttp2	1.68.0-5.fc44	MIT
+chromium-core	fedora	libnghttp3	1.18.0-1.fc44	MIT
+chromium-core	fedora	libogg	1.3.6-2.fc44	BSD-3-Clause
+chromium-core	fedora	libopenjph	0.25.3-3.fc44	BSD-2-Clause
+chromium-core	fedora	libopenmpt	0.8.9-1.fc44	BSD-3-Clause
+chromium-core	fedora	libpciaccess	0.16-17.fc44	HPND AND MIT
+chromium-core	fedora	libpkgconf	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+chromium-core	fedora	libpng	1.6.58-1.fc44	zlib
+chromium-core	fedora	libpsl	0.21.5-7.fc44	MIT
+chromium-core	fedora	libpwquality	1.4.5-15.fc44	BSD-3-Clause OR GPL-2.0-or-later
+chromium-core	fedora	librabbitmq	0.18.1-1.fc44	MIT
+chromium-core	fedora	librepo	1.21.2-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	librist	0.2.11-1.fc44	BSD-2-Clause and ISC
+chromium-core	fedora	librsvg2	2.62.4-1.fc44	LGPL-2.1-or-later AND Apache-2.0 AND BSD-3-Clause AND MIT AND MPL-2.0 AND Unicode-3.0 AND Unicode-DFS-2016 AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR MIT) AND (BSD-3-Clause OR Apache-2.0) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)
+chromium-core	fedora	libsbc	2.1-2.fc44	GPL-2.0-only AND LGPL-2.1-or-later
+chromium-core	fedora	libseccomp	2.6.1-2.fc44	LGPL-2.1-only
+chromium-core	fedora	libselinux	3.11-2.fc44	LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	libsemanage	3.11-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libsepol	3.11-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libsmartcols	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libsmbclient	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	libsndfile	1.2.2-11.fc44	LGPL-2.1-or-later AND GPL-2.0-or-later AND BSD-3-Clause
+chromium-core	fedora	libsodium	1.0.22-1.fc44	ISC AND BSD-2-Clause AND CC0-1.0
+chromium-core	fedora	libsolv	0.7.41-1.fc44	BSD-3-Clause
+chromium-core	fedora	libssh	0.12.2-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libssh-config	0.12.2-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libstdc++	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+chromium-core	fedora	libswresample-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-core	fedora	libtalloc	2.4.4-1.fc44	LGPL-3.0-or-later
+chromium-core	fedora	libtasn1	4.21.0-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+chromium-core	fedora	libtdb	1.4.15-1.fc44	LGPL-3.0-or-later
+chromium-core	fedora	libtevent	0.17.1-4.fc44	LGPL-3.0-or-later
+chromium-core	fedora	libthai	0.1.30-2.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libtheora	1.1.1-41.fc44	BSD-3-Clause
+chromium-core	fedora	libtiff	4.7.2-3.fc44	libtiff
+chromium-core	fedora	libtool-ltdl	2.5.4-10.fc44	LGPLv2+
+chromium-core	fedora	libudfread	1.2.0-3.fc44	LGPL-2.0-or-later
+chromium-core	fedora	libunistring	1.1-11.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-core	fedora	libunwind	1.8.3-4.fc44	MIT
+chromium-core	fedora	libusb1	1.0.30-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	libuuid	2.41.6-1.fc44	BSD-3-Clause
+chromium-core	fedora	libva	2.23.0-3.fc44	MIT AND HPND-sell-variant AND ICU
+chromium-core	fedora	libvdpau	1.5-11.fc44	MIT
+chromium-core	fedora	libverto	0.3.2-12.fc44	MIT
+chromium-core	fedora	libvmaf	3.0.0-5.fc44	BSD-2-Clause-Patent
+chromium-core	fedora	libvorbis	1.3.7-14.fc44	BSD-3-Clause
+chromium-core	fedora	libvpl	2.17.0-1.fc44	MIT
+chromium-core	fedora	libvpx	1.15.0-5.fc44	BSD-3-Clause
+chromium-core	fedora	libwayland-client	1.26.0-1.fc44	MIT
+chromium-core	fedora	libwbclient	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	libwebp	1.6.0-3.fc44	Apache-2.0 AND BSD-3-Clause WITH AdditionRef-WebM-patent-license AND BSD-3-Clause AND FSFULLRWD
+chromium-core	fedora	libxcb	1.17.0-7.fc44	X11
+chromium-core	fedora	libxcrypt	4.5.2-3.fc44	LGPL-2.1-or-later AND BSD-3-Clause AND BSD-2-Clause AND BSD-2-Clause-FreeBSD AND 0BSD AND CC0-1.0 AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	libxkbcommon	1.13.1-2.fc44	MIT AND X11 AND MIT-CMU
+chromium-core	fedora	libxml2	2.12.10-6.fc44	MIT AND ISC-Veillard AND W3C
+chromium-core	fedora	libxshmfence	1.3.2-8.fc44	HPND-sell-variant
+chromium-core	fedora	libxslt	1.1.43-6.fc44	MIT
+chromium-core	fedora	libyaml	0.2.5-18.fc44	MIT
+chromium-core	fedora	libyuv	0-0.61.20260213git6067afd.fc44	BSD-3-Clause
+chromium-core	fedora	libzstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
+chromium-core	fedora	llvm-filesystem	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+chromium-core	fedora	llvm-libs	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+chromium-core	fedora	lm_sensors-libs	3.6.0-24.fc44	LGPL-2.1-or-later
+chromium-core	fedora	lmdb-libs	0.9.34-2.fc44	OLDAP-2.8
+chromium-core	fedora	logrotate	3.22.0-5.fc44	GPL-2.0-or-later
+chromium-core	fedora	lpcnetfreedv	0.5-10.fc44	LicenseRef-Callaway-BSD
+chromium-core	fedora	lttng-ust	2.14.0-5.fc44	LGPL-2.1-only AND MIT AND GPL-2.0-only AND BSD-3-Clause AND BSD-2-Clause
+chromium-core	fedora	lua-libs	5.4.8-5.fc44	MIT
+chromium-core	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
+chromium-core	fedora	lzo	2.10-16.fc44	gpl-2.0-or-later
+chromium-core	fedora	mesa-dri-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-core	fedora	mesa-filesystem	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-core	fedora	mesa-libEGL	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-core	fedora	mesa-libGL	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-core	fedora	mesa-libgbm	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-core	fedora	mpdecimal	4.0.1-3.fc44	BSD-2-Clause
+chromium-core	fedora	mpfr	4.2.2-3.fc44	LGPL-3.0-or-later
+chromium-core	fedora	mpg123-libs	1.32.10-3.fc44	GPL-2.0-or-later
+chromium-core	fedora	ncurses-base	6.6-1.fc44	MIT-open-group
+chromium-core	fedora	ncurses-libs	6.6-1.fc44	MIT-open-group
+chromium-core	fedora	nettle	3.10.1-3.fc44	LGPL-3.0-or-later OR GPL-2.0-or-later
+chromium-core	fedora	ngtcp2	1.22.1-1.fc44	MIT
+chromium-core	fedora	ngtcp2-crypto-gnutls	1.22.1-1.fc44	MIT
+chromium-core	fedora	ngtcp2-crypto-ossl	1.22.1-1.fc44	MIT
+chromium-core	fedora	nspr	4.39.0-7.fc44	MPL-2.0
+chromium-core	fedora	nss	3.131.0-1.fc44	MPL-2.0
+chromium-core	fedora	nss-softokn	3.131.0-1.fc44	MPL-2.0
+chromium-core	fedora	nss-softokn-freebl	3.131.0-1.fc44	MPL-2.0
+chromium-core	fedora	nss-sysinit	3.131.0-1.fc44	MPL-2.0
+chromium-core	fedora	nss-util	3.131.0-1.fc44	MPL-2.0
+chromium-core	fedora	numactl-libs	2.0.19-4.fc44	LGPL-2.1-only and GPL-2.0-only
+chromium-core	fedora	openapv-libs	0.2.1.2-1.fc44	BSD-3-Clause
+chromium-core	fedora	opencore-amr	0.1.6-10.fc44	Apache-2.0
+chromium-core	fedora	openh264	2.6.0-3.fc44	BSD-2-Clause
+chromium-core	fedora	openjpeg	2.5.4-3.fc44	BSD-2-Clause AND MIT
+chromium-core	fedora	openldap	2.6.15-1.fc44	OLDAP-2.8
+chromium-core	fedora	openpgm	5.3.128-6.fc44	LGPL-2.1-or-later
+chromium-core	fedora	openssl-libs	3.5.9-1.fc44	Apache-2.0
+chromium-core	fedora	opus	1.6-2.fc44	BSD-3-Clause AND BSD-2-Clause
+chromium-core	fedora	p11-kit	0.26.5-1.fc44	BSD-3-Clause
+chromium-core	fedora	p11-kit-trust	0.26.5-1.fc44	BSD-3-Clause
+chromium-core	fedora	pam-libs	1.7.2-2.fc44	BSD-3-Clause AND GPL-2.0-or-later
+chromium-core	fedora	pango	1.57.1-1.fc44	LGPL-2.0-or-later
+chromium-core	fedora	pcre2	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+chromium-core	fedora	pcre2-syntax	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+chromium-core	fedora	pipewire	1.6.11-1.fc44	MIT
+chromium-core	fedora	pipewire-alsa	1.6.11-1.fc44	MIT
+chromium-core	fedora	pipewire-jack-audio-connection-kit	1.6.11-1.fc44	MIT
+chromium-core	fedora	pipewire-jack-audio-connection-kit-libs	1.6.11-1.fc44	MIT
+chromium-core	fedora	pipewire-libs	1.6.11-1.fc44	MIT AND GPL-2.0-or-later AND BSD-2-Clause AND LGPL-2.0-or-later
+chromium-core	fedora	pipewire-plugin-libcamera	1.6.11-1.fc44	MIT
+chromium-core	fedora	pipewire-pulseaudio	1.6.11-1.fc44	MIT
+chromium-core	fedora	pixman	0.46.2-3.fc44	MIT
+chromium-core	fedora	pkgconf	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+chromium-core	fedora	pkgconf-m4	2.5.1-1.fc44	GPL-2.0-or-later WITH Autoconf-exception-generic
+chromium-core	fedora	pkgconf-pkg-config	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+chromium-core	fedora	polkit	127-2.fc44.2	LGPL-2.0-or-later
+chromium-core	fedora	polkit-libs	127-2.fc44.2	LGPL-2.0-or-later
+chromium-core	fedora	polkit-pkla-compat	0.1-32.fc44	LGPL-2.0-or-later
+chromium-core	fedora	popt	1.19-10.fc44	MIT AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	publicsuffix-list-dafsa	20260116-1.fc44	MPL-2.0
+chromium-core	fedora	pulseaudio-libs	17.0-9.fc44	LGPL-2.1-or-later
+chromium-core	fedora	python-pip-wheel	26.0.1-3.fc44	MIT AND Python-2.0.1 AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND ISC AND MPL-2.0 AND (Apache-2.0 OR BSD-2-Clause)
+chromium-core	fedora	python-unversioned-command	3.14.8-1.fc44	Python-2.0.1
+chromium-core	fedora	python3	3.14.8-1.fc44	Python-2.0.1
+chromium-core	fedora	python3-libs	3.14.8-1.fc44	Python-2.0.1 AND MIT AND BSD-3-Clause AND MIT-CMU AND HPND-SMC AND BSD-2-Clause AND dtoa AND Unicode-3.0
+chromium-core	fedora	qrencode-libs	4.1.1-12.fc44	LicenseRef-Callaway-LGPLv2+
+chromium-core	fedora	rav1e-libs	0.8.1-3.fc44	BSD-2-Clause AND ISC AND MIT AND LicenseRef-BSD-2-Clause-WITH-AdditionRef-AOMPL-1.0 AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (Unlicense OR MIT)
+chromium-core	fedora	readline	8.3-4.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+chromium-core	fedora	rpm	6.0.2-1.fc44	GPL-2.0-or-later
+chromium-core	fedora	rpm-libs	6.0.2-1.fc44	GPL-2.0-or-later OR LGPL-2.1-or-later
+chromium-core	fedora	rpm-sequoia	1.10.3-1.fc44	LGPL-2.0-or-later AND Apache-2.0 AND BSD-3-Clause AND BSL-1.0 AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (Apache-2.0 OR MIT) AND (Unlicense OR MIT)
+chromium-core	fedora	rtkit	0.11-70.fc44	GPL-3.0-or-later AND MIT
+chromium-core	fedora	samba-client-libs	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	samba-common	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	samba-core-libs	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	samba-ndr-libs	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-core	fedora	sdbus-cpp	2.2.1-2.fc44	LGPL-2.1-only
+chromium-core	fedora	sed	4.9-7.fc44	GPL-3.0-or-later
+chromium-core	fedora	setup	2.15.0-28.fc44	LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	shadow-utils	4.19.0-7.fc44	BSD-3-Clause AND GPL-2.0-or-later
+chromium-core	fedora	shared-mime-info	2.4-3.fc44	GPL-2.0-or-later
+chromium-core	fedora	snappy	1.2.2-4.fc44	BSD-3-Clause
+chromium-core	fedora	soxr	0.1.3-21.fc44	LGPL-2.1-or-later
+chromium-core	fedora	spandsp	0.0.6-22.fc44	LGPL-2.1-only AND GPL-2.0-only
+chromium-core	fedora	speex	1.2.0-21.fc44	BSD-3-clause AND TU-Berlin-1.0
+chromium-core	fedora	spirv-tools-libs	2026.1-1.fc44	Apache-2.0
+chromium-core	fedora	sqlite-libs	3.51.2-2.fc44	blessing
+chromium-core	fedora	srt-libs	1.5.7-1.fc44	MPL-2.0
+chromium-core	fedora	svt-av1-libs	3.1.2-2.fc44	LicenseRef-BSD-3-Clause-Clear-WITH-AdditionRef-AOMPL-1.0 AND MIT AND ISC AND LicenseRef-Fedora-Public-Domain AND BSD-2-Clause
+chromium-core	fedora	systemd	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-core	fedora	systemd-libs	259.10-1.fc44	LGPL-2.1-or-later AND MIT
+chromium-core	fedora	systemd-networkd	259.10-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	systemd-pam	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-core	fedora	systemd-resolved	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-core	fedora	systemd-shared	259.10-1.fc44	LGPL-2.1-or-later AND MIT
+chromium-core	fedora	systemd-standalone-sysusers	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-core	fedora	systemd-udev	259.10-1.fc44	LGPL-2.1-or-later
+chromium-core	fedora	tpm2-tss	4.1.3-9.fc44	BSD-2-Clause
+chromium-core	fedora	twolame-libs	0.4.0-9.fc44	LGPL-2.1-or-later
+chromium-core	fedora	tzdata	2026e-1.fc44	LicenseRef-Fedora-Public-Domain AND (GPL-2.0-only WITH ClassPath-exception-2.0)
+chromium-core	fedora	util-linux-core	2.41.6-1.fc44	GPL-2.0-only AND GPL-2.0-or-later AND BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause-UC AND LicenseRef-Fedora-Public-Domain
+chromium-core	fedora	vo-amrwbenc	0.1.3-24.fc44	Apache-2.0
+chromium-core	fedora	webrtc-audio-processing	2.1-5.fc44	BSD-3-Clause
+chromium-core	fedora	wireplumber	0.5.19-1.fc44	MIT
+chromium-core	fedora	wireplumber-libs	0.5.19-1.fc44	MIT
+chromium-core	fedora	xevd-libs	0.5.0-6.fc44	BSD-3-Clause
+chromium-core	fedora	xeve-libs	0.5.1-6.fc44	BSD-3-Clause
+chromium-core	fedora	xkeyboard-config	2.47-1.fc44	HPND AND HPND-sell-variant AND X11 AND X11-distribute-modifications-variant AND MIT AND MIT-open-group AND xkeyboard-config-Zinoviev
+chromium-core	fedora	xml-common	0.6.3-68.fc44	GPL-1.0-or-later
+chromium-core	fedora	xprop	1.2.8-5.fc44	MIT
+chromium-core	fedora	xvidcore	1.3.7-19.fc44	GPL-2.0-or-later
+chromium-core	fedora	xz-libs	5.8.2-2.fc44	0BSD
+chromium-core	fedora	zchunk-libs	1.5.4-1.fc44	BSD-2-Clause AND MIT
+chromium-core	fedora	zeromq	4.3.5-22.fc43	MPL-2.0 AND BSD-3-Clause AND MIT
+chromium-core	fedora	zlib-ng-compat	2.3.3-3.fc44	Zlib
+chromium-core	fedora	zvbi	0.2.44-3.fc44	GPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-2-Clause AND MIT
+chromium-framework	fedora	ModemManager-glib	1.24.2-3.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	abattis-cantarell-vf-fonts	0.301-17.fc44	OFL-1.1
+chromium-framework	fedora	abseil-cpp	20260107.1-1.fc44	Apache-2.0 AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	adwaita-cursor-theme	50.0-1.fc44	LGPL-3.0-only OR CC-BY-SA-3.0
+chromium-framework	fedora	adwaita-icon-theme	50.0-1.fc44	LGPL-3.0-only OR CC-BY-SA-3.0
+chromium-framework	fedora	adwaita-icon-theme-legacy	46.2-7.fc44	LGPL-3.0-only OR CC-BY-SA-3.0
+chromium-framework	fedora	adwaita-mono-fonts	50.0-1.fc44	OFL-1.1
+chromium-framework	fedora	adwaita-sans-fonts	50.0-1.fc44	OFL-1.1
+chromium-framework	fedora	alsa-lib	1.2.16.1-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	alternatives	1.33-5.fc44	GPL-2.0-only
+chromium-framework	fedora	aribb24	1.0.3^20160216git5e9be27-5.fc44	LGPL-3.0-only
+chromium-framework	fedora	at-spi2-atk	2.60.7-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	at-spi2-core	2.60.7-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	atk	2.60.7-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	audit-libs	4.2.1-1.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	authselect	1.7.1-1.fc44	GPL-3.0-or-later
+chromium-framework	fedora	authselect-libs	1.7.1-1.fc44	GPL-3.0-or-later
+chromium-framework	fedora	avahi	0.9~rc2-8.fc44	LGPL-2.1-or-later AND LGPL-2.0-or-later AND BSD-2-Clause-Views AND MIT
+chromium-framework	fedora	avahi-glib	0.9~rc2-8.fc44	LGPL-2.1-or-later AND LGPL-2.0-or-later AND BSD-2-Clause-Views AND MIT
+chromium-framework	fedora	avahi-libs	0.9~rc2-8.fc44	LGPL-2.1-or-later AND LGPL-2.0-or-later AND BSD-2-Clause-Views AND MIT
+chromium-framework	fedora	bash	5.3.9-3.fc44	GPL-3.0-or-later
+chromium-framework	fedora	bluez-libs	5.87+1.git8750129efca8-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	bubblewrap	0.12.0-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	bzip2-libs	1.0.8-23.fc44	BSD-4-Clause
+chromium-framework	fedora	ca-certificates	2026.2.92_v9.0.319-2.fc44	MIT AND GPL-2.0-or-later
+chromium-framework	fedora	cairo	1.18.6-1.fc44	LGPL-2.1-only OR MPL-1.1
+chromium-framework	fedora	cairo-gobject	1.18.6-1.fc44	LGPL-2.1-only OR MPL-1.1
+chromium-framework	fedora	cdparanoia-libs	10.2-50.fc44	LicenseRef-Callaway-LGPLv2
+chromium-framework	fedora	checkpolicy	3.11-1.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	chromium	156.0.8078.73-1.fc44	BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND IJG AND MIT AND GPL-2.0-or-later AND ISC AND OpenSSL AND (MPL-1.1 OR GPL-2.0-only OR LGPL-2.0-only)
+chromium-framework	fedora	chromium-common	156.0.8078.73-1.fc44	BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND IJG AND MIT AND GPL-2.0-or-later AND ISC AND OpenSSL AND (MPL-1.1 OR GPL-2.0-only OR LGPL-2.0-only)
+chromium-framework	fedora	chromium-headless	156.0.8078.73-1.fc44	BSD-3-Clause AND LGPL-2.1-or-later AND Apache-2.0 AND IJG AND MIT AND GPL-2.0-or-later AND ISC AND OpenSSL AND (MPL-1.1 OR GPL-2.0-only OR LGPL-2.0-only)
+chromium-framework	fedora	cjson	1.7.19-1.fc44	MIT
+chromium-framework	fedora	codec2	1.2.0-9.fc44	LGPL-2.1-only
+chromium-framework	fedora	colord-libs	1.4.8-4.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	coreutils	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	coreutils-common	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	cracklib	2.10.3-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	cracklib-dicts	2.10.3-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	crypto-policies	20251128-3.git19878fe.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	cryptsetup-libs	2.8.8-1.fc44	GPL-2.0-or-later WITH cryptsetup-OpenSSL-exception AND LGPL-2.1-or-later WITH cryptsetup-OpenSSL-exception
+chromium-framework	fedora	cups-filesystem	2.4.19-3.fc44	Apache-2.0 WITH LLVM-exception AND BSD-3-Clause AND Zlib AND BSD-2-Clause
+chromium-framework	fedora	cups-libs	2.4.19-3.fc44	Apache-2.0 WITH LLVM-exception AND BSD-3-Clause AND Zlib AND BSD-2-Clause
+chromium-framework	fedora	curl	8.18.0-14.fc44	curl
+chromium-framework	fedora	cyrus-sasl-lib	2.1.28-35.fc44	BSD-Attribution-HPND-disclaimer
+chromium-framework	fedora	dbus	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+chromium-framework	fedora	dbus-broker	37-8.fc44	Apache-2.0 AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND (Apache-2.0 OR LGPL-2.1-or-later)
+chromium-framework	fedora	dbus-common	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+chromium-framework	fedora	dbus-libs	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+chromium-framework	fedora	dconf	0.49.0-5.fc44	LGPL-2.0-or-later AND LGPL-2.1-or-later AND GPL-2.0-or-later AND GPL-3.0-or-later
+chromium-framework	fedora	default-fonts-core-sans	4.3-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	device-mapper	1.02.212-2.fc44	GPL-2.0-only
+chromium-framework	fedora	device-mapper-libs	1.02.212-2.fc44	LGPL-2.1-only
+chromium-framework	fedora	diffutils	3.12-5.fc44	GPL-3.0-or-later
+chromium-framework	fedora	dnf5	5.4.6.0-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	double-conversion	3.4.0-3.fc44	BSD-3-Clause
+chromium-framework	fedora	duktape	2.7.0-11.fc44	MIT
+chromium-framework	fedora	elfutils-debuginfod-client	0.197-1.fc44	GPL-3.0-or-later AND (GPL-2.0-or-later OR LGPL-3.0-or-later)
+chromium-framework	fedora	elfutils-default-yama-scope	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-framework	fedora	elfutils-libelf	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-framework	fedora	elfutils-libs	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-framework	fedora	exempi	2.6.4-9.fc44	BSD-3-Clause
+chromium-framework	fedora	exiv2	0.28.9-1.fc44	GPL-2.0-or-later AND BSD-3-Clause AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	exiv2-libs	0.28.9-1.fc44	GPL-2.0-or-later AND BSD-3-Clause AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	expat	2.9.0-1.fc44	MIT
+chromium-framework	fedora	fdk-aac-free	2.0.3-2.fc44	FDK-AAC
+chromium-framework	fedora	fedora-gpg-keys	44-2	MIT
+chromium-framework	fedora	fedora-release-common	44-18	MIT
+chromium-framework	fedora	fedora-release-container	44-18	MIT
+chromium-framework	fedora	fedora-release-identity-container	44-18	MIT
+chromium-framework	fedora	fedora-repos	44-2	MIT
+chromium-framework	fedora	fftw-libs-single	3.3.10-17.fc44	GPL-2.0-or-later AND MIT AND BSD-2-Clause
+chromium-framework	fedora	filesystem	3.18-52.fc44	LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	findutils	4.10.0-7.fc44	GPL-3.0-or-later
+chromium-framework	fedora	flac-libs	1.5.0-8.fc44	BSD-3-Clause AND GPL-2.0-or-later AND GFDL-1.3-or-later
+chromium-framework	fedora	fmt	11.2.0-4.fc44	MIT
+chromium-framework	fedora	fontconfig	2.17.0-4.fc44	HPND AND LicenseRef-Fedora-Public-Domain AND Unicode-DFS-2016
+chromium-framework	fedora	fonts-filesystem	5.0.0-2.fc44	MIT
+chromium-framework	fedora	freetype	2.14.3-1.fc44	(FTL OR GPL-2.0-or-later) AND BSD-3-Clause AND MIT AND MIT-Modern-Variant AND LicenseRef-Fedora-Public-Domain AND Zlib
+chromium-framework	fedora	fribidi	1.0.16-4.fc44	LGPL-2.1-or-later AND Unicode-DFS-2016
+chromium-framework	fedora	fuse-common	3.18.3-1.fc44	GPL-1.0-or-later
+chromium-framework	fedora	fuse3	3.18.3-1.fc44	GPL-1.0-or-later
+chromium-framework	fedora	fuse3-libs	3.18.3-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	game-music-emu	0.6.4-3.fc44	LicenseRef-Callaway-LGPLv2+
+chromium-framework	fedora	gawk	5.3.2-3.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause
+chromium-framework	fedora	gdbm	1.23-11.fc44	GPL-3.0-or-later
+chromium-framework	fedora	gdbm-libs	1.23-11.fc44	GPL-3.0-or-later
+chromium-framework	fedora	gdk-pixbuf2	2.44.6^really2.44.4-3.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	geoclue2	2.8.2-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	giflib	6.1.3-2.fc44	MIT
+chromium-framework	fedora	glib-networking	2.80.1-4.fc44	LGPL-2.1-or-later WITH cryptsetup-OpenSSL-exception
+chromium-framework	fedora	glib2	2.88.4-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	glibc	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-framework	fedora	glibc-common	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-framework	fedora	glibc-gconv-extra	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-framework	fedora	glibc-langpack-en	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-framework	fedora	glibc-minimal-langpack	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+chromium-framework	fedora	glycin-libs	2.1.5-1.fc44	(MPL-2.0 OR LGPL-2.1-or-later) AND Apache-2.0 WITH LLVM-exception AND BSD-3-Clause AND CC0-1.0 AND GPL-3.0-or-later AND IJG AND ISC AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (BSD-2-Clause OR Apache-2.0 OR MIT) AND (BSD-3-Clause OR Apache-2.0) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)
+chromium-framework	fedora	glycin-loaders	2.1.5-1.fc44	(MPL-2.0 OR LGPL-2.1-or-later) AND Apache-2.0 WITH LLVM-exception AND BSD-3-Clause AND CC0-1.0 AND GPL-3.0-or-later AND IJG AND ISC AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (BSD-2-Clause OR Apache-2.0 OR MIT) AND (BSD-3-Clause OR Apache-2.0) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)
+chromium-framework	fedora	gmp	6.3.0-5.fc44	(LGPL-3.0-or-later OR GPL-2.0-or-later OR (LGPL-3.0-or-later AND GPL-2.0-or-later)) AND GFDL-1.3-invariants-or-later
+chromium-framework	fedora	gnulib-l10n	20241231-2.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	gnupg2	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+chromium-framework	fedora	gnupg2-dirmngr	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+chromium-framework	fedora	gnupg2-gpg-agent	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+chromium-framework	fedora	gnupg2-gpgconf	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+chromium-framework	fedora	gnupg2-keyboxd	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+chromium-framework	fedora	gnupg2-verify	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+chromium-framework	fedora	gnutls	3.8.13-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	gobject-introspection	1.86.0-3.fc44	GPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-2-Clause
+chromium-framework	fedora	google-crc32c	1.1.2-13.fc44	BSD-3-Clause
+chromium-framework	fedora	google-noto-color-emoji-fonts	20260921-1.fc44	OFL-1.1 AND Apache-2.0
+chromium-framework	fedora	google-noto-fonts-common	20251201-2.fc44	OFL-1.1
+chromium-framework	fedora	google-noto-sans-cjk-vf-fonts	2.004-11.fc44	OFL-1.1
+chromium-framework	fedora	google-noto-sans-mono-cjk-vf-fonts	2.004-11.fc44	OFL-1.1
+chromium-framework	fedora	google-noto-sans-vf-fonts	20251201-2.fc44	OFL-1.1
+chromium-framework	fedora	gpg-pubkey	36f612dcf27f7d1a48a835e4dbfcf71c6d9f90a6-6786af3b	pubkey
+chromium-framework	fedora	gpgme	2.0.1-5.fc44	LGPL-2.1-or-later AND MIT
+chromium-framework	fedora	gpgmepp	2.0.1-5.fc44	LGPL-2.1-or-later AND MIT
+chromium-framework	fedora	graphene	1.10.8-4.fc44	MIT
+chromium-framework	fedora	graphite2	1.3.14-20.fc44	LGPL-2.1-or-later OR MPL-2.0 OR GPL-2.0-or-later
+chromium-framework	fedora	grep	3.12-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND GPL-2.0-or-later AND LGPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+chromium-framework	fedora	gsettings-desktop-schemas	50.1-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	gsm	1.0.24-2.fc44	tu-berlin-2.0
+chromium-framework	fedora	gssdp	1.6.6-1.fc44	LicenseRef-Callaway-LGPLv2+
+chromium-framework	fedora	gstreamer1	1.28.8-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	gstreamer1-plugins-bad-free-libs	1.28.8-1.fc44	LGPL-2.1-or-later AND LGPL-2.0-or-later AND (MIT OR LGPL-2.1-or-later) AND MPL-1.1 AND BSD-2-Clause AND BSD-3-Clause AND BSD-2-Clause-Views AND (BSD-2-Clause AND DOC) AND MIT-Festival AND (LGPL-2.0-or-later AND LicenseRef-Fedora-Public-Domain) AND (MPL-1.1 OR LGPL-2.0-or-later OR MIT) AND BSD-3-Clause WITH AdditionRef-Dart AND MIT AND GPL-2.0-only WITH Linux-syscall-note
+chromium-framework	fedora	gstreamer1-plugins-base	1.28.8-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	gtk-update-icon-cache	3.24.52-2.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	gtk3	3.24.52-2.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	gtk4	4.22.5-2.fc44	LGPL-2.0-or-later AND LGPL-2.1-or-later AND Apache-2.0 AND CC0-1.0 AND MIT AND MIT-open-group AND HPND-sell-variant AND GPL-2.0-or-later AND GPL-3.0-or-later AND OFL-1.1
+chromium-framework	fedora	gupnp	1.6.10-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	gupnp-igd	1.6.0-8.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	gzip	1.14-2.fc44	GPL-3.0-or-later AND GFDL-1.3-only
+chromium-framework	fedora	harfbuzz	14.1.0-2.fc44	MIT-Modern-Variant
+chromium-framework	fedora	hicolor-icon-theme	0.18-3.fc44	GPL-2.0-or-later
+chromium-framework	fedora	highway	1.3.0-2.fc44	Apache-2.0
+chromium-framework	fedora	hwdata	0.412-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	ilbc	3.0.4-19.fc44	BSD-3-Clause
+chromium-framework	fedora	inih	62-2.fc44	BSD-3-Clause
+chromium-framework	fedora	inih-cpp	62-2.fc44	BSD-3-Clause
+chromium-framework	fedora	intel-mediasdk	23.2.2-11.fc44	MIT
+chromium-framework	fedora	intel-vpl-gpu-rt	26.3.4-1.fc44	MIT
+chromium-framework	fedora	iso-codes	4.20.1-3.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	jansson	2.14-4.fc44	MIT AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	jbigkit-libs	2.1-33.fc44	GPL-2.0-or-later
+chromium-framework	fedora	json-c	0.18-8.fc44	MIT
+chromium-framework	fedora	json-glib	1.10.8-5.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	kbd	2.9.0-4.fc44	GPL-2.0-or-later
+chromium-framework	fedora	kbd-legacy	2.9.0-4.fc44	GPL-2.0-or-later
+chromium-framework	fedora	kbd-misc	2.9.0-4.fc44	GPL-2.0-or-later
+chromium-framework	fedora	keyutils-libs	1.6.3-7.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	kmod	34.2-4.fc44	GPL-2.0-or-later AND GPL-3.0-or-later AND FSFUL AND FSFULLRWD AND LGPL-2.1-only AND LGPL-2.1-or-later AND X11
+chromium-framework	fedora	kmod-libs	34.2-4.fc44	GPL-2.0-or-later AND GPL-3.0-or-later AND FSFUL AND FSFULLRWD AND LGPL-2.1-only AND LGPL-2.1-or-later AND X11
+chromium-framework	fedora	krb5-libs	1.22.2-4.fc44	Brian-Gladman-2-Clause AND BSD-2-Clause AND (BSD-2-Clause OR GPL-2.0-or-later) AND BSD-2-Clause-first-lines AND BSD-3-Clause AND BSD-4-Clause AND CMU-Mach-nodoc AND FSFULLRWD AND HPND AND HPND-export2-US AND HPND-export-US AND HPND-export-US-acknowledgement AND HPND-export-US-modify AND ISC AND MIT AND MIT-CMU AND OLDAP-2.8 AND OpenVision
+chromium-framework	fedora	lame-libs	3.100-21.fc44	LGPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	lcms2	2.16-7.fc44	MIT AND GPL-3.0-or-later
+chromium-framework	fedora	libX11	1.8.13-3.fc44	MIT AND X11
+chromium-framework	fedora	libX11-common	1.8.13-3.fc44	MIT AND X11
+chromium-framework	fedora	libX11-xcb	1.8.13-3.fc44	MIT AND X11
+chromium-framework	fedora	libXNVCtrl	580.82.09-2.fc44	GPL-2.0-or-later
+chromium-framework	fedora	libXau	1.0.12-4.fc44	MIT-open-group
+chromium-framework	fedora	libXcomposite	0.4.6-7.fc44	MIT AND HPND-sell-variant
+chromium-framework	fedora	libXcursor	1.2.3-4.fc44	HPND-sell-variant
+chromium-framework	fedora	libXdamage	1.1.6-7.fc44	HPND-sell-variant
+chromium-framework	fedora	libXext	1.3.6-5.fc44	MIT-open-group AND X11 AND HPND AND HPND-sell-variant AND SMLNJ AND MIT AND ISC AND HPND-doc AND HPND-doc-sell
+chromium-framework	fedora	libXfixes	6.0.1-7.fc44	MIT AND HPND-sell-variant
+chromium-framework	fedora	libXft	2.3.8-10.fc44	HPND-sell-variant
+chromium-framework	fedora	libXi	1.8.3-1.fc44	MIT-open-group AND SMLNJ AND MIT
+chromium-framework	fedora	libXinerama	1.1.5-10.fc44	MIT AND MIT-open-group AND X11
+chromium-framework	fedora	libXrandr	1.5.4-7.fc44	HPND-sell-variant
+chromium-framework	fedora	libXrender	0.9.12-4.fc44	HPND-sell-variant
+chromium-framework	fedora	libXtst	1.2.5-4.fc44	MIT-open-group AND HPND-sell-variant AND X11 AND HPND-doc AND HPND-doc-sell
+chromium-framework	fedora	libXv	1.0.13-4.fc44	SMLNJ AND HPND-sell-variant
+chromium-framework	fedora	libXxf86vm	1.1.6-4.fc44	X11-distribute-modifications-variant
+chromium-framework	fedora	libacl	2.4.0-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libaom	3.15.2-1.fc44	BSD-3-Clause
+chromium-framework	fedora	libarchive	3.8.7-1.fc44	BSD-2-Clause AND FSFULLR AND GPL-2.0-or-later WITH Libtool-exception AND BSD-3-Clause AND FSFUL
+chromium-framework	fedora	libaribcaption	1.1.1-4.fc44	MIT
+chromium-framework	fedora	libassuan	2.5.7-5.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	libasyncns	0.8-34.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libattr	2.6.0-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libavcodec-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-framework	fedora	libavformat-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-framework	fedora	libavutil-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-framework	fedora	libblkid	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libbluray	1.4.0-3.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	libbpf	1.6.3-2.fc44	LGPL-2.1-only OR BSD-2-Clause
+chromium-framework	fedora	libbrotli	1.2.1-1.fc44	MIT
+chromium-framework	fedora	libcamera	0.7.2-2.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libcamera-ipa	0.7.2-2.fc44	LGPL-2.1-or-later AND BSD-2-Clause
+chromium-framework	fedora	libcanberra	0.30-39.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libcanberra-gtk3	0.30-39.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libcap	2.78-1.fc44	BSD-3-Clause OR GPL-2.0-only
+chromium-framework	fedora	libcap-ng	0.9.6-1.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	libcbor	0.13.0-2.fc44	MIT
+chromium-framework	fedora	libchromaprint	1.6.0-4.fc44	GPL-2.0-or-later
+chromium-framework	fedora	libcloudproviders	0.4.1-1.fc44	LGPL-3.0-or-later
+chromium-framework	fedora	libcom_err	1.47.3-4.fc44	MIT
+chromium-framework	fedora	libcue	2.3.0-14.fc44	GPL-2.0-only AND BSD-2-Clause
+chromium-framework	fedora	libcurl	8.18.0-14.fc44	curl
+chromium-framework	fedora	libdaemon	0.14-33.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libdatrie	0.2.14-2.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libdav1d	1.5.4-1.fc44	BSD-2-Clause AND ISC
+chromium-framework	fedora	libdisplay-info	0.3.0-1.fc44	MIT
+chromium-framework	fedora	libdnf5	5.4.6.0-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libdnf5-cli	5.4.6.0-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libdrm	2.4.134-1.fc44	MIT
+chromium-framework	fedora	libdvdnav	7.0.0-1.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	libdvdread	7.0.1-1.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later AND (GPL-2.0-only OR GPL-3.0-only) AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	libebur128	1.2.6-15.fc44	MIT
+chromium-framework	fedora	libeconf	0.7.9-3.fc44	MIT
+chromium-framework	fedora	libedit	3.1-59.20260512cvs.fc44	BSD-3-Clause AND BSD-2-Clause AND ISC
+chromium-framework	fedora	libepoxy	1.5.10-12.fc44	MIT
+chromium-framework	fedora	liberation-mono-fonts	2.1.5-15.fc44	OFL-1.1-RFN
+chromium-framework	fedora	liberation-sans-fonts	2.1.5-15.fc44	OFL-1.1-RFN
+chromium-framework	fedora	liberation-serif-fonts	2.1.5-15.fc44	OFL-1.1-RFN
+chromium-framework	fedora	libevent	2.1.13-1.fc44	BSD-3-Clause AND ISC AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	libfdisk	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libffi	3.5.2-2.fc44	MIT AND CC-PDDC AND (GPL-3.0-or-later WITH Texinfo-exception)
+chromium-framework	fedora	libfido2	1.16.0-5.fc44	BSD-2-Clause
+chromium-framework	fedora	libgcc	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+chromium-framework	fedora	libgcrypt	1.12.2-1.fc44	BSD-3-Clause AND (BSD-3-Clause OR GPL-2.0-only) AND GPL-2.0-or-later AND LGPL-2.1-or-later AND LGPL-2.0-or-later AND MIT-Modern-Variant
+chromium-framework	fedora	libgexiv2	0.16.2-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	libglvnd	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-framework	fedora	libglvnd-egl	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-framework	fedora	libglvnd-gles	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-framework	fedora	libglvnd-glx	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+chromium-framework	fedora	libgomp	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+chromium-framework	fedora	libgpg-error	1.58-2.fc44	LGPL-2.1-or-later AND (BSD-3-Clause OR LGPL-2.1-or-later) AND FSFULLR AND GPL-2.0-or-later
+chromium-framework	fedora	libgsf	1.14.60-1.fc44	LGPL-2.1-only
+chromium-framework	fedora	libgudev	238-9.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libgusb	0.4.9-5.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libgxps	0.3.2-12.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libheif	1.23.7-1.fc44	LGPL-3.0-or-later and MIT
+chromium-framework	fedora	libheif-ffmpeg	1.23.7-1.fc44	MIT
+chromium-framework	fedora	libicu	77.1-3.fc44	Unicode-DFS-2016 AND BSD-2-Clause AND BSD-3-Clause AND NAIST-2003 AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	libidn2	2.3.8-3.fc44	(GPL-2.0-or-later OR LGPL-3.0-or-later) AND GPL-3.0-or-later
+chromium-framework	fedora	libimobiledevice	1.4.0-3.fc44	LGPL-2.0-or-later AND MIT AND Zlib
+chromium-framework	fedora	libimobiledevice-glue	1.3.2-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libjpeg-turbo	3.1.3-1.fc44	Zlib AND BSD-3-Clause AND MIT AND IJG
+chromium-framework	fedora	libjxl	0.11.2-1.fc44	BSD-3-Clause AND Apache-2.0 AND Zlib
+chromium-framework	fedora	libksba	1.6.7-5.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later AND (LGPL-3.0-or-later OR GPL-2.0-or-later)
+chromium-framework	fedora	liblastlog2	2.41.6-1.fc44	BSD-2-Clause
+chromium-framework	fedora	liblc3	1.1.3-7.fc44	Apache-2.0
+chromium-framework	fedora	libldac	2.0.2.3-19.fc44	Apache-2.0
+chromium-framework	fedora	libldb	4.24.7-1.fc44	LGPL-3.0-or-later
+chromium-framework	fedora	liblerc	4.0.0-10.fc44	Apache-2.0
+chromium-framework	fedora	libmodplug	0.8.9.0-29.fc44	LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	libmodulemd	2.15.3-1.fc44	MIT
+chromium-framework	fedora	libmount	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libnghttp2	1.68.0-5.fc44	MIT
+chromium-framework	fedora	libnghttp3	1.18.0-1.fc44	MIT
+chromium-framework	fedora	libnice	0.1.23-2.fc44	LGPL-2.1-or-later OR MPL-1.1
+chromium-framework	fedora	libnotify	0.8.9-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libnsl2	2.0.1-5.fc44	BSD-3-Clause AND LGPL-2.1-or-later
+chromium-framework	fedora	libogg	1.3.6-2.fc44	BSD-3-Clause
+chromium-framework	fedora	libopenjph	0.25.3-3.fc44	BSD-2-Clause
+chromium-framework	fedora	libopenmpt	0.8.9-1.fc44	BSD-3-Clause
+chromium-framework	fedora	libosinfo	1.12.0-5.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libpciaccess	0.16-17.fc44	HPND AND MIT
+chromium-framework	fedora	libpkgconf	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+chromium-framework	fedora	libplist	2.7.0-1.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	libpng	1.6.58-1.fc44	zlib
+chromium-framework	fedora	libproxy	0.5.12-2.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libpsl	0.21.5-7.fc44	MIT
+chromium-framework	fedora	libpwquality	1.4.5-15.fc44	BSD-3-Clause OR GPL-2.0-or-later
+chromium-framework	fedora	librabbitmq	0.18.1-1.fc44	MIT
+chromium-framework	fedora	librepo	1.21.2-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	librist	0.2.11-1.fc44	BSD-2-Clause and ISC
+chromium-framework	fedora	librsvg2	2.62.4-1.fc44	LGPL-2.1-or-later AND Apache-2.0 AND BSD-3-Clause AND MIT AND MPL-2.0 AND Unicode-3.0 AND Unicode-DFS-2016 AND (0BSD OR MIT OR Apache-2.0) AND (Apache-2.0 OR MIT) AND (BSD-3-Clause OR Apache-2.0) AND (MIT OR Apache-2.0 OR Zlib) AND (Unlicense OR MIT)
+chromium-framework	fedora	libsbc	2.1-2.fc44	GPL-2.0-only AND LGPL-2.1-or-later
+chromium-framework	fedora	libseccomp	2.6.1-2.fc44	LGPL-2.1-only
+chromium-framework	fedora	libsecret	0.21.8.2-2.fc44	LGPL-2.1-or-later AND Apache-2.0 AND (GPL-2.0-or-later OR TGPPL-1.0) AND LicenseRef-Fedora-Public-Domain AND GCR-docs
+chromium-framework	fedora	libselinux	3.11-2.fc44	LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	libselinux-utils	3.11-2.fc44	LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	libsemanage	3.11-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libsepol	3.11-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libsmartcols	2.41.6-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libsmbclient	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	libsndfile	1.2.2-11.fc44	LGPL-2.1-or-later AND GPL-2.0-or-later AND BSD-3-Clause
+chromium-framework	fedora	libsodium	1.0.22-1.fc44	ISC AND BSD-2-Clause AND CC0-1.0
+chromium-framework	fedora	libsolv	0.7.41-1.fc44	BSD-3-Clause
+chromium-framework	fedora	libsoup3	3.6.6-10.fc44	LGPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	libssh	0.12.2-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libssh-config	0.12.2-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libstdc++	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+chromium-framework	fedora	libstemmer	3.0.1-11.fc44	BSD-3-Clause
+chromium-framework	fedora	libswresample-free	8.1.3-1.fc44	GPL-3.0-or-later
+chromium-framework	fedora	libtalloc	2.4.4-1.fc44	LGPL-3.0-or-later
+chromium-framework	fedora	libtasn1	4.21.0-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	libtdb	1.4.15-1.fc44	LGPL-3.0-or-later
+chromium-framework	fedora	libtevent	0.17.1-4.fc44	LGPL-3.0-or-later
+chromium-framework	fedora	libthai	0.1.30-2.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libtheora	1.1.1-41.fc44	BSD-3-Clause
+chromium-framework	fedora	libtiff	4.7.2-3.fc44	libtiff
+chromium-framework	fedora	libtinysparql	3.11.1-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libtirpc	1.3.8-0.fc44	SISSL AND BSD-3-Clause
+chromium-framework	fedora	libtool-ltdl	2.5.4-10.fc44	LGPLv2+
+chromium-framework	fedora	libudfread	1.2.0-3.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	libunistring	1.1-11.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+chromium-framework	fedora	libunwind	1.8.3-4.fc44	MIT
+chromium-framework	fedora	libusb1	1.0.30-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libusbmuxd	2.1.1-1.fc44	LGPL-2.0-or-later AND GPL-2.0-or-later
+chromium-framework	fedora	libuuid	2.41.6-1.fc44	BSD-3-Clause
+chromium-framework	fedora	libuv	1.52.1-2.fc44	MIT AND CC-BY-4.0 AND ISC AND BSD-2-Clause
+chromium-framework	fedora	libva	2.23.0-3.fc44	MIT AND HPND-sell-variant AND ICU
+chromium-framework	fedora	libvdpau	1.5-11.fc44	MIT
+chromium-framework	fedora	libverto	0.3.2-12.fc44	MIT
+chromium-framework	fedora	libvisual	0.4.2-4.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	libvmaf	3.0.0-5.fc44	BSD-2-Clause-Patent
+chromium-framework	fedora	libvorbis	1.3.7-14.fc44	BSD-3-Clause
+chromium-framework	fedora	libvpl	2.17.0-1.fc44	MIT
+chromium-framework	fedora	libvpx	1.15.0-5.fc44	BSD-3-Clause
+chromium-framework	fedora	libwayland-client	1.26.0-1.fc44	MIT
+chromium-framework	fedora	libwayland-cursor	1.26.0-1.fc44	MIT
+chromium-framework	fedora	libwayland-egl	1.26.0-1.fc44	MIT
+chromium-framework	fedora	libwbclient	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	libwebp	1.6.0-3.fc44	Apache-2.0 AND BSD-3-Clause WITH AdditionRef-WebM-patent-license AND BSD-3-Clause AND FSFULLRWD
+chromium-framework	fedora	libxcb	1.17.0-7.fc44	X11
+chromium-framework	fedora	libxcrypt	4.5.2-3.fc44	LGPL-2.1-or-later AND BSD-3-Clause AND BSD-2-Clause AND BSD-2-Clause-FreeBSD AND 0BSD AND CC0-1.0 AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	libxkbcommon	1.13.1-2.fc44	MIT AND X11 AND MIT-CMU
+chromium-framework	fedora	libxml2	2.12.10-6.fc44	MIT AND ISC-Veillard AND W3C
+chromium-framework	fedora	libxshmfence	1.3.2-8.fc44	HPND-sell-variant
+chromium-framework	fedora	libxslt	1.1.43-6.fc44	MIT
+chromium-framework	fedora	libyaml	0.2.5-18.fc44	MIT
+chromium-framework	fedora	libyuv	0-0.61.20260213git6067afd.fc44	BSD-3-Clause
+chromium-framework	fedora	libzip	1.11.4-3.fc44	BSD-3-Clause
+chromium-framework	fedora	libzstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
+chromium-framework	fedora	llvm-filesystem	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+chromium-framework	fedora	llvm-libs	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+chromium-framework	fedora	lm_sensors-libs	3.6.0-24.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	lmdb-libs	0.9.34-2.fc44	OLDAP-2.8
+chromium-framework	fedora	localsearch	3.11.2-1.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+chromium-framework	fedora	logrotate	3.22.0-5.fc44	GPL-2.0-or-later
+chromium-framework	fedora	lpcnetfreedv	0.5-10.fc44	LicenseRef-Callaway-BSD
+chromium-framework	fedora	lttng-ust	2.14.0-5.fc44	LGPL-2.1-only AND MIT AND GPL-2.0-only AND BSD-3-Clause AND BSD-2-Clause
+chromium-framework	fedora	lua-libs	5.4.8-5.fc44	MIT
+chromium-framework	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
+chromium-framework	fedora	lzo	2.10-16.fc44	gpl-2.0-or-later
+chromium-framework	fedora	mesa-dri-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-framework	fedora	mesa-filesystem	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-framework	fedora	mesa-libEGL	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-framework	fedora	mesa-libGL	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-framework	fedora	mesa-libgbm	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-framework	fedora	mesa-vulkan-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+chromium-framework	fedora	mpdecimal	4.0.1-3.fc44	BSD-2-Clause
+chromium-framework	fedora	mpfr	4.2.2-3.fc44	LGPL-3.0-or-later
+chromium-framework	fedora	mpg123-libs	1.32.10-3.fc44	GPL-2.0-or-later
+chromium-framework	fedora	ncurses-base	6.6-1.fc44	MIT-open-group
+chromium-framework	fedora	ncurses-libs	6.6-1.fc44	MIT-open-group
+chromium-framework	fedora	nettle	3.10.1-3.fc44	LGPL-3.0-or-later OR GPL-2.0-or-later
+chromium-framework	fedora	ngtcp2	1.22.1-1.fc44	MIT
+chromium-framework	fedora	ngtcp2-crypto-gnutls	1.22.1-1.fc44	MIT
+chromium-framework	fedora	ngtcp2-crypto-ossl	1.22.1-1.fc44	MIT
+chromium-framework	fedora	nodejs22	22.23.1-2.fc44	Apache-2.0 AND Artistic-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BlueOak-1.0.0 AND CC-BY-3.0 AND CC0-1.0 AND ISC AND MIT
+chromium-framework	fedora	nodejs22-bin	22.23.1-2.fc44	Apache-2.0 AND Artistic-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BlueOak-1.0.0 AND CC-BY-3.0 AND CC0-1.0 AND ISC AND MIT
+chromium-framework	fedora	nodejs22-docs	22.23.1-2.fc44	Apache-2.0 AND Artistic-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BlueOak-1.0.0 AND CC-BY-3.0 AND CC0-1.0 AND ISC AND MIT
+chromium-framework	fedora	nodejs22-full-i18n	22.23.1-2.fc44	Apache-2.0 AND Artistic-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BlueOak-1.0.0 AND CC-BY-3.0 AND CC0-1.0 AND ISC AND MIT
+chromium-framework	fedora	nodejs22-libs	22.23.1-2.fc44	Apache-2.0 AND Artistic-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BlueOak-1.0.0 AND CC-BY-3.0 AND CC0-1.0 AND ISC AND MIT
+chromium-framework	fedora	nodejs22-npm	10.9.8-1.22.23.1.2.fc44	Apache-2.0 AND Artistic-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BlueOak-1.0.0 AND CC-BY-3.0 AND CC0-1.0 AND ISC AND MIT
+chromium-framework	fedora	nodejs22-npm-bin	22.23.1-2.fc44	Apache-2.0 AND Artistic-2.0 AND BSD-2-Clause AND BSD-3-Clause AND BlueOak-1.0.0 AND CC-BY-3.0 AND CC0-1.0 AND ISC AND MIT
+chromium-framework	fedora	npth	1.8-4.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	nspr	4.39.0-7.fc44	MPL-2.0
+chromium-framework	fedora	nss	3.131.0-1.fc44	MPL-2.0
+chromium-framework	fedora	nss-mdns	0.15.1-28.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	nss-softokn	3.131.0-1.fc44	MPL-2.0
+chromium-framework	fedora	nss-softokn-freebl	3.131.0-1.fc44	MPL-2.0
+chromium-framework	fedora	nss-sysinit	3.131.0-1.fc44	MPL-2.0
+chromium-framework	fedora	nss-util	3.131.0-1.fc44	MPL-2.0
+chromium-framework	fedora	numactl-libs	2.0.19-4.fc44	LGPL-2.1-only and GPL-2.0-only
+chromium-framework	fedora	openapv-libs	0.2.1.2-1.fc44	BSD-3-Clause
+chromium-framework	fedora	opencore-amr	0.1.6-10.fc44	Apache-2.0
+chromium-framework	fedora	openh264	2.6.0-3.fc44	BSD-2-Clause
+chromium-framework	fedora	openjpeg	2.5.4-3.fc44	BSD-2-Clause AND MIT
+chromium-framework	fedora	openldap	2.6.15-1.fc44	OLDAP-2.8
+chromium-framework	fedora	openpgm	5.3.128-6.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	openssl-libs	3.5.9-1.fc44	Apache-2.0
+chromium-framework	fedora	opus	1.6-2.fc44	BSD-3-Clause AND BSD-2-Clause
+chromium-framework	fedora	orc	0.4.41-3.fc44	BSD-2-Clause AND BSD-3-Clause
+chromium-framework	fedora	osinfo-db	20251212-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	osinfo-db-tools	1.12.0-5.fc44	GPL-2.0-or-later
+chromium-framework	fedora	p11-kit	0.26.5-1.fc44	BSD-3-Clause
+chromium-framework	fedora	p11-kit-trust	0.26.5-1.fc44	BSD-3-Clause
+chromium-framework	fedora	pam	1.7.2-2.fc44	BSD-3-Clause AND GPL-2.0-or-later
+chromium-framework	fedora	pam-libs	1.7.2-2.fc44	BSD-3-Clause AND GPL-2.0-or-later
+chromium-framework	fedora	pango	1.57.1-1.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	pcre2	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+chromium-framework	fedora	pcre2-syntax	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+chromium-framework	fedora	pinentry	1.3.2-3.fc44	GPL-2.0-or-later
+chromium-framework	fedora	pipewire	1.6.11-1.fc44	MIT
+chromium-framework	fedora	pipewire-alsa	1.6.11-1.fc44	MIT
+chromium-framework	fedora	pipewire-jack-audio-connection-kit	1.6.11-1.fc44	MIT
+chromium-framework	fedora	pipewire-jack-audio-connection-kit-libs	1.6.11-1.fc44	MIT
+chromium-framework	fedora	pipewire-libs	1.6.11-1.fc44	MIT AND GPL-2.0-or-later AND BSD-2-Clause AND LGPL-2.0-or-later
+chromium-framework	fedora	pipewire-plugin-libcamera	1.6.11-1.fc44	MIT
+chromium-framework	fedora	pixman	0.46.2-3.fc44	MIT
+chromium-framework	fedora	pkgconf	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+chromium-framework	fedora	pkgconf-m4	2.5.1-1.fc44	GPL-2.0-or-later WITH Autoconf-exception-generic
+chromium-framework	fedora	pkgconf-pkg-config	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+chromium-framework	fedora	policycoreutils	3.11-2.fc44	GPL-2.0-or-later
+chromium-framework	fedora	policycoreutils-python-utils	3.11-2.fc44	GPL-2.0-or-later
+chromium-framework	fedora	polkit	127-2.fc44.2	LGPL-2.0-or-later
+chromium-framework	fedora	polkit-libs	127-2.fc44.2	LGPL-2.0-or-later
+chromium-framework	fedora	polkit-pkla-compat	0.1-32.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	poppler	26.01.0-3.fc44	(GPL-2.0-only OR GPL-3.0-only) AND GPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
+chromium-framework	fedora	poppler-data	0.4.11-11.fc44	(GPL-2.0-only OR GPL-3.0-only) AND BSD-3-Clause
+chromium-framework	fedora	poppler-glib	26.01.0-3.fc44	(GPL-2.0-only OR GPL-3.0-only) AND GPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
+chromium-framework	fedora	popt	1.19-10.fc44	MIT AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	publicsuffix-list-dafsa	20260116-1.fc44	MPL-2.0
+chromium-framework	fedora	pulseaudio	17.0-9.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	pulseaudio-libs	17.0-9.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	pulseaudio-utils	17.0-9.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	python-pip-wheel	26.0.1-3.fc44	MIT AND Python-2.0.1 AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND ISC AND MPL-2.0 AND (Apache-2.0 OR BSD-2-Clause)
+chromium-framework	fedora	python-unversioned-command	3.14.8-1.fc44	Python-2.0.1
+chromium-framework	fedora	python3	3.14.8-1.fc44	Python-2.0.1
+chromium-framework	fedora	python3-audit	4.2.1-1.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	python3-distro	1.9.0-11.fc44	Apache-2.0
+chromium-framework	fedora	python3-libs	3.14.8-1.fc44	Python-2.0.1 AND MIT AND BSD-3-Clause AND MIT-CMU AND HPND-SMC AND BSD-2-Clause AND dtoa AND Unicode-3.0
+chromium-framework	fedora	python3-libselinux	3.11-2.fc44	LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	python3-libsemanage	3.11-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	python3-policycoreutils	3.11-2.fc44	GPL-2.0-or-later
+chromium-framework	fedora	python3-setools	4.6.0-6.fc44	LGPL-2.1-only
+chromium-framework	fedora	qrencode-libs	4.1.1-12.fc44	LicenseRef-Callaway-LGPLv2+
+chromium-framework	fedora	rav1e-libs	0.8.1-3.fc44	BSD-2-Clause AND ISC AND MIT AND LicenseRef-BSD-2-Clause-WITH-AdditionRef-AOMPL-1.0 AND (Apache-2.0 OR MIT) AND (Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT) AND (Unlicense OR MIT)
+chromium-framework	fedora	readline	8.3-4.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+chromium-framework	fedora	rpm	6.0.2-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	rpm-libs	6.0.2-1.fc44	GPL-2.0-or-later OR LGPL-2.1-or-later
+chromium-framework	fedora	rpm-sequoia	1.10.3-1.fc44	LGPL-2.0-or-later AND Apache-2.0 AND BSD-3-Clause AND BSL-1.0 AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (Apache-2.0 OR MIT) AND (Unlicense OR MIT)
+chromium-framework	fedora	rtkit	0.11-70.fc44	GPL-3.0-or-later AND MIT
+chromium-framework	fedora	samba-client-libs	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	samba-common	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	samba-core-libs	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	samba-ndr-libs	4.24.7-1.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later
+chromium-framework	fedora	sdbus-cpp	2.2.1-2.fc44	LGPL-2.1-only
+chromium-framework	fedora	sed	4.9-7.fc44	GPL-3.0-or-later
+chromium-framework	fedora	setup	2.15.0-28.fc44	LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	shadow-utils	4.19.0-7.fc44	BSD-3-Clause AND GPL-2.0-or-later
+chromium-framework	fedora	shared-mime-info	2.4-3.fc44	GPL-2.0-or-later
+chromium-framework	fedora	snappy	1.2.2-4.fc44	BSD-3-Clause
+chromium-framework	fedora	sound-theme-freedesktop	0.8-31.fc44	GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.0-or-later AND CC-BY-SA-3.0 AND CC-BY-3.0 AND CC-BY-4.0
+chromium-framework	fedora	soxr	0.1.3-21.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	spandsp	0.0.6-22.fc44	LGPL-2.1-only AND GPL-2.0-only
+chromium-framework	fedora	speex	1.2.0-21.fc44	BSD-3-clause AND TU-Berlin-1.0
+chromium-framework	fedora	speexdsp	1.2.1-10.fc44	BSD-3-Clause
+chromium-framework	fedora	spirv-tools-libs	2026.1-1.fc44	Apache-2.0
+chromium-framework	fedora	sqlite-libs	3.51.2-2.fc44	blessing
+chromium-framework	fedora	srt-libs	1.5.7-1.fc44	MPL-2.0
+chromium-framework	fedora	svt-av1-libs	3.1.2-2.fc44	LicenseRef-BSD-3-Clause-Clear-WITH-AdditionRef-AOMPL-1.0 AND MIT AND ISC AND LicenseRef-Fedora-Public-Domain AND BSD-2-Clause
+chromium-framework	fedora	systemd	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-framework	fedora	systemd-libs	259.10-1.fc44	LGPL-2.1-or-later AND MIT
+chromium-framework	fedora	systemd-networkd	259.10-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	systemd-pam	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-framework	fedora	systemd-resolved	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-framework	fedora	systemd-shared	259.10-1.fc44	LGPL-2.1-or-later AND MIT
+chromium-framework	fedora	systemd-standalone-sysusers	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+chromium-framework	fedora	systemd-udev	259.10-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	tinysparql	3.11.1-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	totem-pl-parser	3.26.7-1.fc44	LicenseRef-Callaway-LGPLv2+
+chromium-framework	fedora	tpm2-tss	4.1.3-9.fc44	BSD-2-Clause
+chromium-framework	fedora	twolame-libs	0.4.0-9.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	tzdata	2026e-1.fc44	LicenseRef-Fedora-Public-Domain AND (GPL-2.0-only WITH ClassPath-exception-2.0)
+chromium-framework	fedora	uchardet	0.0.8-10.fc44	MPL-1.1 OR GPL-2.0-or-later OR LGPL-2.0-or-later
+chromium-framework	fedora	upower	1.91.5-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	upower-libs	1.91.5-1.fc44	GPL-2.0-or-later
+chromium-framework	fedora	usbmuxd	1.1.1^20251205git3ded00c-1.fc44	GPL-3.0-only OR GPL-2.0-only
+chromium-framework	fedora	util-linux	2.41.6-1.fc44	GPL-1.0-or-later AND GPL-2.0-only AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause-UC AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	util-linux-core	2.41.6-1.fc44	GPL-2.0-only AND GPL-2.0-or-later AND BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause-UC AND LicenseRef-Fedora-Public-Domain
+chromium-framework	fedora	vo-amrwbenc	0.1.3-24.fc44	Apache-2.0
+chromium-framework	fedora	vulkan-loader	1.4.341.0-1.fc44	Apache-2.0
+chromium-framework	fedora	webrtc-audio-processing	2.1-5.fc44	BSD-3-Clause
+chromium-framework	fedora	webrtc-audio-processing1	1.3-11.fc44	BSD-3-Clause
+chromium-framework	fedora	wireplumber	0.5.19-1.fc44	MIT
+chromium-framework	fedora	wireplumber-libs	0.5.19-1.fc44	MIT
+chromium-framework	fedora	xdg-desktop-portal	1.22.1-1.fc44	LGPL-2.1-or-later
+chromium-framework	fedora	xdg-desktop-portal-gtk	1.15.3-3.fc44	LGPL-2.0-or-later
+chromium-framework	fedora	xevd-libs	0.5.0-6.fc44	BSD-3-Clause
+chromium-framework	fedora	xeve-libs	0.5.1-6.fc44	BSD-3-Clause
+chromium-framework	fedora	xkeyboard-config	2.47-1.fc44	HPND AND HPND-sell-variant AND X11 AND X11-distribute-modifications-variant AND MIT AND MIT-open-group AND xkeyboard-config-Zinoviev
+chromium-framework	fedora	xml-common	0.6.3-68.fc44	GPL-1.0-or-later
+chromium-framework	fedora	xprop	1.2.8-5.fc44	MIT
+chromium-framework	fedora	xvidcore	1.3.7-19.fc44	GPL-2.0-or-later
+chromium-framework	fedora	xz-libs	5.8.2-2.fc44	0BSD
+chromium-framework	fedora	zchunk-libs	1.5.4-1.fc44	BSD-2-Clause AND MIT
+chromium-framework	fedora	zeromq	4.3.5-22.fc43	MPL-2.0 AND BSD-3-Clause AND MIT
+chromium-framework	fedora	zlib-ng-compat	2.3.3-3.fc44	Zlib
+chromium-framework	fedora	zvbi	0.2.44-3.fc44	GPL-2.0-or-later AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-2-Clause AND MIT
+flutter	debian	adduser	3.134	unknown
+flutter	debian	apt	2.6.1	unknown
+flutter	debian	base-files	12.4+deb12u15	unknown
+flutter	debian	base-passwd	3.6.1	unknown
+flutter	debian	bash	5.2.15-2+b13	unknown
+flutter	debian	bsdutils	1:2.38.1-5+deb12u3	unknown
+flutter	debian	ca-certificates	20250419~deb12u2	unknown
+flutter	debian	coreutils	9.1-1	unknown
+flutter	debian	curl	7.88.1-10+deb12u15	unknown
+flutter	debian	dash	0.5.12-2	unknown
+flutter	debian	debconf	1.5.82	unknown
+flutter	debian	debian-archive-keyring	2023.3+deb12u2	unknown
+flutter	debian	debianutils	5.7-0.5~deb12u1	unknown
+flutter	debian	diffutils	1:3.8-4	unknown
+flutter	debian	dpkg	1.21.23	unknown
+flutter	debian	e2fsprogs	1.47.0-2+b2	unknown
+flutter	debian	findutils	4.9.0-4	unknown
+flutter	debian	gcc-12-base	12.2.0-14+deb12u1	unknown
+flutter	debian	git	1:2.39.5-0+deb12u3	unknown
+flutter	debian	git-man	1:2.39.5-0+deb12u3	unknown
+flutter	debian	gpgv	2.2.40-1.1+deb12u2	unknown
+flutter	debian	grep	3.8-5	unknown
+flutter	debian	gzip	1.12-1	unknown
+flutter	debian	hostname	3.23+nmu1	unknown
+flutter	debian	init-system-helpers	1.65.2+deb12u1	unknown
+flutter	debian	libacl1	2.3.1-3	unknown
+flutter	debian	libapt-pkg6.0	2.6.1	unknown
+flutter	debian	libattr1	1:2.5.1-4	unknown
+flutter	debian	libaudit-common	1:3.0.9-1	unknown
+flutter	debian	libaudit1	1:3.0.9-1	unknown
+flutter	debian	libblkid1	2.38.1-5+deb12u3	unknown
+flutter	debian	libbrotli1	1.0.9-2+deb12u1	unknown
+flutter	debian	libbz2-1.0	1.0.8-5+b1	unknown
+flutter	debian	libc-bin	2.36-9+deb12u14	unknown
+flutter	debian	libc6	2.36-9+deb12u14	unknown
+flutter	debian	libcap-ng0	0.8.3-1+b3	unknown
+flutter	debian	libcap2	1:2.66-4+deb12u3+b1	unknown
+flutter	debian	libcom-err2	1.47.0-2+b2	unknown
+flutter	debian	libcrypt1	1:4.4.33-2	unknown
+flutter	debian	libcurl3-gnutls	7.88.1-10+deb12u15	unknown
+flutter	debian	libcurl4	7.88.1-10+deb12u15	unknown
+flutter	debian	libdb5.3	5.3.28+dfsg2-1	unknown
+flutter	debian	libdebconfclient0	0.270	unknown
+flutter	debian	liberror-perl	0.17029-2	unknown
+flutter	debian	libexpat1	2.5.0-1+deb12u5	unknown
+flutter	debian	libext2fs2	1.47.0-2+b2	unknown
+flutter	debian	libffi8	3.4.4-1	unknown
+flutter	debian	libgcc-s1	12.2.0-14+deb12u1	unknown
+flutter	debian	libgcrypt20	1.10.1-3+deb12u1	unknown
+flutter	debian	libgdbm-compat4	1.23-3	unknown
+flutter	debian	libgdbm6	1.23-3	unknown
+flutter	debian	libgmp10	2:6.2.1+dfsg1-1.1	unknown
+flutter	debian	libgnutls30	3.7.9-2+deb12u7	unknown
+flutter	debian	libgpg-error0	1.46-1	unknown
+flutter	debian	libgssapi-krb5-2	1.20.1-2+deb12u5	unknown
+flutter	debian	libhogweed6	3.8.1-2	unknown
+flutter	debian	libidn2-0	2.3.3-1+b1	unknown
+flutter	debian	libk5crypto3	1.20.1-2+deb12u5	unknown
+flutter	debian	libkeyutils1	1.6.3-2	unknown
+flutter	debian	libkrb5-3	1.20.1-2+deb12u5	unknown
+flutter	debian	libkrb5support0	1.20.1-2+deb12u5	unknown
+flutter	debian	libldap-2.5-0	2.5.13+dfsg-5	unknown
+flutter	debian	liblz4-1	1.9.4-1	unknown
+flutter	debian	liblzma5	5.4.1-1+deb12u2	unknown
+flutter	debian	libmd0	1.0.4-2	unknown
+flutter	debian	libmount1	2.38.1-5+deb12u3	unknown
+flutter	debian	libnettle8	3.8.1-2	unknown
+flutter	debian	libnghttp2-14	1.52.0-1+deb12u3	unknown
+flutter	debian	libp11-kit0	0.24.1-2	unknown
+flutter	debian	libpam-modules	1.5.2-6+deb12u2	unknown
+flutter	debian	libpam-modules-bin	1.5.2-6+deb12u2	unknown
+flutter	debian	libpam-runtime	1.5.2-6+deb12u2	unknown
+flutter	debian	libpam0g	1.5.2-6+deb12u2	unknown
+flutter	debian	libpcre2-8-0	10.42-1+deb12u2	unknown
+flutter	debian	libperl5.36	5.36.0-7+deb12u4	unknown
+flutter	debian	libpsl5	0.21.2-1	unknown
+flutter	debian	librtmp1	2.4+20151223.gitfa8646d.1-2+b2	unknown
+flutter	debian	libsasl2-2	2.1.28+dfsg-10+deb12u1	unknown
+flutter	debian	libsasl2-modules-db	2.1.28+dfsg-10+deb12u1	unknown
+flutter	debian	libseccomp2	2.5.4-1+deb12u1	unknown
+flutter	debian	libselinux1	3.4-1+b6	unknown
+flutter	debian	libsemanage-common	3.4-1	unknown
+flutter	debian	libsemanage2	3.4-1+b5	unknown
+flutter	debian	libsepol2	3.4-2.1	unknown
+flutter	debian	libsmartcols1	2.38.1-5+deb12u3	unknown
+flutter	debian	libss2	1.47.0-2+b2	unknown
+flutter	debian	libssh2-1	1.10.0-3+deb12u1	unknown
+flutter	debian	libssl3	3.0.22-1~deb12u2	unknown
+flutter	debian	libstdc++6	12.2.0-14+deb12u1	unknown
+flutter	debian	libsystemd0	252.39-1~deb12u2	unknown
+flutter	debian	libtasn1-6	4.19.0-2+deb12u1	unknown
+flutter	debian	libtinfo6	6.4-4	unknown
+flutter	debian	libudev1	252.39-1~deb12u2	unknown
+flutter	debian	libunistring2	1.0-2	unknown
+flutter	debian	libuuid1	2.38.1-5+deb12u3	unknown
+flutter	debian	libxxhash0	0.8.1-1	unknown
+flutter	debian	libzstd1	1.5.4+dfsg2-5	unknown
+flutter	debian	login	1:4.13+dfsg1-1+deb12u2	unknown
+flutter	debian	logsave	1.47.0-2+b2	unknown
+flutter	debian	mawk	1.3.4.20200120-3.1	unknown
+flutter	debian	mount	2.38.1-5+deb12u3	unknown
+flutter	debian	ncurses-base	6.4-4	unknown
+flutter	debian	ncurses-bin	6.4-4	unknown
+flutter	debian	openssl	3.0.22-1~deb12u2	unknown
+flutter	debian	passwd	1:4.13+dfsg1-1+deb12u2	unknown
+flutter	debian	perl	5.36.0-7+deb12u4	unknown
+flutter	debian	perl-base	5.36.0-7+deb12u4	unknown
+flutter	debian	perl-modules-5.36	5.36.0-7+deb12u4	unknown
+flutter	debian	sed	4.9-1+deb12u1	unknown
+flutter	debian	sysvinit-utils	3.06-4	unknown
+flutter	debian	tar	1.34+dfsg-1.2+deb12u1	unknown
+flutter	debian	tzdata	2026c-0+deb12u1	unknown
+flutter	debian	unzip	6.0-28+deb12u1	unknown
+flutter	debian	usr-is-merged	37~deb12u1	unknown
+flutter	debian	util-linux	2.38.1-5+deb12u3	unknown
+flutter	debian	util-linux-extra	2.38.1-5+deb12u3	unknown
+flutter	debian	xz-utils	5.4.1-1+deb12u2	unknown
+flutter	debian	zlib1g	1:1.2.13.dfsg-1	unknown
+git	alpine	alpine-baselayout	3.6.5-r0	GPL-2.0-only
+git	alpine	alpine-baselayout-data	3.6.5-r0	GPL-2.0-only
+git	alpine	alpine-keys	2.4-r1	MIT
+git	alpine	apk-tools	2.14.4-r1	GPL-2.0-only
+git	alpine	bash	5.2.26-r0	GPL-3.0-or-later
+git	alpine	brotli-libs	1.1.0-r2	MIT
+git	alpine	busybox	1.36.1-r31	GPL-2.0-only
+git	alpine	busybox-binsh	1.36.1-r31	GPL-2.0-only
+git	alpine	c-ares	1.33.1-r0	MIT
+git	alpine	ca-certificates	20261020-r0	MPL-2.0 AND MIT
+git	alpine	ca-certificates-bundle	20260413-r0	MPL-2.0 AND MIT
+git	alpine	curl	8.14.1-r2	curl
+git	alpine	git	2.45.4-r0	GPL-2.0-only
+git	alpine	git-daemon	2.45.4-r0	GPL-2.0-only
+git	alpine	git-init-template	2.45.4-r0	GPL-2.0-only
+git	alpine	github-cli	2.47.0-r4	MIT
+git	alpine	gmp	6.3.0-r1	LGPL-3.0-or-later OR GPL-2.0-or-later
+git	alpine	jq	1.7.1-r0	MIT
+git	alpine	libcrypto3	3.3.7-r0	Apache-2.0
+git	alpine	libcurl	8.14.1-r2	curl
+git	alpine	libedit	20240517.3.1-r0	BSD-3-Clause
+git	alpine	libexpat	2.8.1-r0	MIT
+git	alpine	libffi	3.4.6-r0	MIT
+git	alpine	libgcc	13.2.1_git20240309-r1	GPL-2.0-or-later AND LGPL-2.1-or-later
+git	alpine	libidn2	2.3.7-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+git	alpine	libncursesw	6.4_p20240420-r2	X11
+git	alpine	libpsl	0.21.5-r1	MIT
+git	alpine	libssl3	3.3.7-r0	Apache-2.0
+git	alpine	libucontext	1.2-r3	ISC
+git	alpine	libunistring	1.2-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+git	alpine	musl	1.2.5-r3	MIT
+git	alpine	musl-utils	1.2.5-r3	MIT AND BSD-2-Clause AND GPL-2.0-or-later
+git	alpine	ncurses-terminfo-base	6.4_p20240420-r2	X11
+git	alpine	nghttp2-libs	1.62.1-r0	MIT
+git	alpine	oniguruma	6.9.9-r0	BSD-2-Clause
+git	alpine	openssh-client-common	9.7_p1-r5	SSH-OpenSSH
+git	alpine	openssh-client-default	9.7_p1-r5	SSH-OpenSSH
+git	alpine	openssh-keygen	9.7_p1-r5	SSH-OpenSSH
+git	alpine	openssh-server	9.7_p1-r5	SSH-OpenSSH
+git	alpine	openssh-server-common	9.7_p1-r5	SSH-OpenSSH
+git	alpine	pcre2	10.43-r0	BSD-3-Clause
+git	alpine	readline	8.2.10-r0	GPL-3.0-or-later
+git	alpine	ruby	3.3.10-r0	Ruby AND BSD-2-Clause AND MIT
+git	alpine	ruby-libs	3.3.10-r0	Ruby AND BSD-2-Clause AND MIT
+git	alpine	scanelf	1.3.7-r2	GPL-2.0-only
+git	alpine	socat	1.8.0.0-r0	GPL-2.0-only WITH OpenSSL-Exception
+git	alpine	ssl_client	1.36.1-r31	GPL-2.0-only
+git	alpine	yaml	0.2.5-r2	MIT
+git	alpine	zlib	1.3.2-r0	Zlib
+git	alpine	zstd-libs	1.5.6-r0	BSD-3-Clause OR GPL-2.0-or-later
+imagegen	fedora	alternatives	1.33-5.fc44	GPL-2.0-only
+imagegen	fedora	audit-libs	4.2.1-1.fc44	LGPL-2.0-or-later
+imagegen	fedora	authselect	1.7.1-1.fc44	GPL-3.0-or-later
+imagegen	fedora	authselect-libs	1.7.1-1.fc44	GPL-3.0-or-later
+imagegen	fedora	bash	5.3.9-3.fc44	GPL-3.0-or-later
+imagegen	fedora	bzip2	1.0.8-23.fc44	BSD-4-Clause
+imagegen	fedora	bzip2-libs	1.0.8-23.fc44	BSD-4-Clause
+imagegen	fedora	ca-certificates	2026.2.92_v9.0.319-2.fc44	MIT AND GPL-2.0-or-later
+imagegen	fedora	coreutils	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+imagegen	fedora	coreutils-common	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+imagegen	fedora	cracklib	2.10.3-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	crypto-policies	20251128-3.git19878fe.fc44	LGPL-2.1-or-later
+imagegen	fedora	curl	8.18.0-14.fc44	curl
+imagegen	fedora	cyrus-sasl-lib	2.1.28-35.fc44	BSD-Attribution-HPND-disclaimer
+imagegen	fedora	dnf5	5.4.6.0-1.fc44	GPL-2.0-or-later
+imagegen	fedora	dnf5-plugins	5.4.6.0-1.fc44	LGPL-2.1-or-later AND GPL-2.0-or-later
+imagegen	fedora	elfutils-default-yama-scope	0.196-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+imagegen	fedora	elfutils-libelf	0.196-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+imagegen	fedora	elfutils-libs	0.196-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+imagegen	fedora	expat	2.9.0-1.fc44	MIT
+imagegen	fedora	fedora-gpg-keys	44-2	MIT
+imagegen	fedora	fedora-release-common	44-18	MIT
+imagegen	fedora	fedora-release-container	44-18	MIT
+imagegen	fedora	fedora-release-identity-container	44-18	MIT
+imagegen	fedora	fedora-repos	44-2	MIT
+imagegen	fedora	file-libs	5.46-10.fc44	BSD-2-Clause-Darwin AND BSD-2-Clause
+imagegen	fedora	filesystem	3.18-52.fc44	LicenseRef-Fedora-Public-Domain
+imagegen	fedora	findutils	4.10.0-7.fc44	GPL-3.0-or-later
+imagegen	fedora	fmt	11.2.0-4.fc44	MIT
+imagegen	fedora	gawk	5.3.2-3.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause
+imagegen	fedora	gdbm	1.23-11.fc44	GPL-3.0-or-later
+imagegen	fedora	gdbm-libs	1.23-11.fc44	GPL-3.0-or-later
+imagegen	fedora	glib2	2.88.4-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	glibc	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+imagegen	fedora	glibc-common	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+imagegen	fedora	glibc-minimal-langpack	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+imagegen	fedora	gmp	6.3.0-5.fc44	(LGPL-3.0-or-later OR GPL-2.0-or-later OR (LGPL-3.0-or-later AND GPL-2.0-or-later)) AND GFDL-1.3-invariants-or-later
+imagegen	fedora	gnulib-l10n	20241231-2.fc44	LGPL-2.1-or-later
+imagegen	fedora	gnupg2	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+imagegen	fedora	gnupg2-dirmngr	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+imagegen	fedora	gnupg2-gpg-agent	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+imagegen	fedora	gnupg2-gpgconf	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+imagegen	fedora	gnupg2-keyboxd	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+imagegen	fedora	gnupg2-verify	2.4.9-16.fc44	CC0-1.0 AND GPL-2.0-or-later AND GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later AND (BSD-3-Clause OR LGPL-3.0-or-later OR GPL-2.0-or-later) AND CC-BY-4.0 AND MIT
+imagegen	fedora	gnutls	3.8.13-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+imagegen	fedora	gpg-pubkey	36f612dcf27f7d1a48a835e4dbfcf71c6d9f90a6-6786af3b	pubkey
+imagegen	fedora	grep	3.12-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND GPL-2.0-or-later AND LGPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+imagegen	fedora	gzip	1.14-2.fc44	GPL-3.0-or-later AND GFDL-1.3-only
+imagegen	fedora	hwdata	0.412-1.fc44	GPL-2.0-or-later
+imagegen	fedora	ima-evm-utils-libs	1.6.2-8.fc44	LGPL-2.0-or-later
+imagegen	fedora	json-c	0.18-8.fc44	MIT
+imagegen	fedora	keyutils-libs	1.6.3-7.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+imagegen	fedora	krb5-libs	1.22.2-4.fc44	Brian-Gladman-2-Clause AND BSD-2-Clause AND (BSD-2-Clause OR GPL-2.0-or-later) AND BSD-2-Clause-first-lines AND BSD-3-Clause AND BSD-4-Clause AND CMU-Mach-nodoc AND FSFULLRWD AND HPND AND HPND-export2-US AND HPND-export-US AND HPND-export-US-acknowledgement AND HPND-export-US-modify AND ISC AND MIT AND MIT-CMU AND OLDAP-2.8 AND OpenVision
+imagegen	fedora	libX11	1.8.13-3.fc44	MIT AND X11
+imagegen	fedora	libX11-common	1.8.13-3.fc44	MIT AND X11
+imagegen	fedora	libX11-xcb	1.8.13-3.fc44	MIT AND X11
+imagegen	fedora	libXau	1.0.12-4.fc44	MIT-open-group
+imagegen	fedora	libXext	1.3.6-5.fc44	MIT-open-group AND X11 AND HPND AND HPND-sell-variant AND SMLNJ AND MIT AND ISC AND HPND-doc AND HPND-doc-sell
+imagegen	fedora	libXxf86vm	1.1.6-4.fc44	X11-distribute-modifications-variant
+imagegen	fedora	libacl	2.4.0-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libarchive	3.8.7-1.fc44	BSD-2-Clause AND FSFULLR AND GPL-2.0-or-later WITH Libtool-exception AND BSD-3-Clause AND FSFUL
+imagegen	fedora	libassuan	2.5.7-5.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+imagegen	fedora	libattr	2.6.0-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libblkid	2.41.6-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libbrotli	1.2.1-1.fc44	MIT
+imagegen	fedora	libcap	2.78-1.fc44	BSD-3-Clause OR GPL-2.0-only
+imagegen	fedora	libcap-ng	0.9.6-1.fc44	LGPL-2.0-or-later
+imagegen	fedora	libcbor	0.13.0-2.fc44	MIT
+imagegen	fedora	libcom_err	1.47.3-4.fc44	MIT
+imagegen	fedora	libcurl	8.18.0-14.fc44	curl
+imagegen	fedora	libdisplay-info	0.3.0-1.fc44	MIT
+imagegen	fedora	libdnf5	5.4.6.0-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libdnf5-cli	5.4.6.0-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libdrm	2.4.134-1.fc44	MIT
+imagegen	fedora	libeconf	0.7.9-3.fc44	MIT
+imagegen	fedora	libedit	3.1-59.20260512cvs.fc44	BSD-3-Clause AND BSD-2-Clause AND ISC
+imagegen	fedora	libevent	2.1.13-1.fc44	BSD-3-Clause AND ISC AND LicenseRef-Fedora-Public-Domain
+imagegen	fedora	libffi	3.5.2-2.fc44	MIT AND CC-PDDC AND (GPL-3.0-or-later WITH Texinfo-exception)
+imagegen	fedora	libfido2	1.16.0-5.fc44	BSD-2-Clause
+imagegen	fedora	libfsverity	1.6-4.fc44	LicenseRef-Callaway-BSD
+imagegen	fedora	libgcc	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+imagegen	fedora	libgcrypt	1.12.2-1.fc44	BSD-3-Clause AND (BSD-3-Clause OR GPL-2.0-only) AND GPL-2.0-or-later AND LGPL-2.1-or-later AND LGPL-2.0-or-later AND MIT-Modern-Variant
+imagegen	fedora	libglvnd	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+imagegen	fedora	libglvnd-egl	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+imagegen	fedora	libglvnd-glx	1.7.0-9.fc44	MIT-feh AND MIT-Modern-Variant AND BSD-1-Clause AND BSD-3-Clause AND GPL-3.0-or-later WITH Autoconf-exception-macro
+imagegen	fedora	libgomp	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+imagegen	fedora	libgpg-error	1.58-2.fc44	LGPL-2.1-or-later AND (BSD-3-Clause OR LGPL-2.1-or-later) AND FSFULLR AND GPL-2.0-or-later
+imagegen	fedora	libidn2	2.3.8-3.fc44	(GPL-2.0-or-later OR LGPL-3.0-or-later) AND GPL-3.0-or-later
+imagegen	fedora	libksba	1.6.7-5.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later AND (LGPL-3.0-or-later OR GPL-2.0-or-later)
+imagegen	fedora	libmodulemd	2.15.3-1.fc44	MIT
+imagegen	fedora	libmount	2.41.6-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libnghttp2	1.68.0-5.fc44	MIT
+imagegen	fedora	libnghttp3	1.18.0-1.fc44	MIT
+imagegen	fedora	libnsl2	2.0.1-5.fc44	BSD-3-Clause AND LGPL-2.1-or-later
+imagegen	fedora	libpciaccess	0.16-17.fc44	HPND AND MIT
+imagegen	fedora	libpsl	0.21.5-7.fc44	MIT
+imagegen	fedora	libpwquality	1.4.5-15.fc44	BSD-3-Clause OR GPL-2.0-or-later
+imagegen	fedora	librepo	1.21.2-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libselinux	3.11-2.fc44	LicenseRef-Fedora-Public-Domain
+imagegen	fedora	libsemanage	3.11-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libsepol	3.11-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libsmartcols	2.41.6-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libsolv	0.7.41-1.fc44	BSD-3-Clause
+imagegen	fedora	libssh	0.12.2-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libssh-config	0.12.2-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libstdc++	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+imagegen	fedora	libtasn1	4.21.0-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+imagegen	fedora	libtirpc	1.3.8-0.fc44	SISSL AND BSD-3-Clause
+imagegen	fedora	libtool-ltdl	2.5.4-10.fc44	LGPLv2+
+imagegen	fedora	libunistring	1.1-11.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+imagegen	fedora	libusb1	1.0.30-1.fc44	LGPL-2.1-or-later
+imagegen	fedora	libuuid	2.41.6-1.fc44	BSD-3-Clause
+imagegen	fedora	libverto	0.3.2-12.fc44	MIT
+imagegen	fedora	libwayland-client	1.26.0-1.fc44	MIT
+imagegen	fedora	libxcb	1.17.0-7.fc44	X11
+imagegen	fedora	libxcrypt	4.5.2-3.fc44	LGPL-2.1-or-later AND BSD-3-Clause AND BSD-2-Clause AND BSD-2-Clause-FreeBSD AND 0BSD AND CC0-1.0 AND LicenseRef-Fedora-Public-Domain
+imagegen	fedora	libxml2	2.12.10-6.fc44	MIT AND ISC-Veillard AND W3C
+imagegen	fedora	libxshmfence	1.3.2-8.fc44	HPND-sell-variant
+imagegen	fedora	libyaml	0.2.5-18.fc44	MIT
+imagegen	fedora	libzstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
+imagegen	fedora	llvm-filesystem	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+imagegen	fedora	llvm-libs	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+imagegen	fedora	lm_sensors-libs	3.6.0-24.fc44	LGPL-2.1-or-later
+imagegen	fedora	lua-libs	5.4.8-5.fc44	MIT
+imagegen	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
+imagegen	fedora	mesa-dri-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+imagegen	fedora	mesa-filesystem	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+imagegen	fedora	mesa-libEGL	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+imagegen	fedora	mesa-libGL	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+imagegen	fedora	mesa-libgbm	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+imagegen	fedora	mesa-vulkan-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+imagegen	fedora	mpfr	4.2.2-3.fc44	LGPL-3.0-or-later
+imagegen	fedora	ncurses-base	6.6-1.fc44	MIT-open-group
+imagegen	fedora	ncurses-libs	6.6-1.fc44	MIT-open-group
+imagegen	fedora	nettle	3.10.1-3.fc44	LGPL-3.0-or-later OR GPL-2.0-or-later
+imagegen	fedora	ngtcp2	1.22.1-1.fc44	MIT
+imagegen	fedora	ngtcp2-crypto-ossl	1.22.1-1.fc44	MIT
+imagegen	fedora	npth	1.8-4.fc44	LGPL-2.1-or-later
+imagegen	fedora	openldap	2.6.15-1.fc44	OLDAP-2.8
+imagegen	fedora	openssl-libs	3.5.9-1.fc44	Apache-2.0
+imagegen	fedora	p11-kit	0.26.5-1.fc44	BSD-3-Clause
+imagegen	fedora	p11-kit-trust	0.26.5-1.fc44	BSD-3-Clause
+imagegen	fedora	pam	1.7.2-2.fc44	BSD-3-Clause AND GPL-2.0-or-later
+imagegen	fedora	pam-libs	1.7.2-2.fc44	BSD-3-Clause AND GPL-2.0-or-later
+imagegen	fedora	pcre2	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+imagegen	fedora	pcre2-syntax	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+imagegen	fedora	popt	1.19-10.fc44	MIT AND LicenseRef-Fedora-Public-Domain
+imagegen	fedora	publicsuffix-list-dafsa	20260116-1.fc44	MPL-2.0
+imagegen	fedora	readline	8.3-4.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+imagegen	fedora	rootfiles	9.0-6.fc44	LicenseRef-Not-Copyrightable
+imagegen	fedora	rpm	6.0.2-1.fc44	GPL-2.0-or-later
+imagegen	fedora	rpm-build-libs	6.0.2-1.fc44	GPL-2.0-or-later
+imagegen	fedora	rpm-libs	6.0.2-1.fc44	GPL-2.0-or-later OR LGPL-2.1-or-later
+imagegen	fedora	rpm-sequoia	1.10.3-1.fc44	LGPL-2.0-or-later AND Apache-2.0 AND BSD-3-Clause AND BSL-1.0 AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (Apache-2.0 OR MIT) AND (Unlicense OR MIT)
+imagegen	fedora	rpm-sign-libs	6.0.2-1.fc44	GPL-2.0-or-later
+imagegen	fedora	sdbus-cpp	2.2.1-2.fc44	LGPL-2.1-only
+imagegen	fedora	sed	4.9-7.fc44	GPL-3.0-or-later
+imagegen	fedora	setup	2.15.0-28.fc44	LicenseRef-Fedora-Public-Domain
+imagegen	fedora	shadow-utils	4.19.0-7.fc44	BSD-3-Clause AND GPL-2.0-or-later
+imagegen	fedora	spirv-tools-libs	2026.1-1.fc44	Apache-2.0
+imagegen	fedora	sqlite-libs	3.51.2-2.fc44	blessing
+imagegen	fedora	sudo	1.9.17-10.p2.fc44	ISC
+imagegen	fedora	systemd-libs	259.10-1.fc44	LGPL-2.1-or-later AND MIT
+imagegen	fedora	systemd-standalone-sysusers	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+imagegen	fedora	tar	1.35-9.fc44	GPL-3.0-or-later
+imagegen	fedora	tpm2-tss	4.1.3-9.fc44	BSD-2-Clause
+imagegen	fedora	tzdata	2026e-1.fc44	LicenseRef-Fedora-Public-Domain AND (GPL-2.0-only WITH ClassPath-exception-2.0)
+imagegen	fedora	util-linux-core	2.41.6-1.fc44	GPL-2.0-only AND GPL-2.0-or-later AND BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause-UC AND LicenseRef-Fedora-Public-Domain
+imagegen	fedora	vim-data	9.2.1202-1.fc44	Vim AND LGPL-2.1-or-later AND MIT AND GPL-1.0-only AND (GPL-2.0-only OR Vim) AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later AND OPUBL-1.0 AND Apache-2.0 WITH Swift-exception
+imagegen	fedora	vim-minimal	9.2.1202-1.fc44	Vim AND LGPL-2.1-or-later AND MIT AND GPL-1.0-only AND (GPL-2.0-only OR Vim) AND Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-or-later AND GPL-3.0-or-later AND OPUBL-1.0 AND Apache-2.0 WITH Swift-exception
+imagegen	fedora	vulkan-loader	1.4.341.0-1.fc44	Apache-2.0
+imagegen	fedora	xz	5.8.2-2.fc44	0BSD AND GPL-2.0-or-later AND LicenseRef-Fedora-Public-Domain
+imagegen	fedora	xz-libs	5.8.2-2.fc44	0BSD
+imagegen	fedora	zchunk-libs	1.5.4-1.fc44	BSD-2-Clause AND MIT
+imagegen	fedora	zlib-ng-compat	2.3.3-3.fc44	Zlib
+imagegen	fedora	zstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
+inference	fedora	alternatives	1.33-5.fc44	GPL-2.0-only
+inference	fedora	audit-libs	4.2.1-1.fc44	LGPL-2.0-or-later
+inference	fedora	bash	5.3.9-3.fc44	GPL-3.0-or-later
+inference	fedora	bzip2-libs	1.0.8-23.fc44	BSD-4-Clause
+inference	fedora	ca-certificates	2026.2.92_v9.0.319-2.fc44	MIT AND GPL-2.0-or-later
+inference	fedora	caddy	2.10.2-9.fc44	Apache-2.0 AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND CC0-1.0 AND ISC AND MIT AND MPL-2.0
+inference	fedora	coreutils	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+inference	fedora	coreutils-common	9.10-5.fc44	GPL-3.0-or-later AND GFDL-1.3-no-invariants-or-later AND LGPL-2.1-or-later AND LGPL-3.0-or-later
+inference	fedora	cracklib	2.10.3-1.fc44	LGPL-2.1-or-later
+inference	fedora	cracklib-dicts	2.10.3-1.fc44	LGPL-2.1-or-later
+inference	fedora	crypto-policies	20251128-3.git19878fe.fc44	LGPL-2.1-or-later
+inference	fedora	cryptsetup-libs	2.8.8-1.fc44	GPL-2.0-or-later WITH cryptsetup-OpenSSL-exception AND LGPL-2.1-or-later WITH cryptsetup-OpenSSL-exception
+inference	fedora	curl	8.18.0-14.fc44	curl
+inference	fedora	cyrus-sasl-lib	2.1.28-35.fc44	BSD-Attribution-HPND-disclaimer
+inference	fedora	dbus	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+inference	fedora	dbus-broker	37-8.fc44	Apache-2.0 AND LGPL-2.0-or-later AND LGPL-2.1-or-later AND (Apache-2.0 OR LGPL-2.1-or-later)
+inference	fedora	dbus-common	1.16.2-1.fc44	(AFL-2.1 OR GPL-2.0-or-later) AND GPL-2.0-or-later
+inference	fedora	device-mapper	1.02.212-2.fc44	GPL-2.0-only
+inference	fedora	device-mapper-libs	1.02.212-2.fc44	LGPL-2.1-only
+inference	fedora	diffutils	3.12-5.fc44	GPL-3.0-or-later
+inference	fedora	dnf5	5.4.6.0-1.fc44	GPL-2.0-or-later
+inference	fedora	elfutils-debuginfod-client	0.197-1.fc44	GPL-3.0-or-later AND (GPL-2.0-or-later OR LGPL-3.0-or-later)
+inference	fedora	elfutils-default-yama-scope	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+inference	fedora	elfutils-libelf	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+inference	fedora	elfutils-libs	0.197-1.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+inference	fedora	expat	2.9.0-1.fc44	MIT
+inference	fedora	fedora-gpg-keys	44-2	MIT
+inference	fedora	fedora-logos-httpd	42.0.1-3.fc44	LicenseRef-Fedora-Logos
+inference	fedora	fedora-release-common	44-18	MIT
+inference	fedora	fedora-release-container	44-18	MIT
+inference	fedora	fedora-release-identity-container	44-18	MIT
+inference	fedora	fedora-repos	44-2	MIT
+inference	fedora	filesystem	3.18-52.fc44	LicenseRef-Fedora-Public-Domain
+inference	fedora	findutils	4.10.0-7.fc44	GPL-3.0-or-later
+inference	fedora	fmt	11.2.0-4.fc44	MIT
+inference	fedora	fonts-filesystem	5.0.0-2.fc44	MIT
+inference	fedora	gawk	5.3.2-3.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND LGPL-2.1-or-later AND BSD-3-Clause
+inference	fedora	gdbm-libs	1.23-11.fc44	GPL-3.0-or-later
+inference	fedora	glib2	2.88.4-1.fc44	LGPL-2.1-or-later
+inference	fedora	glibc	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+inference	fedora	glibc-common	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+inference	fedora	glibc-minimal-langpack	2.43-9.fc44	LGPL-2.1-or-later AND SunPro AND LGPL-2.1-or-later WITH GCC-exception-2.0 AND BSD-3-Clause AND GPL-2.0-or-later AND LGPL-2.1-or-later WITH GNU-compiler-exception AND GPL-2.0-only AND ISC AND LicenseRef-Fedora-Public-Domain AND HPND AND CMU-Mach AND LGPL-2.0-or-later AND Unicode-3.0 AND GFDL-1.1-or-later AND GPL-1.0-or-later AND FSFUL AND MIT AND Inner-Net-2.0 AND X11 AND GPL-2.0-or-later WITH GCC-exception-2.0 AND GFDL-1.3-only AND GFDL-1.1-only AND GPL-3.0-or-later AND GPL-3.0-or-later WITH Autoconf-exception-generic-3.0 AND GPL-3.0-or-later WITH Texinfo-exception
+inference	fedora	gmp	6.3.0-5.fc44	(LGPL-3.0-or-later OR GPL-2.0-or-later OR (LGPL-3.0-or-later AND GPL-2.0-or-later)) AND GFDL-1.3-invariants-or-later
+inference	fedora	gnulib-l10n	20241231-2.fc44	LGPL-2.1-or-later
+inference	fedora	gnutls	3.8.13-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+inference	fedora	gpg-pubkey	36f612dcf27f7d1a48a835e4dbfcf71c6d9f90a6-6786af3b	pubkey
+inference	fedora	grep	3.12-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND LGPL-2.1-or-later AND GPL-2.0-or-later AND LGPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+inference	fedora	gzip	1.14-2.fc44	GPL-3.0-or-later AND GFDL-1.3-only
+inference	fedora	hwdata	0.412-1.fc44	GPL-2.0-or-later
+inference	fedora	json-c	0.18-8.fc44	MIT
+inference	fedora	julietaula-montserrat-fonts	9.000-4.fc44	OFL-1.1
+inference	fedora	kbd	2.9.0-4.fc44	GPL-2.0-or-later
+inference	fedora	kbd-legacy	2.9.0-4.fc44	GPL-2.0-or-later
+inference	fedora	kbd-misc	2.9.0-4.fc44	GPL-2.0-or-later
+inference	fedora	keyutils-libs	1.6.3-7.fc44	GPL-2.0-or-later AND LGPL-2.1-or-later
+inference	fedora	kmod	34.2-4.fc44	GPL-2.0-or-later AND GPL-3.0-or-later AND FSFUL AND FSFULLRWD AND LGPL-2.1-only AND LGPL-2.1-or-later AND X11
+inference	fedora	kmod-libs	34.2-4.fc44	GPL-2.0-or-later AND GPL-3.0-or-later AND FSFUL AND FSFULLRWD AND LGPL-2.1-only AND LGPL-2.1-or-later AND X11
+inference	fedora	krb5-libs	1.22.2-4.fc44	Brian-Gladman-2-Clause AND BSD-2-Clause AND (BSD-2-Clause OR GPL-2.0-or-later) AND BSD-2-Clause-first-lines AND BSD-3-Clause AND BSD-4-Clause AND CMU-Mach-nodoc AND FSFULLRWD AND HPND AND HPND-export2-US AND HPND-export-US AND HPND-export-US-acknowledgement AND HPND-export-US-modify AND ISC AND MIT AND MIT-CMU AND OLDAP-2.8 AND OpenVision
+inference	fedora	libX11	1.8.13-3.fc44	MIT AND X11
+inference	fedora	libX11-common	1.8.13-3.fc44	MIT AND X11
+inference	fedora	libX11-xcb	1.8.13-3.fc44	MIT AND X11
+inference	fedora	libXau	1.0.12-4.fc44	MIT-open-group
+inference	fedora	libacl	2.4.0-1.fc44	LGPL-2.1-or-later
+inference	fedora	libarchive	3.8.7-1.fc44	BSD-2-Clause AND FSFULLR AND GPL-2.0-or-later WITH Libtool-exception AND BSD-3-Clause AND FSFUL
+inference	fedora	libattr	2.6.0-1.fc44	LGPL-2.1-or-later
+inference	fedora	libblkid	2.41.6-1.fc44	LGPL-2.1-or-later
+inference	fedora	libbpf	1.6.3-2.fc44	LGPL-2.1-only OR BSD-2-Clause
+inference	fedora	libbrotli	1.2.1-1.fc44	MIT
+inference	fedora	libcap	2.78-1.fc44	BSD-3-Clause OR GPL-2.0-only
+inference	fedora	libcap-ng	0.9.6-1.fc44	LGPL-2.0-or-later
+inference	fedora	libcbor	0.13.0-2.fc44	MIT
+inference	fedora	libcom_err	1.47.3-4.fc44	MIT
+inference	fedora	libcurl	8.18.0-14.fc44	curl
+inference	fedora	libdisplay-info	0.3.0-1.fc44	MIT
+inference	fedora	libdnf5	5.4.6.0-1.fc44	LGPL-2.1-or-later
+inference	fedora	libdnf5-cli	5.4.6.0-1.fc44	LGPL-2.1-or-later
+inference	fedora	libdrm	2.4.134-1.fc44	MIT
+inference	fedora	libeconf	0.7.9-3.fc44	MIT
+inference	fedora	libedit	3.1-59.20260512cvs.fc44	BSD-3-Clause AND BSD-2-Clause AND ISC
+inference	fedora	libevent	2.1.13-1.fc44	BSD-3-Clause AND ISC AND LicenseRef-Fedora-Public-Domain
+inference	fedora	libfdisk	2.41.6-1.fc44	LGPL-2.1-or-later
+inference	fedora	libffi	3.5.2-2.fc44	MIT AND CC-PDDC AND (GPL-3.0-or-later WITH Texinfo-exception)
+inference	fedora	libfido2	1.16.0-5.fc44	BSD-2-Clause
+inference	fedora	libgcc	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+inference	fedora	libidn2	2.3.8-3.fc44	(GPL-2.0-or-later OR LGPL-3.0-or-later) AND GPL-3.0-or-later
+inference	fedora	libmodulemd	2.15.3-1.fc44	MIT
+inference	fedora	libmount	2.41.6-1.fc44	LGPL-2.1-or-later
+inference	fedora	libnghttp2	1.68.0-5.fc44	MIT
+inference	fedora	libnghttp3	1.18.0-1.fc44	MIT
+inference	fedora	libpciaccess	0.16-17.fc44	HPND AND MIT
+inference	fedora	libpkgconf	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+inference	fedora	libpsl	0.21.5-7.fc44	MIT
+inference	fedora	libpwquality	1.4.5-15.fc44	BSD-3-Clause OR GPL-2.0-or-later
+inference	fedora	librepo	1.21.2-1.fc44	LGPL-2.1-or-later
+inference	fedora	libseccomp	2.6.1-2.fc44	LGPL-2.1-only
+inference	fedora	libselinux	3.11-2.fc44	LicenseRef-Fedora-Public-Domain
+inference	fedora	libsemanage	3.11-1.fc44	LGPL-2.1-or-later
+inference	fedora	libsepol	3.11-1.fc44	LGPL-2.1-or-later
+inference	fedora	libsmartcols	2.41.6-1.fc44	LGPL-2.1-or-later
+inference	fedora	libsolv	0.7.41-1.fc44	BSD-3-Clause
+inference	fedora	libssh	0.12.2-1.fc44	LGPL-2.1-or-later
+inference	fedora	libssh-config	0.12.2-1.fc44	LGPL-2.1-or-later
+inference	fedora	libstdc++	16.2.1-3.fc44	GPL-3.0-or-later AND LGPL-3.0-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND (GPL-3.0-or-later WITH Texinfo-exception) AND (LGPL-2.1-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GCC-exception-2.0) AND (GPL-2.0-or-later WITH GNU-compiler-exception) AND BSL-1.0 AND GFDL-1.3-or-later AND Linux-man-pages-copyleft-2-para AND SunPro AND BSD-1-Clause AND BSD-2-Clause AND BSD-2-Clause-Views AND BSD-3-Clause AND BSD-4-Clause AND BSD-Source-Code AND Zlib AND MIT AND Apache-2.0 AND (Apache-2.0 WITH LLVM-Exception) AND ZPL-2.1 AND ISC AND LicenseRef-Fedora-Public-Domain AND HP-1986 AND curl AND Martin-Birgmeier AND HPND-Markus-Kuhn AND dtoa AND SMLNJ AND AMD-newlib AND OAR AND HPND-merchantability-variant AND HPND-Intel
+inference	fedora	libtasn1	4.21.0-1.fc44	GPL-3.0-or-later AND LGPL-2.1-or-later
+inference	fedora	libtool-ltdl	2.5.4-10.fc44	LGPLv2+
+inference	fedora	libunistring	1.1-11.fc44	GPL-2.0-or-later OR LGPL-3.0-or-later
+inference	fedora	libusb1	1.0.30-1.fc44	LGPL-2.1-or-later
+inference	fedora	libuuid	2.41.6-1.fc44	BSD-3-Clause
+inference	fedora	libverto	0.3.2-12.fc44	MIT
+inference	fedora	libwayland-client	1.26.0-1.fc44	MIT
+inference	fedora	libxcb	1.17.0-7.fc44	X11
+inference	fedora	libxcrypt	4.5.2-3.fc44	LGPL-2.1-or-later AND BSD-3-Clause AND BSD-2-Clause AND BSD-2-Clause-FreeBSD AND 0BSD AND CC0-1.0 AND LicenseRef-Fedora-Public-Domain
+inference	fedora	libxkbcommon	1.13.1-2.fc44	MIT AND X11 AND MIT-CMU
+inference	fedora	libxml2	2.12.10-6.fc44	MIT AND ISC-Veillard AND W3C
+inference	fedora	libxshmfence	1.3.2-8.fc44	HPND-sell-variant
+inference	fedora	libyaml	0.2.5-18.fc44	MIT
+inference	fedora	libzstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
+inference	fedora	llvm-filesystem	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+inference	fedora	llvm-libs	22.1.8-4.fc44	Apache-2.0 WITH LLVM-exception OR NCSA
+inference	fedora	lua-libs	5.4.8-5.fc44	MIT
+inference	fedora	lz4-libs	1.10.0-4.fc44	GPL-2.0-or-later AND BSD-2-Clause
+inference	fedora	mesa-filesystem	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+inference	fedora	mesa-vulkan-drivers	26.2.5-1.fc44	MIT AND BSD-3-Clause AND SGI-B-2.0
+inference	fedora	mpfr	4.2.2-3.fc44	LGPL-3.0-or-later
+inference	fedora	ncurses-base	6.6-1.fc44	MIT-open-group
+inference	fedora	ncurses-libs	6.6-1.fc44	MIT-open-group
+inference	fedora	nettle	3.10.1-3.fc44	LGPL-3.0-or-later OR GPL-2.0-or-later
+inference	fedora	ngtcp2	1.22.1-1.fc44	MIT
+inference	fedora	ngtcp2-crypto-ossl	1.22.1-1.fc44	MIT
+inference	fedora	openldap	2.6.15-1.fc44	OLDAP-2.8
+inference	fedora	openssl-libs	3.5.9-1.fc44	Apache-2.0
+inference	fedora	p11-kit	0.26.5-1.fc44	BSD-3-Clause
+inference	fedora	p11-kit-trust	0.26.5-1.fc44	BSD-3-Clause
+inference	fedora	pam-libs	1.7.2-2.fc44	BSD-3-Clause AND GPL-2.0-or-later
+inference	fedora	pciutils	3.15.0-1.fc44	GPL-2.0-or-later
+inference	fedora	pciutils-libs	3.15.0-1.fc44	GPL-2.0-or-later
+inference	fedora	pcre2	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+inference	fedora	pcre2-syntax	10.47-1.fc44.1	BSD-3-Clause AND FSFULLR AND X11 AND GPL-2.0-or-later AND FSFAP AND FSFUL AND GPL-3.0-or-later
+inference	fedora	pkgconf	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+inference	fedora	pkgconf-m4	2.5.1-1.fc44	GPL-2.0-or-later WITH Autoconf-exception-generic
+inference	fedora	pkgconf-pkg-config	2.5.1-1.fc44	ISC AND BSD-4-Clause AND BSD-2-Clause AND pkgconf AND MIT
+inference	fedora	popt	1.19-10.fc44	MIT AND LicenseRef-Fedora-Public-Domain
+inference	fedora	publicsuffix-list-dafsa	20260116-1.fc44	MPL-2.0
+inference	fedora	qrencode-libs	4.1.1-12.fc44	LicenseRef-Callaway-LGPLv2+
+inference	fedora	readline	8.3-4.fc44	GPL-3.0-or-later AND GPL-2.0-or-later AND GFDL-1.3-no-invariants-or-later
+inference	fedora	rpm	6.0.2-1.fc44	GPL-2.0-or-later
+inference	fedora	rpm-libs	6.0.2-1.fc44	GPL-2.0-or-later OR LGPL-2.1-or-later
+inference	fedora	rpm-sequoia	1.10.3-1.fc44	LGPL-2.0-or-later AND Apache-2.0 AND BSD-3-Clause AND BSL-1.0 AND MIT AND Unicode-3.0 AND Unicode-DFS-2016 AND (Apache-2.0 OR MIT) AND (Unlicense OR MIT)
+inference	fedora	sdbus-cpp	2.2.1-2.fc44	LGPL-2.1-only
+inference	fedora	sed	4.9-7.fc44	GPL-3.0-or-later
+inference	fedora	setup	2.15.0-28.fc44	LicenseRef-Fedora-Public-Domain
+inference	fedora	shadow-utils	4.19.0-7.fc44	BSD-3-Clause AND GPL-2.0-or-later
+inference	fedora	spirv-tools-libs	2026.1-1.fc44	Apache-2.0
+inference	fedora	sqlite-libs	3.51.2-2.fc44	blessing
+inference	fedora	systemd	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+inference	fedora	systemd-libs	259.10-1.fc44	LGPL-2.1-or-later AND MIT
+inference	fedora	systemd-networkd	259.10-1.fc44	LGPL-2.1-or-later
+inference	fedora	systemd-pam	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+inference	fedora	systemd-resolved	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+inference	fedora	systemd-shared	259.10-1.fc44	LGPL-2.1-or-later AND MIT
+inference	fedora	systemd-standalone-sysusers	259.10-1.fc44	LGPL-2.1-or-later AND MIT AND GPL-2.0-or-later
+inference	fedora	systemd-udev	259.10-1.fc44	LGPL-2.1-or-later
+inference	fedora	tar	1.35-9.fc44	GPL-3.0-or-later
+inference	fedora	tpm2-tss	4.1.3-9.fc44	BSD-2-Clause
+inference	fedora	util-linux-core	2.41.6-1.fc44	GPL-2.0-only AND GPL-2.0-or-later AND BSD-2-Clause AND BSD-3-Clause AND BSD-4-Clause-UC AND LicenseRef-Fedora-Public-Domain
+inference	fedora	vulkan-loader	1.4.341.0-1.fc44	Apache-2.0
+inference	fedora	vulkan-tools	1.4.341.0-1.fc44	Apache-2.0
+inference	fedora	xkeyboard-config	2.47-1.fc44	HPND AND HPND-sell-variant AND X11 AND X11-distribute-modifications-variant AND MIT AND MIT-open-group AND xkeyboard-config-Zinoviev
+inference	fedora	xz-libs	5.8.2-2.fc44	0BSD
+inference	fedora	zchunk-libs	1.5.4-1.fc44	BSD-2-Clause AND MIT
+inference	fedora	zlib-ng-compat	2.3.3-3.fc44	Zlib
+inference	fedora	zstd	1.5.7-5.fc44	BSD-3-Clause OR GPL-2.0-only
+proxy	alpine	acl-libs	2.3.2-r1	LGPL-2.1-or-later AND GPL-2.0-or-later
+proxy	alpine	alpine-baselayout	3.7.0-r0	GPL-2.0-only
+proxy	alpine	alpine-baselayout-data	3.7.0-r0	GPL-2.0-only
+proxy	alpine	alpine-keys	2.5-r0	MIT
+proxy	alpine	alpine-release	3.22.7-r0	MIT
+proxy	alpine	apk-tools	2.14.12-r0	GPL-2.0-only
+proxy	alpine	bash	5.2.37-r0	GPL-3.0-or-later
+proxy	alpine	busybox	1.37.0-r20	GPL-2.0-only
+proxy	alpine	busybox-binsh	1.37.0-r20	GPL-2.0-only
+proxy	alpine	ca-certificates	20261020-r0	MPL-2.0 AND MIT
+proxy	alpine	ca-certificates-bundle	20261020-r0	MPL-2.0 AND MIT
+proxy	alpine	libapk2	2.14.12-r0	GPL-2.0-only
+proxy	alpine	libcap2	2.78-r0	BSD-3-Clause OR GPL-2.0-only
+proxy	alpine	libcrypto3	3.5.9-r0	Apache-2.0
+proxy	alpine	libgcc	14.2.0-r6	GPL-2.0-or-later AND LGPL-2.1-or-later
+proxy	alpine	libncursesw	6.5_p20250503-r0	X11
+proxy	alpine	libssl3	3.5.9-r0	Apache-2.0
+proxy	alpine	libstdc++	14.2.0-r6	GPL-2.0-or-later AND LGPL-2.1-or-later
+proxy	alpine	logrotate	3.21.0-r1	GPL-2.0-or-later
+proxy	alpine	musl	1.2.5-r13	MIT
+proxy	alpine	musl-utils	1.2.5-r13	MIT AND BSD-2-Clause AND GPL-2.0-or-later
+proxy	alpine	ncurses-terminfo-base	6.5_p20250503-r0	X11
+proxy	alpine	openssl	3.5.9-r0	Apache-2.0
+proxy	alpine	popt	1.19-r4	MIT
+proxy	alpine	readline	8.2.13-r1	GPL-3.0-or-later
+proxy	alpine	scanelf	1.3.8-r1	GPL-2.0-only
+proxy	alpine	socat	1.8.1.3-r0	GPL-2.0-only WITH OpenSSL-Exception
+proxy	alpine	squid	6.12-r0	GPL-2.0-or-later
+proxy	alpine	ssl_client	1.37.0-r20	GPL-2.0-only
+proxy	alpine	zlib	1.3.2-r1	Zlib
+router	alpine	alpine-baselayout	3.7.2-r0	GPL-2.0-only
+router	alpine	alpine-baselayout-data	3.7.2-r0	GPL-2.0-only
+router	alpine	alpine-keys	2.6-r0	MIT
+router	alpine	alpine-release	3.23.7-r0	MIT
+router	alpine	apk-tools	3.0.8-r0	GPL-2.0-only
+router	alpine	brotli-libs	1.2.0-r0	MIT
+router	alpine	busybox	1.37.0-r30	GPL-2.0-only
+router	alpine	busybox-binsh	1.37.0-r30	GPL-2.0-only
+router	alpine	c-ares	1.34.9-r0	MIT
+router	alpine	ca-certificates	20261020-r0	MPL-2.0 AND MIT
+router	alpine	ca-certificates-bundle	20261020-r0	MPL-2.0 AND MIT
+router	alpine	curl	8.22.0-r0	curl
+router	alpine	libapk	3.0.8-r0	GPL-2.0-only
+router	alpine	libcap	2.78-r0	BSD-3-Clause OR GPL-2.0-only
+router	alpine	libcap-getcap	2.78-r0	BSD-3-Clause OR GPL-2.0-only
+router	alpine	libcap-setcap	2.78-r0	BSD-3-Clause OR GPL-2.0-only
+router	alpine	libcap-utils	2.78-r0	BSD-3-Clause OR GPL-2.0-only
+router	alpine	libcap2	2.78-r0	BSD-3-Clause OR GPL-2.0-only
+router	alpine	libcrypto3	3.5.9-r0	Apache-2.0
+router	alpine	libcurl	8.22.0-r0	curl
+router	alpine	libidn2	2.3.8-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+router	alpine	libpsl	0.21.5-r3	MIT
+router	alpine	libssl3	3.5.9-r0	Apache-2.0
+router	alpine	libunistring	1.4.1-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+router	alpine	mailcap	2.1.54-r0	Public Domain
+router	alpine	musl	1.2.5-r24	MIT
+router	alpine	musl-utils	1.2.5-r24	MIT AND BSD-2-Clause AND GPL-2.0-or-later
+router	alpine	nghttp2-libs	1.69.0-r0	MIT
+router	alpine	nspr	4.36-r0	MPL-2.0
+router	alpine	nss	3.123.1-r0	MPL-2.0
+router	alpine	nss-tools	3.123.1-r0	MPL-2.0
+router	alpine	scanelf	1.3.8-r2	GPL-2.0-only
+router	alpine	sqlite-libs	3.53.4-r0	blessing
+router	alpine	ssl_client	1.37.0-r30	GPL-2.0-only
+router	alpine	zlib	1.3.2-r1	Zlib
+router	alpine	zstd-libs	1.5.7-r2	BSD-3-Clause OR GPL-2.0-or-later
+vault	alpine	acl-libs	2.3.2-r1	LGPL-2.1-or-later AND GPL-2.0-or-later
+vault	alpine	alpine-baselayout	3.6.8-r1	GPL-2.0-only
+vault	alpine	alpine-baselayout-data	3.6.8-r1	GPL-2.0-only
+vault	alpine	alpine-keys	2.5-r0	MIT
+vault	alpine	alpine-release	3.21.3-r0	MIT
+vault	alpine	apk-tools	2.14.6-r3	GPL-2.0-only
+vault	alpine	bash	5.2.37-r0	GPL-3.0-or-later
+vault	alpine	brotli-libs	1.1.1-r0	MIT
+vault	alpine	busybox	1.37.0-r12	GPL-2.0-only
+vault	alpine	busybox-binsh	1.37.0-r12	GPL-2.0-only
+vault	alpine	c-ares	1.34.9-r0	MIT
+vault	alpine	ca-certificates-bundle	20241121-r1	MPL-2.0 AND MIT
+vault	alpine	coreutils	9.5-r2	GPL-3.0-or-later
+vault	alpine	coreutils-env	9.5-r2	GPL-3.0-or-later
+vault	alpine	coreutils-fmt	9.5-r2	GPL-3.0-or-later
+vault	alpine	coreutils-sha512sum	9.5-r2	GPL-3.0-or-later
+vault	alpine	curl	8.14.1-r3	curl
+vault	alpine	dumb-init	1.2.5-r3	MIT
+vault	alpine	jq	1.7.1-r0	MIT
+vault	alpine	libattr	2.5.2-r2	LGPL-2.1-or-later
+vault	alpine	libcap	2.71-r0	BSD-3-Clause OR GPL-2.0-only
+vault	alpine	libcap-getcap	2.71-r0	BSD-3-Clause OR GPL-2.0-only
+vault	alpine	libcap-setcap	2.71-r0	BSD-3-Clause OR GPL-2.0-only
+vault	alpine	libcap-utils	2.71-r0	BSD-3-Clause OR GPL-2.0-only
+vault	alpine	libcap2	2.71-r0	BSD-3-Clause OR GPL-2.0-only
+vault	alpine	libcrypto3	3.3.3-r0	Apache-2.0
+vault	alpine	libcurl	8.14.1-r3	curl
+vault	alpine	libidn2	2.3.7-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+vault	alpine	libncursesw	6.5_p20241006-r3	X11
+vault	alpine	libpsl	0.21.5-r3	MIT
+vault	alpine	libssl3	3.3.3-r0	Apache-2.0
+vault	alpine	libunistring	1.2-r0	GPL-2.0-or-later OR LGPL-3.0-or-later
+vault	alpine	musl	1.2.5-r9	MIT
+vault	alpine	musl-utils	1.2.5-r9	MIT AND BSD-2-Clause AND GPL-2.0-or-later
+vault	alpine	ncurses-terminfo-base	6.5_p20241006-r3	X11
+vault	alpine	nghttp2-libs	1.69.0-r0	MIT
+vault	alpine	oniguruma	6.9.9-r0	BSD-2-Clause
+vault	alpine	readline	8.2.13-r0	GPL-3.0-or-later
+vault	alpine	scanelf	1.3.8-r1	GPL-2.0-only
+vault	alpine	skalibs-libs	2.14.3.0-r0	ISC
+vault	alpine	socat	1.8.1.3-r0	GPL-2.0-only WITH OpenSSL-Exception
+vault	alpine	ssl_client	1.37.0-r12	GPL-2.0-only
+vault	alpine	su-exec	0.2-r3	MIT
+vault	alpine	tzdata	2025a-r0	Public-Domain
+vault	alpine	utmps-libs	0.1.2.3-r2	ISC
+vault	alpine	zlib	1.3.1-r2	Zlib
+vault	alpine	zstd-libs	1.5.6-r2	BSD-3-Clause OR GPL-2.0-or-later
+web-wrangler	debian	adduser	3.134	unknown
+web-wrangler	debian	apt	2.6.1	unknown
+web-wrangler	debian	base-files	12.4+deb12u12	unknown
+web-wrangler	debian	base-passwd	3.6.1	unknown
+web-wrangler	debian	bash	5.2.15-2+b9	unknown
+web-wrangler	debian	bsdutils	1:2.38.1-5+deb12u3	unknown
+web-wrangler	debian	coreutils	9.1-1	unknown
+web-wrangler	debian	dash	0.5.12-2	unknown
+web-wrangler	debian	debconf	1.5.82	unknown
+web-wrangler	debian	debian-archive-keyring	2023.3+deb12u2	unknown
+web-wrangler	debian	debianutils	5.7-0.5~deb12u1	unknown
+web-wrangler	debian	diffutils	1:3.8-4	unknown
+web-wrangler	debian	dpkg	1.21.22	unknown
+web-wrangler	debian	e2fsprogs	1.47.0-2+b2	unknown
+web-wrangler	debian	findutils	4.9.0-4	unknown
+web-wrangler	debian	gcc-12-base	12.2.0-14+deb12u1	unknown
+web-wrangler	debian	gpgv	2.2.40-1.1+deb12u1	unknown
+web-wrangler	debian	grep	3.8-5	unknown
+web-wrangler	debian	gzip	1.12-1	unknown
+web-wrangler	debian	hostname	3.23+nmu1	unknown
+web-wrangler	debian	init-system-helpers	1.65.2+deb12u1	unknown
+web-wrangler	debian	libacl1	2.3.1-3	unknown
+web-wrangler	debian	libapt-pkg6.0	2.6.1	unknown
+web-wrangler	debian	libattr1	1:2.5.1-4	unknown
+web-wrangler	debian	libaudit-common	1:3.0.9-1	unknown
+web-wrangler	debian	libaudit1	1:3.0.9-1	unknown
+web-wrangler	debian	libblkid1	2.38.1-5+deb12u3	unknown
+web-wrangler	debian	libbz2-1.0	1.0.8-5+b1	unknown
+web-wrangler	debian	libc-bin	2.36-9+deb12u13	unknown
+web-wrangler	debian	libc6	2.36-9+deb12u13	unknown
+web-wrangler	debian	libcap-ng0	0.8.3-1+b3	unknown
+web-wrangler	debian	libcap2	1:2.66-4+deb12u2	unknown
+web-wrangler	debian	libcom-err2	1.47.0-2+b2	unknown
+web-wrangler	debian	libcrypt1	1:4.4.33-2	unknown
+web-wrangler	debian	libdb5.3	5.3.28+dfsg2-1	unknown
+web-wrangler	debian	libdebconfclient0	0.270	unknown
+web-wrangler	debian	libext2fs2	1.47.0-2+b2	unknown
+web-wrangler	debian	libffi8	3.4.4-1	unknown
+web-wrangler	debian	libgcc-s1	12.2.0-14+deb12u1	unknown
+web-wrangler	debian	libgcrypt20	1.10.1-3	unknown
+web-wrangler	debian	libgmp10	2:6.2.1+dfsg1-1.1	unknown
+web-wrangler	debian	libgnutls30	3.7.9-2+deb12u5	unknown
+web-wrangler	debian	libgpg-error0	1.46-1	unknown
+web-wrangler	debian	libhogweed6	3.8.1-2	unknown
+web-wrangler	debian	libidn2-0	2.3.3-1+b1	unknown
+web-wrangler	debian	liblz4-1	1.9.4-1	unknown
+web-wrangler	debian	liblzma5	5.4.1-1	unknown
+web-wrangler	debian	libmd0	1.0.4-2	unknown
+web-wrangler	debian	libmount1	2.38.1-5+deb12u3	unknown
+web-wrangler	debian	libnettle8	3.8.1-2	unknown
+web-wrangler	debian	libp11-kit0	0.24.1-2	unknown
+web-wrangler	debian	libpam-modules	1.5.2-6+deb12u1	unknown
+web-wrangler	debian	libpam-modules-bin	1.5.2-6+deb12u1	unknown
+web-wrangler	debian	libpam-runtime	1.5.2-6+deb12u1	unknown
+web-wrangler	debian	libpam0g	1.5.2-6+deb12u1	unknown
+web-wrangler	debian	libpcre2-8-0	10.42-1	unknown
+web-wrangler	debian	libseccomp2	2.5.4-1+deb12u1	unknown
+web-wrangler	debian	libselinux1	3.4-1+b6	unknown
+web-wrangler	debian	libsemanage-common	3.4-1	unknown
+web-wrangler	debian	libsemanage2	3.4-1+b5	unknown
+web-wrangler	debian	libsepol2	3.4-2.1	unknown
+web-wrangler	debian	libsmartcols1	2.38.1-5+deb12u3	unknown
+web-wrangler	debian	libss2	1.47.0-2+b2	unknown
+web-wrangler	debian	libstdc++6	12.2.0-14+deb12u1	unknown
+web-wrangler	debian	libsystemd0	252.39-1~deb12u1	unknown
+web-wrangler	debian	libtasn1-6	4.19.0-2+deb12u1	unknown
+web-wrangler	debian	libtinfo6	6.4-4	unknown
+web-wrangler	debian	libudev1	252.39-1~deb12u1	unknown
+web-wrangler	debian	libunistring2	1.0-2	unknown
+web-wrangler	debian	libuuid1	2.38.1-5+deb12u3	unknown
+web-wrangler	debian	libxxhash0	0.8.1-1	unknown
+web-wrangler	debian	libzstd1	1.5.4+dfsg2-5	unknown
+web-wrangler	debian	login	1:4.13+dfsg1-1+deb12u1	unknown
+web-wrangler	debian	logsave	1.47.0-2+b2	unknown
+web-wrangler	debian	mawk	1.3.4.20200120-3.1	unknown
+web-wrangler	debian	mount	2.38.1-5+deb12u3	unknown
+web-wrangler	debian	ncurses-base	6.4-4	unknown
+web-wrangler	debian	ncurses-bin	6.4-4	unknown
+web-wrangler	debian	passwd	1:4.13+dfsg1-1+deb12u1	unknown
+web-wrangler	debian	perl-base	5.36.0-7+deb12u3	unknown
+web-wrangler	debian	sed	4.9-1	unknown
+web-wrangler	debian	sysvinit-utils	3.06-4	unknown
+web-wrangler	debian	tar	1.34+dfsg-1.2+deb12u1	unknown
+web-wrangler	debian	tzdata	2025b-0+deb12u2	unknown
+web-wrangler	debian	usr-is-merged	37~deb12u1	unknown
+web-wrangler	debian	util-linux	2.38.1-5+deb12u3	unknown
+web-wrangler	debian	util-linux-extra	2.38.1-5+deb12u3	unknown
+web-wrangler	debian	zlib1g	1:1.2.13.dfsg-1	unknown

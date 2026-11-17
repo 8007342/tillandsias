@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-cpu-and-memory-budgets-are-not-honest-to-the-jobs-inside-2067-dwqd
+    event:
+      type: progress
+      ts: "2026-11-10T00:58:19Z"
+      agent_id: linux-yoga-opus5-20261110t005819z
+      host: yoga
+      summary: |-
+        PR 2 on work/2067-dwqd: the tray's memory-stall watch names a tillandsias container held at memory.high (full avg60>=10% with rising high events) on the desktop and as warn:memory-stall:, tillandsias --memory-stall runs it on demand; the scope resolver now finds forges in tillandsias.slice. memory.high unchanged (operator chose throttle over OOM). Live litmus memory-stall-named red on trunk, green 4/4. PR 3 (forge-guard) next.

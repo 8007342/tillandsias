@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga from the v56.11.7.1 stable-promotion smoke, 2026-11-07. Promotes the markdown-only packet 1941-tlsh (plan/issues/cold-lane-agent-tls-eproto-hop-2026-11-01-yoga.md) to a ledger row, so the selector can see it.
+packets:
+  - packet_id: a-cold-opencode-lane-agent-dies-on-eproto-tls-handshake-inside-the-spliced-proxy-tunnel
+    order: 2027-e2cf
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, opencode, proxy, testing]
+    estimated_hours: 4
+    title: "A cold --opencode lane's agent dies with 'EPROTO: The TLS handshake failed' on its model request, so the smoke agent turn never answers"
+    context: |
+      Recurrence on the stable-promotion candidate v56.11.7.1 (yoga, 2026-11-07, smoke run_start 21:40:14Z): after podman reset + credential clear (credential-cold) and a clean --init (rc 0, 504 s), the one-turn smoke lane (1941-smkp prompt, TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode --prompt ...) brought the enclave up (vault unsealed, mirror seeded, proxy alive beside the lane), started opencode on opencode/big-pickle, and the agent died on its FIRST request with `Error: EPROTO: The TLS handshake failed. Does the server speak TLS on this port?`; the lane exited 1 after 168 s with no SMOKE-AGENT-OK token and no tool call (so no credential-guard line either). Prior measurements (1941-tlsh, v56.10.31.x): 4 of 5 cold lanes failed this way after 1-20 min; squid splices the opencode hosts and logs TCP_TUNNEL/200, so the handshake fails client-side inside an established CONNECT tunnel (Bun's TLS client). Today's failure is at the first request, not mid-session. This blocks the smoke's agent-turn assertion on every Linux cold lane.
+    exit_criteria:
+      - "A cold one-turn smoke lane on Linux (reset + init, then the 1941-smkp prompt) prints SMOKE-AGENT-OK in at least 5 of 5 consecutive runs on one host, or, when the model upstream is unreachable, the lane ends with a named refusal (not a bare EPROTO exit) that the smoke classifies as an upstream outage. Pre-fix result: FAILS, the agent exits 1 on EPROTO (5 of 6 cold runs measured 2026-10-31..11-07)."
+    verifiable_closure: "A cold one-turn smoke lane on Linux (reset + init, then the 1941-smkp prompt) prints SMOKE-AGENT-OK in at least 5 of 5 consecutive runs on one host, or, when the model upstream is unreachable, the lane ends with a named refusal (not a bare EPROTO exit) that the smoke classifies as an upstream outage. Pre-fix result: FAILS, the agent exits 1 on EPROTO (5 of 6 cold runs measured 2026-10-31..11-07)."
+    unscoreable: |
+      measured-by-a-live-lane: closure is a smoke measurement on a real host; the run log is the evidence.
+    next_action: >
+      Run the 1941-tlsh debug capture (opencode --log-level DEBUG, BUN_CONFIG_VERBOSE_FETCH=curl) on a cold lane: today it fails on the FIRST request, which makes it cheap to catch. Also check from the host, through the same proxy, whether opencode.ai answers TLS at that moment (an upstream answering plain text, e.g. a quota or block page, would read exactly as this error).
+    provenance: |
+      plan/issues/smoke-e2e-findings-v56.11.7.1-2026-11-07-linux-yoga.md; predecessor packet 1941-tlsh.
+    events:
+      - type: filed
+        ts: "2026-11-07T22:00:00Z"
+        host: yoga
+        summary: "filed from the v56.11.7.1 stable-promotion smoke; promotes markdown packet 1941-tlsh to a ledger row"

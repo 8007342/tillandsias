@@ -76,6 +76,10 @@
 
 set -uo pipefail
 
+# 1247-amcu: every refusal says why it refused and what would clear it, on
+# stderr, so the verdict token on stdout stays what callers parse.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 
 # ORDER 799-tb7q — resolve `jq` through the shared host-preferred /
 # toolbox-fallback dispatch instead of assuming the host has it.
@@ -427,6 +431,7 @@ if [ "${1:-}" = "--probe-fallback" ]; then
     if [ "$_pf_rc" -eq 2 ]; then
         _pf_afford "the container fallback has no tillandsias-inference image on this host, so a host without a bare-metal engine would have no inference" \
             "build it with ./build-inference.sh, then re-run --probe-fallback"
+        # affordance-ok: the why and remedy printed just above carry this verdict's affordance
         echo "blocked:fallback:image-missing:build-inference"
         exit 1
     elif [ "$_pf_rc" -ne 0 ]; then
@@ -436,6 +441,7 @@ if [ "${1:-}" = "--probe-fallback" ]; then
         podman rm -f "$DEV_CONTAINER" >>"$LOG" 2>&1 || true
         _pf_afford "podman refused to start the fallback container (the 1248-j6vd shape: invisible while a bare-metal engine serves)" \
             "fix the cause named in the verdict (full podman output in $LOG), then re-run --probe-fallback"
+        # affordance-ok: the why and remedy printed just above carry this verdict's affordance
         echo "blocked:fallback:container-start-failed:${_cause:-no-error-line-in-log} log=$LOG"
         exit 1
     fi
@@ -443,6 +449,7 @@ if [ "${1:-}" = "--probe-fallback" ]; then
         podman rm -f "$DEV_CONTAINER" >>"$LOG" 2>&1 || true
         _pf_afford "the fallback container started but its engine never answered within ${READY_BUDGET_SECS}s" \
             "read $LOG for the engine's start-up; a first run may need a longer TILLANDSIAS_DEV_INFERENCE_READY_SECS"
+        # affordance-ok: the why and remedy printed just above carry this verdict's affordance
         echo "blocked:fallback:not-ready-after:${READY_BUDGET_SECS}s"
         exit 1
     fi
@@ -457,6 +464,7 @@ if ! api_up; then
     if [ "$LANE" = "macos-native" ]; then
         echo "  why: no inference engine answers ${ENDPOINT}, and on macOS this script does not install one" >&2
         echo "  remedy: start the host-native ollama (\`ollama serve\`, or its app), then re-run" >&2
+        # affordance-ok: the why and remedy printed just above carry this verdict's affordance
         echo "blocked:no-engine:macos-native"
         exit 1
     fi
@@ -471,30 +479,30 @@ if ! api_up; then
         ensure_container
         case "$?" in
             0) ;;
-            2) echo "blocked:image-missing:build-inference"; exit 1 ;;
+            2) _afford "the container lane needs the tillandsias-inference image and this host has none" "build it with ./build-inference.sh, then re-run scripts/dev-inference-ensure.sh"; echo "blocked:image-missing:build-inference"; exit 1 ;;
             *)
                 _cause="$(tail -c +"$(( ${_log_mark:-0} + 1 ))" "$LOG" 2>/dev/null \
                     | grep -iE 'error|denied|no such|not found|failed' | tail -n 1 \
                     | tr -d '\r' | tr '\t' ' ' | cut -c1-240)"
-                echo "blocked:container-start-failed:${_cause:-no-error-line-in-log} log=$LOG"
+                _afford "podman refused to start the dev inference container; the verdict quotes the first error line podman wrote this run" "fix the cause named in the verdict (full podman output in ${LOG}), then re-run"; echo "blocked:container-start-failed:${_cause:-no-error-line-in-log} log=$LOG"
                 exit 1 ;;
         esac
         started="yes"
         # First-ever start may exceed the budget while the image's entrypoint
         # self-installs the ollama runtime; the ensure is idempotent, so the
         # NEXT call converges to ready without re-doing anything.
-        wait_ready || { echo "blocked:not-ready-after:${READY_BUDGET_SECS}s"; exit 1; }
+        wait_ready || { _afford "the dev inference container started but its engine never answered within ${READY_BUDGET_SECS}s" "read ${LOG} for the engine's start-up; a first run that self-installs may need a longer TILLANDSIAS_DEV_INFERENCE_READY_SECS"; echo "blocked:not-ready-after:${READY_BUDGET_SECS}s"; exit 1; }
     else
         if [ ! -x "$BIN" ]; then
             curl -fsS --max-time 5 -o /dev/null https://ollama.com 2>/dev/null || {
-                echo "blocked:no-network"
+                _afford "the ollama runtime is not installed here and ollama.com cannot be reached to fetch it" "connect this host to the network (or install ollama by hand at ${BIN}), then re-run"; echo "blocked:no-network"
                 exit 1
             }
-            install_runtime || { echo "blocked:install-failed:runtime-download"; exit 1; }
+            install_runtime || { _afford "the ollama runtime download or unpack failed, so there is no engine to start" "read ${LOG}, check free space under the state dir, then re-run (the install is idempotent)"; echo "blocked:install-failed:runtime-download"; exit 1; }
         fi
         start_serve
         started="yes"
-        wait_ready || { echo "blocked:not-ready-after:${READY_BUDGET_SECS}s"; exit 1; }
+        wait_ready || { _afford "the bare-metal ollama started but never answered within ${READY_BUDGET_SECS}s" "read ${LOG} for the engine's start-up, or raise TILLANDSIAS_DEV_INFERENCE_READY_SECS, then re-run"; echo "blocked:not-ready-after:${READY_BUDGET_SECS}s"; exit 1; }
     fi
 fi
 
@@ -503,8 +511,8 @@ fi
 # leaving the tier half-present.
 for m in "$GEN_MODEL" "$EMBED_MODEL"; do
     have_model "$m" && continue
-    pull_model "$m" || { echo "blocked:install-failed:pull-$m"; exit 1; }
-    have_model "$m" || { echo "blocked:install-failed:absent-after-pull-$m"; exit 1; }
+    pull_model "$m" || { _afford "the engine could not pull a model this tier needs, so the expert tier would be half-present" "check network and free space, then run ollama pull <model> by hand to see its error (TILLANDSIAS_INFERENCE_MODEL / TILLANDSIAS_EMBED_MODEL name the models)"; echo "blocked:install-failed:pull-$m"; exit 1; }
+    have_model "$m" || { _afford "the pull reported success but the engine does not list the model afterwards" "re-run; if it repeats, list the engine's models (ollama list) and check the model name in TILLANDSIAS_INFERENCE_MODEL / TILLANDSIAS_EMBED_MODEL"; echo "blocked:install-failed:absent-after-pull-$m"; exit 1; }
 done
 
 if [ "$started" = "yes" ]; then

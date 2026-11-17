@@ -86,6 +86,9 @@ local ALLOWED = {
     "scripts/*/README.md",
     "docs/*", "cheatsheets/*", "openspec/*", "plan/*", "skills/*", "crates/*",
     "methodology/specs/*",
+    -- 2078-kmbx: the provenance note the operator's 2026-11-10 ruling asked for
+    -- beside the kumbia audio fixtures (that exact file, nothing else there).
+    "tests/fixtures/audio/kumbia/LICENSE.md",
     -- research/<domain>/<slug>.md (order 1809-dwqf): the provenance-linked
     -- research store, a canonical root of the same class as cheatsheets/ —
     -- each record carries its source and is shape-checked by

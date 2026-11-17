@@ -115,7 +115,7 @@ forge_step_done hot-paths
 forge_step_mark
 start_flaky_installs
 forge_step_done flaky-installs
-ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
+ensure_forge_harnesses codex >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "codex starting"

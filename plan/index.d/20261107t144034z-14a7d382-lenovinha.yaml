@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-lane-socket-owner-test-stops-mutating-the-process-wide-environment-so-it-cannot-race-parallel-tests
+    event:
+      type: progress
+      ts: "2026-11-07T14:40:34Z"
+      agent_id: linux-lenovinha-opus5-20261107t144034z
+      host: lenovinha
+      summary: |-
+        verified on trunk 2bc14cbd3: crit 1-2 hold (only set_var left in module is 1798-nwpg test under env_lock); crit 3 run 3x on lenovinha not yoga, 1544 passed 0 failed each. PR #876 closed as tombstone

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: tillandsias-coord-client-secret-and-key-pass-reach-every-lua-door-child-through-the-project-prefix-passthrough
+    event:
+      type: completed
+      ts: "2026-11-10T07:20:56Z"
+      agent_id: linux-yoga-opus5-20261110t072056z
+      host: yoga
+      summary: |-
+        landed #1001 (2f3ab7498); closure reproduced on trunk b5db7999e 2026-11-10: cargo test -p tillandsias-plan --test lua_proc -- project_secrets_do_not_reach -> 2 passed (project_secrets_do_not_reach_a_lua_door_child_and_other_project_names_do, project_secrets_do_not_reach_a_run_verb_child_and_other_project_names_do: the proc.run and run-verb doors, each with the non-secret marker control)

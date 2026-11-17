@@ -1,0 +1,13 @@
+# @trace spec:proxy-container, order:2041-i3nk
+# Egress tier `vcs`: git hosts (the git mirror's upstreams).
+# Source of truth for this tier. images/proxy/allowlist.txt is GENERATED from
+# the tier files by scripts/lua/build-proxy-allowlist.lua; edit here, then run it.
+
+# --- VCS (git dependencies) ---
+.github.com
+.github.io
+.githubusercontent.com
+.gitlab.com
+.bitbucket.org
+.sr.ht
+.codeberg.org

@@ -3343,6 +3343,18 @@ name = "tillandsias-embed"
 version = "56.10.20"
 
 [[package]]
+name = "tillandsias-enclave-fetch"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "tillandsias-exec"
 version = "0.1.0"
 dependencies = [

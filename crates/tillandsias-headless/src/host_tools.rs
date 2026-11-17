@@ -113,7 +113,7 @@ pub(crate) const GROUPS: &[Group] = &[
     Group {
         prefix: "webstudio.*",
         does: "co-edit this project in a visual web studio (GrapesJS, Decap, Tina, Puck, Onlook) that the operator opens",
-        starts: "nothing from the lane today: webstudio.open names the operator command that opens the studio window; webstudio.changes reads the saves it committed",
+        starts: "webstudio.open STARTS the studio through the tray and opens the dev Chromium window; webstudio.changes reads the saves it committed",
         use_when: "the user wants to author the site interactively beside you",
     },
 ];

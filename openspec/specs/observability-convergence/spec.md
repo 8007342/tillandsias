@@ -164,13 +164,18 @@ reported separately as CentiColons by `methodology/proximity.yaml` and
 ### Requirement: Dashboard is a read-only projection
 <!-- req-id: e3b24f77 -->
 
-The CentiColon dashboard (`docs/convergence/centicolon-dashboard.md` and `docs/convergence/centicolon-dashboard.json`) SHALL be a read-only projection of the signature log. Hand-edits SHALL be considered drift and SHALL be reverted on the next regeneration.
+The CentiColon dashboard SHALL be a read-only projection of the signature log, rendered to `target/convergence/centicolon-dashboard.md` and `target/convergence/centicolon-dashboard.json` by default. It SHALL NOT be committed: `docs/convergence/centicolon-dashboard.*` is retired (operator ruling 2026-11-09, order 2066-obsv), and published release evidence is the observatorium site. Hand-edits SHALL be considered drift and SHALL be reverted on the next regeneration.
 
 #### Scenario: Dashboard regenerated from signature log
 - **WHEN** `scripts/update-convergence-dashboard.sh` runs
 - **THEN** both `.md` and `.json` artefacts SHALL be overwritten from `target/convergence/centicolon-signature.jsonl`
 - **AND** the `.md` SHALL include the auto-generation header `<!-- THIS FILE IS AUTO-GENERATED ... DO NOT EDIT. -->`
 - **AND** the `.json` SHALL include a `dashboard_contract` object describing signature format, refresh policy, alert thresholds, and the source-of-truth integration
+
+#### Scenario: Dashboard is never committed
+- **WHEN** `scripts/update-convergence-dashboard.sh` runs with no `MD_OUT` or `JSON_OUT` set, from release preflight, local CI, or the post-commit refresh hook
+- **THEN** it SHALL write only under `target/convergence/`
+- **AND** no `docs/convergence/centicolon-dashboard.md` or `.json` SHALL exist in the repository
 
 #### Scenario: Dashboard cites the source-of-truth spec
 - **WHEN** the dashboard is rendered

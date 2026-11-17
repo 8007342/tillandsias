@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: macos-vz-guest-storage-probe-for-forge-storage-tasks-6-3-to-6-6-2066-395p
+    order: 2066-395p
+    status: implemented
+    kind: evidence
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, storage, research]
+    estimated_hours: 3
+    title: "macOS VZ guest storage probe: layer map, swap and the free-space numbers for forge-storage tasks 6.3-6.6"
+    context: "Read-only probes on stable 56.11.7.1. 6.3: guest root btrfs on a sparse 20 GiB rootfs.img (1.9G allocated), with discard advertised; host hole-punching not measured. The forge src is a per-lane tmpfs bounded by guest RAM (7.9 GiB). 6.4: zram 7.7G plus a 24G disk swap. 6.5: not run (no forge up). 6.6: host Container Free Space vs guest / avail vs MemAvailable. Evidence: plan/issues/macos-vz-guest-storage-probe-2026-11-09.md (work/2066-395p)."
+    exit_criteria:
+      - "6.5 (in-forge df) and the discard hole-punch check are measured on a run with a forge up, and openspec tasks 6.3-6.6 are ticked."
+    verifiable_closure: "6.5 (in-forge df) and the discard hole-punch check are measured on a run with a forge up, and openspec tasks 6.3-6.6 are ticked."
+    unscoreable: 'none.'
+    next_action: "Re-run 6.5 with a forge up; ask for approval of a guest write-then-delete to measure host hole-punching."
+    provenance: "Measured by tlatoanis-macbook-air claude, 2026-11-09, at macuahuitl-fedora's ruling (c) on 2065-5vcv."
+    events:
+    - type: filed
+      ts: '2026-11-09T22:00:57Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the read-only macOS guest storage probe"

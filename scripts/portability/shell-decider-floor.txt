@@ -15,9 +15,7 @@ scripts/check-cheatsheet-tiers.sh
 scripts/check-claim-confirmed.sh
 scripts/check-claims-across-branches.sh
 scripts/check-committable-branch.sh
-scripts/check-container-bases.sh
 scripts/check-containers-conf-proxy-env.sh
-scripts/check-convergence-velocity.sh
 scripts/check-credential-channel.sh
 scripts/check-cycle-flow-log-fresh.sh
 scripts/check-daily-maintenance.sh
@@ -29,22 +27,16 @@ scripts/check-enclave-ca-consistency.sh
 scripts/check-enclave-network-internal.sh
 scripts/check-enclave-service-health.sh
 scripts/check-engine-cpu-dispatch.sh
-scripts/check-exact-version-literal-added.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-fragment-closure-evidence-added.sh
 scripts/check-fragment-ts-skew.sh
 scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-regimes.sh
-scripts/check-groundtruth-mutable-status-pins.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
-scripts/check-landed-but-open.sh
-scripts/check-ledger-distillation.sh
-scripts/check-litmus-expression-pinning-added.sh
-scripts/check-litmus-line-windows.sh
 scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
 scripts/check-long-running-view.sh
@@ -68,7 +60,6 @@ scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
 scripts/check-plan-schema-divergence.sh
 scripts/check-purge-clears-vault-credentials.sh
-scripts/check-readme-discipline.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
@@ -83,7 +74,6 @@ scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
 scripts/check-spec-index-resolution-agreement.sh
 scripts/check-spec-script-paths.sh
-scripts/check-stale-ready-rows.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
@@ -340,7 +330,6 @@ scripts/test-land-queue.sh
 scripts/test-land-verdict-through-a-pipe.sh
 scripts/test-landed-but-open.sh
 scripts/test-lane-instrument-vs-ledger.sh
-scripts/test-ledger-distillation-advisory.sh
 scripts/test-ledger-node-claim-resolution.sh
 scripts/test-ledger-prose-roundtrip.sh
 scripts/test-ledger-ts-guard.sh
@@ -542,7 +531,6 @@ scripts/test-spec-script-paths.sh
 scripts/test-squid-supervisor.sh
 scripts/test-ssh-lane-refuses-when-unwired.sh
 scripts/test-ssh-lane-sidecar.sh
-scripts/test-stale-ready-rows.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh

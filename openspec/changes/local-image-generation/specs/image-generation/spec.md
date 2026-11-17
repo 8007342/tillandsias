@@ -17,18 +17,30 @@ falling back to CPU.
 - **WHEN** the selected GPU backend fails to place the model
 - **THEN** generation completes on CPU and the result's `backend` is `cpu`
 
-### Requirement: Models form a smallest-first ladder of permissive licences
+### Requirement: Models form a ladder of permissive licences under a hardware ceiling
 
-The tier table (I0–I3) MUST be declarative and ordered smallest first.
-Every request MUST start on the smallest tier available (I0 on first use)
-regardless of hardware; the accel envelope MUST set only the host's ceiling
-tier. Every row MUST name its model and licence, and every licence MUST be
-permissive or open with no revenue cap and no non-commercial term. Models
-under the Stability AI Community Licence (SD-Turbo, SD3.5) MUST NOT appear.
+The tier table (I0–I3) MUST be declarative and ordered smallest first; the
+accel envelope MUST set only the host's ceiling tier, the highest tier the
+host may run. The floor tier I0 MUST be runnable on every host and its
+files MUST be fetched on first use without asking. A tierless request MUST
+run on the highest tier within the ceiling that is available (files
+present, or their download already granted on this host); it MUST NOT walk
+the ladder from I0 (operator ruling 2026-11-01, 1957-5m8g). Every row MUST
+name its model and licence, and every licence MUST be permissive or open
+with no revenue cap and no non-commercial term. Models under the Stability
+AI Community Licence (SD-Turbo, SD3.5) MUST NOT appear.
 
-#### Scenario: Every host starts at the floor
-- **WHEN** a host with a 24 GB VRAM GPU makes its first `image.generate` call
-- **THEN** the image is generated on tier I0
+#### Scenario: A fresh host runs the floor unasked
+- **WHEN** a host with no imagegen model files makes its first tierless `image.generate` call
+- **THEN** I0 is fetched and the image is generated on tier I0 with no consent asked
+
+#### Scenario: A tierless call runs the biggest model already here
+- **WHEN** a host whose ceiling is I3 has the I3 files present and makes a tierless `image.generate` call
+- **THEN** the image is generated on tier I3 with no token and no I0 run first
+
+#### Scenario: A smaller tier stays available by name
+- **WHEN** a host with I3 present requests tier I1
+- **THEN** the image is generated on tier I1
 
 #### Scenario: No capped or non-commercial licence is shippable
 - **WHEN** the tier table is loaded
@@ -76,32 +88,56 @@ MUST NOT contain a base64 run longer than 256 characters.
 - **WHEN** an image is generated
 - **THEN** the result names an existing PNG file and contains no base64 run over 256 characters
 
-### Requirement: A larger tier is offered one step at a time
+### Requirement: The consent gate is a one-time download gate per host
 
-When the host ceiling is above the tier just used, the result MUST offer
-exactly the next tier (never two steps) with a host-minted
-`consent_token` and one curated `ask` sentence. A request for a tier above
-the last accepted one without a token MUST return `consent_required` and
-generate nothing.
+The only thing `image.generate` MUST ask consent for is downloading a
+tier's model files the first time on a host (operator ruling 2026-11-01:
+"the bigger models gate should be asked only for downloading models the
+first time"). Any tier up to the host ceiling MAY be requested directly;
+there MUST be no I0 → I1 → I2 walk and no per-session re-asking. A tier
+whose pinned files are present, or whose download was already granted on
+this host, MUST run with no token. A request for a tier whose files are
+missing, with no valid token, MUST return `consent_required` carrying a
+download offer (`tier`, `model`, `download_bytes`, `ask`, `consent_token`,
+`how`) and generate nothing. Redeeming the token MUST record a standing
+host grant (`kind: download`, `scope: host`, `expiry: none`) for that tier,
+so the tier never asks again on this host; the result MUST name the grant
+it ran under. A tier with no pinned files MUST never be offered and a
+direct request for it MUST fail as `tier_unavailable`.
 
-#### Scenario: Offer is one tier up
-- **WHEN** an I0 image is generated on a host whose ceiling is I3
-- **THEN** the result offers I1 only, with a token and an ask sentence
+#### Scenario: A present tier needs no token
+- **WHEN** `image.generate` requests tier I3 with no token and the I3 files are present
+- **THEN** the image is generated on I3 and the result carries no `consent_required`
 
-#### Scenario: Larger tier without a token asks first
-- **WHEN** `image.generate` requests tier I1 with no token and I1 was never accepted
-- **THEN** nothing is generated and the result is `consent_required`
+#### Scenario: A missing tier asks once, then never again
+- **WHEN** `image.generate` requests tier I3 with no token and the I3 files are not on this host
+- **THEN** nothing is generated and the result is `consent_required` with a download offer for I3
+- **WHEN** the call is repeated with that `consent_token`
+- **THEN** I3 is downloaded and run, the result's `grant` names tier I3 with `scope: host`
+- **WHEN** a later call requests I3 with no token
+- **THEN** it runs with no offer and no `consent_required`
 
-### Requirement: User-facing text is curated and honest
+#### Scenario: Direct request skips no rungs
+- **WHEN** a host with only I0 present and ceiling I3 requests tier I3
+- **THEN** the download offer names I3, not I1
 
-User-facing `ask` text MUST NOT contain raw download sizes or time
-estimates. When the offered tier is not yet downloaded, it MUST say that
-big files are downloaded only if the user is OK waiting longer for better
-results.
+#### Scenario: An unpinned tier is never offered
+- **WHEN** a result is produced on a host whose next tier above what is present has no pinned files
+- **THEN** `bigger_tier_offer` skips to the next installable tier or is null
 
-#### Scenario: Ask carries no sizes
-- **WHEN** any offer or consent_required result is produced
-- **THEN** its `ask` contains no byte, GB or seconds figure
+### Requirement: The download ask states its cost honestly
+
+The `ask` for a tier whose files must be fetched MUST say the download is
+one-time, and MUST carry its size in GB and an estimated minutes figure
+derived from the pinned sizes (1957-8hkf), so the user can decide on the
+cost to this computer. A result at a tier below the ceiling MAY carry
+`bigger_tier_offer` for the next installable tier not yet present; the
+offer is informational and MUST be the same download offer, never a
+quality claim.
+
+#### Scenario: Ask carries the download cost
+- **WHEN** any download offer or `consent_required` result is produced
+- **THEN** its `ask` names a GB figure and a minutes figure and says the download is one-time
 
 ### Requirement: Only free metered services are recommended
 

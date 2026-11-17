@@ -35,7 +35,7 @@ name is a registration label; the tool names are what the agent reads.
 5. **"What it starts" is a description invariant.** A fixture asserts the
    verbs: `preview.publish` STARTS a sibling web container,
    `toolchain.prepare` STARTS a one-time build, `studio.run_workflow` names
-   the studio container, `webstudio.open` starts nothing from the lane, and
+   the studio container, `webstudio.open` STARTS the studio through the tray (2025-e6mi), and
    the read-only tools say "Starts nothing".
 6. **The server name is not renamed in this slice.** The label appears in
    four harness configs, the Codex registration test, three Lua guards, the

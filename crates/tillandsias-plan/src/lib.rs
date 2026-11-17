@@ -44,6 +44,7 @@ pub mod context_pack;
 /// adaptive heartbeat and a git-ledger fallback.
 pub mod coordinator_client;
 pub mod discipline_hooks;
+pub mod disk_preflight;
 /// ORDER 920-pxg6 — the OpenAI-compatible loopback front-end over
 /// `pipeline::run_grounded`. One grounded pipeline, two front-ends.
 pub mod expert_serve;
@@ -78,6 +79,7 @@ pub mod lua_predicate;
 pub mod lua_runtime;
 pub mod lua_std;
 pub mod methodology;
+pub mod safe_roots;
 pub mod sibling_claims;
 /// ORDER 1506-nvqt — the fleet message bus's pure checks (body budget, secret
 /// shapes, TTL bounds), shared by `msg send` and the mover. Lives in the
@@ -86,6 +88,8 @@ pub use tillandsias_msg::shape as msg_shape;
 /// ORDER 1506-nvqt — the Maildir-shaped lane store behind `tillandsias-plan
 /// msg`; no networking, no ack verb (the ack is the infrastructure's).
 pub mod msg_store;
+// ORDER 2031-dwwy: THE one child-environment builder every door calls.
+pub mod child_env;
 pub mod run_verb;
 // ORDER 1384-bqhy: `script run` (the Lua decider runner) and the one classify.
 pub mod script_run;

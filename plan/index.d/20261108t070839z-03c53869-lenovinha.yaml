@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-toolchains-run-in-a-supported-worktree-location-under-the-project-source-root
+    event:
+      type: progress
+      ts: "2026-11-08T07:08:39Z"
+      agent_id: linux-lenovinha-opus5-20261108t070839z
+      host: lenovinha
+      summary: |
+        MEASURED in a relaunched client forge (relayed by coordinator macuahuitl-fedora, 2026-11-08): from a cache worktree the flutter shim printed "Flutter is ready" and then refused with "refused:flutter:host-toolchain-unavailable remedy=the host could not prepare the tillandsias-flutter image". The image was fine. The real cause is the cwd rule: the shim runs only under /home/forge/src/<project>. The verdict sends the agent to the wrong fix. ASK, independent of whether worktrees are allowed: the refusal names the cwd rule and the directory it saw, red first (a fixture runs the shim from outside the project root, image ready, and asserts the verdict names the cwd rule, not the toolchain).

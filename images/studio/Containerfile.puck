@@ -32,6 +32,10 @@ RUN mkdir -p /build/public \
     && test -s public/editor.js && test -s public/editor.css
 
 FROM ${FORGE_IMAGE}
+# 1958-yfib: an image inherits its base layer's labels, so it states its own:
+# our recipe (GPL-3.0-or-later) AND what it mostly ships. @measured/puck 0.20.2 is MIT (upstream LICENSE, measuredco/puck@v0.20.2).
+# Every component's licence: docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND MIT"
 LABEL io.tillandsias.studio="puck" \
       io.tillandsias.studio.puck-version="0.20.2" \
       io.tillandsias.studio.react-version="19.2.0 (bundled)" \

@@ -64,7 +64,7 @@ SCRIPT_DIR="$ROOT/scripts"
 
 usage() {
     cat >&2 <<'EOF'
-Usage: check-running-image-freshness.sh [--require-running] [image ...]
+Usage: check-running-image-freshness.sh [--require-running] [--name NAME] [image ...]
 
 Compares each running tillandsias container against the content hash of its
 image sources in this checkout, and fails loud when they diverge.
@@ -74,6 +74,9 @@ image sources in this checkout, and fails loud when they diverge.
   --require-running  treat "no container running for this image" as a failure
                      instead of a skip. Use in e2e lanes that have just
                      launched the runtime.
+  --name NAME        only consider the container named exactly NAME (a
+                     fixture scopes the check to its own container, so a live
+                     runtime on the same host cannot answer for it; 2093-post).
   --strict           treat an INDETERMINATE identity as a failure (exit 3)
                      instead of passing. Use where every image is expected to
                      carry a canonical source-hash tag.
@@ -85,11 +88,13 @@ EOF
 
 REQUIRE_RUNNING=0
 STRICT=0
+ONLY_NAME=""
 IMAGES=()
 while [ $# -gt 0 ]; do
     case "$1" in
         --require-running) REQUIRE_RUNNING=1; shift ;;
         --strict) STRICT=1; shift ;;
+        --name) [ $# -ge 2 ] || usage; ONLY_NAME="$2"; shift 2 ;;
         -h|--help) usage ;;
         -*) echo "check-running-image-freshness: unknown flag: $1" >&2; usage ;;
         *) IMAGES+=("$1"); shift ;;
@@ -139,7 +144,7 @@ for IMAGE in ${IMAGES[@]+"${IMAGES[@]}"}; do
         [ -n "$_cname" ] && CONTAINERS+=("$_cname")
     done < <(
         podman ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null \
-            | awk -F'\t' -v img="tillandsias-$IMAGE" '$2 ~ ("(^|/)" img ":") {print $1}'
+            | awk -F'\t' -v img="tillandsias-$IMAGE" -v only="$ONLY_NAME" '$2 ~ ("(^|/)" img ":") && (only == "" || $1 == only) {print $1}'
     )
 
     if [ ${#CONTAINERS[@]} -eq 0 ]; then

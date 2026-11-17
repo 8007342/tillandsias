@@ -1,0 +1,27 @@
+# @trace order:2024-82vw
+packets:
+- packet_id: gate-step-private-metrics-fallback-litmus-red-under-the-runner
+  order: 2024-82vw
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [litmus, gate, ci-release, flake]
+  estimated_hours: 2
+  related: [1966-ubsw, 1247-amcu]
+  owned_files:
+  - scripts/lua/test-gate-step-private-metrics-fallback.lua
+  - openspec/litmus-tests/litmus-gate-step-private-metrics-fallback.yaml
+  title: 'litmus:gate-step-private-metrics-fallback is red on trunk under run-litmus-test.sh, yet the same fixture passes 6/6 when run directly'
+  context: 'Found 2026-11-07 by lenovinha while checking #993 (1247-amcu). It fails under scripts/run-litmus-test.sh ci-release --phase pre-build --size instant on BOTH the trunk base a7ced1da0 and the #993 branch, so it is not that branch. First failing step: STEP 1/1 (a foreign id-less record warns, a falling-back child refuses through the private fallback, a run-id record still refuses), rc=1, expected ok:gate-step-private-metrics-fallback:6 arms. First failing arm: "FAIL: 1 FOREIGN and the warning quotes the line — got: ok:no-competing-gate". The inner build.sh --gate-steps output was only the competing-gate verdict, with no foreign-writer-1966 warning. The fixture run directly on trunk 732481e78 passes 6/6 three times: with ~/.local/bin/tillandsias-plan (what resolve_plan_binary picks), with wt-pipc release, and with CARGO_TARGET_DIR set. So the difference is the runner context, not the code under test. In the runner log, a build.sh re-exec into the tillandsias-builder toolbox follows the failure.'
+  exit_criteria:
+  - 'the cause is named: which part of the runner context (env, toolbox re-exec, cwd, a concurrent step) makes the inner build.sh --gate-steps skip the stub step or lose TILLANDSIAS_GATE_SHARED_TIMING_PATH'
+  - 'the litmus step is green under run-litmus-test.sh ci-release on a clean trunk, and still green when run directly'
+  - 'NEGATIVE CONTROL: with the 1966-ubsw fix reverted, arm 1 or 3 still fails under the runner (the fix does not make the step vacuous)'
+  verifiable_closure: 'litmus:gate-step-private-metrics-fallback green under run-litmus-test.sh ci-release --phase pre-build --size instant on lenovinha.'
+  unscoreable: 'none.'
+  next_action: 'Capture the inner gate output under the runner (print o in full for arm 1) and diff env between the runner step and a direct run; check whether build.sh --gate-steps re-execs into the toolbox there.'
+  provenance: 'lenovinha 2026-11-07, filed on the coordinator (macuahuitl) request.'
+  events:
+  - {type: filed, ts: '2026-11-07T12:19:04Z', host: lenovinha, summary: 'filed p2 ready: red under the litmus runner on trunk, green when run directly'}

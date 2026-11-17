@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-approval-key-is-a-secure-enclave-p256-key-behind-touch-id-emitting-sshsig-verifiable-by-ssh-keygen
+    field: next_action
+    value: |-
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+
+
+      [2026-11-17T00:17:43Z yoga] RE-SCOPED per operator clarification 2026-11-16 - primary macOS arm is a live Touch ID biometryCurrentSet prompt run by the tray per action - the Secure Enclave key and SSHSIG move to the Later host-agent-proof records section - see approval-human-gate spec delta
+    ts: "2026-11-17T00:17:43Z"
+    host: yoga
+
+events:
+  - packet_id: macos-approval-key-is-a-secure-enclave-p256-key-behind-touch-id-emitting-sshsig-verifiable-by-ssh-keygen
+    event:
+      type: note
+      ts: "2026-11-17T00:17:43Z"
+      host: yoga
+      summary: |-
+        operator clarification 2026-11-16 - tray-enforced live human gate is primary - spec openspec/changes/os-verified-approval-gates/specs/approval-human-gate

@@ -6,9 +6,11 @@
 # it where every host lands rather than once a day on the release gate.
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
-# from a variable is invisible to every name-based scan.
+# from a variable is invisible to every name-based scan. 2067-dwqd ported the
+# checker to Lua, so the binding is STEP_LUA; the regime pin below is the .sh's
+# darwin run, and the Lua runner is the same plan binary on every regime.
 STEP_DESC="Checking Containerfile bases against policy"
-STEP_SCRIPT="scripts/check-container-bases.sh"
+STEP_LUA="scripts/lua/check-container-bases.lua"
 STEP_ERROR="a Containerfile uses a base outside policy (1087-h2z9)"
 STEP_OK="Container base policy passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"

@@ -1,5 +1,5 @@
 -- @trace order:1631-6w8z
--- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN TILLANDSIAS_PLAN_BIN
 -- preflight: own-deadline — compiles a scratch crate with cargo clippy (cold, 5-30 s), past the 5 s guard deadline
 --
 -- test-rust-lints.lua — the preflight door asks the gate's cargo fmt and
@@ -38,9 +38,9 @@ local ROOT = text.trim(top.stdout or "")
 if top.status ~= "exited" or top.code ~= 0 or ROOT == "" then
     verdict.could_not_run("rust-lints-fixture", "git rev-parse --show-toplevel did not answer")
 end
-local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
+local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or env.get("TILLANDSIAS_PLAN_BIN") or ""
 if PLAN == "" then
-    verdict.could_not_run("rust-lints-fixture", "TILLANDSIAS_SCRIPT_RUNNER_BIN is unset, so the guard cannot be run")
+    verdict.could_not_run("rust-lints-fixture", "neither TILLANDSIAS_SCRIPT_RUNNER_BIN nor TILLANDSIAS_PLAN_BIN is set, so the guard cannot be run")
 end
 local probe = proc.run({ argv = { "cargo", "clippy", "--version" }, cwd = ROOT, timeout_ms = 60000 })
 if probe.status ~= "exited" or probe.code ~= 0 then

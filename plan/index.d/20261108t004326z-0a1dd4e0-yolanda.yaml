@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-trays-guest-health-line-prints-the-bare-crashloop-verdict-with-no-source-and-no-age
+    event:
+      type: completed
+      ts: "2026-11-08T00:43:26Z"
+      agent_id: windows-yolanda-claude-20261108t004326z
+      host: yolanda
+      summary: |
+        COMPLETED. Closure audit: the fix (031a93cc9, 2026-09-04) was recorded as a progress event and never closed; the selector kept offering the row. Landed on origin/linux-next via c8b416be6 (first first-parent trunk commit containing 031a93cc9).
+
+        Re-verified on trunk b7ed781a7 (windows-next merged), yolanda native cargo, 2026-11-08, tests run BY EXACT NAME with the count asserted (a filter matching nothing reports success):
+        - criterion 1 + 3 guard: notify_icon::tests::guest_health_line_names_its_source_and_age ok
+        - criterion 2: notify_icon::tests::absent_state_reports_age_unknown_not_a_fresh_verdict ok
+        - criterion 4: notify_icon::tests::crash_loop_verdict_is_preserved_verbatim_inside_the_framing ok
+          -> test result: ok. 3 passed; 0 failed; 175 filtered out (cargo test -p tillandsias-windows-tray --bins)
+        - criterion 3 parity: windows-tray tests::notify_icon_wires_in_crashloop_detection ok (1 passed); macos-tray tests::diagnose_wires_in_crashloop_verdict ok (1 passed)
+        Pre-fix and post-fix outputs are quoted in the 2026-09-04T22:38:51Z progress event (shipped v56.9.2.1 printed "Guest health: healthy" from a 5-day-old crashloop.state; fixed prints RECORDED framing with source and age). Negative control was armed in that cycle (revert -> two tests red).
+        evidence_refs: c8b416be6, 031a93cc9

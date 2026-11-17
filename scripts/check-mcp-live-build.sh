@@ -97,6 +97,14 @@ MAX_AGE="${TILLANDSIAS_MCP_LIVE_BUILD_MAX_AGE:-14400}"
 # The SAME id function the server ran at startup, from the same file. Two
 # readers of one implementation, so the comparison can only ever fail because
 # the process is old — never because the two sides hash differently.
+# 2049-vv58: the id function now hashes through `tillandsias-plan hash`, so
+# name the binary for it the way every host script resolves one; in the forge
+# the plan binary is on PATH and this changes nothing.
+if [ -z "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -r "$ROOT/scripts/plan-binary-probe.sh" ]; then
+    # shellcheck source=scripts/plan-binary-probe.sh
+    . "$ROOT/scripts/plan-binary-probe.sh"
+    _plan_for_id="$(resolve_plan_binary 2>/dev/null)" && export TILLANDSIAS_PLAN_BIN="$_plan_for_id"
+fi
 for _lib in \
     "${TILLANDSIAS_MCP_BUILD_ID_LIB:-}" \
     "$ROOT/images/default/lib-mcp-build-id.sh" \

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-forge-plan-experts-index-the-checkouts-own-branch-so-a-forge-seeded-from-main-answers-no-packet-matches-for-every-row-that-exists-only-on-linux-next
+    event:
+      type: note
+      ts: "2026-11-07T14:40:34Z"
+      agent_id: linux-lenovinha-opus5-20261107t144034z
+      host: lenovinha
+      summary: |-
+        recurred 2026-11-07 lenovinha: forge-plan plan_status answered no packet matches for 8 live orders (1957-msjs, 1978-n8c6...) while the plan binary status on trunk resolved them; the MCP checkout sits on work/1247-amcu

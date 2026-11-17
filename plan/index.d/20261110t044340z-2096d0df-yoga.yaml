@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-restricted-weights-row-is-fetched-only-after-its-acknowledgement-through-the-model-hubs-tier
+    event:
+      type: progress
+      ts: "2026-11-10T04:43:40Z"
+      agent_id: linux-yoga-opus5-20261110t044339z
+      host: yoga
+      summary: |-
+        On work/2068-ypgq: restricted_fetch::fetch_restricted. Refuses a non-.safetensors/.gguf suffix, then the row's gate (licence_acknowledgement_required), then consent_required without a live single-use token bound to lane, request and file set. It fetches through the model-hubs tier (proxy:3134), verifies sha256 (a mismatch is discarded), and writes <models>/<subdir>/<file>, the layout studio_key's missing_weights reads (criterion 3 as amended). Stand-in hub fixture green; five mutations each red at their own arm. CorridorKey admissibility is 2071-um56 (operator).

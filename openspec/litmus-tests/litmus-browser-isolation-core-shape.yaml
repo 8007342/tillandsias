@@ -15,7 +15,7 @@
 #   2. Content-hash image identity with human aliases
 #      (tillandsias-chromium-framework:v<N.N.N.N> pattern).
 #   3. Build invocation via build-image.sh (sibling script
-#      check-container-bases.sh exists).
+#      check-container-bases.lua exists).
 #
 # Companion litmus raises browser-isolation-core coverage 33 → 67.
 name: litmus:browser-isolation-core-shape
@@ -25,14 +25,14 @@ description: >
   Pin scripts/launch-chromium.sh + scripts/run-safe-browser.sh
   spec-trace headers; the --cap-drop=ALL + --user-data-dir security
   flags; the tillandsias-chromium-framework:v<version> image
-  identity pattern; the sibling check-container-bases.sh script.
+  identity pattern; the sibling check-container-bases.lua script.
 severity: medium
 size: instant
 
 preconditions:
   - workspace contains scripts/launch-chromium.sh
   - workspace contains scripts/run-safe-browser.sh
-  - workspace contains scripts/check-container-bases.sh
+  - workspace contains scripts/lua/check-container-bases.lua
   - shell utilities (grep, test) are available in PATH
 
 critical_path:
@@ -110,14 +110,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "tillandsias-chromium-framework"
 
-  - step: "sibling check-container-bases.sh exists + executable (build invocation contract)"
+  - step: "sibling check-container-bases.lua exists (build invocation contract)"
     # Spec requirement: "Build invocation via build-image.sh".
-    # The check-container-bases.sh sibling script is the
+    # The check-container-bases.lua sibling script is the
     # verification surface for image base pinning, named in the
     # spec's verification list.
-    command: "test -x scripts/check-container-bases.sh && echo 'ok: check-container-bases.sh executable'"
+    command: "test -f scripts/lua/check-container-bases.lua && echo 'ok: check-container-bases.lua present'"
     timeout_ms: 3000
-    expected_behavior: "ok: check-container-bases.sh executable"
+    expected_behavior: "ok: check-container-bases.lua present"
 
   - step: "both launch scripts are executable"
     command: "test -x scripts/launch-chromium.sh && test -x scripts/run-safe-browser.sh && echo 'ok: launch scripts executable'"

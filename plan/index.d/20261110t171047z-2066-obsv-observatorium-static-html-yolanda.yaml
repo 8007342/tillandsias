@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: observatorium-rebuild-as-static-html-published-manually
+  order: 2066-obsv
+  status: in_progress
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - node
+  - observatorium
+  estimated_hours: 24
+  title: observatorium rebuild as static HTML, published manually
+  context: 'Filed after the fact. The order 2066-obsv was minted as a work-ref name by the fleet lead (macuahuitl-fedora) and cited by the change before any packet carried it; check-order-citations-resolve.lua evicted #1076 for that, and the fleet lead asked for this row rather than a rename. Design and evidence: plan/issues/observatorium-blind-design-2026-11-09/ (README.md, comparison.md, design.md rev3). Operator rulings of 2026-11-09, recorded in that README: plain generated HTML replaces the Flutter app and must stay clean, semantic markup editable in the GrapesJS local editor; docs/convergence/centicolon-dashboard.* is deleted outright; NO auto-deploy anywhere, publishing is a manual wrangler deploy from the operator''s machine after a release, no Workers Builds trigger is connected and none ever is; promote-stable.sh stops moving deploy/observatorium and methodology/versioning.yaml stops claiming a Workers Builds trigger. OpenSpec change: openspec/changes/observatorium-static-html.'
+  next_action: |
+    The five-PR plan in openspec/changes/observatorium-static-html/proposal.md:
+    PR 1 (#1069, landed): the static site generator, honesty lint and Home page.
+    PR 2 (#1073, landed): Releases, Obligations, Claims, Instrument, Glossary and Data pages.
+    PR 3 (#1076): no auto-deploy; site/publish.mjs writes the built site onto the local deploy ref, verify.mjs guards a stale ship; the Flutter app is deleted.
+    PR 4: the project trace viewer moves to tools/trace-viewer/.
+    PR 5: docs/convergence/centicolon-dashboard.* is retired with an observability-convergence spec delta.
+    Then task 3.6, the observatorium npm test gate step with a STEP_SECOND_REGIME attestation (the fleet lead routes the second host).
+  exit_criteria:
+  - 'observatorium/site builds every page as plain HTML with build-time SVG charts, each with a table twin, and the honesty lint fails the build closed.'
+  - 'No automation writes deploy/observatorium or deploys the observatorium; publishing is the documented manual flow (site/publish.mjs, then a hand push and npm run deploy).'
+  - 'The Flutter app, the deploy-time live collection and docs/convergence/centicolon-dashboard.* are gone; the trace viewer lives in tools/trace-viewer/.'
+  verifiable_closure: 'litmus:stable-channel-shape — its step "no automation writes the observatorium deploy ref" passes; cd observatorium && npm test passes; scripts/test-promote-stable-evidence-gate.sh reports "a promotion never moves deploy/observatorium" ok.'
+  provenance: operator rulings 2026-11-09 (plan/issues/observatorium-blind-design-2026-11-09/README.md); order minted by macuahuitl-fedora; filed by the yolanda forge 2026-11-10 at the fleet lead's request.
+  events:
+  - type: created
+    ts: '2026-11-10T17:10:47Z'
+    host: yolanda
+    summary: filed for an order already cited by the 2066-obsv work ref (PRs 1 and 2 landed)

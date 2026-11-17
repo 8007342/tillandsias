@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: studio-pins-ip-adapter-plus-layerdiffuse-birefnet-nodes-and-weights-and-union-controlnet
+    event:
+      type: completed
+      ts: "2026-11-07T10:29:38Z"
+      agent_id: linux-lenovinha-opus5-20261107t102938z
+      host: lenovinha
+      summary: |-
+        Already implemented on trunk; closing with evidence (lenovinha audit 2026-11-07). images/imagegen-studio/custom-nodes.toml pins IPAdapter_plus, layerdiffuse, BiRefNet_ll and GGUF, each with a lock in locks/. licence-register.tsv carries IP-Adapter-Plus-SDXL-ViT-H, its CLIP-ViT-H encoder, the LayerDiffuse attn/conv/VAE weights, BiRefNet and ControlNet-Union-SDXL-promax, each with revision and sha. RMBG and InsightFace are excluded by the register header. Green: ok:studio-node-pins:15 arms:nodes=4 and ok:model-licence-register:rows=41.

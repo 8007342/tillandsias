@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-07 at macuahuitl's request, after a --no-verify push it ruled out. Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-stale-base-pre-push-guard-refuses-a-force-push-that-drops-the-pushers-own-commits-and-the-files-only-they-added
+    order: 2030-bc5z
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [git, hooks, testing]
+    estimated_hours: 2
+    title: "The stale-base pre-push guard refuses a force-with-lease that drops the pusher's own commits, naming files that exist only in those dropped commits"
+    context: |
+      Measured 2026-11-07 on work/2025-e6mi (PR #996). Two commits (fdca0b2bc, ac218db0c) added scripts/lua/verify-image-usable.lua. They had to be DROPPED rather than reverted, because check-shell-ratchet refuses re-adding a floor line that any earlier version of the floor file removed. A push of the rewritten ref with --force-with-lease=work/2025-e6mi:ac218db0c was refused: `blocked:stale-base-revert:refs/heads/work/2025-e6mi:1 file(s)` naming scripts/lua/verify-image-usable.lua. The file existed on no other ref (not on origin/linux-next; `git branch -r --contains fdca0b2bc` listed only origin/work/2025-e6mi). Cause, in scripts/hooks/pre-push-no-stale-base-revert.sh: `touched` is computed from `git log rsha..lsha` (the commits the push ADDS), and `deleted` from `git diff rsha..lsha`. On a non-fast-forward update, a path introduced only by commits in `lsha..rsha` (the ones being dropped) is "deleted" but never "touched", so a deliberate history rewrite of one's own work ref reads as a stale-base revert. The guard has no affordance for this case short of --no-verify, which the coordinator rules out (the push went out with --no-verify once; recorded on 2025-e6mi).
+    exit_criteria:
+      - "scripts/test-no-stale-base-revert.sh gains an arm: a remote ref whose tip adds file F in a commit no other remote ref contains, and a force-pushed local tip that drops that commit, is NOT refused for F; and a control arm where F was added by a commit that is also on origin/linux-next (or another remote ref) IS still refused. Pre-fix result: FAILS, the first arm is refused with blocked:stale-base-revert naming F."
+    verifiable_closure: "scripts/test-no-stale-base-revert.sh gains an arm: a remote ref whose tip adds file F in a commit no other remote ref contains, and a force-pushed local tip that drops that commit, is NOT refused for F; and a control arm where F was added by a commit that is also on origin/linux-next (or another remote ref) IS still refused. Pre-fix result: FAILS, the first arm is refused with blocked:stale-base-revert naming F."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the arm named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      In pre-push-no-stale-base-revert.sh, when rsha is not an ancestor of lsha, also treat as explained every deleted path whose adding commits all lie in lsha..rsha and are contained by no other remote ref (git branch -r --contains). Write the two arms first and watch the first fail.
+    provenance: |
+      work/2025-e6mi push of e991e12bf, 2026-11-07; macuahuitl relay asking for this row.
+    events:
+      - type: filed
+        ts: "2026-11-07T22:57:22Z"
+        host: yoga
+        summary: "filed at the coordinator's request after a --no-verify push around this false positive"

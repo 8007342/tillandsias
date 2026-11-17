@@ -4,6 +4,11 @@
 # skills, and entrypoints. Rapidly rebuildable.
 ARG BASE_IMAGE=localhost/tillandsias-forge-base
 FROM ${BASE_IMAGE}
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # ── Environment exports for diagnostics and agent discovery ─────
 ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
@@ -100,6 +105,17 @@ COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 # Sourced by lib-common.sh from its own directory; kept separate so litmus can
 # exercise the state grammar with a stubbed curl outside the image.
 COPY lib-inference-state.sh /usr/local/lib/tillandsias/lib-inference-state.sh
+# @trace order:2049-y7k8 — the Lua bodies of the ported helpers (openspec
+# forge-lua-helpers), run by `tillandsias-plan script run --helper`. Each
+# lib-*.sh finds its module at /usr/local/lib/tillandsias/lua/; without this
+# COPY a ported helper reports probe-tool-missing in every built forge.
+COPY lua/ /usr/local/lib/tillandsias/lua/
+
+# 2067-faum (operator ruling 2026-11-09): Lua, Rust and Go are ALWAYS in the
+# forge; agents are told to prefer them in that order. They come from
+# Containerfile.base; this layer refuses to finish if one went missing.
+# scripts/lua/check-forge-languages.lua --containerfile pins this line.
+RUN for t in lua cargo rustc go; do command -v "$t" >/dev/null || { echo "FATAL: $t missing from the forge (2067-faum: Lua, Rust and Go are always available)" >&2; exit 1; }; done
 # @trace order:1264-s4id — push capability (can this forge push to THIS repo?),
 # read from the mirror's verdict; sourced by lib-common.sh from its directory.
 COPY lib-push-capability.sh /usr/local/lib/tillandsias/lib-push-capability.sh
@@ -122,6 +138,15 @@ COPY lib-expert-capability.sh /usr/local/lib/tillandsias/lib-expert-capability.s
 # COPY is dropped, forge discovery reports `project_engine: state=unknown ...
 # probe=helper-missing` instead of a verdict — named, never silent.
 COPY lib-project-engine-capability.sh /usr/local/lib/tillandsias/lib-project-engine-capability.sh
+# @trace order:2047-ci2k — sourced by lib-common.sh from its own directory
+# (embed endpoint, ledger freshness) and by both MCP wrappers via
+# /usr/local/lib/tillandsias/ (experts probe, MCP build id). They existed in the
+# tree and were never copied, so a built forge silently took every fallback.
+# scripts/lua/check-forge-lib-copies.lua refuses a sourced lib with no COPY.
+COPY lib-embed-endpoint.sh /usr/local/lib/tillandsias/lib-embed-endpoint.sh
+COPY lib-experts-probe.sh /usr/local/lib/tillandsias/lib-experts-probe.sh
+COPY lib-ledger-freshness.sh /usr/local/lib/tillandsias/lib-ledger-freshness.sh
+COPY lib-mcp-build-id.sh /usr/local/lib/tillandsias/lib-mcp-build-id.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh
@@ -130,6 +155,7 @@ COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-w
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-forge-codex.sh /usr/local/bin/entrypoint-forge-codex.sh
 COPY entrypoint-forge-antigravity.sh /usr/local/bin/entrypoint-forge-antigravity.sh
+COPY entrypoint-forge-copilot.sh /usr/local/bin/entrypoint-forge-copilot.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
 COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
@@ -138,6 +164,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
              /usr/local/bin/entrypoint-forge-codex.sh \
              /usr/local/bin/entrypoint-forge-antigravity.sh \
+             /usr/local/bin/entrypoint-forge-copilot.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/tillandsias-brew-shim-exec \
              /usr/local/bin/harness-supervisor \
@@ -195,6 +222,7 @@ COPY config-overlay/claude/settings.json /home/forge/.config-overlay/claude/sett
 # @trace spec:forge-environment-discoverability, order:1678-62p7
 # Antigravity reads MCP configuration from ~/.gemini/config/mcp_config.json.
 COPY config-overlay/antigravity/mcp_config.json /home/forge/.config-overlay/antigravity/mcp_config.json
+COPY config-overlay/copilot/mcp-config.json /home/forge/.config-overlay/copilot/mcp-config.json
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish
@@ -260,6 +288,9 @@ COPY cli/tillandsias-trust /opt/agents/tillandsias-cli/bin/tillandsias-trust
 COPY cli/tillandsias-listen /opt/agents/tillandsias-cli/bin/tillandsias-listen
 # 2006-srcr: how full /home/forge/src is, what to move, and its high-water mark (python3).
 COPY cli/tillandsias-room /opt/agents/tillandsias-cli/bin/tillandsias-room
+# 2067-dwqd: run a heavy job inside the forge's real budget (queue, headroom,
+# thread caps, process-tree kill on sustained memory pressure); stock Lua 5.4.
+COPY cli/forge-guard /opt/agents/tillandsias-cli/bin/forge-guard
 # 1874-pn3s: `flutter` is now a shell front that runs this lane client when the
 # lane is ready, else a cached SDK from the project cache, else a typed refusal.
 COPY cli/flutter-lane /opt/agents/tillandsias-cli/libexec/flutter-lane
@@ -277,7 +308,8 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-impact /usr/local/bin/tillandsias-impact \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-trust /usr/local/bin/tillandsias-trust \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-listen /usr/local/bin/tillandsias-listen \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-room /usr/local/bin/tillandsias-room
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-room /usr/local/bin/tillandsias-room \
+    && ln -sf /opt/agents/tillandsias-cli/bin/forge-guard /usr/local/bin/forge-guard
 
 # ── Skills mapping ─────────────────────────────────────────────
 # @trace

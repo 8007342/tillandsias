@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga at operator request 2026-11-07 ("open in a studio for editing" from a forge asked the operator to run a terminal command). Code is cited by symbol, never by line.
+packets:
+  - packet_id: webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls
+    order: 2025-e6mi
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [ux, agent, tray, mcp]
+    estimated_hours: 4
+    title: "webstudio.open from a forge lane launches the studio through the tray and returns its window and preview URLs, for any project"
+    context: |
+      Operator direction 2026-11-07: asking a forge agent "load this project in an authoring tool" or "open in a studio for editing" must have the tray launch the studio and open it in the dev Chromium framework browser, so the user and the agent co-edit with live preview. Today studio::call answers webstudio.open with an error naming the operator command `tillandsias --studio <id> --cloud <owner>/<project>`, and forge-agent-guidance.md says it "starts nothing from the lane"; the agent relays the command and the operator's run of it failed. 1860-auhm landed run_studio_mode (registry, launcher, write guard, co-edit tools) reachable only from the CLI; the webstudio.open refusal points at 1859-57mi, whose criterion covers only the choice prompt, so no row owned the lane launch. Generic for any project's forge. Rulings that apply: web-studio-lanes spec (dev Chromium window, Wayland-only, opens only after an authenticated 2xx; saves committed; publish alone needs user consent), forge-diagnostics-scope (the launch is a host-started container of the lane and its log is readable from that lane).
+    exit_criteria:
+      - "A fixture drives the real lane MCP dispatch with webstudio.open {studio: <a built lane>} against a stub launcher and asserts: the launcher is invoked exactly once with that studio id and the lane's project identity; a second call while it runs does not launch again; the result carries window_url and preview_url and no operator-command text; an unknown or not-yet-built studio is refused before anything launches; and the webstudio.open descriptor and forge-agent-guidance.md no longer say it starts nothing from the lane. Pre-fix result: FAILS, webstudio.open returns an error naming tillandsias --studio."
+    verifiable_closure: "A fixture drives the real lane MCP dispatch with webstudio.open {studio: <a built lane>} against a stub launcher and asserts: the launcher is invoked exactly once with that studio id and the lane's project identity; a second call while it runs does not launch again; the result carries window_url and preview_url and no operator-command text; an unknown or not-yet-built studio is refused before anything launches; and the webstudio.open descriptor and forge-agent-guidance.md no longer say it starts nothing from the lane. Pre-fix result: FAILS, webstudio.open returns an error naming tillandsias --studio."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the fixture named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      Nothing is done. Write the fixture first on work/2025-e6mi and watch it fail, then wire webstudio.open to the tray launcher. Also repoint openspec/changes/host-tool-discovery/tasks.md 2.3 and the studio::call refusal from 1859-57mi to this order.
+    provenance: |
+      Filed at operator request 2026-11-07, scope confirmed by macuahuitl the same day.
+    events:
+      - type: filed
+        ts: "2026-11-07T18:00:00Z"
+        host: yoga
+        summary: "filed ready from the operator direction of 2026-11-07"

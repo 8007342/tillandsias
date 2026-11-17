@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    field: next_action
+    value: |-
+      Read crates/tillandsias-headless/src/approval.rs for how allowed_signers is read and appended, then write the test that appends a pasted line and show it admitted today before gating it on host-enrol provenance.
+
+      [2026-11-16T23:57:56Z yoga] Re-scoped per the operator human-gate ruling 2026-11-16 (threat is ungated agent action, not signer identity). Kept (1) the accept-licence skill manual-flow guard test, (2) removal of TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS with TILLANDSIAS_APPROVAL_STATE_DIR confined to cfg(test), (3) polkit-gated tillandsias approval enrol. Dropped provenance filtering and the .enrolled sidecar (kept unpushed on yoga as local branch wip/2083-nfne-provenance). Draft PR on work/2083-nfne, held for the release-cut freeze.
+    ts: "2026-11-16T23:57:56Z"
+    host: yoga
+
+events:
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    event:
+      type: note
+      ts: "2026-11-16T23:57:56Z"
+      host: yoga
+      summary: |-
+        re-scope per operator human-gate ruling 2026-11-16 relayed by coordinator

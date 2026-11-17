@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: studio-run-workflow-mcp-tool-headless-comfyui-with-provenance-shared-gpu-queue
+    event:
+      type: completed
+      ts: "2026-11-07T10:29:38Z"
+      agent_id: linux-lenovinha-opus5-20261107t102938z
+      host: lenovinha
+      summary: |-
+        Already implemented on trunk and in daily use by kumbia; closing with evidence (lenovinha audit 2026-11-07). 1b0350944 added studio_tool.rs. It meets D1: nodes must be node-classes.tsv rows, models are register- or consent-admitted, and inputs live under /work/tmp/imagegen. It meets D2: inputs go under in/ and SaveImage is forced to studio/<job>/. D3: gpu_queue.rs holds the 1955-rjv3 queue shared by both engines, and POST /free runs after each job. D5: <output>.provenance.json is written and returned, and imagegen_tool adopts crate::provenance. Named test studio_run_workflow_refuses_unpinned_node_and_returns_provenance passes.

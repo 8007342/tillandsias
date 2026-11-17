@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli (ledger-only host) 2026-11-02, from the 1957 studio incident where `plan next` answered unsupported.
+packets:
+  - packet_id: plan-next-falls-through-to-the-next-citable-rows-when-its-top-rows-cannot-be-cited
+    order: 1962-69mn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags:
+    - plan
+    - mcp
+    - testing
+    estimated_hours: 2
+    title: plan next picks its top five rows BEFORE checking each is citable, so five uncitable top rows turn the whole answer into unsupported instead of falling through to the next citable rows
+    context: 'crates/tillandsias-plan/src/answer.rs fn answer_next_excluding: `eligible.sort_by_key(next_ranking_key)` then `eligible.truncate(limit)` (limit clamps to NEXT_LIMIT_MAX = 5), and only THEN the per-row loop calls `packet_row_citations(ledger, &id, fields, source_rel)` and `continue`s past every row that returns None. When all five truncated rows are uncitable the loop adds zero citations and `Envelope::supported` downgrades the answer to `unsupported`, even though eligible row six onward could have been cited. Seen 2026-11-02 on the 1957-* studio fragments (1957-emar and siblings): their `- packet_id:` items sat at column 0 under `packets:`, fragments::fragment_item_span treated the column-0 line as end of section, every one of those p0/p1 rows was uncitable, they outranked everything else, and `plan next` (forge-plan plan_next / tillandsias-plan next) answered unsupported for the whole release. PR #825 (e65ff520b) fixes the span. This row is the SEPARATE selection bug: the truncation happens before citability, so any future batch of five uncitable top rows blanks the answer again. The same shape exists in answer_query (packets truncated by `.take(*limit)` for Forgotten, then filtered by citability); the fix here is scoped to answer_next, and the claimer may note whether the shared loop deserves the same treatment.'
+    exit_criteria:
+    - 'A ledger with five uncitable ready rows ranked p0 above one citable ready p1 row: `answer_next` returns a supported envelope that cites the p1 row. Red on today''s tree (the answer is `unsupported`).'
+    - 'The headline still reports `top N of M eligible` where M counts all eligible rows (citable or not) and N the rows actually offered; the omitted uncitable rows are named in a NOTE line, as answer_query already does, so the caller sees which top-ranked rows were skipped rather than silently losing them.'
+    - 'Ranking order is unchanged: with five citable top rows the answer is byte-identical to today''s.'
+    verifiable_closure: 'cargo test -p tillandsias-plan plan_next_falls_through_past_uncitable_top_rows -- a named test in crates/tillandsias-plan/src/answer.rs that builds the five-uncitable-p0 plus one-citable-p1 ledger and asserts the envelope is supported and cites the p1 order. Red today.'
+    next_action: 'In answer_next_excluding, drop `eligible.truncate(limit)` and instead iterate the full sorted `eligible`, calling packet_row_citations per row and stopping once `limit` citable rows have been collected; push skipped ids into an `uncitable` Vec and append the NOTE line the way answer_query does. Then write the named test. Pickup: any host that compiles the plan crate (macuahuitl); calmecacpilli is ledger-only.'
+    provenance: calmecacpilli 2026-11-02, from the 1957 studio fragments answering unsupported; PR #825 for the span half.
+    events:
+    - type: filed
+      ts: '2026-11-02T09:00:00Z'
+      host: calmecacpilli
+      summary: filed p2; the selection half of the 1957 unsupported plan-next incident, separate from the fragment_item_span fix in PR #825

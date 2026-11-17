@@ -21,7 +21,7 @@ Each tool description SHALL say what the call starts on the host (a sibling web 
 #### Scenario: the starters are named
 
 - **WHEN** `tools/list` is read
-- **THEN** `preview.publish` says it starts a sibling web container, `toolchain.prepare` says it starts a one-time image build, `studio.run_workflow` names the studio container it needs, `webstudio.open` says it starts nothing from the lane, and `preview.status`, `preview.stop`, `preview.logs`, `webstudio.changes`, `webstudio.publish_request` and `tillandsias.index` say they start nothing
+- **THEN** `preview.publish` says it starts a sibling web container, `toolchain.prepare` says it starts a one-time image build, `studio.run_workflow` names the studio container it needs, `webstudio.open` says it starts the studio through the tray (order 2025-e6mi), and `preview.status`, `preview.stop`, `preview.logs`, `webstudio.changes`, `webstudio.publish_request` and `tillandsias.index` say they start nothing
 
 ### Requirement: the agent sees a grouped index first
 

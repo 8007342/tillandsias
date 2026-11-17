@@ -1,0 +1,65 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-13 at the coordinator's direction. Code is cited by symbol, never by line.
+packets:
+  - packet_id: an-admitted-gpu-voice-tts-and-voice-conversion-service-on-the-host-that-forges-call-like-studio-run-workflow
+    order: 2080-zq6u
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, audio, gpu, cuda, licences, mcp]
+    estimated_hours: 12
+    title: "A host-side GPU voice service (text-to-speech and voice conversion: Chatterbox or Kokoro on CUDA, admitted through the licence register) that a forge calls by tool, as it calls studio.run_workflow, so a project never loads its own copy of the model"
+    context: |
+      Motivating user: the demon_attack project's radio bank, a set of in-game radio voice lines. On macuahuitl 2026-11-10 the demon_attack forge ran 4 workers that each loaded their own Chatterbox model inside the forge; the 12.9 GB forge sat pinned at memory.high (about 9M high events) with host swap full and load about 17 (see the 2026-11-10 yoga correction fragment on the forge resource-stall row). Synthesis belongs on the host, once, on the GPU, like the ComfyUI studio (imagegen_studio) and the audio studio (audio_studio): one admitted model, one process, a queue, and the forge sends text plus a voice reference and receives a wav in its own output volume.
+      Shape to copy: imagegen_studio::run_args (own project network, no egress, read-only /models mount from the licence-registered cache, out volume, CDI GPU when present) and the studio.run_workflow tool path in studio_tool. Weights come through the licence register (images/models/licence-register.tsv) and the models manifest only: Chatterbox (Resemble AI, MIT) and Kokoro-82M (Apache-2.0) are the candidates; read cardData.license and gated from the Hub at a pinned revision, safetensors only. A licence outside the permissive list goes through accept-licence with the operator's OS-verified signature, never by an agent.
+      Voice conversion and cloning from a reference clip: the clip comes from the calling project; the service keeps nothing between calls (no voice library on the host).
+    exit_criteria:
+      - "A forge tool call (voice.synthesize: text, voice reference path in the project, output name) returns a wav in the forge's output volume, produced by one host container on the GPU; the forge's own memory does not grow by a model's size. Pre-fix result: no such tool exists (the forge's tool list has no voice.* entry)."
+      - "The model files are rows of images/models/licence-register.tsv and the models manifest at a pinned revision with sha256; a file not listed is refused."
+      - "Concurrent calls from one forge are queued on the one loaded model, not loaded again per call."
+    verifiable_closure: "cargo test -p tillandsias-headless --features host-services,tray --bin tillandsias voice_service"
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the voice_service test module (argv shape, licence-register refusal, queue-not-reload) in the same commit; the GPU half is measured by regenerating the demon_attack radio bank on a CUDA host.
+    next_action: >
+      Nothing is built. Read imagegen_studio::run_args and studio_tool's run_workflow path, pick Chatterbox or Kokoro by reading their Hub cards at a pinned revision, write the voice_service argv and queue tests red first, then the container and the forge tool.
+    provenance: |
+      Coordinator direction 2026-11-13 (Task C); demon_attack measurements from the 2026-11-10 yoga correction relayed from macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-13T22:31:55Z"
+        host: macuahuitl
+        summary: "filed at the coordinator's direction; the demon_attack radio bank is the motivating user"
+
+  - packet_id: hugging-face-login-for-the-host-via-browser-device-flow-with-a-tray-token-paste-fallback-token-only-in-the-vault
+    order: 2080-dhzf
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [vault, oauth, licences, models, tray]
+    estimated_hours: 8
+    title: "Hugging Face login for the host: `tillandsias --huggingface-login` signs the operator in through the browser (OAuth device flow or PKCE), falls back to pasting a token in the tray, and keeps the token only in the vault for host-side model fetchers"
+    context: |
+      Operator asked 2026-11-13 for `tillandsias --huggingface-login`. Why: authenticated Hub downloads get higher rate limits and speed, and the operator's own account can accept gated model terms on huggingface.co, which then lets accept-licence admit FLUX.1-dev or SD3.5. Gated terms are always clicked by the human on the website, never by tillandsias.
+      What Hugging Face supports, read 2026-11-13 from https://huggingface.co/.well-known/openid-configuration: authorization_endpoint /oauth/authorize, token_endpoint /oauth/token, device_authorization_endpoint /oauth/device, grant_types_supported includes urn:ietf:params:oauth:grant-type:device_code, authorization_code and refresh_token, code_challenge_methods_supported [S256], and a registration_endpoint plus client_id_metadata_document_supported. So both a device flow and authorization code with PKCE are offered; the device flow needs no loopback listener and suits a headless host. App registration and scopes per https://huggingface.co/docs/hub/oauth (read-repos for downloads; gated-repos as applicable). Model on cloudflare_login / cloudflare_oauth (the existing browser-login flow and its vault write).
+      Fallback: the tray asks for a pasted user access token (read scope) when the browser flow cannot complete.
+      Storage: the token lives only in the vault; no plaintext at rest (operator ruling 2026-10-19: lost credentials beat unencrypted; an unopenable vault is wiped and the operator logs in again). The studio and model fetchers (imagegen_models' proxy fetch, restricted_fetch) read it host-side and send it only to huggingface.co. Forges never see it: HF_TOKEN is already a scrubbed credential in tillandsias-plan child_env.
+    exit_criteria:
+      - "`tillandsias --huggingface-login` completes a device-flow login against a stub authorization server and writes the token to the vault only; no file under the state, cache or config dirs contains it. Pre-fix result: FAILS (the flag does not exist)."
+      - "When the browser flow fails, the tray paste path stores a pasted token the same way."
+      - "A host-side model fetch sends Authorization: Bearer only to huggingface.co; a forge's environment has no HF_TOKEN."
+    verifiable_closure: "cargo test -p tillandsias-headless --features host-services,tray --bin tillandsias huggingface_login"
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the huggingface_login test module (stub device-flow server, vault-only storage, no-plaintext scan, forge env scrub) in the same commit; the live login is measured once by the operator on a stable release.
+    next_action: >
+      Nothing is built. Read cloudflare_login and cloudflare_oauth for the login shape and vault write; register a Hugging Face OAuth app (operator's account, an operator action) or use client metadata documents; write the device-flow tests against a stub server red first.
+    provenance: |
+      Coordinator relay 2026-11-13 of an operator request (C2); Hugging Face OIDC discovery document read 2026-11-13 by macuahuitl.
+    events:
+      - type: filed
+        ts: "2026-11-13T22:31:55Z"
+        host: macuahuitl
+        summary: "filed at the coordinator's direction; operator asked for tillandsias --huggingface-login"

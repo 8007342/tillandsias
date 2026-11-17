@@ -17,8 +17,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-MD_PATH="docs/convergence/centicolon-dashboard.md"
-JSON_PATH="docs/convergence/centicolon-dashboard.json"
+# 2066-obsv: the dashboard is rendered under target/ and never committed.
+MD_PATH="target/convergence/centicolon-dashboard.md"
+JSON_PATH="target/convergence/centicolon-dashboard.json"
 
 TESTS_RUN=0
 TESTS_PASSED=0
@@ -59,6 +60,8 @@ bash scripts/update-convergence-dashboard.sh >/dev/null 2>&1
 
 # --- Group 1: rendered markdown shape ----------------------------------------
 printf '\n  [group] rendered markdown shape\n'
+assert_true "no dashboard is committed under docs/convergence (2066-obsv)" \
+    "[ ! -e docs/convergence/centicolon-dashboard.md ] && [ ! -e docs/convergence/centicolon-dashboard.json ]"
 assert_true "md exists" "[ -f '$MD_PATH' ]"
 assert_true "md carries auto-generation header" \
     "grep -qF 'THIS FILE IS AUTO-GENERATED' '$MD_PATH'"

@@ -17,7 +17,8 @@
 # executable/linkable EXTENSIONS even when git classifies them text (a
 # zero-byte or stub .so is still a leak).
 #
-# Allowlist: image/icon asset PATH PREFIXES only, enumerated below with their
+# Allowlist: image/icon asset PATH PREFIXES, and (2078-kmbx) the one
+# operator-ruled audio fixture directory, enumerated below with their
 # contents at adoption time. Executable/linkable artifacts are never
 # allowlistable — a new prefix requires editing this file, in review.
 # (The packet estimated "five icon/image assets"; the empirical set at
@@ -37,6 +38,7 @@ ALLOW_PREFIXES=(
     "crates/tillandsias-macos-tray/assets/"    # icon.icns, icon.png, tray-icon.png
     "crates/tillandsias-windows-tray/assets/"  # tillandsias.ico
     "images/dmg/"                              # dmg-background.png/.svg
+    "tests/fixtures/audio/kumbia/"             # 2078-kmbx: 11 FLAC excerpts, operator ruling 2026-11-10 (under 10 MB, hash-checked by test-audio-studio-glitches.lua)
 )
 
 # Extensions refused even when git classifies the blob as text.

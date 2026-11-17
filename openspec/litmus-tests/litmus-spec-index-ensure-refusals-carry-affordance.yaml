@@ -1,0 +1,34 @@
+# @trace spec:forge-environment-discoverability, order:1247-amcu
+name: litmus:spec-index-ensure-refusals-carry-affordance
+spec: forge-environment-discoverability
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/spec-index-ensure.sh (the spec RAG index builder
+  behind spec_answer) says WHY it refused and WHAT would make it not a
+  refusal, as labelled "  why:" / "  remedy:" stderr lines beside its
+  unchanged stdout verdict (1247-amcu). The fixture drives a failing and an
+  empty chunker through a stub plan binary, hermetically, and a static arm
+  fails any verdict site added later without an affordance.
+
+preconditions:
+  - workspace contains scripts/spec-index-ensure.sh
+  - workspace contains scripts/lua/test-spec-index-ensure-affordances.lua
+
+critical_path:
+  - step: "a failing or empty chunker refuses with why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-spec-index-ensure-affordances.lua 2>&1"
+    timeout_ms: 300000
+    success_pattern: "ok:spec-index-ensure-affordances:3 arms"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "a spec-index refusal names its rule and how to clear it"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "spec-index-ensure-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in spec-index-ensure.sh ships without why/remedy"

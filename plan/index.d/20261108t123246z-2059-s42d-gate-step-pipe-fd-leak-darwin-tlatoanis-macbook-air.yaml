@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-step-runner-leaks-the-step-pipe-into-every-child-under-bash-3-2-so-darwin-refuses-clean-steps-as-pipe-holders
+    order: 2059-s42d
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, macos, portability]
+    estimated_hours: 1
+    title: "On darwin the gate-step runner leaks the step's pipe into every child (bash 3.2 saves fd 8 to fd 12), and its holder probe has no /proc, so clean steps are refused with holders=unknown"
+    context: "Measured 2026-11-08T12:32:46Z on tlatoanis-macbook-air (linux-next): ./build.sh --check stopped at 'a pending capability row does not wedge the host that published it (1128-4ffr)'. The fixture passed 9/9, but the gate printed refused:gate-step:background-job-holds-pipe ... holders=unknown. Two darwin causes. (1) _gs_await_step_pipe names holders only through /proc, which darwin lacks. (2) _gs_exec_step ran '_run bash step >&8 2>&1 8>&-'. On bash 3.2 a redirection on a FUNCTION call saves fd 8 (the step pipe) to fd 12 without close-on-exec, so every child, even a job redirected to /dev/null, still holds the pipe. Minimal repro: under /bin/bash 3.2 a child sees fds 0 1 2 12 through a function call and 0 1 2 through a command or subshell. scripts/lua/test-gate-step-pipe-holder.lua failed 2 arms on darwin: LEAK did not name the sleep, and the CLEAN negative control was refused."
+    exit_criteria:
+      - "On darwin the holder probe names holders through lsof, and a job redirected off the step's pipe no longer holds it. test-gate-step-pipe-holder.lua passes 3/3 on darwin and on Linux. Pre-fix result: FAILS on darwin with 2 arms red."
+    verifiable_closure: "tillandsias-plan script run scripts/lua/test-gate-step-pipe-holder.lua prints ok:gate-step-pipe-holder:3/3 on darwin, and ./build.sh --check passes the 1128-4ffr step there."
+    unscoreable: 'none.'
+    next_action: "Land the exec-based redirection and the lsof backend."
+    provenance: "Found by tlatoanis-macbook-air claude during the 2031-dwwy census; assigned by macuahuitl-fedora (2026-11-08)."
+    events:
+    - type: filed
+      ts: '2026-11-08T12:32:46Z'
+      host: tlatoanis-macbook-air
+      summary: "filed ready: bash 3.2 leaks the gate step pipe as fd 12; the holder probe needs a darwin backend"

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-proxy-refuses-a-connect-whose-target-does-not-match-its-sni
+    event:
+      type: progress
+      ts: "2026-11-08T05:13:17Z"
+      agent_id: linux-lenovinha-opus5-20261108t051317z
+      host: lenovinha
+      summary: |
+        ADDITION (coordinator macuahuitl-fedora, 2026-11-08, from the 2041-i3nk part 2 live test against the built proxy image): a ClientHello with NO SNI is not terminated on a tier port. squid's ssl::server_name --client-requested falls back to the CONNECT target when SNI is absent, so a no-SNI client is judged by its target alone. That does not widen reach: the target is still held to the port's tier (dstdomain in http_access). Part 2 pins this behaviour as measured, in litmus:proxy-tier-ports-live arm 5 (no SNI to fonts.googleapis.com passes; no SNI to pypi.org is refused). This row should decide, and implement if chosen, fail-closed on a missing SNI (for example an SNI-presence check in ssl_bump), together with its SNI-to-destination resolution check. When it does, arm 5 must change from 'no-SNI in-tier passes' to 'no-SNI is refused', red first.

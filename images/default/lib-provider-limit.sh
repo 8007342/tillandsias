@@ -22,7 +22,16 @@
 # Record: $(provider_limit_dir)/<provider>, one line
 #   <until-epoch> <until-utc> <recorded-utc>
 # in the forge's persistent project cache, so every later forge of this
-# project on this host reads it. It does NOT yet reach other hosts.
+# project on this host reads it.
+#
+# OTHER HOSTS (1957-msjs). The free tier's quota is shared fleet-wide, so the
+# HOST relays: when a forge exits with a record, scripts/provider-limit-relay.sh
+# publishes it as a plan event, and every host's launch folds those events
+# offline and passes the live ones in as TILLANDSIAS_PROVIDER_LIMIT_SHARED,
+# `<provider> <until-epoch> <until-utc> <recorded-by>` entries joined by `;`.
+# A shared entry refuses like an own record and names the host that recorded
+# it. provider_limit_active stays own-record only: the supervisor asks it
+# whether THIS run hit the limit.
 #
 # TILLANDSIAS_IGNORE_PROVIDER_LIMIT=1 lets an operator try anyway.
 
@@ -83,14 +92,43 @@ provider_limit_active() {
     printf '%s\n' "$until_utc"
 }
 
-# provider_limit_refuse <provider> — 0 (refuse) while a limit is active,
-# printing why; 1 to go ahead.
+# provider_limit_shared_active <provider> — 0 while a host-seeded entry in
+# TILLANDSIAS_PROVIDER_LIMIT_SHARED has not lifted; prints
+# `<until-utc> <recorded-by>` of the latest one.
+provider_limit_shared_active() {
+    local now best=0 best_line="" entry p until until_utc by rest
+    now="$(date -u +%s)"
+    local IFS=';'
+    for entry in ${TILLANDSIAS_PROVIDER_LIMIT_SHARED:-}; do
+        IFS=' ' read -r p until until_utc by rest <<<"$entry"
+        [ "$p" = "$1" ] || continue
+        case "$until" in '' | *[!0-9]*) continue ;; esac
+        [ "$now" -lt "$until" ] || continue
+        [ "$until" -gt "$best" ] || continue
+        best="$until"
+        best_line="$until_utc ${by:-another-host}"
+    done
+    [ -n "$best_line" ] || return 1
+    printf '%s\n' "$best_line"
+}
+
+# provider_limit_refuse <provider> — 0 (refuse) while a limit is active, this
+# host's own or one another host recorded, printing why; 1 to go ahead.
 provider_limit_refuse() {
-    local until_utc
+    local until_utc by="" shared
     [ "${TILLANDSIAS_IGNORE_PROVIDER_LIMIT:-0}" = "1" ] && return 1
-    until_utc="$(provider_limit_active "$1")" || return 1
-    printf '[forge] provider usage limit reached, retry after %s (%s); not calling it. Set TILLANDSIAS_IGNORE_PROVIDER_LIMIT=1 to try anyway.\n' "$until_utc" "$1"
-    printf 'blocked:provider-usage-limit:provider=%s:retry_after=%s\n' "$1" "$until_utc"
+    if ! until_utc="$(provider_limit_active "$1")"; then
+        shared="$(provider_limit_shared_active "$1")" || return 1
+        until_utc="${shared%% *}"
+        by="${shared#* }"
+    fi
+    if [ -n "$by" ]; then
+        printf '[forge] provider usage limit reached on %s, retry after %s (%s); the quota is shared, so not calling it. Set TILLANDSIAS_IGNORE_PROVIDER_LIMIT=1 to try anyway.\n' "$by" "$until_utc" "$1"
+        printf 'blocked:provider-usage-limit:provider=%s:retry_after=%s:recorded_by=%s\n' "$1" "$until_utc" "$by"
+    else
+        printf '[forge] provider usage limit reached, retry after %s (%s); not calling it. Set TILLANDSIAS_IGNORE_PROVIDER_LIMIT=1 to try anyway.\n' "$until_utc" "$1"
+        printf 'blocked:provider-usage-limit:provider=%s:retry_after=%s\n' "$1" "$until_utc"
+    fi
     return 0
 }
 

@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: windows-tray-host-process-dies-silently-unsupervised
+    event:
+      type: progress
+      ts: "2026-11-08T01:11:32Z"
+      agent_id: windows-yolanda-claude-20261108t004326z
+      host: yolanda
+      summary: |
+        PROGRESS. Code on work/783-eeii at 5491e29dc (contains origin/linux-next as of 2026-11-08). All three criteria implemented; NOT closed (not landed).
+        - criterion 1: tray-lifecycle.state records start, a 60s heartbeat and the exit route (quit-menu, session-end via WM_ENDSESSION, message-loop-error, panic via catch_unwind around run, startup-failure, message-loop-ended; first wins). A record with no exit line is reported by the next start at WARN (Event Log) with its heartbeat window.
+        - criterion 2: Event Log searched (queries in plan/issues/enhancement/tray-host-process-silent-death-2026-08-16.md). Death 2 ATTRIBUTED: a logged Quit at 14:04:46 local whose VM drain took the enclave down. Death 1 NOT ATTRIBUTABLE: no panic/Quit/WER/power/shutdown event; signature of external TerminateProcess or job teardown; process-exit auditing was off.
+        - criterion 3: --diagnose prints "Tray process:"; --forge refuses exit 3 naming the dead tray. Running-or-not comes from the tray-windows singleton (version-independent), never the record.
+        Evidence: tray_lifecycle tests 7/7; two sabotages (finding always None; held reads not-running) turned 1 and 2 tests red, green on restore; real debug binary: --diagnose reads running against the live pre-783 tray, --forge with an unheld lock name refused rc=3. Clippy and fmt clean.
+        Preflight NOT yet green: relay-preflight refused at check-no-python-scripts, a native-Windows decider defect (its bash probe returns an MSYS /c/ path the Lua spawner cannot exec; the policy binary run directly says ok). The WSL build.sh --preflight re-run was reaped by the harness for host memory pressure (7% free, WSL balloon) and its guest orphan was stopped.

@@ -37,6 +37,8 @@
 
 set -uo pipefail
 
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 ROOT="${SKILLS_CHECK_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT" 2>/dev/null || { echo "skip:not-a-git-repo"; exit 0; }
 git rev-parse --git-dir >/dev/null 2>&1 || { echo "skip:not-a-git-repo"; exit 0; }
@@ -127,17 +129,20 @@ _normalise() {  # <dir> <target> -> prints a repo-relative normalised path, or A
 # <runtime dir> <tracked link path> <what it should reach>
 _assert_resolves_into_canonical() {
     _t="$(_link_target_in_index "$2")" || {
+        _afford "git ls-files -s says $2 is a symlink, but its target blob could not be read" "run git fsck, or re-create the link: git rm --cached $2 && ln -sfn <relative path into skills/> $2 && git add $2"
         echo "violation:unresolvable-link:$2 — tracked as a symlink but its target could not be read from the index"
         exit 1
     }
     _r="$(_normalise "$(dirname "$2")" "$_t")"
     if [ "$_r" = "ABSOLUTE" ]; then
+        _afford "$2 points at an absolute path, which only exists on the host that made it" "make it relative into canonical skills/ (e.g. ln -sfn ../../skills/<name> $2) and git add it"
         echo "violation:absolute-link-target:$2 -> $_t — an absolute target resolves on the author's host and nowhere else, including inside the builder toolbox where the gate runs"
         exit 1
     fi
     case "$_r" in
         skills|skills/*) ;;
         *)
+            _afford "$2 resolves outside canonical skills/, so the runtime reads a second copy that can drift" "point it into skills/ (ln -sfn ../../skills/<name> $2), or move the content into skills/ and link to it"
             echo "violation:link-leaves-canonical:$2 -> $_t (resolves to '$_r') — a runtime skills link must reach canonical skills/, or it is a second source wearing a symlink"
             exit 1 ;;
     esac
@@ -145,6 +150,7 @@ _assert_resolves_into_canonical() {
     # looked at is the whole reason this criterion exists.
     _resolved_tracked="$(git ls-files "$_r" | head -1)"
     if [ -z "$_resolved_tracked" ]; then
+        _afford "$2 resolves to $_r, where nothing is tracked" "restore the target under skills/, or fix the link to a tracked skills/ path"
         echo "violation:dangling-link:$2 -> $_t (resolves to '$_r') — nothing is tracked there, so every skill it claims to reach is unreachable"
         exit 1
     fi
@@ -172,6 +178,7 @@ for d in $RUNTIMES; do
         # REFUSE BY NAME rather than skip. A declared runtime with no tracked
         # skills tree is either a deletion nobody meant or a declaration nobody
         # updated, and both are things a reader must be told.
+        # affordance-ok: the verdict says why and what to do on the same line
         echo "violation:runtime-missing:$d/skills — declared in $_decl_name but nothing is tracked there. Restore it, or remove it from the declaration deliberately."
         exit 1
     fi
@@ -181,6 +188,7 @@ for d in $RUNTIMES; do
     while IFS= read -r entry; do
         [ -n "$entry" ] || continue
         is_declared "$entry" && continue
+        _afford "$d/skills/$entry is a real file or directory, so that runtime carries its own copy beside canonical skills/" "move it to skills/$entry (if new) and replace it with a link: git rm -r --cached $d/skills/$entry && ln -s ../../skills/$entry $d/skills/$entry && git add $d/skills/$entry"
         echo "violation:second-source:$d/skills/$entry"
         exit 1
     done <<EOF
@@ -223,6 +231,7 @@ EOF
                 continue ;;
         esac
         is_declared "$s" && continue
+        # affordance-ok: the two printf lines that follow carry why and remedy
         echo "violation:missing-from-runtime:$d/skills/$s"
         # 1247-amcu: why and remedy on stderr; stdout stays the one pinned
         # line. Never offers HARNESS-SCOPED.txt as the fix (1256-f7td).

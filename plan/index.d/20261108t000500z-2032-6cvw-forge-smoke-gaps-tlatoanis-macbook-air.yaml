@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-08 at the coordinator's direction (macuahuitl-fedora) from the v56.11.7.1 macOS forge smoke.
+packets:
+- packet_id: the-forge-smoke-has-a-way-to-see-guest-kernel-faults
+  order: 2032-6cvw
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge, observability, smoke]
+  estimated_hours: 2
+  title: The forge smoke turn cannot see guest kernel faults (no dmesg or journalctl in the forge), so "no segfaults" is checked host-side only
+  context: 'v56.11.7.1 macOS smoke: the forge agent could only report that its own commands did not segfault. 2029-b87w''s segfaults and hang were visible only from the host through tray --exec-guest.'
+  exit_criteria:
+  - 'The smoke reports guest kernel segfault/hung-task counts for the boot, either from a host-side step (exec-guest journalctl -k) recorded in the smoke report, or from a read-only summary exposed to the forge; a fixture covers the count.'
+  verifiable_closure: 'A smoke report that carries the guest kernel fault count.'
+  unscoreable: 'none.'
+  next_action: 'Add a host-side guest kernel fault count to the smoke skill''s macOS/Windows forge step.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-08: "File (a) and (b) as small rows."'
+  events:
+  - type: filed
+    ts: '2026-11-08T00:00:11Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the v56.11.7.1 macOS forge smoke
+- packet_id: forge-quick-intro-names-the-credential-guard-script
+  order: 2032-vtp2
+  status: ready
+  kind: docs
+  priority: p3
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [forge, docs, skills]
+  estimated_hours: 1
+  title: forge-quick-intro names the credential guard script the smoke turn runs
+  context: 'The v56.11.7.1 macOS forge agent had to find the credential guard (it reported ok:forge-git-mirror) without the quick-intro skill naming it.'
+  exit_criteria:
+  - 'The forge-quick-intro skill names the credential guard script, its path and its ok/refused tokens, and a check fails if the named path does not exist.'
+  verifiable_closure: 'The skill text plus the path check.'
+  unscoreable: 'none.'
+  next_action: 'Add the guard''s path and tokens to forge-quick-intro.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-08: "File (a) and (b) as small rows."'
+  events:
+  - type: filed
+    ts: '2026-11-08T00:00:11Z'
+    host: tlatoanis-macbook-air
+    summary: filed ready from the v56.11.7.1 macOS forge smoke

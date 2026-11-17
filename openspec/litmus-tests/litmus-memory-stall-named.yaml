@@ -1,0 +1,59 @@
+# @trace spec:observability-metrics, order:2067-dwqd
+#
+# Regression pin for order 2067-dwqd. memory.high throttles instead of
+# killing (the operator's choice in the 1375-xxzj budget), so a forge whose
+# jobs outgrow it does not die: it freezes. On 2026-11-09 the demon_attack
+# forge sat at memory.high for about two hours with nothing on the tray. Now
+# the tray's resident watch names a tillandsias container whose
+# memory.pressure full avg60 is at least 10% while its memory.events high
+# count rises, once per episode, on the desktop and as a warn:memory-stall:
+# line; `tillandsias --memory-stall` runs the same pass on demand. The fixture
+# was red against trunk ce151d3ef (Unsupported option) and red again with the
+# resolver's tillandsias.slice probe removed (the forges were invisible there).
+name: litmus:memory-stall-named
+spec: observability-metrics
+phase: post-build
+description: >
+  Pin that a real container pinned at its memory.high in tillandsias.slice is
+  named by `tillandsias --memory-stall` (by name, with the memory.high it is
+  held at, exit 1), and that an idle container with the same budget beside it
+  is not. The fixture asserts the stall from the kernel before any verdict.
+severity: high
+size: quick
+
+inputs:
+  - crates/tillandsias-metrics/src/memory_stall.rs
+  - crates/tillandsias-metrics/src/container.rs
+  - crates/tillandsias-headless/src/memory_stall_watch.rs
+  - scripts/lua/test-memory-stall-named.lua
+
+preconditions:
+  - the headless binary is built (target/debug/tillandsias, or TILLANDSIAS_HEADLESS_BIN); the fixture reports could-not-run otherwise
+  - a versioned localhost/tillandsias-forge-base tag is in the podman store (tillandsias --init); could-not-run otherwise
+  - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "a container held at memory.high is named by name with its budget, exit 1; an idle one beside it is not"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-memory-stall-named.lua"
+    timeout_ms: 300000
+    success_pattern: "ok:memory-stall-named:4"
+    failure_pattern: "refused:|FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:observability-metrics"
+  expected_log: "ok:memory-stall-named:4"
+  log_fields:
+    spec: "observability-metrics"
+    test: "memory-stall-named"
+    artifact: "crates/tillandsias-metrics/src/memory_stall.rs"
+
+rollback:
+  on_failure: >
+    Arm 1 red with "ok:memory-stall:none" means the scan cannot find the scope:
+    check that container::resolve_scope_dir still probes tillandsias.slice
+    under user@<uid>.service and at the root. Arm 1 red with a premise refusal
+    means the kernel did not stall the hog (no PSI, or no memory controller
+    delegated). Arm 3 red means the thresholds name a container that is not
+    throttled: check STALL_FULL_AVG60 and the high-event rise in StallWatch.
+  command: "grep -n 'tillandsias.slice\\|STALL_FULL_AVG60' crates/tillandsias-metrics/src/container.rs crates/tillandsias-metrics/src/memory_stall.rs"

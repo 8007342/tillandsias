@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-consent-is-a-grant-tier-scope-expiry-so-an-approved-tier-is-callable-directly-without-another-ladder-walk
+    field: next_action
+    value: 'Land #825 (origin/work/1957-5m8g @c56e9cb65, the one-time per-host download gate per the operator ruling 2026-11-01) into linux-next, then verify the three imagegen_tool download-gate tests green there and close. The spec/overlay text already matches it on work/1959-dlgate. Remaining gap filed for follow-up: the host grant is in-process memory (HashSet), so it is forgotten on headless restart; persist it beside the model cache so "never asks again on this host" holds across restarts.'
+    ts: "2026-11-02T05:15:22Z"
+    host: calmecacpilli
+    replaces_sha256: "b7985d61c1c2210b3725e5d03c38758fd7550198406b654a40c4f1e9990f4401"
+
+events:
+  - packet_id: imagegen-consent-is-a-grant-tier-scope-expiry-so-an-approved-tier-is-callable-directly-without-another-ladder-walk
+    event:
+      type: note
+      ts: "2026-11-02T05:15:22Z"
+      host: calmecacpilli
+      summary: |-
+        operator ruling 2026-11-01 on #825: download gate replaces session grant; the Grant-store step is done at c56e9cb65

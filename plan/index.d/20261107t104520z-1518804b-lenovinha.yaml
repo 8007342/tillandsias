@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-nvidia-cdi-currency-check-keys-on-the-driver-version-while-the-spec-pins-libraries-that-version-independently-so-it-reports-current-about-a-spec-whose-files-no-longer-exist-and-the-gpu-container-lane-dies
+    event:
+      type: progress
+      ts: "2026-11-07T10:45:20Z"
+      agent_id: linux-lenovinha-opus5-20261107t104520z
+      host: lenovinha
+      summary: |-
+        Live proof on macuahuitl (RTX A5000, driver 615.71.09, trunk 8351a0f3f+, scratch copy of /etc/cdi/nvidia.yaml via TILLANDSIAS_CDI_DIR), run by macuahuitl and relayed to lenovinha. Criterion 1: with the stamp current and only one hostPath edited, the run gives stdout ok:nvidia-cdi:generated:615.71.09, stderr note:nvidia-cdi:stale-hostpath:/usr/lib64/libnvidia-egl-gbm.so.1.1.5, rc=0. Criterion 4, negative control: the rerun gives ok:nvidia-cdi:current:615.71.09 and spec mtime 1794048269 is unchanged. Criteria 2 and 3 are on trunk (c251ecc00, 1249-xngp); their live runs (host-native engine on 11434 reads lane=bare-metal; free port starts lane=container) wait for the GPU to be idle. Open question found: the script checks only the user CDI dir, while podman on macuahuitl uses /etc/cdi/nvidia.yaml; its user dir holds a 610.57.04 stamp and no spec.

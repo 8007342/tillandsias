@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-live-vms-vm-swap-img-is-unlinked-while-the-vm-still-uses-it-2066-d7g7
+    order: 2066-d7g7
+    status: ready
+    kind: fix
+    priority: p2
+    desired_release: v0.5
+    pickup_role: macos
+    capability_tags: [macos, vm, swap, disk]
+    estimated_hours: 3
+    title: "macOS: the live VM's vm-swap.img is unlinked (nlink 0) while the VM still uses it, hiding 24 GiB from host disk accounting"
+    context: "lsof +L1 on the VZ process (up since 2026-11-07 17:27) shows vm-swap.img with nlink 0; ls shows no swap file. Suspect: impl Drop for VzRuntime removes image_root/vm-swap.img unconditionally, so another process's VzRuntime dropped on the same root deletes the live file. Evidence: plan/issues/macos-vz-guest-storage-probe-2026-11-09.md (work/2066-395p)."
+    exit_criteria:
+      - "A fixture shows a second VzRuntime dropped while the VM runs leaves the live swap file linked (fails on today's code), and lsof +L1 on a live VM shows no vm-swap.img."
+    verifiable_closure: "A fixture shows a second VzRuntime dropped while the VM runs leaves the live swap file linked (fails on today's code), and lsof +L1 on a live VM shows no vm-swap.img."
+    unscoreable: 'none.'
+    next_action: "Find which code path drops a VzRuntime on the live image root (exec-guest, diagnose --with-metrics, tests); remove the swap file only from the process that created it."
+    provenance: "Measured by tlatoanis-macbook-air claude, 2026-11-09, at macuahuitl-fedora's ruling (c) on 2065-5vcv."
+    events:
+    - type: filed
+      ts: '2026-11-09T22:00:57Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the read-only macOS guest storage probe"

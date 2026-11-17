@@ -30,7 +30,11 @@ critical_path:
     # step pins (relay-fix, macuahuitl 2026-09-27: 50 GiB cache, rc=1).
     command: "test -x scripts/check-build-cache-sweep.sh && out=$(scripts/check-build-cache-sweep.sh); case \"$out\" in (skip:forge-exempt) echo \"$out\" ;; (*) grep -qE '^(ok:build-cache-sweep-not-due|due:build-cache-sweep):bytes=[0-9]+:gib=[0-9]+:marker=[^:]+:reason=[a-z0-9-]+$' <<<\"$out\" && echo 'ok: grammar pinned' ;; esac"
     expected_behavior: "ok: grammar pinned"
-    timeout_ms: 30000
+    # 2093-vves: budget 60 s. The property is "a due sweep is DETECTED and
+    # named in the pinned grammar", not walk speed. On macuahuitl target/ is
+    # 409 GiB: the walk takes 11 s quiet and overran 30 s under gate I/O.
+    # 2093-npdi makes the check bounded and runs the overdue sweep after the cut.
+    timeout_ms: 60000
 
   - step: "NOT DUE: under the size threshold with a fresh marker is a no-op (exit 0)"
     # 1428-v4tt: steps 2-15 (except 13, which tests the forge exemption

@@ -4,6 +4,11 @@
 # workerd's Linux distribution is glibc-linked; Alpine's musl loader cannot
 # execute it. Keep the Node release pinned while using the supported Debian base.
 FROM docker.io/library/node:22.19.0-bookworm-slim@sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 LABEL io.tillandsias.web-runtime="wrangler-local"
 LABEL io.tillandsias.wrangler.version="4.42.0"

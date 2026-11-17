@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-host-enrols-a-fido2-security-key-as-its-approval-key-with-an-honestly-labelled-polkit-software-fallback
+    field: next_action
+    value: |-
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+
+
+      [2026-11-10T22:41:18Z yoga] 2026-11-10T22:41:18Z yoga BLOCKS LICENCE RECORDS. The operator approved the Demucs weights licence on 2026-11-10 (non-commercial, gated per project; relayed by macuahuitl-fedora). The signed acknowledgement can't be produced, because no Linux host can enrol an approval key. Trunk @957d75fd4 checked: licence_consent::Verifier::for_host reads <state dir>/approvals/allowed_signers, and nothing on Linux writes it; there is no tillandsias approval or enrol subcommand. tasks.md sections 1 and 2 are all unchecked. This row and its dependency 1879-5jkt block 2068-cqis (the real-weights Demucs arms) and the 4 CorridorKey seed acknowledgements. Possible interim path, the operator's call and not taken: the macOS tray already has --approval-enrol <slug> and --approval-sign <slug> <statement> (1886-hf9j, landed 10183b92b). Adding that Mac's allowed-signers line on the verifying host would let accept-licence step 3 use Touch ID. 1886-hf9j's row still reads ready / "Nothing is done" although its code landed.
+
+      [2026-11-11T10:17:16Z yoga] 2026-11-11T10:17:15Z yoga OPERATOR RULING 2026-11-11 (relayed by macuahuitl-fedora): option (a). Linux approval keys are FIDO2 only (ssh-keygen -t ed25519-sk -O verify-required), with NO software fallback: no polkit action, no Vault-sealed software key, no software-password strength on Linux. Until the operator has a security key, Linux approvals are signed on the Mac with Touch ID (1886-hf9j --approval-sign); that key's allowed_signers line is already on macuahuitl. With no authenticator present, enrolment and request refuse with a named message pointing at Mac signing. The polkit arms of this row's exit criterion ("software-password", "polkit stubbed to allow/deny") are retired by this ruling. Why: polkit reads actions only from /usr/share/polkit-1/actions, read-only on Silverblue, so org.tillandsias.approve can't be installed without layering. Being built on yoga as work/1880-9wpd, stacked on #1085 (1879-5jkt), which removes the broker's polkit path in the same change.
+
+      [2026-11-11T20:45:54Z yoga] 2026-11-11T20:45:53Z yoga HANDOFF (rate limits; host restarting). Work in progress on work/1880-9wpd (WIP commit, no PR; not ready). Done:
+      - crates/tillandsias-headless/examples/sk_stub.rs: an OpenSSH sk-api provider (API 0x000a0000) built as a cdylib [[example]] (ring as a dev-dependency, already in the lockfile). TILLANDSIAS_SK_STUB_MODE=absent|decline.
+      - Measured on yoga with OpenSSH 10.5: ssh-keygen -t ed25519-sk -O verify-required -w libsk_stub.so enrols; -Y sign -w signs; stock -Y verify accepts. MODE=absent gives "Key enrollment failed: device not found".
+      - FINDING: allowed_signers accepts no verify-required option ("bad options: unknown key option"; man: only cert-authority, namespaces, valid-after, valid-before). So the broker's verify must check the SSHSIG sk flags byte for UV (0x04) itself. The mirror's pre-receive (1881-ynjn) must do the same.
+      - scripts/lua/test-approval-broker.lua rewritten red-first for FIDO2 only. Arms: E1 no authenticator -> refused:approval-enrol:no-security-key naming --approval-sign; E2/E3 enrol line and idempotence; hardware-pin; plain key -> not-a-security-key; unenrolled project -> no-security-key; presence-only sk signature -> not-user-verified; decline -> sign-failed.
+      NOT done (next):
+      - approval.rs: add 'approval enrol --project <slug>' (key at <state>/keys/<owner>__<name>; ssh-keygen -t ed25519-sk -O verify-required -O application=ssh:tillandsias-approval -N '' -C tillandsias-approval/<slug>, plus -w $TILLANDSIAS_APPROVAL_SK_PROVIDER if set; no -O write-attestation, per the PII amendment; append 'operator namespaces="tillandsias-approval@v1" <type> <b64> tillandsias-approval/<slug>' once).
+      - request: --key optional (default: the project's enrolled key); refuse non-sk keys (not-a-security-key) and a missing key (no-security-key), both pointing at Mac signing; pass -w; delete polkit_check, POLKIT_ACTION and the software path.
+      - verify and request: parse the SSHSIG blob and require the UV flag (not-user-verified).
+      - Design D1/D2: record the ruling, and the allowed_signers finding.
+      - Tasks 2.x; litmus success_pattern (arm count); clippy x3; bin tests; preflight; carried check.
+    ts: "2026-11-11T20:45:54Z"
+    host: yoga
+
+events:
+  - packet_id: linux-host-enrols-a-fido2-security-key-as-its-approval-key-with-an-honestly-labelled-polkit-software-fallback
+    event:
+      type: progress
+      ts: "2026-11-11T20:45:54Z"
+      host: yoga
+      summary: |-
+        status 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+        
+        
+        [2026-11-10T22:41:18Z yoga] 2026-11-10T22:41:18Z yoga BLOCKS LICENCE RECORDS. The operator approved the Demucs weights licence on 2026-11-10 (non-commercial, gated per project; relayed by macuahuitl-fedora). The signed acknowledgement can't be produced, because no Linux host can enrol an approval key. Trunk @957d75fd4 checked: licence_consent::Verifier::for_host reads <state dir>/approvals/allowed_signers, and nothing on Linux writes it; there is no tillandsias approval or enrol subcommand. tasks.md sections 1 and 2 are all unchecked. This row and its dependency 1879-5jkt block 2068-cqis (the real-weights Demucs arms) and the 4 CorridorKey seed acknowledgements. Possible interim path, the operator's call and not taken: the macOS tray already has --approval-enrol <slug> and --approval-sign <slug> <statement> (1886-hf9j, landed 10183b92b). Adding that Mac's allowed-signers line on the verifying host would let accept-licence step 3 use Touch ID. 1886-hf9j's row still reads ready / "Nothing is done" although its code landed.
+        
+        [2026-11-11T10:17:16Z yoga] 2026-11-11T10:17:15Z yoga OPERATOR RULING 2026-11-11 (relayed by macuahuitl-fedora): option (a). Linux approval keys are FIDO2 only (ssh-keygen -t ed25519-sk -O verify-required), with NO software fallback: no polkit action, no Vault-sealed software key, no software-password strength on Linux. Until the operator has a security key, Linux approvals are signed on the Mac with Touch ID (1886-hf9j --approval-sign); that key's allowed_signers line is already on macuahuitl. With no authenticator present, enrolment and request refuse with a named message pointing at Mac signing. The polkit arms of this row's exit criterion ("software-password", "polkit stubbed to allow/deny") are retired by this ruling. Why: polkit reads actions only from /usr/share/polkit-1/actions, read-only on Silverblue, so org.tillandsias.approve can't be installed without layering. Being built on yoga as work/1880-9wpd, stacked on #1085 (1879-5jkt), which removes the broker's polkit path in the same change.
+        
+        [2026-11-11T20:45:54Z yoga] 2026-11-11T20:45:53Z yoga HANDOFF (rate limits; host restarting). Work in progress on work/1880-9wpd (WIP commit, no PR; not ready). Done:
+        - crates/tillandsias-headless/examples/sk_stub.rs: an OpenSSH sk-api provider (API 0x000a0000) built as a cdylib [[example]] (ring as a dev-dependency, already in the lockfile). TILLANDSIAS_SK_STUB_MODE=absent|decline.
+        - Measured on yoga with OpenSSH 10.5: ssh-keygen -t ed25519-sk -O verify-required -w libsk_stub.so enrols; -Y sign -w signs; stock -Y verify accepts. MODE=absent gives "Key enrollment failed: device not found".
+        - FINDING: allowed_signers accepts no verify-required option ("bad options: unknown key option"; man: only cert-authority, namespaces, valid-after, valid-before). So the broker's verify must check the SSHSIG sk flags byte for UV (0x04) itself. The mirror's pre-receive (1881-ynjn) must do the same.
+        - scripts/lua/test-approval-broker.lua rewritten red-first for FIDO2 only. Arms: E1 no authenticator -> refused:approval-enrol:no-security-key naming --approval-sign; E2/E3 enrol line and idempotence; hardware-pin; plain key -> not-a-security-key; unenrolled project -> no-security-key; presence-only sk signature -> not-user-verified; decline -> sign-failed.
+        NOT done (next):
+        - approval.rs: add 'approval enrol --project <slug>' (key at <state>/keys/<owner>__<name>; ssh-keygen -t ed25519-sk -O verify-required -O application=ssh:tillandsias-approval -N '' -C tillandsias-approval/<slug>, plus -w $TILLANDSIAS_APPROVAL_SK_PROVIDER if set; no -O write-attestation, per the PII amendment; append 'operator namespaces="tillandsias-approval@v1" <type> <b64> tillandsias-approval/<slug>' once).
+        - request: --key optional (default: the project's enrolled key); refuse non-sk keys (not-a-security-key) and a missing key (no-security-key), both pointing at Mac signing; pass -w; delete polkit_check, POLKIT_ACTION and the software path.
+        - verify and request: parse the SSHSIG blob and require the UV flag (not-user-verified).
+        - Design D1/D2: record the ruling, and the allowed_signers finding.
+        - Tasks 2.x; litmus success_pattern (arm count); clippy x3; bin tests; preflight; carried check.' (not terminal) with evidence_refs: work/1880-9wpd WIP; ssh-keygen 10.5 measurements on yoga 2026-11-11

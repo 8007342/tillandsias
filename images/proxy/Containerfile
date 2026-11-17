@@ -32,6 +32,11 @@
 # once while chasing a memory bug. If 6.12 does not stop it, evaluate 7.x as
 # its own packet.
 FROM docker.io/library/alpine:3.22
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # @trace spec:proxy-container, spec:reverse-proxy-internal
 # Squid + SSL for MITM proxy; squid + openssl for SSL bump support
@@ -49,6 +54,10 @@ RUN apk add --no-cache squid openssl bash ca-certificates socat \
 
 COPY squid.conf /etc/squid/squid.conf
 COPY allowlist.txt /etc/squid/allowlist.txt
+# 2041-i3nk part 2: the tier files, each loaded on its own port, and the
+# generated per-tier port include (scripts/lua/build-proxy-allowlist.lua).
+COPY tiers/ /etc/squid/tiers/
+COPY tier-ports.conf /etc/squid/tier-ports.conf
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # @trace spec:proxy-container
 # 767-es4w: crash supervision for squid. PID 1 is the supervisor, squid is its
@@ -71,7 +80,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/squid-supervisor
 RUN test "$(id -u proxy):$(id -g proxy)" = "1000:1000"
 USER 1000:1000
 
-EXPOSE 3128 3129
+EXPOSE 3128 3129 3130 3131 3132 3133 3134 3135
 
 # @trace spec:proxy-container, spec:socket-container-orchestration
 # 1919-hlth: 30 s steady (operator-approved, 120 probes/h, was 1,800). No startup

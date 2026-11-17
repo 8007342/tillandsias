@@ -1,11 +1,18 @@
 <!-- @trace order:1724-kcj4 — forge-wide guidance for every coding agent in a Tillandsias forge.
      ONE source, linked by agent-profile.sh (link_forge_agent_guidance) as each harness's
      USER-level instructions: ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.gemini/GEMINI.md and
-     ~/.config/opencode/AGENTS.md. A project's own CLAUDE.md / AGENTS.md still loads on top. -->
+     ~/.config/opencode/AGENTS.md; copilot gets it as $COPILOT_HOME/copilot-instructions.md
+     (entrypoint-forge-copilot.sh, 2067-faum). A project's own CLAUDE.md / AGENTS.md still loads on top. -->
 
 # Working in a Tillandsias forge
 
 These notes apply to every project in this forge. Your project's own instructions come first wherever they disagree.
+
+## Tooling language: Lua > Rust > Go
+
+When you write a script, a helper or a tool for this project, use Lua first, then Rust, then Go. Use Python only when a library you need forces it. All three are always installed here: `lua` (5.4, with `lfs` and `lpeg`), `cargo` and `rustc`, and `go`. Python, Perl and the others stay installed, so a project that already uses them still works.
+
+Why: a forge has a fixed memory budget shared by every process in it, and Python's `multiprocessing` starts a full interpreter per worker. One forge stalled on exactly that. A Lua script stays small, and Rust or Go give you real threads in one process. For a quick edit across several files, `lua-edit` is already on PATH.
 
 ## Stopping a process
 
@@ -20,7 +27,7 @@ Don't use `pkill -f` or `killall -r`. Your command runs as `bash -c "<your comma
 
 ## Generating images
 
-`image.generate` starts on the smallest model. When a bigger one fits this computer, the result carries `bigger_tier_offer` with an `ask` sentence. Show the user that sentence exactly as written. Only if they say yes, call `image.generate` again with the same prompt, the offered `tier` and its `consent_token`. A token works once. Never ask for a bigger tier on your own: without a token you get `consent_required` and nothing runs.
+`image.generate` runs the biggest model already on this computer unless you name a `tier`; any tier up to what the computer can run may be named directly. The only thing it asks about is downloading a model's files the first time: the result is `consent_required` (or carries `bigger_tier_offer`) with an `ask` sentence naming the one-time download in GB and minutes. Show the user that sentence exactly as written. Only if they say yes, call `image.generate` again with the same prompt, that `tier` and its `consent_token`. A token works once; the yes holds for this computer, so that tier never asks again. Never start a download on your own: without a token you get `consent_required` and nothing runs.
 
 ## Host tools: which one starts what
 
@@ -32,6 +39,6 @@ One MCP server, registered as `host-browser`, carries every host-side tool. The 
 - `studio.*` — the headless ComfyUI pipeline: `studio.run_workflow` and `studio.key_footage` queue GPU work in the project's studio container (it must be running: call `studio.start {}` first, no relaunch; `studio.status {}` says whether it is up). `studio.start` returns a `window_url`: `browser.open {url: window_url, dev: true}` opens the SAME studio in a window the operator can use with you; `studio.validate_family`, `studio.finish_pixels`, `studio.contact_sheet` start nothing.
 - `browser.*` — `browser.open` STARTS a browser window on the host (the forge has no browser binary); the rest drive it.
 - `cloudflare.*` — read-only views of the operator's Cloudflare account; call `cloudflare.scope_probe` first.
-- `webstudio.*` — the visual co-edit studios (GrapesJS, Decap, Tina, Puck); `webstudio.open` starts nothing from the lane today and names the operator command.
+- `webstudio.*` — the visual co-edit studios (GrapesJS, Decap, Tina, Puck); when the user asks to load or open the project in an authoring tool, a studio or a visual editor, call `webstudio.options {}` and then `webstudio.open {studio: <id>}` yourself. Choose by each option's `good_for` / `not_for` against what the user wants to change (page layout, markdown content, React components, images): take the `[Recommended]` one unless the request is in its `not_for`, and when none is recommended pick the best fit and say why, or offer the two best fits. The tray STARTS the studio and opens the operator's dev Chromium window. The reply's `window_url` opens the same page for you with `browser.open {url: window_url, dev: true}`. Never hand the user a terminal command for it.
 
 The flat names `publish_local`, `service_status`, `service_stop`, `service_reload`, `service_logs`, `toolchain_prepare`, `studio_options`, `studio_open`, `studio_changes`, `studio_publish_request` still work for one release as deprecated aliases; prefer the namespaced names.

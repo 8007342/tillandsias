@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 at the operator's ruling (move the window login off argv). Code is cited by symbol, never by line.
+packets:
+  - packet_id: opencode-web-and-studio-windows-receive-their-login-over-cdp-so-the-session-token-never-appears-in-argv
+    order: 2046-6em7
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [security, browser, rust]
+    estimated_hours: 6
+    title: "OpenCode Web and studio windows receive their login over CDP, like preview windows, so the session token never appears in argv"
+    context: |
+      Operator ruling 2026-11-08: "Yes, move to CDP". Measured the same day on yoga (2045-eqx3 audit): launch_opencode_web_browser builds `--app=<data URL>` from tillandsias_otp::build_login_data_url, which embeds the OTP, and the router sidecar re-issues those same bytes as the live session cookie. So the token is visible in `podman inspect` of tillandsias-browser-<project> and in /proc/<pid>/cmdline for the whole session; run_studio_mode and run_sibling_studio_mode share the path. Preview windows (browser.open) already avoid it: they start on about:blank and navigate over the DevTools channel. 2045-eqx3 redacts the data URL from every LOGGED argv; this row removes it from the argv itself. Operator also ruled the authenticated probe keeps accepting 2xx or 3xx, as spec opencode-web-session-otp says (unchanged here).
+    exit_criteria:
+      - "A cargo test builds the OpenCode Web window spec with a real OTP and asserts no element of its podman argv or env contains the OTP or a data: URL, and that the window is driven to the login over CDP (the same mechanism browser.open uses); the existing authenticated-probe-before-window ordering test stays green; and on a real --opencode-web launch on a Wayland host, `podman inspect tillandsias-browser-<project>` contains no OTP while the window lands authenticated on the OpenCode UI (checked by exit status and HTTP status, never by printing the token). Pre-fix result: FAILS, the OTP is inside --app=data: in the argv."
+    verifiable_closure: "A cargo test builds the OpenCode Web window spec with a real OTP and asserts no element of its podman argv or env contains the OTP or a data: URL, and that the window is driven to the login over CDP (the same mechanism browser.open uses); the existing authenticated-probe-before-window ordering test stays green; and on a real --opencode-web launch on a Wayland host, `podman inspect tillandsias-browser-<project>` contains no OTP while the window lands authenticated on the OpenCode UI (checked by exit status and HTTP status, never by printing the token). Pre-fix result: FAILS, the OTP is inside --app=data: in the argv."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the test named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      After 2045-eqx3 lands, read how browser.open drives its window over CDP (browser_open.rs) and reuse it for launch_opencode_web_browser; write the argv test first.
+    provenance: |
+      2045-eqx3 audit, yoga 2026-11-08; operator ruling 2026-11-08 (answered directly to yoga).
+    events:
+      - type: filed
+        ts: "2026-11-08T05:05:14Z"
+        host: yoga
+        summary: "filed at the operator's ruling to move the window login to CDP"

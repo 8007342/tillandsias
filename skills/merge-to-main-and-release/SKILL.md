@@ -3,6 +3,13 @@ name: merge-to-main-and-release
 description: Refresh linux-next, open/update the PR to main, merge once green, bump VERSION, tag, and trigger the workflow_dispatch release. Runs on a daily cadence so the latest linux-next work reaches a downloadable Linux release operators can smoke-test on a Fedora Silverblue host.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Merge to Main and Release
 
 This skill closes the loop between the work-loop (`/advance-work-from-plan`) and downloadable releases. It promotes the current `linux-next` HEAD to `main` via PR, bumps the version, tags, and triggers the `workflow_dispatch`-only release workflow that publishes the Linux musl binaries (and the macOS / Windows artifacts) on a GitHub Release.
@@ -694,8 +701,8 @@ line per the semantic-distillation policy.
 
 **You are TOLD when that threshold is crossed — you no longer have to notice it
 here** (order 914-nkc4). `scripts/release-preflight.sh` runs
-`scripts/check-ledger-distillation.sh`, which reports
-`due:ledger-distillation:<n>-rows:threshold=<t>` and names the destination line.
+`scripts/lua/check-ledger-distillation.lua` (ported from the .sh by 1879-5jkt), which reports
+`due:ledger-distillation:<n>-rows:threshold=<t> (advisory)` and names the destination line.
 It is ADVISORY and cannot refuse a cut: an over-long table costs a long README,
 never a false verdict. The threshold lives in that script rather than in this
 sentence, so the number cannot drift between the two. This paragraph used to be

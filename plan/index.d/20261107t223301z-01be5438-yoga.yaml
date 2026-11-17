@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: verify-image-usable-is-ported-to-lua-and-the-carried-waiver-grammar-names-cross-cutting-items
+    event:
+      type: progress
+      ts: "2026-11-07T22:33:01Z"
+      agent_id: linux-yoga-opus5-20261107t223301z
+      host: yoga
+      summary: |
+        Port half done on work/2025-e6mi (PR #996, head ac218db0c): scripts/verify-image-usable.sh deleted, scripts/lua/verify-image-usable.lua byte-identical on 4 side-by-side arms (usage arm documented), callers build-image.sh/with-nix-builder.sh/test-image-usability-check.sh moved, floors lowered. NOT done: the Carried-Waiver grammar token for cross-cutting items (the row's second half). Do not port verify-image-usable again.

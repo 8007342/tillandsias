@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-cpu-and-memory-budgets-are-not-honest-to-the-jobs-inside-2067-dwqd
+    field: context
+    value: |-
+      Found by the demon_attack forge, 2026-11-09. CPU/memory sibling of 1878-2cwt (disk discipline). (1) nproc and os.cpu_count() report the host's 20 CPUs while cpu.max is 1 core; a job sized 4 workers x 5 threads from that thrashed about 2 h. (2) memory.high (about 10.2 GiB) is soft, so the forge reclaimed silently with about 9M high events and the TUI and remote control froze. (3) No guard tool on PATH. Prior art: demon_attack tools/forge-guard/ (Go, about 300 lines, 1750e1b on that repo's main). It provides run -- cmd (flock queue, anon+shmem headroom check, OMP/MKL/torch/rayon/GOMAXPROCS caps, process-group kill on sustained pressure) and wait --pid|--file, which replaces pgrep -f waits. Split into PRs; (1) first.
+
+      [2026-11-10T00:31:20Z yoga] CORRECTION 2026-11-10 (yoga, relayed from macuahuitl-fedora): finding (1) is RETRACTED. The forge's cpu.max read "max 100000", which is UNLIMITED, not 1 core; measured in the demon_attack forge on macuahuitl: cpu.max "max 100000", /proc/self/cgroup "0::/", nproc 20. nproc told the truth, and tillandsias sets no forge CPU limit (ForgeBudget::podman_args emits memory, swap and pids only). The real cause was memory: 4 workers each loading its own Chatterbox model pinned the 12.9 GB forge at memory.high (about 9M high events) on a host with swap full and load about 17. Scope is now PR 2 (memory.max close above memory.high, or a pressure watchdog that fails loudly, and the tray names the stall) then PR 3 (forge-guard with the memory-headroom queue). Optional: export TILLANDSIAS_CPUS / TILLANDSIAS_MEM_BUDGET so jobs size from the real budget. The title and exit criterion (1) are superseded by this paragraph.
+    ts: "2026-11-10T00:31:20Z"
+    host: yoga
+
+events:
+  - packet_id: forge-cpu-and-memory-budgets-are-not-honest-to-the-jobs-inside-2067-dwqd
+    event:
+      type: progress
+      ts: "2026-11-10T00:31:20Z"
+      host: yoga
+      summary: |-
+        status 'Found by the demon_attack forge, 2026-11-09. CPU/memory sibling of 1878-2cwt (disk discipline). (1) nproc and os.cpu_count() report the host's 20 CPUs while cpu.max is 1 core; a job sized 4 workers x 5 threads from that thrashed about 2 h. (2) memory.high (about 10.2 GiB) is soft, so the forge reclaimed silently with about 9M high events and the TUI and remote control froze. (3) No guard tool on PATH. Prior art: demon_attack tools/forge-guard/ (Go, about 300 lines, 1750e1b on that repo's main). It provides run -- cmd (flock queue, anon+shmem headroom check, OMP/MKL/torch/rayon/GOMAXPROCS caps, process-group kill on sustained pressure) and wait --pid|--file, which replaces pgrep -f waits. Split into PRs; (1) first.
+        
+        [2026-11-10T00:31:20Z yoga] CORRECTION 2026-11-10 (yoga, relayed from macuahuitl-fedora): finding (1) is RETRACTED. The forge's cpu.max read "max 100000", which is UNLIMITED, not 1 core; measured in the demon_attack forge on macuahuitl: cpu.max "max 100000", /proc/self/cgroup "0::/", nproc 20. nproc told the truth, and tillandsias sets no forge CPU limit (ForgeBudget::podman_args emits memory, swap and pids only). The real cause was memory: 4 workers each loading its own Chatterbox model pinned the 12.9 GB forge at memory.high (about 9M high events) on a host with swap full and load about 17. Scope is now PR 2 (memory.max close above memory.high, or a pressure watchdog that fails loudly, and the tray names the stall) then PR 3 (forge-guard with the memory-headroom queue). Optional: export TILLANDSIAS_CPUS / TILLANDSIAS_MEM_BUDGET so jobs size from the real budget. The title and exit criterion (1) are superseded by this paragraph.' (not terminal) with evidence_refs: macuahuitl-fedora relay 2026-11-10: demon_attack forge cpu.max max 100000, nproc 20

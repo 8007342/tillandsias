@@ -49,6 +49,10 @@
 
 set -uo pipefail
 
+# 1247-amcu: every refusal says why it refused and what would clear it, on
+# stderr, so the verdict token on stdout stays what callers parse.
+_afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
+
 PKG="@fission-ai/openspec"
 NPM="${OPENSPEC_PIN_NPM:-npm}"
 
@@ -153,18 +157,18 @@ install_version() {
         printf '%s\n' "$dir/node_modules/.bin/openspec"
         return 0
     fi
-    mkdir -p "$CACHE_ROOT" || { echo "refused:openspec-install:$v:cache-unwritable"; return 1; }
+    mkdir -p "$CACHE_ROOT" || { _afford "the version-keyed install cache could not be created, so no pinned openspec can be installed" "make OPENSPEC_PIN_CACHE (or XDG_CACHE_HOME/tillandsias/openspec-pinned) writable, or point OPENSPEC_PIN_CACHE at a writable directory, then re-run"; echo "refused:openspec-install:$v:cache-unwritable"; return 1; }
     tmp="$dir.tmp.$$"
     rm -rf "$tmp"
     if ! "$NPM" install --prefix "$tmp" --no-audit --no-fund --silent "$PKG@$v" >/dev/null 2>&1; then
         rm -rf "$tmp"
-        echo "refused:openspec-install:$v:npm-install-failed"
+        _afford "npm could not install this openspec version, so nothing was put in the cache" "run npm install @fission-ai/openspec@<version> by hand to see npm's error (registry reachable? version published?); OPENSPEC_PIN_NPM names the npm used"; echo "refused:openspec-install:$v:npm-install-failed"
         return 1
     fi
     have="$("$tmp/node_modules/.bin/openspec" --version 2>/dev/null | tail -n 1)"
     if [ "$have" != "$v" ]; then
         rm -rf "$tmp"
-        echo "refused:openspec-install:$v:installed-reports-${have:-nothing}"
+        _afford "the installed binary reports a different version than the one asked for, so the install is not trusted" "re-run to reinstall cleanly; if it repeats, check that the version is published as itself (npm view @fission-ai/openspec versions)"; echo "refused:openspec-install:$v:installed-reports-${have:-nothing}"
         return 1
     fi
     rm -rf "$dir"
@@ -178,7 +182,7 @@ cmd_install() {
         read_pin || { echo "absent:openspec-pin"; return 4; }
         v="$PIN"
     fi
-    is_version "$v" || { echo "refused:openspec-install:$v:not-a-version"; return 1; }
+    is_version "$v" || { _afford "the version asked for is not a semver X.Y.Z" "pass a version like 1.13.2, or omit it to install the pin in openspec/cli-version"; echo "refused:openspec-install:$v:not-a-version"; return 1; }
     install_version "$v"
 }
 
@@ -187,19 +191,20 @@ cmd_bump() {
     while [ $# -gt 0 ]; do
         case "$1" in
             --to) to="${2:-}"; shift 2 ;;
-            *) echo "refused:openspec-bump:unknown-argument:$1"; return 1 ;;
+            *) _afford "bump takes only --to <version>" "run scripts/openspec-pin.sh bump, or bump --to X.Y.Z"; echo "refused:openspec-bump:unknown-argument:$1"; return 1 ;;
         esac
     done
     if [ -n "$(cd "$ROOT" && git status --porcelain --untracked-files=all)" ]; then
-        echo "refused:openspec-bump:dirty-tree"
+        _afford "bump regenerates every configured tool in one change, and a dirty tree would mix other edits into it" "commit or stash your changes (git status shows them), then re-run bump"; echo "refused:openspec-bump:dirty-tree"
         return 1
     fi
     if read_pin; then old="$PIN"; else old="none"; fi
     if [ -z "$to" ]; then
-        to="$(latest_version)" || { echo "refused:openspec-bump:registry-unreachable"; return 1; }
+        to="$(latest_version)" || { _afford "npm's latest openspec version could not be read, and bump without --to needs it" "check that the npm registry is reachable, or pass bump --to X.Y.Z explicitly"; echo "refused:openspec-bump:registry-unreachable"; return 1; }
     fi
-    is_version "$to" || { echo "refused:openspec-bump:not-a-version:$to"; return 1; }
+    is_version "$to" || { _afford "the --to value is not a semver X.Y.Z" "pass bump --to X.Y.Z, for example the version npm view @fission-ai/openspec version prints"; echo "refused:openspec-bump:not-a-version:$to"; return 1; }
 
+    # affordance-ok: install_version printed this failure's why and remedy on stderr; this only re-labels its verdict
     out="$(install_version "$to")" || { echo "refused:openspec-bump:${out#refused:}"; return 1; }
     bin="$out"
 

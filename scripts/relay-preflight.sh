@@ -62,7 +62,9 @@
 #      of them runs.
 #   6. Crate tests: `cargo test -p <crate>` for each crate with a touched
 #      file (nearest Cargo.toml above the path), plus the tray,listen-vsock
-#      serial pass when crates/tillandsias-headless/src/tray/ is touched.
+#      serial pass when the diff touches crates/tillandsias-headless/src/,
+#      tests/ or Cargo.toml (2065-skdk: the tray tests count tools other
+#      modules register, so src/tray/ alone missed them).
 #   7. Covering litmus: scripts/litmus-covering-specs.sh --relay-scope <base>
 #      (--all-covering to lift the cap) for the run/deferred partition, then
 #      scripts/run-litmus-test.sh <spec> --phase pre-build --size <size>
@@ -552,8 +554,14 @@ if [ -n "$crate_dirs" ]; then
 $crate_dirs
 CDEOF
 fi
+# 2065-skdk: ANY headless source, not only src/tray/. The tray,listen-vsock
+# tests count what other modules register (mcp_socket.rs's tool list): #1034
+# changed only mcp_socket.rs and audio_studio.rs, skipped this pass, and was
+# evicted at the land gate on three tool-count pins.
+# BEGIN-TRAY-TRIGGER
 _tray_touched=0
-grep -q '^crates/tillandsias-headless/src/tray/' <<<"$DIFF_ALL" && _tray_touched=1
+grep -qE '^crates/tillandsias-headless/(src|tests)/|^crates/tillandsias-headless/Cargo\.toml$' <<<"$DIFF_ALL" && _tray_touched=1
+# END-TRAY-TRIGGER
 
 if [ "$PLAN_MODE" = 1 ]; then
     while IFS= read -r _cn; do

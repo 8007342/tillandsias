@@ -1,0 +1,17 @@
+# Gate step 2031-z4rm — data, not code (order 1072-b7eq).
+#
+# Every Lua door child gets the runner's TILLANDSIAS_* variables minus the
+# credential-shaped ones (2031-h5ru; design 2029-39bt §4.10). That is safe only
+# while a name spelled like a credential IS one: a non-secret spelled like one
+# is silently dropped from children (TILLANDSIAS_WRAPPER_TOKEN, the reaper's
+# marker, was), and a secret spelled otherwise leaks. The fixture runs the
+# guard scripts/lua/check-env-namespace-hygiene.lua on this tree, then on
+# scratch trees with a planted credential-shaped name (refused), a locator name
+# (passes) and no code (could-not-run).
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking TILLANDSIAS_ names are spelled like credentials only when they are (2031-z4rm)"
+STEP_LUA="scripts/lua/test-env-namespace-hygiene.lua"
+STEP_ERROR="a TILLANDSIAS_ name spelled like a credential is not a listed secret, so the Lua door would drop a variable children need, or the guard no longer refuses one (2031-z4rm) — see the FAIL lines above"
+STEP_OK="env namespace hygiene fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-08 darwin macOS 27.2 ok:env-namespace-hygiene:4 arms (work/2031-z4rm @ 1b379d38f)"

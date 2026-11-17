@@ -16,6 +16,8 @@ pub mod policy;
 pub mod readiness;
 pub mod runtime;
 pub mod terminal_handoff;
+#[cfg(all(test, unix))]
+pub(crate) mod test_stub;
 pub mod wedge_capture;
 
 use std::env;
@@ -562,6 +564,11 @@ fn looks_like_secret_value(value: &str) -> bool {
 /// `KEY=VALUE` (passed via `-e`/`--env`) or bare opaque values (passed via
 /// `--secret`/`--password`).
 fn redact_one(arg: &str) -> String {
+    // A data URL inlines a whole document (the web windows' login form holds
+    // the session OTP), flag form included, so it goes before the flag skip.
+    if let Some(hidden) = crate::backend::redact_data_url(arg) {
+        return hidden;
+    }
     // Don't touch flag-like tokens (`--something`); they're never secret values.
     if arg.starts_with('-') {
         return arg.to_string();
@@ -1427,9 +1434,6 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         (tokio::sync::MutexGuard<'static, ()>, impl Drop),
         std::path::PathBuf,
     ) {
-        use std::io::Write;
-        use std::os::unix::fs::PermissionsExt;
-
         let lock = env_lock();
 
         struct Restore;
@@ -1446,10 +1450,7 @@ while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((
         ));
         std::fs::create_dir_all(&dir).expect("stub dir");
         let stub = dir.join("podman");
-        let mut f = std::fs::File::create(&stub).expect("stub file");
-        f.write_all(script.as_bytes()).expect("write stub");
-        drop(f);
-        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        crate::test_stub::install_ready_stub(&stub, script);
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
         ((lock, Restore), dir)
     }
@@ -1850,6 +1851,31 @@ exit 0
         let line = format_podman_invocation_line("container", "podman", &args);
         assert!(line.len() <= 403, "line too long: {} chars", line.len());
         assert!(line.ends_with("..."), "line not truncated: {line}");
+    }
+
+    /// The `--debug` invocation line hid the browser's
+    /// `--app=data:text/html;base64,<login form with the OTP>` only because a
+    /// real browser argv is longer than the 400-character cut (measured on
+    /// yoga 2026-11-08). A short argv proves the redaction, not the cut,
+    /// is what keeps it out.
+    #[test]
+    fn invocation_line_redacts_a_data_url_before_any_truncation() {
+        let payload = "PGh0bWw+PGlucHV0IG5hbWU9Im90cCIgdmFsdWU9InNlY3JldCI+PC9odG1sPg";
+        let line = format_podman_invocation_line(
+            "container",
+            "podman",
+            &[
+                "run".into(),
+                "img:v1".into(),
+                format!("--app=data:text/html;base64,{payload}"),
+            ],
+        );
+        assert!(
+            line.len() < 400,
+            "premise: the line is not truncated: {line}"
+        );
+        assert!(!line.contains(payload), "data URL payload leaked: {line}");
+        assert!(line.contains("--app=data:<redacted>"), "{line}");
     }
 
     /// @trace spec:podman-idiomatic-patterns

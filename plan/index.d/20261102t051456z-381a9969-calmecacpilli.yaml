@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: imagegen-offers-only-installed-or-installable-tiers-and-states-download-size-and-minutes-for-an-installable-one
+    event:
+      type: note
+      ts: "2026-11-02T05:14:56Z"
+      agent_id: forge-forge-tillandsias-claude-20261102t051455z
+      host: calmecacpilli
+      summary: |
+        Operator ruling 2026-11-01 on #825 (verbatim): "the bigger models gate should be asked only for downloading models the first time ... there's no real reason to use the smaller models". This row's two asks survive the ruling and are the gate's whole content now: #825 (origin/work/1957-5m8g @c56e9cb65) offers only installed-or-installable tiers (next_offerable over the pinned manifest; an unpinned tier fails tier_unavailable) and the single ask text is the download one — "This model is not on this computer yet: it needs a one-time download of N.N GB (about M min) and that much disk. Download it?" — with GB from the pinned sizes and minutes at an ASSUMED 10 MB/s (ASSUMED_DOWNLOAD_BYTES_PER_S), not a measured link rate. The old spec requirement "Ask carries no sizes" is replaced on work/1959-dlgate by "The download ask states its cost honestly" (openspec/changes/local-image-generation/specs/image-generation/spec.md), and bigger_tier_offer is now the same download offer for the next installable tier above everything present, or null.

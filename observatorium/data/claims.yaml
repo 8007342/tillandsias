@@ -1,0 +1,147 @@
+# @trace order:2066-obsv, spec:observatorium-dashboard
+# Claims register (design.md V4). Seeded by an agent from the blind design's V4
+# list and derivation.md's L5 inventory; NOT reviewed by the operator. Every
+# entry stays `review: operator-pending` until the operator changes it, and the
+# page says so.
+#
+# Format: a strict YAML subset, one list of flat maps. Values are a double-
+# quoted string, a bare word, or null. Anything else fails the build.
+# Keys: id, statement, strength, scope, since, discharge, review.
+# Strengths: proved, property-tested, tested by name, external analogy,
+#   assumed, open, withdrawn, on paper only.
+
+- id: prop-1
+  statement: "Proposition 1 of the level-5 document holds."
+  strength: proved
+  scope: "In the model only; says nothing about the live grader."
+  since: null
+  discharge: "Already discharged for the model; a live claim would need a test against the grader."
+  review: operator-pending
+
+- id: refine-monotone
+  statement: "refine is monotone."
+  strength: property-tested
+  scope: "Generative tests over a committed rule set, not every live validator. Test names not resolved."
+  since: null
+  discharge: "Name the property tests and run them against the live validators."
+  review: operator-pending
+
+- id: refine-inflationary
+  statement: "refine is inflationary."
+  strength: property-tested
+  scope: "Generative tests over a committed rule set, not every live validator. Test names not resolved."
+  since: null
+  discharge: "Name the property tests and run them against the live validators."
+  review: operator-pending
+
+- id: refine-idempotent
+  statement: "refine is idempotent."
+  strength: assumed
+  scope: "Claimed in the document; no named test found."
+  since: null
+  discharge: "A named property test that refine(refine(x)) = refine(x)."
+  review: operator-pending
+
+- id: contraction
+  statement: "refine is a contraction."
+  strength: open
+  scope: "Needs a metric, completeness and a constant; none is defined."
+  since: null
+  discharge: "Define the metric and constant, then prove or test it."
+  review: operator-pending
+
+- id: galois-connection
+  statement: "Validation and closure form a Galois connection."
+  strength: open
+  scope: "The document states there is none; closure proves neither adequacy nor universality over executions."
+  since: null
+  discharge: "None planned."
+  review: operator-pending
+
+- id: strong-law
+  statement: "Repeated iteration converges almost surely (strong law of large numbers)."
+  strength: withdrawn
+  scope: "The citation was withdrawn; iteration practice is an empirical track record, not a guarantee."
+  since: null
+  discharge: "None: withdrawn."
+  review: operator-pending
+
+- id: crdt-commutative
+  statement: "The plan ledger fold is commutative."
+  strength: tested by name
+  scope: "G-sets for packets and events, LWW registers, fold in (ts, filename) order."
+  since: null
+  discharge: "Already tested by name."
+  review: operator-pending
+
+- id: crdt-idempotent
+  statement: "The plan ledger fold is idempotent."
+  strength: tested by name
+  scope: "As for commutativity."
+  since: null
+  discharge: "Already tested by name."
+  review: operator-pending
+
+- id: crdt-associative
+  statement: "The plan ledger fold is associative."
+  strength: open
+  scope: "No test names associativity."
+  since: null
+  discharge: "A named property test of associativity."
+  review: operator-pending
+
+- id: crdt-seen-set
+  statement: "Seen-set deduplication makes the ledger a CRDT."
+  strength: withdrawn
+  scope: "The CRDT header making this claim was retracted."
+  since: null
+  discharge: "None: withdrawn."
+  review: operator-pending
+
+- id: semantic-merge
+  statement: "Semantic merge of plan entries is safe."
+  strength: external analogy
+  scope: "Typed as a cache; held at external analogy until property tests exist."
+  since: null
+  discharge: "Property tests of the merge."
+  review: operator-pending
+
+- id: progress-premise
+  statement: "With no regression and a decrease within K cycles, the residual reaches zero within K times the starting residual."
+  strength: open
+  scope: "Conditional; the project has declared no K. Not a wall-clock bound."
+  since: null
+  discharge: "Declare K and record a decrease within it."
+  review: operator-pending
+
+- id: seven-rung-lattice
+  statement: "Each obligation sits on a seven-rung chain from absent to evidence_bundled."
+  strength: on paper only
+  scope: "Declared in methodology/math-foundations.yaml; the grader assigns only declared, traced and positively_tested."
+  since: null
+  discharge: "A grader that assigns the other four rungs with an exportable witness."
+  review: operator-pending
+
+- id: weighted-policy
+  statement: "The residual is a weighted sum under the proximity policy."
+  strength: on paper only
+  scope: "Weights are declared in methodology/proximity.yaml and read by no code; the live residual is an unweighted count."
+  since: null
+  discharge: "A grader that applies the declared weights."
+  review: operator-pending
+
+- id: penalties-caps
+  statement: "Sixteen penalties and six caps adjust the score."
+  strength: on paper only
+  scope: "Declared in methodology/proximity.yaml; no code reads them."
+  since: null
+  discharge: "Code that evaluates and logs them per release."
+  review: operator-pending
+
+- id: versioning-semantics
+  statement: "methodology/versioning.yaml describes the release tag scheme."
+  strength: open
+  scope: "Documentation defect: live tags are years-since-1970.month.day.build; the document describes Major.Minor.YYMMDD.Build."
+  since: null
+  discharge: "Correct the document."
+  review: operator-pending

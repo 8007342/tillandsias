@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    field: status
+    value: in_progress
+    ts: "2026-11-07T14:45:16Z"
+    host: lenovinha
+
+events:
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    event:
+      type: progress
+      ts: "2026-11-07T14:45:16Z"
+      host: lenovinha
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: work/1270-5mz8
+  - packet_id: a-prebuilt-binary-resolved-by-existence-runs-stale-until-something-refuses-it-three-instances-in-two-days-and-the-podman-shim-ran-the-release-gate-s-forge-lane-on-four-day-old-code
+    event:
+      type: note
+      ts: "2026-11-07T14:45:16Z"
+      host: lenovinha
+      summary: |-
+        claimed for cycle 2026-11-07T14:45:16Z by linux-lenovinha-opus5-20261107t144516z

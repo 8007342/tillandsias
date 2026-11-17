@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-self-exe-unlinked-spawn-test-survives-a-sibling-fork-between-its-write-and-its-exec
+    order: 2053-bg68
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [testing, flake, gate]
+    estimated_hours: 2
+    title: |
+      tillandsias-headless self_exe::tests::a_self_spawn_works_after_the_running_binary_is_unlinked fails intermittently with ETXTBSY (Text file busy) at the spawn after std::fs::copy: a sibling test's fork between the write and the exec holds the write fd
+    context: |
+      MEASURED on macuahuitl (relayed by coordinator macuahuitl-fedora, 2026-11-08): the test failed with "Text file busy" at self_exe.rs:131 (cmd.output().unwrap(), right after std::fs::copy writes the probe copy) and evicted #1012. It is the write-then-exec race: a parallel test forks while the copy's write fd is open, and the child holds it until its own exec, so an exec of the copy in that window is ETXTBSY. Same class as 1478-9r6f (the podman stub in tillandsias_podman backend tests), still open: one shared test helper (write, close, exec with a bounded retry on ETXTBSY only) can serve both.
+    exit_criteria:
+      - 'RED FIRST: the race is reproduced under parallel spawning load (a sibling thread forking in a loop while the test copies and execs), failing with ETXTBSY on the pre-fix code'
+      - 'the exec retries on ETXTBSY only, with a short bounded backoff, and any other error still fails at once; or the copy-and-exec is serialised against every test that forks, with the reason stated'
+      - 'NEGATIVE CONTROL: an exec that fails with another error (a non-executable copy) is not retried and fails the test'
+    verifiable_closure: 'the reproduction loop run N times after the fix with zero ETXTBSY failures, and the negative control red'
+    unscoreable: 'none.'
+    provenance: coordinator macuahuitl-fedora 2026-11-08 (eviction of #1012); filed by lenovinha.
+    depends_on: []
+    related: [1478-9r6f]
+    events:
+      - {type: filed, ts: '2026-11-08T07:13:15Z', host: lenovinha, summary: filed p2 ready at the coordinator's request}
+  - packet_id: the-keep-id-warm-live-test-skips-with-its-reason-when-podman-returns-no-graph-root-under-load
+    order: 2054-kiwm
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [testing, flake, gate, podman]
+    estimated_hours: 1
+    title: |
+      keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start failed under gate load with an EMPTY GraphRoot ("layers.json at overlay-layers/layers.json does not list the built image's layer ... (GraphRoot ); the store is not readable from here"), and passed alone and on a full rerun
+    context: |
+      MEASURED on lenovinha 2026-11-08, in the full gate for work/2041-i3nk (24026c487; bintest=101, 1474 passed, 1 failed). The panic is at crates/tillandsias-headless/src/main.rs:40504. GraphRoot printed EMPTY, so the store path became the relative overlay-layers/layers.json: podman did not answer the graph-root query under load. The test's doc says it skips where podman cannot answer, but an empty GraphRoot gets past that check and fails as a store fault. The same tree passed it alone (keep_id_warm_tests 4/4) and on a full bintest rerun (1475 passed, 0 failed). The diff under test did not touch this code (proxy and Lua files only).
+    exit_criteria:
+      - 'an empty or non-absolute GraphRoot (or a failed podman info) is a named SKIP with the reason, never a failure that blames the store'
+      - 'RED FIRST: with the graph-root query stubbed to return empty, the test fails on the pre-fix tree with the store-not-readable message; post-fix it skips naming the empty GraphRoot'
+      - 'NEGATIVE CONTROL: a real GraphRoot whose layers.json truly lacks the layer still fails'
+    verifiable_closure: 'the stubbed-empty arm skips with its reason, and the real-store arm still asserts on a host whose store cannot shift'
+    unscoreable: 'none.'
+    provenance: lenovinha gate 2026-11-08 on 24026c487; filed at the coordinator's request.
+    depends_on: []
+    related: [2053-bg68]
+    events:
+      - {type: filed, ts: '2026-11-08T07:13:15Z', host: lenovinha, summary: filed p2 ready; passed alone (4 of 4) and on a full bintest rerun (1475 passed)}

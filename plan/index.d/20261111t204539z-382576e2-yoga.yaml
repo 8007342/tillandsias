@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+    field: status
+    value: completed
+    ts: "2026-11-11T20:45:39Z"
+    host: yoga
+
+events:
+  - packet_id: approval-broker-signs-an-action-bound-statement-after-an-os-verified-check-and-records-it-as-a-git-note
+    event:
+      type: completed
+      ts: "2026-11-11T20:45:39Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: landed e1f8d7f01 (#1085, from c7d6ad609); trunk scripts/lua/test-approval-broker.lua -> ok:approval-broker:16 with the headless binary built from c7d6ad609 (approval.rs identical at e1f8d7f01); pinned by litmus:approval-broker-signs-an-action-bound-record

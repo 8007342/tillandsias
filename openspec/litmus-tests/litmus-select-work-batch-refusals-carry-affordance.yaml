@@ -1,0 +1,35 @@
+# @trace spec:meta-orchestration, order:1247-amcu
+name: litmus:select-work-batch-refusals-carry-affordance
+spec: meta-orchestration
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/select-work-batch.sh (the batch selector every
+  worker cycle runs) says WHY it refused and WHAT would make it not a refusal,
+  as labelled "  why:" / "  remedy:" stderr lines beside its unchanged stdout
+  verdict (1247-amcu). The fixture runs the caller-error and no-plan-binary
+  refusals, EXECUTES their stated remedies and shows each clears its refusal,
+  and a static arm fails any refusal site added later without an affordance.
+
+preconditions:
+  - workspace contains scripts/select-work-batch.sh
+  - workspace contains scripts/lua/test-select-work-batch-affordances.lua
+
+critical_path:
+  - step: "each selector refusal carries why and remedy, the executed remedies clear their refusals, and no refusal site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-select-work-batch-affordances.lua 2>&1"
+    timeout_ms: 300000
+    success_pattern: "ok:select-work-batch-affordances:8 arms"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "a selector refusal names its rule and how to clear it"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "select-work-batch-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in select-work-batch.sh ships without why/remedy"
+  - "a stated remedy no longer clears its refusal"

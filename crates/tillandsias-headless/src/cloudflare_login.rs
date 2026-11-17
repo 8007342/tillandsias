@@ -423,7 +423,7 @@ impl Refusal {
 /// Keep a dynamic reason only when it is made of the verdict alphabet
 /// (`[a-z0-9_:-]`, at most 120 bytes); anything else becomes `unrecognised`.
 /// Belt and braces: every producer already emits fixed words.
-fn fixed_word(s: &str) -> String {
+pub(crate) fn fixed_word(s: &str) -> String {
     if !s.is_empty()
         && s.len() <= 120
         && s.bytes().all(|b| {
@@ -1749,7 +1749,7 @@ pub fn parse_args(args: &[String]) -> Result<Command, Refusal> {
 
 /// One line from the terminal with echo OFF (restored before returning), at
 /// most [`MAX_PASTE_BYTES`].
-fn read_paste_line_from_terminal() -> Result<String, String> {
+pub(crate) fn read_paste_line_from_terminal() -> Result<String, String> {
     let stdin = std::io::stdin();
     #[cfg(unix)]
     let restore = {

@@ -1,0 +1,35 @@
+# @trace spec:inference-container, order:1247-amcu, order:1249-xngp
+name: litmus:configure-ollama-refusals-carry-affordance
+spec: inference-container
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/configure-ollama.sh (the bare-metal ollama for the
+  local expert lane) says WHY it refused and WHAT would make it not a refusal:
+  labelled "  why:" / "  remedy:" stderr lines, or the script's own WHY / WHAT
+  TO DO prose marked affordance-ok (1247-amcu). The fixture runs the one
+  refusal reachable with no side effect (a bin dir beneath a regular file;
+  nothing is fetched, started or pulled) and pins the rest statically: a
+  verdict site added later without an affordance fails.
+
+preconditions:
+  - workspace contains scripts/configure-ollama.sh
+  - workspace contains scripts/lua/test-configure-ollama-affordances.lua
+
+critical_path:
+  - step: "the uncreatable-bin-dir refusal carries why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-configure-ollama-affordances.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:configure-ollama-affordances:3 arms"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+  expected_log: "a configure-ollama refusal names its rule and how to clear it"
+  log_fields:
+    spec: "inference-container"
+    test: "configure-ollama-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in configure-ollama.sh ships without why/remedy"

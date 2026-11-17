@@ -282,6 +282,8 @@ pub(crate) fn image_context_rel(image_name: &str) -> Result<&'static str, String
         "imagegen-studio" => Ok("images/imagegen-studio"),
         // 1956-ucix: the CorridorKey 2.0 proof of concept, built on first use.
         "imagegen-corridorkey" => Ok("images/imagegen-corridorkey"),
+        // 2055-grzz: the audio studio appliance, built on first use.
+        "audio-studio" => Ok("images/audio-studio"),
         "vault" => Ok("images/vault"),
         name if studio_image_id(name).is_some() => Ok("images/studio"),
         other => Err(format!("Unknown image type: {other}")),
@@ -484,6 +486,7 @@ mod tests {
                 "images/imagegen-corridorkey/Containerfile",
                 "images/imagegen-corridorkey",
             ),
+            ("images/audio-studio/Containerfile", "images/audio-studio"),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {

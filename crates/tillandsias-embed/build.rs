@@ -89,7 +89,7 @@ fn main() {
         "images/web-wrangler/entrypoint.sh",
         "images/webkit/Containerfile",
         "images/webkit/webkit-window.js",
-        "observatorium/index.html",
+        "tools/trace-viewer/index.html",
         "scripts/manage-cache.sh",
         "scripts/run-observatorium.sh",
         "skills/advance-work-from-plan/SKILL.md",

@@ -943,31 +943,30 @@ pub(crate) fn ensure_vault_tls_leaf(
         ));
     }
 
+    // 2058-xduu: the SANs go in through -extfile, not -copy_extensions, which
+    // LibreSSL (macOS's /usr/bin/openssl) rejects as an unknown option.
+    let ext = certs_dir.join(format!("vault.ext.{unique}.tmp"));
+    if let Err(e) = fs::write(&ext, vault_leaf_extfile(vault_san)) {
+        let _ = fs::remove_file(&csr);
+        let _ = fs::remove_file(&tmp_key);
+        return Err(format!("write Vault TLS leaf extensions: {e}"));
+    }
     let sign_status = Command::new("openssl")
-        .args(["x509", "-req", "-in"])
-        .arg(&csr)
-        .arg("-CA")
-        .arg(&ca_cert)
-        .arg("-CAkey")
-        .arg(&ca_key)
-        .args(crate::ca_key_store::key_in_args())
+        .args(vault_leaf_sign_args(
+            &csr,
+            &ca_cert,
+            &ca_key,
+            &ext,
+            &tmp_cert,
+            crate::ca_key_store::key_in_args(),
+        ))
         .envs(crate::ca_key_store::pass_env())
-        .args([
-            "-CAcreateserial",
-            "-days",
-            // 1762-bano: the CA's lifetime. It is re-issued whenever the CA is
-            // newer, so it never outlives the CA that signed it.
-            crate::CA_VALIDITY_DAYS,
-            "-sha256",
-            "-copy_extensions",
-            "copy",
-            "-out",
-        ])
-        .arg(&tmp_cert)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map_err(|e| format!("spawn openssl x509 for Vault TLS leaf: {e}"))?;
+        .map_err(|e| format!("spawn openssl x509 for Vault TLS leaf: {e}"));
+    let _ = fs::remove_file(&ext);
+    let sign_status = sign_status?;
     let _ = fs::remove_file(&csr);
     if !sign_status.success() {
         let _ = fs::remove_file(&tmp_cert);
@@ -989,6 +988,51 @@ pub(crate) fn ensure_vault_tls_leaf(
         .map_err(|e| format!("publish Vault TLS key: {e}"))?;
     fs::rename(&tmp_cert, &cert).map_err(|e| format!("publish Vault TLS cert: {e}"))?;
     Ok(())
+}
+
+/// The extension file for the Vault leaf, read by `openssl x509 -extfile`
+/// (2058-xduu). An extfile REPLACES openssl's default extensions, so the key
+/// identifiers are named here: without authorityKeyIdentifier a leaf cannot
+/// say which of two same-subject CAs signed it, and a trust bundle holding the
+/// replaced and the current CA (2000-camv) fails to verify the old leaf.
+fn vault_leaf_extfile(san: &str) -> String {
+    format!(
+        "{san}\nbasicConstraints=CA:FALSE\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid,issuer\n"
+    )
+}
+
+/// `openssl x509 -req` arguments that sign the Vault leaf. Every flag here is
+/// accepted by LibreSSL 3.x and OpenSSL 1.1 to 4.x (2058-xduu).
+fn vault_leaf_sign_args(
+    csr: &std::path::Path,
+    ca_cert: &std::path::Path,
+    ca_key: &std::path::Path,
+    extfile: &std::path::Path,
+    out: &std::path::Path,
+    key_in: Vec<String>,
+) -> Vec<std::ffi::OsString> {
+    let mut a: Vec<std::ffi::OsString> = vec!["x509".into(), "-req".into(), "-in".into()];
+    a.push(csr.into());
+    a.push("-CA".into());
+    a.push(ca_cert.into());
+    a.push("-CAkey".into());
+    a.push(ca_key.into());
+    a.extend(key_in.into_iter().map(Into::into));
+    // 1762-bano: the CA's lifetime. It is re-issued whenever the CA is newer,
+    // so it never outlives the CA that signed it.
+    for f in [
+        "-CAcreateserial",
+        "-days",
+        crate::CA_VALIDITY_DAYS,
+        "-sha256",
+        "-extfile",
+    ] {
+        a.push(f.into());
+    }
+    a.push(extfile.into());
+    a.push("-out".into());
+    a.push(out.into());
+    a
 }
 
 fn end_previous_ca_window(certs_dir: &std::path::Path) {
@@ -2572,6 +2616,148 @@ fn cloudflare_refresh_failure_reason(err: &str) -> String {
         return "refresh-response-unusable".into();
     }
     "refresh-transport".into()
+}
+
+// ── Hugging Face (order 2080-dhzf) ────────────────────────────────────────
+// @trace order:2080-dhzf
+
+/// Where the Hugging Face sign-in lives: ONE record (access token, optional
+/// refresh token and expiry, how it was obtained). Only the host binary reads
+/// it, through the root token, for huggingface.co downloads; no Vault policy
+/// grants it to a service and no forge is ever handed it (HF_TOKEN is a
+/// scrubbed credential in tillandsias-plan child_env). Operator ruling
+/// 2026-10-19: no plaintext at rest, so there is no file fallback.
+pub const HUGGINGFACE_TOKEN_PATH: &str = "secret/huggingface/token";
+
+/// The stored Hugging Face sign-in. No derived `Debug`: the hand-written one
+/// redacts both tokens.
+#[derive(Clone, PartialEq, Eq)]
+pub struct HuggingFaceToken {
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    /// Unix seconds; `None` for a pasted user access token (no expiry).
+    pub expires_at: Option<u64>,
+    /// `device` or `paste`.
+    pub source: String,
+}
+
+impl std::fmt::Debug for HuggingFaceToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HuggingFaceToken")
+            .field("access_token", &"<redacted>")
+            .field(
+                "refresh_token",
+                &self.refresh_token.as_ref().map(|_| "<redacted>"),
+            )
+            .field("expires_at", &self.expires_at)
+            .field("source", &self.source)
+            .finish()
+    }
+}
+
+impl HuggingFaceToken {
+    /// The Vault record.
+    pub fn record(&self) -> serde_json::Value {
+        let mut m = serde_json::Map::new();
+        m.insert("access_token".into(), self.access_token.clone().into());
+        if let Some(r) = &self.refresh_token {
+            m.insert("refresh_token".into(), r.clone().into());
+        }
+        if let Some(e) = self.expires_at {
+            m.insert("expires_at".into(), e.into());
+        }
+        m.insert("source".into(), self.source.clone().into());
+        serde_json::Value::Object(m)
+    }
+
+    /// Parse a record; `None` when it holds no usable access token.
+    pub fn from_record(v: &serde_json::Value) -> Option<Self> {
+        let access_token = v["access_token"]
+            .as_str()
+            .filter(|s| !s.is_empty())?
+            .to_string();
+        Some(Self {
+            access_token,
+            refresh_token: v["refresh_token"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .map(str::to_string),
+            expires_at: v["expires_at"].as_u64(),
+            source: v["source"].as_str().unwrap_or("unknown").to_string(),
+        })
+    }
+
+    /// Usable for a request at `now`: no expiry, or at least a minute left.
+    pub fn usable_at(&self, now: u64) -> bool {
+        self.expires_at.is_none_or(|e| e > now.saturating_add(60))
+    }
+}
+
+/// Vault as the Hugging Face login sees it; errors are reason tokens.
+pub trait HuggingFaceTokenStore {
+    /// `Ok(None)` ONLY when Vault answered that the record does not exist.
+    fn read_token(&self) -> Result<Option<HuggingFaceToken>, String>;
+    /// Write and confirm (read back and compare).
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String>;
+    /// Destroy every version and confirm; an absent record is `Ok`.
+    fn delete_record(&self, path: &str) -> Result<(), String>;
+}
+
+pub fn store_huggingface_token(
+    store: &dyn HuggingFaceTokenStore,
+    token: &HuggingFaceToken,
+) -> Result<(), String> {
+    if token.access_token.is_empty() {
+        return Err("token-empty".into());
+    }
+    store.write_record(HUGGINGFACE_TOKEN_PATH, token.record())
+}
+
+pub fn delete_huggingface_token(store: &dyn HuggingFaceTokenStore) -> Result<(), String> {
+    store.delete_record(HUGGINGFACE_TOKEN_PATH)
+}
+
+/// The live store: the same Vault, root token, lease and confirm-after-write
+/// rules as [`VaultCloudflareTokenStore`] (whose path-generic write and delete
+/// it reuses), reading its own record.
+pub struct VaultHuggingFaceTokenStore {
+    pub debug: bool,
+    /// A fetch never starts Vault (it reads only if Vault is up); the login
+    /// and logout may.
+    pub may_start_vault: bool,
+}
+
+impl VaultHuggingFaceTokenStore {
+    fn inner(&self) -> VaultCloudflareTokenStore {
+        VaultCloudflareTokenStore {
+            debug: self.debug,
+            may_start_vault: self.may_start_vault,
+        }
+    }
+}
+
+impl HuggingFaceTokenStore for VaultHuggingFaceTokenStore {
+    fn read_token(&self) -> Result<Option<HuggingFaceToken>, String> {
+        vault_up_or_start_unless(
+            crate::read_only_process() || !self.may_start_vault,
+            || container_running(VAULT_CONTAINER_NAME),
+            || ensure_vault_running(self.debug),
+        )?;
+        let (_stability, rt, client) = self.inner().client()?;
+        match rt.block_on(client.read_secret(HUGGINGFACE_TOKEN_PATH)) {
+            Ok(v) => Ok(HuggingFaceToken::from_record(&v)),
+            Err(VaultError::NotFound(_)) => Ok(None),
+            Err(e) => Err(cloudflare_vault_reason(&e).into()),
+        }
+    }
+
+    fn write_record(&self, path: &str, value: serde_json::Value) -> Result<(), String> {
+        CloudflareTokenStore::write_record(&self.inner(), path, value)
+    }
+
+    fn delete_record(&self, path: &str) -> Result<(), String> {
+        CloudflareTokenStore::delete_record(&self.inner(), path)
+    }
 }
 
 /// May a refresh token be POSTed to this endpoint? https anywhere; plain http
@@ -6384,6 +6570,8 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::ClaudeForge => "claude-forge",
         Policy::AntigravityForge => "antigravity-forge",
         Policy::AntigravityLogin => "antigravity-login",
+        Policy::CopilotForge => "copilot-forge",
+        Policy::CopilotLogin => "copilot-login",
         Policy::OpenCodeForge => "opencode-forge",
     }
 }
@@ -7090,6 +7278,100 @@ pub async fn ensure_mirror_identity_provisioned(
 
 #[cfg(test)]
 mod tests {
+
+    // 2058-xduu: the Vault leaf's sign arguments work under EVERY openssl this
+    // host has: LibreSSL (macOS /usr/bin) and OpenSSL 3+ (Homebrew, Linux).
+    // Before the fix, -copy_extensions made LibreSSL refuse the sign.
+    #[test]
+    fn the_vault_leaf_sign_args_work_under_libressl_and_openssl() {
+        use std::process::Command;
+        let mut bins: Vec<String> = Vec::new();
+        for b in [
+            "/usr/bin/openssl",
+            "/opt/homebrew/bin/openssl",
+            "/usr/local/bin/openssl",
+        ] {
+            if std::path::Path::new(b).exists() {
+                bins.push(b.to_string());
+            }
+        }
+        if bins.is_empty() {
+            bins.push("openssl".to_string());
+        }
+        let mut flavours = Vec::new();
+        for bin in &bins {
+            let ver = Command::new(bin)
+                .arg("version")
+                .output()
+                .expect("openssl version");
+            let ver = String::from_utf8_lossy(&ver.stdout).trim().to_string();
+            let dir = tempfile::tempdir().unwrap();
+            let p = |n: &str| dir.path().join(n);
+            let ok = |c: &mut Command| c.output().map(|o| o.status.success()).unwrap_or(false);
+            assert!(
+                ok(Command::new(bin)
+                    .args([
+                        "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "2", "-subj",
+                        "/CN=ca", "-keyout"
+                    ])
+                    .arg(p("ca.key"))
+                    .arg("-out")
+                    .arg(p("ca.crt"))),
+                "{ver}: CA"
+            );
+            assert!(
+                ok(Command::new(bin)
+                    .args([
+                        "req",
+                        "-newkey",
+                        "rsa:2048",
+                        "-nodes",
+                        "-subj",
+                        "/CN=vault",
+                        "-keyout"
+                    ])
+                    .arg(p("l.key"))
+                    .arg("-out")
+                    .arg(p("l.csr"))),
+                "{ver}: CSR"
+            );
+            std::fs::write(
+                p("l.ext"),
+                super::vault_leaf_extfile("subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1"),
+            )
+            .unwrap();
+            let args = super::vault_leaf_sign_args(
+                &p("l.csr"),
+                &p("ca.crt"),
+                &p("ca.key"),
+                &p("l.ext"),
+                &p("l.crt"),
+                Vec::new(),
+            );
+            let out = Command::new(bin).args(&args).output().expect("spawn sign");
+            assert!(
+                out.status.success(),
+                "{ver} refused the Vault leaf sign: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            let text = Command::new(bin)
+                .args(["x509", "-noout", "-text", "-in"])
+                .arg(p("l.crt"))
+                .output()
+                .unwrap();
+            let text = String::from_utf8_lossy(&text.stdout);
+            assert!(
+                text.contains("DNS:vault") && text.contains("IP Address:127.0.0.1"),
+                "{ver}: leaf lacks its SANs"
+            );
+            assert!(
+                text.contains("Authority Key Identifier"),
+                "{ver}: leaf names no issuing key, so a two-CA trust cannot verify it"
+            );
+            flavours.push(ver);
+        }
+        eprintln!("vault leaf signed under: {flavours:?}");
+    }
 
     /// Order 1919-keyc: the root-token memo lives in memory only, wipes its
     /// buffer when dropped, and a heal clears it.

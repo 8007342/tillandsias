@@ -194,8 +194,8 @@ fn sample_one_container(name: &str, id: &str, cgroup_root: &Path) -> ContainerMe
         None => ContainerMetric::error_only(
             name,
             format!(
-                "cgroup scope libpod-{id}.scope not found under machine.slice \
-                 (rootful) or user.slice/user-*.slice/user@*.service/user.slice \
+                "cgroup scope libpod-{id}.scope not found under machine.slice or tillandsias.slice \
+                 (rootful) or user.slice/user-*.slice/user@*.service/{{user,tillandsias}}.slice \
                  (rootless) below {}",
                 cgroup_root.display()
             ),
@@ -203,7 +203,7 @@ fn sample_one_container(name: &str, id: &str, cgroup_root: &Path) -> ContainerMe
     }
 }
 
-/// Locate `libpod-<id>.scope` under the two known cgroup v2 parents.
+/// Locate `libpod-<id>.scope` under the known cgroup v2 parents.
 ///
 /// 1. Rootful podman (systemd machine slice):
 ///    `<root>/machine.slice/libpod-<id>.scope`
@@ -212,12 +212,20 @@ fn sample_one_container(name: &str, id: &str, cgroup_root: &Path) -> ContainerMe
 ///    The uid is not known here, so this is a two-level directory scan
 ///    (`user-*.slice`, then `user@*.service`) rather than a fixed path —
 ///    the documented glob fallback.
-fn resolve_scope_dir(cgroup_root: &Path, id: &str) -> Option<PathBuf> {
+/// 3. ORDER 2067-dwqd: a container launched with
+///    `--cgroup-parent=tillandsias.slice` (1913-ebv8: every forge and its
+///    siblings where podman runs on the systemd manager) sits in that slice
+///    instead: `<root>/tillandsias.slice/` rootful,
+///    `user@<uid>.service/tillandsias.slice/` rootless. Without these the
+///    forges were the containers this resolver could not find.
+pub(crate) fn resolve_scope_dir(cgroup_root: &Path, id: &str) -> Option<PathBuf> {
     let scope = format!("libpod-{id}.scope");
 
-    let rootful = cgroup_root.join("machine.slice").join(&scope);
-    if rootful.is_dir() {
-        return Some(rootful);
+    for parent in ["machine.slice", "tillandsias.slice"] {
+        let rootful = cgroup_root.join(parent).join(&scope);
+        if rootful.is_dir() {
+            return Some(rootful);
+        }
     }
 
     let user_slice = cgroup_root.join("user.slice");
@@ -237,9 +245,11 @@ fn resolve_scope_dir(cgroup_root: &Path, id: &str) -> Option<PathBuf> {
             if !(service_name.starts_with("user@") && service_name.ends_with(".service")) {
                 continue;
             }
-            let candidate = service_dir.path().join("user.slice").join(&scope);
-            if candidate.is_dir() {
-                return Some(candidate);
+            for parent in ["user.slice", "tillandsias.slice"] {
+                let candidate = service_dir.path().join(parent).join(&scope);
+                if candidate.is_dir() {
+                    return Some(candidate);
+                }
             }
         }
     }

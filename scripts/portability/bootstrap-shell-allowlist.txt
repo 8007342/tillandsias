@@ -46,6 +46,7 @@ scripts/hooks/claude-pretooluse-command-policy.sh
 images/default/entrypoint-forge-antigravity.sh
 images/default/entrypoint-forge-claude.sh
 images/default/entrypoint-forge-codex.sh
+images/default/entrypoint-forge-copilot.sh
 images/default/entrypoint-forge-opencode-web.sh
 images/default/entrypoint-forge-opencode.sh
 images/default/entrypoint-terminal.sh

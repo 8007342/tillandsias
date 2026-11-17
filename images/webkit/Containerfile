@@ -13,6 +13,11 @@
 # pinned checksum is the stronger statement anyway. `playwright install-deps`
 # runs apt only.
 FROM docker.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+# 1958-yfib: the image inherits its base layer's labels, so without this line it ships
+# the base's licence as ours (measured: fedora-minimal -> MIT, caddy -> Apache-2.0). The
+# label is Tillandsias's own recipe; every base image and package it carries is
+# credited, with its upstream licence, in docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # Node 22 LTS from nodejs.org (Playwright 1.63 needs node >= 20; Ubuntu 24.04 ships 18).
 ARG NODE_VERSION=22.23.3

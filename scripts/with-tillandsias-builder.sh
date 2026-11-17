@@ -250,7 +250,7 @@ _toolbox_exists() {
 # init so `./build.sh --check` does not fail with "Missing host build tools".
 _toolbox_initialized() {
     toolbox run --container "$TOOLBOX_NAME" \
-        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && command -v podman && command -v nix && command -v node && command -v systemd-run && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
+        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && command -v podman && command -v nix && command -v node && command -v systemd-run && command -v getfattr && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
         &>/dev/null 2>&1
 }
 
@@ -329,6 +329,8 @@ if ! _toolbox_initialized; then
     # (profiled), not the ~37s I first recorded: that figure was the one-off
     # first build of every dependency for the new target, not steady state.
     #
+    # attr (getfattr): litmus:forge-is-the-last-oomd-candidate reads the
+    # user.oomd_avoid xattr; the gate runs inside this toolbox (2093-am6t).
     # jq/yq/ripgrep/openssl: the toolbox-first dispatch pattern
     # (methodology multi_host_development.toolbox_first_scripts) is only valid
     # for tools the toolbox HAS, and it had none of these — so the ~50 scripts
@@ -344,6 +346,7 @@ if ! _toolbox_initialized; then
             ruby perl-FindBin \
             procps-ng findutils diffutils \
             jq yq ripgrep openssl \
+            attr \
             nodejs systemd \
             mingw64-gcc \
         2>&1 | while IFS= read -r line; do printf '  [dnf] %s\n' "$line"; done
@@ -427,8 +430,8 @@ PWD_QUOTED="$(printf '%q' "$(pwd)")"
 # environment instead, forwarded by the TILLANDSIAS_ namespace above, so the
 # kill set is exactly this dispatch's tree and can never be another's.
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib-dispatch-reap.sh"
-TILLANDSIAS_WRAPPER_TOKEN="$(tillandsias_dispatch_token)"
-export TILLANDSIAS_WRAPPER_TOKEN
+TILLANDSIAS_WRAPPER_MARK="$(tillandsias_dispatch_token)"
+export TILLANDSIAS_WRAPPER_MARK
 
 # The reap itself lives in lib-dispatch-reap.sh, NOT here: scripts/
 # with-wsl2-builder.sh dispatches the same way and has the same defect, and
@@ -462,12 +465,12 @@ export TILLANDSIAS_WRAPPER_TOKEN
 # survivor can be found by hand.
 _tb_on_signal() {
     local rc=0
-    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_TOKEN" || rc=$?
+    tillandsias_reap_marked "$TILLANDSIAS_WRAPPER_MARK" || rc=$?
     if [ "$rc" -ne 0 ]; then
         echo "[tillandsias-builder] refused:dispatch-reap-incomplete: could not confirm the container-side tree was reaped (rc=$rc)." >&2
         echo "  A CANCELLED GATE MAY STILL BE RUNNING in this checkout, holding the same tree." >&2
         echo "  Find it:  ps -eo pid,ppid,etime,cmd | grep 'build.sh --check'" >&2
-        echo "  Its processes carry TILLANDSIAS_WRAPPER_TOKEN=$TILLANDSIAS_WRAPPER_TOKEN" >&2
+        echo "  Its processes carry TILLANDSIAS_WRAPPER_MARK=$TILLANDSIAS_WRAPPER_MARK" >&2
         echo "  SIGTERM has been measured inert on a survivor; SIGKILL the pid and its children." >&2
     fi
     exit 143
@@ -499,7 +502,7 @@ ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 _tb_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -x "$_tb_self_dir/check-no-competing-gate.sh" ]; then
     # ASSERT HOST-SIDE AND HAND OVER OUR OWN PID. $$ here is the host-side shell
-    # that minted TILLANDSIAS_WRAPPER_TOKEN above and is about to dispatch, so
+    # that minted TILLANDSIAS_WRAPPER_MARK above and is about to dispatch, so
     # it is exactly the process whose readability decides whether the check can
     # see the class of process its verdict depends on. The check verifies our
     # environ is readable AND carries that token; if it cannot read us it says

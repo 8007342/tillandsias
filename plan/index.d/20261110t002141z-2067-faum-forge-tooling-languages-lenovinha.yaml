@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: lua-rust-and-go-are-always-in-the-forge-and-every-harness-is-told-to-prefer-them-in-that-order
+    order: 2067-faum
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, image, harness, guidance, cheatsheet]
+    estimated_hours: 3
+    title: |
+      Lua, Rust and Go are always available in the forge and recommended to every agent in that order (Python only when a library forces it); ruby, perl, python and the other languages stay installed
+    context: |
+      Operator ruling 2026-11-09, relayed by coordinator macuahuitl-fedora. Trigger: a demon_attack forge stalled on Python multiprocessing memory thrash that day. MEASURED on lenovinha 2026-11-09 in localhost/tillandsias-forge:latest: lua, cargo, rustc and go are /usr/bin, as are perl and python3; ruby is absent (left alone unless trivial). They come from images/default/Containerfile.base (golang, rust cargo, lua).
+    exit_criteria:
+      - 'a fixture fails when lua, cargo, rustc or go is missing from the forge, red first through a stub PATH, and the forge image build refuses to finish without them'
+      - 'the preference "tooling language: Lua > Rust > Go; Python only when a library forces it" is in the forge guidance every harness loads (Claude, Codex, OpenCode, Antigravity, Copilot)'
+      - 'a short cheatsheet with provenance states the order and why'
+    verifiable_closure: 'the fixture red before and green after; one built forge in which all four commands resolve and each harness instruction file carries the preference'
+    unscoreable: 'none.'
+    next_action: 'Fixture and Containerfile build guard first, then the guidance section, the Copilot instructions link and the cheatsheet.'
+    provenance: operator ruling 2026-11-09 relayed by coordinator macuahuitl-fedora; filed and claimed by lenovinha-silverblue.
+    depends_on: []
+    related: [2063-nfag, 2049-xjsb]
+    events:
+      - {type: filed, ts: '2026-11-10T00:21:41Z', host: lenovinha-silverblue, summary: filed p1 and claimed in_progress by lenovinha-silverblue}

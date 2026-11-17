@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air (macOS lane) on 2026-11-07 at the coordinator's direction, from the v56.11.7.1 macOS run.
+packets:
+- packet_id: a-graceful-tray-quit-mid-image-build-never-corrupts-guest-podman-storage
+  order: 2023-3hgf
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, vm, podman, storage]
+  estimated_hours: 4
+  title: A graceful tray quit while the guest is still building images never leaves podman storage corrupt
+  context: 'Measured on tlatoanis-macbook-air 2026-11-07 (v56.11.7.1, VZ guest Fedora 44, kernel 7.2.15, podman 5.8.9, btrfs /var): the curl install writes soft-reset.request, the guest resets podman storage at its next start (10:52Z) and rebuilds images; a SIGTERM to the tray about 3 minutes later (the graceful drain path) stopped the VM while that work was in flight. One overlay layer (d17217275ed6…) was left with an EMPTY link file, after which EVERY podman run failed with "Error: readlink /var/lib/containers/storage/overlay: invalid argument", the vault never started ("podman run vault failed: exit status: 125"), and Ready never came (wait_phase_ready timeout after 300 s). podman system check reported "damage detected in local storage" for that layer.'
+  exit_criteria:
+  - 'A graceful quit (SIGTERM or the menu''s Quit) while the guest is building or pulling an image either waits for that work to finish (bounded, and shown on the chip) or stops it so podman leaves no partial layer; the guest syncs its filesystems before the VM stops.'
+  - 'A test or a live run quits the tray mid-build and the next start passes `podman system check` with no damage.'
+  verifiable_closure: 'A run that quits mid-build, then `podman system check` clean and a forge launch reaching Ready, on a published release.'
+  unscoreable: 'none.'
+  next_action: 'Find how the guest stops on a drain (does headless stop in-flight podman build/pull, and is there a sync before power-off), then reproduce the empty link file deliberately.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-07: "file both: (a) p1, a normal quit mid-build must not corrupt storage".'
+  events:
+  - type: filed
+    ts: '2026-11-07T11:15:33Z'
+    host: tlatoanis-macbook-air
+    summary: filed p1 ready from the v56.11.7.1 macOS run
+- packet_id: a-damaged-podman-layer-is-repaired-once-by-its-exact-signature-never-silently
+  order: 2023-hd7m
+  status: ready
+  kind: feature
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [podman, storage, recovery]
+  estimated_hours: 3
+  title: A podman run failing with the corrupt-layer signature runs one `podman system check --repair`, keeps volumes, and says what it removed
+  context: 'Same run as 2023-3hgf: once a layer is damaged, every podman run fails with "readlink /var/lib/containers/storage/overlay: invalid argument" and nothing recovers; `podman system check --repair --force` deleted the one damaged image (the vault''s, 4660a752…) and the next launch rebuilt it. --repair DELETES images, so it must be narrow.'
+  exit_criteria:
+  - 'Only that exact signature (a podman run or create failing with "readlink <graphroot>/overlay: invalid argument", or podman system check reporting damage) triggers it, at most once per process; it runs `podman system check --repair --force` with no volume or container removal flags, prints each image or layer it removed, and the caller then retries its one podman action once.'
+  - 'A fixture with a stub podman returning that signature asserts one repair and one retry; another error asserts no repair.'
+  verifiable_closure: 'The fixture, plus the live recovery on a guest with a seeded empty link file.'
+  unscoreable: 'unpinnable-until-the-guard-exists: the fixture lands with the change (1136-n8sh).'
+  next_action: 'Find the single podman-run seam the vault and forge launches share, then add the signature arm with its fixture.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-07: "(b) p2, with care since --repair deletes images: run it once, only for that exact signature, keep volumes untouched, and say what it removed".'
+  events:
+  - type: filed
+    ts: '2026-11-07T11:15:33Z'
+    host: tlatoanis-macbook-air
+    summary: filed p2 ready from the v56.11.7.1 macOS run

@@ -1,0 +1,35 @@
+# @trace spec:forge-environment-discoverability, order:2073-i4jr, order:2079-sgp4
+#
+# test-json-query-jq-parity runs a private snapshot of the plan binary, so a
+# concurrent guard relinking the build output mid-run cannot fail a random
+# case (FAIL:json-get-parity:78/79 evicted #1044 and #1059 on macuahuitl).
+# A divergence names its want, got and stderr.
+name: litmus:json-get-parity-binary-swap
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  The jq-parity guard stays green while its plan binary is rewritten in place
+  during the run, and a diverging binary is reported with want, got and
+  stderr, plus the binary's path and sha256.
+severity: high
+size: quick
+
+critical_path:
+  - step: "2073-i4jr: the guard stays 79/79 while its binary is rewritten in place"
+    timeout_ms: 240000
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-jqs.XXXXXX); B=$(command -v tillandsias-plan); cp \"$B\" \"$T/orig\"; cp \"$B\" \"$T/plan\"; ( i=0; while [ $i -lt 600 ] && [ -f \"$T/orig\" ]; do cat \"$T/orig\" > \"$T/plan\" 2>/dev/null; sleep 0.05; i=$((i+1)); done ) & W=$!; out=$(TILLANDSIAS_PLAN_BIN=\"$PWD/$T/plan\" bash scripts/test-json-query-jq-parity.sh 2>&1); rc=$?; kill $W 2>/dev/null; wait $W 2>/dev/null; find \"$T\" -delete; v=$(grep -E '^(ok|FAIL|blocked):json-get-parity' <<<\"$out\"); [ \"$rc\" -eq 0 ] && case \"$v\" in ok:json-get-parity:*) true;; *) false;; esac && echo 'ok: parity holds under a binary rewrite' || { echo \"FAIL rc=$rc verdict=[$v]\"; exit 1; }"
+    expected_behavior: "ok: parity holds under a binary rewrite"
+
+  - step: "2079-sgp4: a -n case whose input outgrows the pipe buffer is not SIGPIPEd (rc=141 on trunk before the fix)"
+    timeout_ms: 240000
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-jqp.XXXXXX); mkdir -p \"$T/scripts/portability\"; cp scripts/test-json-query-jq-parity.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp scripts/portability/jq-subset-corpus.txt scripts/portability/jq-subset-golden.txt \"$T/scripts/portability/\"; n=$(grep -c '^@@case' \"$T/scripts/portability/jq-subset-golden.txt\"); printf -- '-n\\tnull\\t%0100000d\\n' 1 >> \"$T/scripts/portability/jq-subset-corpus.txt\"; printf '@@case %d\\nnull\\nrc=0\\n' $((n+1)) >> \"$T/scripts/portability/jq-subset-golden.txt\"; out=$(TILLANDSIAS_PLAN_BIN=$(command -v tillandsias-plan) bash \"$T/scripts/test-json-query-jq-parity.sh\" 2>&1); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 0 ] && grep -q '^ok:json-get-parity:' <<<\"$out\" && echo 'ok: a -n case is never SIGPIPEd' || { echo \"FAIL rc=$rc\"; grep -E '^(mismatch|  got|FAIL)' <<<\"$out\"; exit 1; }"
+    expected_behavior: "ok: a -n case is never SIGPIPEd"
+
+  - step: "2073-i4jr NEGATIVE CONTROL: a diverging binary is named with want, got, stderr and its sha256"
+    timeout_ms: 120000
+    command: "mkdir -p target; T=$(mktemp -d target/litmus-jqs.XXXXXX); printf '#!/bin/sh\\ncase \"$1\" in capabilities) echo json;; *) echo junk; echo boom-from-stub >&2;; esac\\n' > \"$T/tillandsias-plan\"; chmod +x \"$T/tillandsias-plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$PWD/$T/tillandsias-plan\" bash scripts/test-json-query-jq-parity.sh 2>&1); rc=$?; find \"$T\" -delete; [ \"$rc\" -eq 1 ] && grep -q '^FAIL:json-get-parity:0/' <<<\"$out\" && grep -q '^  stderr: boom-from-stub' <<<\"$out\" && grep -q '^  got:  junk' <<<\"$out\" && grep -qE '^note:json-get-parity:binary=.* sha256=[0-9a-f]{64} ' <<<\"$out\" && echo 'ok: divergence names its cause' || { echo \"FAIL rc=$rc\"; head -8 <<<\"$out\"; exit 1; }"
+    expected_behavior: "ok: divergence names its cause"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-offers-only-installed-or-installable-tiers-and-states-download-size-and-minutes-for-an-installable-one
+    field: context
+    value: |-
+      demon_attack-forge round 2, calmecacpilli 2026-11-02: bigger_tier_offer named I2 although imagegen_models.rs pins no files for it on this host, so saying yes could only fail. An offer the host cannot honour is a broken resource gate. When the tier IS installable the user needs the cost to decide: size on disk and an estimate of the fetch time at the measured link rate.
+
+      [2026-11-02T05:15:26Z calmecacpilli] Under the operator ruling 2026-11-01 on #825 ("the bigger models gate should be asked only for downloading models the first time"), this ask IS the gate: the consent_required / bigger_tier_offer result is a download offer for a tier whose files are missing, carrying download_bytes and an ask with GB and minutes (c56e9cb65; minutes at an assumed 10 MB/s until a link rate is measured). Spec: openspec/changes/local-image-generation design.md section 5 and the requirement "The download ask states its cost honestly" (work/1959-dlgate).
+    ts: "2026-11-02T05:15:26Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: imagegen-offers-only-installed-or-installable-tiers-and-states-download-size-and-minutes-for-an-installable-one
+    event:
+      type: note
+      ts: "2026-11-02T05:15:26Z"
+      host: calmecacpilli
+      summary: |-
+        operator ruling 2026-11-01 on #825

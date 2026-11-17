@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: lua-interpreter-on-path-in-the-forge-with-asserted-batch-replace-and-conflict-hunk-helpers
+    event:
+      type: completed
+      ts: "2026-11-10T07:22:37Z"
+      agent_id: linux-yoga-opus5-20261110t072237z
+      host: yoga
+      summary: |-
+        closed by yoga at macuahuitl coordinator's request (2026-11-10). Reproduced on trunk 951ef84ff: bash scripts/test-forge-lua-tooling.sh (inside the built forge image) -> PASS: lua-version=Lua 5.4.8, lfs=yes, lpeg=yes; ctx-present names lua (5.4, with lfs and lpeg); lua-edit: a duplicate OLD refused with the file unchanged, a missing OLD refused unchanged, a unique set applied (1 two 3); lua-conflict resolves ours (top,mine,end), theirs (top,yours,end), both (top,mine,yours,end), and refuses a file with no hunk

@@ -2672,15 +2672,22 @@ _gs_exec_step() {
     local _gs_tee
     exec 8> >(tee "$_step_out")
     _gs_tee=$!
+    # 2059-s42d: point stdout/stderr at the tee with `exec`, never as a
+    # redirection on the `_run` call. bash 3.2 (darwin's /bin/bash) applies a
+    # function call's `8>&-` by SAVING fd 8 to a high fd (12) without
+    # close-on-exec, so every child, even a job redirected to /dev/null, still
+    # held the step's pipe and the gate refused it. `exec` saves nothing.
+    # fds 9/6 keep the gate's own stdout/stderr to restore after.
+    exec 9>&1 6>&2 1>&8 2>&1 8>&-
     if [ -n "$STEP_LUA" ]; then
         # 1600-nn5b: handed the runner that runs it, the _run_lua_decider and
         # preflight-door contract (1570-mxcg), so a fixture that must ask the
         # plan binary finds one in the land queue's clean env too.
-        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" >&8 2>&1 8>&- || _step_rc=$?
+        _run env "TILLANDSIAS_SCRIPT_RUNNER_BIN=$_gs_plan" "$_gs_plan" script run "$_gs_root/$STEP_LUA" || _step_rc=$?
     else
-        _run bash "$_gs_root/$STEP_SCRIPT" >&8 2>&1 8>&- || _step_rc=$?
+        _run bash "$_gs_root/$STEP_SCRIPT" || _step_rc=$?
     fi
-    exec 8>&-
+    exec 1>&9 2>&6 9>&- 6>&-
     _gs_await_step_pipe "$_gs_tee"
 }
 
@@ -2711,6 +2718,18 @@ _gs_await_step_pipe() {
             _seen="$_seen$_p "
             _holders="${_holders:+$_holders }$_p($(tr '\0' ' ' < "/proc/$_p/cmdline" 2>/dev/null | cut -c1-60))"
         done
+    elif command -v lsof >/dev/null 2>&1; then
+        # 2059-s42d: no /proc (darwin). lsof names tee's read end by the
+        # address of its peer (`n->0x…`); every writer holds an fd whose
+        # device IS that address. Only this user's processes can hold it.
+        _pipe="$(lsof -nP -a -p "$_tee" -d 0 -F n 2>/dev/null | sed -n 's/^n->//p' | head -n 1)"
+        if [ -n "$_pipe" ]; then
+            for _p in $(lsof -nP -u "$(id -u)" -F pd 2>/dev/null |
+                awk -v want="d$_pipe" '/^p/ { p = substr($0, 2) } $0 == want { print p }' | sort -u); do
+                [ "$_p" = "$_tee" ] && continue
+                _holders="${_holders:+$_holders }$_p($(ps -o command= -p "$_p" 2>/dev/null | cut -c1-60))"
+            done
+        fi
     fi
     printf 'refused:gate-step:background-job-holds-pipe:%s holders=%s\n' \
         "${STEP_SCRIPT:-$STEP_LUA}" "${_holders:-unknown}" | tee -a "$_step_out" >&2
@@ -2938,7 +2957,26 @@ _run_lua_decider() {  # $1 = scripts/lua/<name>.lua, remaining args are explicit
     TILLANDSIAS_SCRIPT_RUNNER_BIN="$_ld_bin" _run "$_ld_bin" script run "$SCRIPT_DIR/$_ld_script" -- "$@"
 }
 
+# ORDER 1270-5mz8: the litmus runtime shim routes every podman call through
+# scripts/tillandsias-podman, which runs a PREBUILT tillandsias-podman-cli. Build
+# it once, before the first phase mints the shim, and say so in the gate log, so
+# a release gate can never measure the forge lane on a binary older than the
+# tree (2026-09-19: two release gates did). The shim refuses a stale one too.
+_LITMUS_PODMAN_CLI_READY=0
+_ensure_litmus_podman_cli() {
+    [ "$_LITMUS_PODMAN_CLI_READY" = 1 ] && return 0
+    _LITMUS_PODMAN_CLI_READY=1
+    local _pc_rc=0
+    (cd "$SCRIPT_DIR" && cargo build -q -p tillandsias-podman-cli) || _pc_rc=$?
+    if [ "$_pc_rc" -eq 0 ]; then
+        echo "podman-cli: built-before-litmus-shim (cargo build -p tillandsias-podman-cli rc=0; 1270-5mz8)"
+    else
+        echo "podman-cli: build-failed-before-litmus-shim rc=$_pc_rc — the shim will refuse a stale prebuilt by name (1270-5mz8)"
+    fi
+}
+
 _run_litmus_phase() {
+    _ensure_litmus_podman_cli
     local phase="$1"
     local size="$2"
     local log_file="$3"
@@ -3805,7 +3843,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # ORDER 1221-vkbj: it now SAYS WHICH SILENCE, and this caller reads the code.
     #
-    # The context is decided on TILLANDSIAS_WRAPPER_TOKEN, not on container
+    # The context is decided on TILLANDSIAS_WRAPPER_MARK (2031-z4rm; the retired
+    # TILLANDSIAS_WRAPPER_TOKEN is still read), not on container
     # markers. The markers are the enumeration this check already inverted away
     # from — yolanda measured a WSL distro with TOOLBOX_PATH, container,
     # /run/.toolboxenv, /run/.containerenv and /.dockerenv ALL absent while
@@ -3818,7 +3857,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Still advisory, still no --host-side from here: see the long note in
     # check-no-competing-gate.sh about why asserting from an undispatched gate
     # would manufacture a vacuous clean.
-    if [ -n "${TILLANDSIAS_WRAPPER_TOKEN:-}" ]; then
+    if [ -n "${TILLANDSIAS_WRAPPER_MARK:-${TILLANDSIAS_WRAPPER_TOKEN:-}}" ]; then
         _cg_ctx=dispatched
     else
         _cg_ctx=undispatched
@@ -3856,6 +3895,23 @@ if [[ "$FLAG_CHECK" == true ]]; then
     if ! _run_lua_decider "scripts/lua/check-smoke-agent-prompt-is-minimal.lua" 2>&1; then
         _error "a smoke skill hands its forge agent the /meta-orchestration loop — a smoke spends one short turn on the shared hosted model (1941-smkp)"
         exit 1
+    fi
+
+    # ORDER 1958-yfib. Tillandsias is GPL-3.0-or-later; a file of ours declaring
+    # another licence, or an image leaving the OCI licence label to its base
+    # layer (measured: tillandsias-inference shipped fedora-minimal's MIT), is
+    # refused. Vendored upstream files are listed in the guard with reasons.
+    if ! _run_lua_decider "scripts/lua/check-own-licence-declarations.lua" 2>&1; then
+        _error "a file of ours declares a licence other than GPL-3.0-or-later, or an image inherits its base image's licence label (1958-yfib) — see the refused: lines above"
+        exit 1
+    fi
+
+    # ORDER 1958-yfib. The stack ledger (docs/credits/stack.v1.json) is generated
+    # from cargo metadata, the Containerfiles, the lockfiles and the model
+    # register. ADVISORY here: it is refreshed at each stable release (1958-jyfk),
+    # not on every dependency bump, so a stale ledger warns and does not red the gate.
+    if ! _run_lua_decider "scripts/lua/build-stack-ledger.lua" --check 2>&1; then
+        _warn "advisory: docs/credits/stack.v1.json is stale against the sources of truth — regenerate with \`tillandsias-plan script run scripts/lua/build-stack-ledger.lua\` (refreshed at each stable release, 1958-jyfk)"
     fi
 
     # ORDER 1484-uf29. The typed Lua runner is the decision path. Every input
@@ -4317,7 +4373,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a run against HEAD can only print ok:, and a check that only ever prints
     # ok: on a healthy tree cannot be told from a broken one.
     _step "Checking the release-ledger distillation advisory (914-nkc4)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-ledger-distillation-advisory.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-ledger-distillation-advisory.lua" 2>&1; then
         _error "the ledger-distillation advisory regressed — the release ledger can again outgrow its own policy with nothing reporting it"
         exit 1
     fi
@@ -4760,7 +4816,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # count must not silently grow back: it went from 21 to 23 in the one day
     # between filing the packet and starting it.
     _step "Reporting litmus line-window pins (925-erjs, advisory)..."
-    _run bash "$SCRIPT_DIR/scripts/check-litmus-line-windows.sh" 2>&1 || true
+    _run_lua_decider "scripts/lua/check-litmus-line-windows.lua" 2>&1 || true
     _info "Litmus line-window report emitted"
 
     # Order 928-qm8k. A groundtruth case that asserts on ANSWER PROSE has a
@@ -5514,7 +5570,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # bar accepts standing debt rather than redding it (the operator's
     # CRDT/Erlang posture: keep the line running, file improvement packets).
     _step "Checking for newly-added expression-pinned litmus steps (634-39ik)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-expression-pinning-added.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-litmus-expression-pinning-added.lua" 2>&1; then
         _error "a newly-added litmus step pins a literal source expression without a negative control (634-39ik)"
         exit 1
     fi
@@ -5721,7 +5777,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Checking groundtruth cases for mutable-status pins (680-zphp)..."
     if _class_may_skip groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*; then
         _class_skip_line groundtruth-mutable-status-pins specs plan-ledger path:crates/tillandsias-plan/*
-    elif ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
+    elif ! _run_lua_decider "scripts/lua/check-groundtruth-mutable-status-pins.lua" 2>&1; then
         _error "an expert-groundtruth case pins status on a live non-terminal packet — it will red the harness on the next ledger update (680-zphp)"
         exit 1
     else
@@ -6067,6 +6123,16 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Relay-preflight deleted-fixture check passed"
+
+    # ORDER 2065-skdk — relay-preflight runs its tray,listen-vsock pass for any
+    # tillandsias-headless source change, not only src/tray/ (#1034 was evicted
+    # at the land gate on tray tool-count pins its preflight never ran).
+    _step "Checking relay-preflight's tray pass trigger (2065-skdk)..."
+    if ! _run_lua_decider "scripts/lua/test-relay-preflight-tray-trigger.lua" 2>&1; then
+        _error "relay-preflight's tray,listen-vsock trigger skips a headless source change or runs for an unrelated one — see the FAIL lines above (2065-skdk)"
+        exit 1
+    fi
+    _info "Relay-preflight tray trigger check passed"
 
     # ORDER 1597-rrku — the mirror's discipline parser and its fixture probe
     # ruby by running it: a forge's `ruby` is a Homebrew shim that exits 127.

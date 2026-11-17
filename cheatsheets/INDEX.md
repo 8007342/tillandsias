@@ -15,6 +15,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 ## agents
 
 - claude-code.md                   — Running Claude Code inside the forge, understanding its CLI, passing model flag… [bundled, partial-verify]
+- forge-tooling-language.md        — choosing the language for a script, helper or tool you write inside a forge [pull-on-demand: project-committed]
 - opencode.md                      — Launching web-based visual IDE, running OpenCode CLI, debugging web sessions, p… [bundled, partial-verify]
 - openspec.md                      — Creating/applying/archiving OpenSpec changes, understanding the artifact lifecy… [bundled, partial-verify]
 
@@ -152,6 +153,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - container-image-tagging.md                — Understanding how Tillandsias tags images with versions, detects stale images, … [bundled, partial-verify]
 - container-lifecycle.md [DRAFT]            — Launching containers and waiting for readiness, implementing health checks, cle… [bundled, partial-verify]
 - container-networking.md [DRAFT]           — Configuring podman container network modes and bridges. [bundled, partial-verify]
+- container-startup-orchestration.md        — **Use when:** deciding how the enclave (proxy, vault, router, git, inference, [pull-on-demand: stub]
 - cross-platform-terminal-launch.md [DRAFT] — Handling terminal window launch on Windows and Linux. [bundled, partial-verify]
 - dedicated-service-account-podman.md       — You want Tillandsias to own a dedicated rootless Podman runtime under a service [bundled, partial-verify]
 - enclave-network.md [DRAFT]                — Understanding enclave network topology and routing. [bundled, partial-verify]
@@ -208,6 +210,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - socket-container-orchestration.md [DRAFT] — Orchestrating Tillandsias enclave startup (proxy → git → inference → forge) wit… [bundled, partial-verify]
 - socket-enclave-diagnostics.md [DRAFT]     — Debugging enclave startup failures, health check timeouts, orchestration hangs,… [bundled, partial-verify]
 - squid-cache-peer-routing.md [DRAFT]       — Configuring Squid peer routing and cache hierarchies. [bundled, partial-verify]
+- startup-io-memory-pressure.md             — starts happen back to back, and the host (a QLC NVMe laptop, a VZ guest on a [pull-on-demand: stub]
 - statusnotifier-tray.md                    — Implementing or debugging the Linux tray icon/menu path for Tillandsias. [bundled, partial-verify]
 - syslog-configuration.md [DRAFT]           — Configuring syslog logging in containers. [bundled, partial-verify]
 - systemd-socket-activation.md              — building a daemon (like tillandsias-router) that systemd should supervise; coor… [pull-on-demand: stub]
@@ -238,8 +241,10 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 ## security
 
+- agent-web-access-patterns.md     — and web research, or why "let the shell curl anything" is not the pattern. [pull-on-demand: stub]
 - oauth-callback-relay.md          — Use this cheatsheet when a native or CLI app signs in with OAuth through a [pull-on-demand: stub]
 - owasp-top-10-2021.md             — You're writing or reviewing any web-facing software, APIs, or services that tou… [bundled, partial-verify]
+- per-workload-egress-tiers.md     — siblings only, host, curated internet), keeping TLS end to end, and keeping [pull-on-demand: stub]
 
 ## test
 

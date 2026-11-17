@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: linux-host-enrols-a-fido2-security-key-as-its-approval-key-with-an-honestly-labelled-polkit-software-fallback
+    field: next_action
+    value: |-
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+
+
+      [2026-11-10T22:41:18Z yoga] 2026-11-10T22:41:18Z yoga BLOCKS LICENCE RECORDS. The operator approved the Demucs weights licence on 2026-11-10 (non-commercial, gated per project; relayed by macuahuitl-fedora). The signed acknowledgement can't be produced, because no Linux host can enrol an approval key. Trunk @957d75fd4 checked: licence_consent::Verifier::for_host reads <state dir>/approvals/allowed_signers, and nothing on Linux writes it; there is no tillandsias approval or enrol subcommand. tasks.md sections 1 and 2 are all unchecked. This row and its dependency 1879-5jkt block 2068-cqis (the real-weights Demucs arms) and the 4 CorridorKey seed acknowledgements. Possible interim path, the operator's call and not taken: the macOS tray already has --approval-enrol <slug> and --approval-sign <slug> <statement> (1886-hf9j, landed 10183b92b). Adding that Mac's allowed-signers line on the verifying host would let accept-licence step 3 use Touch ID. 1886-hf9j's row still reads ready / "Nothing is done" although its code landed.
+    ts: "2026-11-10T22:41:18Z"
+    host: yoga
+
+events:
+  - packet_id: linux-host-enrols-a-fido2-security-key-as-its-approval-key-with-an-honestly-labelled-polkit-software-fallback
+    event:
+      type: progress
+      ts: "2026-11-10T22:41:18Z"
+      host: yoga
+      summary: |-
+        status 'Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+        
+        
+        [2026-11-10T22:41:18Z yoga] 2026-11-10T22:41:18Z yoga BLOCKS LICENCE RECORDS. The operator approved the Demucs weights licence on 2026-11-10 (non-commercial, gated per project; relayed by macuahuitl-fedora). The signed acknowledgement can't be produced, because no Linux host can enrol an approval key. Trunk @957d75fd4 checked: licence_consent::Verifier::for_host reads <state dir>/approvals/allowed_signers, and nothing on Linux writes it; there is no tillandsias approval or enrol subcommand. tasks.md sections 1 and 2 are all unchecked. This row and its dependency 1879-5jkt block 2068-cqis (the real-weights Demucs arms) and the 4 CorridorKey seed acknowledgements. Possible interim path, the operator's call and not taken: the macOS tray already has --approval-enrol <slug> and --approval-sign <slug> <statement> (1886-hf9j, landed 10183b92b). Adding that Mac's allowed-signers line on the verifying host would let accept-licence step 3 use Touch ID. 1886-hf9j's row still reads ready / "Nothing is done" although its code landed.' (not terminal) with evidence_refs: git show origin/linux-next:crates/tillandsias-headless/src/licence_consent.rs:857-866; openspec/changes/os-verified-approval-gates/tasks.md:1-12

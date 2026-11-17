@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: an-oauth-vault-watcher-whose-session-died-makes-its-last-copy-and-exits-even-under-inotifywait
+    order: 2076-w7kd
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, vault, oauth, codex, watcher]
+    estimated_hours: 2
+    owned_files:
+      - images/default/codex-oauth-vault.sh
+      - images/default/claude-approvals-vault.sh
+      - images/default/provider-oauth-vault.sh
+    title: |
+      codex-oauth-vault watch blocks forever once its session dies when inotifywait exists (every forge): the inotify loop never re-checks the child, and the final copy never runs, so a rotated sign-in is lost
+    context: |
+      Reported 2026-11-10 by coordinator macuahuitl-fedora, found by the yolanda forge: headless test a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale (watch 999999) hung 14 h on yolanda. READ on lenovinha at trunk: watch_auth takes the inotifywait branch whenever inotifywait is on PATH and reads events with a blocking read, with no kill -0 of the child and no final copy_if_changed after the loop. A session that dies without TERMing the watcher leaves it alive. claude-approvals-vault.sh has the same inotify loop shape. provider-oauth-vault.sh (copilot) polls with kill -0 and cannot hang, but makes no final harvest after the child dies, so a rotation inside the last poll interval is lost.
+    exit_criteria:
+      - 'with inotifywait present and a dead child, codex watch exits promptly having made its final copy; red first (hangs)'
+      - 'the same for claude-approvals-vault watch; provider-oauth-vault watch harvests once after the child dies'
+    verifiable_closure: 'the headless watcher tests pass with inotifywait on PATH; pre-fix the codex test hangs'
+    unscoreable: 'none.'
+    next_action: 'Check child liveness before the inotify loop and on each read -t timeout; final copy after it; same for approvals; final harvest in provider.'
+    provenance: coordinator macuahuitl-fedora 2026-11-10; filed and claimed by lenovinha-silverblue.
+    depends_on: []
+    related: [2063-nfag]
+    events:
+      - {type: filed, ts: '2026-11-10T14:16:55Z', host: lenovinha-silverblue, summary: filed p1 and claimed in_progress by lenovinha-silverblue}

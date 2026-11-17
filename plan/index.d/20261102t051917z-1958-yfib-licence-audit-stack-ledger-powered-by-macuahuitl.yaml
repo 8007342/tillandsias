@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl on the operator's 2026-11-01 request: a credits / "Powered By"
+# page for tillandsias.org with a graph of the stack and its licences, backed by
+# an audit of every licence our own files declare.
+packets:
+- packet_id: licence-audit-stack-ledger-and-powered-by-page-for-tillandsias-org
+  order: 1958-yfib
+  status: completed
+  kind: enhancement
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - release-gate
+  - website
+  - images
+  estimated_hours: 6
+  title: Audit every licence our own files declare against GPL-3.0-or-later, generate the stack ledger from the sources of truth, and give tillandsias.org a Powered By page drawn from it
+  context: 'Operator 2026-11-01: "our files might have the wrong licenses, some agents randomly hallucinate licenses for new files and we rarely check. The other day I saw some MIT license in one of our own files." Measured on the operator''s host: localhost/tillandsias-inference carried org.opencontainers.image.licenses=MIT with vendor="Fedora Project", and tillandsias-router carried Apache-2.0 — every Tillandsias-built image inherits its base layer''s labels because no Containerfile set its own. Cargo manifests, package.json files and SPDX headers of our own code all said GPL-3.0-or-later or nothing; the only MIT in a file of ours was a litmus fixture imitating a third-party project. The operator also asked for a transparent ledger of everything we auto-wire, with licences as the upstream declares them (never guessed), and an EXTREMELY SIMPLE graph on the website with rings per licence family, dashed optional dependencies and a link to each homepage.'
+  exit_criteria:
+  - 'scripts/lua/check-own-licence-declarations.lua refuses a non-GPL-3.0-or-later licence on a file of ours and an images/*/Containerfile* or observatorium/Containerfile with no org.opencontainers.image.licenses label; vendored upstream paths are listed in the guard with reasons; wired into ./build.sh --check; red on the tree before this packet (20 images), green after.'
+  - 'scripts/lua/build-stack-ledger.lua writes docs/credits/stack.v1.json from cargo metadata, the Containerfiles, the npm lockfiles, the model licence register, the studio registry, the custom-node manifest, the vendored LICENSE texts and the cheatsheet allowlist; every licence is copied from its source or is "unknown"; --check is byte-stable.'
+  - 'tillandsias.org has a Powered By entry in its menu rendering the ledger as clustered rings with a searchable credits table (PR into main; deploy is the operator''s intentional step).'
+  verifiable_closure: 'litmus:own-licence-declarations (scripts/lua/test-own-licence-declarations.lua: 5 arms, ok:own-licence-declarations-fixture:5); tillandsias-plan script run scripts/lua/build-stack-ledger.lua -- --check -> ok:stack-ledger:fresh:nodes=<n>:edges=<m>'
+  next_action: 'Nothing left on this packet. The recurring refresh is 1958-jyfk.'
+  provenance: macuahuitl 2026-11-02T05:19:17Z, operator request of 2026-11-01 relayed by the coordinator.
+  events:
+  - type: filed
+    ts: '2026-11-02T05:19:17Z'
+    host: macuahuitl
+    summary: filed and built in one pass on work/1958-yfib; audit record at plan/issues/licence-declaration-audit-2026-11-01.md
+  - type: completed
+    ts: '2026-11-02T05:19:17Z'
+    host: macuahuitl
+    evidence_refs:
+    - 'scripts/lua/test-own-licence-declarations.lua: ok:own-licence-declarations-fixture:5 (arm 5 refused 20 images on the pre-fix tree)'
+    - 'scripts/lua/build-stack-ledger.lua -- --check: ok:stack-ledger:fresh:nodes=901:edges=1941'
+    - 'podman image inspect localhost/tillandsias-inference:latest: org.opencontainers.image.licenses=MIT, vendor=Fedora Project (the leak, measured 2026-11-01)'
+    summary: 20 Containerfiles now declare GPL-3.0-or-later; the ledger and its guard are in; the site PR carries the page.
+- packet_id: refresh-powered-by-from-the-stack-ledger-at-each-stable-release
+  order: 1958-jyfk
+  status: ready
+  kind: enhancement
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - release-gate
+  - website
+  estimated_hours: 1
+  title: Refresh docs/credits/stack.v1.json and the tillandsias.org Powered By page from it at each stable release
+  context: 'The stack ledger is generated, not maintained: dependencies move with every landing, so ./build.sh --check only WARNS when docs/credits/stack.v1.json is stale (1958-yfib). The honest moment to refresh it is the stable promotion, when the website re-pins to the release anyway (tillandsias.org scripts/refresh.py). The site copies the ledger from the tagged runtime checkout (scripts/snapshot-stack.py) and renders the Powered By page from the copy; a pin whose tag predates the ledger keeps the committed copy and says so.'
+  exit_criteria:
+  - 'At each stable promotion the promoted tag''s tree carries a docs/credits/stack.v1.json for which `tillandsias-plan script run scripts/lua/build-stack-ledger.lua -- --check` prints ok:stack-ledger:fresh, and tillandsias.org''s docs/powered-by/stack.v1.json names that tag as its source.'
+  - 'The site PR for the release includes the regenerated Powered By page (var/html/index.html), and the deploy is the operator''s intentional `npx wrangler deploy`.'
+  unscoreable: 'a recurring release-runbook obligation, not a litmus: each cycle is scored by `tillandsias-plan script run scripts/lua/build-stack-ledger.lua -- --check` printing ok:stack-ledger:fresh at the promoted tag (docs/RELEASING.md, "Stable promotion" step)'
+  verifiable_closure: 'Per cycle: in the runtime checkout at the stable tag, tillandsias-plan script run scripts/lua/build-stack-ledger.lua -- --check -> ok:stack-ledger:fresh:…; in tillandsias.org, python3 scripts/snapshot-stack.py <checkout> prints snapshot-stack: … at <tag> and python3 scripts/build-matrix.py rebuilds the page.'
+  next_action: 'At the next stable promotion (scripts/promote-stable.sh, docs/RELEASING.md "Stable promotion" step): regenerate the ledger on a work ref if --check says stale, land it before the cut; then in tillandsias.org run scripts/refresh.py for the tag (it snapshots the ledger) and open the site PR.'
+  provenance: macuahuitl 2026-11-02T05:19:17Z, scheduled at the operator's request ("please also schedule an update for our next stable release").
+  events:
+  - type: filed
+    ts: '2026-11-02T05:19:17Z'
+    host: macuahuitl
+    summary: filed as the recurring refresh of the stack ledger and the Powered By page, tied to the stable promotion

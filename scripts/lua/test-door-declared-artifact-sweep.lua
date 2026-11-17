@@ -1,5 +1,5 @@
 -- @trace order:1630-dwab
--- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @env PATH TILLANDSIAS_SCRIPT_RUNNER_BIN TILLANDSIAS_PLAN_BIN
 --
 -- test-door-declared-artifact-sweep.lua — when the preflight door KILLs a
 -- declared checkout writer, or a guard that names one, it removes the
@@ -34,9 +34,9 @@ local ROOT = text.trim(top.stdout or "")
 if top.status ~= "exited" or top.code ~= 0 or ROOT == "" then
     verdict.could_not_run("door-declared-artifact-sweep", "git rev-parse --show-toplevel did not answer")
 end
-local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or ""
+local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") or env.get("TILLANDSIAS_PLAN_BIN") or ""
 if PLAN == "" then
-    verdict.could_not_run("door-declared-artifact-sweep", "TILLANDSIAS_SCRIPT_RUNNER_BIN is unset, so check-bare-mktemp cannot be run")
+    verdict.could_not_run("door-declared-artifact-sweep", "neither TILLANDSIAS_SCRIPT_RUNNER_BIN nor TILLANDSIAS_PLAN_BIN is set, so check-bare-mktemp cannot be run")
 end
 local REL = "target/plan-scratch/door-declared-artifact-" .. time.iso_utc() .. "-" .. tostring(math.random(100000, 999999))
 fs.mkdir(REL)

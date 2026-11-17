@@ -8,7 +8,8 @@
 # The function under test is EXTRACTED from scripts/promote-stable.sh (so the
 # fixture cannot drift from what promotion runs) and driven against a
 # throwaway repo and a stub coordinator client that records its argv. A static
-# arm proves promote-stable.sh calls it after step 4 and before `promoted:`.
+# arm proves promote-stable.sh calls it after step 3 is verified on origin and
+# before `promoted:` (step 4, the observatorium deploy ref, is retired: 2066-obsv).
 # Exit 0 pass, 1 fail.
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,15 +21,15 @@ bad() { echo "FAIL: $1"; fail=1; }
 work="$(mktemp -d "${TMPDIR:-/tmp}/website-update.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-# ── static: called after step 4, before the final promoted: line ────────────
-deploy=$(grep -n '^_advance_deploy_ref "\$COMMIT" "\$TAG"$' "$PS" | cut -d: -f1)
+# ── static: called after step 3 verifies, before the final promoted: line ───
+verified=$(grep -n '^echo "verified:stable-tag:\$COMMIT"$' "$PS" | cut -d: -f1)
 step5=$(grep -n '^_enqueue_website_update "\$PREV_STABLE" "\$COMMIT" "\$TAG"$' "$PS" | cut -d: -f1)
 prevcap=$(grep -n '^PREV_STABLE="\$(git' "$PS" | cut -d: -f1)
 tagmove=$(grep -n '^git -C "\$REPO_ROOT" tag -f -a stable -m "Stable channel: promoted' "$PS" | cut -d: -f1)
 last=$(grep -n '^echo "promoted:\$TAG"$' "$PS" | cut -d: -f1)
-if [ -n "$deploy" ] && [ -n "$step5" ] && [ -n "$last" ] && [ "$deploy" -lt "$step5" ] && [ "$step5" -lt "$last" ]; then
-    ok "static: step 5 runs after step 4 and before promoted:"
-else bad "static: step 5 is not between step 4 and promoted: (deploy=$deploy step5=$step5 last=$last)"; fi
+if [ -n "$verified" ] && [ -n "$step5" ] && [ -n "$last" ] && [ "$verified" -lt "$step5" ] && [ "$step5" -lt "$last" ]; then
+    ok "static: step 5 runs after step 3 is verified and before promoted:"
+else bad "static: step 5 is not between the step 3 verification and promoted: (verified=$verified step5=$step5 last=$last)"; fi
 if [ -n "$prevcap" ] && [ -n "$tagmove" ] && [ "$prevcap" -lt "$tagmove" ]; then
     ok "static: the previous stable is read before step 3 moves the tag"
 else bad "static: PREV_STABLE is not captured before the tag moves"; fi

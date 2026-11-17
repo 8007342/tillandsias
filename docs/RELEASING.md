@@ -37,9 +37,10 @@ work happen locally first.
    scripts/release-preflight-local.sh --nix-probe
    ```
 
-4. Review and commit any generated local evidence, especially
-   `docs/convergence/centicolon-dashboard.md` and
-   `docs/convergence/centicolon-dashboard.json`.
+4. Review and commit any generated local evidence (regenerated trace
+   indexes). The CentiColon dashboard renders to `target/convergence/` and
+   is not committed; published release evidence is the observatorium site
+   (`observatorium/site/publish.mjs`, `openspec/specs/observatorium-dashboard/deployment.md`).
 
 5. Push the release ref only after the local gate passes:
 
@@ -63,3 +64,22 @@ Cosign keyless signing through GitHub OIDC, release upload, and rolling tags.
 Do not run hosted CI, litmus metadata, convergence dashboard, cache warm, or
 integration jobs for normal releases. Those checks are local through
 `scripts/release-preflight-local.sh` and `scripts/local-ci.sh`.
+
+## Stable promotion: refresh the stack ledger and the website's Powered By page
+
+Plan order 1958-jyfk. The credits ledger `docs/credits/stack.v1.json` is
+generated from the sources of truth (cargo metadata, the Containerfiles, the
+npm lockfiles, the model licence register, the studio registry, and the package
+manager inside each built image via `build-package-licence-register.lua`) and only
+WARNS when stale in `./build.sh --check`. Before `scripts/promote-stable.sh`:
+
+```bash
+PLAN="$(. scripts/plan-binary-probe.sh && resolve_plan_binary)"
+"$PLAN" script run scripts/lua/build-stack-ledger.lua -- --check || "$PLAN" script run scripts/lua/build-stack-ledger.lua
+```
+
+Land a stale ledger's regeneration on a work ref before the cut. After the
+promotion, in the tillandsias.org checkout, `scripts/refresh.py --tag <tag>`
+copies the ledger from the tagged runtime checkout (`scripts/snapshot-stack.py`)
+and rebuilds the Powered By page; open the site PR. Deploying the site is the
+operator's intentional step (`npx wrangler deploy`), never automatic.

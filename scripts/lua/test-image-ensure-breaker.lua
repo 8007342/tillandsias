@@ -48,7 +48,7 @@ local probe = proc.run({ argv = { "bash", "-s" }, cwd = ROOT, env = penv, timeou
     stdin = '. scripts/plan-binary-probe.sh\nresolve_target_binary tillandsias debug "$PWD"\n' })
 local BIN = text.trim(probe.stdout or "")
 if probe.status ~= "exited" or probe.code ~= 0 or BIN == "" then
-    verdict.could_not_run(NAME, "no built tillandsias binary (cargo build -p tillandsias-headless --bin tillandsias)")
+    verdict.skip(NAME, "no-headless-binary", "no built tillandsias binary (cargo build -p tillandsias-headless --bin tillandsias)")
 end
 
 local failed = {}

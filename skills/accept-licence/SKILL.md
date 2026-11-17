@@ -46,66 +46,49 @@ The obligation classes and their verbatim clauses come from
 licence not in that table the only class is `review`: the owner reads the
 text and classifies it before the record is written.
 
-## 2. Show the licence verbatim through the tray
+## Status: NOT AVAILABLE ON THIS HOST YET
 
-Ask the tray, never a paraphrase in chat. Through the host MCP:
+The approval tool (`licence.acknowledge`; orders 2022-ygqj, 2022-89hm,
+2022-hn2k) has not shipped. Until it lists in `tools/list` on this host:
 
-```
-browser.open <card URL>            # the licence as the publisher shows it
-```
+- Do NOT walk the user through commands, heredocs, `--approval-enrol`,
+  `--approval-sign`, `ssh-keygen`, or copying text off a screen. The user
+  must never move bytes by hand (operator ruling 2026-11-14: "I cannot copy
+  that text from the screen into the clipboard. This is the stupidest
+  interaction in the world ever.").
+- NEVER write, paste or accept an allowed-signers line, a public key or a
+  signature that did not come from the host's own enrol/sign path. The trust
+  anchor of this gate must be written by the host, never delivered by a paste
+  or a chat message (incident 2026-11-14, order 2083-nfne). This skill never
+  instructs a manual or terminal flow, now or after the tool ships.
+- Say, in plain words: "Accepting licences from here is not available on
+  this machine yet; it is coming." Name the refused artefact, stop, and do
+  not write a record.
+- You may still do step 1 (read the row, check the licence hash) to tell the
+  user what is blocked.
 
-and in the approval dialog's detail, byte for byte from the register and
-the licence text:
+## 2. Target flow once the tool ships (the only flow)
 
-- licence id, version and `licence_sha256`;
-- each restriction clause quoted verbatim (the `obligations_for` clauses);
-- the artefact: repo, revision, file, sha256.
+The user says something vague, for example "yo lets accept depry and herpy
+licenses, duh". The user is never asked for ids, slugs, scope, use or expiry.
 
-The user reads the quotes before anything is signed. The dialog carries no
-sizes and no download times.
+1. Resolve. You map the fuzzy names to register rows yourself (fuzzy and
+   semantic match, plus the project's pending
+   `licence_acknowledgement_required` refusals) and propose defaults from
+   policy: non-sale, one year; `standing` only where the policy allows.
+2. ONE call to the tool for the whole batch, however many licences. The tray
+   shows ONE native window listing every acknowledgeable: each licence's
+   verbatim clauses, the artefacts, and the scope and use in plain words. The
+   approve control stays disabled until the user has scrolled to the bottom.
+   Touch ID, Windows Hello or polkit signs all of them and the window closes.
+   Cancel signs nothing. You build no statement text; the tray builds it
+   (`licence_consent::Acknowledgement::statement_text`).
+3. The tray enrols the per-repo key silently if needed and returns the signed
+   records in the MCP result. Nothing is printed for anyone to copy.
+4. Continue below with the returned records.
 
-## 3. Take the OS-verified signed approval
-
-The approval is an SSHSIG by the host's enrolled approval key, released only
-after the OS check (os-verified-approval-gates D1 to D3): Touch ID on macOS,
-Windows Hello on Windows, a FIDO2 key or the polkit-released software key on
-Linux. The statement that is signed is canonical, built by
-`licence_consent::Acknowledgement::statement_text`:
-
-```
-tillandsias-licence-acknowledgement v1
-licence: <id>
-licence_sha256: <64 hex>
-covers: <repo>[, <repo>...]
-grantor: <allowed-signers principal, e.g. operator>
-scope: project:<name> | operator-projects
-use: non-sale | commercial
-expiry: standing | <RFC 3339>
-host: <hostname>
-strength: hardware-biometric | hardware-pin | hardware-presence | software-password
-issued: <RFC 3339>
-```
-
-Ask the user for `scope`, `use` and `expiry` in those words. `standing` is
-offered only from the tray's grant list, never as a reflex click in the
-dialog (approval-gates R1). Namespace: `tillandsias-approval@v1`, the one
-namespace every Tillandsias approval uses. The signer writes the statement
-file and its `.sig`; on a Linux host with an enrolled key that is
-
-```bash
-ssh-keygen -Y sign -n tillandsias-approval@v1 -f <approval key> <statement file>
-```
-
-Verify before writing anything:
-
-```bash
-ssh-keygen -Y verify -n tillandsias-approval@v1 -I <grantor> \
-  -f "${TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS:-$XDG_STATE_HOME/tillandsias/approvals/allowed_signers}" \
-  -s <statement file>.sig < <statement file>
-```
-
-A statement that does not verify is not recorded. Do not fall back to a
-typed "yes": the record's value is the signature.
+Acceptance bar: a non-technical user. The transcript shows exactly one user
+utterance and one biometric touch.
 
 ## 4. Write the record and the spec into the agreeing project
 

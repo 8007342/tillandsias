@@ -1627,18 +1627,41 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
                 .unwrap_or(0);
             let rows = crate::forgotten::forgotten_rows(ledger, now, 0);
             let total = rows.len();
-            let packets: Vec<&serde_yaml::Value> = rows
-                .iter()
-                .take(*limit)
-                .filter_map(|(_, _, _, _, id, _)| ledger.resolve(id))
-                .collect();
+            // Order 1962-69mn: take `limit` CITABLE rows in rank order rather
+            // than truncating first, so uncitable top rows cannot crowd out
+            // citable ones; the skipped ones are named in the headline.
+            let mut packets: Vec<&serde_yaml::Value> = Vec::new();
+            let mut skipped: Vec<String> = Vec::new();
+            for (_, _, _, _, id, _) in &rows {
+                if packets.len() == *limit {
+                    break;
+                }
+                let Some(p) = ledger.resolve(id) else {
+                    continue;
+                };
+                let pid = ledger.id_of(p);
+                if packet_row_citations(ledger, &pid, Vec::new(), source_rel).is_some() {
+                    packets.push(p);
+                } else {
+                    skipped.push(pid);
+                }
+            }
+            let skipped_note = if skipped.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " {} higher-ranked row(s) skipped as uncitable: {}.",
+                    skipped.len(),
+                    skipped.join(", ")
+                )
+            };
             (
                 format!(
                     "the {} least-noticed ready packets of {total} (deterministic projection: \
                      age since last event, never-leased, low blocking weight). No inference \
                      endpoint was consulted, so this is the unphrased list rather than a refusal. \
                      Ranked at now-epoch {now}; `forgotten --now-epoch {now}` reproduces this \
-                     exact set.",
+                     exact set.{skipped_note}",
                     packets.len()
                 ),
                 packets,
@@ -2107,7 +2130,9 @@ pub fn answer_next_excluding(
         .collect();
     eligible.sort_by_key(|p| next_ranking_key(ledger, p));
     let total_eligible = eligible.len();
-    eligible.truncate(limit);
+    // Order 1962-69mn: no truncation here. Rows are offered in rank order
+    // until `limit` CITABLE rows are collected; an uncitable row is skipped
+    // and named, so five uncitable top rows cannot blank the answer.
 
     let role_part = role
         .map(|r| format!(" for pickup_role '{r}'"))
@@ -2123,13 +2148,14 @@ pub fn answer_next_excluding(
         );
     }
 
-    let mut body = format!(
-        "next claimable work{role_part} in desired_release '{release}' (top {} of {} eligible):\n",
-        eligible.len(),
-        total_eligible
-    );
+    let mut rows = String::new();
+    let mut offered = 0usize;
+    let mut uncitable: Vec<String> = Vec::new();
     let mut citations = Vec::new();
-    for (rank, p) in eligible.iter().enumerate() {
+    for p in eligible.iter() {
+        if offered == limit {
+            break;
+        }
         let id = ledger.id_of(p);
         let order = p
             .get("order")
@@ -2156,17 +2182,31 @@ pub fn answer_next_excluding(
         }
         let Some(row_citations) = packet_row_citations(ledger, &id, fields, source_rel) else {
             // Same rule as every other row surface: a row we cannot point at
-            // is a row we do not offer as a claim.
+            // is a row we do not offer as a claim. It is named, not lost.
+            uncitable.push(id);
             continue;
         };
         citations.extend(row_citations);
-        body.push_str(&format!(
+        offered += 1;
+        rows.push_str(&format!(
             "{}. {order}\t{id}\twhy: {}\n   next: {}\n",
-            rank + 1,
+            offered,
             why.join(", "),
             next_action_snippet(p)
         ));
     }
+
+    let mut body = format!(
+        "next claimable work{role_part} in desired_release '{release}' (top {offered} of {total_eligible} eligible):\n"
+    );
+    if !uncitable.is_empty() {
+        body.push_str(&format!(
+            "NOTE: {} higher-ranked row(s) skipped as uncitable — no source span could be located for them: {}\n",
+            uncitable.len(),
+            uncitable.join(", ")
+        ));
+    }
+    body.push_str(&rows);
 
     // The committed budget is structural (bounded rows x bounded snippets),
     // and enforced: a result that cannot fit is truncated at a row boundary
@@ -2825,6 +2865,59 @@ events:
     /// ORDER 1826-gi8e — a live coordinator overlay on the top-ranked row
     /// hides it from `next`, and nothing else changes. An empty overlay is
     /// byte-identical to plain `answer_next`.
+    /// Order 1962-69mn: five uncitable ready p0 rows (a flow-style fragment
+    /// has no `- packet_id:` line to span) rank above one citable p1. Pre-fix:
+    /// FAILS — the top five were truncated before the citability check, so the
+    /// answer had no citations and downgraded to unsupported.
+    #[test]
+    fn plan_next_falls_through_past_uncitable_top_rows() {
+        let d = std::env::temp_dir().join(format!("tilland-69mn-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).unwrap();
+        std::fs::write(
+            d.join("plan/index.yaml"),
+            "plan_index:\n  steps:\n    - packet_id: citable-p1\n      order: 950\n      status: ready\n      desired_release: v9.9\n      priority: p1\n      pickup_role: linux\n      title: \"The citable one\"\n",
+        )
+        .unwrap();
+        let rows: Vec<String> = (0..5)
+            .map(|i| format!("{{packet_id: flow-p0-{i}, order: 94{i}, status: ready, desired_release: v9.9, priority: p0, pickup_role: linux, title: t}}"))
+            .collect();
+        std::fs::write(
+            d.join("plan/index.d/20261102t0900z-aaaa-h1.yaml"),
+            format!("packets: [{}]\n", rows.join(", ")),
+        )
+        .unwrap();
+        let ledger = Ledger::load_with_fragments(&d.join("plan/index.yaml")).expect("loads");
+        let r = answer_next(
+            &ledger,
+            Some("linux"),
+            Some("v9.9"),
+            None,
+            "plan/index.yaml",
+        );
+        let text = r.answer();
+        assert!(!text.starts_with("unsupported"), "{text}");
+        assert!(text.contains("950\tcitable-p1"), "cites the p1: {text}");
+        assert!(text.contains("(top 1 of 6 eligible)"), "{text}");
+        assert!(
+            text.contains("flow-p0-0") && text.contains("uncitable"),
+            "names the skipped rows: {text}"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+
+        // With citable top rows the answer is byte-identical to before.
+        let fix = repo_root()
+            .join("openspec/litmus-tests/groundtruth/fixtures/plan-next/plan/index.yaml");
+        let ledger = Ledger::load_with_fragments(&fix).expect("fixture loads");
+        let a = answer_next(&ledger, None, None, None, "plan/index.yaml");
+        assert!(!a.answer().contains("uncitable"), "{}", a.answer());
+        assert!(
+            a.answer().contains("(top 5 of 6 eligible)"),
+            "{}",
+            a.answer()
+        );
+    }
+
     #[test]
     fn plan_next_omits_an_overlaid_order() {
         let fix = repo_root()

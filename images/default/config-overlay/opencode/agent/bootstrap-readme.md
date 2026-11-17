@@ -12,7 +12,7 @@ description: "Regenerate and validate README.md from source manifests."
 
 1. Print "Regenerating README.md from source manifests..."
 2. Run `regenerate-readme.sh` (invokes summarizers, writes README.md)
-3. Run `check-readme-discipline.sh README.md` (validates structure)
+3. Run `tillandsias-plan script run scripts/lua/check-readme-discipline.lua` (validates structure)
 4. Print per-check status and result
 5. If validation fails, offer next step (re-run, or manual edit)
 6. Preserve any agent-curated sections (Security, Architecture, Privacy) from previous README

@@ -1,0 +1,35 @@
+# @trace spec:default-image, order:2017-wtbr
+name: litmus:forge-subagent-worktree-base-shape
+spec: default-image
+phase: pre-build
+status: active
+description: >
+  Order 2017-wtbr. Claude Code's default worktree.baseRef ("fresh") starts a
+  sub-agent worktree at origin/HEAD, which in a forge clone names the mirror's
+  default branch, so sub-agents started on main instead of the session branch.
+  The forge Claude entrypoint seeds worktree.baseRef = "head" into
+  ~/.claude/settings.json, forge-gated, keeping the PreToolUse hook and any
+  explicit baseRef. The fixture runs the seed in scratch HOMEs and shows the
+  pre-fix seeding left no baseRef.
+severity: medium
+size: instant
+preconditions:
+  - jq is available in PATH
+critical_path:
+  - step: "Req: a forge sub-agent worktree starts on the session HEAD (pre-fix: no baseRef, the fresh default)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-subagent-worktree-starts-on-session-head.lua 2>&1"
+    timeout_ms: 60000
+    success_pattern: "ok:forge-subagent-worktree-base:7"
+observability:
+  traces:
+    - "@trace order:2017-wtbr"
+  expected_log: "ok:forge-subagent-worktree-base:7"
+  log_fields:
+    spec: "default-image"
+    test: "forge-subagent-worktree-base-shape"
+rollback:
+  on_failure: >
+    Forge sub-agents start on the remote default branch again. Restore
+    seed_claude_worktree_base_head in images/default/lib-common.sh and its call
+    in images/default/entrypoint-forge-claude.sh.
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-subagent-worktree-starts-on-session-head.lua"

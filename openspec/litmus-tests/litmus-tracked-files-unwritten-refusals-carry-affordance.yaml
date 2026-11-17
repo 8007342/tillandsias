@@ -1,0 +1,35 @@
+# @trace spec:methodology-accountability, order:1247-amcu, order:1063-363b
+name: litmus:tracked-files-unwritten-refusals-carry-affordance
+spec: methodology-accountability
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/check-tracked-files-unwritten.sh (the gate's
+  "the gate must not write into the checkout it measures" guard) says WHY it
+  refused and WHAT would make it not a refusal (1247-amcu): labelled
+  "  why:" / "  remedy:" stderr lines beside its unchanged one-line stdout
+  verdict. The fixture runs the four refusals reached before any file is
+  hashed (usage, unknown mode, no baseline, not a work tree) and pins the rest
+  statically: a verdict site added later without an affordance fails.
+
+preconditions:
+  - workspace contains scripts/check-tracked-files-unwritten.sh
+  - workspace contains scripts/lua/test-tracked-files-unwritten-affordances.lua
+
+critical_path:
+  - step: "four refusals carry why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tracked-files-unwritten-affordances.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:tracked-files-unwritten-affordances:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "a tracked-files-unwritten refusal names its rule and how to clear it"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "tracked-files-unwritten-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in check-tracked-files-unwritten.sh ships without why/remedy"

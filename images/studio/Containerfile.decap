@@ -10,6 +10,10 @@
 # 0BSD 1). The build fetches; the RUN of the studio has no network.
 ARG FORGE_IMAGE=localhost/tillandsias-forge
 FROM ${FORGE_IMAGE}
+# 1958-yfib: an image inherits its base layer's labels, so it states its own:
+# our recipe (GPL-3.0-or-later) AND what it mostly ships. Decap CMS 3.17.3 is MIT (upstream LICENSE, decaporg/decap-cms@decap-cms@3.17.3).
+# Every component's licence: docs/credits/stack.v1.json.
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND MIT"
 
 ARG DECAP_CMS_VERSION=3.17.3
 ARG DECAP_CMS_INTEGRITY=sha512-aoNAV1throw76ieMmCVe5qb3EbhbbFdXwG+fTupQqvKVwJYnJVQiFdAwvWeP9+H5prNeXS6mrVbW9cxGD/m6tg==

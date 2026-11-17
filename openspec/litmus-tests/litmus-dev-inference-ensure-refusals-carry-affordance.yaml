@@ -1,0 +1,35 @@
+# @trace spec:inference-container, order:1247-amcu
+name: litmus:dev-inference-ensure-refusals-carry-affordance
+spec: inference-container
+phase: pre-build
+size: instant
+severity: medium
+description: >
+  Every refusal of scripts/dev-inference-ensure.sh (the dev host's inference
+  engine for the expert system) says WHY it refused and WHAT would make it not
+  a refusal, as labelled "  why:" / "  remedy:" stderr lines beside its
+  unchanged stdout verdict (1247-amcu). The fixture runs the one refusal
+  reachable with no side effect (macos-native lane, closed port; nothing is
+  installed, started or pulled) and pins the rest statically: a verdict site
+  added later without an affordance fails.
+
+preconditions:
+  - workspace contains scripts/dev-inference-ensure.sh
+  - workspace contains scripts/lua/test-dev-inference-ensure-affordances.lua
+
+critical_path:
+  - step: "the no-engine refusal carries why and remedy, and no verdict site lacks an affordance"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-dev-inference-ensure-affordances.lua 2>&1"
+    timeout_ms: 120000
+    success_pattern: "ok:dev-inference-ensure-affordances:2 arms"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+  expected_log: "a dev-inference refusal names its rule and how to clear it"
+  log_fields:
+    spec: "inference-container"
+    test: "dev-inference-ensure-refusals-carry-affordance"
+
+failure_modes:
+  - "a new refusal in dev-inference-ensure.sh ships without why/remedy"

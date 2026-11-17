@@ -180,7 +180,7 @@ _D=d   # split literal; see the note at the grep below
 # date -d class minus one deliberate test subject. AN INCOMPLETE COUNTERPART
 # LIST DOES NOT UNDER-REPORT, IT ACCUSES WORKING CODE, which is the failure
 # this fixture exists to catch.
-for _cf in check-readme-discipline.sh manage-cache.sh test-forge-liveness-probe.sh \
+for _cf in manage-cache.sh test-forge-liveness-probe.sh \
            pre-commit-openspec.sh; do
     # The literal is SPLIT so this fixture does not itself read as a
     # GNU-date-ism to check-bash-dialect (761-g36m). It flagged line 131 of an

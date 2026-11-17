@@ -1,0 +1,57 @@
+# @trace spec:forge-hot-cold-split, order:2067-dwqd
+#
+# Regression pin for order 2067-dwqd PR 3. The demon_attack forge sized four
+# workers from the host's core count; each loaded its own model, and the
+# forge sat at memory.high for about two hours: throttled, never killed.
+# forge-guard (images/default/cli/forge-guard, stock Lua 5.4 plus flock) is
+# how a job asks the forge's real budget first. The fixture runs the tool
+# inside the forge base image, in a container with --cpus=2 and memory.high
+# 256 MiB, so every budget arm reads a real cgroup. Red before 2067-dwqd (no
+# tool); each of the tree kill, the slot lock and the thread caps was removed
+# once and the matching arm went red.
+name: litmus:forge-guard
+spec: forge-hot-cold-split
+phase: post-build
+description: >
+  Pin that forge-guard reports the forge's CPU budget from cpu.max, caps the
+  job's thread pools to it (or to --threads), exports TILLANDSIAS_CPUS and
+  TILLANDSIAS_MEM_BUDGET_MB, passes the job's exit code through, refuses a
+  --need-mb the memory budget cannot hold (exit 75) and runs one it can, runs
+  one job per slot (a different slot overlaps), kills the job's whole process
+  tree under sustained full memory pressure (exit 137) unless --no-kill, and
+  that wait --pid / --file returns or times out with 124.
+severity: high
+size: quick
+
+inputs:
+  - images/default/cli/forge-guard
+  - images/default/Containerfile
+  - scripts/lua/test-forge-guard.lua
+
+preconditions:
+  - a versioned localhost/tillandsias-forge-base tag is in the podman store (tillandsias --init); could-not-run otherwise
+  - a tillandsias-plan resolves (scripts/plan-binary-probe.sh)
+
+critical_path:
+  - step: "forge-guard: budget, thread caps, exit code, headroom refusal, slot queue, tree kill, wait"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/test-forge-guard.lua"
+    timeout_ms: 300000
+    success_pattern: "ok:forge-guard:13"
+    failure_pattern: "refused:|FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:forge-hot-cold-split"
+  expected_log: "ok:forge-guard:13"
+  log_fields:
+    spec: "forge-hot-cold-split"
+    test: "forge-guard"
+    artifact: "images/default/cli/forge-guard"
+
+rollback:
+  on_failure: >
+    Arm 10 red means the watcher no longer finds the job's tree
+    (/proc/<pid>/task/*/children) or no longer writes the marker the job
+    reads. Arm 8 red means run no longer re-enters itself under flock. Arms
+    2-4 red mean cpu.max or memory.high is read from the wrong place.
+  command: "grep -n 'flock\\|children\\|cpu.max\\|memory.high' images/default/cli/forge-guard"

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-image-ships-images-default-lua-and-check-forge-lib-copies-covers-named-lua-modules
+    field: status
+    value: ready
+    ts: "2026-11-08T18:05:44Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-forge-image-ships-images-default-lua-and-check-forge-lib-copies-covers-named-lua-modules
+    event:
+      type: falsified
+      ts: "2026-11-08T18:05:44Z"
+      host: lenovinha
+      summary: |-
+        falsified 'in_progress' claim; evidence: not started; coordinator moved 2061-cpnt ahead of it — status set to 'ready', new attempt epoch
+  - packet_id: the-forge-image-ships-images-default-lua-and-check-forge-lib-copies-covers-named-lua-modules
+    event:
+      type: note
+      ts: "2026-11-08T18:05:44Z"
+      host: lenovinha
+      summary: |-
+        WIP limit; xjsb resumes after 2061-cpnt

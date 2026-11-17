@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-rm-of-regenerable-paths-prompts-in-bypass-2065-baby
+    order: 2065-baby
+    status: ready
+    kind: proposal
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [forge, policy, claude-code]
+    estimated_hours: 4
+    title: "PROPOSAL (operator approval needed): no rm prompt inside the forge's safe roots (scratchpad, /work/tmp, build/, .dart_tool/, .cache/, .claude/worktrees/)"
+    context: "rm of regenerable paths prompted even in bypass mode. tillandsias-plan policy classify-bash --hook silently allows all four shapes, so the prompt is most likely Claude Code's own check on forced deletion; the exact prompt text is unconfirmed. Reported 2026-11-09 by the demon_attack forge session (demon-attack-3e). Packet: plan/issues/forge-rm-of-regenerable-paths-prompts-in-bypass-2026-11-09.md."
+    exit_criteria:
+      - "The operator rules on the proposal; if approved, a forge agent removes .dart_tool and a worktree without a prompt, and rm -rf ~/ still prompts."
+    verifiable_closure: "The operator rules on the proposal; if approved, a forge agent removes .dart_tool and a worktree without a prompt, and rm -rf ~/ still prompts."
+    unscoreable: 'none.'
+    next_action: "ASK the operator; on approval, design the forge-shipped permissions/hook scope."
+    provenance: "Filed at macuahuitl-fedora's request (2026-11-09) by tlatoanis-macbook-air claude, from the demon-attack-3e forge session's report."
+    events:
+    - type: filed
+      ts: '2026-11-09T19:08:22Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the demon-attack-3e forge gap report"
