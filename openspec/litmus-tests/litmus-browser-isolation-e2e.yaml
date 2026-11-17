@@ -70,7 +70,7 @@ critical_path:
   - step: "generate OTP token (base64url-encoded random 32 bytes)"
     command: "OTP_TOKEN=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && echo \"$OTP_TOKEN\" && [ ${#OTP_TOKEN} -ge 40 ]"
     timeout_ms: 5000
-    expected_behavior: "[A-Za-z0-9_-]{40,}"
+    success_pattern: "^[A-Za-z0-9_-]{40,}$"
 
   - step: "create mock OpenCode service inside forge (simple HTTP server)"
     command: "scripts/litmus-helper-browser-isolation.sh start-mock-opencode"
@@ -100,7 +100,7 @@ critical_path:
   - step: "request from forge through proxy to router with valid OTP (E2E chain)"
     command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '\\n%{http_code}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2"
     timeout_ms: 5000
-    expected_behavior: "200|opencode-ready"
+    success_pattern: "200|opencode-ready"
 
   - step: "verify latency < 500ms for E2E request"
     command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '%{time_total}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if ($1 < 0.5) print \"PASS\"; else print \"FAIL: \" $1}'"
@@ -110,7 +110,7 @@ critical_path:
   - step: "verify OTP validation logs are present in router"
     command: "podman logs tillandsias-test-router-e2e 2>&1 | grep -i 'cookie\\|otp\\|validation' | head -1 || echo 'LOGS_OK'"
     timeout_ms: 5000
-    expected_behavior: "LOGS_OK|validation|cookie"
+    success_pattern: "LOGS_OK|validation|cookie"
 
   - step: "cleanup: remove containers"
     command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
