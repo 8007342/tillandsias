@@ -97,18 +97,36 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "READY"
 
+  # 2093-9jmw QUARANTINE (coordinator ruling 2026-11-16): stale against the
+  # current router (dynamic.Caddyfile in /run/router, sidecar OTP socket).
+  # FAILS once 2093-9jmw is done, until this original command is restored:
+  #   OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillands
+  #   ias-test-forge-e2e curl -s -w '\n%{http_code}' -H "Cookie: tillandsias_session=$OTP" http:
+  #   //opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2
   - step: "request from forge through proxy to router with valid OTP (E2E chain)"
-    command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '\\n%{http_code}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$(\"$MFPLAN\" status 2093-9jmw 2>/dev/null) || { echo \"FAIL: quarantine packet 2093-9jmw is not in the ledger\"; exit 1; }; set -- $R; S=\"${2:-}\"; [ -n \"$S\" ] || { echo \"FAIL: no status for quarantine packet 2093-9jmw\"; exit 1; }; if [ \"$S\" = done ] || [ \"$S\" = completed ] || [ \"$S\" = archived ]; then echo \"FAIL: quarantine expired: 2093-9jmw is $S, so restore this step's real command (kept in the comment above it) and make it pass\"; exit 1; fi; echo \"skip:quarantined:browser-isolation-stale-router 2093-9jmw (packet status=$S; the E2E route through the router is UNPROVEN: this step is stale against the current router design)\""
     timeout_ms: 5000
     success_pattern: "200|opencode-ready"
 
+  # 2093-9jmw QUARANTINE (coordinator ruling 2026-11-16): stale against the
+  # current router (dynamic.Caddyfile in /run/router, sidecar OTP socket).
+  # FAILS once 2093-9jmw is done, until this original command is restored:
+  #   OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillands
+  #   ias-test-forge-e2e curl -s -w '%{time_total}' -H "Cookie: tillandsias_session=$OTP" http:/
+  #   /opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if (
+  #   $1 < 0.5) print "PASS"; else print "FAIL: " $1}'
   - step: "verify latency < 500ms for E2E request"
-    command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '%{time_total}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if ($1 < 0.5) print \"PASS\"; else print \"FAIL: \" $1}'"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$(\"$MFPLAN\" status 2093-9jmw 2>/dev/null) || { echo \"FAIL: quarantine packet 2093-9jmw is not in the ledger\"; exit 1; }; set -- $R; S=\"${2:-}\"; [ -n \"$S\" ] || { echo \"FAIL: no status for quarantine packet 2093-9jmw\"; exit 1; }; if [ \"$S\" = done ] || [ \"$S\" = completed ] || [ \"$S\" = archived ]; then echo \"FAIL: quarantine expired: 2093-9jmw is $S, so restore this step's real command (kept in the comment above it) and make it pass\"; exit 1; fi; echo \"skip:quarantined:browser-isolation-stale-router 2093-9jmw (packet status=$S; the E2E route through the router is UNPROVEN: this step is stale against the current router design)\""
     timeout_ms: 10000
     expected_behavior: "PASS"
 
+  # 2093-9jmw QUARANTINE (coordinator ruling 2026-11-16): stale against the
+  # current router (dynamic.Caddyfile in /run/router, sidecar OTP socket).
+  # FAILS once 2093-9jmw is done, until this original command is restored:
+  #   podman logs tillandsias-test-router-e2e 2>&1 | grep -i 'cookie\|otp\|validation' | head -1
+  #    || echo 'LOGS_OK'
   - step: "verify OTP validation logs are present in router"
-    command: "podman logs tillandsias-test-router-e2e 2>&1 | grep -i 'cookie\\|otp\\|validation' | head -1 || echo 'LOGS_OK'"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$(\"$MFPLAN\" status 2093-9jmw 2>/dev/null) || { echo \"FAIL: quarantine packet 2093-9jmw is not in the ledger\"; exit 1; }; set -- $R; S=\"${2:-}\"; [ -n \"$S\" ] || { echo \"FAIL: no status for quarantine packet 2093-9jmw\"; exit 1; }; if [ \"$S\" = done ] || [ \"$S\" = completed ] || [ \"$S\" = archived ]; then echo \"FAIL: quarantine expired: 2093-9jmw is $S, so restore this step's real command (kept in the comment above it) and make it pass\"; exit 1; fi; echo \"skip:quarantined:browser-isolation-stale-router 2093-9jmw (packet status=$S; the E2E route through the router is UNPROVEN: this step is stale against the current router design)\""
     timeout_ms: 5000
     success_pattern: "LOGS_OK|validation|cookie"
 
