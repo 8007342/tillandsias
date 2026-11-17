@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: cloud-launch-coverage-moves-to-post-release-smoke
+    event:
+      type: note
+      ts: "2026-11-16T13:00:14Z"
+      agent_id: linux-macuahuitl-claude-20261116t130014z
+      host: macuahuitl
+      summary: |-
+        Dropped list extended (2093-vvnk): litmus:forge-e2e-rate-limit-shape step "smoke runs are marker-gated and delta-steps skip on mode=smoke" loses its "delta-steps skip on mode=smoke" half (the >=3 opencode-e2e-mode references in litmus-opencode-prompt-e2e-shape.yaml); the smoke must re-pin it. The MO-SMOKE marker-gate half stays in the gate.

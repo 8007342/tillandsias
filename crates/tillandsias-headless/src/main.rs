@@ -1087,6 +1087,13 @@ fn main() {
         .position(|a| a == "--prompt")
         .and_then(|i| user_args.get(i + 1).map(|p| p.to_string()));
 
+    if user_args.iter().any(|a| a == "--no-remote-control") {
+        // SAFETY: single-threaded argument parsing, before any subsystem runs.
+        unsafe {
+            std::env::set_var(NO_REMOTE_CONTROL_ENV, "1");
+        }
+    }
+
     let known_flags = [
         // ORDER 1286-4437, ADDED AFTER A RELEASE SHIPPED WITHOUT THEM. Both
         // reset flags are parsed above (`--reset-guest` and `--reset-state`),
@@ -1176,6 +1183,7 @@ fn main() {
         "--observatorium",
         "--port",
         "--prompt",
+        "--no-remote-control",
         "--cache-clear",
         "--cache-verify",
         "--listen-vsock",
@@ -2155,7 +2163,7 @@ fn print_usage(version: &str) {
     println!("       tillandsias --stop-all");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
-    println!("       tillandsias --claude <project> [--debug|--diagnostics]");
+    println!("       tillandsias --claude <project> [--no-remote-control] [--debug|--diagnostics]");
     println!("       tillandsias --bash <project> [--debug|--diagnostics]");
     println!("       tillandsias --copilot <project> [--debug|--diagnostics]");
     println!(
@@ -7096,6 +7104,12 @@ mod seed_staleness_tests {
     }
 }
 
+/// 2092-crun: mount-point parent for runtime-secret FILE binds in read-only
+/// containers. crun 1.31 cannot create a bind target file on a read-only
+/// rootfs; a tmpfs here is writable, holds nothing itself, and is shadowed by
+/// the ro binds podman mounts on top of it.
+const RUN_SECRETS_TMPFS: &str = "/run/secrets:rw,noexec,nosuid,nodev,size=1m,mode=0755";
+
 /// Mint the per-project git-mirror Vault Agent auto-auth credential.
 ///
 /// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
@@ -7397,6 +7411,12 @@ fn build_git_run_args(
         // image directory.
         "--tmpfs".into(),
         "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777".into(),
+        // 2092-crun: crun 1.31 no longer creates a FILE mount point on a
+        // read-only rootfs ("open .../merged/run/secrets/vault-approle: No such
+        // file or directory", exit 127). A tmpfs at /run/secrets gives every
+        // runtime-secret bind below a writable parent to create its target in.
+        "--tmpfs".into(),
+        RUN_SECRETS_TMPFS.into(),
         "--volume".into(),
         format!("{mirror_volume}:/srv/git"),
         "--env".into(),
@@ -10440,6 +10460,53 @@ fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
 /// Instance-scoped so two concurrent workers do not collide on the enclave
 /// network's DNS. Sharing a hostname would make container-to-container
 /// resolution non-deterministic between workers.
+/// Set by `--no-remote-control`; suppresses TILLANDSIAS_CLAUDE_SESSION_NAME.
+const NO_REMOTE_CONTROL_ENV: &str = "TILLANDSIAS_NO_REMOTE_CONTROL";
+
+/// `<project>-forge`, the Remote Control / session name for a Claude forge.
+/// Takes the last path segment (so `owner/project` names the project) and
+/// sanitises it to `[a-z0-9._-]`.
+fn claude_forge_session_name(project_name: &str) -> String {
+    let slug: String = project_name
+        .rsplit('/')
+        .next()
+        .unwrap_or(project_name)
+        .chars()
+        .map(|c| {
+            let c = c.to_ascii_lowercase();
+            if c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let slug = if slug.is_empty() {
+        "project".to_string()
+    } else {
+        slug
+    };
+    format!("{slug}-forge")
+}
+
+#[cfg(test)]
+mod claude_forge_session_name_tests {
+    use super::claude_forge_session_name;
+
+    #[test]
+    fn sanitises_owner_project_slug() {
+        assert_eq!(
+            claude_forge_session_name("8007342/Tillandsias"),
+            "tillandsias-forge"
+        );
+        assert_eq!(
+            claude_forge_session_name("My Proj!.v2"),
+            "my-proj-.v2-forge"
+        );
+        assert_eq!(claude_forge_session_name(""), "project-forge");
+    }
+}
+
 fn forge_hostname(project_name: &str) -> String {
     sanitize_hostname(&format!("forge-{project_name}{}", forge_instance_suffix()))
 }
@@ -16516,6 +16583,9 @@ fn build_ssh_lane_sidecar_run_args(
         "--read-only".into(),
         "--tmpfs".into(),
         "/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777".into(),
+        // 2092-crun: see build_git_run_args.
+        "--tmpfs".into(),
+        RUN_SECRETS_TMPFS.into(),
         "--volume".into(),
         format!("{}:/ssh-agent", ssh_lane_agent_volume(project_name)),
         "--volume".into(),
@@ -22706,6 +22776,16 @@ fn build_forge_agent_run_args_with_vault(
         && matches!(mode, ForgeAgentMode::Claude)
     {
         spec = spec.env("TILLANDSIAS_CLAUDE_PROMPT", prompt);
+    }
+    // Remote Control by default for the Claude lane (2026-11-13): the
+    // entrypoint joins the session to Remote Control named `<project>-forge`
+    // so a coordinator can message it without the operator typing
+    // /remote-control. `--no-remote-control` opts out.
+    if matches!(mode, ForgeAgentMode::Claude) && std::env::var_os(NO_REMOTE_CONTROL_ENV).is_none() {
+        spec = spec.env(
+            "TILLANDSIAS_CLAUDE_SESSION_NAME",
+            claude_forge_session_name(project_name),
+        );
     }
 
     for (name, value) in
@@ -33552,6 +33632,34 @@ mod tests {
     }
 
     #[test]
+    fn git_run_args_give_secret_file_binds_a_writable_parent() {
+        // 2092-crun: crun 1.31 refuses to create a file mount point on the
+        // read-only rootfs, so the mirror died at start (exit 127) whenever a
+        // runtime secret was bound under /run/secrets.
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            Some("s-relay"),
+            None,
+        );
+        assert!(args.iter().any(|a| a == "--read-only"));
+        let at = args
+            .windows(2)
+            .position(|w| w[0] == "--tmpfs" && w[1].starts_with("/run/secrets:"))
+            .expect("a read-only mirror must carry a /run/secrets tmpfs");
+        let bind = args
+            .iter()
+            .position(|a| a.contains(":/run/secrets/vault-approle:"))
+            .expect("the relay secret is bound under /run/secrets");
+        assert!(at < bind, "the tmpfs must precede the binds it parents");
+    }
+
+    #[test]
     fn git_run_args_use_image_entrypoint_and_persist_srv_git() {
         // The image's ENTRYPOINT runs `git daemon --base-path=/srv/git
         // --enable=receive-pack`; the launcher must NOT override CMD.
@@ -35278,6 +35386,39 @@ esac
                 .any(|arg| arg.starts_with("OPENCODE_AUTH_CONTENT="))
         );
         assert!(!args.iter().any(|arg| arg.starts_with("GEMINI_API_KEY=")));
+    }
+
+    /// 2093-am6t: litmus:enclave-isolation step 4 used to grep tray/mod.rs
+    /// for the proxy literal; 776-jcf3 retired that tray launcher. This pins the
+    /// same property on the argv the forge launcher actually builds.
+    #[test]
+    fn forge_launch_argv_routes_through_the_enclave_proxy() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            Some(&PathBuf::from("/tmp/project")),
+            None,
+            "alpha",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        for expected in [
+            "http_proxy=http://proxy:3128",
+            "https_proxy=http://proxy:3128",
+            "HTTP_PROXY=http://proxy:3128",
+            "HTTPS_PROXY=http://proxy:3128",
+        ] {
+            assert!(
+                has_arg(&args, expected),
+                "forge launch argv must route egress through the enclave proxy: missing {expected}"
+            );
+        }
     }
 
     #[test]

@@ -26,84 +26,18 @@ preconditions:
   - plan/diagnostics/forge-diagnostics-prompt.txt exists and is non-empty
 
 critical_path:
-  # e2e_token_budget (2026-07-11): the diagnostics capture is a live
-  # provider call. Unthrottled, it stacked onto the other gate launches and
-  # tripped provider rate limits (empty diagnostics JSON, two red gates in
-  # a row on agent-layer throttling). Fresh captures are limited to one per
-  # 4h (limiter class `diagnostics`); rate-limited runs assert on the most
-  # recent VALID capture (<24h) instead of hammering the provider again.
-  - step: "reset the cycle dedupe marker ONLY when a fresh capture is allowed"
-    command: "if scripts/forge-e2e-rate-limit.sh check diagnostics >/dev/null 2>&1; then scripts/forge-diagnostics-annex.sh --reset && echo 'ok: fresh capture allowed'; else echo 'ok: rate-limited — will assert on cached capture'; fi"
-    timeout_ms: 8000
-    expected_behavior: "ok:"
-
-  - step: "run the non-blocking diagnostics annex (one forge launch + dedup + distill; rate-limited)"
-    # Replaces the two prior inline `tillandsias --opencode --diagnostics`
-    # invocations (which launched the forge TWICE). The annex launches once,
-    # writes target/forge-diagnostics/diagnostics_<UTC>.log, records the dedupe
-    # marker, and distills into plan/diagnostics/. Non-blocking by contract
-    # (exits 0); the JSON-validity gate below is what decides this test's
-    # verdict per the agent_diagnostic annex signal rule. When rate-limited,
-    # the dedupe marker was NOT reset above, so the annex dedup-skips —
-    # no live agent launch, no provider tokens.
-    command: "if scripts/forge-e2e-rate-limit.sh check diagnostics >/dev/null 2>&1; then scripts/forge-e2e-rate-limit.sh record diagnostics >/dev/null; fi; scripts/forge-diagnostics-annex.sh"
-    timeout_ms: 600000
-
-  - step: "validate output is parseable JSON with diagnostics_timestamp field (newest VALID capture, <24h)"
-    # A throttled/crashed agent can leave an EMPTY newest artifact; the
-    # verdict is on the newest capture that validates, provided it is
-    # fresh (mtime < 24h). No valid fresh capture at all = FAIL.
-    command: "found=\"\"; for LOG in $(ls -t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | grep -v '\\.stderr\\.log$' | head -5); do [ -n \"$(find \"$LOG\" -mtime -1 2>/dev/null)\" ] || continue; if cargo run --quiet -p tillandsias-policy -- validate-forge-diagnostics-json \"$LOG\" >/dev/null 2>&1; then found=\"$LOG\"; break; fi; done; [ -n \"$found\" ] && echo \"ok: valid capture $found\" || { echo 'FAIL: no valid diagnostics capture under 24h'; exit 1; }"
-    timeout_ms: 30000
-    expected_behavior: "ok: valid capture"
-
-  - step: "container-start health: the idiomatic layer emitted at least one running event"
-    # The annex now captures stderr to a `.stderr.log` companion next to
-    # the stdout JSON. The launch-event stream (emit_launch_event,
-    # spec:runtime-diagnostics-stream, ISO-8601 prefixed) lives there. A
-    # single `state=running container=…` line is structural proof that
-    # the shared PodmanClient layer ran — a raw `Command::new("podman")`
-    # bypass would NOT produce these. Field order is pinned by the unit
-    # test `launch_event_line_shape_is_stable`; keep this grep in lockstep.
-    # @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
-    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && [ -s \"$STDERR\" ] && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' \"$STDERR\" && echo \"ok: idiomatic layer reported >=1 container running via diagnostics annex\""
+  # 2093-loc: local-checkout launch is retired. The '.' launch is refused
+  # (exit 2, pinned message), and the cloud-launch arms moved to the post-release
+  # smoke (order 2093-clds, which names every dropped step). No GitHub push and
+  # no OpenCode traffic from the release gate.
+  - step: "a '.' launch with --diagnostics is refused (exit 2, pinned message)"
+    command: "E=\"${TMPDIR:-/tmp}/litmus-dot-launch.err\"; TILLANDSIAS_NO_TRAY=1 timeout 60 tillandsias . --opencode --diagnostics --port 19080 --prompt x >/dev/null 2>\"$E\"; rc=$?; [ \"$rc\" = 2 ] || { echo \"FAIL: '.' launch exited $rc, expected 2\"; exit 1; }; grep -qF \"Error: launching from a local checkout ('.') is no longer supported: Tillandsias does not mount or read a host checkout.\" \"$E\" || { echo 'FAIL: the local-checkout refusal message changed'; exit 1; }; if grep -q 'event:container_launch ' \"$E\"; then echo 'FAIL: a container launched before the refusal'; exit 1; fi; echo \"ok: '.' launch refused (exit 2, pinned message, no container launched)\""
+    timeout_ms: 90000
+    expected_behavior: "ok: '.' launch refused"
+  - step: "--diagnostics emits a well-formed envelope line before the refusal"
+    command: "E=\"${TMPDIR:-/tmp}/litmus-dot-launch.err\"; test -s \"$E\" || { echo 'FAIL: no stderr from the refusal step'; exit 1; }; grep -Eq '^event:diagnostics_envelope timestamp=[0-9T:Z-]+ tillandsias_version=[0-9.]+ host_platform=[a-z]+ agent=opencode$' \"$E\" && echo 'ok: --diagnostics still emits its envelope line before the refusal' || { echo 'FAIL: no well-formed diagnostics envelope line'; exit 1; }"
     timeout_ms: 10000
-    expected_behavior: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
-    assert_output_contains: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
-
-  - step: "container-start health: NO INFRA container failed during the annex capture (agent-process exits excluded)"
-    # A failed INFRA launch surfaces the failing stage + container straight
-    # from the stream and invalidates the structured report. An attached
-    # AGENT process exiting nonzero ("attached command exited with status")
-    # is an agent-layer condition (2026-07-11: provider throttling), judged
-    # by the JSON-validity step — the same infra/agent split as
-    # litmus:container-start-health.
-    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && if grep -E 'event:container_launch .* state=failed' \"$STDERR\" | grep -Ev 'attached command exited with status'; then echo \"FAIL: an infra container launch failed during the annex capture (see lines above)\"; exit 1; else echo \"ok: no infra container_launch state=failed in annex stderr\"; fi"
-    timeout_ms: 10000
-    expected_behavior: "ok: no infra container_launch state=failed in annex stderr"
-
-  - step: "container-start health: the forge-agent stage launched (running OR exited)"
-    # The annex prompt activates --opencode → must launch the agent
-    # container. spec:runtime-diagnostics-stream "Launch stage event"
-    # allows TWO terminal states for the agent stage: `state=running` for
-    # detached containers, OR `state=exited` for a completed attached
-    # foreground forge (which is what `--diagnostics --prompt …` produces:
-    # the agent runs to completion, then exits cleanly).
-    #
-    # Stage label is per-agent (`opencode`, `claude`, `codex`, or the
-    # generic `forge`) — accept any of them so this litmus stays correct
-    # across agent choices.
-    #
-    # Verified shape from the first production distill
-    # (plan/diagnostics/diagnostics_20260528T111351Z-summary.md):
-    #   `event:container_launch stage=opencode state=exited container=…`
-    #
-    # A capture without an agent-stage line means the agent JSON came
-    # from somewhere unexpected (cached run, mocked call, ...) and the
-    # structured report can't be trusted. Gating.
-    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) (state=(running|exited) |state=failed .*attached command exited with status)' \"$STDERR\" && echo \"ok: forge-agent stage launched via idiomatic layer\""
-    timeout_ms: 10000
-    expected_behavior: "ok: forge-agent stage launched via idiomatic layer"
+    expected_behavior: "ok: --diagnostics still emits its envelope line"
 
 observability:
   traces:

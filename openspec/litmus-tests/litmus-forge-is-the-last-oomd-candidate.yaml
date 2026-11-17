@@ -12,7 +12,15 @@ preconditions:
 
 critical_path:
   - step: "arm 1: in a throwaway MemoryHigh=200M slice, the avoid-marked scope survives oomd and the other is killed, with the mark placed on each in turn; arm 2: every running forge is in tillandsias.slice with memory.oom.group=1 and user.oomd_avoid=1"
-    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-forge-oomd-avoid.lua"
+    # 2093-gfak QUARANTINE (coordinator ruling 2026-11-16). systemd-oomd 262 on
+    # macuahuitl marks the fixture's libpod scopes for killing every ~15 s and
+    # the kill never lands, so this property cannot be shown here. While
+    # 2093-gfak is open, the step reports `skip:quarantined:host-oomd-no-kill
+    # 2093-gfak`: never a pass, and named in the runner summary. When 2093-gfak
+    # is done, this step FAILS until the quarantine is removed and the real test
+    # (the original command: "$MFPLAN" script run scripts/lua/test-forge-oomd-avoid.lua)
+    # is restored.
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; R=$(\"$MFPLAN\" status 2093-gfak 2>/dev/null) || { echo \"FAIL: quarantine packet 2093-gfak is not in the ledger\"; exit 1; }; set -- $R; S=\"${2:-}\"; [ -n \"$S\" ] || { echo \"FAIL: no status for quarantine packet 2093-gfak\"; exit 1; }; if [ \"$S\" = done ] || [ \"$S\" = completed ] || [ \"$S\" = archived ]; then echo \"FAIL: quarantine expired: 2093-gfak is $S, so remove the quarantine from this step and run the test for real\"; exit 1; fi; echo \"skip:quarantined:host-oomd-no-kill 2093-gfak (packet status=$S; the oomd-avoid property is UNPROVEN on this host: systemd-oomd 262 marks rootless libpod scopes for killing but the kill never lands)\""
     timeout_ms: 900000
     expected_behavior: "ok:forge-oomd-avoid:2-arms"
 

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: handle-mcp-jsonrpc-consults-a-gate-table-and-returns-awaiting-approval-for-every-cost-bearing-tool-without-contacting-the-cloud
+    field: next_action
+    value: |-
+      Nothing is done. Write the check named in the exit criterion first and watch it fail on today's code, then implement per openspec/changes/os-verified-approval-gates.
+
+
+      [2026-11-17T00:17:40Z yoga] RE-SCOPED per operator clarification 2026-11-16 - this row now carries specs/approval-human-gate - the tray is the enforcer outside every forge, a forge may only REQUEST a gated action, the tray shows the OS prompt (polkit auth_self, Touch ID biometryCurrentSet, Windows Hello RequestVerificationForWindowAsync) then performs the action itself or returns a one-time action-bound token - approval binds to the exact args shown, single-use, short expiry, never cached - no signature chain, no identity
+    ts: "2026-11-17T00:17:40Z"
+    host: yoga
+
+events:
+  - packet_id: handle-mcp-jsonrpc-consults-a-gate-table-and-returns-awaiting-approval-for-every-cost-bearing-tool-without-contacting-the-cloud
+    event:
+      type: note
+      ts: "2026-11-17T00:17:40Z"
+      host: yoga
+      summary: |-
+        operator clarification 2026-11-16 - tray-enforced live human gate is primary - spec openspec/changes/os-verified-approval-gates/specs/approval-human-gate

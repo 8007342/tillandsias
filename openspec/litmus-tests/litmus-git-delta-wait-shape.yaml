@@ -70,10 +70,9 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: remote-head-branch-scoped"
 
-  - step: "opencode-prompt e2e litmus steps 4-6 consult the helper"
-    command: "c=$(grep -c 'scripts/litmus-git-delta-wait.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml); [ \"$c\" -ge 3 ] && echo 'ok: e2e-steps-wired' || { echo \"FAIL: only $c references\"; exit 1; }"
-    timeout_ms: 3000
-    expected_behavior: "ok: e2e-steps-wired"
+  # 2093-vves: "opencode-prompt e2e litmus steps 4-6 consult the helper" was
+  # DROPPED with those steps (coordinator ruling (b), 2093-hbaw). The
+  # cloud-launch delta checks moved to the post-release smoke; see 2093-clds.
 
 observability:
   traces:

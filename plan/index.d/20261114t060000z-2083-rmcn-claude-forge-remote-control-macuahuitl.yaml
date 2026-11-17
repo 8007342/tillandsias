@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-14 on coordinator request. Code is cited by symbol, never by line.
+packets:
+  - packet_id: claude-forge-launches-already-joined-to-remote-control-named-project-forge-so-the-coordinator-can-message-it-without-the-operator-typing-remote-control
+    order: 2083-rmcn
+    status: completed
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, claude, coordination]
+    estimated_hours: 1
+    title: "tillandsias --cloud <owner>/<project> --claude starts the in-forge Claude session joined to Remote Control and named <project>-forge by default; --no-remote-control opts out"
+    context: |
+      The coordinator messages forge Claude sessions over Remote Control, but every session needed the operator to type /remote-control first. The launcher now sets TILLANDSIAS_CLAUDE_SESSION_NAME (claude_forge_session_name: last path segment of the project, sanitised to [a-z0-9._-], plus -forge) for the Claude lane next to TILLANDSIAS_CLAUDE_PROMPT in build_forge_agent_run_args, unless --no-remote-control was given. The Claude entrypoint's append_claude_remote_control_args appends --remote-control NAME --name NAME only when the installed claude's --help mentions --remote-control, otherwise it falls back silently.
+    exit_criteria:
+      - "scripts/test-claude-forge-remote-control-args.sh passes its supported, unsupported and unset arms plus the wiring check; pre-fix result: FAILS, the function does not exist."
+      - "cargo unit test claude_forge_session_name_tests maps 8007342/Tillandsias to tillandsias-forge."
+    verifiable_closure: "bash scripts/test-claude-forge-remote-control-args.sh prints PASS, wired into litmus:claude-launch-stability-shape."
+    next_action: "Nothing left in code; land the PR, then on a stable release confirm a --claude forge appears in Remote Control as <project>-forge."
+    provenance: "coordinator request 2026-11-13 relayed to macuahuitl"
+    events:
+      - type: filed
+        ts: "2026-11-14T06:00:00Z"
+        host: macuahuitl
+        summary: "filed and implemented: Remote Control by default for the Claude forge lane"
+      - type: completed
+        ts: "2026-11-14T06:00:00Z"
+        host: macuahuitl
+        summary: "implemented on work/2083-rmcn"
+        evidence_refs:
+          - "scripts/test-claude-forge-remote-control-args.sh PASS (3 arms + wiring)"

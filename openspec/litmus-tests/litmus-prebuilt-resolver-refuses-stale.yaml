@@ -21,6 +21,14 @@ critical_path:
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-prebuilt-resolver-refuses-stale.lua 2>&1"
     timeout_ms: 120000
     expected_behavior: "ok:prebuilt-resolver:stale-refused:2/2"
+  - step: "both litmus phase runners rebuild the podman-cli prebuilt before the shim runs (2093-pcli)"
+    # build.sh's gate-touch (1599-egzz) bumps every tracked mtime at gate
+    # start, so a runner that skips the rebuild hands the shim a prebuilt it
+    # must refuse. local-ci.sh's runner did, and every --ci-full pre-build
+    # litmus read podman as refused (12 reds, macuahuitl 2026-11-15).
+    command: "c(){ awk -v fn=\"$2\" '$0 ~ \"^\" fn \"\\\\(\\\\) \\\\{\" {i=1; next} i && /^}/ {exit} i && /ensure_litmus_podman_cli/ {f=1} END {exit !f}' \"$1\"; }; c scripts/local-ci.sh run_litmus_phase || { echo 'FAIL: local-ci.sh run_litmus_phase no longer rebuilds the podman-cli prebuilt'; exit 1; }; c build.sh _run_litmus_phase || { echo 'FAIL: build.sh _run_litmus_phase no longer rebuilds the podman-cli prebuilt'; exit 1; }; T=$(mktemp); sed '/^run_litmus_phase() {/,/^}/{/ensure_litmus_podman_cli/d}' scripts/local-ci.sh > \"$T\"; if c \"$T\" run_litmus_phase; then rm -f \"$T\"; echo 'FAIL: negative control: a runner without the rebuild was not caught'; exit 1; fi; rm -f \"$T\"; echo 'ok: both litmus runners rebuild the podman-cli prebuilt before the shim (negative control must fail and did)'"
+    timeout_ms: 10000
+    expected_behavior: "ok: both litmus runners rebuild"
 
 observability:
   traces:
