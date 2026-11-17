@@ -384,9 +384,9 @@ cat > "$GH_PRS" <<'JSON'
  {"number":42,"headRefName":"work/7001-aaaa","isDraft":true}]
 JSON
 out7c="$(run_queue)"; rc7c=$?
-if printf '%s' "$out7c" | grep -q 'advisory:land-queue:ignored-draft:#42:work/7001-aaaa' \
-   && printf '%s' "$out7c" | grep -q 'advisory:land-queue:ignored-draft:#196:work/1375-amye' \
-   && printf '%s' "$out7c" | grep -q 'ok:land-queue:0 ' && [ "$rc7c" -eq 0 ]; then
+if grep -q 'advisory:land-queue:ignored-draft:#42:work/7001-aaaa' <<<"$out7c" \
+   && grep -q 'advisory:land-queue:ignored-draft:#196:work/1375-amye' <<<"$out7c" \
+   && grep -q 'ok:land-queue:0 ' <<<"$out7c" && [ "$rc7c" -eq 0 ]; then
     ok "ARM 7c: every ignored draft is named, and a drafts-only queue still exits 0 as empty"
 else
     bad "ARM 7c: wanted an ignored-draft advisory for #42 and #196 plus ok:land-queue:0 (rc=$rc7c)
