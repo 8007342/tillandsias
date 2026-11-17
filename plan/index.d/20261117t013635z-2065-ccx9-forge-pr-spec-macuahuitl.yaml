@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: forge-open-pr-through-the-tray-2065-ccx9
+    field: verifiable_closure
+    value: "From a forge, github.pr_create opens a draft PR for a pushed work ref with no credential in the forge, the tray shows a curated event for it, and no github.* tool can merge."
+    ts: "2026-11-17T01:36:35Z"
+    host: macuahuitl
+  - packet_id: forge-open-pr-through-the-tray-2065-ccx9
+    field: priority
+    value: p1
+    ts: "2026-11-17T01:36:35Z"
+    host: macuahuitl
+  - packet_id: forge-open-pr-through-the-tray-2065-ccx9
+    field: next_action
+    value: "Nothing is implemented. First make the real call with the Vault token to confirm Pull requests: write (tasks.md 1.x), then write the failing tools/list test and build the github.* host tool per openspec/changes/forge-github-pull-requests."
+    ts: "2026-11-17T01:36:35Z"
+    host: macuahuitl
+
+events:
+  - packet_id: forge-open-pr-through-the-tray-2065-ccx9
+    event:
+      type: note
+      ts: "2026-11-17T01:36:35Z"
+      host: macuahuitl
+      summary: "operator direction 2026-11-17: forges must open PRs themselves; spec filed at openspec/changes/forge-github-pull-requests (not gated by default, tray-visible, rate-limited, never merge)"
