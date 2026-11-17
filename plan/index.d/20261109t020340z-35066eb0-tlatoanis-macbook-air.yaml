@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: shell-outs-in-images-default-lib-sh-are-a-counter-of-the-shell-to-lua-carried-obligation-backlog
+    event:
+      type: note
+      ts: "2026-11-09T02:03:40Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        forge-helper-shell counter at trunk 5e3092d18 = 287, per-file. The four ports DID take effect after merging: each landing cut exactly its delta (1020 y7k8 lib-inference-state -6, 1021 krk2 lib-experts-probe -5, 1022 ndde lib-ledger-freshness -3, 1023 vv58 lib-mcp-build-id -7; total -21, i.e. 308 to 287). The 292 baseline went stale before the ports landed: land(999) work/2027-e2cf (b9f11273a) added 16 shell-outs to lib-common.sh (225 to 241), which put trunk at 308 by the time 1020 landed. Earlier: 991 2017-wtbr +2 lib-common, 866 1957-msjs +1 lib-provider-limit. The remainder is lib-common.sh 241 of 287.

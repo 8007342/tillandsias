@@ -2,7 +2,7 @@
 tags: [bash, shell, posix, scripting, msys2, git-bash, windows, cross-platform]
 languages: [bash]
 since: 2026-04-25
-last_verified: 2026-04-28
+last_verified: 2026-11-08
 sources:
   - https://www.gnu.org/software/bash/manual/bash.html
   - https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html
@@ -129,6 +129,8 @@ Quote `"$(...)"` to preserve newlines and avoid word-splitting. Use `2>/dev/null
 - **`while read` in a pipeline runs in a subshell** — `count=0; ls | while read f; do ((count++)); done; echo "$count"` prints `0`. Use process substitution instead: `while read f; do ((count++)); done < <(ls)`.
 - **`[ ]` vs `[[ ]]`** — `[ ]` (POSIX `test`) requires quoting and word-splits unquoted vars; `[[ ]]` is a bash builtin that doesn't word-split and supports `=~` regex, `&&`, `||`. Always prefer `[[ ]]` in bash scripts.
 - **Portable shebang matters** — `#!/bin/bash` breaks on macOS where bash 3.2 is at `/bin/bash` and bash 5+ is at `/opt/homebrew/bin/bash`. Use `#!/usr/bin/env bash` so PATH resolves it.
+- **macOS bash 3.2 leaks the fds a FUNCTION-call redirection saves** — `myfunc cmd >&8 2>&1 8>&-` makes `/bin/bash` 3.2 save fd 8 to a high fd (12) without close-on-exec, so every child `myfunc` starts inherits it. A background job redirected to `/dev/null` still holds that pipe, and a reader waiting for EOF waits for the job. A plain command or a subshell with the same redirection saves nothing. Move the fds with `exec` (`exec 9>&1 1>&8 2>&1 8>&-; myfunc …; exec 1>&9 9>&-`) or wrap the call in `( … )`. Measured on darwin 27.2 with `lsof -p <child> -d 0-20 -F f` (`f0 f1 f2 f12` through a function call, `f0 f1 f2` through a command); 2059-s42d.
+- **macOS BSD userland differs silently when stderr is discarded** — BSD `xargs` has no `-a FILE` (feed the list on stdin), and BSD `wc -l < f` pads its count (`"      77"`), so `case "$n" in *[!0-9]*)` rejects it. Strip the padding with `"${n//[[:space:]]/}"`, or do the arithmetic as `$((n))`. Both hid behind `2>/dev/null` until a fixture failed (2056-29t4).
 - **`set -e` does NOT propagate into functions called in a condition** — `if myfunc; then ...` ignores `set -e` inside `myfunc`. Use explicit `|| return 1` inside the function, or check `$?` after the call.
 - **`$?` after a pipeline is the LAST command's exit** — without `set -o pipefail`, `false | true` exits 0. Always set `pipefail` in strict mode.
 - **`IFS` not reset after temporary change** — leaks into the rest of the script. Save and restore: `OLD_IFS=$IFS; IFS=,; ...; IFS=$OLD_IFS`. Or scope in a subshell `( IFS=,; ... )`.

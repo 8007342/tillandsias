@@ -144,7 +144,7 @@ create_container_with_userns() {
             --tmpfs /tmp:rw,size=64m \
             --tmpfs /var/cache:rw,size=16m \
             --publish "127.0.0.1:${candidate}:8080" \
-            --volume "${ROOT}/observatorium:/var/www/observatorium:ro" \
+            --volume "${ROOT}/tools/trace-viewer:/var/www/observatorium:ro" \
             --volume "${PROJECT_ROOT}:/var/www/source:ro" \
             "$IMAGE" >/dev/null 2>"$create_error_file"; then
             HOST_PORT="$candidate"

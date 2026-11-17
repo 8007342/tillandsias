@@ -3,6 +3,13 @@ name: initialize-bare-metal-host
 description: Bring up, rebuild and troubleshoot THIS bare-metal host's own tillandsias enclave and per-project git mirror, idempotently. Does not seed, prompt for, or copy a GitHub token. Referenced by join-the-fleet as its substrate step.
 ---
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 # Initialize Bare Metal Host
 
 Brings up — and rebuilds, and troubleshoots — **this host's own** enclave and

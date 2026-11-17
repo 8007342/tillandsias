@@ -1,0 +1,14 @@
+# @trace spec:proxy-container, order:2041-i3nk
+# Egress tier `research`: TRANSITIONAL: documentation sites served by the proxy until enclave-fetch (2041-csm4) serves research; then this tier leaves the proxy.
+# Source of truth for this tier. images/proxy/allowlist.txt is GENERATED from
+# the tier files by scripts/lua/build-proxy-allowlist.lua; edit here, then run it.
+
+# --- Documentation ---
+.docs.rs
+.w3.org
+.devdocs.io
+.stackoverflow.com
+.stackexchange.com
+.readthedocs.io
+.readthedocs.org
+.mozilla.org

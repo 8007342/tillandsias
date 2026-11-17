@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-cpu-and-memory-budgets-are-not-honest-to-the-jobs-inside-2067-dwqd
+    field: next_action
+    value: 'PR 2 first (yoga): make a forge that crosses memory.high fail with a NAMED stall the tray shows, red-first fixture driving a forge past high. Then PR 3, forge-guard run/wait on the forge PATH. Exit criterion (1) (nproc/cpuset) is retracted; see context.'
+    ts: "2026-11-10T00:31:20Z"
+    host: yoga
+    replaces_sha256: "f98ab16ec5b733d2ea993f9dd76f7dd890796e1a842d5e0d50f268ae213c7b34"
+
+events:
+  - packet_id: forge-cpu-and-memory-budgets-are-not-honest-to-the-jobs-inside-2067-dwqd
+    event:
+      type: progress
+      ts: "2026-11-10T00:31:20Z"
+      host: yoga
+      summary: |-
+        status 'PR 2 first (yoga): make a forge that crosses memory.high fail with a NAMED stall the tray shows, red-first fixture driving a forge past high. Then PR 3, forge-guard run/wait on the forge PATH. Exit criterion (1) (nproc/cpuset) is retracted; see context.' (not terminal) with evidence_refs: re-scope relayed by macuahuitl-fedora 2026-11-10

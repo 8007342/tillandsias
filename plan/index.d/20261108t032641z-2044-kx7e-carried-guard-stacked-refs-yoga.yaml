@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 after the land queue evicted #1002 on a stacked-PR false positive. Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-carried-obligation-guard-reads-a-descendant-ref-stacked-on-the-change-as-taking-the-changes-own-paid-item
+    order: 2044-kx7e
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [methodology, lua, git]
+    estimated_hours: 1
+    title: "The carried-obligation guard refuses a change whose paid item is also deleted by a work ref stacked ON it (paid-but-taken-by a descendant)"
+    context: |
+      Measured 2026-11-08: the land queue evicted #1002 (work/2031-z4rm) with carried-work/2031-dwwy:paid-but-taken-by. #1002 pays its shell-to-lua obligation by porting scripts/check-readme-discipline.sh. #1007 (work/2031-dwwy) is stacked ON work/2031-z4rm, so it contains that same deletion. In scripts/lua/check-carried-obligations.lua, taken_items treats another work ref as this change's own when the ref is an ANCESTOR of HEAD (`merge-base --is-ancestor ref HEAD`), which covers HEAD stacked on the ref. It does not cover the reverse: a ref that DESCENDS from HEAD. For any other ref it lists the files deleted between merge-base(BASE, ref) and ref, so a descendant reports every deletion it inherited from HEAD as "taken". The guard exists to catch two hosts porting the SAME item independently (2026-10-10); a stacked descendant is not that. Fix: list the other ref's deletions from merge-base(HEAD, ref) instead of merge-base(BASE, ref). A descendant then contributes only the deletions it adds after HEAD, and an unrelated ref is judged as today (its merge-base with HEAD is at or before BASE).
+    exit_criteria:
+      - "scripts/lua/test-carried-obligations.lua gains two arms in a scratch repo. (1) A change that ports item X, plus a work ref stacked on it that adds an unrelated commit: the guard reports carried:<backlog>:paid:X, not paid-but-taken-by. (2) Control: an independent work ref, not descending from the change, that also deletes X still yields refused:carried:paid-but-taken-by:<ref>:X. Pre-fix result: FAILS, arm 1 is refused paid-but-taken-by the stacked ref."
+    verifiable_closure: "scripts/lua/test-carried-obligations.lua gains two arms in a scratch repo. (1) A change that ports item X, plus a work ref stacked on it that adds an unrelated commit: the guard reports carried:<backlog>:paid:X, not paid-but-taken-by. (2) Control: an independent work ref, not descending from the change, that also deletes X still yields refused:carried:paid-but-taken-by:<ref>:X. Pre-fix result: FAILS, arm 1 is refused paid-but-taken-by the stacked ref."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the fix adds the arms named in the exit criterion in the same commit (1136-n8sh).
+    next_action: >
+      yoga: write the two arms first, then switch taken_items' diff base to merge-base(HEAD, ref). Land this before #1002 is re-queued.
+    provenance: |
+      macuahuitl relay 2026-11-08 (the #1002 eviction); yoga read of check-carried-obligations.lua taken_items.
+    events:
+      - type: filed
+        ts: "2026-11-08T03:26:41Z"
+        host: yoga
+        summary: "filed after the stacked-PR eviction of #1002; yoga claims it"

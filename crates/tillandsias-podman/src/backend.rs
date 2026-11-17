@@ -354,6 +354,25 @@ impl PodmanBackend for ReplayBackend {
 
 pub type BackendRef = Arc<dyn PodmanBackend>;
 
+/// A `data:` URL argument with its payload hidden, or `None` when `arg` holds
+/// no data URL. Accepts the bare form (`data:…`) and the flag form
+/// (`--app=data:…`). A data URL carries its whole document inline, so it can
+/// hold anything: the OpenCode Web and studio windows' login form carries the
+/// session OTP this way (`tillandsias_otp::build_login_data_url`).
+// @trace spec:opencode-web-session-otp, spec:secrets-management
+pub fn redact_data_url(arg: &str) -> Option<String> {
+    let at = if arg.starts_with("data:") {
+        0
+    } else {
+        let eq = arg.find('=')?;
+        if !arg.starts_with('-') || !arg[eq + 1..].starts_with("data:") {
+            return None;
+        }
+        eq + 1
+    };
+    Some(format!("{}data:<redacted>", &arg[..at]))
+}
+
 pub fn redact_argv(argv: &[String]) -> Vec<String> {
     let mut redacted = Vec::with_capacity(argv.len());
     let mut hide_next = false;
@@ -361,6 +380,10 @@ pub fn redact_argv(argv: &[String]) -> Vec<String> {
         if hide_next {
             redacted.push("<redacted>".to_string());
             hide_next = false;
+            continue;
+        }
+        if let Some(hidden) = redact_data_url(arg) {
+            redacted.push(hidden);
             continue;
         }
         if matches!(arg.as_str(), "--password" | "--token" | "--secret-value") {
@@ -429,21 +452,14 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn a_stalled_podman_fails_within_its_budget_and_names_the_operation() {
-        use std::io::Write;
-        use std::os::unix::fs::PermissionsExt;
-
         let _env_guard = crate::PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-stalled-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");
         let stub = dir.join("podman");
-        {
-            let mut f = std::fs::File::create(&stub).expect("stub");
-            // Sleeps regardless of argv: a podman that accepted the command and
-            // then never returned, which is what a storage lock looks like.
-            writeln!(f, "#!/bin/sh\nsleep 600").expect("write stub");
-        }
-        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        // Sleeps regardless of argv: a podman that accepted the command and
+        // then never returned, which is what a storage lock looks like.
+        crate::test_stub::install_ready_stub(&stub, "#!/bin/sh\nsleep 600\n");
         // SAFETY: the env mutation is serialized by podman_bin_env_lock above.
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
 
@@ -493,19 +509,12 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn a_prompt_podman_still_succeeds_under_the_same_budget() {
-        use std::io::Write;
-        use std::os::unix::fs::PermissionsExt;
-
         let _env_guard = crate::PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-prompt-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");
         let stub = dir.join("podman");
-        {
-            let mut f = std::fs::File::create(&stub).expect("stub");
-            writeln!(f, "#!/bin/sh\necho ok").expect("write stub");
-        }
-        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        crate::test_stub::install_ready_stub(&stub, "#!/bin/sh\necho ok\n");
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
 
         let output = RealBackend
@@ -554,6 +563,34 @@ mod tests {
     fn redacts_tokens() {
         let argv = vec!["run".into(), "-e".into(), "TOKEN=abc".into()];
         assert_eq!(redact_argv(&argv)[2], "TOKEN=<redacted>");
+    }
+
+    /// The OpenCode Web / studio window is launched with
+    /// `--app=data:text/html;base64,<login form>`, and the form carries the
+    /// session OTP (which is also the session cookie). The redacted argv goes
+    /// into every launch-failure message, which reaches stderr and the
+    /// OpenCode Web event log; a data URL must never survive redaction, in
+    /// either the flag form or the bare form.
+    #[test]
+    fn redacts_data_urls_in_flag_and_bare_form() {
+        let payload = "PGh0bWw+PGlucHV0IG5hbWU9Im90cCIgdmFsdWU9InNlY3JldCI+PC9odG1sPg";
+        let argv = vec![
+            "run".to_string(),
+            "img:v1".to_string(),
+            format!("--app=data:text/html;base64,{payload}"),
+            format!("data:text/html;base64,{payload}"),
+            "--ozone-platform=wayland".to_string(),
+        ];
+        let redacted = redact_argv(&argv);
+        let joined = redacted.join(" ");
+        assert!(
+            !joined.contains(payload),
+            "data URL payload leaked: {joined}"
+        );
+        assert_eq!(redacted[2], "--app=data:<redacted>");
+        assert_eq!(redacted[3], "data:<redacted>");
+        assert_eq!(redacted[4], "--ozone-platform=wayland");
+        assert_eq!(redacted[1], "img:v1");
     }
 
     #[test]

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-opencode-release-pin-is-bumped-automatically-only-after-the-contract-probe-passes-on-the-new-release
+    field: status
+    value: obsoleted
+    ts: "2026-11-08T01:50:57Z"
+    host: lenovinha
+
+events:
+  - packet_id: the-opencode-release-pin-is-bumped-automatically-only-after-the-contract-probe-passes-on-the-new-release
+    event:
+      type: completed
+      ts: "2026-11-08T01:50:57Z"
+      host: lenovinha
+      summary: |-
+        status 'obsoleted' with evidence_refs: 2027-e2cf
+  - packet_id: the-opencode-release-pin-is-bumped-automatically-only-after-the-contract-probe-passes-on-the-new-release
+    event:
+      type: note
+      ts: "2026-11-08T01:50:57Z"
+      host: lenovinha
+      summary: |-
+        close:superseded-by:2027-e2cf — operator ruling 2026-11-08 (relayed by macuahuitl-fedora): opencode tracks LATEST on every launch, with no fixed pin, verified against the release's published sha256, with last-good rollback after the health probe. There is no pin to bump; the probe-gated last-good in _require_release_harness (work/2027-e2cf, 7f62cd22e) covers this row's intent. Agreed by yoga, who filed it. Closed by linux-lenovinha-opus5-20261108t015057z.

@@ -1,11 +1,18 @@
 <!-- @trace order:1724-kcj4 — forge-wide guidance for every coding agent in a Tillandsias forge.
      ONE source, linked by agent-profile.sh (link_forge_agent_guidance) as each harness's
      USER-level instructions: ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.gemini/GEMINI.md and
-     ~/.config/opencode/AGENTS.md. A project's own CLAUDE.md / AGENTS.md still loads on top. -->
+     ~/.config/opencode/AGENTS.md; copilot gets it as $COPILOT_HOME/copilot-instructions.md
+     (entrypoint-forge-copilot.sh, 2067-faum). A project's own CLAUDE.md / AGENTS.md still loads on top. -->
 
 # Working in a Tillandsias forge
 
 These notes apply to every project in this forge. Your project's own instructions come first wherever they disagree.
+
+## Tooling language: Lua > Rust > Go
+
+When you write a script, a helper or a tool for this project, use Lua first, then Rust, then Go. Use Python only when a library you need forces it. All three are always installed here: `lua` (5.4, with `lfs` and `lpeg`), `cargo` and `rustc`, and `go`. Python, Perl and the others stay installed, so a project that already uses them still works.
+
+Why: a forge has a fixed memory budget shared by every process in it, and Python's `multiprocessing` starts a full interpreter per worker. One forge stalled on exactly that. A Lua script stays small, and Rust or Go give you real threads in one process. For a quick edit across several files, `lua-edit` is already on PATH.
 
 ## Stopping a process
 

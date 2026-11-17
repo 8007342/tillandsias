@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-litmus-runners-own-metadata-reads-pipe-yaml-json-into-jq-so-the-yq-fix-moved-the-dependency-to-jq-route-them-through-the-plan-binary-and-select-the-same-tests-on-a-host-with-neither
+    event:
+      type: progress
+      ts: "2026-11-08T01:06:34Z"
+      agent_id: linux-lenovinha-opus5-20261108t010634z
+      host: lenovinha
+      summary: |
+        ADDITION from coordinator macuahuitl-fedora, 2026-11-07, after #893's parity diff: the selection-parity fixture should diff the SKIP REASONS as well as the totals. On #893 the only difference between hosts was the Total line, caused by a run-time skip that happens only in no-jq mode on macuahuitl. A count-only diff hides why the two hosts differ. Each skipped test with its reason should be part of the compared output, so that a host-specific skip shows up as a named line.

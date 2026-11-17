@@ -37,9 +37,10 @@ work happen locally first.
    scripts/release-preflight-local.sh --nix-probe
    ```
 
-4. Review and commit any generated local evidence, especially
-   `docs/convergence/centicolon-dashboard.md` and
-   `docs/convergence/centicolon-dashboard.json`.
+4. Review and commit any generated local evidence (regenerated trace
+   indexes). The CentiColon dashboard renders to `target/convergence/` and
+   is not committed; published release evidence is the observatorium site
+   (`observatorium/site/publish.mjs`, `openspec/specs/observatorium-dashboard/deployment.md`).
 
 5. Push the release ref only after the local gate passes:
 

@@ -10,6 +10,7 @@ tillandsias:
     I2
     I3
     I1/qwen-image-edit
+    I1/qwen-image
     I1/flux2-klein
     I1/wan-vace
     I1/ace-dit
@@ -17,6 +18,7 @@ tillandsias:
     I2
     I3
     I1/qwen-image-edit
+    I1/qwen-image
     I1/flux2-klein
     I1/wan-vace
     I1/ace-dit
@@ -58,3 +60,5 @@ tillandsias:
     I1/layer_model
   birefnet: |
     I1/birefnet
+  upscale_models: |
+    I1/upscale_models

@@ -15,13 +15,13 @@
 #   2. "Image hierarchy locked to chromium-core" — pin the
 #      `FROM ${CHROMIUM_CORE_IMAGE}` line in
 #      Containerfile.framework AND the corresponding assertion
-#      in scripts/check-container-bases.sh.
+#      in scripts/lua/check-container-bases.lua.
 #   3. "Security model inheritance" — verified through
 #      Containerfile.framework extending the chromium-core
 #      base which already pins the security flags
 #      (browser-isolation-core).
 #   4. "Build invocation via build-image.sh" — pinned via the
-#      check-container-bases.sh sibling script existence.
+#      check-container-bases.lua sibling script existence.
 #
 # Companion litmus raises browser-isolation-framework coverage
 # 33 → 67.
@@ -32,13 +32,13 @@ description: >
   Pin images/chromium/Containerfile.framework: 3-spec @trace
   header, ARG-driven CHROMIUM_CORE_IMAGE reference, FROM-the-ARG
   pattern; plus the matching assertion in
-  scripts/check-container-bases.sh.
+  scripts/lua/check-container-bases.lua.
 severity: medium
 size: instant
 
 preconditions:
   - workspace contains images/chromium/Containerfile.framework
-  - workspace contains scripts/check-container-bases.sh
+  - workspace contains scripts/lua/check-container-bases.lua
   - shell utilities (grep, test) are available in PATH
 
 critical_path:
@@ -66,9 +66,9 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "Extends tillandsias-chromium-core"
 
-  - step: "check-container-bases.sh asserts the framework extends chromium-core"
+  - step: "check-container-bases.lua asserts the framework extends chromium-core"
     # Spec requirement: "Build invocation via build-image.sh". The
-    # check-container-bases.sh sibling script enforces the base
+    # check-container-bases.lua sibling script enforces the base
     # at audit time via `expect_base`. A refactor that drops this
     # assertion lets the framework drift to a different base.
     #
@@ -76,14 +76,14 @@ critical_path:
     # unescape of `\"` → `"` that produces unbalanced quotes when
     # the original line contains escaped double-quotes around
     # the file path. (Sixth matcher/parser quirk this session.)
-    command: "grep -F 'Containerfile.framework' scripts/check-container-bases.sh && grep -F 'tillandsias-chromium-core' scripts/check-container-bases.sh"
+    command: "grep -F 'Containerfile.framework' scripts/lua/check-container-bases.lua && grep -F 'tillandsias-chromium-core' scripts/lua/check-container-bases.lua"
     timeout_ms: 3000
     expected_behavior: "tillandsias-chromium-core"
 
-  - step: "check-container-bases.sh exists + executable"
-    command: "test -x scripts/check-container-bases.sh && echo 'ok: check-container-bases.sh executable'"
+  - step: "check-container-bases.lua exists"
+    command: "test -f scripts/lua/check-container-bases.lua && echo 'ok: check-container-bases.lua present'"
     timeout_ms: 3000
-    expected_behavior: "ok: check-container-bases.sh executable"
+    expected_behavior: "ok: check-container-bases.lua present"
 
   - step: "Containerfile.framework exists at canonical path"
     command: "test -f images/chromium/Containerfile.framework && echo 'ok: Containerfile.framework present'"
@@ -99,7 +99,7 @@ observability:
     spec: "browser-isolation-framework"
     test: "browser-isolation-framework-shape"
     containerfile_artifact: "images/chromium/Containerfile.framework"
-    bases_check_artifact: "scripts/check-container-bases.sh"
+    bases_check_artifact: "scripts/lua/check-container-bases.lua"
 
 rollback:
   on_failure: >
@@ -110,5 +110,5 @@ rollback:
     tag — the content-addressed hierarchy depends on the ARG);
     the `Extends tillandsias-chromium-core with:` documentation;
     the `expect_base ... 'tillandsias-chromium-core:` assertion in
-    check-container-bases.sh.
-  command: "head -20 images/chromium/Containerfile.framework && grep -n 'Containerfile.framework' scripts/check-container-bases.sh"
+    check-container-bases.lua.
+  command: "head -20 images/chromium/Containerfile.framework && grep -n 'Containerfile.framework' scripts/lua/check-container-bases.lua"

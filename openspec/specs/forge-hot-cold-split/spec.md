@@ -78,28 +78,36 @@ advisory: writes that would exceed it MUST fail with ENOSPC.
 
 ---
 
-### Requirement: --memory ceiling pairs with tmpfs caps
+### Requirement: Forge containers are uncapped
 <!-- req-id: 0d24437b -->
 
-When ANY tmpfs mount is present in the profile, the podman invocation MUST also
-pass `--memory=<ceiling>m` and `--memory-swap=<ceiling>m` (no swap escape).
+Operator ruling 2026-11-13: "Do we need to limit the forges at all? Let them
+hog all available resources freely. Let's see how the Linux kernel handles it."
+This supersedes the earlier `--memory = sum(tmpfs caps) + 256 MB` ceiling and
+the ForgeBudget memory.max / memory.high / memory.swap.max / pids.max tiers for
+forge containers. tmpfs mounts keep their own `size=` caps.
 
-The ceiling is: `sum(all tmpfs size_mb) + 256` (256 MB working-set baseline).
+A forge container's podman argv MUST NOT carry `--memory=`, `--memory-swap`,
+or a numeric `--pids-limit`, and MUST NOT carry `--cpus`. It MUST pass
+`--cgroup-conf=memory.high=max`, `--cgroup-conf=memory.swap.max=max` and
+`--pids-limit=-1`, so the containers.conf pids default cannot apply. It MAY
+keep `--memory-reservation` (memory.low is a protection, not a cap). Forge
+siblings (browser windows, web previews) keep their capped sibling budgets.
+The GPU image studio and the audio studio are uncapped the same way; the
+short-lived model-fetch helper keeps its small cap.
 
-- `--memory-swap` MUST equal `--memory` exactly (zero additional swap).
+#### Scenario: a forge argv carries no memory or pids cap
 
-#### Scenario: --memory and --memory-swap match (no swap escape)
+- **WHEN** the forge budget produces a forge container's podman flags
+- **THEN** no `--memory=`, `--memory-swap` or numeric `--pids-limit` flag appears
+- **AND** `--cgroup-conf=memory.high=max`, `--cgroup-conf=memory.swap.max=max`
+  and `--pids-limit=-1` appear
 
-- **WHEN** `build_podman_args()` produces a forge container's podman argv
-- **THEN** both `--memory=<N>m` and `--memory-swap=<N>m` MUST appear in the argv
-- **AND** both values MUST be equal (no net swap allocation)
+#### Scenario: the nested container cgroup reads max
 
-#### Scenario: --memory = sum(tmpfs caps) + 256 MB working-set baseline
-
-- **WHEN** a forge profile carries four tmpfs mounts totalling
-  `8 + budget + 256 + 64` MB
-- **THEN** `--memory` MUST be `8 + budget + 256 + 64 + 256` MB
-- **AND** `--memory-swap` MUST equal the same value
+- **WHEN** a forge is launched with those flags
+- **THEN** memory.max, memory.high, memory.swap.max and pids.max read `max` in
+  both the libpod scope and its nested `container` cgroup
 
 ---
 

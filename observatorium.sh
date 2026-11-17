@@ -32,7 +32,7 @@ if ! kill -0 $SERVER_PID 2>/dev/null; then
     exit 1
 fi
 
-URL="http://localhost:$PORT/observatorium/index.html"
+URL="http://localhost:$PORT/tools/trace-viewer/index.html"
 echo "Observatorium is running at: $URL"
 
 if command -v google-chrome &> /dev/null; then

@@ -104,20 +104,30 @@ target: refs/heads/linux-next
 from: <old sha>
 to: <new sha>
 detail: Merge work/1879-5jkt into linux-next
-host: <hostname>
+host: <enrolment id: k and ten letters g..z, derived from the public key>
 forge_instance: <instance id>
 forge_agent: <agent>
 forge_project: <project label>
 forge_launched: 2026-10-25T13:40:00Z
 strength: hardware-biometric | hardware-pin | hardware-presence | software-password
 nonce: <128-bit random, broker-issued>
-issued: 2026-10-25T14:02:11Z
-expires: 2026-10-25T14:12:11Z
+issued: 2026-10-25T14:02Z
+expires: 2026-10-25T14:12Z
 ```
 
 The forge never sees the nonce before approval; the broker issues it when the
 dialog opens, so a replay or a pre-built statement fails. `expires` is ten
 minutes after issue; a stale approval is re-asked, not extended.
+
+Operator PII amendment (2026-10-27, applied by 1879-5jkt): `host` is an opaque
+enrolment id derived from the public key, never the host name; `issued` and
+`expires` are UTC to the minute; `project` is the repository slug, never a
+local path; and the broker refuses, before signing, a request whose fields
+carry a home directory path, an email address or this host's name. The
+`Approved-by:` trailer reads `operator (<enrolment id>)`, with no host name
+and no biometric name. The parser is strict: fields in the order above, each
+at most once, optional ones omitted rather than empty, and anything not in
+canonical form is refused.
 
 ### D4. Where the record lives
 
@@ -130,7 +140,7 @@ minutes after issue; a stale approval is re-asked, not extended.
   append-only per commit.
 - **Merge commits created by host tools** additionally carry a trailer, so the
   approval is visible in `git log` without notes configured:
-  `Approved-by: the operator, with Touch ID on macneo`. No hash is printed.
+  `Approved-by: operator (<enrolment id>)` (PII amendment). No hash is printed.
 - **Non-git actions** (workflow dispatch, Cloudflare, remote worker): the
   broker appends the note body to a host approval journal
   (`approvals.jsonl` in the tray's state directory) and, when the action names
@@ -281,7 +291,7 @@ tillandsias-grant v1
 action: workflow-dispatch
 target: 8007342/tillandsias release.yml@main
 scope: once | 10m | 2h | session | standing   (standing deferred, see above)
-host: <hostname>
+host: <enrolment id>
 forge_instance: <instance id, unique per forge launch>
 forge_agent: <agent>
 forge_project: <project label>

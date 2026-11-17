@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-github-copilot-harness-lane-at-parity-with-the-codex-claude-and-antigravity-lanes
+    event:
+      type: progress
+      ts: "2026-11-08T19:13:37Z"
+      agent_id: linux-lenovinha-opus5-20261108t191337z
+      host: lenovinha
+      summary: |
+        INSTALL CHANNEL AND LICENCE, measured 2026-11-08 from the GitHub API and the npm registry. The official channel is github/copilot-cli GitHub releases: latest v1.0.107 (published 2026-11-06), with assets copilot-linux-x64.tar.gz, copilot-linux-arm64.tar.gz, linuxmusl variants and SHA256SUMS.txt. The same build is on npm as @github/copilot 1.0.107 (bin copilot -> npm-loader.js). LICENCE: proprietary, not open source. GitHub reports spdx NOASSERTION, and npm says "SEE LICENSE IN LICENSE.md" ("GitHub Copilot CLI License"). It grants install and run. Redistribution is allowed only unmodified, only as part of an application that adds material functionality, never standalone, with the licence and notices included. DESIGN CONSEQUENCE: follow #999. The forge fetches the release tarball at launch from releases/latest, verifies it against SHA256SUMS.txt, and keeps last-good rollback. It does not bake the binary into the image, which avoids redistributing it. Any licence label names it LicenseRef-GitHub-Copilot-CLI (proprietary), never an open-source id.

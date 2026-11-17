@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: an-audio-studio-sibling-appliance-runs-analysis-and-transform-tools-on-the-gpu-queue-with-provenance
+    event:
+      type: completed
+      ts: "2026-11-10T07:20:58Z"
+      agent_id: linux-yoga-opus5-20261110t072056z
+      host: yoga
+      summary: |-
+        landed #1034 (ac69f06e3); closure reproduced on trunk b5db7999e 2026-11-10: test-audio-studio-glitches.lua ok 12 arms (five fault kinds at their planted ranges, clean control empty); the_audio_studio_is_a_tools_only_sibling_listed_with_its_affordances passed (registry lists good_for/not_for/edits); test-audio-studio-bundle.lua ok:audio-studio-bundle-fixture:10-arms (no rubberband or sox in the bundle)

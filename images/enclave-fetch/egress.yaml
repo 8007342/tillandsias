@@ -1,0 +1,5 @@
+# @trace spec:proxy-container, order:2041-csm4
+# Egress tiers for this image (openspec change curated-egress-tiers).
+# The fetch service reaches only its catalog, through the proxy's research tier.
+tiers: [siblings, research]
+reason: serves agents curated docs and feeds; the forge's shell never reaches research hosts

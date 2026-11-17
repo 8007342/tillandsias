@@ -107,7 +107,7 @@ fi
 # closes — i.e. for the child's whole lifetime. The fixture hung for its full
 # timeout on the first run for exactly this reason.
 spawn_marked() {
-    TILLANDSIAS_WRAPPER_TOKEN="$1" setsid sleep 300 >/dev/null 2>&1 </dev/null &
+    TILLANDSIAS_WRAPPER_MARK="$1" setsid sleep 300 >/dev/null 2>&1 </dev/null &
     echo $!
 }
 
@@ -235,7 +235,7 @@ tillandsias_reap_marked "$TOKEN_A" >/dev/null 2>&1
 # 7. A SIGTERM-INERT PROCESS IS STILL REAPED. This is the measured case: the
 #    stray ignored SIGTERM on three hosts. A reaper that sent only TERM would
 #    return success here and leave the process running.
-TILLANDSIAS_WRAPPER_TOKEN="$TOKEN_A" setsid bash -c 'trap "" TERM; sleep 300' \
+TILLANDSIAS_WRAPPER_MARK="$TOKEN_A" setsid bash -c 'trap "" TERM; sleep 300' \
     >/dev/null 2>&1 </dev/null &
 pd=$!
 sleep 0.5
@@ -250,7 +250,39 @@ check "a SIGTERM-inert process is escalated to SIGKILL and reaped" $?
 tillandsias_reap_marked "nonexistent-token-$$" >/dev/null 2>&1
 check "reaping an absent token is a clean no-op" $?
 
-kill -KILL "$pa" "$pb" "$pc" "$pd" 2>/dev/null || true
+# 9. ORDER 2031-z4rm: a wrapper from an OLDER checkout on this host still
+#    exports the retired name TILLANDSIAS_WRAPPER_TOKEN. The reaper must still
+#    find and kill its subtree for the transition window, or an orphan gate
+#    survives the wrapper that started it.
+TOKEN_R="test-r-$$-${RANDOM}"
+TILLANDSIAS_WRAPPER_TOKEN="$TOKEN_R" setsid sleep 300 >/dev/null 2>&1 </dev/null &
+pr=$!
+await_marked "$pr" "$TOKEN_R"; check "a process carrying only the retired name is found" $?
+tillandsias_reap_marked "$TOKEN_R" >/dev/null 2>&1
+for _ in 1 2 3 4 5 6 7 8 9 10; do alive "$pr" || break; sleep 0.2; done
+! alive "$pr"; check "a process carrying only the retired name is reaped" $?
+
+# 10. ORDER 2031-z4rm: a child started through a Lua door carries the marker,
+#     so a gate a Lua script spawns is reaped with its wrapper. This is the
+#     propagation the rename exists to protect: a name spelled like a
+#     credential would be dropped by the door's credential filter
+#     (2031-h5ru, 2031-dwwy). Skipped by name where no plan binary runs.
+_plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _plan=""
+case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
+if [ -n "$_plan" ]; then
+    _lw="$(mktemp -d "${TMPDIR:-/tmp}/z4rm-lua.XXXXXX")"
+    printf '%s\n' "local r = proc.run{argv={'printenv','TILLANDSIAS_WRAPPER_MARK'}}" \
+        "if r.status == 'exited' and r.code == 0 then verdict.ok('marker-reached-child') end" \
+        "verdict.emit('violation:z4rm:marker-did-not-reach-child', 1)" > "$_lw/probe.lua"
+    _lout="$(cd "$ROOT" && TILLANDSIAS_WRAPPER_MARK="lua-door-$$" "$_plan" script run "$_lw/probe.lua" 2>/dev/null)"; _lrc=$?
+    rm -rf "$_lw"
+    [ "$_lrc" -eq 0 ] && case "$_lout" in *ok:marker-reached-child*) true ;; *) false ;; esac
+    check "a Lua door child carries TILLANDSIAS_WRAPPER_MARK" $?
+else
+    echo "skip:dispatch-reap:lua-door-arm:no-runnable-plan-binary"
+fi
+
+kill -KILL "$pa" "$pb" "$pc" "$pd" "$pr" 2>/dev/null || true
 
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then

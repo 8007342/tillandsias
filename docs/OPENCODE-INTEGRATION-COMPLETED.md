@@ -183,7 +183,7 @@ this end-to-end before touching the entrypoints.
    `scripts/regenerate-readme.sh`, and writes an initial `readme.traces` entry.
 3. If the project exists but the README is stale, `/bootstrap-readme` regenerates
    from manifests (Cargo.toml, package.json, etc.) and validates with
-   `scripts/check-readme-discipline.sh`.
+   `scripts/lua/check-readme-discipline.lua` (ported from the .sh, 2031-z4rm).
 4. The discovered project context (`TILLANDSIAS_PROJECT_PATH`,
    `TILLANDSIAS_PROJECT_GENUS`) is exported by `lib-common.sh::export_project_env()`
    so every agent — CLI, OpenCode web session, MCP tool — sees the same view.

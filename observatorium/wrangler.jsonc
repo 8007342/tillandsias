@@ -1,5 +1,11 @@
 {
-  // @trace spec:observatorium-dashboard — atomic CDN artifact, 60s metrics cache
+  // @trace order:2066-obsv, spec:observatorium-dashboard
+  // Static assets only, and NO build command: nothing ever builds on
+  // Cloudflare and no Workers Builds trigger is connected. The published tree
+  // is refs/heads/deploy/observatorium, written by site/publish.mjs, which
+  // carries its own copy of this config. This copy lets an operator deploy a
+  // preview they built here (node site/build.mjs) by hand; see
+  // openspec/specs/observatorium-dashboard/deployment.md.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tillandsias-observatorium",
   "compatibility_date": "2026-10-13",
@@ -7,9 +13,8 @@
   "routes": [
     { "pattern": "observatorium.tillandsias.org", "custom_domain": true }
   ],
-  "build": { "command": "npm run build" },
   "assets": {
-    "directory": "./build/web",
-    "not_found_handling": "single-page-application"
+    "directory": "./dist",
+    "not_found_handling": "404-page"
   }
 }

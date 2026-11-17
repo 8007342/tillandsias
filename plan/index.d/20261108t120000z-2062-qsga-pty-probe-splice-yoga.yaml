@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-08 at the coordinator's direction (macuahuitl-fedora: "File it and take it"). Code is cited by symbol, never by line.
+packets:
+  - packet_id: the-pty-input-probe-counts-every-read-family-syscall-on-a-terminal-so-a-splicing-cat-is-blocked-on-input
+    order: 2062-qsga
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [guest, pty, portability, gate]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/pty_input_probe.rs
+    title: "The PTY input probe counts readv, pread64, preadv, preadv2 and splice on a terminal as blocked on input, so GNU coreutils 9.11's cat (which reads a tty with splice) no longer turns every Linux gate red"
+    context: |
+      MEASURED on yoga 2026-11-08, the 2031-dwwy census run of `TILLANDSIAS_ENV_BLOCK_WARN=1 ./build.sh --check` at 29f2c719e: rc=1 at the workspace suite, 1020 passed, 1 failed, pty_input_probe::tests::a_process_reading_a_real_pty_reports_blocked_on_input.
+      The builder toolbox's `cat --version` is "cat (GNU coreutils) 9.11". The child's /proc/<pid>/syscall was "275 0x0 0x0 0x6 0x0 0x80000 0x0 ...": 275 is splice on x86_64, with fd_in 0, the PTY slave.
+      probe_process_group returns BlockedOnInput only for libc::SYS_read, so a reader that splices from its terminal is reported NotBlocked. That is wrong for the product too (a cat-like reader at a prompt is waiting for input), not only for the test.
+      Every Linux gate whose toolbox has this coreutils is red; macuahuitl's gates are still green, so they have an older cat. The census for 2031-dwwy's R1 flip cannot finish on yoga until this lands.
+    exit_criteria:
+      - "probe_process_group returns BlockedOnInput for a task blocked in read, readv, pread64, preadv, preadv2 or splice whose first argument is a terminal fd, through libc::SYS_* so aarch64 keeps its own numbers; any of them on a pipe, socket or file stays NotBlocked."
+      - "a_process_reading_a_real_pty_reports_blocked_on_input passes under the builder toolbox's coreutils 9.11 cat. Pre-fix result: FAILS on yoga (raw syscall line 275, NotBlocked)."
+      - "A pure arm pins the classification table: each listed syscall on a pts fd target is input, and a syscall outside the list (clock_nanosleep, ppoll) is not."
+    verifiable_closure: "The real-PTY test passes under coreutils 9.11 cat on yoga, and the classification arm pins every read-family syscall. Pre-fix result: FAILS (syscall 275, NotBlocked)."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the classification arm in the same commit (1136-n8sh).
+    next_action: >
+      Show the real-PTY test red under the toolbox cat first, then widen the syscall set in probe_process_group.
+    provenance: |
+      yoga census run 2026-11-08 (scratchpad census log, the workspace gate transcript target/test-transcript-workspace-gate.log); macuahuitl-fedora direction 2026-11-08.
+    events:
+      - type: filed
+        ts: "2026-11-08T12:00:00Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; blocks yoga's full census for 2031-dwwy"

@@ -108,7 +108,7 @@ critical_path:
   - step: "the entrypoint executes only an engine the integrity check vouches for (order 521)"
     # Only ok or stale:* may put OLLAMA_BINDIR on PATH; every refusal logs a
     # reason=engine-integrity-refused:<why> line the forge's unreachable detail points at.
-    command: "E=images/inference/entrypoint.sh; grep -Fq '. \"$ENGINE_INTEGRITY_SH\"' $E && grep -Fq 'ok | stale:*) export PATH=\"$OLLAMA_BINDIR:$PATH\" ;;' $E && grep -Fq 'echo \"[inference] FATAL: reason=$_engine_verdict' $E && grep -Fq 'reason=engine-integrity-refused:payload-digest-mismatch' $E && grep -Fq 'tillandsias_engine_record \"$OLLAMA_TOOLSROOT\"' $E && grep -Fq 'grep reason=engine-' images/default/lib-inference-state.sh && grep -q 'COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh' images/inference/Containerfile && echo 'ok: integrity wiring'"
+    command: "E=images/inference/entrypoint.sh; grep -Fq '. \"$ENGINE_INTEGRITY_SH\"' $E && grep -Fq 'ok | stale:*) export PATH=\"$OLLAMA_BINDIR:$PATH\" ;;' $E && grep -Fq 'echo \"[inference] FATAL: reason=$_engine_verdict' $E && grep -Fq 'reason=engine-integrity-refused:payload-digest-mismatch' $E && grep -Fq 'tillandsias_engine_record \"$OLLAMA_TOOLSROOT\"' $E && grep -Fq 'grep reason=engine-' images/default/lua/inference-state.lua && grep -q 'COPY engine-integrity.sh /usr/local/bin/tillandsias-engine-integrity.sh' images/inference/Containerfile && echo 'ok: integrity wiring'"
     timeout_ms: 3000
     expected_behavior: "ok: integrity wiring"
 

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-carried-obligation-guard-reads-a-descendant-ref-stacked-on-the-change-as-taking-the-changes-own-paid-item
+    field: status
+    value: completed
+    ts: "2026-11-10T07:21:13Z"
+    host: yoga
+
+events:
+  - packet_id: the-carried-obligation-guard-reads-a-descendant-ref-stacked-on-the-change-as-taking-the-changes-own-paid-item
+    event:
+      type: completed
+      ts: "2026-11-10T07:21:13Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: on trunk (taken_items merge-base(HEAD, ref)); test-carried-obligations.lua 28 incl. STACKED and the PAID-BUT-TAKEN control on trunk b5db7999e
+  - packet_id: the-carried-obligation-guard-reads-a-descendant-ref-stacked-on-the-change-as-taking-the-changes-own-paid-item
+    event:
+      type: note
+      ts: "2026-11-10T07:21:13Z"
+      host: yoga
+      summary: |-
+        landed; closure reproduced on trunk 2026-11-10 (yoga closure sweep, coordinator-approved)

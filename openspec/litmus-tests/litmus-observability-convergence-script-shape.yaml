@@ -25,7 +25,7 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-convergence-velocity.sh
+  - workspace contains scripts/lua/check-convergence-velocity.lua
   - workspace contains scripts/generate-evidence-bundle.sh
   - workspace contains scripts/release-preflight-local.sh
   - workspace contains scripts/test-convergence-dashboard.sh
@@ -37,7 +37,7 @@ critical_path:
   - step: "Req trace: @trace spec:observability-convergence on all 5 scripts"
     # Spec § Observability mandates each convergence script carry
     # the spec trace. Pin all 5 active shell surfaces.
-    command: "for f in scripts/check-convergence-velocity.sh scripts/generate-evidence-bundle.sh scripts/release-preflight-local.sh scripts/test-convergence-dashboard.sh scripts/update-convergence-dashboard.sh; do grep -Fq 'spec:observability-convergence' \"$f\" || { echo \"FAIL: $f missing@trace\"; exit 1; }; done && echo \"ok: 5 scripts traced\""
+    command: "for f in scripts/lua/check-convergence-velocity.lua scripts/generate-evidence-bundle.sh scripts/release-preflight-local.sh scripts/test-convergence-dashboard.sh scripts/update-convergence-dashboard.sh; do grep -Fq 'spec:observability-convergence' \"$f\" || { echo \"FAIL: $f missing@trace\"; exit 1; }; done && echo \"ok: 5 scripts traced\""
     timeout_ms: 5000
     expected_behavior: "ok: 5 scripts traced"
 
@@ -56,7 +56,7 @@ critical_path:
     # which is the 599-w5jd class this pin was always meant to catch.
     # 'Python retired' stays pinned in the source: that is the historical
     # record the no-python-runtime-policy archive note depends on.
-    command: "grep -Fq 'Python retired' scripts/check-convergence-velocity.sh && grep -Fq 'unavailable:no-rust-checker' scripts/check-convergence-velocity.sh && bash scripts/check-convergence-velocity.sh 2>/dev/null | grep -Eq '^summary: unavailable:' && echo 'ok: python checker retired explicitly'"
+    command: ". scripts/plan-binary-probe.sh; grep -Fq 'Python retired' scripts/lua/check-convergence-velocity.lua && grep -Fq 'could-not-run:convergence-velocity:no-rust-checker' scripts/lua/check-convergence-velocity.lua && \"$(resolve_plan_binary)\" script run scripts/lua/check-convergence-velocity.lua 2>/dev/null | grep -Eq '^could-not-run:convergence-velocity:' && echo 'ok: python checker retired explicitly'"
     timeout_ms: 5000
     expected_behavior: "ok: python checker retired explicitly"
 
@@ -105,12 +105,12 @@ rollback:
   on_failure: >
     A `spec:observability-convergence` script surface drifted.
     Restore: @trace spec:observability-convergence on all 5 active
-    shell scripts (check-convergence-velocity.sh, generate-
+    script surfaces (lua/check-convergence-velocity.lua, generate-
     evidence-bundle.sh, release-preflight-local.sh, test-
     convergence-dashboard.sh, update-convergence-dashboard.sh);
-    check-convergence-velocity's `summary: unavailable:no-rust-checker`
+    check-convergence-velocity's `could-not-run:convergence-velocity:no-rust-checker`
     verdict (order 831-ezea — it must NOT go back to a green no-op);
     generate-evidence-bundle.sh 4 exit codes; >=6 test groups in
     test-convergence-dashboard.sh; spec body staleness threshold
     (30 days) and alert thresholds (red < 90%, yellow < 95%).
-  command: "grep -n 'spec:observability-convergence\\|Python retired\\|unavailable:no-rust-checker\\|Exit Code\\|30 days\\|red < 90%' scripts/check-convergence-velocity.sh scripts/generate-evidence-bundle.sh scripts/test-convergence-dashboard.sh openspec/specs/observability-convergence/spec.md 2>/dev/null | head -20"
+  command: "grep -n 'spec:observability-convergence\\|Python retired\\|could-not-run:convergence-velocity\\|Exit Code\\|30 days\\|red < 90%' scripts/lua/check-convergence-velocity.lua scripts/generate-evidence-bundle.sh scripts/test-convergence-dashboard.sh openspec/specs/observability-convergence/spec.md 2>/dev/null | head -20"

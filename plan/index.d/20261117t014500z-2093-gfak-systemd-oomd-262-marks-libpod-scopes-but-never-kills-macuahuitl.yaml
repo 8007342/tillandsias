@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Linux) at the coordinator's ruling (a) during the 2026-11-16 cut triage.
+packets:
+- packet_id: systemd-oomd-262-marks-rootless-libpod-scopes-but-never-kills
+  order: 2093-gfak
+  status: ready
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [oomd, systemd, forge, memory, podman]
+  estimated_hours: 6
+  title: 'systemd-oomd 262 marks rootless libpod scopes under user@1000 for killing but the kill never lands'
+  context: |-
+    A REAL PRODUCT GAP, not a test artefact: on the night of 2026-11-15, a forge's runaway tests took macuahuitl down (swap-starved) while systemd-oomd did nothing.
+    litmus:forge-is-the-last-oomd-candidate is QUARANTINED in the release gate until this closes (`skip:quarantined:host-oomd-no-kill 2093-gfak`, named in the runner summary, never a pass). The quarantine FAILS the step once this packet is done, and stays failing until the quarantine is removed.
+    Evidence (macuahuitl, 2026-11-16). Versions: systemd 262 (262.1-1.fc45), Fedora 45, kernel 7.3.3-300.fc45. /usr/lib/systemd/oomd.conf.d/10-oomd-defaults.conf sets only DefaultMemoryPressureDurationSec=20s; there is no /etc/systemd/oomd.conf override, and /run/systemd/oomd.prekill.hook/ does not exist (no prekill hooks).
+    The fixture's slice carries MemoryHigh=209715200, MemorySwapMax=0, ManagedOOMMemoryPressure=kill, ManagedOOMMemoryPressureLimit=858993459 (20%). Two containers run `tail /dev/zero` under --cgroup-parent=tillandsias-ebv8-litmus.slice. With swap capped on the slice: still "neither-killed" in both arms over a 3-minute window.
+    oomctl (verbatim):
+      Path: /user.slice/user-1000.slice/user@1000.service/tillandsias.slice/tillandsias-ebv8.slice/tillandsias-ebv8-litmus.slice
+        Memory Pressure Limit: 20.00%
+        Memory Pressure Duration: 5s
+        Pressure: Avg10: 81.27, Avg60: 29.13, Avg300: 6.97, Total: 21s
+    journalctl -u systemd-oomd (verbatim; the same pair repeats about every 15 s from 17:35:56 to 17:38:17, always the same scope, which never dies):
+      Nov 16 17:35:56 macuahuitl.ayahuitlcalpan.com systemd-oomd[844]: Considered 4 cgroups for killing, top candidates were:
+      Nov 16 17:35:56 macuahuitl.ayahuitlcalpan.com systemd-oomd[844]: Marked /user.slice/user-1000.slice/user@1000.service/tillandsias.slice/tillandsias-ebv8.slice/tillandsias-ebv8-litmus.slice/libpod-fd7ac6a1226394019a6281fcd5bbec01ad1808343ea996cc4d26ed3777d7ab09.scope for killing due to memory pressure
+      Nov 16 17:36:11 macuahuitl.ayahuitlcalpan.com systemd-oomd[844]: Considered 4 cgroups for killing, top candidates were:
+      Nov 16 17:36:11 macuahuitl.ayahuitlcalpan.com systemd-oomd[844]: Marked /user.slice/user-1000.slice/user@1000.service/tillandsias.slice/tillandsias-ebv8.slice/tillandsias-ebv8-litmus.slice/libpod-fd7ac6a1226394019a6281fcd5bbec01ad1808343ea996cc4d26ed3777d7ab09.scope for killing due to memory pressure
+    Host swap at the time: zram0 8G, a 24G per-forge swapfile, and /srv/fastbuild/swap/relief.swap 24G (priority 20, added 2026-11-15). Ruled out as the cause by MemorySwapMax=0 on the fixture slice.
+  exit_criteria:
+  - 'litmus:forge-is-the-last-oomd-candidate passes on macuahuitl with its quarantine removed: the avoid-marked scope survives and the other is killed, in both arms (ok:forge-oomd-avoid:2-arms).'
+  verifiable_closure: 'litmus:forge-is-the-last-oomd-candidate'
+  unscoreable: 'none.'
+  next_action: 'Find why systemd-oomd 262 marks a rootless libpod .scope under user@1000 for killing without the kill landing (the kill path for user-manager cgroups, or a permission gap on the libpod scope); fix or work around; remove the quarantine and prove it on macuahuitl.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-16 ruling (a) on the gate-eleven oomd red.'
+  events:
+  - type: filed
+    ts: '2026-11-17T01:45:00Z'
+    host: macuahuitl
+    summary: filed ready (p1) from the 2026-11-16 cut triage; quarantines litmus:forge-is-the-last-oomd-candidate

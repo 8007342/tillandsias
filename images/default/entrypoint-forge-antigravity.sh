@@ -65,7 +65,7 @@ forge_step_done flaky-installs
 # Refresh every provider harness on each forge launch.  The updater is
 # idempotent and fail-soft; require_antigravity below remains the primary
 # lane's actionable gate when no cached binary exists.
-ensure_forge_harnesses >>/tmp/forge-lifecycle.log 2>&1 &
+ensure_forge_harnesses antigravity >>/tmp/forge-lifecycle.log 2>&1 &
 
 # @trace spec:forge-welcome
 trace_lifecycle "entrypoint" "antigravity starting"

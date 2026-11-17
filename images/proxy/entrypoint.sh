@@ -81,6 +81,7 @@ echo "========================================"
 echo "  tillandsias proxy (ssl-bump enabled)"
 echo "  strict:     :3128"
 echo "  permissive: :3129 (provisioned, NOT routed — order 245 P6)"
+echo "  tier ports: :3130-3135, one per egress tier (2041-i3nk; images/proxy/tier-ports.conf)"
 echo "========================================"
 
 # Parse only after the runtime CA material and cache paths exist. This turns

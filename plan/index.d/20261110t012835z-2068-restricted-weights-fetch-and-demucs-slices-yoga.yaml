@@ -1,0 +1,102 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-10 at the coordinator's direction (macuahuitl-fedora, reply to the 2055-d9sa design note). Code is cited by symbol, never by line.
+packets:
+  - packet_id: a-restricted-weights-row-is-fetched-only-after-its-acknowledgement-through-the-model-hubs-tier
+    order: 2068-ypgq
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [models, licence, egress, proxy]
+    estimated_hours: 8
+    depends_on:
+      - accept-licence-skill-signed-acknowledgement-obligations-spec-and-restricted-register-gate
+    owned_files:
+      - crates/tillandsias-headless/src/restricted_fetch.rs
+    title: "A restricted-register row (CorridorKey, Demucs) is downloaded only after licence_consent admits it for the requesting project, through the model-hubs egress tier with a single-use consent token, verified by sha256 and suffix, into the cache the studio mounts read-only"
+    context: |
+      FOUND 2026-11-10 by yoga while taking 2055-d9sa. licence_consent::admits_restricted gates a restricted row, but nothing downloads one: studio_key::call answers "weights_missing: ... fetched on this machine by the consent-gated fetch (order 1956-ecpb), never bundled" after the gate, and 1956-ecpb's criteria cover the gate only. The one fetcher, imagegen_models::ensure_files_registered, reads the permissive register only, and goes through ProxyTransport on the plain proxy port, not the model-hubs tier (build-proxy-allowlist.lua names 3134, the code uses 3128).
+      ALLOWED_SUFFIXES stays .safetensors and .gguf (coordinator ruling 2026-11-10): a pickle is never fetched or loaded.
+    exit_criteria:
+      - "For a restricted row, the fetch refuses licence_acknowledgement_required (nothing downloaded) without a matching acknowledgement for the requesting project, and refuses consent_required without a live consent token; with both, it downloads through the model-hubs tier and the file's sha256 matches the register. Pre-fix result: FAILS, no restricted fetch exists."
+      - "A suffix outside ALLOWED_SUFFIXES or a sha256 mismatch is refused and leaves no file in the cache."
+      - "CorridorKey's studio_key::call reaches the job (not weights_missing) once its rows are fetched."
+    verifiable_closure: "A fixture against a local stand-in hub: refused without the acknowledgement, refused without the token, fetched and hash-verified with both, refused on a wrong hash or a .th suffix. Pre-fix result: FAILS, no restricted fetch exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the fixture and its refusal arms in the same commit (1136-n8sh).
+    next_action: >
+      Read licence_consent::admits_restricted_in, imagegen_consent (offer/redeem) and imagegen_models::ProxyTransport; decide where the model-hubs tier port comes from, then write the stand-in-hub fixture red first.
+    provenance: |
+      yoga source read of studio_key, licence_consent, imagegen_models, imagegen_consent at trunk db674ccf4; macuahuitl-fedora relay 2026-11-10.
+    events:
+      - type: filed
+        ts: "2026-11-10T01:28:35Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; blocker 1 of 2055-d9sa's separation"
+  - packet_id: demucs-weights-are-converted-to-safetensors-registered-restricted-and-audio-separate-refuses-without-acknowledgement
+    order: 2068-eeti
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, audio, models, licence]
+    estimated_hours: 6
+    depends_on:
+      - the-audio-studio-separates-a-mix-into-stems-with-demucs-and-builds-cumulative-tiers-from-chosen-stems
+    owned_files:
+      - images/audio-studio/weights.tsv
+    title: "2055-d9sa slice 2: htdemucs and htdemucs_6s are converted from .th to safetensors in a one-off auditable step, registered restricted (non-commercial) with both hashes, and audio.separate refuses licence_acknowledgement_required until the project acknowledges them"
+    context: |
+      Coordinator ruling 2026-11-10: keep ALLOWED_SUFFIXES; convert the Demucs weights to safetensors in a one-off auditable step, pin each converted file by sha256 in the register next to the upstream .th hash it came from, and load only the safetensors. weights_only=True is not a substitute (a weaker gate).
+      Operator ruling 2026-11-09: both models are treated as non-commercial behind accept-licence per project (no standing grant). The weights' licence is unstated; the register's licence text is the maintainer's README statement ("The license of the weights is not clear: MusDB contains some data that were only usable for research purpose"; htdemucs_6s "was trained only on Meta internal dataset, which likely means CC-NC-BY license is applicable"), hashed at a pinned revision. Upstream files: htdemucs 955717e8-8726e21a.th, htdemucs_6s 5c90dfd2-34c22ccb.th.
+    exit_criteria:
+      - "The conversion step is a committed, re-runnable script whose run records the upstream .th sha256 and the produced .safetensors sha256; the register row carries both, and the licence text hash."
+      - "audio.separate refuses licence_acknowledgement_required for a project with no acknowledgement, naming the accept-licence skill; with one it proceeds to the fetch of 2068-ypgq. Pre-fix result: FAILS, no audio.separate tool exists."
+      - "The shipped-register tests (the_shipped_restricted_register_is_well_formed, test-licence-register-restricted.lua) accept the rows."
+    verifiable_closure: "audio.separate's refusal arm and the register well-formedness tests pass with the Demucs rows. Pre-fix result: FAILS, no audio.separate tool exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the refusal arm in the same commit (1136-n8sh).
+    next_action: >
+      Write the conversion step (inside an appliance image, not the host), record both hashes, then add the register rows and the refusal arm.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-10 (safetensors ruling); operator AskUserQuestion answer 2026-11-09 ("Gate both, non-commercial").
+    events:
+      - type: filed
+        ts: "2026-11-10T01:28:35Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; slice 2 of 2055-d9sa"
+  - packet_id: the-audio-studio-separates-a-mix-into-4-or-6-stems-with-demucs-on-cpu-from-safetensors-weights
+    order: 2068-cqis
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, audio, models, gpu]
+    estimated_hours: 10
+    depends_on:
+      - a-restricted-weights-row-is-fetched-only-after-its-acknowledgement-through-the-model-hubs-tier
+      - demucs-weights-are-converted-to-safetensors-registered-restricted-and-audio-separate-refuses-without-acknowledgement
+    owned_files:
+      - images/audio-studio/requirements.lock
+    title: "2055-d9sa slice 3: the audio studio image carries pinned torch (CPU) and demucs, loads only the safetensors weights read-only, and audio.separate writes 4 or 6 stems whose sum reconstructs the input, with provenance"
+    context: |
+      The image has no torch or demucs, and its egress is [none]; the weights arrive through 2068-ypgq's fetch and are mounted read-only like CorridorKey's (--network=none at run time). CPU first (coordinator 2026-11-10): torch with ROCm for yoga's gfx1152 is unproven. The GPU run (ROCm or CUDA, through the shared queue) is its own later criterion, not a gate on this row.
+    exit_criteria:
+      - "On CPU, audio.separate of a real mix writes 4 stems (htdemucs) or 6 (htdemucs_6s) under /work/tmp/audio with provenance (model id, safetensors sha256, input sha256), and the stem sum reconstructs the input within a stated tolerance."
+      - "The studio refuses a weights file that is not the registered safetensors (wrong hash, or any .th), and never calls torch.load on a pickle."
+      - "Pre-fix result: FAILS, no separation tool exists."
+    verifiable_closure: "A CPU separation fixture: 4 (or 6) stems, reconstruction within tolerance, provenance present; a wrong-hash weights file refused. Pre-fix result: FAILS, no separation tool exists."
+    unscoreable: |
+      unpinnable-until-the-guard-exists: the implementer adds the separation fixture in the same commit (1136-n8sh).
+    next_action: >
+      Pin torch (CPU wheel) and demucs in requirements.lock (licences: BSD-3 and MIT, both permissive), confirm the image still ships no GPL tools, and write the CPU separation fixture.
+    provenance: |
+      macuahuitl-fedora relay 2026-11-10; yoga survey of images/audio-studio at trunk db674ccf4.
+    events:
+      - type: filed
+        ts: "2026-11-10T01:28:35Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; slice 3 of 2055-d9sa, CPU first"

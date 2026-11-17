@@ -1,0 +1,43 @@
+packets:
+  - packet_id: codex-oauth-vault-watch-inotify-branch-never-exits-when-the-child-dies-so-a-full-gate-in-a-forge-hangs-forever
+    order: 2042-w7v4
+    status: pending
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    size: S
+    pickup_role: linux
+    capability_tags: [forge, gate, tests, inotify, headless]
+    depends_on: []
+    related: [1780-jxc3, 1919-cred, 1914-twan]
+    title: "The codex-oauth-vault watcher's inotify branch never checks child liveness, so a full ./build.sh --check inside a forge hangs forever on a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale"
+    context: |
+      MEASURED 2026-11-08 in a Tillandsias forge (image ships /usr/sbin/inotifywait): a full
+      ./build.sh --check stops in `cargo test --workspace --no-fail-fast` and never returns. The
+      hanging test is tillandsias-headless's a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale
+      (crates/tillandsias-headless/src/main.rs:31469). It runs the real
+      images/default/codex-oauth-vault.sh with `watch 999999 old` — pid 999999 is dead, so the test
+      expects the watcher to make its final copy and exit at once (the poll branch's
+      `while kill -0 "$child_pid"` fails immediately).
+
+      watch_auth (images/default/codex-oauth-vault.sh) takes the inotify branch whenever
+      `command -v inotifywait` succeeds and the auth directory exists, and that branch NEVER reads
+      child_pid: it blocks on `while read -r name <&3` over `inotifywait -m` until the process is
+      killed. A dead child therefore never ends the watcher, and the test (and the gate) waits
+      forever. On hosts where inotifywait is absent the poll branch runs and the test passes, which
+      is why this is forge-regime-only today.
+
+      Not in scripts/test-known-red.txt and not one of the six environment reds of 1780-jxc3.
+      Related: 1919-cred (provider OAuth watcher uses inotify) and 1914-twan (the watcher and test).
+    exit_criteria:
+      - "Inside a forge (inotifywait present), cargo test -p tillandsias-headless a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale finishes in seconds instead of hanging"
+      - "the inotify branch still exits promptly when the watched child dies, and still copies a rotation made since the last event before exiting (NEGATIVE CONTROL: a live child keeps the watcher running)"
+    verifiable_closure: |
+      Inside a forge: cargo test -p tillandsias-headless a_failed_codex_rotation_copy_marks_the_vaulted_sign_in_stale — hangs today, passes after the fix.
+      unscoreable: forge-regime-only — the test passes on hosts without inotify-tools, and no litmus runs the gate inside a forge today (same regime gap as 1780-jxc3).
+    next_action: "Make the inotify branch observe child liveness (e.g. inotifywait on the auth file with a timeout/self-pipe, or a background `wait` that TERMs inotifywait when the child exits), then run the named test inside a forge and on a host."
+    events:
+      - type: filed
+        ts: "2026-11-08T02:55:22Z"
+        host: macuahuitl
+        summary: "Found while running ./build.sh --check for 1117-66qv: the gate hangs in the codex rotation-copy test inside a forge."

@@ -186,6 +186,41 @@ features:
     macos: "unknown"
     windows: "done"
     parity: "platform-specific"
+  # ── 2093-post: three menu ids that landed without a claiming row ─────────
+  # Linux cells are read from the code (crates/tillandsias-headless/src/tray,
+  # which renders tillandsias_host_shell::menu_state::build); macOS and
+  # Windows stay `unknown` until each host verifies its own column.
+  - capability: "Cloud submenu agent rows: the Cloud submenu's direct children are per-agent rows, each carrying that agent's project list (order 1362)"
+    class: "menu"
+    surfaces: ["menu.cloud-agent"]
+    linux: "done"
+    macos: "unknown"
+    windows: "unknown"
+    parity: "platform-specific"
+  - capability: "Cloudflare sign-in menu item, shown only while the guest reports no Cloudflare login (order 1719-83po)"
+    class: "menu"
+    surfaces: ["menu.cloudflare-login"]
+    linux: "done"
+    macos: "unknown"
+    windows: "unknown"
+    parity: "platform-specific"
+  - capability: "Per-project Copilot launch leaf in the agent menus (2063-nfag; Linux LeafAction::Copilot, offset 7)"
+    class: "menu"
+    surfaces: ["menu.copilot"]
+    linux: "done"
+    macos: "unknown"
+    windows: "unknown"
+    parity: "platform-specific"
+  # agent.copilot is a LEGACY global-picker id (host-shell `ids`, 2063-nfag):
+  # build() never emits it on any platform; the Copilot lane ships as the
+  # per-project `copilot` verb. Linux therefore renders nothing for this id.
+  - capability: "Legacy global-picker Copilot id (resolver-only; the Copilot lane is the per-project verb, 2063-nfag)"
+    class: "menu"
+    surfaces: ["menu.agent.copilot"]
+    linux: "n/a"
+    macos: "unknown"
+    windows: "unknown"
+    parity: "platform-specific"
 
 # ── Grandfathered menu-surface baseline (order 628-r2vk) ─────────────────────
 # The shared menu-id universe (host-shell `pub mod ids`) as of the gate's

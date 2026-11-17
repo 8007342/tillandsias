@@ -1,0 +1,58 @@
+# @trace spec:proxy-container, order:2041-csm4
+# The enclave-fetch catalog (openspec change curated-egress-tiers, decision 5).
+# The service fetches ONLY what an entry here covers: same host, URL path under
+# the entry's path. Each entry says why it is here and who added it; nothing is
+# ever auto-allowed. Adding a source is a reviewed change to this file.
+#
+# kind: docs  — a documentation site; `name` is what docs(library, ...) takes;
+#               an optional `search` template with {query} is used for queries.
+# kind: feed  — an RSS or Atom feed; `name` is what feed(name) takes.
+# kind: page  — any page under `url` may be fetched with fetch(url).
+version: 1
+sources:
+  - name: rust-std
+    kind: docs
+    url: https://doc.rust-lang.org/std/
+    search: https://doc.rust-lang.org/std/?search={query}
+    reason: Rust standard library reference for forge agents
+    provenance: seeded 2026-11-08 by order 2041-csm4 (curated-egress research)
+  - name: docs-rs
+    kind: docs
+    url: https://docs.rs/
+    reason: API docs for crates the project depends on
+    provenance: seeded 2026-11-08 by order 2041-csm4
+  - name: mdn
+    kind: docs
+    url: https://developer.mozilla.org/en-US/docs/
+    reason: web platform reference
+    provenance: seeded 2026-11-08 by order 2041-csm4
+  - name: podman
+    kind: docs
+    url: https://docs.podman.io/en/latest/
+    reason: the enclave runs on podman
+    provenance: seeded 2026-11-08 by order 2041-csm4
+  - name: squid
+    kind: docs
+    url: https://www.squid-cache.org/Doc/
+    reason: the enclave proxy is squid
+    provenance: seeded 2026-11-08 by order 2041-csm4
+  - name: python
+    kind: docs
+    url: https://docs.python.org/3/
+    reason: Python standard library reference
+    provenance: seeded 2026-11-08 by order 2041-csm4
+  - name: flutter
+    kind: docs
+    url: https://docs.flutter.dev/
+    reason: the recommended app stack for new projects
+    provenance: seeded 2026-11-08 by order 2041-csm4
+  - name: rust-blog
+    kind: feed
+    url: https://blog.rust-lang.org/feed.xml
+    reason: Rust release announcements
+    provenance: seeded 2026-11-08 by order 2041-csm4
+  - name: podman-releases
+    kind: feed
+    url: https://github.com/containers/podman/releases.atom
+    reason: podman release notes, which the enclave tracks
+    provenance: seeded 2026-11-08 by order 2041-csm4

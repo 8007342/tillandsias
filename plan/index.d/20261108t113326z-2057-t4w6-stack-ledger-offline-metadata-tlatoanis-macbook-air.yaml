@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: stack-ledger-check-reads-cargo-metadata-offline-which-needs-every-targets-crates-cached-so-it-could-not-run-on-darwin
+    order: 2057-t4w6
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [build, macos, portability]
+    estimated_hours: 1
+    title: "The stack-ledger check runs cargo metadata --locked --offline, which resolves every target's crates, so it reports could-not-run on a host that has never fetched them (web-time v1.1.0 on darwin)"
+    context: "Measured 2026-11-08T11:33:26Z on tlatoanis-macbook-air (linux-next 29f2c719e): during ./build.sh --check, scripts/lua/build-stack-ledger.lua printed 'cargo metadata --locked --offline did not answer: error: failed to download web-time v1.1.0 ... --offline was specified', then could-not-run:stack-ledger:no-cargo-metadata. The check is advisory, so --check went on. The host builds the workspace fine; cargo metadata without --filter-platform resolves dependencies for every target, and this host's registry has never fetched the ones for other platforms. So the stack-ledger staleness check never runs on darwin."
+    exit_criteria:
+      - "On a host whose registry holds only its own platform's crates, the check either answers (for example with --filter-platform for the host triple, if the ledger allows it, or after a cargo fetch) or reports a named skip that says which crate is missing. Pre-fix result: could-not-run on darwin."
+    verifiable_closure: "./build.sh --check on darwin no longer prints could-not-run:stack-ledger:no-cargo-metadata, or prints a skip naming the cause."
+    unscoreable: 'none.'
+    next_action: "Decide whether the ledger needs every platform's crates. If so, run cargo fetch --locked first when the network is allowed; if not, pass --filter-platform."
+    provenance: "Found by tlatoanis-macbook-air claude during the 2031-dwwy census for macuahuitl-fedora (2026-11-08)."
+    events:
+    - type: filed
+      ts: '2026-11-08T11:33:26Z'
+      host: tlatoanis-macbook-air
+      summary: "filed ready: the stack-ledger check can't read cargo metadata offline on darwin (web-time)"

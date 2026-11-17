@@ -37,6 +37,10 @@
 --                   be empty), and is reached only through the router's OTP
 --                   route studio.<label> -> tillandsias-<project>-studio:<port>.
 --   image           sibling only: the image the sibling runs (built on first use)
+--   tools           2055-grzz: a TOOLS-ONLY sibling (port 0): the MCP tools an
+--                   agent drives it with. It has no window, so webstudio.open
+--                   refuses it and names these tools instead. A sibling with
+--                   port 0 must list at least one; a windowed studio lists none.
 --
 -- Silex is deliberately absent (operator ruling 2026-10-25).
 
@@ -61,6 +65,8 @@ return {
                   "React, Vue or other component-based apps",
                   "pages produced by a build step (it edits the HTML it is given, not a template)" },
       edits = "The page's .html and .css files directly; every save is a commit.",
+      -- 2041-jb57: egress tiers (curated-egress-tiers); runs in the forge, so it has the forge's tiers.
+      egress = { "siblings", "registries", "assets", "providers", "research" },
       frameworks = { "plain-html" },
       entry = { "/usr/local/bin/studio-grapesjs" }, port = 4096,
       save_adapter = "endpoint",
@@ -77,6 +83,8 @@ return {
                   "composing pages from components",
                   "plain HTML sites with no static site generator" },
       edits = "Markdown files and their frontmatter under the content folders, plus uploads under static/; scaffolds admin/config.yml when it is missing.",
+      -- 2041-jb57: egress tiers (curated-egress-tiers); runs in the forge, so it has the forge's tiers.
+      egress = { "siblings", "registries", "assets", "providers", "research" },
       frameworks = { "markdown-ssg" },
       entry = { "/usr/local/bin/studio-decap" }, port = 4096,
       save_adapter = "own-writer",
@@ -93,6 +101,8 @@ return {
                   "plain HTML sites with no build",
                   "changing component code or styles" },
       edits = "Content files under content/ (markdown, MDX or JSON) and the tina/config schema.",
+      -- 2041-jb57: egress tiers (curated-egress-tiers); runs in the forge, so it has the forge's tiers.
+      egress = { "siblings", "registries", "assets", "providers", "research" },
       frameworks = { "next-tailwind" },
       entry = { "/usr/local/bin/studio-tina" }, port = 4096,
       save_adapter = "own-writer",
@@ -109,6 +119,8 @@ return {
                   "creating or changing the components themselves",
                   "sites that are not React" },
       edits = "Only the page layout data (which components, in what order, with what props) under .tillandsias/studio/puck/; never component source.",
+      -- 2041-jb57: egress tiers (curated-egress-tiers); runs in the forge, so it has the forge's tiers.
+      egress = { "siblings", "registries", "assets", "providers", "research" },
       frameworks = { "react" },
       entry = { "/usr/local/bin/studio-puck" }, port = 4096,
       save_adapter = "endpoint",
@@ -126,6 +138,8 @@ return {
                   "markdown content",
                   "sites that are not Next.js" },
       edits = "The app's own source under app/, src/ and components/ (not available offline in the forge).",
+      -- 2041-jb57: egress tiers (curated-egress-tiers); runs in the forge, so it has the forge's tiers.
+      egress = { "siblings", "registries", "assets", "providers", "research" },
       frameworks = {},
       entry = { "/usr/local/bin/studio-onlook" }, port = 4096,
       save_adapter = "own-writer",
@@ -143,12 +157,37 @@ return {
       not_for = { "editing site pages, text or code",
                   "anything that must change files in the checkout directly" },
       edits = "Nothing in the checkout: outputs land in the lane's scratch volume (/work/tmp/imagegen), and the agent commits the ones the user keeps.",
+      -- 2041-jb57: egress tiers (curated-egress-tiers); sibling container: model weights plus the front's assets.
+      egress = { "siblings", "model-hubs", "assets" },
       frameworks = {},
       kind = "sibling", image = "imagegen-studio",
       entry = {}, port = 8188,
       save_adapter = "own-writer",
       write_allowlist = {},
       status = "ready", packet = "1921-2krx",
+    },
+    {
+      -- 2055-grzz: a TOOLS-ONLY sibling. It has no window (port 0, no entry):
+      -- the agent drives it through the listed MCP tools, one container per
+      -- call with no network, and reads the results under /work/tmp/audio.
+      id = "audio", name = "Audio Studio", license = "GPL-3.0-or-later",
+      brief = "Audio analysis and transforms (ffmpeg, sox, rubberband, a glitch detector) on the lane's audio scratch volume, with provenance.",
+      good_for = { "finding clicks, dropouts, spectral holes, clipping and loop seams in audio, with their time ranges",
+                   "loudness-normalising, time-stretching (rubberband) and resampling (sox) audio",
+                   "converting audio to Opus or AAC for the web or a game build" },
+      not_for = { "composing or generating new music (generative tools are order 2055-dihg)",
+                  "separating a mix into stems (order 2055-d9sa)",
+                  "editing audio by hand on a timeline: it has no window" },
+      edits = "Nothing in the checkout: outputs land in the lane's audio scratch volume (/work/tmp/audio), each with a provenance record, and the agent commits the ones the user keeps.",
+      frameworks = {},
+      kind = "sibling", image = "audio-studio",
+      entry = {}, port = 0,
+      tools = { "audio.transform", "audio.detect_glitches", "audio.separate" },
+      -- 2041-jb57: egress tiers (curated-egress-tiers); each call runs with --network=none.
+      egress = { "none" },
+      save_adapter = "own-writer",
+      write_allowlist = {},
+      status = "ready", packet = "2055-grzz",
     },
   },
 }

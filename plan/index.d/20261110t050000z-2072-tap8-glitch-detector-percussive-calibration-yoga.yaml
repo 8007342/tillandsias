@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-10 at the coordinator's direction (macuahuitl-fedora, from kumbias' calibration on v56.11.10.1). Code is cited by symbol, never by line.
+packets:
+  - packet_id: glitch-detector-reports-nothing-on-percussive-controls-and-still-catches-planted-faults
+    order: 2072-tap8
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [audio, studio]
+    estimated_hours: 6
+    owned_files:
+      - images/audio-studio/audio-tool.py
+      - scripts/lua/test-audio-studio-glitches.lua
+    title: "audio.detect_glitches is miscalibrated for percussive music: loop_seam fires on sample-continuous wraps, drum transients read as clicks, and 8-20 kHz spectral holes track the transients"
+    context: |
+      FOUND by kumbias calibrating v56.11.10.1 (relayed by macuahuitl-fedora 2026-11-10). The detector is the detect subcommand of images/audio-studio/audio-tool.py, behind audio_studio::detect.
+      (1) LOOP SEAM. The level_step_db arm (step > 6.0 over 50 ms RMS either side of the wrap) fires at 7-14 dB on wraps that are sample-continuous: kumbias' controls were ROLLED loops, whose wrap is two adjacent original samples (garden low 14.3, bar low 10.5, billiards mid 7.4), and a 20 ms crossfade (garden 8.6). A percussive loop's first and last 50 ms legitimately differ in level, so a level step is not a seam. residual_ratio reads 2-15 on those controls against 26-166 on the real wraps; the current floor (jump > 12.0) sits inside the control range, so it needs a calibrated floor, not deletion.
+      (2) CLICKS. Drum transients score peak_ratio 12-45 against the 12x local-median floor, so a full mix gives beat-grid false clicks (bar low: 50 in the mix, 41 on the percussive part, 1 on the harmonic part). Candidates from the coordinator: run the click test on the harmonic part (HPSS; librosa is already in requirements.lock), on stems, or flag beat-periodic events. The criteria below name the output, not the mechanism.
+      (3) SPECTRAL HOLES in 8-20 kHz depend on STFT frame alignment and track the transients (a drum hit's decay leaves the top band momentarily under its median).
+      Fixtures: kumbias-forge holds the control files at /work/tmp/audio/calib/ (loops, rolled, crossfade, HPSS parts). Ask for them; record their sha256 and provenance in the fixture. The existing synthetic arms in test-audio-studio-glitches.lua must keep passing.
+    exit_criteria:
+      - "RED FIRST: with the shipped detector, test-audio-studio-glitches.lua run over kumbias' calib controls reports at least one finding on a control (loop_seam on a rolled or crossfaded loop, click on the bar mix). Pre-fix result: FAILS (findings on clean controls)."
+      - "After the fix, every kumbias control (rolled loops, the crossfade, the full mixes and their HPSS parts) returns zero findings."
+      - "A 1 ms dropout and a single-sample click planted into a percussive control are each still reported at their planted time range, and a real hard-cut wrap of a control is still reported as loop_seam."
+      - "The existing synthetic arms (click, dropout, spectral_hole, clipping, loop_seam, clean control) stay green."
+    verifiable_closure: "litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools — scripts/lua/test-audio-studio-glitches.lua green with the calib-control arms, and each new arm red against the pre-fix audio-tool.py."
+    next_action: >
+      Ask kumbias-forge for /work/tmp/audio/calib/; add the controls as fixture inputs with hashes; land the red arms; then calibrate.
+    provenance: |
+      kumbias calibration on v56.11.10.1 relayed by macuahuitl-fedora 2026-11-10; yoga source read of audio-tool.py detect (click, spectral hole, loop seam blocks) at 9984fbdd8.
+    events:
+      - type: filed
+        ts: "2026-11-10T05:00:00Z"
+        host: yoga
+        summary: "filed p1 at the coordinator's direction from kumbias' calibration"

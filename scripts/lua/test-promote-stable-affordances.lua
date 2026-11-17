@@ -46,7 +46,10 @@ local function run(args)
     local argv = { "bash", SUBJECT }
     for _, a in ipairs(args) do argv[#argv + 1] = a end
     local r = proc.run{ argv = argv, timeout_ms = 60000,
-        env = { HOME = scratch, GH_CONFIG_DIR = scratch, GH_TOKEN = "", GITHUB_TOKEN = "" } }
+        -- No GH_TOKEN / GITHUB_TOKEN literal: a child starts from the base set, so
+        -- they are absent already, and a credential-shaped per-call literal is
+        -- refused (2031-dwwy, design 2029-39bt §4.2), even an empty one.
+        env = { HOME = scratch, GH_CONFIG_DIR = scratch } }
     return r.code, text.trim(r.stdout or ""), r.stderr or ""
 end
 

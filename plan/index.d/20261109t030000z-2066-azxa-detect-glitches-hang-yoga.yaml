@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-09 at the coordinator's direction (macuahuitl-fedora: the kumbia agent is blocked on detect_glitches). Code is cited by symbol, never by line.
+packets:
+  - packet_id: audio-detect-glitches-answers-on-real-length-files-and-a-runaway-call-dies-at-a-container-deadline
+    order: 2066-azxa
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, audio, deadline]
+    estimated_hours: 2
+    owned_files:
+      - images/audio-studio/audio-tool.py
+      - crates/tillandsias-headless/src/audio_studio.rs
+    title: "audio.detect_glitches answers on real-length files (lpc computes only the lags it needs), and each audio-studio call dies at a 600 s container deadline instead of outliving its podman client"
+    context: |
+      REPORTED by macuahuitl-fedora 2026-11-09 from a live forge: audio.detect_glitches never returned on 86 s and 55 s .ogg files (over 15 min, two calls timed out at 30 min), later a 4 s file hung too; audio.transform on the same studio answered in ~3 s.
+      MEASURED on yoga with production's podman argv: a 4 s .ogg detects in 4-5 s, an 86 s stereo .ogg ran 10 min at 1166% CPU and never answered. Cause: lpc() took np.correlate(x, x, mode="full"), O(n^2), to use 33 lags.
+      Second defect: `timeout` on the podman client (and the tray's 30 min output_bounded) kills the client, not the container. The runaway containers kept running and starved later calls, which fits the 4 s hang in the forge.
+    exit_criteria:
+      - "detect --loop on a 90 s 44.1 kHz stereo .ogg answers in under 60 s with its findings; pre-fix result: FAILS (killed at the 120 s fixture deadline, rc=255)."
+      - "Every audio-studio podman run carries --timeout=600, so conmon kills the container at the deadline; the tray reports deadline_exceeded, not engine_failed, for a run killed there."
+      - "The five planted-fault arms still pass unchanged."
+    verifiable_closure: "litmus:audio-studio-finds-planted-faults-and-ships-no-gpl-tools — test-audio-studio-glitches.lua's real-length arm answers in under 60 s; pre-fix result: FAILS (rc=255 at the 120 s deadline)."
+    next_action: >
+      Land work/2066-azxa; then the coordinator re-runs detection on work/2612-layr.
+    provenance: |
+      macuahuitl-fedora relays 2026-11-09; yoga repro with production run_args (scratchpad repro scripts).
+    events:
+      - type: filed
+        ts: "2026-11-09T03:00:00Z"
+        host: yoga
+        summary: "filed and taken at the coordinator's direction; blocks kumbia's music promotion"

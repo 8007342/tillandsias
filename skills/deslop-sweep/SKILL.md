@@ -1,5 +1,12 @@
 # De-slop Sweep (order 829-dkuc)
 
+> **Disk preflight (order 1878-2cwt, D5).** Before creating a worktree or
+> starting a build, run
+> `tillandsias-plan disk-preflight --repo <checkout> --target <where it writes>`
+> (add `--l0` for the forge's source tmpfs). It removes only clean, pushed
+> worktrees, oldest first. On `refused:disk-low:...` stop and report it;
+> do not delete anything by hand.
+
 The scheduled reconciler that removes what CRDT-style accretion leaves behind:
 branches guarded by variables nothing sets, rows the fold still offers after
 their work landed, ceremony that survives because each piece looks deliberate
@@ -36,7 +43,7 @@ committed detector whose output is a list a stranger can reproduce:
 
 ```bash
 scripts/check-dead-env-branches.sh        # TILLANDSIAS_* vars live code reads and nothing assigns or documents
-scripts/check-stale-ready-rows.sh         # ready rows a landed commit subject cites (1144-jfr5)
+tillandsias-plan script run scripts/lua/check-stale-ready-rows.lua  # ready rows a landed commit subject cites (1144-jfr5)
 ```
 
 Group findings by FILE before fanning out, so two agents never mutate one

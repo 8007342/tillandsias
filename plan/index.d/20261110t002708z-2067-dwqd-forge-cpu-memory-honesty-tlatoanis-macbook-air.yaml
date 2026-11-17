@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: forge-cpu-and-memory-budgets-are-not-honest-to-the-jobs-inside-2067-dwqd
+    order: 2067-dwqd
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, cgroup, cpu, memory, podman]
+    estimated_hours: 10
+    title: "Forge CPU and memory budgets lie to the jobs inside: nproc reports host CPUs, memory.high stalls silently, no guard on PATH"
+    context: "Found by the demon_attack forge, 2026-11-09. CPU/memory sibling of 1878-2cwt (disk discipline). (1) nproc and os.cpu_count() report the host's 20 CPUs while cpu.max is 1 core; a job sized 4 workers x 5 threads from that thrashed about 2 h. (2) memory.high (about 10.2 GiB) is soft, so the forge reclaimed silently with about 9M high events and the TUI and remote control froze. (3) No guard tool on PATH. Prior art: demon_attack tools/forge-guard/ (Go, about 300 lines, 1750e1b on that repo's main). It provides run -- cmd (flock queue, anon+shmem headroom check, OMP/MKL/torch/rayon/GOMAXPROCS caps, process-group kill on sustained pressure) and wait --pid|--file, which replaces pgrep -f waits. Split into PRs; (1) first."
+    exit_criteria:
+      - "(1) A red-first fixture shows nproc inside a launched forge equals its CPU budget (fails today: host count). The fix is a cpuset sized to the budget or equivalent."
+      - "(2) memory.max sits just above memory.high, or a pressure watchdog fails loudly; the tray names the stall. A fixture drives a forge past high and sees a named failure, not a silent freeze."
+      - "(3) A forge-guard (adopted Go or a Rust port in tillandsias) is on the forge PATH with run and wait, and has fixtures for the queue, the headroom refusal, the thread caps and the pgid kill."
+    verifiable_closure: "nproc in a forge equals its CPU budget; a forge pushed past memory.high fails with a named stall shown in the tray; forge-guard run/wait is on the forge PATH with fixtures."
+    unscoreable: 'none.'
+    next_action: "PR 1: find where the podman create args set cpus (--cpus / cpu.max) and add a matching --cpuset-cpus; write the nproc fixture red first."
+    provenance: "Relayed by macuahuitl-fedora from the demon_attack forge, 2026-11-09; filed by tlatoanis-macbook-air claude."
+    events:
+    - type: filed
+      ts: '2026-11-10T00:27:08Z'
+      host: tlatoanis-macbook-air
+      summary: "filed from the demon_attack forge resource findings"

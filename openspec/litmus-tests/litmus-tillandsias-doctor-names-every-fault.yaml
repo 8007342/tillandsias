@@ -20,7 +20,7 @@ critical_path:
   - step: "Req: on a dead lane the lane and host-browser rows fail with a reason, a healthy MCP server stays ok, both router rows fail with a reason, the no-in-forge-renderer line is present, and the startup context names the command (pre-fix: there is no doctor)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-tillandsias-doctor.lua 2>&1"
     timeout_ms: 180000
-    success_pattern: "ok:tillandsias-doctor:7 arms"
+    success_pattern: "ok:tillandsias-doctor:8 arms"
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"

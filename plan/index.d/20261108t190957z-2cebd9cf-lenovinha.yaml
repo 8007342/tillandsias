@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-codex-forge-in-prompt-mode-panics-with-status-101-after-a-cancelled-tool-call-instead-of-recovering
+    event:
+      type: progress
+      ts: "2026-11-08T19:09:57Z"
+      agent_id: linux-lenovinha-opus5-20261108t190957z
+      host: lenovinha
+      summary: |
+        CAUSE NAMED by a second crash (relayed by coordinator macuahuitl-fedora, 2026-11-08): "thread 'codex-main' panicked at library/std/src/io/stdio.rs:1165: failed printing to stderr: Resource temporarily unavailable (os error 11)", then "tool call cancelled" and exit 101. Rust's eprintln! panics on EAGAIN. The forge's attached stderr is O_NONBLOCK, so a burst of output (a big tool result) makes the write return EAGAIN. The 130 KB output is only the TRIGGER, not the cause. FIX ON OUR SIDE: give the harness blocking stdio. Either clear O_NONBLOCK on fds 0, 1 and 2 in the entrypoint before exec, or do not hand the harness a shared nonblocking pty or pipe. Likely the same class for every Rust CLI harness (codex and others), so the fix belongs in the shared entrypoint path, not in one lane. REVISED EXIT CRITERIA: (1) RED FIRST, a fixture that floods stderr through the same attach path makes a Rust eprintln! child exit 101 with os error 11 before the fix; (2) after the fix the same flood completes and the child exits 0; (3) NEGATIVE CONTROL, a blocking fd stays blocking and an interactive session still works; (4) one live codex --prompt run with a large tool output no longer ends in status 101.

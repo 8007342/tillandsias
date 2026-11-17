@@ -1,5 +1,5 @@
 <!-- @trace spec:observatorium-dashboard -->
-<!-- freshness: auditor=forge-observatorium date=2026-10-18 verdict=updated scope=inspectable obligation evidence and managed forge build -->
+<!-- freshness: auditor=yolanda date=2026-11-11 verdict=updated scope=observatorium-static-html archived (order 2066-obsv): static generated HTML, honesty lint, manual publish; Flutter and the managed forge build removed -->
 
 # Observatorium dashboard
 
@@ -15,19 +15,6 @@ CentiColon convergence describes named, verifiable implementation obligations.
 The legacy private trace viewer remains governed by `clickable-trace-index`.
 
 ## Requirements
-
-### Requirement: Flutter and Flame presentation
-<!-- req-id: 4f8d972b -->
-
-The dashboard SHALL use Flutter for its web UI and Flame for charts. It SHALL
-expose metric and time-window controls. Logarithmic plots SHALL name their
-zero-safe transform and retain raw values and units.
-
-#### Scenario: Different magnitudes
-
-- WHEN a plot contains zero and measurements of widely different magnitudes
-- THEN a zero-safe logarithmic transform allows them to share the plot
-- AND displayed raw values retain the original measurement meaning.
 
 ### Requirement: Cheap collection and precomputed publication
 <!-- req-id: 3c39b8b8 -->
@@ -112,79 +99,126 @@ NOT imply that all remaining shell files contain substantive shell behavior.
 ### Requirement: Cloudflare deployment and local artifact
 <!-- req-id: ecefcdde -->
 
-Cloudflare Workers Builds SHALL deploy the app from root `observatorium` using
-`npm run build` and `npx wrangler deploy`, static assets and the dashboard custom
-domain. It SHALL use no GitHub Actions or Cloudflare credentials in GitHub.
-The build SHALL pin downloaded toolchains by URL and SHA-256 and collect metrics
-at deploy time, publishing unavailable metrics as gaps.
+The observatorium SHALL be deployed only by the operator running
+`wrangler deploy` by hand from a checkout of `refs/heads/deploy/observatorium`,
+whose tree holds the built site and a `wrangler.jsonc` with no build command.
+No Workers Builds trigger SHALL be connected to the Worker, nothing SHALL build
+on Cloudflare, and no automation (release, promotion, hook, cron or CI) SHALL
+write the deploy branch. It SHALL use no GitHub Actions and no Cloudflare
+credentials in the repository. The build SHALL download nothing.
 
 #### Scenario: Fresh deployment runner
 
-- WHEN Workers Builds prepares a deployment from a fresh clone
-- THEN the build produces the Flutter assets and precomputed metrics
-- AND the app requires no private infrastructure at rendering time.
+- **WHEN** the operator deploys from a fresh checkout of `refs/heads/deploy/observatorium`
+- **THEN** `npm run deploy` verifies the trailers and uploads the committed `dist/` with no build step
+- **AND** the site requires no private infrastructure at rendering time.
+
+#### Scenario: A stable promotion deploys nothing
+
+- **WHEN** `scripts/promote-stable.sh` promotes a release
+- **THEN** `refs/heads/deploy/observatorium` is unchanged
+- **AND** no observatorium build or deploy starts.
 
 ### Requirement: Durable release observations
 <!-- req-id: 1782be04 -->
 
 The release cut SHALL append exactly one snapshot naming its release tag to
 `observatorium/history/snapshots.jsonl`, after a recorded litmus run with a
-measured grade. Unmeasured grades SHALL be refused without appending. A deploy
-SHALL read committed history without writing it; its live observation SHALL
-remain display-only.
+measured grade. Unmeasured grades SHALL be refused without appending. Building
+or deploying the site SHALL read committed history without writing it and
+SHALL collect no live observation.
 
 #### Scenario: Release cut records the release
 
-- WHEN a release is cut
-- THEN exactly one snapshot naming that tag is appended after recorded litmus
-- AND an unmeasured grade is refused without changing history.
+- **WHEN** a release is cut
+- **THEN** exactly one snapshot naming that tag is appended after recorded litmus
+- **AND** an unmeasured grade is refused without changing history.
 
 #### Scenario: Deployment cannot manufacture history
 
-- WHEN a deployment reads committed release history
-- THEN it may publish its current observation beside that history
-- AND it never appends its live observation to the committed history.
+- **WHEN** the site is built for a deployment
+- **THEN** every number it shows comes from committed release-cut snapshots
+- **AND** nothing is appended to the committed history.
 
 ### Requirement: Release and current evidence remain distinct
 <!-- req-id: 1782be05 -->
 
-The headline CentiColon grade SHALL use the latest valid measured release-cut
-snapshot and name the release. Current collection SHALL remain labelled
-display-only and SHALL NOT join the release series. Missing release evidence
-SHALL remain unavailable rather than borrowing a current observation.
+The headline residual SHALL use the latest valid measured release-cut snapshot
+and name the release. The site SHALL show no current (deploy-time) collection.
+Missing release evidence SHALL remain unavailable rather than borrowing a
+current observation.
 
 #### Scenario: Headline grade comes from the release cut
 
-- WHEN the dashboard is deployed from a build that ran no litmus
-- THEN its headline residual names the latest measured release-cut snapshot
-- AND the current traced count appears in a separate display-only observation.
+- **WHEN** the site is built from a checkout that ran no litmus
+- **THEN** its headline residual names the latest measured release-cut snapshot
+- **AND** no current observation appears anywhere on the site.
 
-### Requirement: Managed forge build and browser loading
-<!-- req-id: 1782be06 -->
+### Requirement: Static generated HTML presentation
+<!-- req-id: 63f74e23 -->
 
-Inside a forge, builds SHALL use the managed Flutter command and trusted sibling
-toolchain. Standalone builds SHALL retain the pinned SDK path. Local publication
-SHALL serve the selected app worktree's built assets. Browser loading SHALL use
-web-compatible HTTP, expose retryable errors and retain the last snapshot on
-refresh failure. Managed sibling and browser testing SHALL use host-browser when
-available; absent infrastructure SHALL be reported as unverified.
+The observatorium SHALL be plain multi-page HTML generated at build time from
+the committed `observatorium/history/snapshots.jsonl` alone, with no network,
+no toolchain download and no live metrics. Charts SHALL be inline SVG rendered
+at build time, each with a `<table>` twin built from the same values. Pages
+SHALL be complete without JavaScript; JavaScript MAY be used only to filter
+tables. Markup SHALL be semantic and free of inline styles so it can be edited
+in a visual editor.
 
-#### Scenario: App loads in Chromium
+#### Scenario: Built from committed history only
 
-- WHEN the built app is opened in the managed browser
-- THEN it fetches published metrics and renders evidence
-- AND the loading marker is removed after the first Flutter frame.
+- **WHEN** `node observatorium/site/build.mjs` runs in a checkout with no network
+- **THEN** it writes HTML, CSS, SVG and `data/history.json` derived only from `history/snapshots.jsonl`
+- **AND** every chart in the output has a table twin.
 
-#### Scenario: Refresh fails after a successful load
+### Requirement: Honesty lint fails the build closed
+<!-- req-id: 2dac277d -->
 
-- WHEN a subsequent metrics fetch fails
-- THEN the last loaded snapshot and current controls remain available
-- AND the failure is visible with a retry action.
+Every number a generated page shows SHALL be bound to a field of the derived
+view, and the build SHALL refuse to write any file when a page shows a number
+that disagrees with the view, shows a value for a missing field (missing is
+never 0), shows a ratio without its numerator and denominator and the words
+"share of", uses a probability word, lacks an absolute release-and-UTC stamp,
+uses a relative time, or joins a series across a scope, denominator or epoch
+break. Published data SHALL contain no `host` key.
+
+#### Scenario: A renderer maps null to zero
+
+- **WHEN** a page shows `0` for a field the snapshot does not record
+- **THEN** the build prints `refused:honesty-lint` with rule `missing-is-missing`
+- **AND** no output file is written.
+
+### Requirement: A stale snapshot cannot ship
+<!-- req-id: 576ca4cd -->
+
+A release build (`publish.mjs <tag>`) SHALL refuse unless the last release in
+`history/snapshots.jsonl`, the newest `v*` tag reachable from HEAD, and the
+named tag all agree, HEAD is that tag's commit and `observatorium/` is clean.
+The commit it writes on `refs/heads/deploy/observatorium` SHALL carry
+`Observatorium-Release`, `Observatorium-Snapshot` and `Observatorium-Source`
+trailers, and `verify.mjs`, run before `wrangler deploy`, SHALL refuse unless
+those trailers name the release and history digest the built data came from.
+A preview build SHALL say "preview build" on every page.
+
+#### Scenario: Deploy commit without the trailer
+
+- **WHEN** `npm run deploy` runs on a deploy-branch commit with no `Observatorium-Release:` trailer
+- **THEN** `verify.mjs` prints `refused:missing-trailer` and `wrangler deploy` does not run.
+
+#### Scenario: Publishing an older release
+
+- **WHEN** the deploy branch already serves a newer release
+- **THEN** `publish.mjs` prints `refused:older-release` and writes nothing.
 
 ## Authority and verification
 
 Operator UX and Dart/Node authorization: `1661-vckd` (2026-10-13) and app repair
-`1782-bek5` (2026-10-18). No tray UX changes are authorized.
-Verification: Node collector/projection/build tests, Flutter analysis and widget
-tests, release web build, managed sibling preview and Chromium interaction.
+`1782-bek5` (2026-10-18); static HTML rebuild and manual publishing by operator
+ruling 2026-11-09 (order 2066-obsv, change archived as
+`openspec/changes/archive/2026-11-11-observatorium-static-html`). No tray UX
+changes are authorized.
+Verification: `cd observatorium && npm test` (site generator, honesty lint,
+publish and verify; gate step 930-2066-obsv), `litmus:stable-channel-shape`
+(no automation writes the deploy ref) and
+`scripts/test-promote-stable-evidence-gate.sh`.
 Public deployment requires separate live evidence; configuration is not proof.

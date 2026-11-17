@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-licence-record-signed-on-one-host-must-verify-on-another-so-allowed-signers-lines-travel-with-the-project
+    field: next_action
+    value: |-
+      Read PR 1090 for the hand-built signers file shape and the fingerprint pin, then specify where the pin lives so a project commit cannot self-grant trust.
+
+      [2026-11-16T23:53:21Z yoga] DEFERRED per operator ruling 2026-11-16 - cross-host verification is out of scope (gate not identity) - see approval-human-gate spec delta
+    ts: "2026-11-16T23:53:21Z"
+    host: yoga
+
+events:
+  - packet_id: a-licence-record-signed-on-one-host-must-verify-on-another-so-allowed-signers-lines-travel-with-the-project
+    event:
+      type: note
+      ts: "2026-11-16T23:53:21Z"
+      host: yoga
+      summary: |-
+        operator ruling 2026-11-16 (human gate not identity) recorded in openspec/changes/os-verified-approval-gates/specs/approval-human-gate

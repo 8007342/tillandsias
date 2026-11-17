@@ -570,6 +570,7 @@ local IMAGE_OPTIONAL = {
     default = false, ["default-base"] = false, builder = false, git = false, proxy = false, router = false, vault = false, web = false,
     inference = true, imagegen = true, ["imagegen-cuda"] = true, ["imagegen-studio"] = true, chromium = true, webkit = true,
     flutter = true, warp = true, ["web-wrangler"] = true, ["web-studio-grapesjs"] = true, observatorium = true,
+    ["audio-studio"] = true,  -- 2055-grzz: built on the first audio.* tool call
 }
 local containerfiles = fs.walk("images", { suffix = "" })
 table.sort(containerfiles)

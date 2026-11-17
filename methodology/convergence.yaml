@@ -768,6 +768,33 @@ carried_obligations:
       guard: 1577-g96z
       tally: 1577-568c
       honest_counter: 1577-57u3
+    - name: forge-helper-shell
+      stage: advisory
+      since: "2026-11-08"
+      proposed_by: "2049-74tx (openspec change forge-lua-helpers D4, operator-approved 2026-11-08); advisory is where every backlog starts"
+      area:
+        - images/default/lib-*.sh
+        - images/default/config-overlay/mcp/mcp-usage-log.sh
+        - images/default/lua/**
+      population:
+        - images/default/lib-*.sh
+        - images/default/config-overlay/mcp/mcp-usage-log.sh
+      counter: >
+        `counter=forge-helper-shell:<n>` on the ok: line of
+        scripts/lua/check-carried-obligations.lua: the external commands
+        (sed, awk, grep, cut, tr, sort, uniq, head, tail, wc, curl, jq, date,
+        sha256sum, shasum, cksum, git, python3, node, cat) at a command
+        position on a code line of images/default/lib-*.sh, one item per
+        occurrence, named <file>:<cmd>:<k>. The forge's sourced helpers pay
+        these forks on every startup and MCP session; this replaces the
+        separate check-helper-shell-population.lua the design first proposed,
+        so the image helpers and scripts/ share one waiver grammar.
+      item: >
+        A helper body in images/default/lib-*.sh ported to
+        images/default/lua/<name>.lua on `tillandsias-plan script run
+        --helper`, keeping the .sh's function names and machine lines, so its
+        shell-out sites leave the counter.
+      spec: openspec/changes/forge-lua-helpers
     - name: manifest-dir-runtime
       stage: advisory
       since: "2026-10-11"

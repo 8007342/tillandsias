@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: verify-image-usable-is-ported-to-lua-with-the-podman-profile-and-survives-the-747-knbp-fixture
+    event:
+      type: list-replace
+      ts: "2026-11-10T07:03:03Z"
+      agent_id: linux-yoga-opus5-20261110t070303z
+      host: yoga
+      field: depends_on
+      items: []
+      summary: |-
+        coordinator macuahuitl-fedora 2026-11-10: zq68 needs only the podman profile, which landed in 29f2c719e (#1007, 2031-dwwy part 1); the dwwy remainder (msys census, Windows run of windows_folds_case_for_the_hard_block, the flip) does not gate it

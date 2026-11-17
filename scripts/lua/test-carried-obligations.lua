@@ -42,6 +42,9 @@
 --                REMOTE after the clone's last fetch: the pre-snapshot guard (from
 --                git) offers it; the fixed guard fetches first and reports it
 --                taken-by with snapshot=<iso>; offline it says snapshot=stale:<age>.
+--  19-21 FORGE-HELPER-SHELL (2049-74tx) the second backlog: its counter
+--                counts helper shell-outs, a port pays it, and an advisory due
+--                change still lands.
 --  17 PAID-BUT-TAKEN (1589-hm2r, measured by yoga) a port duplicating another
 --                open work ref: pre-snapshot prints paid; the fixed guard refuses
 --                refused:carried:paid-but-taken-by:work/<ref>:<item> on every push
@@ -127,7 +130,11 @@ write("scripts/audit-x.sh", n_lines("a", 160))
 write("crates/a.rs", "fn main() {}\n")
 -- proc.run's command-policy audit writes .cache/metrics/ under a repo root
 -- (1443-w9hf); gitignored in the real checkout, so ignored here too.
-write(".gitignore", ".cache/\n")
+-- 2044-kx7e: the arms' own scratch (the bare remote, the late clone, the
+-- pre-fix guard copies) lives inside this repo, so an arm's `git add -A`
+-- swallowed it and the next `checkout base` deleted the remote from under the
+-- arms after it. Ignored from the start.
+write(".gitignore", ".cache/\n/remote.git/\n/late/\n/pre-*-guard.lua\n")
 G({ "init", "-q", "-b", "base" })
 G({ "add", "-A" }); G({ "commit", "-qm", "base" })
 
@@ -438,8 +445,68 @@ rc, o, e = judge_with(GUARD)
 check("PAID-BUT-TAKEN remedy: a Carried-Waiver conflict: trailer clears the refusal (waived, exit 0)",
     rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#9996)"),
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+
+-- 18. STACKED (2044-kx7e, measured: #1002 evicted 2026-11-08). A change ports
+-- check-x.sh and pushes its ref; a second work ref is STACKED ON it (contains
+-- it, adds one unrelated commit) and is pushed too. The stacked ref deletes
+-- check-x.sh only because it inherits our deletion, so it must not "take" our
+-- payment. The pre-fix guard listed every deletion since merge-base(BASE,
+-- ref) and refused paid-but-taken-by the stacked ref. Arm 17 is the control:
+-- an INDEPENDENT ref deleting the same item is still refused.
+change("work/1004-own")
+G({ "rm", "-q", "scripts/check-x.sh" })
+fs.mkdir(REL .. "/scripts/lua")
+write("scripts/lua/check-x.lua", "verdict.emit('ok:x', 0)\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "our port of check-x" })
+G({ "push", "-q", "origin", "work/1004-own" })
+G({ "checkout", "-q", "-b", "work/1005-stack" })
+write("crates/b.rs", "fn b() {}\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "unrelated work stacked on 1004-own" })
+G({ "push", "-q", "origin", "work/1005-stack" })
+G({ "checkout", "-q", "work/1004-own" })
+rc, o, e = judge_with(GUARD)
+check("STACKED: a work ref stacked ON the change does not take the change's own paid item",
+    rc == 0 and has_line(o, "carried:shell-to-lua:paid:scripts/check-x.sh")
+        and not text.contains(o, "paid-but-taken-by:work/1005-stack"),
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
 G({ "checkout", "-q", "base" })
 G({ "remote", "remove", "origin" })
+
+-- 19-21. FORGE-HELPER-SHELL (2049-74tx, openspec forge-lua-helpers D4): a
+-- second backlog counted by the same guard. Items are the external commands at
+-- command positions in images/default/lib-*.sh; a comment and an `echo grep`
+-- argument are not items.
+G({ "checkout", "-q", "base" }); G({ "checkout", "-q", "-B", "helperbase", "base" })
+fs.mkdir(REL .. "/images"); fs.mkdir(REL .. "/images/default")
+write("methodology/convergence.yaml", fs.read(REL .. "/methodology/convergence.yaml") .. table.concat({
+    "    - name: forge-helper-shell",
+    "      stage: advisory",
+    "      area:",
+    "        - images/default/lib-*.sh",
+    "      population:",
+    "        - images/default/lib-*.sh", "" }, "\n"))
+write("images/default/lib-a.sh", "v=$(sed -n p f | tr a b)\ngit log -1\n# grep in a comment\necho grep\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "helper base" })
+rc, o = judge(false, "helperbase")
+check("HELPER COUNTER: three shell-outs (sed, tr, git) count; a comment and an echo argument do not",
+    rc == 0 and text.contains(o, "forge-helper-shell:3") and has_line(o, "carried:forge-helper-shell:not-due"),
+    "rc=" .. rc .. " out=[" .. o .. "]")
+G({ "checkout", "-q", "-B", "work/1006-hlpr", "helperbase" })
+write("images/default/lib-a.sh", "v=$(tillandsias-plan script run --helper lua/a.lua)\ngit log -1\n# grep in a comment\necho grep\n")
+G({ "commit", "-qam", "port the sed|tr pipe of lib-a to Lua" })
+rc, o = judge(true, "helperbase")
+check("HELPER PAID: removing a helper's sed|tr pipe pays forge-helper-shell and lowers its counter",
+    rc == 0 and grep(o, [[^carried:forge-helper-shell:paid:images/default/lib-a\.sh:(sed|tr):1$]]) ~= nil
+        and text.contains(o, "forge-helper-shell:1"),
+    "rc=" .. rc .. " out=[" .. o .. "]")
+G({ "checkout", "-q", "-B", "work/1007-hlpd", "helperbase" })
+write("images/default/lib-a.sh", "v=$(sed -n p f | tr a b)\ngit log -1 | cut -c1-7\n")
+G({ "commit", "-qam", "a helper edit that adds a cut" })
+rc, o = judge(true, "helperbase")
+check("HELPER ADVISORY: a helper edit that pays nothing is due but, advisory, still lands (exit 0)",
+    rc == 0 and grep(o, [[^carried:forge-helper-shell:due:]]) ~= nil and not text.contains(o, "violation:"),
+    "rc=" .. rc .. " out=[" .. o .. "]")
+G({ "checkout", "-q", "base" })
 
 run({ "rm", "-rf", R })
 

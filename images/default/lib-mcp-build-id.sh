@@ -30,26 +30,30 @@
 # the false-positive inversion of this same defect. One file, one falsifiable
 # claim.
 #
-# `unknown` is a real value. No digest tool means the id is UNKNOWABLE, and an
+# `unknown` is a real value. No digest tool (since 2049-vv58: no plan binary) means the id is UNKNOWABLE, and an
 # unknowable id must never compare equal to anything — a checker seeing
 # `unknown` on either side reports that it could not tell, never `current`.
 
 # tillandsias_mcp_build_id <file> -> 12 hex chars, or `unknown`
+#
+# ORDER 2049-vv58 (openspec forge-lua-helpers D3.4): one call to the plan
+# binary's `hash sha256 <file>` replaces the sha256sum / shasum / cksum chain
+# and its `cut`/`tr`. NOT a Lua module, deliberately: the Lua fs door is
+# confined to the repository root, and the file hashed here is the MCP server
+# script under /home/forge/.config-overlay/mcp/, outside any project, so
+# `hash.sha256(fs.read(...))` would be refused and read `unknown` in every
+# forge. The digest is byte-identical to sha256sum's. Without the binary the id
+# is UNKNOWABLE and says so; no second implementation.
 tillandsias_mcp_build_id() {
     _mbi_file="${1:-}"
     if [ -z "$_mbi_file" ] || [ ! -r "$_mbi_file" ]; then
         printf 'unknown\n'
         return 0
     fi
+    _mbi_plan="${TILLANDSIAS_PLAN_BIN:-tillandsias-plan}"
     _mbi_sum=""
-    if command -v sha256sum >/dev/null 2>&1; then
-        _mbi_sum="$(sha256sum "$_mbi_file" 2>/dev/null | cut -d' ' -f1)"
-    elif command -v shasum >/dev/null 2>&1; then
-        _mbi_sum="$(shasum -a 256 "$_mbi_file" 2>/dev/null | cut -d' ' -f1)"
-    elif command -v cksum >/dev/null 2>&1; then
-        # Weaker, and deliberately still not `unknown`: cksum distinguishes the
-        # before/after of a real edit, which is the whole question here.
-        _mbi_sum="$(cksum "$_mbi_file" 2>/dev/null | tr -d ' ' | tr -c '0-9a-f' 'f')"
+    if command -v "$_mbi_plan" >/dev/null 2>&1; then
+        _mbi_sum="$("$_mbi_plan" hash sha256 "$_mbi_file" 2>/dev/null)" || _mbi_sum=""
     fi
     case "$_mbi_sum" in
         '' | *[!0-9a-f]*) printf 'unknown\n'; return 0 ;;

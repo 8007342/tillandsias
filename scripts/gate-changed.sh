@@ -132,7 +132,10 @@ done < "$WORK/members"
 grep -E '\.(sh|lua|awk|py|step)$|^build\.sh$' "$WORK/files" | grep -vE '^crates/' > "$WORK/srcs"
 grep -E '^crates/.*\.(rs|toml)$' "$WORK/files" >> "$WORK/srcs"
 # shellcheck disable=SC2046
-xargs -a "$WORK/srcs" grep -HnE '/|\.(sh|lua|awk|py|yaml|toml|json|txt|tsv|md)' 2>/dev/null |
+# The list goes on stdin, not via `xargs -a`: BSD xargs has no -a, and with
+# stderr discarded the token table came back empty on darwin, so every path
+# read unmapped (2056-29t4).
+xargs grep -HnE '/|\.(sh|lua|awk|py|yaml|toml|json|txt|tsv|md)' < "$WORK/srcs" 2>/dev/null |
     grep -vE '^[^:]+:[0-9]+:[[:space:]]*(#|--|//)' > "$WORK/tokens" || true
 awk -F'\t' -v W="$WORK" '
 function add(f, r, t,   k) { k = f SUBSEP r; if (!(k in E) || (E[k] == "r" && t == "x")) E[k] = t }

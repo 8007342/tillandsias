@@ -2,14 +2,25 @@
 
 ### Requirement: each studio lane is a registry entry consumed by one generic launcher
 
-Each studio SHALL be declared once in a Lua studio registry with these fields: `id`, `brief`, `detector`, `image`, `entry`, `port`, `save_adapter`, and `write_allowlist`. A generic `run_studio_mode` SHALL launch any registered studio by reusing the OpenCode Web lane plumbing: image ensure, router route, OTP session, and host window. No studio SHALL add a bespoke route, auth, or window path.
+Each studio SHALL be declared once in a Lua studio registry with these fields: `id`, `brief`, `detector`, `image`, `entry`, `port`, `save_adapter`, and `write_allowlist`. A generic `run_studio_mode` SHALL launch any registered studio by reusing the lane plumbing: image ensure, router route, and window. No studio SHALL add a bespoke route, auth, or window path.
+
+The studio route SHALL be `studio.<router_host_label>`, served over the preview TLS listener ONLY. Its leaf SHALL name it. It SHALL be served only to callers on the project's studio network: the router, and each browser.open window's forwarder. Every other caller SHALL get 403. The route SHALL carry no OTP gate, and no plain-HTTP site SHALL be emitted for it. The launch SHALL require nothing from the operator at runtime: the window opens through the browser.open registry once the studio answers. From a lane, that is the lane's registry (`webstudio.open`); a bare `--studio` launch opens one chromium-framework window the same way.
+
+RETIRED (order 2067-uc3k, operator ruling 2026-11-10: "Full https only, and nothing required from the user at runtime"): the studio lane used to reuse OpenCode Web's OTP route on the plain listener, with a session from `tillandsias_otp::issue_session` registered via `send_issue_web_session`, and a window that opened after an authenticated 2xx. A browser.open window cannot load that route (it loads the project over https only), so it is gone. OpenCode Web itself keeps its OTP route unchanged.
 
 #### Scenario: launching a registered studio
 
 - **WHEN** `run_studio_mode` launches studio `grapesjs`
-- **THEN** the router holds a route `studio.<label>` and the window opens only after an authenticated 2xx
-- **AND** an unauthenticated request to the route is refused
-- **AND** the route is `studio.<router_host_label>` and the session came from `tillandsias_otp::issue_session` registered via `send_issue_web_session`
+- **THEN** the router holds a route `studio.<label>` on the preview TLS listener only, with no plain-HTTP site and no OTP gate
+- **AND** a request from outside the project's studio network is refused with 403
+- **AND** the window opens at `https://studio.<label>.localhost:<preview TLS port>/` once the studio answers, with no user action
+
+#### Scenario: opening a studio from a lane
+
+- **WHEN** a forge agent calls `webstudio.open {studio: "grapesjs"}`
+- **THEN** its `window_url` is `https://studio.<label>.localhost:<preview TLS port>/`
+- **AND** `browser.open {url: window_url, dev: true}` in container mode admits it
+- **AND** the tray opens the operator's window in that lane's browser.open registry once the studio answers
 
 ### Requirement: studio images are built on first use into the cache layer
 

@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-08: the shell-to-Lua helper design, ready for
+# operator approve/reject/amend before any implementation.
+packets:
+  - packet_id: forge-lua-helpers-migrate-five-hot-image-helpers-to-the-lua-runner-with-a-helper-mode-a-shipped-module-guard-and-a-monotone-shell-out-ratchet
+    order: 2048-wu3h
+    status: pending
+    kind: design
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    size: L
+    capability_tags: [forge, image, lua, startup, mcp, packaging]
+    estimated_hours: 14
+    related: [2047-ci2k, 718-ja7g, 823-u3k9, 835-h2wq]
+    owned_files:
+      - images/default/lib-inference-state.sh
+      - images/default/lib-experts-probe.sh
+      - images/default/lib-ledger-freshness.sh
+      - images/default/lib-mcp-build-id.sh
+      - images/default/config-overlay/mcp/mcp-usage-log.sh
+      - images/default/Containerfile
+      - crates/tillandsias-plan/src/script_run.rs
+      - scripts/lua/check-helper-shell-population.lua
+    title: "Migrate five hot image helpers (inference-state, experts-probe, ledger-freshness, mcp-build-id, mcp-usage-log) from shell to the Rust-hosted Lua runner, adding script run --helper, a shipped-module guard and a monotone shell-out ratchet"
+    context: |
+      Design + spec + tasks are written on work/2048-wu3h:
+      openspec/changes/forge-lua-helpers/{proposal,design,tasks}.md and
+      openspec/changes/forge-lua-helpers/specs/forge-lua-helpers/spec.md
+      (openspec validate --strict: valid). Census on macuahuitl 2026-11-08:
+      the five helpers spend 4-9 execve each per call; the MCP servers pay
+      them at session start. The image now ships a static tillandsias-plan
+      whose capabilities include lua and script, so lib-*.sh can call it.
+      The change also carries the prerequisite defect 2047-ci2k: three libs
+      are sourced in the image but never copied, so the startup context and
+      both MCP servers silently degrade today.
+    exit_criteria:
+      - "tillandsias-plan script run --helper refuses verdict.* as refused:helper-called-verdict and exits 0/1 without adding anything to stdout. Pre-fix result: the mode does not exist (script run demands a verdict), so the fixture FAILS."
+      - "Each ported helper keeps its machine line and every named fallback (a fixture arm per reason token), and its measured execve count drops (inference 8->1, experts 9->2, ledger 4->1 runner+3 git, build-id 5->1). Pre-fix result: FAILS on the fork-count arm."
+      - "A guard refuses a lib-*.sh sourced in the image but not COPYed, and is red today naming lib-ledger-freshness.sh, lib-experts-probe.sh and lib-mcp-build-id.sh (2047-ci2k)."
+      - "check-helper-shell-population.lua counts shell-outs in images/default/lib-*.sh, refuses above baseline, and names each migrated helper."
+    verifiable_closure: "The --helper fixture, the five per-helper fixtures (every reason token), the shipped-module guard (red before 2047-ci2k's COPY lines) and the shell-out ratchet all pass, and litmus:inference-model-preload-policy, litmus:forge-ledger-freshness-shape, litmus:mcp-usage-telemetry-shape and litmus:mcp-live-build-check-fixture stay green."
+    unscoreable: |
+      awaiting-operator-ruling: the change is a design asking approve/reject/
+      amend. No implementation is claimed; status stays pending until the
+      operator rules.
+    next_action: >
+      Operator: read openspec/changes/forge-lua-helpers/design.md on
+      work/2048-wu3h and approve, reject or amend it. If approved, mint task 0
+      (script run --helper) first and write its fixture red.
+    provenance: |
+      Filed from the live forge on macuahuitl 2026-11-08 from the completed
+      survey of images/default and scripts/; design cites
+      plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md §6.
+    events:
+      - type: filed
+        ts: "2026-11-08T05:15:58Z"
+        host: macuahuitl
+        agent_id: forge-forge-tillandsias-opencode-20261108t035123z
+        summary: "filed pending design: five image helpers -> Lua, --helper mode, shipped-module guard, shell-out ratchet; awaiting approve/reject/amend"

@@ -73,6 +73,8 @@ use serde::{Deserialize, Serialize};
 /// UNCONDITIONAL: the packet's whole point is that this reaches users without
 /// --debug and on every platform, so it must not sit behind a feature gate.
 mod bringup_progress;
+mod egress;
+mod fs_stall;
 // 1991-dovl: dev-build overlay over the compiled-in studio tables.
 mod dev_overlay;
 // 1984-pexe: this binary's path, robust to an upgrade replacing it on disk.
@@ -90,6 +92,8 @@ mod imagegen_models;
 mod imagegen_placement;
 mod imagegen_studio;
 mod imagegen_tiers;
+// @trace order:2055-grzz: the audio studio appliance (audio.* tools).
+mod audio_studio;
 #[cfg(feature = "host-services")]
 mod imagegen_tool;
 // 1971-3erz: the resident image engine (sd-server) behind image.generate.
@@ -127,6 +131,17 @@ mod studio_contract;
 // signed acknowledgement record, the obligations spec and the consent gate.
 #[cfg(feature = "host-services")]
 mod licence_consent;
+// 1879-5jkt: the approval broker (os-verified-approval-gates D1-D4): signs an
+// action-bound statement and admits it once. Uses licence_consent's verifier.
+#[cfg(feature = "host-services")]
+mod approval;
+// 2068-ypgq: the restricted-weights fetch behind the licence gate, on the
+// model-hubs tier with a single-use consent token.
+#[cfg(feature = "host-services")]
+mod restricted_fetch;
+// 2068-eeti: audio.separate (Demucs), the restricted fetch's first caller.
+#[cfg(feature = "host-services")]
+mod audio_separate;
 // 1376-8zdz: per-launch disk swap around an attached forge (Linux; the
 // macOS and WSL2 VMs carry their own per-boot swap, design §9.2/§9.3).
 #[cfg(feature = "listen-vsock")]
@@ -140,6 +155,9 @@ mod forge_swap;
 // 1913-ebv8: forges and their siblings in tillandsias.slice; the forge last for oomd.
 #[cfg(target_os = "linux")]
 mod oom_posture;
+// 2067-dwqd: the tray names a container held at its memory.high.
+#[cfg(target_os = "linux")]
+mod memory_stall_watch;
 // 1944-trsp: one tray per enclave (a lifetime flock), and a CLI that can tell.
 mod tray_presence;
 // RAM-only source-volume identity is needed by default CLI launchers too.
@@ -224,6 +242,11 @@ pub mod cloudflare_oauth;
 // storing through the 1505-iysn Vault functions. Needs Vault, so `vault`-gated.
 #[cfg(feature = "vault")]
 mod cloudflare_login;
+// @trace order:2080-dhzf — `--huggingface-login [--via device|paste]` and
+// `--huggingface-logout`: the device grant over cloudflare_oauth's core, or a
+// pasted token; stored only in Vault. Needs Vault, so `vault`-gated.
+#[cfg(feature = "vault")]
+mod huggingface_login;
 // @trace order:1506-q7ab — `--msg-serve [--once]`: the same-host mover of the
 // fleet message bus (fsync-then-ack between lane mailboxes, attribution by
 // mount, TTL sweep, wake socket) and the per-forge lane mount. No network.
@@ -396,6 +419,27 @@ fn main() {
         return;
     }
 
+    // Order 2080-dhzf: `--huggingface-login` / `--huggingface-logout`,
+    // dispatched early like the Cloudflare login below.
+    if user_args
+        .iter()
+        .any(|a| a == "--huggingface-login" || a == "--huggingface-logout")
+    {
+        #[cfg(feature = "vault")]
+        std::process::exit(huggingface_login::run_cli(&user_args));
+        #[cfg(not(feature = "vault"))]
+        {
+            eprintln!("refused:huggingface-login:vault-not-compiled");
+            eprintln!(
+                "  why: the Hugging Face token is stored only in Vault, and this binary was built without the `vault` feature"
+            );
+            eprintln!(
+                "  remedy: use a default build of tillandsias (the `vault` feature is on by default)"
+            );
+            std::process::exit(2);
+        }
+    }
+
     // Order 1505-kc5f: `--cloudflare-login` / `--cloudflare-logout`. Dispatched
     // early and exits, like --swap: the module parses its own arguments
     // (refusing anything it does not take, and never echoing a positional
@@ -425,6 +469,24 @@ fn main() {
     // MCP tool (used vs free-tier cap per provider), so the release gate and
     // an operator can read the same numbers a forge agent gets. Read-only;
     // prints JSON with no token text. Also listed in known_flags (five sites).
+    // Order 2066-fxbh: `--fs-stall-check`, an on-demand read of /proc that
+    // names a wedged btrfs transaction (two samples, --gap-secs apart, default
+    // 3). Exit 0 for `fs-stall: none`, 1 when wedged. Read-only; no loop.
+    if user_args.iter().any(|a| a == "--fs-stall-check") {
+        let gap = user_args
+            .iter()
+            .position(|a| a == "--gap-secs")
+            .and_then(|i| user_args.get(i + 1))
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(3);
+        let v = fs_stall::check(
+            std::path::Path::new("/proc"),
+            std::time::Duration::from_secs(gap),
+        );
+        println!("{}", v.line());
+        std::process::exit(if v == fs_stall::Verdict::Clear { 0 } else { 1 });
+    }
+
     if user_args.iter().any(|a| a == "--cloud-usage") {
         #[cfg(all(feature = "host-services", feature = "vault"))]
         {
@@ -453,6 +515,31 @@ fn main() {
         }
     }
 
+    // Order 2067-dwqd: `--memory-stall [--for <secs>]`, a read-only probe of
+    // whether a tillandsias container is held at its memory.high: the tray's
+    // own watch, sampled every 5 s for `--for` seconds (default 30). Exits 1
+    // when it names a stall. Also listed in known_flags (five sites).
+    if let Some(idx) = user_args.iter().position(|a| a == "--memory-stall") {
+        let secs = match user_args.get(idx + 1).map(String::as_str) {
+            Some("--for") => user_args.get(idx + 2).and_then(|s| s.parse::<u64>().ok()),
+            _ => Some(30),
+        };
+        let Some(secs) = secs else {
+            eprintln!("usage: tillandsias --memory-stall [--for <secs>]");
+            std::process::exit(2);
+        };
+        #[cfg(target_os = "linux")]
+        std::process::exit(memory_stall_watch::run_cli(secs));
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = secs;
+            eprintln!(
+                "could-not-run:memory-stall: cgroup v2 is Linux-only; run it where the containers run"
+            );
+            std::process::exit(2);
+        }
+    }
+
     // Order 1913-fh6l: `--memory-protection <container>`, a read-only probe of
     // whether the container's memory.low protects anything: it walks the
     // cgroup chain up to the root and reports the effective protection. Also
@@ -477,6 +564,22 @@ fn main() {
     // device catalogue is pure data; dispatched early, it touches nothing.
     if user_args.first().map(String::as_str) == Some("devices") {
         std::process::exit(run_devices_cli(&user_args[1..]));
+    }
+
+    // Order 1879-5jkt: `approval request|verify`. Dispatched early, on the host
+    // binary: it signs with the host's approval key, which never enters a forge.
+    if user_args.first().map(String::as_str) == Some("approval") {
+        #[cfg(feature = "host-services")]
+        std::process::exit(approval::run_cli(&user_args[1..]));
+        #[cfg(not(feature = "host-services"))]
+        {
+            println!("refused:approval:not-compiled");
+            eprintln!(
+                "  why: the approval broker is built with the host services, and this binary was built without them"
+            );
+            eprintln!("  remedy: use the tray build of tillandsias (--features tray)");
+            std::process::exit(2);
+        }
     }
 
     // Order 828-h7kw: `--hold-window -- <command...>`. The terminal a lane
@@ -759,12 +862,15 @@ fn main() {
     let antigravity_login = user_args
         .iter()
         .any(|a| a == "--antigravity-login" || a == "--agy-login");
+    // 2063-nfag: the operator's device-code sign-in for the copilot lane.
+    let copilot_login = user_args.iter().any(|a| a == "--copilot-login");
     let list_cloud_projects = user_args.iter().any(|a| a == "--list-cloud-projects");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let codex = user_args.iter().any(|a| a == "--codex");
     let claude = user_args.iter().any(|a| a == "--claude");
     let bash = user_args.iter().any(|a| a == "--bash");
     let antigravity = user_args.iter().any(|a| a == "--antigravity");
+    let copilot = user_args.iter().any(|a| a == "--copilot");
     let opencode_web = user_args.iter().any(|a| a == "--opencode-web");
     // 1860-auhm: `--studio <id>` opens the project in a registered web studio.
     let studio_id: Option<String> = match user_args.iter().position(|a| a == "--studio") {
@@ -981,6 +1087,13 @@ fn main() {
         .position(|a| a == "--prompt")
         .and_then(|i| user_args.get(i + 1).map(|p| p.to_string()));
 
+    if user_args.iter().any(|a| a == "--no-remote-control") {
+        // SAFETY: single-threaded argument parsing, before any subsystem runs.
+        unsafe {
+            std::env::set_var(NO_REMOTE_CONTROL_ENV, "1");
+        }
+    }
+
     let known_flags = [
         // ORDER 1286-4437, ADDED AFTER A RELEASE SHIPPED WITHOUT THEM. Both
         // reset flags are parsed above (`--reset-guest` and `--reset-state`),
@@ -1034,10 +1147,18 @@ fn main() {
         // here too so no reorder can make them `Unsupported option`.
         "--cloudflare-login",
         "--cloudflare-logout",
+        // Order 2080-dhzf: dispatched early (huggingface_login::run_cli).
+        "--huggingface-login",
+        "--huggingface-logout",
         "--via",
         // Order 1966-47vt: dispatched early (cloud_usage::call_live).
         "--cloud-usage",
+        // Order 2066-fxbh: dispatched early (fs_stall::check).
+        "--fs-stall-check",
+        "--gap-secs",
         // Order 1913-fh6l: dispatched early (memory_protection::run_cli).
+        // Order 2067-dwqd: dispatched early (memory_stall_watch::run_cli).
+        "--memory-stall",
         "--memory-protection",
         // Order 1506-q7ab: dispatched early (msg_serve::run_cli), listed here
         // too so no reorder can make it `Unsupported option`.
@@ -1049,17 +1170,20 @@ fn main() {
         "--codex-login",
         "--antigravity-login",
         "--agy-login",
+        "--copilot-login",
         "--list-cloud-projects",
         "--opencode",
         "--codex",
         "--claude",
         "--bash",
         "--antigravity",
+        "--copilot",
         "--opencode-web",
         "--studio",
         "--observatorium",
         "--port",
         "--prompt",
+        "--no-remote-control",
         "--cache-clear",
         "--cache-verify",
         "--listen-vsock",
@@ -1111,6 +1235,7 @@ fn main() {
         || claude
         || bash
         || antigravity
+        || copilot
         || opencode_web
         // 1953-stsk: --studio was missing, so a studio launch SIGTERMed the
         // running tray (lenovinha 2026-11-01).
@@ -1127,6 +1252,7 @@ fn main() {
         || claude_login
         || codex_login
         || antigravity_login
+        || copilot_login
         || list_cloud_projects
         || cache_clear
         || cache_verify;
@@ -1212,6 +1338,18 @@ fn main() {
             .expect("Antigravity device-auth provider spec must exist");
         Some((
             ProviderId::Antigravity,
+            AuthModel::OAuthDevice,
+            spec.image_name,
+            spec.login_script(),
+            LoginInputMode::Terminal,
+        ))
+    } else if copilot_login {
+        // 2063-nfag: `copilot login --device-code` in the one-shot login
+        // container; the credential is archived straight into Vault.
+        let spec = provider_device_auth_spec(&ProviderId::Copilot)
+            .expect("Copilot device-auth provider spec must exist");
+        Some((
+            ProviderId::Copilot,
             AuthModel::OAuthDevice,
             spec.image_name,
             spec.login_script(),
@@ -1555,6 +1693,7 @@ fn main() {
             (codex, "--codex"),
             (claude, "--claude"),
             (antigravity, "--antigravity"),
+            (copilot, "--copilot"),
             (bash, "--bash"),
         ]
         .into_iter()
@@ -1593,18 +1732,9 @@ fn main() {
         }
     }
 
-    if codex || claude || bash || antigravity {
+    if let Some((mode, flag)) = forge_agent_lane(&user_args) {
         let reserved_lane = cli_reserved_lane(config_path.as_deref(), is_cloud);
         maybe_spawn_detached_tray_for_cli(tray, reserved_lane.as_deref(), debug);
-        let (mode, flag) = if codex {
-            (ForgeAgentMode::Codex, "--codex")
-        } else if claude {
-            (ForgeAgentMode::Claude, "--claude")
-        } else if antigravity {
-            (ForgeAgentMode::Antigravity, "--antigravity")
-        } else {
-            (ForgeAgentMode::Maintenance, "--bash")
-        };
         if let Some(project_path) = config_path {
             let result = run_cli_with_vault_credential_cleanup(debug, || {
                 run_forge_agent_cli_mode(
@@ -2016,8 +2146,12 @@ fn print_usage(version: &str) {
     println!("       tillandsias --cloudflare-login [--via device|loopback|qr|paste] [--debug]");
     println!("       tillandsias --msg-serve [--once]");
     println!("       tillandsias --cloudflare-logout [--debug]");
+    println!("       tillandsias --huggingface-login [--via device|paste] [--debug]");
+    println!("       tillandsias --huggingface-logout [--debug]");
     println!("       tillandsias --cloud-usage [--debug]");
+    println!("       tillandsias --fs-stall-check [--gap-secs N]");
     println!("       tillandsias --memory-protection <container>");
+    println!("       tillandsias --memory-stall [--for <secs>]");
     println!("       tillandsias --refresh-github-token [--debug]");
     println!("       tillandsias --claude-login [--debug]");
     println!("       tillandsias --codex-login [--debug]");
@@ -2029,8 +2163,9 @@ fn print_usage(version: &str) {
     println!("       tillandsias --stop-all");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
     println!("       tillandsias --codex <project> [--debug|--diagnostics]");
-    println!("       tillandsias --claude <project> [--debug|--diagnostics]");
+    println!("       tillandsias --claude <project> [--no-remote-control] [--debug|--diagnostics]");
     println!("       tillandsias --bash <project> [--debug|--diagnostics]");
+    println!("       tillandsias --copilot <project> [--debug|--diagnostics]");
     println!(
         "       tillandsias --opencode-web <project> [--prompt <text>] [--debug|--diagnostics]"
     );
@@ -2044,6 +2179,7 @@ fn print_usage(version: &str) {
     println!("  --codex        Launch Codex inside the forge for a project");
     println!("  --claude       Launch Claude Code inside the forge for a project");
     println!("  --antigravity  Launch Antigravity inside the forge for a project");
+    println!("  --copilot      Launch the GitHub Copilot CLI inside the forge for a project");
     println!("  --bash         Launch the forge welcome shell for a project");
     println!("  --opencode-web Launch OpenCode Web plus isolated browser");
     println!("  --observatorium Launch the project Observatorium viewer");
@@ -2095,14 +2231,25 @@ fn print_usage(version: &str) {
          it is single-use and useless without the verifier that stays in this process"
     );
     println!(
+        "  --fs-stall-check  Read-only: two /proc samples N s apart (default 3); names a wedged btrfs transaction (fs-stall: btrfs-transaction-wedged ...) or prints fs-stall: none"
+    );
+    println!(
         "  --cloud-usage  Read-only: used vs free-tier cap this month per provider (Cloudflare Workers Builds minutes, GitHub Actions cache/run minutes/billing), as JSON; the same numbers as the cloud.usage MCP tool"
     );
     println!(
         "  --memory-protection <container>  Read-only: does the container's memory.low protect anything? Walks its cgroup chain to the root and prints each level's memory.low and the effective protection; exits 1 when an ancestor caps it below the reservation"
     );
     println!(
+        "  --memory-stall [--for <secs>]  Read-only: is a tillandsias container held at its memory.high (throttled, not killed, so it looks frozen)? Samples memory.pressure and memory.events every 5 s for --for seconds (default 30), prints a warn:memory-stall: line naming each one; exits 1 when any is stalled"
+    );
+    println!(
         "  --cloudflare-logout Revoke (best effort) and delete the stored Cloudflare sign-in; the fleet-vpn mesh credential is kept"
     );
+    println!(
+        "  --huggingface-login Sign in to Hugging Face (OAuth device flow when an app client id is configured, else paste a \
+         Read token on the terminal) and keep the token in Vault only; host-side huggingface.co downloads send it"
+    );
+    println!("  --huggingface-logout Delete the stored Hugging Face sign-in from Vault");
     println!(
         "  --msg-serve    Run the same-host mover of the fleet message bus in the foreground: deliver every lane's outbox \
          into the destination lanes on this host, ack after fsync, sweep at TTL (the tray runs one itself). \
@@ -2119,6 +2266,7 @@ fn print_usage(version: &str) {
         "  --codex-login Authenticate Codex (device flow: codex login --device-auth) into Vault"
     );
     println!("  --antigravity-login Authenticate Antigravity (agy device flow) into Vault");
+    println!("  --copilot-login Authenticate GitHub Copilot (device code) into Vault");
     println!("  --agy-login    Alias for --antigravity-login");
     println!(
         "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
@@ -2403,6 +2551,27 @@ fn proxy_env_args() -> Vec<String> {
         "--env".into(),
         "NODE_USE_ENV_PROXY=1".into(),
     ]
+}
+
+// The proxy env for `image`, or nothing when its egress declaration names no
+// proxied tier (order 2041-jb57: undeclared means none).
+// @trace spec:proxy-container, order:2041-jb57
+fn proxy_env_args_for(image: &str) -> Vec<String> {
+    if egress::wants_proxy(image) {
+        proxy_env_args()
+    } else {
+        Vec::new()
+    }
+}
+
+// apply_proxy_env, gated on `image`'s egress declaration like
+// proxy_env_args_for.
+fn apply_proxy_env_for(spec: ContainerSpec, image: &str) -> ContainerSpec {
+    if egress::wants_proxy(image) {
+        apply_proxy_env(spec)
+    } else {
+        spec
+    }
 }
 
 // Applies the canonical proxy env vars to a ContainerSpec builder.
@@ -2808,6 +2977,9 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         // image; built on the first studio.key_footage of a project with
         // `[imagegen] corridorkey = true`.
         "imagegen-corridorkey" => "images/imagegen-corridorkey",
+        // 2055-grzz: the audio studio appliance. Never an INIT image; built on
+        // the first audio.transform or audio.detect_glitches.
+        "audio-studio" => "images/audio-studio",
         "vault" => "images/vault",
         // 1861-nmpp: a studio lane image, built on first use on the forge.
         name if runtime_assets::studio_image_id(name).is_some() => "images/studio",
@@ -4904,6 +5076,90 @@ mod ca_refresh_margin_tests {
         );
     }
 
+    /// 2070-mtf9 slice 2: the tray leaves `lane-stale` beside the socket of a
+    /// lane an older build serves, so the forge's tillandsias-doctor names
+    /// host_lane=stale-build; a current lane's note is removed, and a lane
+    /// that cannot be judged keeps whatever it had.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn the_tray_marks_a_stale_lane_for_the_forge_and_clears_a_current_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let lane = |n: &str| {
+            let d = dir.path().join(n);
+            std::fs::create_dir_all(&d).unwrap();
+            (n.to_string(), d.join("mcp.sock"))
+        };
+        let lanes = vec![
+            lane("old-default"),
+            lane("new-default"),
+            lane("odd-default"),
+        ];
+        std::fs::write(
+            dir.path().join("new-default/lane-stale"),
+            "left from before\n",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("odd-default/lane-stale"), "kept\n").unwrap();
+        let lines = vec![
+            "warn:lane-stale:old-default: runs 56.11.9.1+bbbb, installed 56.11.10.1+aaaa; relaunch that forge to use the installed build".to_string(),
+            "ok:lane-current:new-default: 56.11.10.1+aaaa".to_string(),
+            "note:lane-unknown:odd-default: lane ?, installed 56.11.10.1+aaaa".to_string(),
+        ];
+        let who =
+            |name: &str| (name == "old-default").then(|| "pid 1020477 (exe deleted)".to_string());
+        sync_lane_stale_markers(&lanes, &lines, &who);
+        let note = std::fs::read_to_string(dir.path().join("old-default/lane-stale")).unwrap();
+        assert!(
+            note.starts_with("warn:lane-stale:old-default: runs 56.11.9.1+bbbb"),
+            "{note}"
+        );
+        assert!(
+            note.contains("served by pid 1020477 (exe deleted)"),
+            "{note}"
+        );
+        assert!(
+            !dir.path().join("new-default/lane-stale").exists(),
+            "a current lane keeps no note"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("odd-default/lane-stale")).unwrap(),
+            "kept\n"
+        );
+    }
+
+    /// 2070-mtf9: after an upgrade the tray reports each lane still served
+    /// by an older build once, naming the serving process; a lane already
+    /// reported for that build is not repeated, and current lanes are silent.
+    #[test]
+    #[cfg(feature = "host-services")]
+    fn the_tray_reports_each_stale_lane_once_naming_its_server() {
+        let lines = vec![
+            "ok:lane-current:game-a: 56.11.10.1+aaaa".to_string(),
+            "warn:lane-stale:demon_attack-default: runs 56.11.9.1+bbbb, installed 56.11.10.1+aaaa; relaunch that forge to use the installed build".to_string(),
+            "note:lane-unknown:site-default: lane ?, installed 56.11.10.1+aaaa".to_string(),
+        ];
+        let who = |name: &str| {
+            (name == "demon_attack-default").then(|| "pid 1020477 (exe deleted)".to_string())
+        };
+        let mut seen = std::collections::HashSet::new();
+        let first = stale_lane_reports(&lines, &who, &mut seen);
+        assert_eq!(first.len(), 1, "{first:?}");
+        assert!(
+            first[0].starts_with("warn:lane-stale:demon_attack-default: runs 56.11.9.1+bbbb"),
+            "{}",
+            first[0]
+        );
+        assert!(
+            first[0].contains("served by pid 1020477 (exe deleted)"),
+            "{}",
+            first[0]
+        );
+        assert!(
+            stale_lane_reports(&lines, &who, &mut seen).is_empty(),
+            "repeated"
+        );
+    }
+
     /// 2006-srcs: kumbia-kombat's real seed (main) names `integration.forge:
     /// game`; the candidates follow the forge's order.
     #[test]
@@ -5827,9 +6083,8 @@ fn build_stack_common_args(
         // sighting, 2026-08-10). This is a fork-bomb ceiling, not a scheduler:
         // size it above the workload's honest peak.
     ];
-    // ORDER 1375-xxzj: the forge cgroup budget — memory.max/high/low,
-    // memory.swap.max and pids.max = clamp(512·nproc, 4096, 16384), which
-    // keeps the 4096 floor above.
+    // ORDER 1375-xxzj, uncapped by the operator ruling 2026-11-13: memory.low
+    // only; memory.max/high/swap.max and pids.max are all `max`.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     args.extend(oom_slice_args());
     args.extend(proxy_env_args());
@@ -6849,6 +7104,12 @@ mod seed_staleness_tests {
     }
 }
 
+/// 2092-crun: mount-point parent for runtime-secret FILE binds in read-only
+/// containers. crun 1.31 cannot create a bind target file on a read-only
+/// rootfs; a tmpfs here is writable, holds nothing itself, and is shadowed by
+/// the ro binds podman mounts on top of it.
+const RUN_SECRETS_TMPFS: &str = "/run/secrets:rw,noexec,nosuid,nodev,size=1m,mode=0755";
+
 /// Mint the per-project git-mirror Vault Agent auto-auth credential.
 ///
 /// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
@@ -7150,6 +7411,12 @@ fn build_git_run_args(
         // image directory.
         "--tmpfs".into(),
         "/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777".into(),
+        // 2092-crun: crun 1.31 no longer creates a FILE mount point on a
+        // read-only rootfs ("open .../merged/run/secrets/vault-approle: No such
+        // file or directory", exit 127). A tmpfs at /run/secrets gives every
+        // runtime-secret bind below a writable parent to create its target in.
+        "--tmpfs".into(),
+        RUN_SECRETS_TMPFS.into(),
         "--volume".into(),
         format!("{mirror_volume}:/srv/git"),
         "--env".into(),
@@ -7180,7 +7447,7 @@ fn build_git_run_args(
     // the enclave proxy. Uses enclave_no_proxy() — the canonical full NO_PROXY
     // list — not a shorter hand-rolled one.
     // See cheatsheets/runtime/enclave-proxy-patterns.md for justification.
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("git"));
     if let Some(url) = project_remote_url.and_then(sanitize_forge_origin_url)
         && !url.is_empty()
     {
@@ -8544,7 +8811,7 @@ fn build_inference_run_args(
         effective_tier,
         &usable_nodes,
     ));
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("inference"));
     // Order 524: this env pair MUST be built before the mount/image tail.
     // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
     // ..)` calls — but the tail ended `[.., image, "/usr/bin/ollama", "serve"]`,
@@ -9296,6 +9563,10 @@ struct RouterRoute {
     /// project's studio network); everyone else gets 403 on every listener.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     allow_cidr: Option<String>,
+    /// 2067-uc3k: a public preview-TLS route served on the TLS listener only;
+    /// no plain :8080 site is emitted for it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    tls_only: bool,
 }
 
 /// 1985-stdu: the Caddy lines that refuse a caller outside `cidr` (the TCP
@@ -9319,6 +9590,7 @@ impl RouterRoute {
             public: false,
             preview_tls: false,
             allow_cidr: None,
+            tls_only: false,
         }
     }
 
@@ -9458,11 +9730,14 @@ fn generate_dynamic_caddyfile(routes_to_render: &[RouterRoute]) -> String {
         // @trace spec:enclave-service-catalog
         if route.public {
             let guard = caddy_source_guard(route.allow_cidr.as_deref());
-            routes.push_str(&format!(
-                "http://{subdomain}.localhost:8080 {{\n{guard}    \
+            // 2067-uc3k: a TLS-only route has no plaintext site at all.
+            if !(route.tls_only && route.preview_tls) {
+                routes.push_str(&format!(
+                    "http://{subdomain}.localhost:8080 {{\n{guard}    \
 reverse_proxy {upstream_host}:{port}\n\
 }}\n\n"
-            ));
+                ));
+            }
             if route.preview_tls {
                 // `<service>.<project>`: the project is everything after the
                 // first label, dots included (flutter.macron.dev → macron.dev).
@@ -9812,15 +10087,21 @@ pub(crate) fn quarantine_invalid_checkout(path: &Path) -> Result<PathBuf, String
 /// @trace spec:remote-projects, spec:host-shell-architecture
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, String> {
-    let short_name = nwo
-        .rsplit('/')
+    // Order 2067-774h: one spelling per project. A clone URL or owner/repo
+    // ending in `.git` (or `/`) names the bare repo: GitHub repository names
+    // cannot end in ".git", and a lane labelled "repo.git" misses every host
+    // lookup keyed on "repo" (the known-project list, the tray's lane table).
+    let canonical = nwo.trim_end_matches('/');
+    let canonical = canonical.strip_suffix(".git").unwrap_or(canonical);
+    let short_name = canonical
+        .rsplit(['/', ':'])
         .next()
         .filter(|s| !s.is_empty())
         .ok_or_else(|| format!("--cloud value has no repo name: {nwo}"))?;
     let remote_url = if nwo.starts_with("https://") || nwo.starts_with("git@") {
-        nwo.to_string()
+        format!("{canonical}.git")
     } else {
-        format!("https://github.com/{nwo}.git")
+        format!("https://github.com/{canonical}.git")
     };
     if debug {
         eprintln!(
@@ -10179,6 +10460,53 @@ fn forge_worker_state_env(instance: Option<&str>) -> Vec<(String, String)> {
 /// Instance-scoped so two concurrent workers do not collide on the enclave
 /// network's DNS. Sharing a hostname would make container-to-container
 /// resolution non-deterministic between workers.
+/// Set by `--no-remote-control`; suppresses TILLANDSIAS_CLAUDE_SESSION_NAME.
+const NO_REMOTE_CONTROL_ENV: &str = "TILLANDSIAS_NO_REMOTE_CONTROL";
+
+/// `<project>-forge`, the Remote Control / session name for a Claude forge.
+/// Takes the last path segment (so `owner/project` names the project) and
+/// sanitises it to `[a-z0-9._-]`.
+fn claude_forge_session_name(project_name: &str) -> String {
+    let slug: String = project_name
+        .rsplit('/')
+        .next()
+        .unwrap_or(project_name)
+        .chars()
+        .map(|c| {
+            let c = c.to_ascii_lowercase();
+            if c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let slug = if slug.is_empty() {
+        "project".to_string()
+    } else {
+        slug
+    };
+    format!("{slug}-forge")
+}
+
+#[cfg(test)]
+mod claude_forge_session_name_tests {
+    use super::claude_forge_session_name;
+
+    #[test]
+    fn sanitises_owner_project_slug() {
+        assert_eq!(
+            claude_forge_session_name("8007342/Tillandsias"),
+            "tillandsias-forge"
+        );
+        assert_eq!(
+            claude_forge_session_name("My Proj!.v2"),
+            "my-proj-.v2-forge"
+        );
+        assert_eq!(claude_forge_session_name(""), "project-forge");
+    }
+}
+
 fn forge_hostname(project_name: &str) -> String {
     sanitize_hostname(&format!("forge-{project_name}{}", forge_instance_suffix()))
 }
@@ -11082,8 +11410,8 @@ fn build_opencode_forge_args(
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
     ];
-    // Same budget as build_stack_common_args (1375-xxzj; the 4096 pids floor of
-    // 667-se87 is kept by the clamp): this lane hosts workspace builds too.
+    // Same uncapped forge budget as build_stack_common_args (ruling 2026-11-13):
+    // this lane hosts workspace builds too.
     args.extend(tillandsias_core::forge_budget::ForgeBudget::for_this_host().podman_args());
     args.extend(oom_slice_args());
     match mode {
@@ -11132,7 +11460,7 @@ fn build_opencode_forge_args(
             args.push("--detach".into());
         }
     }
-    args.extend(proxy_env_args());
+    args.extend(proxy_env_args_for("default"));
     args.extend([
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
@@ -11387,6 +11715,20 @@ fn build_opencode_forge_args(
                 format!(
                     "type=volume,source={volume},target={}",
                     imagegen_tool::FORGE_SCRATCH
+                ),
+            ]);
+        }
+        // 2055-grzz: the audio studio's scratch VOLUME, the same shape.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = audio_studio::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            args.extend([
+                "--mount".into(),
+                format!(
+                    "type=volume,source={volume},target={}",
+                    audio_studio::FORGE_AUDIO
                 ),
             ]);
         }
@@ -14161,6 +14503,95 @@ pub(crate) fn lane_freshness_lines(
         .collect()
 }
 
+/// ORDER 2070-mtf9: the stale-lane lines a tray has not reported yet, each
+/// naming the process that serves the lane. A tray upgrade never re-adopts a
+/// lane a live older launcher still listens on (macuahuitl 2026-11-09), so
+/// this report is how the operator learns the lane runs old code.
+#[cfg(feature = "host-services")]
+pub(crate) fn stale_lane_reports(
+    lines: &[String],
+    who: &dyn Fn(&str) -> Option<String>,
+    seen: &mut std::collections::HashSet<String>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for line in lines {
+        let Some(rest) = line.strip_prefix("warn:lane-stale:") else {
+            continue;
+        };
+        let Some((name, _)) = rest.split_once(':') else {
+            continue;
+        };
+        let key = line.split(';').next().unwrap_or(line).to_string();
+        if !seen.insert(key) {
+            continue;
+        }
+        out.push(match who(name) {
+            Some(w) => format!("{line}; served by {w}"),
+            None => line.clone(),
+        });
+    }
+    out
+}
+
+/// ORDER 2070-mtf9: one tray pass over every lane socket; logs each lane
+/// newly found on an older build.
+#[cfg(feature = "host-services")]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn report_stale_lanes(seen: &mut std::collections::HashSet<String>) {
+    let lanes = crate::mcp_socket::lane_sockets();
+    if lanes.is_empty() {
+        return;
+    }
+    let installed = crate::mcp_socket::installed_build_identity();
+    let lines = lane_freshness_lines(&lanes, installed.as_deref(), &|sock| {
+        crate::mcp_socket::lane_server_build(sock).unwrap_or_else(|e| format!("unanswered ({e})"))
+    });
+    let who = |name: &str| {
+        lanes
+            .iter()
+            .find(|(n, _)| n == name)
+            .and_then(|(_, sock)| crate::mcp_socket::describe_lane_server(sock))
+    };
+    for report in stale_lane_reports(&lines, &who, seen) {
+        tracing::warn!(spec = "mcp-tool-socket", order = "2070-mtf9", "{report}");
+        eprintln!("[tillandsias] {report}");
+    }
+    sync_lane_stale_markers(&lanes, &lines, &who);
+}
+
+/// ORDER 2070-mtf9 slice 2: the note a lane's forge reads. Each lane socket
+/// dir is bind-mounted read-only into its forge (/run/host/tillandsias-mcp),
+/// so a `lane-stale` file beside the socket lets the forge's tillandsias-doctor
+/// report host_lane=stale-build: the lane answers, but on an older build. A
+/// lane found current loses its note; one that cannot be judged keeps it.
+/// Nothing is restarted: a relaunch is the operator's call.
+#[cfg(feature = "host-services")]
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn sync_lane_stale_markers(
+    lanes: &[(String, PathBuf)],
+    lines: &[String],
+    who: &dyn Fn(&str) -> Option<String>,
+) {
+    for ((name, sock), line) in lanes.iter().zip(lines) {
+        let Some(dir) = sock.parent() else { continue };
+        let note = dir.join("lane-stale");
+        if line.starts_with("warn:lane-stale:") {
+            let body = match who(name) {
+                Some(w) => format!("{line}; served by {w}\n"),
+                None => format!("{line}\n"),
+            };
+            if std::fs::read_to_string(&note).ok().as_deref() != Some(body.as_str()) {
+                let tmp = dir.join("lane-stale.tmp");
+                if std::fs::write(&tmp, &body).is_ok() {
+                    let _ = std::fs::rename(&tmp, &note);
+                }
+            }
+        } else if line.starts_with("ok:lane-current:") {
+            let _ = std::fs::remove_file(&note);
+        }
+    }
+}
+
 fn run_status_check(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --status-check")?;
     report_runtime_lane("--status-check", debug);
@@ -15053,6 +15484,8 @@ pub enum ProviderId {
     Claude,
     Codex,
     Antigravity,
+    /// ORDER 2063-nfag: GitHub Copilot CLI (device-code sign-in).
+    Copilot,
 }
 
 impl ProviderId {
@@ -15062,6 +15495,7 @@ impl ProviderId {
             ProviderId::Claude => "secret/claude/oauth",
             ProviderId::Codex => "secret/codex/oauth",
             ProviderId::Antigravity => "secret/antigravity/oauth",
+            ProviderId::Copilot => "secret/copilot/oauth",
         }
     }
 
@@ -15071,6 +15505,7 @@ impl ProviderId {
             ProviderId::Claude => "Claude",
             ProviderId::Codex => "Codex",
             ProviderId::Antigravity => "Antigravity",
+            ProviderId::Copilot => "GitHub Copilot",
         }
     }
 
@@ -15080,6 +15515,7 @@ impl ProviderId {
             ProviderId::Claude => "claude",
             ProviderId::Codex => "codex",
             ProviderId::Antigravity => "antigravity",
+            ProviderId::Copilot => "copilot",
         }
     }
 
@@ -15102,7 +15538,10 @@ impl ProviderId {
                 "printf '\\n' >&2\n",
                 "printf 'Add more permissions later if you need them.\\n' >&2\n",
             ),
-            ProviderId::Claude | ProviderId::Codex | ProviderId::Antigravity => "",
+            ProviderId::Claude
+            | ProviderId::Codex
+            | ProviderId::Antigravity
+            | ProviderId::Copilot => "",
         }
     }
 
@@ -15112,6 +15551,7 @@ impl ProviderId {
             ProviderId::Claude => "tillandsias-claude-token",
             ProviderId::Codex => "tillandsias-codex-token",
             ProviderId::Antigravity => "tillandsias-antigravity-token",
+            ProviderId::Copilot => "tillandsias-copilot-token",
         }
     }
 
@@ -15121,6 +15561,7 @@ impl ProviderId {
             ProviderId::Claude => CLAUDE_DEVICE_AUTH_SPEC.vault_field,
             ProviderId::Codex => CODEX_DEVICE_AUTH_SPEC.vault_field,
             ProviderId::Antigravity => ANTIGRAVITY_DEVICE_AUTH_SPEC.vault_field,
+            ProviderId::Copilot => COPILOT_DEVICE_AUTH_SPEC.vault_field,
         }
     }
 }
@@ -15183,11 +15624,25 @@ const ANTIGRAVITY_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthS
     vault_field: "credentials_b64",
 };
 
+/// ORDER 2063-nfag: `copilot login --device-code` in the one-shot login
+/// container, COPILOT_HOME on tmpfs; the credential files are archived
+/// straight into Vault (operator ruling 2026-11-08, option B). The token's
+/// scopes are unverified, and the operator chose this knowing that.
+const COPILOT_DEVICE_AUTH_SPEC: ProviderDeviceAuthSpec = ProviderDeviceAuthSpec {
+    image_name: "forge",
+    login_program: "/usr/local/bin/provider-device-auth",
+    login_args: &["copilot"],
+    credential_path: "$COPILOT_HOME (tmpfs; archived, never on disk)",
+    vault_path: "secret/copilot/oauth",
+    vault_field: "credentials_b64",
+};
+
 fn provider_device_auth_spec(provider: &ProviderId) -> Option<&'static ProviderDeviceAuthSpec> {
     match provider {
         ProviderId::Codex => Some(&CODEX_DEVICE_AUTH_SPEC),
         ProviderId::Claude => Some(&CLAUDE_DEVICE_AUTH_SPEC),
         ProviderId::Antigravity => Some(&ANTIGRAVITY_DEVICE_AUTH_SPEC),
+        ProviderId::Copilot => Some(&COPILOT_DEVICE_AUTH_SPEC),
         ProviderId::GitHub => None,
     }
 }
@@ -16128,6 +16583,9 @@ fn build_ssh_lane_sidecar_run_args(
         "--read-only".into(),
         "--tmpfs".into(),
         "/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777".into(),
+        // 2092-crun: see build_git_run_args.
+        "--tmpfs".into(),
+        RUN_SECRETS_TMPFS.into(),
         "--volume".into(),
         format!("{}:/ssh-agent", ssh_lane_agent_volume(project_name)),
         "--volume".into(),
@@ -17252,6 +17710,13 @@ fn observatorium_container_name(project_name: &str) -> String {
     format!("tillandsias-observatorium-{project_name}")
 }
 
+/// Order 2066-obsv (PR 4): the project trace viewer --observatorium serves at
+/// /observatorium/ lives in the runtime asset root's tools/trace-viewer/;
+/// observatorium/ is the static release site and is never mounted.
+fn trace_viewer_assets(root: &Path) -> PathBuf {
+    root.join("tools").join("trace-viewer")
+}
+
 fn build_observatorium_web_args(
     project_path: &Path,
     project_name: &str,
@@ -17379,7 +17844,7 @@ fn run_observatorium_mode(
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
-    let observatorium_assets = root.join("observatorium");
+    let observatorium_assets = trace_viewer_assets(&root);
     if !observatorium_assets.join("index.html").is_file() {
         return Err(format!(
             "Observatorium UI assets not found at {}",
@@ -19458,6 +19923,98 @@ mod tray_notify_tests {
         assert!(matches!(out, TrayNotify::NoTray(_)), "{out:?}");
     }
 
+    /// Order 2067-774h: a `--cloud` value spelled with `.git` (a clone URL, or
+    /// owner/repo.git) names the same project as the bare repo. MEASURED in a
+    /// live forge 2026-11-09: the lane carried "tlatoani.net.git", so its git
+    /// service, MCP socket and every host lookup missed the known project
+    /// "tlatoani.net" (refused:lane-tray-version-mismatch, "not a known
+    /// project on this host"). GitHub repository names cannot end in ".git".
+    #[cfg(any(feature = "tray", feature = "listen-vsock"))]
+    #[test]
+    fn a_cloud_value_spelled_with_dot_git_names_the_bare_project() {
+        let _g = crate::test_support::env_lock();
+        let prev = std::env::var_os("TILLANDSIAS_PROJECT_REMOTE_URL");
+        let mut got = Vec::new();
+        for nwo in [
+            "8007342/tlatoani.net",
+            "8007342/tlatoani.net.git",
+            "8007342/tlatoani.net/",
+            "https://github.com/8007342/tlatoani.net.git",
+            "https://github.com/8007342/tlatoani.net",
+            "git@github.com:8007342/tlatoani.net.git",
+        ] {
+            let name = resolve_cloud_project_checkout(nwo, false);
+            let remote = std::env::var("TILLANDSIAS_PROJECT_REMOTE_URL").unwrap_or_default();
+            got.push((nwo, name, remote));
+        }
+        let refused = resolve_cloud_project_checkout("8007342/.git", false);
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("TILLANDSIAS_PROJECT_REMOTE_URL", v),
+                None => std::env::remove_var("TILLANDSIAS_PROJECT_REMOTE_URL"),
+            }
+        }
+        for (nwo, name, remote) in &got {
+            assert_eq!(name.as_deref(), Ok("tlatoani.net"), "{nwo}");
+            assert!(!remote.ends_with(".git.git"), "{nwo}: {remote}");
+            assert!(remote.contains("8007342/tlatoani.net"), "{nwo}: {remote}");
+        }
+        assert!(refused.is_err(), "{refused:?}");
+    }
+
+    /// Order 2067-774h: the web-session handshake dials the socket the
+    /// running tray serves (2007-rtky: `<runtime>/tillandsias/control/`), not
+    /// the pre-2007 path. MEASURED in a live forge 2026-11-09: a stale real
+    /// socket from an exited tray sat at the old path (the legacy symlink
+    /// never replaces a real file), the handshake dialled it, got "Connection
+    /// refused", and webstudio.open answered started:true with no window.
+    #[test]
+    fn issue_web_session_dials_the_trays_current_socket_not_a_stale_legacy_one() {
+        let _g = crate::test_support::env_lock();
+        let run = tempfile::tempdir().unwrap();
+        let prev = std::env::var_os("XDG_RUNTIME_DIR");
+        // SAFETY: serialised by env_lock; restored below.
+        unsafe { std::env::set_var("XDG_RUNTIME_DIR", run.path()) };
+        // An exited tray's socket at the legacy path: the file stays, connect
+        // is refused.
+        let legacy = control_socket_host_dir().join("control.sock");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        drop(UnixListener::bind(&legacy).unwrap());
+        // The running tray, on its current socket.
+        let listener = UnixListener::bind(control_socket_file()).unwrap();
+        let t = std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let body = read_control_frame_blocking(&mut s).unwrap();
+            let got = decode(&body).unwrap().body;
+            let ack = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::IssueAck { seq_acked: 1 },
+            };
+            let encoded = encode(&ack).unwrap();
+            let mut frame = (encoded.len() as u32).to_be_bytes().to_vec();
+            frame.extend_from_slice(&encoded);
+            s.write_all(&frame).unwrap();
+            got.kind()
+        });
+        let out = send_issue_web_session("tlatoani.net", &[7u8; 32]);
+        if out.is_err() {
+            // Unblock the listener thread so the test reports instead of hanging.
+            let _ = UnixStream::connect(control_socket_file());
+        }
+        let kind = t.join();
+        // SAFETY: serialised by env_lock.
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var("XDG_RUNTIME_DIR", v),
+                None => std::env::remove_var("XDG_RUNTIME_DIR"),
+            }
+        }
+        assert!(out.is_ok(), "{out:?}");
+        assert_eq!(kind.ok(), Some("IssueWebSession"));
+    }
+
     /// Order 1719-83po: each notifier sends ITS OWN variant through the shared
     /// framing and reads the ack; this also pins the GitHub path through the
     /// refactor into notify_tray_login_stored.
@@ -19497,16 +20054,37 @@ mod tray_notify_tests {
 
 #[cfg(unix)]
 fn send_issue_web_session(project_label: &str, cookie_value: &[u8; 32]) -> Result<(), String> {
-    // Get control socket path from XDG_RUNTIME_DIR or default.
-    let runtime_dir = std::env::var("XDG_RUNTIME_DIR")
-        .unwrap_or_else(|_| format!("/run/user/{}", unsafe { libc::getuid() }));
-    let socket_path = format!("{}/tillandsias/control.sock", runtime_dir);
+    // Order 2067-774h: the socket the running tray serves (2007-rtky:
+    // control/control.sock), the same one every other CLI-to-tray call dials.
+    // This used to build the pre-2007 `<runtime>/tillandsias/control.sock`
+    // itself; a stale real socket left there by an exited tray is never
+    // replaced by the legacy symlink, so the handshake got ECONNREFUSED while
+    // the live tray listened one directory down. The legacy path is tried
+    // only when the current socket does not exist (a pre-2007 tray).
+    let socket_path = tray_control_socket_path();
+    let legacy_path = control_socket_host_dir().join("control.sock");
 
     // Connect to the socket. The connect itself has no built-in timeout, but
     // it's a local UDS so it either binds immediately or returns ENOENT/
     // ECONNREFUSED.
-    let mut stream = UnixStream::connect(&socket_path)
-        .map_err(|e| format!("Failed to connect to control socket {}: {}", socket_path, e))?;
+    let mut stream = match UnixStream::connect(&socket_path) {
+        Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => UnixStream::connect(&legacy_path)
+            .map_err(|le| {
+                format!(
+                    "Failed to connect to control socket {} ({e}) or the pre-2007 {} ({le})",
+                    socket_path.display(),
+                    legacy_path.display()
+                )
+            })?,
+        Err(e) => {
+            return Err(format!(
+                "Failed to connect to control socket {}: {}",
+                socket_path.display(),
+                e
+            ));
+        }
+    };
 
     // The whole round-trip must complete within a couple of seconds; the
     // tray broadcast is synchronous so the ack should land in single-digit
@@ -19806,10 +20384,91 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
     Ok(())
 }
 
-/// ORDER 1860-auhm: a registered studio, launched as a web lane. Same stack,
-/// route, OTP and window as OpenCode Web; only the lane differs (the studio's
-/// image and entry, routed as `studio.<label>`). A studio whose lane is not
-/// built yet is refused here, before anything starts.
+/// ORDER 2067-uc3k: route `studio.<label>` to `upstream:port` over the
+/// preview TLS listener only, for the project's studio network only (the
+/// ComfyUI window's wiring, 1985-stdu): the network exists, the router is on
+/// it, and so is each browser.open window's forwarder. This replaces the OTP
+/// route the lane held under the same name; there is no plain :8080 site.
+#[cfg(feature = "host-services")]
+fn wire_studio_route(
+    project_name: &str,
+    upstream: &str,
+    port: u16,
+    debug: bool,
+) -> Result<String, String> {
+    let cidr = imagegen_studio::ensure_network(project_name)?;
+    imagegen_studio::connect(project_name, "tillandsias-router")?;
+    local_web_preview::add_studio_route(project_name, upstream, port, &cidr, debug)
+}
+
+/// 2067-uc3k: the browser lane a bare `--studio` launch opens its window in.
+#[cfg(feature = "host-services")]
+const STUDIO_CLI_LANE: &str = "studio-cli";
+
+/// 2067-uc3k: the operator's studio window, with nothing for them to do.
+/// From a lane (`webstudio.open`), the tray opens it in that lane's
+/// browser.open registry, so this returns at once. A bare `--studio` launch
+/// opens one chromium-framework window the same way once the studio answers,
+/// and stays until that window closes (the window lives in this process's
+/// registry; its forwarder and network go with it).
+#[cfg(feature = "host-services")]
+fn open_studio_window(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
+    if std::env::var(studio::WINDOW_BY_TRAY_ENV).as_deref() == Ok("1") {
+        eprintln!("[tillandsias] studio routed at {url}; the tray opens the window");
+        return Ok(());
+    }
+    let opened = studio::open_when_ready(
+        &|| local_web_preview::studio_answers(project_name),
+        &|| None,
+        &mut || studio::open_lane_window(project_name, STUDIO_CLI_LANE, url),
+        std::time::Duration::from_secs(10 * 60),
+        std::time::Duration::from_secs(2),
+    )?;
+    if debug {
+        eprintln!("[tillandsias] studio window: {opened}");
+    }
+    eprintln!("[tillandsias] studio window open at {url}; this launcher exits when it closes");
+    let prefix = format!("tillandsias-browser-{project_name}-");
+    loop {
+        std::thread::sleep(Duration::from_secs(2));
+        let mut cmd = podman_command();
+        cmd.args(["ps", "--format", "{{.Names}}"]);
+        let Ok(out) =
+            cmd.output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        else {
+            continue;
+        };
+        if !String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .any(|n| n.starts_with(&prefix))
+        {
+            break;
+        }
+    }
+    let (windows, debounce) = mcp_socket::lane_windows(project_name, STUDIO_CLI_LANE);
+    tillandsias_browser_mcp::window_registry::close_all(&windows, &debounce);
+    Ok(())
+}
+
+/// 2067-uc3k: without host-services there is no preview TLS listener, so a
+/// studio cannot be served at all; refuse by name rather than fall back to a
+/// plaintext route.
+#[cfg(not(feature = "host-services"))]
+fn wire_studio_route(_: &str, _: &str, _: u16, _: bool) -> Result<String, String> {
+    Err("a studio is served over the preview TLS listener only, which this build (no host-services) does not have".into())
+}
+
+#[cfg(not(feature = "host-services"))]
+fn open_studio_window(_: &str, _: &str, _: bool) -> Result<(), String> {
+    Err("a studio window needs the host-services build".into())
+}
+
+/// ORDER 1860-auhm: a registered studio, launched as a web lane: the same
+/// stack as OpenCode Web, with the studio's image and entry. 2067-uc3k: its
+/// route is `studio.<label>`, TLS-only and network-limited, with no OTP
+/// (`wire_studio_route`), and its window opens with no user action
+/// (`open_studio_window`). A studio whose lane is not built yet is refused
+/// here, before anything starts.
 pub(crate) fn run_studio_mode(
     project_path: &str,
     studio_id: &str,
@@ -19826,11 +20485,11 @@ pub(crate) fn run_studio_mode(
 
 /// ORDER 1921-2krx: a SIBLING studio (ComfyUI) runs in its own container next
 /// to the forge, so no forge, git mirror or inference is started for it. The
-/// studio publishes no host port; the router routes `studio.<label>` to its
-/// container on the enclave network, behind the same OTP `forward_auth` gate
-/// as OpenCode Web, and the window opens through the same session issue and
-/// authenticated probe (`launch_opencode_web_browser`), so it opens only after
-/// an authenticated 2xx.
+/// studio publishes no host port. 2067-uc3k (operator ruling 2026-11-10): the
+/// router serves `studio.<label>` over the preview TLS listener only, to the
+/// project's studio network only, with no OTP gate (`wire_studio_route`; the
+/// OTP route it held is retired), and the window opens once the studio
+/// answers, with nothing for the operator to do (`open_studio_window`).
 fn run_sibling_studio_mode(
     project_path: &str,
     is_cloud: bool,
@@ -19848,7 +20507,7 @@ fn run_sibling_studio_mode(
     // stall fails by name instead of a silent 50-minute wait (2026-11-01).
     use std::time::Duration;
     use studio_stages::{Stage, run_async, run_blocking};
-    const TOTAL: usize = 4;
+    const TOTAL: usize = 3;
     let label = lane.label.clone();
     let version = VERSION.trim().to_string();
     let images: Vec<String> = lane.images(launch_images::launch_images(
@@ -19912,31 +20571,19 @@ fn run_sibling_studio_mode(
                 router_host_port,
                 debug,
             )
-            .await?;
-            // Not public: the route keeps the OTP forward_auth gate.
-            let route = RouterRoute::new(
-                lane.route_host(&router_host_label(project_name)),
-                container.clone(),
-                lane.port,
-            );
-            upsert_router_route(route, debug)?;
-            caddy_reload_routes(debug).await
+            .await
         })
         .await
     })?;
+    // 2067-uc3k: https only, network-limited, no OTP (the route function
+    // reloads the router itself; it runs outside the async runtime).
+    let url = wire_studio_route(project_name, &container, lane.port, debug)?;
     eprintln!(
-        "[tillandsias] {label} for {project_name}: {container} (no host port; only the router's authenticated route)"
+        "[tillandsias] {label} for {project_name}: {container} (no host port; served at {url} to the project's network only)"
     );
-    let window_stage = Stage {
-        index: 4,
-        total: TOTAL,
-        name: "session and window",
-        bound: Duration::from_secs(3 * 60),
-    };
-    let (project, lane) = (project_name.to_string(), lane.clone());
-    run_blocking(&label, window_stage, move || {
-        launch_opencode_web_browser(&project, &certs_dir, router_host_port, &lane, debug)
-    })
+    // 2067-uc3k: no OTP session to issue; the window opens once the studio
+    // answers (its own wait budget), and a bare launch stays while it is open.
+    open_studio_window(project_name, &url, debug)
 }
 
 pub(crate) fn run_opencode_web_mode(
@@ -20278,17 +20925,21 @@ pub(crate) fn run_opencode_web_mode(
         // The forge image's opencode-web entrypoint runs `opencode serve --hostname 0.0.0.0
         // --port 4096` (see images/default/entrypoint-forge-opencode-web.sh:142), so the
         // router upstream must target 4096 — not 8080, which is the router's own listener.
-        let route = RouterRoute::new(
-            lane.route_host(&router_host_label(project_name)),
-            forge_container_name(project_name),
-            lane.port,
-        );
-        upsert_router_route(route, debug)?;
+        // 2067-uc3k: a studio lane is not routed here: it is served over TLS
+        // only, network-limited, below (wire_studio_route).
+        if lane.service == "opencode" {
+            let route = RouterRoute::new(
+                lane.route_host(&router_host_label(project_name)),
+                forge_container_name(project_name),
+                lane.port,
+            );
+            upsert_router_route(route, debug)?;
 
-        // @trace spec:subdomain-routing-via-reverse-proxy
-        // After writing the dynamic Caddyfile, reload Caddy to activate the routes.
-        // The reload is graceful (no container restart) via the admin API at localhost:2019.
-        caddy_reload_routes(debug).await?;
+            // @trace spec:subdomain-routing-via-reverse-proxy
+            // After writing the dynamic Caddyfile, reload Caddy to activate the routes.
+            // The reload is graceful (no container restart) via the admin API at localhost:2019.
+            caddy_reload_routes(debug).await?;
+        }
 
         // Stop the diagnostic-event emitter before this block closes;
         // dropping `_diag_logs_handle` aborts its logs tails.
@@ -20300,6 +20951,15 @@ pub(crate) fn run_opencode_web_mode(
         Ok::<(), String>(())
     })?;
 
+    if lane.service != "opencode" {
+        let url = wire_studio_route(
+            project_name,
+            &forge_container_name(project_name),
+            lane.port,
+            debug,
+        )?;
+        return open_studio_window(project_name, &url, debug);
+    }
     launch_opencode_web_browser(project_name, &certs_dir, router_host_port, lane, debug)
 }
 
@@ -20367,6 +21027,8 @@ pub(crate) enum ForgeAgentMode {
     Codex,
     OpenCode,
     Antigravity,
+    /// ORDER 2063-nfag: GitHub's official copilot CLI.
+    Copilot,
     Maintenance,
 }
 
@@ -20377,6 +21039,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Codex => "/usr/local/bin/entrypoint-forge-codex.sh",
             ForgeAgentMode::OpenCode => "/usr/local/bin/entrypoint-forge-opencode.sh",
             ForgeAgentMode::Antigravity => "/usr/local/bin/entrypoint-forge-antigravity.sh",
+            ForgeAgentMode::Copilot => "/usr/local/bin/entrypoint-forge-copilot.sh",
             ForgeAgentMode::Maintenance => "/usr/local/bin/entrypoint-terminal.sh",
         }
     }
@@ -20387,6 +21050,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Codex => "codex",
             ForgeAgentMode::OpenCode => "opencode",
             ForgeAgentMode::Antigravity => "antigravity",
+            ForgeAgentMode::Copilot => "copilot",
             ForgeAgentMode::Maintenance => "maintenance",
         }
     }
@@ -20404,6 +21068,7 @@ impl ForgeAgentMode {
             ForgeAgentMode::Antigravity => {
                 ("Antigravity session open", "Antigravity session ended")
             }
+            ForgeAgentMode::Copilot => ("Copilot session open", "Copilot session ended"),
             ForgeAgentMode::Maintenance => ("Terminal open", "Terminal closed"),
         }
     }
@@ -20417,9 +21082,27 @@ impl ForgeAgentMode {
             ForgeAgentMode::Codex => "codex",
             ForgeAgentMode::OpenCode => "opencode",
             ForgeAgentMode::Antigravity => "antigravity",
+            ForgeAgentMode::Copilot => "copilot",
             ForgeAgentMode::Maintenance => "terminal",
         }
     }
+}
+
+/// The forge agent lane a launcher argv selects, with the flag that named it.
+/// Precedence when several are given is the historical one: codex, claude,
+/// antigravity, copilot (2063-nfag), then --bash. (Pulled out of main for 2063-nfag so the lane
+/// flags are testable.)
+fn forge_agent_lane(args: &[String]) -> Option<(ForgeAgentMode, &'static str)> {
+    [
+        ("--codex", ForgeAgentMode::Codex),
+        ("--claude", ForgeAgentMode::Claude),
+        ("--antigravity", ForgeAgentMode::Antigravity),
+        ("--copilot", ForgeAgentMode::Copilot),
+        ("--bash", ForgeAgentMode::Maintenance),
+    ]
+    .into_iter()
+    .find(|(flag, _)| args.iter().any(|a| a == flag))
+    .map(|(flag, mode)| (mode, flag))
 }
 
 /// ORDER 828-h7kw. The line the hold prints, and the pure half of the hold
@@ -21512,6 +22195,9 @@ fn cleanup_forge_ram_workspace(project: &str, debug: bool) -> Result<(), String>
     // 1874-kkrc: image.generate's scratch volume goes with the forge.
     #[cfg(feature = "host-services")]
     imagegen_tool::remove_lane_volume(project, instance);
+    // 2055-grzz: and the audio studio's.
+    #[cfg(feature = "host-services")]
+    audio_studio::remove_lane_volume(project, instance);
     remove_source_volume_if_present(&volume, debug)
 }
 
@@ -21879,7 +22565,7 @@ fn build_forge_agent_run_args_with_vault(
         // forge. The rationale travels with EVERY site now; a fix whose
         // comment rides only some copies makes the missed ones look
         // intentional.
-        // ORDER 1375-xxzj: the full cgroup budget; its pids clamp keeps the 4096 floor.
+        // Operator ruling 2026-11-13: the forge is uncapped (memory.low only, pids max).
         .memory_budget(tillandsias_core::forge_budget::ForgeBudget::for_this_host())
         // 1913-ebv8: in tillandsias.slice, where oomd ranks this forge last.
         .cgroup_parent(oom_slice());
@@ -21954,7 +22640,7 @@ fn build_forge_agent_run_args_with_vault(
             FORGE_SPEC_INDEX_MOUNT.to_string(),
             MountMode::ReadOnly,
         );
-    let mut spec = apply_proxy_env(spec)
+    let mut spec = apply_proxy_env_for(spec, "default")
         // Order 801-a2by: name the durable root explicitly so the in-forge
         // readers resolve it without probing for podman (which the enclave does
         // not have) and without an existence heuristic that would silently
@@ -22091,6 +22777,16 @@ fn build_forge_agent_run_args_with_vault(
     {
         spec = spec.env("TILLANDSIAS_CLAUDE_PROMPT", prompt);
     }
+    // Remote Control by default for the Claude lane (2026-11-13): the
+    // entrypoint joins the session to Remote Control named `<project>-forge`
+    // so a coordinator can message it without the operator typing
+    // /remote-control. `--no-remote-control` opts out.
+    if matches!(mode, ForgeAgentMode::Claude) && std::env::var_os(NO_REMOTE_CONTROL_ENV).is_none() {
+        spec = spec.env(
+            "TILLANDSIAS_CLAUDE_SESSION_NAME",
+            claude_forge_session_name(project_name),
+        );
+    }
 
     for (name, value) in
         forge_git_identity_env(forge_app_user().as_ref(), project_name, &forge_host_name())
@@ -22184,6 +22880,14 @@ fn build_forge_agent_run_args_with_vault(
         ) {
             spec = spec.volume(volume, imagegen_tool::FORGE_SCRATCH, MountMode::ReadWrite);
         }
+        // 2055-grzz: the audio studio's scratch VOLUME, the same shape.
+        #[cfg(feature = "host-services")]
+        if let Some(volume) = audio_studio::forge_scratch_volume(
+            project_name,
+            raw_instance.as_deref().unwrap_or("default"),
+        ) {
+            spec = spec.volume(volume, audio_studio::FORGE_AUDIO, MountMode::ReadWrite);
+        }
     }
     // Order 1859-v5iv: labelled with the launching tray run (dead_run.rs).
     if let Some(run) = dead_run::run_label_value() {
@@ -22247,7 +22951,9 @@ fn build_forge_agent_run_args_with_vault(
         ForgeAgentMode::Claude => Some(crate::vault_bootstrap::ProviderId::Anthropic),
         ForgeAgentMode::Codex => Some(crate::vault_bootstrap::ProviderId::Openai),
         ForgeAgentMode::Antigravity => Some(crate::vault_bootstrap::ProviderId::Gemini),
-        ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
+        // 2063-nfag: copilot has no API-key provider; its token is restored
+        // inside its own forge from secret/copilot/oauth.
+        ForgeAgentMode::OpenCode | ForgeAgentMode::Copilot | ForgeAgentMode::Maintenance => None,
     };
     if let Some(p) = provider_api
         && let Ok(key) = crate::vault_bootstrap::read_provider_api_key(p, debug)
@@ -22412,20 +23118,22 @@ pub(crate) fn build_forge_agent_run_argv(
 /// no provider credential.
 fn mode_provider_pair(
     mode: ForgeAgentMode,
-) -> Option<(ProviderId, crate::vault_bootstrap::ProviderId)> {
+) -> Option<(ProviderId, Option<crate::vault_bootstrap::ProviderId>)> {
     match mode {
         ForgeAgentMode::Claude => Some((
             ProviderId::Claude,
-            crate::vault_bootstrap::ProviderId::Anthropic,
+            Some(crate::vault_bootstrap::ProviderId::Anthropic),
         )),
         ForgeAgentMode::Codex => Some((
             ProviderId::Codex,
-            crate::vault_bootstrap::ProviderId::Openai,
+            Some(crate::vault_bootstrap::ProviderId::Openai),
         )),
         ForgeAgentMode::Antigravity => Some((
             ProviderId::Antigravity,
-            crate::vault_bootstrap::ProviderId::Gemini,
+            Some(crate::vault_bootstrap::ProviderId::Gemini),
         )),
+        // 2063-nfag: copilot signs in by device code only (no API key).
+        ForgeAgentMode::Copilot => Some((ProviderId::Copilot, None)),
         ForgeAgentMode::OpenCode | ForgeAgentMode::Maintenance => None,
     }
 }
@@ -22439,9 +23147,11 @@ fn provider_auth_satisfied(mode: ForgeAgentMode, debug: bool) -> bool {
     let Some((op, ap)) = mode_provider_pair(mode) else {
         return true;
     };
-    let api_key_exists = crate::vault_bootstrap::read_provider_api_key(ap, debug)
-        .map(|v| !v.is_empty())
-        .unwrap_or(false);
+    let api_key_exists = ap.is_some_and(|ap| {
+        crate::vault_bootstrap::read_provider_api_key(ap, debug)
+            .map(|v| !v.is_empty())
+            .unwrap_or(false)
+    });
     if api_key_exists {
         return true;
     }
@@ -27841,6 +28551,37 @@ mod tests {
         assert!(!generate_dynamic_caddyfile(&[open]).contains("remote_ip"));
     }
 
+    /// ORDER 2067-uc3k (operator ruling 2026-11-10: "Full https only"): the
+    /// studio route is served on the preview TLS listener ONLY, network-limited
+    /// and with no OTP gate; no plain :8080 site is emitted for it at all.
+    /// Pre-fix: FAILS, every public route also had a plain :8080 site.
+    #[test]
+    fn a_tls_only_studio_route_has_no_plain_site_and_no_otp_gate() {
+        let mut route =
+            RouterRoute::public_service("studio.e6mi-site", "tillandsias-e6mi-site-forge", 3000);
+        route.preview_tls = true;
+        route.allow_cidr = Some("10.89.9.0/24".into());
+        route.tls_only = true;
+        let caddy = generate_dynamic_caddyfile(&[route]);
+        assert!(
+            !caddy.contains("http://studio.e6mi-site.localhost:8080"),
+            "a plain site exists:\n{caddy}"
+        );
+        assert!(!caddy.contains("forward_auth"), "{caddy}");
+        assert!(!caddy.contains("_auth/login"), "{caddy}");
+        let at = caddy
+            .find("https://studio.e6mi-site.localhost:8443 {")
+            .unwrap_or_else(|| panic!("no TLS site:\n{caddy}"));
+        let block = &caddy[at..];
+        let guard = block
+            .find("@outside not remote_ip 10.89.9.0/24")
+            .expect("guard");
+        assert!(
+            guard < block.find("reverse_proxy").expect("proxy"),
+            "{block}"
+        );
+    }
+
     #[test]
     fn private_routes_keep_their_auth_gate() {
         // Regression guard: adding the public branch must not drop auth from
@@ -28004,6 +28745,7 @@ mod tests {
             "claude",
             "bash",
             "antigravity",
+            "copilot",
             "opencode_web",
             "observatorium",
             "inference_tier",
@@ -28014,6 +28756,7 @@ mod tests {
             "claude_login",
             "codex_login",
             "antigravity_login",
+            "copilot_login",
             // 1911-3dqo, yoga 2026-10-30: --rejoin was missing, so a rejoin
             // SIGTERMed the running tray and it stopped the whole stack and
             // the very forge the rejoin came for (tray log: "Received
@@ -31521,6 +32264,167 @@ mod tests {
         assert!(!marker.exists(), "a copy that lands clears the marker");
     }
 
+    /// Order 2076-w7kd: run a vault helper's `watch` against a dead child
+    /// (pid 999999) with an inotifywait on PATH that announces its watch and
+    /// then stays silent, as a real one does when nothing is written. Returns
+    /// whether the watcher exited within the bound; a hung one is killed.
+    #[cfg(unix)]
+    fn watch_dead_child_under_silent_inotify(
+        helper: &str,
+        args: &[&str],
+        envs: &[(&str, std::ffi::OsString)],
+        bin: &std::path::Path,
+    ) -> bool {
+        use std::os::unix::fs::PermissionsExt as _;
+        let manifest = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR");
+        let script = std::path::Path::new(&manifest)
+            .join("../../images/default")
+            .join(helper);
+        let inw = bin.join("inotifywait");
+        std::fs::write(
+            &inw,
+            "#!/usr/bin/env bash\necho 'Watches established.'\nexec sleep 30\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&inw, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut cmd = std::process::Command::new("bash");
+        cmd.arg(&script)
+            .arg("watch")
+            .arg("999999")
+            .args(args)
+            .env(
+                "PATH",
+                format!(
+                    "{}:{}",
+                    bin.display(),
+                    std::env::var("PATH").unwrap_or_default()
+                ),
+            )
+            .env("TILLANDSIAS_OAUTH_WATCH_BEAT_SECS", "1")
+            .env("TILLANDSIAS_APPROVALS_WATCH_BEAT_SECS", "1")
+            .env("TILLANDSIAS_OAUTH_POLL_SECS", "0")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+        for (k, v) in envs {
+            cmd.env(k, v);
+        }
+        let mut child = cmd.spawn().expect("spawn watcher");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        while std::time::Instant::now() < deadline {
+            if child.try_wait().expect("try_wait").is_some() {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+        false
+    }
+
+    #[cfg(unix)]
+    fn capturing_vault_cli(path: &std::path::Path, sink: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::write(
+            path,
+            format!("#!/usr/bin/env bash\ncat >'{}'\n", sink.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_codex_watcher_whose_session_died_copies_and_exits_under_inotify() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let sink = dir.path().join("vaulted");
+        capturing_vault_cli(&bin.join("vault-cli.sh"), &sink);
+        let auth = dir.path().join("auth.json");
+        std::fs::write(&auth, "{\"tokens\":{\"refresh_token\":\"rotated\"}}\n").unwrap();
+        let exited = watch_dead_child_under_silent_inotify(
+            "codex-oauth-vault.sh",
+            &["old"],
+            &[
+                ("TILLANDSIAS_CODEX_AUTH_FILE", auth.into()),
+                (
+                    "TILLANDSIAS_CODEX_STALE_MARKER",
+                    dir.path().join("stale").into(),
+                ),
+                ("TILLANDSIAS_CODEX_HARVEST_ATTEMPTS", "1".into()),
+                (
+                    "TILLANDSIAS_LIFECYCLE_LOG",
+                    dir.path().join("lifecycle.log").into(),
+                ),
+            ],
+            &bin,
+        );
+        assert!(
+            exited,
+            "the watcher of a dead session must exit, not wait on inotify forever"
+        );
+        assert!(
+            sink.exists(),
+            "the rotated sign-in must be copied to Vault before exit"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_claude_approvals_watcher_whose_session_died_harvests_and_exits_under_inotify() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let sink = dir.path().join("vaulted");
+        let cli = bin.join("vault-cli");
+        capturing_vault_cli(&cli, &sink);
+        let cfg = dir.path().join("claude.json");
+        std::fs::write(&cfg, "{\"theme\":\"dark\"}\n").unwrap();
+        let exited = watch_dead_child_under_silent_inotify(
+            "claude-approvals-vault.sh",
+            &[],
+            &[
+                ("CLAUDE_CONFIG_FILE", cfg.into()),
+                ("TILLANDSIAS_VAULT_CLI", cli.into()),
+            ],
+            &bin,
+        );
+        assert!(
+            exited,
+            "the watcher of a dead session must exit, not wait on inotify forever"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_provider_watcher_copies_a_rotation_made_after_its_last_poll() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let sink = dir.path().join("vaulted");
+        capturing_vault_cli(&bin.join("vault-cli.sh"), &sink);
+        let auth = dir.path().join("credentials.json");
+        std::fs::write(&auth, "{\"refresh\":\"rotated\"}\n").unwrap();
+        let exited = watch_dead_child_under_silent_inotify(
+            "provider-oauth-vault.sh",
+            &["old"],
+            &[
+                ("TILLANDSIAS_OAUTH_PROVIDER", "claude".into()),
+                ("TILLANDSIAS_CLAUDE_AUTH_FILE", auth.into()),
+            ],
+            &bin,
+        );
+        assert!(
+            exited,
+            "the provider watcher polls, so a dead child ends it"
+        );
+        assert!(
+            sink.exists(),
+            "a rotation since the last poll must still reach Vault"
+        );
+    }
+
     #[test]
     fn codex_login_never_uses_generic_paste_token_script() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
@@ -32725,6 +33629,34 @@ mod tests {
             !args.iter().any(|a| a == "--no-healthcheck"),
             "the git SERVICE must keep its HEALTHCHECK: {args:?}"
         );
+    }
+
+    #[test]
+    fn git_run_args_give_secret_file_binds_a_writable_parent() {
+        // 2092-crun: crun 1.31 refuses to create a file mount point on the
+        // read-only rootfs, so the mirror died at start (exit 127) whenever a
+        // runtime secret was bound under /run/secrets.
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            Some("s-relay"),
+            None,
+        );
+        assert!(args.iter().any(|a| a == "--read-only"));
+        let at = args
+            .windows(2)
+            .position(|w| w[0] == "--tmpfs" && w[1].starts_with("/run/secrets:"))
+            .expect("a read-only mirror must carry a /run/secrets tmpfs");
+        let bind = args
+            .iter()
+            .position(|a| a.contains(":/run/secrets/vault-approle:"))
+            .expect("the relay secret is bound under /run/secrets");
+        assert!(at < bind, "the tmpfs must precede the binds it parents");
     }
 
     #[test]
@@ -34456,6 +35388,39 @@ esac
         assert!(!args.iter().any(|arg| arg.starts_with("GEMINI_API_KEY=")));
     }
 
+    /// 2093-am6t: litmus:enclave-isolation step 4 used to grep tray/mod.rs
+    /// for the proxy literal; 776-jcf3 retired that tray launcher. This pins the
+    /// same property on the argv the forge launcher actually builds.
+    #[test]
+    fn forge_launch_argv_routes_through_the_enclave_proxy() {
+        let _env = env_lock();
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            Some(&PathBuf::from("/tmp/project")),
+            None,
+            "alpha",
+            None,
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            None,
+            false,
+            false,
+        );
+        for expected in [
+            "http_proxy=http://proxy:3128",
+            "https_proxy=http://proxy:3128",
+            "HTTP_PROXY=http://proxy:3128",
+            "HTTPS_PROXY=http://proxy:3128",
+        ] {
+            assert!(
+                has_arg(&args, expected),
+                "forge launch argv must route egress through the enclave proxy: missing {expected}"
+            );
+        }
+    }
+
     #[test]
     fn opencode_without_vault_key_preserves_credential_free_lane() {
         let _env = env_lock();
@@ -34755,6 +35720,31 @@ esac
     /// identify the harness selected by the launcher. Cover both launch
     /// builders and every direct agent lane; checking the built argv pins the
     /// exact environment that Podman places inside the container.
+    /// ORDER 2063-nfag. `--copilot` selects the copilot lane, alone and with
+    /// --cloud; the existing lanes keep their flags and precedence. Pre-fix:
+    /// FAILS, --copilot selected nothing.
+    #[test]
+    fn the_copilot_flag_selects_the_copilot_lane() {
+        let sel = |a: &[&str]| {
+            let v: Vec<String> = a.iter().map(|s| s.to_string()).collect();
+            forge_agent_lane(&v).map(|(m, f)| (m.slug(), f))
+        };
+        assert_eq!(sel(&["--copilot", "/p"]), Some(("copilot", "--copilot")));
+        assert_eq!(
+            sel(&["--cloud", "owner/repo", "--copilot"]),
+            Some(("copilot", "--copilot"))
+        );
+        assert_eq!(sel(&["--codex", "/p"]), Some(("codex", "--codex")));
+        assert_eq!(sel(&["--claude", "/p"]), Some(("claude", "--claude")));
+        assert_eq!(
+            sel(&["--antigravity", "/p"]),
+            Some(("antigravity", "--antigravity"))
+        );
+        assert_eq!(sel(&["--bash", "/p"]), Some(("maintenance", "--bash")));
+        assert_eq!(sel(&["--opencode", "/p"]), None);
+        assert_eq!(sel(&["--copilot-login"]), None, "the login is not the lane");
+    }
+
     #[test]
     fn forge_launch_args_export_exact_harness_identity() {
         let _pseam = podman_false_seam();
@@ -36271,6 +37261,51 @@ esac
         );
     }
 
+    /// The OpenCode Web / studio window's run argv carries the login data URL,
+    /// whose form holds the session OTP (also the session cookie). The argv
+    /// the shared podman layer redacts for failure messages (stderr and the
+    /// `launch_failed` OpenCode Web event) must hold neither the OTP nor the
+    /// data URL. Built from the production inputs: a real OTP, the real
+    /// login URL builder and the real window spec.
+    #[test]
+    fn opencode_web_window_argv_redacts_the_login_otp() {
+        let runtime = tempfile::tempdir().expect("runtime dir");
+        std::fs::write(runtime.path().join("wayland-0"), b"").expect("socket stand-in");
+        let display = BrowserDisplayContext {
+            wayland_display: Some("wayland-0".to_string()),
+            xdg_runtime_dir: Some(runtime.path().to_path_buf()),
+            audio_socket: None,
+        };
+        let url = "http://opencode.visual-chess.localhost:8080/";
+        let otp = tillandsias_otp::issue_session("visual-chess");
+        let otp_text = tillandsias_otp::format_cookie_value(&otp);
+        let login_url = tillandsias_otp::build_login_data_url(url, &otp);
+        let spec = build_opencode_web_browser_spec(
+            &login_url,
+            "1.2.3",
+            Path::new("/tmp/tillandsias/browser/test-profile"),
+            Path::new("/tmp/tillandsias/ca"),
+            &display,
+            "visual-chess",
+        )
+        .expect("a Wayland session builds a browser spec");
+        let mut full = vec!["run".to_string()];
+        full.extend(spec.build_run_args());
+        // Premise: the secret really is in the argv, base64-encoded in --app.
+        let payload = login_url
+            .strip_prefix("data:text/html;base64,")
+            .expect("login URL is a base64 data URL");
+        assert!(
+            full.iter().any(|a| a.contains(payload)),
+            "premise: the window argv carries the login data URL"
+        );
+        let redacted = tillandsias_podman::backend::redact_argv(&full).join(" ");
+        assert!(!redacted.contains(payload), "login data URL leaked");
+        assert!(!redacted.contains(&otp_text), "OTP leaked");
+        assert!(redacted.contains("--app=data:<redacted>"), "{redacted}");
+        assert!(redacted.contains("--ozone-platform=wayland"), "{redacted}");
+    }
+
     fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {
         let start = source
             .find(signature)
@@ -36913,6 +37948,34 @@ esac
             window
                 .contains("launch_images::launch_images(launch_images::LaunchSite::Observatorium)"),
             "observatorium mode must ensure the web image exists before launch"
+        );
+    }
+
+    /// Order 2066-obsv (PR 4): the project trace viewer moved out of
+    /// observatorium/ (now the static release site) to tools/trace-viewer/.
+    /// --observatorium still serves it at /observatorium/; only the source
+    /// directory in the runtime asset root changed.
+    #[test]
+    fn observatorium_mode_serves_the_trace_viewer_from_tools() {
+        let root = Path::new("/tmp/runtime");
+        let assets = trace_viewer_assets(root);
+        assert_eq!(assets, Path::new("/tmp/runtime/tools/trace-viewer"));
+        let args = build_observatorium_web_args(
+            Path::new("/tmp/project"),
+            "project",
+            &assets,
+            "tillandsias-web:v1.2.3",
+        );
+        assert!(
+            args.iter().any(|arg| arg
+                == "type=bind,source=/tmp/runtime/tools/trace-viewer,target=/var/www/observatorium,relabel=shared,readonly=true"),
+            "--observatorium must mount tools/trace-viewer at /var/www/observatorium: {args:?}"
+        );
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.contains("source=/tmp/runtime/observatorium,")),
+            "--observatorium must not mount observatorium/ (the static release site): {args:?}"
         );
     }
 
@@ -39950,10 +41013,19 @@ mod forge_budget_argv_tests {
     fn assert_budget(what: &str, args: &[String]) {
         let budget = ForgeBudget::for_this_host().podman_args();
         assert!(
-            budget.iter().any(|a| a.starts_with("--memory="))
-                && budget.iter().any(|a| a.contains("memory.high="))
-                && budget.iter().any(|a| a.contains("memory.swap.max=")),
-            "ForgeBudget::podman_args() no longer names --memory / memory.high / memory.swap.max: {budget:?}"
+            budget.iter().any(|a| a == "--cgroup-conf=memory.high=max")
+                && budget
+                    .iter()
+                    .any(|a| a == "--cgroup-conf=memory.swap.max=max")
+                && budget.iter().any(|a| a == "--pids-limit=-1"),
+            "ForgeBudget::podman_args() no longer writes the uncapped forge contract: {budget:?}"
+        );
+        // Operator ruling 2026-11-13: no forge argv carries a memory cap.
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.starts_with("--memory=") || a.starts_with("--memory-swap")),
+            "{what}: forge argv carries a memory cap; argv={args:?}"
         );
         for flag in &budget {
             assert!(
@@ -40420,8 +41492,14 @@ mod keep_id_warm_tests {
         let root = podman_cmd_sync()
             .args(["info", "--format", "{{.Store.GraphRoot}}"])
             .output_bounded(OperationKind::Inspect.default_budget())
+            .ok()
+            .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
+        if let Some(why) = keep_id_graph_root_unusable(&root) {
+            eprintln!("skip: {why}");
+            return;
+        }
         // 1960-kidw: podman may run on the HOST (the builder toolbox's podman
         // is a flatpak-spawn shim), so the GraphRoot it reports is a host
         // path. A store under $HOME is visible here at the same path; one
@@ -40501,11 +41579,9 @@ mod keep_id_warm_tests {
             .args(["rmi", "-f", &tag])
             .output_bounded(OperationKind::Image.default_budget());
         assert!(!layer.is_empty(), "the image's layer digest");
-        assert!(
-            seen >= 1,
-            "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
-            layers_json.display()
-        );
+        if let Some(fault) = keep_id_store_fault(&root, &layers_json, seen, &layer) {
+            panic!("{fault}");
+        }
         assert_eq!(
             after_build, 0,
             "a fresh image starts with no mapped copy (the premise)"
@@ -40514,6 +41590,70 @@ mod keep_id_warm_tests {
         assert_eq!(
             after_start, 1,
             "the first keep-id start made no copy of its own"
+        );
+    }
+
+    /// ORDER 2054-kiwm: why the GraphRoot podman answered cannot name a store,
+    /// or None when it can. Under load the `podman info` query can time out
+    /// or fail, which used to leave an EMPTY root: the store path became the
+    /// relative `overlay-layers/layers.json` and the test blamed the store.
+    fn keep_id_graph_root_unusable(root: &str) -> Option<String> {
+        if root.is_empty() {
+            return Some(
+                "podman answered no GraphRoot (empty; the info query failed or timed out)".into(),
+            );
+        }
+        (!Path::new(root).is_absolute())
+            .then(|| format!("podman answered a relative GraphRoot {root:?}, which names no store"))
+    }
+
+    /// The store fault the warm test reports when the built image's own
+    /// layer is missing from a store that podman did name.
+    fn keep_id_store_fault(
+        root: &str,
+        layers_json: &Path,
+        seen: usize,
+        layer: &str,
+    ) -> Option<String> {
+        (seen == 0).then(|| {
+            format!(
+                "layers.json at {} does not list the built image's layer {layer} (GraphRoot {root}); the store is not readable from here",
+                layers_json.display()
+            )
+        })
+    }
+
+    /// 2054-kiwm: an empty or relative GraphRoot is a named SKIP, never a
+    /// store fault. Pre-fix: FAILS, the empty root fell through to the
+    /// store-not-readable assertion.
+    #[test]
+    fn an_empty_or_relative_graph_root_is_a_named_skip_not_a_store_fault() {
+        for root in ["", "  ", "overlay", "relative/storage"] {
+            let why = keep_id_graph_root_unusable(root.trim());
+            assert!(
+                why.as_deref().is_some_and(|w| w.contains("GraphRoot")),
+                "root {root:?} must skip naming the GraphRoot, got {why:?}; else: {:?}",
+                keep_id_store_fault(root, &keep_id_layers_json(root), 0, "sha256:x")
+            );
+        }
+    }
+
+    /// 2054-kiwm NEGATIVE CONTROL: a real GraphRoot is not skipped, and a
+    /// layers.json there that truly lacks the layer is still a failure.
+    #[test]
+    fn a_real_graph_root_missing_the_layer_still_fails() {
+        let root = "/var/home/u/.local/share/containers/storage";
+        assert_eq!(keep_id_graph_root_unusable(root), None);
+        let fault = keep_id_store_fault(root, &keep_id_layers_json(root), 0, "sha256:x");
+        assert!(
+            fault
+                .as_deref()
+                .is_some_and(|f| f.contains("the store is not readable from here")),
+            "{fault:?}"
+        );
+        assert_eq!(
+            keep_id_store_fault(root, &keep_id_layers_json(root), 1, "sha256:x"),
+            None
         );
     }
 

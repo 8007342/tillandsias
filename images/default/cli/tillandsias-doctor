@@ -45,7 +45,17 @@ row() { NAMES+=("$1"); STATES+=("$2"); DETAILS+=("$3"); }
 # ── Lane socket ───────────────────────────────────────────────
 lane="$(lane_socket_state)"
 case "$lane" in
-    ready)  row lane ok "host_lane=ready socket=${TILLANDSIAS_CONTROL_SOCKET}" ;;
+    ready)
+        # 2070-mtf9: the tray writes lane-stale beside the socket when an
+        # older launcher still serves this lane after an upgrade. It answers,
+        # but every tool runs the old build.
+        stale_note="$(dirname "${TILLANDSIAS_CONTROL_SOCKET}")/lane-stale"
+        if [ -s "$stale_note" ]; then
+            row lane failed "host_lane=stale-build: $(head -c 600 "$stale_note" | tr '\n' ' ')— remedy: ask the operator to relaunch this forge's window from the tray, so the installed build serves the lane"
+        else
+            row lane ok "host_lane=ready socket=${TILLANDSIAS_CONTROL_SOCKET}"
+        fi
+        ;;
     stale)  row lane failed "host_lane=stale: ${TILLANDSIAS_CONTROL_SOCKET} exists but nothing on the host accepts (connect refused); publish_local, browser.open and flutter all fail until the tray re-serves the lane" ;;
     absent) row lane failed "host_lane=absent: no socket at ${TILLANDSIAS_CONTROL_SOCKET}; this forge was launched without a lane" ;;
     unset)  row lane skip "host_lane=unset: TILLANDSIAS_CONTROL_SOCKET is not set; this forge has no host lane" ;;

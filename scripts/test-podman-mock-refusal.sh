@@ -196,7 +196,7 @@ fi
 # it used to answer with an empty stdout and success — the shape most likely to
 # be read as "this image has no data" rather than "nothing ran".
 # The tag is a fixture string, not a real reference — nothing is pulled. It is
-# pinned anyway because check-container-bases.sh greps scripts/ for
+# pinned anyway because check-container-bases.lua greps scripts/ for
 # `tillandsias-*:latest` and cannot tell an argument to a mock from an image
 # this repo would actually run. `./build.sh --check` does not run that policy
 # but `--ci-full` does, which is how this reached linux-next green and then

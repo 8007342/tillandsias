@@ -487,6 +487,8 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(crate::studio_tool::models_descriptor());
             // 1969-cfyt: the studio appliance, started on demand.
             tools.extend(crate::imagegen_studio::tool_descriptors());
+            // 2055-grzz: the audio studio appliance's tools, beside it.
+            tools.extend(crate::audio_studio::tool_descriptors());
             // 1956-26qh: the GPU-free family contract checker, beside it.
             tools.push(validate_family_descriptor());
             // 1957-emar: the GPU arbiter's status and unload, beside them.
@@ -703,6 +705,22 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                             emit(line);
                         }
                     }) {
+                        Ok(result) => serde_json::json!({
+                            "result": tillandsias_browser_mcp::framing::tool_result_content(result)
+                        }),
+                        Err(e) => serde_json::json!({
+                            "error": { "code": -32000, "message": e }
+                        }),
+                    }
+                }
+                // 2055-grzz: one audio studio call, one appliance container;
+                // 2068-eeti: audio.separate goes through the licence gate first.
+                "audio.transform" | "audio.detect_glitches" | "audio.separate" => {
+                    let empty = serde_json::json!({});
+                    let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                    match crate::audio_studio::call(tool_name, project_label, instance, arguments)
+                        .unwrap_or_else(|| Err(format!("unknown tool {tool_name}")))
+                    {
                         Ok(result) => serde_json::json!({
                             "result": tillandsias_browser_mcp::framing::tool_result_content(result)
                         }),
@@ -1839,6 +1857,35 @@ pub(crate) fn lane_server_build(socket: &std::path::Path) -> Result<String, Stri
         .as_str()
         .ok_or_else(|| format!("initialize reply carries no serverInfo: {}", line.trim()))?;
     Ok(format!("{version}+unknown"))
+}
+
+/// 2070-mtf9: the pid of the process listening on `socket`, from the
+/// kernel's peer credentials (captured at listen time). `None` when nothing
+/// accepts there.
+pub(crate) fn lane_listener_pid(socket: &std::path::Path) -> Option<i32> {
+    let stream = UnixStream::connect(socket).ok()?;
+    let creds =
+        nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::PeerCredentials).ok()?;
+    Some(creds.pid())
+}
+
+/// `" (exe deleted)"` when a `/proc/<pid>/exe` link names a replaced binary.
+pub(crate) fn exe_note(exe_link: &str) -> &'static str {
+    if exe_link.ends_with(" (deleted)") {
+        " (exe deleted)"
+    } else {
+        ""
+    }
+}
+
+/// 2070-mtf9: who serves a lane, for an operator report: `pid N`, plus
+/// `(exe deleted)` when that process runs a binary an upgrade replaced.
+pub(crate) fn describe_lane_server(socket: &std::path::Path) -> Option<String> {
+    let pid = lane_listener_pid(socket)?;
+    let exe = fs::read_link(format!("/proc/{pid}/exe"))
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Some(format!("pid {pid}{}", exe_note(&exe)))
 }
 
 /// 1961-8ats: the named refusal when a tray-marked lane is answered by a
@@ -3088,6 +3135,79 @@ mod host_tool_discovery_fixtures {
         }
     }
 
+    /// ORDER 2067-uc3k: browser.open in CONTAINER mode (the tray's real mode)
+    /// admits the studio's window_url and starts a window on it, and refuses
+    /// the retired plain form. Pre-fix: webstudio.open answered the plain
+    /// form, refused here as URL_NOT_ALLOWED (https only).
+    #[test]
+    fn browser_open_in_container_mode_admits_the_studio_window_url() {
+        use std::sync::Mutex;
+        use tillandsias_browser_mcp::launcher::{
+            BrowserContainers, ContainerHandle, ContainerLaunchRequest, LaunchError,
+        };
+        #[derive(Default)]
+        struct Recording {
+            starts: Mutex<Vec<String>>,
+        }
+        impl BrowserContainers for Recording {
+            fn preview_tls_port(&self) -> Option<u16> {
+                Some(18443)
+            }
+            fn routed_hosts(&self) -> Vec<String> {
+                vec![format!(
+                    "studio.{}.localhost:18443",
+                    crate::local_web_preview::host_label("uc3k-site")
+                )]
+            }
+            fn start(
+                &self,
+                request: &ContainerLaunchRequest<'_>,
+            ) -> Result<ContainerHandle, LaunchError> {
+                self.starts.lock().unwrap().push(request.url.to_string());
+                Ok(ContainerHandle {
+                    container_name: "tillandsias-browser-uc3k-1".to_string(),
+                    network_name: "tillandsias-browser-net-uc3k".to_string(),
+                    profile_dir: std::path::PathBuf::new(),
+                    cdp_socket: None,
+                    notice: None,
+                })
+            }
+            fn stop(&self, _handle: &ContainerHandle) {}
+        }
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let host = std::sync::Arc::new(Recording::default());
+        let project = "uc3k-site";
+        let browser = lane_browser_server(project, "uc3k-lane", Some(host.clone()), false);
+        let open = |url: &str| {
+            let reply = handle_mcp_jsonrpc(
+                project,
+                "uc3k-lane",
+                &serde_json::json!({"jsonrpc":"2.0","id":1,"method":"tools/call",
+                    "params":{"name":"browser.open","arguments":{"url": url, "dev": true}}}),
+                &browser,
+                &rt,
+            )
+            .unwrap();
+            reply.to_string()
+        };
+        let url = crate::local_web_preview::studio_url_on(project, 18443);
+        assert_eq!(url, "https://studio.uc3k-site.localhost:18443/");
+        let admitted = open(&url);
+        assert!(!admitted.contains("URL_NOT_ALLOWED"), "{admitted}");
+        assert_eq!(
+            *host.starts.lock().unwrap(),
+            std::slice::from_ref(&url),
+            "{admitted}"
+        );
+        let plain = open("http://studio.uc3k-site.localhost:8080/");
+        assert!(plain.contains("URL_NOT_ALLOWED"), "{plain}");
+        assert_eq!(
+            host.starts.lock().unwrap().len(),
+            1,
+            "the plain form started nothing"
+        );
+    }
+
     /// Order 2025-e6mi: "open in a studio" from a forge launches the studio
     /// through the tray and hands the agent its URLs, for any project. RED
     /// before: webstudio.open answered an error naming `tillandsias --studio`
@@ -3100,6 +3220,7 @@ mod host_tool_discovery_fixtures {
         #[derive(Default)]
         struct Stub {
             launches: Mutex<Vec<(String, String, String)>>,
+            windows: Mutex<Vec<(String, String, String, String)>>,
         }
         impl LaneLauncher for Stub {
             fn project_remote(&self, project: &str) -> Result<String, String> {
@@ -3114,8 +3235,16 @@ mod host_tool_discovery_fixtures {
                 l.push(key);
                 Ok(true)
             }
-            fn router_port(&self) -> Option<u16> {
-                Some(8080)
+            fn tls_port(&self) -> Option<u16> {
+                Some(18443)
+            }
+            fn open_window(&self, project: &str, instance: &str, studio: &str, url: &str) {
+                self.windows.lock().unwrap().push((
+                    project.to_string(),
+                    instance.to_string(),
+                    studio.to_string(),
+                    url.to_string(),
+                ));
             }
         }
 
@@ -3149,10 +3278,26 @@ mod host_tool_discovery_fixtures {
             "\\\"started\\\":true",
             "window_url",
             "preview_url",
-            "studio.e6mi-site.localhost:8080",
+            // 2067-uc3k: https on the preview TLS listener; pre-fix this was
+            // http://studio.e6mi-site.localhost:8080, which browser.open
+            // refuses in container mode.
+            "https://studio.e6mi-site.localhost:18443/",
         ] {
             assert!(text(&first).contains(needle), "{needle}: {first}");
         }
+        assert!(!text(&first).contains(":8080"), "{first}");
+        // 2067-uc3k: the window opens with no user action: the tray opens it
+        // in THIS lane's registry, once, for the launch that started.
+        assert_eq!(
+            *stub.windows.lock().unwrap(),
+            [(
+                project.to_string(),
+                "default".to_string(),
+                "grapesjs".to_string(),
+                "https://studio.e6mi-site.localhost:18443/".to_string()
+            )],
+            "one window, opened by the tray for the lane that asked"
+        );
         assert!(!text(&first).contains("tillandsias --studio"), "{first}");
         assert!(text(&second).contains("\\\"started\\\":false"), "{second}");
         assert_eq!(
@@ -3287,5 +3432,34 @@ mod lane_freshness_tests {
         );
         assert_eq!(parse_version_line("something else"), None);
         assert_eq!(parse_version_line("Tillandsias v$(rm -rf)"), None);
+    }
+}
+
+#[cfg(test)]
+mod lane_server_who_tests {
+    /// 2070-mtf9: a lane socket names the process listening on it, so a
+    /// tray upgrade can say WHICH old launcher still serves a lane (on
+    /// macuahuitl, pid 1020477 with its exe deleted).
+    #[test]
+    fn a_lane_socket_names_the_process_listening_on_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let sock = dir.path().join("mcp.sock");
+        let _listener = std::os::unix::net::UnixListener::bind(&sock).unwrap();
+        assert_eq!(
+            super::lane_listener_pid(&sock),
+            Some(std::process::id() as i32)
+        );
+        let who = super::describe_lane_server(&sock).unwrap();
+        assert_eq!(who, format!("pid {}", std::process::id()));
+        assert!(super::describe_lane_server(&dir.path().join("none.sock")).is_none());
+    }
+
+    #[test]
+    fn a_deleted_exe_is_named() {
+        assert_eq!(
+            super::exe_note("/usr/bin/tillandsias (deleted)"),
+            " (exe deleted)"
+        );
+        assert_eq!(super::exe_note("/usr/bin/tillandsias"), "");
     }
 }

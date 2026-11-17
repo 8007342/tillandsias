@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cold-opencode-lane-agent-dies-on-eproto-tls-handshake-inside-the-spliced-proxy-tunnel
+    event:
+      type: progress
+      ts: "2026-11-08T02:06:01Z"
+      agent_id: linux-yoga-opus5-20261108t020601z
+      host: yoga
+      summary: |
+        MECHANISM (hypothesis from existing evidence, NOT reproduced; the operator declined the 2 extra repro turns 2026-11-08). What is MEASURED: (1) yoga 2026-11-08, 4 single-shot turns through the enclave squid all answered PONG, 1.19.5 up to a 395,232 B request and 2.2.6 up to >=362,679 B, so request size alone does not trigger EPROTO. (2) The 1941-tlsh debug capture shows the failing request rode a REUSED pooled CONNECT tunnel after ~17 s idle, deep in a multi-step session. (3) lenovinha: the upstream edge sends one 24-byte TLS 1.3 alert, which Bun reports as EPROTO; squid splices the opencode.ai tunnels (no bump) and logs TCP_TUNNEL/200. (4) images/proxy/squid.conf sets no idle/pconn/read timeout, so the defaults apply. HYPOTHESIS: the upstream edge closes an idle TLS session (~15 s) with an alert inside the still-open tunnel; Bun's pool reuses that tunnel for the next model stream and fails instead of reconnecting. Size correlated with failure only because long sessions both grow requests and contain idle gaps. PROPOSED FIX on our side, cheapest first: (a) squid closes an idle CONNECT tunnel to the model hosts before the edge does (read_timeout scoped to those hosts, e.g. 10 s), so Bun sees a TCP close on an idle socket, which pooled clients treat as stale and redial; (b) the forge's agent launch disables HTTP keep-alive for the model provider, if opencode v1 exposes it; (c) the agent retries a stream once on EPROTO before exiting, so a cold lane still reaches its disposition. Each needs a repro first: one multi-step turn whose tool step sleeps ~20 s between two model calls, with ss -tnp on :3128 sampled, red before and green after. Running it needs the operator's yes for 2 turns.

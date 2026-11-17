@@ -243,18 +243,6 @@ pub fn resolve_pull_cache_ram_mb(mem_total_mb: u64, override_mb: Option<u32>) ->
     }
 }
 
-/// Working-set baseline (MB) added on top of the tmpfs sum to compute
-/// the `--memory` ceiling for a forge container.
-///
-/// Spec § "--memory ceiling pairs with tmpfs caps" mandates
-/// `--memory = sum(tmpfs caps) + 256 MB` and `--memory-swap` MUST
-/// equal `--memory` exactly (zero net swap). The 256 MB baseline is
-/// the spec's working-set headroom — enough for the agent process,
-/// language servers, and the in-VM helpers without overcommitting.
-///
-/// @trace spec:forge-hot-cold-split
-pub const FORGE_WORKING_SET_BASELINE_MB: u32 = 256;
-
 /// Parse the `size=<N>m` field from a tmpfs spec string.
 ///
 /// Forge tmpfs strings have the form `/path:size=Nm,mode=NNNN`. The
@@ -265,8 +253,7 @@ pub const FORGE_WORKING_SET_BASELINE_MB: u32 = 256;
 /// Tolerant of comma-separated extra tokens (mode, …) and of token
 /// order — `size=` may appear anywhere after the first colon.
 ///
-/// @trace spec:forge-hot-cold-split (parser for [`compute_memory_
-///   ceiling_mb`])
+/// @trace spec:forge-hot-cold-split (tmpfs size parser)
 pub fn parse_tmpfs_size_mb(tmpfs_spec: &str) -> Option<u32> {
     // Everything after the first colon is the option list.
     let (_path, opts) = tmpfs_spec.split_once(':')?;
@@ -283,32 +270,6 @@ pub fn parse_tmpfs_size_mb(tmpfs_spec: &str) -> Option<u32> {
         }
     }
     None
-}
-
-/// Compute the `--memory` ceiling (MB) for a forge container, given
-/// its tmpfs mount sizes.
-///
-/// Spec § "--memory ceiling pairs with tmpfs caps":
-///
-/// > The ceiling is: `sum(all tmpfs size_mb) + 256` (256 MB
-/// > working-set baseline).
-///
-/// `--memory-swap` MUST equal `--memory` exactly (zero net swap) —
-/// the caller is responsible for emitting both args from the
-/// returned value.
-///
-/// Saturating add so a malicious profile with billions of MB of
-/// tmpfs can't overflow. The 256 baseline always wins for empty
-/// profiles (returns 256) — useful when the helper is called
-/// preemptively on a profile that hasn't yet been sized.
-///
-/// @trace spec:forge-hot-cold-split (Requirement: --memory ceiling
-///   pairs with tmpfs caps)
-pub fn compute_memory_ceiling_mb(tmpfs_sizes_mb: impl IntoIterator<Item = u32>) -> u32 {
-    let sum: u32 = tmpfs_sizes_mb
-        .into_iter()
-        .fold(0_u32, |acc, n| acc.saturating_add(n));
-    sum.saturating_add(FORGE_WORKING_SET_BASELINE_MB)
 }
 
 #[cfg(test)]
@@ -446,46 +407,6 @@ Cached:          4567890 kB
         assert!(msg.contains("200 MiB required"), "missing required: {msg}");
         assert!(msg.contains("250 MiB"), "missing threshold: {msg}");
         assert!(msg.contains("1.25×"), "missing headroom factor: {msg}");
-    }
-
-    // @trace spec:forge-hot-cold-split (Scenario "--memory = sum(tmpfs
-    //   caps) + 256 MB working-set baseline")
-    #[test]
-    fn compute_memory_ceiling_returns_sum_plus_256_baseline() {
-        // Spec example: 4 tmpfs mounts totaling 8 + 800 + 256 + 64 = 1128 MB.
-        // Ceiling = 1128 + 256 baseline = 1384 MB.
-        let sizes = [8, 800, 256, 64];
-        assert_eq!(
-            compute_memory_ceiling_mb(sizes),
-            1384,
-            "spec example: {sizes:?} → 1128 + 256 baseline = 1384"
-        );
-
-        // Single 256 MB mount → 256 + 256 = 512.
-        assert_eq!(compute_memory_ceiling_mb([256]), 512);
-    }
-
-    // @trace spec:forge-hot-cold-split (degenerate: empty tmpfs list
-    //   — spec mandates ceiling ALWAYS includes the 256 MB baseline,
-    //   so even a profile with zero tmpfs mounts gets 256)
-    #[test]
-    fn compute_memory_ceiling_returns_baseline_for_empty_profile() {
-        let empty: [u32; 0] = [];
-        assert_eq!(
-            compute_memory_ceiling_mb(empty),
-            FORGE_WORKING_SET_BASELINE_MB
-        );
-    }
-
-    // @trace spec:forge-hot-cold-split (saturating-add branch — a
-    //   malicious profile listing billions of MB of tmpfs cannot
-    //   overflow u32)
-    #[test]
-    fn compute_memory_ceiling_saturates_on_overflow() {
-        // Two near-u32::MAX entries saturate; baseline can't push it
-        // further.
-        let huge = [u32::MAX - 100, 200];
-        assert_eq!(compute_memory_ceiling_mb(huge), u32::MAX);
     }
 
     // @trace spec:forge-hot-cold-split (parser for tmpfs spec strings

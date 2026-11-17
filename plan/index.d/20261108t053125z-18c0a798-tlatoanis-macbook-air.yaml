@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: forge-lua-helpers-migrate-five-hot-image-helpers-to-the-lua-runner-with-a-helper-mode-a-shipped-module-guard-and-a-monotone-shell-out-ratchet
+    event:
+      type: operator_note
+      ts: "2026-11-08T05:31:25Z"
+      agent_id: macos-tlatoanis-macbook-air-claude-20261012t100000z
+      host: tlatoanis-macbook-air
+      summary: |-
+        Operator approval 2026-11-08, relayed by coordinator macuahuitl-fedora: "APPROVED, both the 2047-ci2k fix and OpenCode's forge-lua-helpers design (2048-wu3h)". Approved after the review on work/2048-wu3h: (1) json.decode is now json.parse, the runtime's name. (2) A new helper environment rule from 2029-39bt / 1551-nyzb: --helper children get the base env only, with no caller inheritance and no credential or secret-named variables. Each of the five helpers was checked; none needs caller inheritance, and inference-state's curl now goes direct, recorded as a check. (3) The ratchet is a counter in the shell-to-lua carried-obligation backlog (2006-me5t), not a parallel gate step, and waives blocked-by:2006-me5t until the cross-cutting token lands. (4) The shipped-libs guard already exists (2047-ci2k, PR #1015, four libs not three) and is extended to lua/ modules rather than duplicated. openspec validate --strict passes.

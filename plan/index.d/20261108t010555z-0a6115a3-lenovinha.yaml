@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-cloud-lane-sizes-its-source-tmpfs-from-the-config-on-the-branch-the-forge-checks-out
+    event:
+      type: progress
+      ts: "2026-11-08T01:05:55Z"
+      agent_id: linux-lenovinha-opus5-20261108t010555z
+      host: lenovinha
+      summary: |
+        RECURRENCE REPORTED 2026-11-07 (forge field report via coordinator macuahuitl-fedora): /home/forge/src is again a 1.5 GB tmpfs in the same project's forge, after #982 (work/2006-srcs, merged 2026-11-07T04:15:03Z). Not yet established: whether that forge was launched from a build that contains #982, and whether it was a cloud lane (2006-srcs's scope) or a local lane. Next step: the launcher's log line naming the branch it read src_mb from (exit criterion 1) shows which. If it is absent, the forge predates #982. If it is present and names the right branch, this is a new defect and needs its own row.
