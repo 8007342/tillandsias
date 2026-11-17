@@ -947,6 +947,50 @@ async fn cli_credential_exchange(
     }
 }
 
+/// Order 2094-53uw: a fetch just wrote a fresh rootfs, so the Keychain's Vault
+/// share and root token belong to a store that no longer exists. A failure to
+/// forget them is loud but not fatal: the guest's wrong-key heal still recovers.
+pub(crate) fn forget_stale_vault_credentials() {
+    if let Err(e) = crate::installation_uuid::forget_vault_credentials_for_fresh_guest() {
+        eprintln!("[tillandsias-tray] {e}; the first boot will heal it (1118-fqfk)");
+    }
+}
+
+/// Order 2094-53uw: how long a CLI session waits, before it stops the VM, for
+/// Vault to unseal so the share a fresh init or a wrong-key heal created can be
+/// collected. Measured 2026-11-17: delivery of a stale share -> wrong key ->
+/// wipe (1118-fqfk) -> init -> unsealed took ~15 s from the first answer.
+const VAULT_SETTLE_BEFORE_STOP: std::time::Duration = std::time::Duration::from_secs(120);
+
+/// Order 2094-53uw: the CLI session's last exchange, after Vault has settled.
+///
+/// Measured on the v56.11.17.2 macOS smoke (2026-11-17), every `--exec-guest`
+/// boot: the stale Keychain share is delivered -> "FATAL: unseal request
+/// returned HTTP 400: wrong key" -> "sign-in-again: ... store was wiped" ->
+/// "first boot: running vault operator init" -> "vault unsealed" -> the CLI
+/// session ran its "before stop" exchange while that heal was still in flight,
+/// found no handover, and stopped the VM. The new share was never collected, so
+/// every later boot repeated the loop. Ready is held until Vault is unsealed
+/// (1751-ipuw), so waiting for it (bounded) means the handover exists to
+/// collect. A Vault that never unseals still stops after the bound, loudly.
+async fn credentials_before_stop(
+    vz: &tillandsias_vm_layer::vz::VzRuntime,
+    session: &crate::installation_uuid::CliCredentialExchange,
+) -> bool {
+    if let Err(e) = vz
+        .wait_phase_ready(VAULT_SETTLE_BEFORE_STOP, |t| {
+            probe_phase_secure_or_plain(vz, t)
+        })
+        .await
+    {
+        eprintln!(
+            "[tillandsias-tray] credential exchange (before stop): Vault did not unseal within \
+             {VAULT_SETTLE_BEFORE_STOP:?} ({e}); collecting whatever is pending"
+        );
+    }
+    cli_credential_exchange(vz, session, "before stop").await
+}
+
 async fn open_control_wire_stream(
     vz: &tillandsias_vm_layer::vz::VzRuntime,
     port: u32,
@@ -1682,6 +1726,7 @@ pub fn provision_main() -> i32 {
 
     match rt.block_on(vz.fetch_fedora_cloud_image(&manifest, &on_phase, &on_event)) {
         Ok(()) => {
+            forget_stale_vault_credentials();
             println!(
                 "{{\"status\":\"provisioned\",\"path\":\"{}\"}}",
                 vz.rootfs_image_path().display()
@@ -1739,6 +1784,7 @@ fn provision_rendered(
     };
     match result {
         Ok(()) => {
+            forget_stale_vault_credentials();
             let _ = sink.finish();
             if drew_bars {
                 eprintln!();
@@ -1948,7 +1994,7 @@ pub fn exec_guest_main(argv: Vec<String>, required_cap: Option<&'static str>) ->
                 }
             }
         };
-        cli_credential_exchange(&vz, &credentials, "before stop").await;
+        credentials_before_stop(&vz, &credentials).await;
         let _ = vz.stop(Duration::from_secs(10)).await;
         report_exec(result)
     })
@@ -2226,7 +2272,7 @@ pub fn transport_conformance_main() -> i32 {
     };
 
     print!("{}", render_report(&results));
-    rt.block_on(cli_credential_exchange(&vz, &credentials, "before stop"));
+    rt.block_on(credentials_before_stop(&vz, &credentials));
     let _ = rt.block_on(vz.stop(Duration::from_secs(10)));
     if all_passed(&results) { 0 } else { 1 }
 }
@@ -2645,7 +2691,7 @@ pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
             }
             .await;
             // Stop the VM whatever happened: this verb owns the VM it booted.
-            cli_credential_exchange(&vz, &credentials, "before stop").await;
+            credentials_before_stop(&vz, &credentials).await;
             let _ = vz.stop(Duration::from_secs(10)).await;
             result
         });
@@ -2806,7 +2852,7 @@ pub fn list_cloud_projects_main() -> i32 {
             },
         )
         .await;
-        cli_credential_exchange(&vz, &credentials, "before stop").await;
+        credentials_before_stop(&vz, &credentials).await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
@@ -2991,7 +3037,7 @@ pub fn opencode_main(cloud: String, prompt: Option<String>) -> i32 {
             let _ = std::io::stdout().flush();
         })
         .await;
-        cli_credential_exchange(&vz, &credentials, "before stop").await;
+        credentials_before_stop(&vz, &credentials).await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
@@ -3155,7 +3201,7 @@ pub fn measure_save_restore_main() -> i32 {
             cold_ms.map_or("none".to_string(), |v| v.to_string()),
             restore_ms.map_or("none".to_string(), |v| v.to_string()),
         );
-        cli_credential_exchange(&vz, &credentials, "before stop").await;
+        credentials_before_stop(&vz, &credentials).await;
         let _ = vz.stop(Duration::from_secs(30)).await;
         if restore_ms.is_some() { 0 } else { 1 }
     });
@@ -3666,6 +3712,34 @@ mod tests {
         for p in [VmPhase::Draining, VmPhase::Stopping, VmPhase::Provisioning] {
             assert_eq!(exec_guest_ready_phase(p), p, "{p:?}");
         }
+    }
+
+    #[test]
+    fn every_fetch_site_forgets_the_stale_vault_credentials_2094_53uw() {
+        // Production code only: the text before each file's test module.
+        let full = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let diag = &full[..full.find("#[cfg(test)]\nmod tests {").unwrap()];
+        let host = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/action_host.rs"));
+        let host = &host[..host.find("#[cfg(test)]\nmod tests").unwrap_or(host.len())];
+        let sites = diag.matches("fetch_fedora_cloud_image(&manifest").count()
+            + host.matches("vz.fetch_fedora_cloud_image(").count();
+        let forgets = diag
+            .matches("    forget_stale_vault_credentials();")
+            .count()
+            + host
+                .matches("crate::diagnose::forget_stale_vault_credentials();")
+                .count();
+        assert_eq!(sites, 3, "population: the three fetch sites");
+        assert_eq!(
+            forgets, sites,
+            "a fetch site writes a fresh rootfs without forgetting the share"
+        );
+        let body = &diag[diag.find("async fn credentials_before_stop(").unwrap()..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        assert!(
+            body.find("wait_phase_ready").unwrap() < body.find("cli_credential_exchange").unwrap(),
+            "the before-stop collect must wait for Vault to settle first"
+        );
     }
 
     #[test]
@@ -4206,7 +4280,7 @@ mod tests {
                 );
             } else {
                 assert!(
-                    func.contains("cli_credential_exchange(&vz, &credentials, \"before stop\")"),
+                    func.contains("credentials_before_stop(&vz, &credentials)"),
                     "{name} stops the VM without collecting the Vault handover"
                 );
             }

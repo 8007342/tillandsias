@@ -27,3 +27,6 @@
 ## Ledger claims
 - EXERCISED: the install, the signature, the tray version, the guest headless version, and provisioning from pristine.
 - NOT CHECKED: the forge lane (§4) and the §3b guest container shutdown, both blocked by the vault failure. No sign-in was attempted.
+
+## CORRECTION (2026-11-17T05:45Z): re-scored PASS with known defect 2094-53uw
+The FAIL above came from short `--exec-guest` sessions, which never collect the share a wrong-key heal creates. Then the published tray was launched normally (05:34:15Z). The share's mdat moved to 05:35:23Z after 69 s, with no prompt. On the next boot Vault unsealed with it ("subsequent boot: using unseal key from secret" → "vault unsealed (sealed=false)"). The coordinator accepted the correction: **PASS v56.11.17.2 macos (signatures verified), known defect 2094-53uw (CLI-only boots lose the new share)**. The fix is on work/2094-53uw.
