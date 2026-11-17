@@ -63,7 +63,7 @@ critical_path:
     assert_output_nonempty: true
 
   - step: "verify all 3 containers are running"
-    command: "for i in 1 2 3 4 5; do count=$(podman ps -a --filter 'name=tillandsias-test-.*-e2e' --format '{{.Names}}:{{.Status}}' | grep -Ec '(proxy|router|forge):Up'); if [ \"$count\" = \"3\" ]; then echo 3; exit 0; fi; sleep 1; done; podman ps -a --filter 'name=tillandsias-test-' --format '{{.Names}}:{{.Status}}'; echo \"count=$count\""
+    command: "for i in 1 2 3 4 5; do count=$(podman ps -a --filter 'name=tillandsias-test-.*-e2e' --format '{{.Names}}:{{.Status}}' | grep -Ec '(proxy|router|forge)-e2e:Up'); if [ \"$count\" = \"3\" ]; then echo 3; exit 0; fi; sleep 1; done; podman ps -a --filter 'name=tillandsias-test-' --format '{{.Names}}:{{.Status}}'; echo \"count=$count\""
     timeout_ms: 10000
     expected_behavior: "3"
 
