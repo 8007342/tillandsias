@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-a-vault-wipe-is-a-tray-event-with-a-cause-class
+    field: next_action
+    value: D6 is answered. Write the event test and the record allowlist test, watch both fail, then push the event from the caller of wipe_unopenable_store and write the one record.
+    ts: "2026-11-11T19:15:06Z"
+    host: macuahuitl
+    replaces_sha256: "ee0c04a1294c20b4be8c45f28f6b57e96d752f22a7c62492d4ffec0534d32356"
+
+events:
+  - packet_id: medium-a-vault-wipe-is-a-tray-event-with-a-cause-class
+    event:
+      type: note
+      ts: "2026-11-11T19:15:06Z"
+      host: macuahuitl
+      summary: |-
+        next step now includes the approved record

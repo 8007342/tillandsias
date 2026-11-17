@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: medium-a-vault-wipe-is-a-tray-event-with-a-cause-class
+    field: context
+    value: |-
+      Audit finding M4 (black-box M4 confirmed). The wipe itself is the operator's rule and stays. wipe_unopenable_store reports with a single stderr line, so a wipe on 2026-11-11 was found only by reading a log, and its cause is unknown. The tray sentence is curated and calm. Whether anything may be persisted about it is operator decision D6; until then the event is live only. No recovery or salvage step is added.
+
+
+      [2026-11-11T19:15:05Z macuahuitl] Operator ruling on D6, relayed by the coordinator 2026-11-11, approved. One persisted NON-SECRET wipe-history record is acceptable. It holds cause class, timestamp and version only. It holds no private information, no account name, no repository name, no path with a user name, no host name beyond a class, no token fragment. The tray event is still required.
+    ts: "2026-11-11T19:15:05Z"
+    host: macuahuitl
+
+events:
+  - packet_id: medium-a-vault-wipe-is-a-tray-event-with-a-cause-class
+    event:
+      type: note
+      ts: "2026-11-11T19:15:05Z"
+      host: macuahuitl
+      summary: |-
+        D6 answered
