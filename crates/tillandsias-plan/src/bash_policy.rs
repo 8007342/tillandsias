@@ -519,10 +519,12 @@ fn self_matching_kill(argv: &[String], depth: u8) -> Option<String> {
 fn agent_merge(argv: &[String]) -> Option<String> {
     let i = argv.iter().position(|a| cp::program_name(a) == "gh")?;
     let rest = &argv[i + 1..];
-    if rest.len() >= 2 && rest[0] == "pr" && rest[1] == "merge" {
-        if let Some(head) = rest[2..].iter().find(|a| a.contains("licences/")) {
-            return Some(format!("gh pr merge {head}"));
-        }
+    if rest.len() >= 2
+        && rest[0] == "pr"
+        && rest[1] == "merge"
+        && let Some(head) = rest[2..].iter().find(|a| a.contains("licences/"))
+    {
+        return Some(format!("gh pr merge {head}"));
     }
     None
 }

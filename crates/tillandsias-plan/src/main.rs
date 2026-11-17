@@ -5273,10 +5273,10 @@ fn run_classify_bash(args: &[String]) -> ! {
             // stays pure. `gh` is resolved on the hook process PATH, which
             // a Bash command cannot change (no env override: one would let
             // an agent point the lookup at a stub).
-            if c.verdict == bp::Verdict::Allow {
-                if let Some(d) = bp::resolve_merges(cmd, "gh") {
-                    c = d;
-                }
+            if c.verdict == bp::Verdict::Allow
+                && let Some(d) = bp::resolve_merges(cmd, "gh")
+            {
+                c = d;
             }
             bp::log_decision(&ctx, cmd, c.verdict.as_str(), &c.rule, false);
             match c.verdict {
