@@ -217,6 +217,19 @@ const DEMUCS_UNCLEAR: &str = "The license of the weights is not clear: MusDB con
 const DEMUCS_6S: &str = "The 6 source variant of htdemucs was trained only on Meta internal dataset, which likely means CC-NC-BY license is applicable, as it was the case for all models released by FAIR.";
 const NVIDIA_UNREAD: &str = "the NVIDIA Open Model License Agreement (June 2024) is published only as a PDF at developer.download.nvidia.com, which this host could not fetch; its clauses are classed from the licence as remembered and are not quoted. Read it before relying on these classes.";
 
+// 2094-h3rq: Fish Audio Research License Agreement (fishaudio/s2-pro
+// LICENSE.md, Last Updated March 7, 2026), quoted without its Markdown bold.
+const FISH_NC: &str = "Any use of the Fish Audio Materials or Derivative Works for a Commercial Purpose requires a separate written license agreement from Fish Audio. No commercial rights are granted under this Agreement.";
+const FISH_ATTRIBUTION: &str = "(iii) prominently display \"Built with Fish Audio\" on a related website, user interface, blogpost, about page, or product documentation.";
+const FISH_NOTICE: &str = "(i) provide a copy of this Agreement to that third party, (ii) retain the following attribution notice within a \"Notice\" text file distributed as a part of such copies: \"This model is licensed under the Fish Audio Research License, Copyright © 39 AI, INC. All Rights Reserved.\"";
+const FISH_FIELD: &str = "Furthermore, You will not use the Fish Audio Materials or Derivative Works, or any output or results of the Fish Audio Materials or Derivative Works, to create or improve any foundational generative AI model (excluding the Models or Derivative Works).";
+const FISH_AUP: &str = "Your use of the Fish Audio Materials and Derivative Works, including any output or results of the Fish Audio Materials or Derivative Works, must comply with applicable laws and regulations (including Trade Control Laws and equivalent regulations) and adhere to Fish Audio's Acceptable Use Policy, which is hereby incorporated by reference. (The Acceptable Use Policy text is not pinned here.)";
+// 2094-h3rq: Boson Higgs Audio 2 Community License Agreement (June 20, 2025).
+const HIGGS_ATTRIBUTION: &str = "(B) prominently display \u{201c}Built with Higgs Materials licensed from Boson AI USA, Inc., Copyright Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under the Meta Llama 3 Community License, Copyright Meta Platforms, Inc., All Right Reserved\". based on Meta Llama 3\u{201d} on a related website, user interface, blogpost, about page, or product documentation.";
+const HIGGS_NOTICE: &str = "(A) provide a copy of this Agreement and the of Meta License \u{2019}s Llama 3 agreement with any such Higgs Materials";
+const HIGGS_FIELD: &str = "v. You will not use the Higgs Materials or any output or results of the Higgs Materials to improve any other large language model (excluding Boson Higgs Audio 2 or derivative works thereof).";
+const HIGGS_THRESHOLD: &str = "If the annual active users of the products or services made available by or for Licensee, or Licensee\u{2019}s affiliates, is greater than 100,000 annual active users in the preceding calendar year, you must request an expanded license from Boson AI";
+const HIGGS_LLAMA: &str = "The terms and conditions of the Meta License Agreement are hereby incorporated herein by reference and Unless stated otherwise below, its terms apply. (Meta Llama 3 Community License, meta-llama/llama3 LICENSE at a0940f9c, sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f; the Llama 3 Acceptable Use Policy it also incorporates is not pinned here.)";
 /// The obligation table, keyed by licence id as the register spells it.
 /// An unknown id yields one review obligation naming it.
 pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
@@ -321,6 +334,48 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
                 DEMUCS_UNCLEAR,
             ),
         ],
+        // 2094-h3rq: Fish S2-Pro. Research AND non-commercial use is granted
+        // (hobbyist, evaluation), so it is not forbidden outright.
+        "fish-audio-research-license" => vec![
+            ob(
+                C::Attribution {
+                    text: "Built with Fish Audio".into(),
+                },
+                FISH_ATTRIBUTION,
+            ),
+            ob(C::Notice, FISH_NOTICE),
+            ob(C::NonCommercial, FISH_NC),
+            ob(C::FieldOfUse, FISH_FIELD),
+            ob(
+                C::Review {
+                    clause: "the Fish Audio Acceptable Use Policy is incorporated by reference and is not pinned".into(),
+                },
+                FISH_AUP,
+            ),
+        ],
+        // 2094-h3rq: Higgs Audio v2, a Meta Llama 3 derivative.
+        "boson-higgs-audio-2-community-license" => vec![
+            ob(
+                C::Attribution {
+                    text: "Built with Higgs Materials licensed from Boson AI USA, Inc. and Meta Llama 3".into(),
+                },
+                HIGGS_ATTRIBUTION,
+            ),
+            ob(C::Notice, HIGGS_NOTICE),
+            ob(C::FieldOfUse, HIGGS_FIELD),
+            ob(
+                C::SeatOrRevenueThreshold {
+                    detail: "100,000 annual active users: an expanded licence from Boson AI".into(),
+                },
+                HIGGS_THRESHOLD,
+            ),
+            ob(
+                C::Review {
+                    clause: "incorporates the Meta Llama 3 Community License (sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f) and the Llama 3 Acceptable Use Policy (not pinned) by reference".into(),
+                },
+                HIGGS_LLAMA,
+            ),
+        ],
         "mit" => vec![ob(C::Notice, MIT_NOTICE)],
         _ => vec![ob(
             C::Review {
@@ -349,6 +404,15 @@ const FORBIDDEN_OUTRIGHT: &[(&str, &str)] = &[
         "insightface-non-commercial",
         "InsightFace weights are for non-commercial research purposes only",
     ),
+];
+
+/// Licences acknowledged per project only: no standing operator grant covers
+/// them (Demucs: operator ruling 2026-11-09, 2068-eeti; Fish S2-Pro and Higgs
+/// v2: the licence PR flow, 2094-h3rq).
+pub const PER_PROJECT_ONLY: &[&str] = &[
+    "demucs-weights-unstated",
+    "fish-audio-research-license",
+    "boson-higgs-audio-2-community-license",
 ];
 
 pub fn forbidden_outright(licence_id: &str) -> Option<&'static str> {
@@ -867,6 +931,7 @@ pub fn licence_pr(
     licence_url: &str,
     obligations: &[Obligation],
     promises: &[String],
+    incorporated: &[IncorporatedText],
 ) -> Result<LicencePr, String> {
     use sha2::Digest as _;
     let got = format!("{:x}", sha2::Sha256::digest(licence_text));
@@ -918,20 +983,55 @@ pub fn licence_pr(
         body.push('\n');
     }
     body.push_str("````\n\n</details>\n\n");
+    let mut extra_files = Vec::new();
+    if !incorporated.is_empty() {
+        body.push_str("### Incorporated by reference\n\nThis licence makes these texts part of its terms; pressing Merge accepts them too.\n\n");
+    }
+    for inc in incorporated {
+        let got = format!("{:x}", sha2::Sha256::digest(inc.text));
+        if got != inc.sha256 {
+            return Err(format!(
+                "incorporated text {} hashes to {got}, not the pinned {}; nothing rendered",
+                inc.id, inc.sha256
+            ));
+        }
+        let t = String::from_utf8_lossy(inc.text);
+        body.push_str(&format!(
+            "<details><summary>{}, verbatim (sha256 <code>{}</code>, from {})</summary>\n\n````text\n{}{}````\n\n</details>\n\n",
+            inc.id,
+            inc.sha256,
+            inc.url,
+            t,
+            if t.ends_with('\n') { "" } else { "\n" }
+        ));
+        extra_files.push((licence_text_path(inc.id), t.into_owned()));
+    }
     body.push_str("---\nOpened by the accept-licence skill. Until a human merges this in the GitHub web UI, the licence gate admits nothing. Closing it unmerged declines.\n");
+    let mut files = vec![
+        (record_path, ack.to_yaml()),
+        (
+            spec_path,
+            obligations_spec(artefact, &ack.licence, obligations),
+        ),
+        (text_path, text.into_owned()),
+    ];
+    files.extend(extra_files);
     Ok(LicencePr {
         head: format!("{LICENCE_HEAD_PREFIX}{id}"),
         title: format!("Accept the {} licence for {artefact}", ack.licence),
         body,
-        files: vec![
-            (record_path, ack.to_yaml()),
-            (
-                spec_path,
-                obligations_spec(artefact, &ack.licence, obligations),
-            ),
-            (text_path, text.into_owned()),
-        ],
+        files,
     })
+}
+
+/// A text the licence incorporates by reference (Higgs Audio 2 incorporates
+/// the Meta Llama 3 Community License), quoted and pinned beside it.
+#[derive(Debug, Clone, Copy)]
+pub struct IncorporatedText<'a> {
+    pub id: &'a str,
+    pub url: &'a str,
+    pub sha256: &'a str,
+    pub text: &'a [u8],
 }
 
 // ---------------------------------------------------------------------------
@@ -967,15 +1067,24 @@ impl Verifier {
         }
     }
 
-    /// The gate a project's request goes through on this host. With
-    /// `TILLANDSIAS_LICENCE_ACK_REPO` naming the project's checkout or mirror
-    /// clone, the merge gate over its default branch; a repo whose default
-    /// branch cannot be resolved admits nothing (an unreadable gate is a
-    /// refusal, never a fall back to a weaker one). Otherwise the SSHSIG gate.
-    pub fn for_project_host() -> Result<Self, String> {
-        match std::env::var_os("TILLANDSIAS_LICENCE_ACK_REPO") {
-            Some(repo) => Ok(Self::merged(MergeGate::for_repo(Path::new(&repo))?)),
-            None => Ok(Self::for_host()),
+    /// The gate `project`'s request goes through on this host, chosen from
+    /// HOST state only (never from the forge's environment or request): when
+    /// the project's git mirror answers, the merge gate over its default
+    /// branch, with GitHub's confirmation required; a mirror that answers
+    /// but whose default branch cannot be resolved REFUSES (never a fall
+    /// back). With no mirror, the SSHSIG gate, where an unsigned record
+    /// admits nothing.
+    pub fn for_project_host(project: &str) -> Result<Self, String> {
+        let probe = git_out(
+            &GitSource::Mirror(project.to_string()),
+            &["rev-parse", "--is-bare-repository"],
+        );
+        match probe {
+            Ok(_) => Ok(Self {
+                merge_gate: Some(MergeGate::for_mirror(project)?),
+                ..Self::for_host()
+            }),
+            Err(_) => Ok(Self::for_host()),
         }
     }
 
@@ -1072,29 +1181,91 @@ pub struct MergeEvidence {
 /// tree, or only on an unmerged branch, admits nothing.
 #[derive(Debug, Clone)]
 pub struct MergeGate {
-    pub repo: PathBuf,
-    /// e.g. `origin/main`; [`MergeGate::for_repo`] resolves `origin/HEAD`.
+    pub repo: GitSource,
+    /// e.g. `origin/main`, or `main` in the bare mirror.
     pub default_ref: String,
-    /// `owner/name` for the optional online check; `None` = offline only.
+    /// `owner/name` for the online check.
     pub github_repo: Option<String>,
+    pub online: Online,
 }
 
-fn git_out(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
-        .arg("-C")
-        .arg(repo)
-        .args(args)
-        .stdin(Stdio::null())
-        .output()
-        .map_err(|e| format!("git: {e}"))?;
-    if !out.status.success() {
-        return Err(format!(
-            "git {}: {}",
-            args.join(" "),
-            String::from_utf8_lossy(&out.stderr).trim()
-        ));
+/// Where the merge gate reads git. HOST-SIDE ONLY: nothing a forge sends or
+/// sets chooses it (no environment variable; order 2094-h3rq, coordinator
+/// ruling 2026-11-17).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitSource {
+    /// A repository on this host's filesystem (fixtures, a host checkout).
+    Local(PathBuf),
+    /// The project's git mirror, `tillandsias-git-<project>` at
+    /// `/srv/git/<project>`, reached through the host's podman.
+    Mirror(String),
+}
+
+/// How the gate uses the GitHub API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Online {
+    /// Offline evidence only; merged_by unknown.
+    Off,
+    /// Confirm when reachable; unreachable leaves the offline evidence,
+    /// labelled `online-unavailable`.
+    Optional,
+    /// Admit nothing without GitHub's confirmation. The mirror accepts forge
+    /// pushes (relayed to GitHub), and a forge can push a commit that LOOKS
+    /// like a GitHub merge (committer name and a gpgsig header are just
+    /// bytes; nothing here verifies GitHub's key), so a mirror-read record
+    /// needs GitHub to say the PR merged at that sha.
+    Required,
+}
+
+fn git_out(src: &GitSource, args: &[&str]) -> Result<String, String> {
+    match src {
+        GitSource::Local(repo) => {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(repo)
+                .args(args)
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|e| format!("git: {e}"))?;
+            if !out.status.success() {
+                return Err(format!(
+                    "git {}: {}",
+                    args.join(" "),
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ));
+            }
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        }
+        GitSource::Mirror(project) => {
+            let mut c = crate::podman_command();
+            c.args(mirror_git_argv(project, args));
+            crate::podman_command_output(c, false)
+                .map_err(|e| format!("mirror git {}: {e}", args.join(" ")))
+        }
     }
-    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// `owner/name` from the source's `origin` URL when it is GitHub.
+fn github_repo_of(src: &GitSource) -> Option<String> {
+    let url = git_out(src, &["remote", "get-url", "origin"]).ok()?;
+    url.trim()
+        .trim_end_matches(".git")
+        .split_once("github.com")
+        .map(|(_, r)| r.trim_start_matches([':', '/']).to_string())
+        .filter(|r| r.split('/').count() == 2)
+}
+
+/// The podman argv that runs `git <args>` in `project`'s mirror.
+pub fn mirror_git_argv(project: &str, args: &[&str]) -> Vec<String> {
+    let mut v = vec![
+        "exec".to_string(),
+        format!("tillandsias-git-{project}"),
+        "git".to_string(),
+        "-C".to_string(),
+        format!("/srv/git/{project}"),
+    ];
+    v.extend(args.iter().map(|a| a.to_string()));
+    v
 }
 
 /// `#123` from `Merge pull request #123 from owner/licences/x` (a merge
@@ -1123,22 +1294,36 @@ impl MergeGate {
     /// `repo` with its default branch resolved from `origin/HEAD`, and the
     /// GitHub `owner/name` read from the `origin` URL when it is GitHub.
     pub fn for_repo(repo: &Path) -> Result<Self, String> {
+        let src = GitSource::Local(repo.to_path_buf());
         let head = git_out(
-            repo,
+            &src,
             &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
         )
         .map_err(|e| format!("cannot resolve the default branch (origin/HEAD): {e}"))?;
-        let url = git_out(repo, &["remote", "get-url", "origin"]).unwrap_or_default();
-        let github_repo = url
-            .trim()
-            .trim_end_matches(".git")
-            .split_once("github.com")
-            .map(|(_, r)| r.trim_start_matches([':', '/']).to_string())
-            .filter(|r| r.split('/').count() == 2);
+        let online = if std::env::var_os("TILLANDSIAS_LICENCE_ACK_ONLINE").is_some() {
+            Online::Optional
+        } else {
+            Online::Off
+        };
         Ok(Self {
-            repo: repo.to_path_buf(),
+            github_repo: github_repo_of(&src),
+            repo: src,
             default_ref: head.trim().to_string(),
-            github_repo,
+            online,
+        })
+    }
+
+    /// `project`'s git mirror: a bare repository whose `HEAD` is the default
+    /// branch. Online confirmation is REQUIRED (see [`Online::Required`]).
+    pub fn for_mirror(project: &str) -> Result<Self, String> {
+        let src = GitSource::Mirror(project.to_string());
+        let head = git_out(&src, &["symbolic-ref", "--short", "HEAD"])
+            .map_err(|e| format!("cannot resolve the mirror's default branch: {e}"))?;
+        Ok(Self {
+            github_repo: github_repo_of(&src),
+            repo: src,
+            default_ref: head.trim().to_string(),
+            online: Online::Required,
         })
     }
 
@@ -1223,8 +1408,20 @@ impl MergeGate {
             merged_by: None,
             check: "offline".into(),
         };
-        if let Some(gh) = &self.github_repo
-            && std::env::var_os("TILLANDSIAS_LICENCE_ACK_ONLINE").is_some()
+        if self.online == Online::Off {
+            return Ok(ev);
+        }
+        let Some(gh) = &self.github_repo else {
+            return match self.online {
+                Online::Required => Err(format!(
+                    "{sha}: GitHub must confirm PR #{pr}, and the repo names no GitHub origin"
+                )),
+                _ => {
+                    ev.check = "online-unavailable: no GitHub origin".into();
+                    Ok(ev)
+                }
+            };
+        };
         {
             match online_pr(gh, pr) {
                 Ok((merged, merge_sha, by)) => {
@@ -1239,6 +1436,11 @@ impl MergeGate {
                 }
                 // No network is not a pass and not a refusal: the offline
                 // evidence stands, labelled, and merged_by stays unknown.
+                Err(e) if self.online == Online::Required => {
+                    return Err(format!(
+                        "GitHub could not confirm PR #{pr} ({e}); a mirror-read record admits only with that confirmation, retry when GitHub is reachable"
+                    ));
+                }
                 Err(e) => ev.check = format!("online-unavailable: {e}"),
             }
         }
@@ -1411,13 +1613,21 @@ fn admit_restricted_row(
     }
     let now = chrono::Utc::now();
     let mut reasons: Vec<String> = Vec::new();
-    // Under the merge gate the records come from the default branch, never
-    // from the working tree or a state-dir copy (order 2094-h3rq).
-    let records = match &verifier.merge_gate {
-        Some(g) => g.records(),
-        None => read_acknowledgements(project_ack_dir),
-    };
-    for (slug, ack) in records {
+    // Under the merge gate the MERGED records come from the default branch,
+    // never from the working tree (order 2094-h3rq). Signed records in the
+    // project dir still verify by their SSHSIG against the host's enrolled
+    // signers: the signature gate is replaced only for unsigned records, and
+    // an unsigned record outside the default branch admits nothing.
+    let mut records: Vec<(String, Acknowledgement, bool)> = Vec::new();
+    if let Some(g) = &verifier.merge_gate {
+        records.extend(g.records().into_iter().map(|(s, a)| (s, a, true)));
+    }
+    records.extend(
+        read_acknowledgements(project_ack_dir)
+            .into_iter()
+            .map(|(s, a)| (s, a, false)),
+    );
+    for (slug, ack, merged) in records {
         if !ack.covers.iter().any(|c| c == &r.repo) {
             continue;
         }
@@ -1443,9 +1653,9 @@ fn admit_restricted_row(
             reasons.push(format!("{slug}: expired at {}", ack.expiry));
             continue;
         }
-        let approved = match &verifier.merge_gate {
-            Some(g) => g.evidence(&slug).map(Some),
-            None => verifier
+        let approved = match (&verifier.merge_gate, merged) {
+            (Some(g), true) => g.evidence(&slug).map(Some),
+            _ => verifier
                 .verify(&ack.statement_text(), &ack.signature, &ack.grantor)
                 .map(|()| None),
         };
@@ -1522,7 +1732,7 @@ pub fn admits_restricted(
     project: &str,
     artefacts: &[RestrictedArtefact],
 ) -> Result<Vec<String>, String> {
-    let verifier = Verifier::for_project_host().map_err(|e| {
+    let verifier = Verifier::for_project_host(project).map_err(|e| {
         format!("consent_required: {project}: the licence gate cannot read its repo: {e}")
     })?;
     admits_restricted_in(
@@ -1894,6 +2104,25 @@ pub(crate) mod tests {
         assert_eq!(m.merged_by, None);
         assert_eq!(m.check, "offline");
 
+        // The mirror's gate REQUIRES GitHub's confirmation: without it the
+        // same structurally perfect merge admits nothing (a forge can push
+        // bytes that look like a GitHub merge).
+        let strict = Verifier::merged(MergeGate {
+            online: Online::Required,
+            github_repo: None,
+            ..MergeGate::for_repo(&repo).unwrap()
+        });
+        let err = register_admits_with_consent_in(
+            crate::imagegen_models::register_tsv(),
+            RESTRICTED,
+            &row,
+            &repo.join(ACK_REPO_DIR),
+            "project:demo",
+            &strict,
+        )
+        .unwrap_err();
+        assert!(err.contains("GitHub must confirm"), "{err}");
+
         // Edited on the default branch after the merge: the merge no longer
         // vouches for these bytes.
         git(
@@ -1929,6 +2158,7 @@ pub(crate) mod tests {
             "https://example.invalid/l",
             &obl,
             &promises,
+            &[],
         )
         .unwrap();
         assert_eq!(pr.head, "licences/cc-by-nc-sa-4-0");
@@ -1942,9 +2172,39 @@ pub(crate) mod tests {
         assert_eq!(rec_path, &format!("{ACK_REPO_DIR}/{}.yaml", ack.slug()));
         assert_eq!(Acknowledgement::from_yaml(rec).unwrap(), ack);
         assert_eq!(pr.files[2].1.as_bytes(), text);
-        let err =
-            licence_pr(&ack, "x", b"LICENCE TEXT\nline 2\n", "u", &obl, &promises).unwrap_err();
+        let err = licence_pr(
+            &ack,
+            "x",
+            b"LICENCE TEXT\nline 2\n",
+            "u",
+            &obl,
+            &promises,
+            &[],
+        )
+        .unwrap_err();
         assert!(err.contains("not the pinned"), "{err}");
+        // An incorporated text is pinned too: other bytes render nothing.
+        let inc_text = b"INCORPORATED\n";
+        let inc_sha = format!("{:x}", sha2::Sha256::digest(inc_text));
+        let inc = IncorporatedText {
+            id: "meta-llama-3-community-license",
+            url: "https://example.invalid/llama",
+            sha256: &inc_sha,
+            text: inc_text,
+        };
+        let pr = licence_pr(&ack, "x", text, "u", &obl, &promises, &[inc]).unwrap();
+        assert!(pr.body.contains("### Incorporated by reference"));
+        assert!(pr.body.contains("INCORPORATED\n"));
+        assert_eq!(
+            pr.files[3].0,
+            "licences/texts/meta-llama-3-community-license.md"
+        );
+        let bad = IncorporatedText {
+            text: b"OTHER\n",
+            ..inc
+        };
+        let err = licence_pr(&ack, "x", text, "u", &obl, &promises, &[bad]).unwrap_err();
+        assert!(err.contains("incorporated text"), "{err}");
     }
 
     /// The skill's DRY RUN: render a licence PR to a local dir, opening
@@ -1974,7 +2234,40 @@ pub(crate) mod tests {
         };
         let promises: Vec<String> = env("_PROMISES").lines().map(str::to_string).collect();
         let obl = obligations_for(&ack.licence);
-        let pr = licence_pr(&ack, &env("_REPO"), &text, &env("_URL"), &obl, &promises).unwrap();
+        // _INCORPORATED (optional): lines `<id>|<url>|<path>`.
+        let inc_raw: Vec<(String, String, Vec<u8>, String)> =
+            std::env::var("TILLANDSIAS_LICENCE_PR_DRY_RUN_INCORPORATED")
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| {
+                    let mut it = l.splitn(3, '|');
+                    let id = it.next().unwrap().to_string();
+                    let url = it.next().unwrap().to_string();
+                    let bytes = fs::read(it.next().unwrap()).unwrap();
+                    let sha = format!("{:x}", sha2::Sha256::digest(&bytes));
+                    (id, url, bytes, sha)
+                })
+                .collect();
+        let inc: Vec<IncorporatedText> = inc_raw
+            .iter()
+            .map(|(id, url, bytes, sha)| IncorporatedText {
+                id,
+                url,
+                sha256: sha,
+                text: bytes,
+            })
+            .collect();
+        let pr = licence_pr(
+            &ack,
+            &env("_REPO"),
+            &text,
+            &env("_URL"),
+            &obl,
+            &promises,
+            &inc,
+        )
+        .unwrap();
         for (p, c) in &pr.files {
             let dst = out.join("files").join(p);
             fs::create_dir_all(dst.parent().unwrap()).unwrap();
@@ -1989,6 +2282,138 @@ pub(crate) mod tests {
             ),
         )
         .unwrap();
+    }
+
+    /// The merge gate replaces the signature only for unsigned records: a
+    /// SIGNED record in the project dir (the demucs shape) still admits by
+    /// its SSHSIG when the project has a mirror.
+    #[test]
+    fn a_signed_record_still_admits_under_the_merge_gate() {
+        let dir = disk_scratch("merge-signed");
+        let (key, signers) = enrol(&dir, "operator");
+        let repo = dir.join("project");
+        fs::create_dir_all(&repo).unwrap();
+        git(&repo, OWNER, &["init", "-q"]);
+        git(
+            &repo,
+            OWNER,
+            &["commit", "-q", "--allow-empty", "-m", "base"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let verifier = Verifier {
+            allowed_signers: signers,
+            merge_gate: Some(MergeGate::for_repo(&repo).unwrap()),
+        };
+        let acks = dir.join("acks");
+        fs::create_dir_all(&acks).unwrap();
+        let unsigned = nc_ack("project:demo");
+        fs::write(acks.join("unsigned.yaml"), unsigned.to_yaml()).unwrap();
+        let admit = || {
+            register_admits_with_consent_in(
+                crate::imagegen_models::register_tsv(),
+                RESTRICTED,
+                &nc_row(),
+                &acks,
+                "project:demo",
+                &verifier,
+            )
+        };
+        assert!(admit().is_err(), "an unsigned, unmerged record admitted");
+        let signed = sign(&dir, &key, nc_ack("project:demo"));
+        fs::write(acks.join("signed.yaml"), signed.to_yaml()).unwrap();
+        let ok = admit().unwrap();
+        assert_eq!(ok.acknowledgement_slug.as_deref(), Some("signed"));
+        assert_eq!(ok.merge, None);
+    }
+
+    /// The gate's source is host state only: no environment variable a forge
+    /// could carry picks the repo, and the mirror is reached by podman exec.
+    #[test]
+    fn the_merge_gate_source_is_host_side_only() {
+        let src = include_str!("licence_consent.rs");
+        let var = concat!("TILLANDSIAS_LICENCE_", "ACK_REPO");
+        assert!(!src.contains(var), "{var} is read again");
+        assert_eq!(
+            mirror_git_argv("demon_attack", &["symbolic-ref", "--short", "HEAD"]),
+            [
+                "exec",
+                "tillandsias-git-demon_attack",
+                "git",
+                "-C",
+                "/srv/git/demon_attack",
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+            ]
+        );
+    }
+
+    /// 2094-h3rq: demon_attack's licences are registered, pinned, classified
+    /// from their text, and admissible with an acknowledgement (neither is
+    /// research-only: Fish grants non-commercial use, Higgs is a community
+    /// licence with a user threshold).
+    #[test]
+    fn fish_s2_pro_and_higgs_v2_are_registered_and_classified() {
+        let rows = parse_restricted(restricted_register_tsv()).unwrap();
+        for (id, hash, names) in [
+            (
+                "fish-audio-research-license",
+                "aa7d9206e9d710590987a3636934f643529c00cd490323594e6206aaa0c32d80",
+                &["fish-s2-pro", "fish-s2-pro-codec"][..],
+            ),
+            (
+                "boson-higgs-audio-2-community-license",
+                "8b2e018eeb3967a4636ccc57528440b33c14dd6e02ad67571fc7759489dde9a0",
+                &["higgs-audio-v2", "higgs-audio-v2-tokenizer"][..],
+            ),
+        ] {
+            assert!(forbidden_outright(id).is_none(), "{id}");
+            let table: Vec<ObligationClass> =
+                obligations_for(id).into_iter().map(|o| o.class).collect();
+            assert!(
+                !table
+                    .iter()
+                    .any(|c| matches!(c, ObligationClass::Review { clause } if clause.contains("not in the obligation table"))),
+                "{id} is not in the obligation table"
+            );
+            for n in names {
+                let mine: Vec<&RestrictedRow> = rows.iter().filter(|r| r.name == *n).collect();
+                assert!(!mine.is_empty(), "{n} not registered");
+                for r in mine {
+                    assert_eq!(r.spdx, id);
+                    assert_eq!(r.licence_sha256, hash);
+                    assert_eq!(r.gated, "false");
+                    assert_eq!(
+                        ObligationClass::render_list(&r.obligations),
+                        ObligationClass::render_list(&table),
+                        "{n}: register cell and obligation table disagree"
+                    );
+                }
+            }
+        }
+        // Every quoted clause carries text (none left empty for these two).
+        for id in [
+            "fish-audio-research-license",
+            "boson-higgs-audio-2-community-license",
+        ] {
+            assert!(
+                obligations_for(id).iter().all(|o| !o.clause.is_empty()),
+                "{id}"
+            );
+        }
     }
 
     #[test]
@@ -2404,7 +2829,7 @@ pub(crate) mod tests {
         // Demucs: operator ruling 2026-11-09, acknowledged per project with
         // NO standing grant (2068-eeti), so no seed may cover it.
         for r in &rows {
-            if r.spdx == "demucs-weights-unstated" {
+            if PER_PROJECT_ONLY.contains(&r.spdx.as_str()) {
                 assert!(
                     !acks.iter().any(|a| a.covers.contains(&r.repo)),
                     "{}: a standing seed covers {}; Demucs has no standing grant",
@@ -2470,10 +2895,14 @@ pub(crate) mod tests {
         // has no standing grant, so those records must NOT admit it.
         let (demucs, ck): (Vec<&RestrictedRow>, Vec<&RestrictedRow>) = rows
             .iter()
-            .partition(|r| r.spdx == "demucs-weights-unstated");
+            .partition(|r| PER_PROJECT_ONLY.contains(&r.spdx.as_str()));
         let artefacts: Vec<RestrictedArtefact> = ck.into_iter().map(to_artefact).collect();
         assert!(artefacts.len() >= 30, "{}", artefacts.len());
-        assert_eq!(demucs.len(), 2, "htdemucs and htdemucs_6s");
+        assert_eq!(
+            demucs.len(),
+            7,
+            "htdemucs, htdemucs_6s, 3 Fish S2-Pro and 2 Higgs v2 files"
+        );
         let demucs: Vec<RestrictedArtefact> = demucs.into_iter().map(to_artefact).collect();
         let err =
             admits_restricted_in(&pinned, "demon_attack", &demucs, &acks, &verifier).unwrap_err();

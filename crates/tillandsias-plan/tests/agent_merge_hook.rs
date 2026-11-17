@@ -38,7 +38,10 @@ fn hook(dir: &Path, stub: &str, cmd: &str) -> (i32, String) {
     let mut child = Command::new(PLAN)
         .current_dir(dir)
         .args(["policy", "classify-bash", "--hook"])
-        .env("PATH", format!("{}:/usr/bin:/bin", dir.join("bin").display()))
+        .env(
+            "PATH",
+            format!("{}:/usr/bin:/bin", dir.join("bin").display()),
+        )
         .env("HOME", dir.join("home"))
         .env_remove("TILLANDSIAS_PRETOOLUSE_HOOK")
         .stdin(Stdio::piped())
@@ -79,8 +82,14 @@ fn a_failing_head_lookup_refuses_every_merge_form() {
     for cmd in MERGES {
         let (rc, err) = hook(&d, "false", cmd);
         assert_eq!(rc, 2, "{cmd}: {err}");
-        assert!(err.contains("refused:bash-policy:no-agent-merge"), "{cmd}: {err}");
-        assert!(err.contains("retry when GitHub is reachable"), "{cmd}: {err}");
+        assert!(
+            err.contains("refused:bash-policy:no-agent-merge"),
+            "{cmd}: {err}"
+        );
+        assert!(
+            err.contains("retry when GitHub is reachable"),
+            "{cmd}: {err}"
+        );
     }
 }
 

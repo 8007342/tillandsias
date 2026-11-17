@@ -531,10 +531,16 @@ fn agent_merge(argv: &[String]) -> Option<String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MergeTarget {
     /// `gh pr merge <selector>` (`""` = the current branch's PR).
-    PrCli { selector: String, repo: Option<String> },
+    PrCli {
+        selector: String,
+        repo: Option<String>,
+    },
     /// REST `repos/<owner>/<name>/pulls/<n>/merge` (repo `None` when the path
     /// is the `{owner}/{repo}` placeholder form or relative).
-    Rest { repo: Option<String>, number: String },
+    Rest {
+        repo: Option<String>,
+        number: String,
+    },
     /// GraphQL merge; `node_id` is the pull request's node id when the
     /// command spells it literally.
     Graphql { node_id: Option<String> },
@@ -599,8 +605,15 @@ pub fn merge_targets(cmd: &str) -> Vec<MergeTarget> {
                         j += 2;
                         continue;
                     }
-                    "-b" | "--body" | "-F" | "--body-file" | "-t" | "--subject"
-                    | "--match-head-commit" | "-A" | "--author-email" => {
+                    "-b"
+                    | "--body"
+                    | "-F"
+                    | "--body-file"
+                    | "-t"
+                    | "--subject"
+                    | "--match-head-commit"
+                    | "-A"
+                    | "--author-email" => {
                         j += 2;
                         continue;
                     }
@@ -706,7 +719,9 @@ pub fn resolve_merges(cmd: &str, gh_program: &str) -> Option<Classification> {
                 Err(e) => Err(format!("gh: {e}")),
                 Ok(o) if !o.status.success() => Err(format!(
                     "gh exited {} {}",
-                    o.status.code().map_or("by signal".into(), |c| c.to_string()),
+                    o.status
+                        .code()
+                        .map_or("by signal".into(), |c| c.to_string()),
                     String::from_utf8_lossy(&o.stderr).trim()
                 )),
                 Ok(o) => Ok(String::from_utf8_lossy(&o.stdout).into_owned()),
@@ -1322,16 +1337,24 @@ mod tests {
             ("gh pr merge 12 --merge", pr("12", None)),
             ("gh pr merge --squash -R o/r 12", pr("12", Some("o/r"))),
             ("gh pr merge --auto", pr("", None)),
-            ("gh api -X PUT repos/o/r/pulls/12/merge", rest(Some("o/r"), "12")),
+            (
+                "gh api -X PUT repos/o/r/pulls/12/merge",
+                rest(Some("o/r"), "12"),
+            ),
             ("gh api repos/o/r/pulls/12/merge", rest(Some("o/r"), "12")),
-            ("gh api repos/{owner}/{repo}/pulls/9/merge -f x=y", rest(None, "9")),
+            (
+                "gh api repos/{owner}/{repo}/pulls/9/merge -f x=y",
+                rest(None, "9"),
+            ),
             (
                 "curl -X PUT https://api.github.com/repos/o/r/pulls/3/merge",
                 rest(Some("o/r"), "3"),
             ),
             (
                 "gh api graphql -f query='mutation{mergePullRequest(input:{pullRequestId:\"PR_kw1\"}){clientMutationId}}'",
-                MergeTarget::Graphql { node_id: Some("PR_kw1".into()) },
+                MergeTarget::Graphql {
+                    node_id: Some("PR_kw1".into()),
+                },
             ),
             (
                 "gh api graphql -F query=@merge.graphql -f x=mergePullRequest",
