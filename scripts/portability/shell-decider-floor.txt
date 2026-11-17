@@ -73,7 +73,6 @@ scripts/check-sigpipe-verdict-pipelines-added.sh
 scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
 scripts/check-spec-index-resolution-agreement.sh
-scripts/check-spec-script-paths.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
@@ -527,7 +526,6 @@ scripts/test-spec-index-endpoint-classification.sh
 scripts/test-spec-index-repo-relative-rung.sh
 scripts/test-spec-index-staging-capacity.sh
 scripts/test-spec-registry-status.sh
-scripts/test-spec-script-paths.sh
 scripts/test-squid-supervisor.sh
 scripts/test-ssh-lane-refuses-when-unwired.sh
 scripts/test-ssh-lane-sidecar.sh
