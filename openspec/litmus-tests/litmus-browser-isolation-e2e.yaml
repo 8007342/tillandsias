@@ -131,7 +131,7 @@ critical_path:
     success_pattern: "LOGS_OK|validation|cookie"
 
   - step: "cleanup: remove containers"
-    command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
+    command: "podman rm -f -t 0 tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
     timeout_ms: 10000
     expected_behavior: "CLEANUP_OK"
 
@@ -152,4 +152,4 @@ observability:
 
 rollback:
   on_failure: "ensure all test containers and networks are cleaned; inspect router logs for OTP validation errors"
-  command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e /tmp/tillandsias-e2e-test-* 2>/dev/null; echo 'Test cleanup complete'"
+  command: "podman rm -f -t 0 tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e /tmp/tillandsias-e2e-test-* 2>/dev/null; echo 'Test cleanup complete'"
