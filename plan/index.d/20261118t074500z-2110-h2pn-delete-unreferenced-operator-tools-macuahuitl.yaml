@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (family-d agent) 2026-11-18: shell-to-lua family D, batch 6 (delete-only).
+packets:
+  - packet_id: nineteen-unreferenced-bash-operator-tools-are-deleted-with-their-restore-shas-recorded
+    order: 2110-h2pn
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 1
+    size: S
+    implementer_tier: sonnet
+    depends_on: [six-more-wired-shell-tests-move-onto-the-lua-fixture-kit]
+    title: "Nineteen hand-run bash tools that nothing references (bench-*, measure-*, e2e-step*, diagnose-git-mirror, dispatch-brief and the like, plus five scripts/refusal-calibration/*.sh) are deleted; the PR lists each one's last-commit SHA"
+    context: |
+      Operator ruling relayed by the coordinator 2026-11-18 on unreferenced bash: "They're BASH aren't
+      they? They must go." Git history keeps them. litmus-run-one.sh is excluded (#1138 ports it).
+      Proof: git grep -F <basename> outside plan/, the ratchet floors (rows removed here) and recorded
+      TSV data finds nothing, except three prose mentions in scripts/refusal-calibration, which now
+      carry the restore SHA. Deleted: bench-hot-path-placement, bench-semantic-budget,
+      centicolon-backfill, deferred-specs, diagnose-git-mirror, dispatch-brief, e2e-step1-linux,
+      e2e-step3-linux, macos-tray-ax-smoke, measure-exec-wire-control-bytes,
+      measure-forge-memory-budget, measure-forge-spill, measure-inference-tier,
+      record-nix-cache-metrics, refusal-calibration/{apply-relabelled-561, inject-negatives,
+      judge-support, measure-recall-at-k, rebuild-index-with-embedder}.
+    exit_criteria:
+      - "None of the nineteen paths exists, and the PR body lists each with the last commit that touched it."
+    unscoreable: "unpinnable-until-the-guard-exists: a deletion has no fixture of its own; the grep in context is the check (1136-n8sh)"
+    next_action: "Land the PR for work/2110-h2pn after work/2109-r8wd."
+    provenance: "macuahuitl family-d agent session 2026-11-18; operator ruling via the coordinator."
+    events:
+      - type: filed
+        ts: "2026-11-18T07:45:00Z"
+        host: macuahuitl
+        summary: "filed and claimed by the family-d agent for the delete-only operator-tool batch"

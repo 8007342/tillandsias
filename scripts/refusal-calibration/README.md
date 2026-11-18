@@ -14,7 +14,7 @@ having a rule at all.
 | --- | --- |
 | `measure-bands.sh` | embed a labelled question set, retrieve top-2, emit TSV |
 | `analyze-bands.sh` | turn that TSV into a separability verdict, global and per corpus |
-| `inject-negatives.sh` | clone an index and append "declined alternative" chunks |
+| `inject-negatives.sh` (deleted 2026-11-18; restore from 85dc1649b) | clone an index and append "declined alternative" chunks |
 
 ```bash
 IDX=~/.local/share/containers/storage/volumes/tillandsias-spec-index-tillandsias/_data/<generation>
@@ -120,7 +120,7 @@ gigabytes are still free. The failure names memory and is not about memory,
 which is why it read as a size limit for as long as it did.
 
 **Workaround, proven:** serialise the loads and unload between models.
-`measure-recall-at-k.sh` demonstrates it rather than describing it — phase 1
+`measure-recall-at-k.sh` (deleted 2026-11-18; restore from 6e0407195) demonstrated it rather than describing it — phase 1
 embeds and unloads, phase 2 judges.
 
 Why this correction is loud rather than a quiet edit: a low-end host reading
