@@ -276,6 +276,34 @@ burndown:<backlog>:count=<n>:stage=<s>:window=<k>:paid=<p>:waived=<v>:silent=<q>
 
 ---
 
+## Stale Drafts And PR-less Work Refs: List AND Act (order 2100-vkpg)
+
+The land queue lands non-draft PRs and nothing else. Every pass, before you
+shape work, list each draft PR and each `origin/work/*` ref with no PR that is
+more than 5 days old and holds commits not on `linux-next`. Check by ancestry,
+or by `git cherry` / patch-id.
+
+```bash
+gh pr list --state open --draft --limit 500 --json number,headRefName,updatedAt
+git for-each-ref --format='%(refname:short) %(committerdate:short)' refs/remotes/origin/work
+git cherry origin/linux-next origin/<ref>   # '+' lines are unlanded
+```
+
+Until the guard from 2101-b4pf exists, run the commands above. The queue's own
+`advisory:land-queue:ignored-draft:#N:<ref>` lines are the same list. Act on
+each item in the same pass:
+- A draft with an unexpired reason and expiry is held, so leave it.
+- A draft with no reason or a past expiry gets un-drafted (`gh pr ready N`),
+  or closed with a tombstone naming its replacement.
+- A landing-ready ref with no PR gets a PR you open yourself.
+- A ref whose content is on trunk by ancestry or patch-id gets deleted, and
+  its SHA goes in the pass record.
+- A ref more than ~200 commits behind is not rebased. Re-implement it fresh
+  on a new `work/<order>`, or file a packet that cites `refs/pull/N/head`.
+Report the count as `stale-work:<drafts>/<prless>` in the status line (2102-9gyk).
+Why: 2026-11-17, 84 refs held about 80 agent-hours that never landed
+(plan/issues/abandoned-work-audit-2026-11-17.md).
+
 ## Stale Ready Rows: Surface, Never Close (order 1144-jfr5)
 
 Before shaping work, run the first-pass reconciliation and carry its
