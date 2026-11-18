@@ -1,0 +1,35 @@
+# Third-party licence acknowledgement (order 1956-ecpb, implements 1954-dvz9).
+# Signed over `statement` as SSHSIG in namespace tillandsias-approval@v1; verify with
+#   ssh-keygen -Y verify -n tillandsias-approval@v1 -I <grantor> -f <allowed_signers> -s <sig> < <statement>
+record: tillandsias-licence-acknowledgement v1
+licence: demucs-weights-unstated
+licence_sha256: 2abed9c9af52efd786e5f1f04f50e60b7f0dd754eb773df24ef7ebd045706324
+covers: [adefossez/HTDemucs, adefossez/HTDemucs-6s]
+grantor: operator
+scope: project:tillandsias
+use: non-sale
+expiry: "2027-11-11T00:00:00Z"
+signed_at: "2026-11-11T08:20:29Z"
+strength: hardware-biometric
+host: tlatoanis-macbook-air
+statement: |
+  tillandsias-licence-acknowledgement v1
+  licence: demucs-weights-unstated
+  licence_sha256: 2abed9c9af52efd786e5f1f04f50e60b7f0dd754eb773df24ef7ebd045706324
+  covers: adefossez/HTDemucs, adefossez/HTDemucs-6s
+  grantor: operator
+  scope: project:tillandsias
+  use: non-sale
+  expiry: 2027-11-11T00:00:00Z
+  host: tlatoanis-macbook-air
+  strength: hardware-biometric
+  issued: 2026-11-11T08:20:29Z
+signature: |
+  -----BEGIN SSH SIGNATURE-----
+  U1NIU0lHAAAAAQAAAGgAAAATZWNkc2Etc2hhMi1uaXN0cDI1NgAAAAhuaXN0cDI1NgAAAE
+  EEzXcfxDzlf3hKfiACd9JgajvLV02QuUx3FTdQH0rDJZxXytVTPbOYI4I6rhqI75tnH0YL
+  vW/HrPOPsuqnETcbAAAAABd0aWxsYW5kc2lhcy1hcHByb3ZhbEB2MQAAAAAAAAAGc2hhNT
+  EyAAAAZQAAABNlY2RzYS1zaGEyLW5pc3RwMjU2AAAASgAAACEAgrhcjv+FxVul2GLSSy/i
+  hlG8EKnazDnW09YuARIjCwwAAAAhAKZzKG2IMgS9Xllqd3FMWMWu35/Ed5Dr3fBCJCswGz
+  /k
+  -----END SSH SIGNATURE-----
