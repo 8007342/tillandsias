@@ -83,7 +83,7 @@ Smallest actionable boundary:
 - `./scripts/regenerate-cheatsheet-index.sh --check`
 
 Sibling tests:
-- `./scripts/check-cheatsheet-sources.sh --no-sha`
+- `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha`
 - `./scripts/check-cheatsheet-tiers.sh --strict`
 
 Scoped follow-up:
