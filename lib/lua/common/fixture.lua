@@ -11,8 +11,12 @@
 --
 -- Exit codes: 0 every arm passed (or skip); 1 an arm failed or the fixture
 -- refused to set up (T:refuse). Scratch lives under target/plan-scratch
--- (inside the repo, so fs.* doors reach it). Lines and codes come from
--- common.verdict; never print a verdict line by hand.
+-- (inside the repo, so fs.* doors reach it), created and removed through the
+-- scratch.* door (order 2106-scrt), whose root the kit declares as
+-- target/plan-scratch the first time a test asks for a dir. A test that needs
+-- its own root outside the repo calls scratch.declare itself and does not use
+-- T:scratch. Lines and codes come from common.verdict; never print a verdict
+-- line by hand.
 local V = require "common.verdict"
 local M = {}
 
@@ -29,6 +33,13 @@ function M.repo_root()
         end
     end
     return ROOT
+end
+
+local SCRATCH = "target/plan-scratch"
+
+-- Declare the kit's scratch root once (a no-op when already declared).
+local function scratch_root()
+    if not scratch.root() then scratch.declare(SCRATCH) end
 end
 
 local T = {}
@@ -52,10 +63,10 @@ end
 -- A fresh scratch dir. rel is repo-relative (for fs.*), abs for argv/cwd.
 function T:scratch(tag)
     self.seq = self.seq + 1
-    local rel = "target/plan-scratch/" .. self.name .. "-" .. tostring(time.now_ms())
+    local leaf = self.name .. "-" .. tostring(time.now_ms())
         .. "-" .. self.seq .. (tag and ("-" .. tag) or "")
-    fs.mkdir(rel)
-    local d = { rel = rel, abs = M.repo_root() .. "/" .. rel }
+    scratch_root()
+    local d = { rel = SCRATCH .. "/" .. leaf, abs = scratch.mkdir(leaf), leaf = leaf }
     self.dirs[#self.dirs + 1] = d
     return d
 end
@@ -64,9 +75,9 @@ end
 -- subject is path length (unix-socket SUN_LEN). Same {rel=, abs=} and cleanup.
 function T:short_scratch()
     self.seq = self.seq + 1
-    local rel = "target/plan-scratch/s" .. tostring(time.now_ms() % 10000000) .. self.seq
-    fs.mkdir(rel)
-    local d = { rel = rel, abs = M.repo_root() .. "/" .. rel }
+    local leaf = "s" .. tostring(time.now_ms() % 10000000) .. self.seq
+    scratch_root()
+    local d = { rel = SCRATCH .. "/" .. leaf, abs = scratch.mkdir(leaf), leaf = leaf }
     self.dirs[#self.dirs + 1] = d
     return d
 end
@@ -104,7 +115,7 @@ function T:git_repo(tag)
 end
 
 function T:cleanup()
-    for _, d in ipairs(self.dirs) do proc.run{ argv = { "rm", "-rf", d.abs } } end
+    for _, d in ipairs(self.dirs) do scratch.rm(d.leaf) end
     self.dirs = {}
 end
 
