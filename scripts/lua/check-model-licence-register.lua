@@ -26,6 +26,9 @@ local ALLOWED = {
     ["openrail++"] = true, ["creativeml-openrail-m"] = true,
     -- Operator ruling 2026-11-01 (order 1957-pins): plain OpenRAIL and OpenRAIL-M.
     ["openrail"] = true, ["openrail-m"] = true,
+    -- Operator ruling 2026-11-14 (order 2090-ausx): CC BY 4.0, attribution
+    -- obligation; the row's comment carries the credit line.
+    ["cc-by-4.0"] = true,
 }
 -- Licence ids read on the cards of the 2026-10-28 deny list, by class.
 local DENIED = {
