@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: squid-survives-a-transient-resolver-failure-and-the-in-vm-github-login-survives-a-proxy-restart
+    event:
+      type: note
+      ts: "2026-11-18T01:02:02Z"
+      agent_id: windows-yolanda-claude-20261118t010202z
+      host: yolanda
+      summary: |-
+        ROOT CAUSE REVISED (yolanda 2026-11-17 17:05, measured): squid never crashed. The proxy log captured across recreations shows "Shutting down... Squid Cache (Version 6.12): Exiting normally" before every recreation; the kernel's "fatal signal 6" is exit-time noise. What kills the sign-in is a mid-session enclave REPLACEMENT: the enclave CA in /root/.local/state/tillandsias/ca (intermediate.crt/key, vault.crt/key) was re-minted at 16:59:53 while a login was polling. ensure_proxy_running then saw "proxy CA is stale (running a4421f7bbec5f97e, on disk 4dc9d3a9b78ea2a4); replacing the proxy", the vault was removed and recreated on a fresh volume, and the login's write of secret/data/github/refresh hit "Failed to connect to vault port 8200". GitHub had authorised; only the token store was gone. The DNS hypothesis is disproved: 20 s of dropped DNS with traffic left squid's PID unchanged. Operator direction (same day): this is an anti-pattern to the architecture. The rule should be ephemeral: mint the enclave CA once per VM boot, and recreate enclave services only at a session boundary, never while a session (login, forge, studio) is live. Exit criteria 1-2 are superseded by: (a) no CA re-mint or enclave replacement while any session holds the enclave, and (b) the writer that re-minted at 16:59:53 is named.

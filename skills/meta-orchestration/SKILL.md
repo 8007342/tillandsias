@@ -910,7 +910,7 @@ filing — not the prompt.
    FROM ONE THAT DIED: the trunk carries its commits while the fleet record says
    the host never reported. A forge hits this by default — its checkout is a
    clone, it is often seeded from `main` (965-rb3v), and `main` is refused by
-   `check-committable-branch.sh` — so relocating is the NORMAL forge path, not an
+   `check-committable-branch.lua` — so relocating is the NORMAL forge path, not an
    exception.
 
    Snapshotting a fresh clone is not a formality and not vacuous: the clone
@@ -1179,7 +1179,7 @@ PR merges. Breach record: 34e60965, an antigravity forge cycle running ON
 Run the executable guard instead of re-deriving the check in prose:
 
 ```bash
-scripts/check-committable-branch.sh
+tillandsias-plan script run scripts/lua/check-committable-branch.lua
 ```
 
 It prints exactly one line matching the falsifiable grammar

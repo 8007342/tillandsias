@@ -23,14 +23,14 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     git fetch origin
     git checkout <active-branch>  # linux-next, windows-next, or osx-next per host table
     git pull --ff-only origin <active-branch>
-    scripts/check-committable-branch.sh
+    tillandsias-plan script run scripts/lua/check-committable-branch.lua
     git merge --no-edit origin/linux-next   # platform branches: BEFORE §2.0, not only before push
     ```
     `<active-branch>` is where you START and where the plan-only lane writes
     (claims, events, handoffs). Your CODE goes to a work ref, `work/<order>`,
     created after the claim (§3) and pushed as often as you like without a
     gate (§6; methodology `work_ref_lane`, 1315-4a7j / 1317-9ugn).
-    The `scripts/check-committable-branch.sh` line is the executable Committable Branch Guard (order 476,
+    The `scripts/lua/check-committable-branch.lua` line is the executable Committable Branch Guard (order 476,
     pinned by `litmus:committable-branch-guard-shape`): it prints one verdict
     line and exits `0` only when HEAD is on a committable branch (any named
     branch except `main`). On `blocked:committable-cycle-on-main` (or any
