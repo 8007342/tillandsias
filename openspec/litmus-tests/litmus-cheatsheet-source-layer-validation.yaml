@@ -12,7 +12,7 @@ preconditions:
 
 critical_path:
   - step: "run the source validator in no-sha mode"
-    command: '. scripts/plan-binary-probe.sh; "$(resolve_plan_binary)" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha'
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha"
     timeout_ms: 5000
 
 observability:
@@ -25,4 +25,4 @@ observability:
 
 rollback:
   on_failure: "inspect scripts/lua/check-cheatsheet-sources.lua and openspec/specs/cheatsheet-source-layer/spec.md for drift"
-  command: '. scripts/plan-binary-probe.sh; "$(resolve_plan_binary)" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha'
+  command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha"
