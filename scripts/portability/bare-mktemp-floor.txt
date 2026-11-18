@@ -54,7 +54,6 @@ scripts/test-append-vs-origin-fold.sh 1
 scripts/test-bash-composition-hazards.sh 1
 scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
-scripts/test-cache-semantics.sh 6
 scripts/test-census-enforced-reachability-split.sh 1
 scripts/test-check-credential-channel.sh 1
 scripts/test-check-installer-prompts.sh 1
@@ -103,7 +102,6 @@ scripts/test-gate-host-memory-figure.sh 1
 scripts/test-gate-memory-floor-consumer.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
-scripts/test-gate-stamp-movers-batching-is-equivalent.sh 1
 scripts/test-gate-stamp-must-be-earned.sh 1
 scripts/test-gate-stamp-scope.sh 1
 scripts/test-gate-stamp.sh 1

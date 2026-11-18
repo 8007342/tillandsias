@@ -109,7 +109,6 @@ scripts/test-build-sh-darwin-install-refusal.sh
 scripts/test-build-sh-darwin-tool-remediation.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-build-version-label.sh
-scripts/test-cache-semantics.sh
 scripts/test-capabilities-envelope-names-its-source.sh
 scripts/test-capability-manifest-guard.sh
 scripts/test-capability-routing.sh
@@ -247,7 +246,6 @@ scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp-movers-batching-is-equivalent.sh
 scripts/test-gate-stamp-must-be-earned.sh
 scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp-portable-digest.sh
@@ -363,7 +361,6 @@ scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-test-selector.sh
 scripts/test-litmus-tracked-file-kill-safety.sh
-scripts/test-locale-coverage.sh
 scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-loop-status-audit-reads-current-emitter.sh
