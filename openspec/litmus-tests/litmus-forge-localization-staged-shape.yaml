@@ -30,7 +30,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "PASS: forge-localization-staged"
+  expected_log: "ok:forge-localization-staged:4 arms"
   log_fields:
     spec: "default-image"
     test: "forge-localization-staged-shape"
