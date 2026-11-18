@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (Linux) at the coordinator's ruling during the 2026-11-16 cut triage.
+packets:
+- packet_id: build-cache-sweep-after-cut-and-bounded-check
+  order: 2093-npdi
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [build, cache, litmus, ci]
+  estimated_hours: 3
+  title: 'Run the build-cache sweep after the cut, and make check-build-cache-sweep bounded (do not walk all of target/)'
+  context: 'Gate nine of the 2026-11-16 cut: litmus:build-cache-sweep-trigger step 1 timed out at 30 s. scripts/check-build-cache-sweep.sh walks all of target/ (409 GiB on macuahuitl; last sweep marker 2026-09-26) and reports due:build-cache-sweep reason=over-size. 11 s quiet, over 30 s under gate I/O. 2093-vves raised that step to 60 s as a stopgap. The coordinator ruled no sweep before the gate, because a wiped cache makes every following gate a cold build.'
+  exit_criteria:
+  - 'The sweep runs on macuahuitl after the cut''s back-merge, and the marker is stamped with its action.'
+  - 'check-build-cache-sweep.sh answers due/not-due without walking the whole tree (for example a filesystem usage query, or a capped walk that stops once the threshold is crossed), and its litmus step 1 passes under 10 s on a 400 GiB target/ with the budget restored to 30 s.'
+  verifiable_closure: 'litmus:build-cache-sweep-trigger'
+  unscoreable: 'none.'
+  next_action: 'After the cut: run the sweep and stamp the marker; then bound the size probe in scripts/check-build-cache-sweep.sh and restore the step 1 budget.'
+  provenance: 'Coordinator macuahuitl-fedora 2026-11-16 ruling 3 on gate-nine reds.'
+  events:
+  - type: filed
+    ts: '2026-11-16T11:22:00Z'
+    host: macuahuitl
+    summary: filed ready from the 2026-11-16 cut triage

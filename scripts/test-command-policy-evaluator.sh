@@ -50,8 +50,8 @@ has() { grep -qF -- "$1" <<<"$2"; }
 ev --host-kind forge --regime interactive -- gh auth refresh
 if [ "$OUT" = "refused:policy:no-credential-mutation" ] && [ "$RC" = 1 ] \
    && has "  why: " "$ERR" && has "  remedy: " "$ERR" \
-   && has "tillandsias --github-login --with-token" "$ERR"; then
-    ok "1 gh auth refresh: no-credential-mutation, exit 1, why + remedy naming the operator token path"
+   && has "the OPERATOR signs in from" "$ERR"; then
+    ok "1 gh auth refresh: no-credential-mutation, exit 1, why + remedy naming the operator tray sign-in (2028-j4a7)"
 else bad "1 out=[$OUT] rc=$RC err=[$ERR]"; fi
 
 # ── arm 2 ────────────────────────────────────────────────────────────────────

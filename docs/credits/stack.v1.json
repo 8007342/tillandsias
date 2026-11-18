@@ -18816,6 +18816,12 @@
       "from": "media:imagegen-models",
       "kind": "runtime-download",
       "optional": true,
+      "to": "model:Comfy-Org/Real-ESRGAN"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
       "to": "model:Comfy-Org/Wan-2.2"
     },
     {
@@ -18865,6 +18871,12 @@
       "kind": "runtime-download",
       "optional": true,
       "to": "model:lightx2v/Qwen-Image-Lightning"
+    },
+    {
+      "from": "media:imagegen-models",
+      "kind": "runtime-download",
+      "optional": true,
+      "to": "model:lightx2v/Wan2.2-Lightning"
     },
     {
       "from": "media:imagegen-models",
@@ -33180,6 +33192,7 @@
       ],
       "source": "images/models/licence-register.tsv",
       "tiers": [
+        "I1/qwen-image",
         "I1/qwen-image-te",
         "I1/qwen-image-vae"
       ],
@@ -33204,6 +33217,26 @@
         "I1/qwen-image-edit"
       ],
       "version": "f68ace85e60b4a02a323e394253731947657b7d2"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/Comfy-Org/Real-ESRGAN",
+      "homepage_kind": "model-card",
+      "id": "model:Comfy-Org/Real-ESRGAN",
+      "license": "bsd-3-clause",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "RealESRGAN-x4plus",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/upscale_models"
+      ],
+      "version": "5fd49b7b278836f48af63ecd314d0f98ab336105"
     },
     {
       "gated": false,
@@ -33385,6 +33418,26 @@
         "I1/lora"
       ],
       "version": "d468c534b360e0754c6bf9e38ed49e1e09cd2e2a"
+    },
+    {
+      "gated": false,
+      "homepage": "https://huggingface.co/lightx2v/Wan2.2-Lightning",
+      "homepage_kind": "model-card",
+      "id": "model:lightx2v/Wan2.2-Lightning",
+      "license": "apache-2.0",
+      "license_family": "permissive",
+      "link": "runtime-download",
+      "link_note": "model weights downloaded on first use after the user accepts the tier; never shipped in a release",
+      "name": "Wan2.2-Lightning-T2V-A14B-high-noise",
+      "optional": true,
+      "pulled_by": [
+        "media:imagegen-models"
+      ],
+      "source": "images/models/licence-register.tsv",
+      "tiers": [
+        "I1/lora"
+      ],
+      "version": "18bccf8884ec0a078eed79785eb4ef13ea16ce1e"
     },
     {
       "gated": false,
@@ -60820,15 +60873,15 @@
   "schema": "tillandsias-stack/v1",
   "summary": {
     "components": 57,
-    "edges": 3106,
+    "edges": 3108,
     "license_families": {
       "model": 7,
-      "permissive": 1706,
+      "permissive": 1708,
       "service": 15,
       "strong-copyleft": 24,
       "unknown": 162,
       "weak-copyleft": 20
     },
-    "nodes": 1934
+    "nodes": 1936
   }
 }
