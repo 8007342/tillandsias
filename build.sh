@@ -6509,7 +6509,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 911-m7js: the archiver-check memo hits only on an unchanged ledger AND
     # unchanged instrument; a fragment written or removed flips it.
     _step "Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-check-memo.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-archiver-check-memo.lua" 2>&1; then
         _error "the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
         exit 1
     fi

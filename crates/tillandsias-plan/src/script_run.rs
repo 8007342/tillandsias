@@ -770,7 +770,55 @@ fn register(
         )?;
         g.set("env", env)?;
     }
+    install_require(lua)?;
     Ok(())
+}
+
+/// ORDER 2080-zcur. `require "common.fixture"` loads `lib/lua/common/fixture.lua`
+/// from the repo root, once per script. Only `[a-z0-9_]` segments joined by
+/// dots resolve, so a module name can never leave `lib/lua/`. There is no
+/// package table: the loader reads text through Rust and loads a text chunk
+/// into the script's own globals, so a module has exactly the doors the
+/// script has (no file handles, no native loaders).
+fn install_require(lua: &Lua) -> LuaResult<()> {
+    let cache = lua.create_table()?;
+    let f = lua.create_function(move |lua, name: String| -> LuaResult<LuaValue> {
+        if let Ok(v) = cache.get::<LuaValue>(name.as_str())
+            && !v.is_nil()
+        {
+            return Ok(v);
+        }
+        let valid = !name.is_empty()
+            && name.split('.').all(|seg| {
+                !seg.is_empty()
+                    && seg
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            });
+        if !valid {
+            return Err(LuaError::RuntimeError(format!(
+                "require: '{name}' is not a module name (dot-separated [a-z0-9_] segments)"
+            )));
+        }
+        let root = crate::lua_predicate::find_repo_root().map_err(LuaError::RuntimeError)?;
+        let rel = format!("lib/lua/{}.lua", name.replace('.', "/"));
+        let src = std::fs::read_to_string(root.join(&rel)).map_err(|e| {
+            LuaError::RuntimeError(format!("require: module '{name}' not found at {rel}: {e}"))
+        })?;
+        let v: LuaValue = lua
+            .load(&src)
+            .set_name(format!("@{rel}"))
+            .set_mode(mlua::ChunkMode::Text)
+            .call(())?;
+        let v = if v.is_nil() {
+            LuaValue::Boolean(true)
+        } else {
+            v
+        };
+        cache.set(name.as_str(), v.clone())?;
+        Ok(v)
+    })?;
+    lua.globals().set("require", f)
 }
 
 /// ORDER 2049-w2q6. Marker carried by the error a helper's `verdict` access raises.

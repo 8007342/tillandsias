@@ -90,7 +90,6 @@ scripts/test-agent-identity.sh
 scripts/test-all-fragments-intact.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
-scripts/test-archiver-check-memo.sh
 scripts/test-archiver-concurrent-check.sh
 scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
