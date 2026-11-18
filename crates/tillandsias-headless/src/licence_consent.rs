@@ -1042,7 +1042,10 @@ pub fn licence_pr(
     ];
     files.extend(extra_files);
     Ok(LicencePr {
-        head: format!("{LICENCE_HEAD_PREFIX}{id}"),
+        // `licences/<record file stem>`: one licence can cover several
+        // artefacts (Higgs model + tokenizer), and a head named after the
+        // licence alone collides (demon_attack #13-#15).
+        head: format!("{LICENCE_HEAD_PREFIX}{}", ack.slug()),
         title: format!("Accept the {} licence for {artefact}", ack.licence),
         body,
         files,
@@ -2210,7 +2213,7 @@ pub(crate) mod tests {
             &[],
         )
         .unwrap();
-        assert_eq!(pr.head, "licences/cc-by-nc-sa-4-0");
+        assert_eq!(pr.head, "licences/cc-by-nc-sa-4-0--fixture-nc-weights");
         assert!(
             pr.body
                 .contains("Pressing Merge on this pull request is your acceptance")
@@ -2687,6 +2690,47 @@ pub(crate) mod tests {
         .unwrap();
         assert_eq!(ok.acknowledgement_slug.as_deref(), Some(old));
         assert_eq!(ok.merge.unwrap().pr, 4);
+    }
+
+    /// demon_attack #13-#15 (2026-11-17): the Higgs model and tokenizer share
+    /// three licences, and a head named after the licence alone collided with
+    /// the model PRs' branches. The head is `licences/<record file stem>`.
+    #[test]
+    fn two_artefacts_under_one_licence_get_two_head_branches() {
+        use sha2::Digest as _;
+        let text = b"T";
+        let pr_for = |repo: &str| {
+            let mut a = nc_ack("project:demon_attack");
+            a.licence = "meta-llama-3-community".into();
+            a.licence_sha256 = format!("{:x}", sha2::Sha256::digest(text));
+            a.covers = vec![repo.into()];
+            licence_pr(&a, repo, text, "u", &[], &[], &[]).unwrap()
+        };
+        let model = pr_for("bosonai/higgs-tts-2-3b-base");
+        let tok = pr_for("bosonai/higgs-audio-v2-tokenizer");
+        assert_ne!(
+            model.head, tok.head,
+            "one licence, two artefacts, one branch"
+        );
+        assert_eq!(
+            tok.head,
+            "licences/meta-llama-3-community--bosonai-higgs-audio-v2-tokenizer"
+        );
+        // The head names the record file, and keeps the licences/ prefix the
+        // merge gate requires of a merge commit's head.
+        let stem = tok.files[0]
+            .0
+            .trim_start_matches(&format!("{ACK_REPO_DIR}/"))
+            .trim_end_matches(".yaml")
+            .to_string();
+        assert_eq!(tok.head, format!("{LICENCE_HEAD_PREFIX}{stem}"));
+        assert_eq!(
+            pr_from_subject(
+                &format!("Merge pull request #13 from 8007342/{}", tok.head),
+                2
+            ),
+            Some(13)
+        );
     }
 
     #[test]

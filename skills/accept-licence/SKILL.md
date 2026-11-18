@@ -63,7 +63,7 @@ obligation, `review`.
 
 One PR per licence TEXT, in the PROJECT repo (not Tillandsias):
 
-- head `licences/<licence-id>`, base the project's default branch (the gate
+- head `licences/<licence-id>--<artefact-slug>` (the record file stem), base the project's default branch (the gate
   reads the merged record there);
 - `licences/acknowledgements/<licence-id>--<artefact-slug>.yaml` (one file per
   licence TEXT, so several licences on one repo never share a file), exactly as
@@ -99,13 +99,14 @@ It writes `pr-meta.txt`, `pr-body.md` and `files/` under the out dir.
 
 ## 3. Open it and hand over ONE link
 
-In the project checkout: create the `licences/<id>` branch from the default
+In the project checkout: create the branch `pr-meta.txt` names
+(`licences/<licence-id>--<artefact-slug>`) from the default
 branch, add the three files, commit (trailer
 `Licence-Acknowledgement: <licence id> <licence_sha256>`), push the branch,
 then
 
 ```bash
-gh pr create --base <default branch> --head licences/<id> --title "<title>" --body-file pr-body.md
+gh pr create --base <default branch> --head licences/<licence-id>--<artefact-slug> --title "<title>" --body-file pr-body.md
 ```
 
 Tell the user, in one or two plain sentences: what the licence lets them do,
@@ -118,7 +119,7 @@ Re-run the refused request. When the project has a git mirror on the host
 (`tillandsias-git-<project>`), the host gate reads the record from the
 mirror's default branch and admits it only when a GitHub PR merge put it
 there (committer `GitHub`, a GitHub signature header, subject `Merge pull
-request #N from <owner>/licences/<id>`), unchanged since, AND GitHub's API
+request #N from <owner>/licences/...`), unchanged since, AND GitHub's API
 confirms PR #N merged at that sha. Without GitHub reachable it admits
 nothing ("retry when GitHub is reachable"): the mirror accepts forge pushes,
 so the bytes alone could be forged. Nothing in the forge chooses where the
@@ -134,7 +135,7 @@ three: `boson-higgs-audio-2-community`, and the two texts that licence
 incorporates, `meta-llama-3-community` and
 `meta-llama-3-acceptable-use-policy`, each with its own pinned text. The gate
 admits the file only when all three are acknowledged, so open THREE PRs (one
-per licence id, each its own `licences/<id>` head and its own record file,
+per licence id, each its own `licences/<licence-id>--<artefact-slug>` head and its own record file,
 `<licence-id>--<artefact-slug>.yaml`) and hand the user the three links in
 one message. A licence id is spelled exactly as the register spells it.
 (`licence_pr` can also quote an incorporated text inside one PR, for a

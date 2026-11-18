@@ -6,7 +6,7 @@
 
 Operator direction 2026-11-16: the accept-licence skill SHALL be zero-setup.
 It SHALL open ONE pull request in the PROJECT repository, head
-`licences/<licence-id>`, base the project's default branch, carrying the
+`licences/<licence-id>--<artefact-slug>` (the record file stem), base the project's default branch, carrying the
 acknowledgement record (`licences/acknowledgements/<licence-id>--<artefact-slug>.yaml`), the
 obligations spec (`openspec/specs/third-party-licence-<id>/spec.md`), the
 licence text verbatim (`licences/texts/<id>.md`) whose sha256 is the record's
@@ -14,7 +14,9 @@ licence text verbatim (`licences/texts/<id>.md`) whose sha256 is the record's
 SHALL give the user ONE URL. The human pressing Merge in the GitHub web UI IS
 the approval; no signature, key or enrolment is required on this path.
 
-The head is `licences/<licence-id>` (one branch per licence) and the base is
+The head is `licences/<licence-id>--<artefact-slug>` (one branch per record; a
+head named after the licence alone collided when two artefacts share a
+licence, demon_attack #13-#15) and the base is
 the default branch, because the admit gate reads the merged record on the
 default branch; a long-lived `licences` branch would never be what the gate
 reads.
@@ -51,7 +53,7 @@ mirror's default branch (`HEAD`), never from a working tree, and SHALL admit
 one only when the last first-parent commit on that branch that added or
 modified it is a GitHub pull-request merge: committer
 `GitHub <noreply@github.com>`, a `gpgsig` header, and the subject
-`Merge pull request #<n> from <owner>/licences/<id>` (or a squash subject
+`Merge pull request #<n> from <owner>/licences/<...>` (or a squash subject
 ending `(#<n>)`), AND GitHub's API (`gh api repos/<owner>/<name>/pulls/<n>`)
 says the PR is merged at that merge sha. No environment variable, forge
 request or forge-written file SHALL choose or override the source.
@@ -73,7 +75,7 @@ nothing outside the merge gate.
 
 #### Scenario: an open pull request admits nothing
 
-- **WHEN** the record is on `licences/<id>` and checked out in the working
+- **WHEN** the record is on `licences/<licence-id>--<artefact-slug>` and checked out in the working
   tree, but the PR is not merged
 - **THEN** the gate refuses with `licence_acknowledgement_required`
 
