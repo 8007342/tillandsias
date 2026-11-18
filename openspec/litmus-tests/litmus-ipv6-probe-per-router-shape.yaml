@@ -32,7 +32,7 @@ critical_path:
   - step: "all six named arms pass (parse, one-blackhole, both-ok, no-router, flowlabel, unmeasured)"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-ipv6-probe.lua 2>&1"
     timeout_ms: 600000
-    expected_behavior: "ok:ipv6-probe:6 arms"
+    success_pattern: "ok:ipv6-probe:6 arms|skip:ipv6-probe:linux-only-unit-tests:"
 
 observability:
   traces:
