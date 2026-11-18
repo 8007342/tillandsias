@@ -732,7 +732,6 @@ scripts scripts/test-packet-tier-fields.sh 4
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
 scripts scripts/test-plan-binary-freshness.sh 2
-scripts scripts/test-plan-binary-probe-release-over-debug.sh 2
 scripts scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh 2
@@ -796,7 +795,6 @@ scripts scripts/test-spec-index-repo-relative-rung.sh 3
 scripts scripts/test-spec-index-staging-capacity.sh 4
 scripts scripts/test-ssh-lane-sidecar.sh 6
 scripts scripts/test-status-channel-absent-is-first-class.sh 10
-scripts scripts/test-summarize-pubspec.sh 3
 scripts scripts/test-support/github-login-fake.sh 2
 scripts scripts/test-support/litmus-fake-podman-guard.sh 1
 scripts scripts/test-support/podman-mock.sh 25

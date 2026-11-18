@@ -189,7 +189,6 @@ scripts/test-spec-index-repo-relative-rung.sh 1
 scripts/test-squid-supervisor.sh 1
 scripts/test-ssh-lane-refuses-when-unwired.sh 1
 scripts/test-ssh-lane-sidecar.sh 1
-scripts/test-summarize-pubspec.sh 1
 scripts/test-timing-record-carries-reproduced.sh 1
 scripts/test-timing-record-carries-root.sh 1
 scripts/test-tool-materialize-litmus-surfaces-arm.sh 1

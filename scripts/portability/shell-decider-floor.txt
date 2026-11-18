@@ -275,7 +275,6 @@ scripts/test-headless-sidecar-target-gate.sh
 scripts/test-hook-phase-instrumentation.sh
 scripts/test-host-kind-evidence-not-from-workspace.sh
 scripts/test-host-tools.sh
-scripts/test-if-not-pipeline-guard.sh
 scripts/test-image-build-convergence.sh
 scripts/test-image-usability-check.sh
 scripts/test-inference-engine-pinned-and-npu-honest.sh
@@ -393,7 +392,6 @@ scripts/test-pilot-lua-ports.sh
 scripts/test-plan-binary-copy-refresh.sh
 scripts/test-plan-binary-freshness.sh
 scripts/test-plan-binary-locus-native.sh
-scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism-corpus.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe-usage-population.sh
@@ -494,7 +492,6 @@ scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
-scripts/test-summarize-pubspec.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-timing-record-carries-reproduced.sh
 scripts/test-timing-record-carries-root.sh

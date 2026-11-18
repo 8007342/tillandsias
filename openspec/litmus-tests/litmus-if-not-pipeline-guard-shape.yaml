@@ -8,11 +8,11 @@ size: instant
 
 preconditions:
   - workspace contains scripts/lua/check-no-spawn-in-if-not.lua (1525-c6jm port of the .sh)
-  - scripts/test-if-not-pipeline-guard.sh is present and executable
+  - scripts/lua/test-if-not-pipeline-guard.lua is present
 
 critical_path:
   - step: "NEGATIVE CONTROL: the fixture script proving the gate behavior passes"
-    command: "bash scripts/test-if-not-pipeline-guard.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-if-not-pipeline-guard.lua 2>&1"
     timeout_ms: 10000
     expected_behavior: "ok:if-not-pipeline-guard-shape:3"
 

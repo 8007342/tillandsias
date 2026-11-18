@@ -36,7 +36,7 @@ preconditions:
   - workspace contains scripts/summarize-nix.sh
   - workspace contains scripts/summarize-pubspec.sh
   - workspace contains scripts/summarize-pyproject.sh
-  - workspace contains scripts/test-summarize-pubspec.sh
+  - workspace contains scripts/lua/test-summarize-pubspec.lua
   - shell utilities (grep) are available in PATH
 
 critical_path:
@@ -99,9 +99,9 @@ critical_path:
     # The family-wide shape checks cannot detect a parser that emits empty
     # versions or counts nested YAML keys as dependencies. Keep one runtime
     # negative control on the component found by the 2026-08-24 freshness draw.
-    command: "bash scripts/test-summarize-pubspec.sh"
-    timeout_ms: 3000
-    expected_behavior: "PASS: summarize-pubspec behavior (3/3)"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-summarize-pubspec.lua 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "ok:summarize-pubspec:3 arms"
 
   # A step that greped the TRACES.md row for spec:project-summarizers lived here
   # until 2026-08-09. It was removed with the rendering, and NOT replaced: STEP 2
