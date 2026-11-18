@@ -4616,9 +4616,11 @@ fn refuse_mint_for_unavailable_key(
 ) -> Result<(), String> {
     if materialized == ca_key_store::Materialized::Unavailable && cert_valid_for(crt, 0) {
         return Err(format!(
-            "ca-key-unavailable: the CA key for {} is not on tmpfs and the keyring could not \
-             be read; the CA is kept rather than replaced. Unlock the keyring (log in to the \
-             desktop session) and retry (2007-ckun)",
+            "ca-key-unavailable: the CA key for {} cannot be opened here (the keyring could \
+             not be read, or the key does not decrypt under this process's passphrase); the \
+             CA is kept rather than replaced. Unlock the keyring (log in to the desktop \
+             session) and retry (2007-ckun); in the VM, restart it so every process reads \
+             one passphrase (2096-e3te)",
             crt.display()
         ));
     }
