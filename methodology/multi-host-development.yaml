@@ -1104,6 +1104,34 @@ multi_host_development:
       - "Saying `macos-next` — wrong. Always `osx-next`."
       - "Pushing platform code to `linux-next` directly — should route through the platform branch unless the file is shared (plan/, methodology/, openspec/, cheatsheets/)."
 
+  unlanded_work_is_a_defect:
+    trace: order:2100-vkpg
+    rule: >
+      The land queue lands non-draft PRs and nothing else. A draft, or a work
+      ref with no PR, is invisible to it, so it is never merged and nobody is
+      told. Three rules follow. (1) A HELD PR is a draft that carries a reason
+      and an expiry: a PR comment naming what un-drafts it and a date no more
+      than 5 days out. A draft past its expiry, or with no reason, is stale.
+      (2) A work ref that is landing-ready and has no PR is a defect, not a
+      queue item. Whoever pushed it opens the PR in the same pass; the
+      coordinator opens it if they do not. (3) Every coordinator pass lists
+      stale drafts and PR-less work refs older than 5 days that hold commits
+      not on linux-next (by ancestry or patch-id). For each one it acts:
+      un-draft, open a PR, re-implement fresh off linux-next, or close it with
+      a tombstone naming its replacement. Listing without acting does not count.
+    threshold_days: 5
+    why: >
+      Measured 2026-11-17 (plan/issues/abandoned-work-audit-2026-11-17.md):
+      1344 dead refs had piled up on GitHub. 84 refs held work that never
+      landed: 173 commits, about 80 agent-hours from commit timestamps. Of
+      those, 18 were drafts (#196 to #1064) up to 4900 commits behind, and 21
+      were work refs that never got a PR. The queue printed "the queue is
+      empty" while it skipped them.
+    enforcement:
+      - "scripts/land-queue.sh prints advisory:land-queue:ignored-draft:#N:<ref> for every draft it skips (2100-vkpg)."
+      - "Stale-work guard with --strict, filed as 2101-b4pf."
+      - "Daily stale-work metric in the coordinator status, filed as 2102-9gyk."
+
   forge_base_determinism:
     rule: >
       A forge's base branch is seeded from the HOST CHECKOUT's current branch
