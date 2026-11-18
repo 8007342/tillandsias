@@ -30,7 +30,12 @@
 set -uo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-VERIFY="$ROOT/scripts/verify-image-usable.sh"
+# The verifier is scripts/lua/verify-image-usable.lua since 2006-me5t, run on
+# the plan binary resolved by execution, exactly as build-image.sh runs it.
+VERIFY="$ROOT/scripts/lua/verify-image-usable.lua"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+verify() { (cd "$ROOT" && "$PLAN" script run scripts/lua/verify-image-usable.lua -- "$@"); }
 PODMAN="${TILLANDSIAS_PODMAN:-podman}"
 
 pass=0; fail=0
@@ -38,7 +43,8 @@ ok()  { printf 'ok:   %s\n' "$1"; pass=$((pass + 1)); }
 bad() { printf 'FAIL: %s\n' "$1" >&2; fail=$((fail + 1)); }
 
 command -v "$PODMAN" >/dev/null 2>&1 || { echo "SKIP: no podman on this host"; exit 0; }
-[ -x "$VERIFY" ] || { echo "FAIL: $VERIFY missing or not executable" >&2; exit 1; }
+[ -f "$VERIFY" ] || { echo "FAIL: $VERIFY missing" >&2; exit 1; }
+[ -n "$PLAN" ] || { echo "could-not-run: no runnable tillandsias-plan to run $VERIFY"; exit 3; }
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/image-usability.XXXXXX")"
 cleanup() { "$PODMAN" unshare rm -rf "$W" 2>/dev/null || true; rm -rf "$W" 2>/dev/null || true; }
@@ -63,7 +69,7 @@ export TILLANDSIAS_PODMAN_ARGS="--root $W/root --runroot $W/run"
 # ── ARM 1: an INTACT image passes ─────────────────────────────────────────
 # First, because every later arm is meaningless if the check refuses a good
 # image — and because a check that refuses everything would score arm 3.
-out1="$(bash "$VERIFY" probe:latest 2>/dev/null)"; rc1=$?
+out1="$(verify probe:latest 2>/dev/null)"; rc1=$?
 case "$out1" in
     ok:image-usable:probe:latest) ok "an intact image passes" ;;
     *) bad "an intact image was not accepted: rc=$rc1 out=$out1" ;;
@@ -101,7 +107,7 @@ tree_rc=$?
     || bad "'image tree' now catches it (rc=$tree_rc)"
 
 # ── ARM 3: the check REFUSES the broken image ────────────────────────────
-out3="$(bash "$VERIFY" probe:latest 2>/dev/null)"; rc3=$?
+out3="$(verify probe:latest 2>/dev/null)"; rc3=$?
 case "$out3" in
     violation:image-not-usable:probe:latest:*) ok "a broken image is refused with a named verdict" ;;
     *) bad "the broken image was not refused: rc=$rc3 out=$out3" ;;
@@ -111,7 +117,7 @@ esac
 # ── ARM 4: the refusal NAMES the remedy ──────────────────────────────────
 # Criterion 2: an operator must not be left reading a faccessat error against a
 # build that claimed to work.
-err4="$(bash "$VERIFY" probe:latest 2>&1 >/dev/null)"
+err4="$(verify probe:latest 2>&1 >/dev/null)"
 case "$err4" in
     *TILLANDSIAS_BUILD_NO_CACHE=1*) ok "the refusal names the --no-cache remedy" ;;
     *) bad "the refusal does not name the remedy: $err4" ;;

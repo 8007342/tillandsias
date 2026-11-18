@@ -4616,9 +4616,11 @@ fn refuse_mint_for_unavailable_key(
 ) -> Result<(), String> {
     if materialized == ca_key_store::Materialized::Unavailable && cert_valid_for(crt, 0) {
         return Err(format!(
-            "ca-key-unavailable: the CA key for {} is not on tmpfs and the keyring could not \
-             be read; the CA is kept rather than replaced. Unlock the keyring (log in to the \
-             desktop session) and retry (2007-ckun)",
+            "ca-key-unavailable: the CA key for {} cannot be opened here (the keyring could \
+             not be read, or the key does not decrypt under this process's passphrase); the \
+             CA is kept rather than replaced. Unlock the keyring (log in to the desktop \
+             session) and retry (2007-ckun); in the VM, restart it so every process reads \
+             one passphrase (2096-e3te)",
             crt.display()
         ));
     }
@@ -23391,6 +23393,9 @@ mod mcp_socket;
 // 1969-7qm7: the grouped host tool index and the deprecated flat aliases.
 #[cfg(feature = "host-services")]
 mod host_tools;
+// 2094-ay52 / 2095-kgdj: the job admission queue (rules only) and watch.wait.
+#[cfg(feature = "host-services")]
+mod job_queue;
 // 1956-4pxj: push events from the git mirror to every forge of a project.
 #[cfg(feature = "host-services")]
 mod lane_events;
@@ -41711,7 +41716,7 @@ mod keep_id_warm_tests {
     /// after each successful build's aliases (plain and after an overlay heal,
     /// never on a Skip or Retag of a present image), and build-image.sh runs
     /// its shell twin, which asks podman the same question, after the image
-    /// passes verify-image-usable.sh. NEGATIVE CONTROL: the shell twin creates
+    /// passes _verify_image_usable. NEGATIVE CONTROL: the shell twin creates
     /// nothing on a store that shifts, or that cannot say.
     #[test]
     fn init_and_build_image_builds_are_keep_id_warm() {
@@ -41752,7 +41757,7 @@ mod keep_id_warm_tests {
 
         let script = include_str!("../../../scripts/build-image.sh");
         let usable = script
-            .find("\"$SCRIPT_DIR/verify-image-usable.sh\" \"$IMAGE_TAG\"")
+            .find("_verify_image_usable \"$IMAGE_TAG\" >/dev/null")
             .expect("build-image.sh checks usability");
         let call = script
             .find("\n    _warm_keep_id_mapping \"$IMAGE_TAG\"")

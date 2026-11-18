@@ -157,11 +157,21 @@ mod at_rest {
         store: fn(&str) -> Result<(), String>,
     ) -> Option<String> {
         let mut cache = CACHE.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some(v) = cache.as_ref() {
-            return Some(v.clone());
-        }
+        // 2096-e3te: READ THROUGH. The durable store is asked on every call,
+        // and the cache never outranks it. A cache answered first used to let
+        // a long-lived daemon keep a passphrase the pass file no longer held,
+        // which is how two processes on one VM came to hold different
+        // passphrases and delete each other's CA key. The cache is now only
+        // the fallback for a store that cannot be read, and the value
+        // re-stored when the store has lost it.
         let value = match lookup() {
             Ok(Some(v)) if !v.is_empty() => v,
+            Ok(_) if cache.is_some() => {
+                let v = cache.clone().unwrap_or_default();
+                let _ = store(&v);
+                v
+            }
+            Err(_) if cache.is_some() => cache.clone().unwrap_or_default(),
             Ok(_) => {
                 let v = fresh();
                 if let Err(e) = store(&v) {
@@ -289,11 +299,24 @@ mod at_rest {
             return Materialized::Inactive;
         };
         // 2003-kypa: with no passphrase there is no proof the key is lost, so
-        // it is left exactly as it is; only a key that fails under the
-        // passphrase this host keeps is ciphertext nobody can open.
+        // it is left exactly as it is.
+        //
+        // 2096-e3te: a key that does not decrypt under THIS process's
+        // passphrase is not proof either. A wrong passphrase is not a corrupt
+        // key. Measured on yolanda 2026-11-17: a long-lived guest daemon held
+        // one passphrase in memory while new processes read another from the
+        // pass file. Each deleted the key the other had minted (this arm used
+        // to remove_file and answer Gone), so every login re-minted the CA and
+        // replaced the proxy and the Vault mid-session. The key is kept and
+        // the caller refuses by name (refuse_mint_for_unavailable_key) instead
+        // of minting over it.
         if is_encrypted(&bytes) && pass().is_some() && decrypt(persisted).is_err() {
-            let _ = std::fs::remove_file(persisted);
-            return Materialized::Gone;
+            eprintln!(
+                "[tillandsias] warn:ca-key-pass-mismatch: {} does not decrypt under this \
+                 process's passphrase; the key is kept, not re-minted (2096-e3te)",
+                persisted.display()
+            );
+            return Materialized::Unavailable;
         }
         Materialized::Inactive
     }
@@ -759,6 +782,100 @@ mod tests {
                 .contains("PRIVATE KEY")
         );
         assert_eq!(std::fs::read(&key).unwrap(), before);
+    }
+
+    // 2096-e3te: two processes on one VM, two passphrases. The key on disk
+    // was minted under the OTHER process's passphrase. This process must keep
+    // it byte-identical and answer Unavailable, so ensure_ca_bundle refuses
+    // by name instead of minting a new CA (which replaced the proxy and the
+    // Vault mid-login on yolanda). Red before 2096-e3te: Gone, key deleted.
+    fn this_process_lookup() -> Result<Option<String>, String> {
+        Ok(Some("this-process-passphrase".into()))
+    }
+
+    #[test]
+    fn a_key_under_another_processs_passphrase_is_kept_and_never_re_minted() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let key = dir.path().join("intermediate.key");
+        let made = std::process::Command::new("openssl")
+            .args([
+                "genpkey",
+                "-algorithm",
+                "EC",
+                "-pkeyopt",
+                "ec_paramgen_curve:P-256",
+            ])
+            .args(["-aes-256-cbc", "-pass", "env:E3TE_PASS", "-out"])
+            .arg(&key)
+            .env("E3TE_PASS", "the-other-processs-passphrase")
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(made.success());
+        let before = std::fs::read(&key).unwrap();
+        at_rest::reset_cache();
+        *at_rest::TEST_LOOKUP.lock().unwrap() = Some(this_process_lookup);
+
+        let answer = at_rest::materialize(&key);
+        let after = std::fs::read(&key).ok();
+
+        *at_rest::TEST_LOOKUP.lock().unwrap() = None;
+        at_rest::reset_cache();
+        assert_eq!(
+            answer,
+            Materialized::Unavailable,
+            "a wrong passphrase is not a lost key"
+        );
+        assert_eq!(
+            after.as_deref(),
+            Some(before.as_slice()),
+            "the other process's key was deleted"
+        );
+    }
+
+    // 2096-e3te: the passphrase is read through. A process that cached one
+    // value must take the store's current value, so a long-lived daemon and a
+    // fresh process can never hold two. Red before 2096-e3te: the cache
+    // answered first and the daemon kept its old passphrase.
+    fn store_now_holds_b() -> Result<Option<String>, String> {
+        Ok(Some("passphrase-b".into()))
+    }
+    fn store_lost_it() -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    static RESTORED: Mutex<Option<String>> = Mutex::new(None);
+    fn recording_store(v: &str) -> Result<(), String> {
+        *RESTORED.lock().unwrap() = Some(v.to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn the_passphrase_store_outranks_a_process_cache_and_a_lost_file_is_restored_not_reinvented() {
+        let _serial = SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+        at_rest::reset_cache();
+        *RESTORED.lock().unwrap() = None;
+        // The daemon first saw passphrase-a.
+        let first = at_rest::pass_with(|| Ok(Some("passphrase-a".into())), recording_store);
+        // The store now holds passphrase-b: the daemon must follow it.
+        let followed = at_rest::pass_with(store_now_holds_b, recording_store);
+        // The store loses its file: the process restores what it holds, and
+        // does not invent a third passphrase.
+        let restored = at_rest::pass_with(store_lost_it, recording_store);
+        let written = RESTORED.lock().unwrap().clone();
+        at_rest::reset_cache();
+        assert_eq!(first.as_deref(), Some("passphrase-a"));
+        assert_eq!(
+            followed.as_deref(),
+            Some("passphrase-b"),
+            "the cache outranked the store"
+        );
+        assert_eq!(restored.as_deref(), Some("passphrase-b"));
+        assert_eq!(
+            written.as_deref(),
+            Some("passphrase-b"),
+            "a lost pass file was not restored"
+        );
     }
 
     /// pass_env as an at-rest caller sees it, independent of the tmpfs store.
