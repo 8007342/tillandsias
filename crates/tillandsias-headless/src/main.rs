@@ -23391,6 +23391,9 @@ mod mcp_socket;
 // 1969-7qm7: the grouped host tool index and the deprecated flat aliases.
 #[cfg(feature = "host-services")]
 mod host_tools;
+// 2094-ay52 / 2095-kgdj: the job admission queue (rules only) and watch.wait.
+#[cfg(feature = "host-services")]
+mod job_queue;
 // 1956-4pxj: push events from the git mirror to every forge of a project.
 #[cfg(feature = "host-services")]
 mod lane_events;
