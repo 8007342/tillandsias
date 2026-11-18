@@ -101,7 +101,6 @@ scripts/test-gate-stamp-must-be-earned.sh 1
 scripts/test-gate-stamp-scope.sh 1
 scripts/test-gate-stamp.sh 1
 scripts/test-gate-step-metrics-isolation.sh 2
-scripts/test-git-credential-helper.sh 1
 scripts/test-git-mirror-existing-volume-hardening.sh 1
 scripts/test-git-mirror-ref-convergence.sh 1
 scripts/test-git-mirror-relay-token-expiry.sh 1
@@ -189,7 +188,6 @@ scripts/test-skill-canonicalization-remedy.sh 1
 scripts/test-skills-single-source.sh 1
 scripts/test-smoke-verifies-a-signature.sh 1
 scripts/test-spec-index-durable-tier-demotion.sh 1
-scripts/test-spec-index-endpoint-classification.sh 1
 scripts/test-spec-index-repo-relative-rung.sh 1
 scripts/test-squid-supervisor.sh 1
 scripts/test-ssh-lane-refuses-when-unwired.sh 1

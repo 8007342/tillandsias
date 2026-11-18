@@ -37,7 +37,7 @@ What exists (read before implementing; none of it is re-filed):
 - Guests: macOS VM (`crates/tillandsias-vm-layer` `vz`), WSL2 distro
   (`tillandsias-windows-tray` `wsl_lifecycle`); both run the Linux
   `tillandsias-headless` binary as a service.
-- Fixture style: `scripts/test-github-token-auto-rotation.sh` drives cargo
+- Fixture style: `scripts/lua/test-github-token-auto-rotation.lua` drives cargo
   tests over a stub store and a stub token endpoint; no network, no Vault.
 
 ## Decision 1 — the login is Authorization Code + PKCE with three receivers

@@ -653,14 +653,12 @@ scripts scripts/test-gate-step-append-no-conflict.sh 11
 scripts scripts/test-gate-step-prefix-allocation.sh 8
 scripts scripts/test-gate-step-skip-exit.sh 3
 scripts scripts/test-gate-thresholds-are-chosen.sh 1
-scripts scripts/test-git-credential-helper.sh 5
 scripts scripts/test-git-mirror-dns-identity.sh 2
 scripts scripts/test-git-mirror-existing-volume-hardening.sh 14
 scripts scripts/test-git-mirror-ref-convergence.sh 1
 scripts scripts/test-git-mirror-relay-token-expiry.sh 6
 scripts scripts/test-git-mirror-startup-per-ref.sh 3
 scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
-scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-github-token-rotation-entry-points.sh 3
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-groundtruth-regime-fails-closed.sh 4
@@ -760,7 +758,6 @@ scripts scripts/test-plan-fragments-lane-affordance.sh 2
 scripts scripts/test-plan-only-lane-structural.sh 8
 scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
-scripts scripts/test-podman-mock-secret-lifecycle.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-deletion-only.sh 1
 scripts scripts/test-pre-push-empty-ref-list.sh 6
@@ -798,7 +795,6 @@ scripts scripts/test-scorable-obligation-gate.sh 15
 scripts scripts/test-scorable-obligation-splitter.sh 14
 scripts scripts/test-script-exec-bits.sh 3
 scripts scripts/test-seam-writers-canonical.sh 7
-scripts scripts/test-secrets.sh 7
 scripts scripts/test-selector-drops-cross-branch-claims.sh 6
 scripts scripts/test-selector-flags-host-scoped-criteria.sh 4
 scripts scripts/test-session-tokens.sh 2
@@ -823,7 +819,6 @@ scripts scripts/test-support/github-login-fake.sh 2
 scripts scripts/test-support/litmus-fake-podman-guard.sh 1
 scripts scripts/test-support/podman-mock.sh 25
 scripts scripts/test-support/secret-tool-fake.sh 1
-scripts scripts/test-timing-clock-resolution.sh 2
 scripts scripts/test-timing-record-carries-reproduced.sh 2
 scripts scripts/test-timing-record-carries-root.sh 3
 scripts scripts/test-timing-supervisor-lost.sh 2

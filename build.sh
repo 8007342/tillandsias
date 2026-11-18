@@ -6406,7 +6406,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Spec/registry status agreement passed"
     # ...and the guard itself can fail: hermetic arms for a flipped word, a
     # missing section, an annotated line, and a named undecided pair.
-    if ! _run bash "$SCRIPT_DIR/scripts/test-spec-registry-status.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-spec-registry-status.lua" 2>&1; then
         _error "the spec/registry status guard no longer refuses what it must (1397-eppt)"
         exit 1
     fi
@@ -6918,9 +6918,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/check-forge-findings-persisted.sh fixture failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
-    _step "Checking test-git-credential-helper (1063-nraf; 28ms)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-git-credential-helper.sh" 2>&1; then
-        _error "scripts/test-git-credential-helper.sh failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
+    _step "Checking the git credential helper fixture (1063-nraf; 28ms)..."
+    if ! _run_lua_decider "scripts/lua/test-git-credential-helper.lua" 2>&1; then
+        _error "scripts/lua/test-git-credential-helper.lua failed — orphaned until 1063-nraf bound it, so this is the first gate that can see it; read the fixture output above rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-guest-unit-hardening (1063-nraf; 62ms)..."

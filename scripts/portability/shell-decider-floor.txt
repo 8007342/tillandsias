@@ -251,7 +251,6 @@ scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
 scripts/test-gate-thresholds-are-chosen.sh
 scripts/test-ghost-trace-yaml-anchoring.sh
-scripts/test-git-credential-helper.sh
 scripts/test-git-mirror-dns-identity.sh
 scripts/test-git-mirror-existing-volume-hardening.sh
 scripts/test-git-mirror-ref-convergence.sh
@@ -261,12 +260,10 @@ scripts/test-git-mirror-stale-reconcile.sh
 scripts/test-git-mirror-startup-per-ref.sh
 scripts/test-git-mirror-unborn-head.sh
 scripts/test-git-mirror-vault-agent-auto-auth.sh
-scripts/test-github-token-auto-rotation.sh
 scripts/test-github-token-rotation-entry-points.sh
 scripts/test-groundtruth-corpus-declaration.sh
 scripts/test-groundtruth-regime-fails-closed.sh
 scripts/test-guest-binaries-nix-lane.sh
-scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-unit-hardening.sh
 scripts/test-hardware-fingerprint.sh
 scripts/test-harness-affinity-selection.sh
@@ -411,7 +408,6 @@ scripts/test-plan-hash-time-verbs.sh
 scripts/test-plan-only-lane-structural.sh
 scripts/test-plan-orders-fragment-fold.sh
 scripts/test-podman-mock-refusal.sh
-scripts/test-podman-mock-secret-lifecycle.sh
 scripts/test-podman-sync-budgets.sh
 scripts/test-populate-hot-paths-negative-control.sh
 scripts/test-portability-idioms.sh
@@ -473,7 +469,6 @@ scripts/test-scorable-obligation-splitter.sh
 scripts/test-script-exec-bits.sh
 scripts/test-script-run-verb.sh
 scripts/test-seam-writers-canonical.sh
-scripts/test-secrets.sh
 scripts/test-selector-drops-cross-branch-claims.sh
 scripts/test-selector-flags-host-scoped-criteria.sh
 scripts/test-session-tokens.sh
@@ -491,16 +486,12 @@ scripts/test-skill-canonicalization-remedy.sh
 scripts/test-skills-single-source.sh
 scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-consecutive-lanes.sh
-scripts/test-smoke-evidence-dir-is-fresh.sh
-scripts/test-smoke-forge-lane-cold-host-outcome.sh
 scripts/test-smoke-skill-reset-env-matches-policy.sh
 scripts/test-smoke-verifies-a-signature.sh
 scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh
-scripts/test-spec-index-endpoint-classification.sh
 scripts/test-spec-index-repo-relative-rung.sh
 scripts/test-spec-index-staging-capacity.sh
-scripts/test-spec-registry-status.sh
 scripts/test-spec-script-paths.sh
 scripts/test-squid-supervisor.sh
 scripts/test-ssh-lane-refuses-when-unwired.sh
@@ -511,7 +502,6 @@ scripts/test-subdomain-routing.sh
 scripts/test-summarize-pubspec.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-terminology-check-memo.sh
-scripts/test-timing-clock-resolution.sh
 scripts/test-timing-record-carries-reproduced.sh
 scripts/test-timing-record-carries-root.sh
 scripts/test-timing-supervisor-lost.sh

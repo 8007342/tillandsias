@@ -31,6 +31,21 @@ function M.repo_root()
     return ROOT
 end
 
+-- The tillandsias-plan binary a fixture should drive: TILLANDSIAS_PLAN_BIN,
+-- else TILLANDSIAS_SCRIPT_RUNNER_BIN (the gate hands one over), else a built
+-- target/{release,debug} binary. The script must declare whichever env names
+-- it wants honoured (-- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN).
+function M.plan_bin()
+    for _, n in ipairs{ "TILLANDSIAS_PLAN_BIN", "TILLANDSIAS_SCRIPT_RUNNER_BIN" } do
+        local ok, v = pcall(env.get, n)
+        if ok and v and v ~= "" then return v end
+    end
+    for _, p in ipairs{ "target/release/tillandsias-plan", "target/debug/tillandsias-plan" } do
+        if fs.exists(p) then return M.repo_root() .. "/" .. p end
+    end
+    return nil
+end
+
 local T = {}
 T.__index = T
 
