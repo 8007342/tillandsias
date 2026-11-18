@@ -20,8 +20,9 @@ for _, d in ipairs{ "bin", "home", "project" } do fs.mkdir(W.rel .. "/" .. d) en
 
 local EXPECTED = '{"access_token":"fixture-access","refresh_token":"fixture-refresh"}\n'
 fs.write(W.rel .. "/expected.json", EXPECTED)
-local b64 = T:must{ "base64", "-w0", W.abs .. "/expected.json" }
-fs.write(W.rel .. "/vault-value", b64.stdout)
+-- base64 without -w0 (a GNU flag): BSD/macOS base64 has no -w; join the lines here.
+local b64 = T:must{ "base64", W.abs .. "/expected.json" }
+fs.write(W.rel .. "/vault-value", (b64.stdout:gsub("%s", "")))
 
 fs.write(W.rel .. "/bin/vault-cli.sh", table.concat({
     "#!/usr/bin/env bash",
@@ -57,7 +58,9 @@ local r = T:run{ "bash", ROOT .. "/images/default/codex-oauth-vault.sh", "restor
 T:arm("1 restore exits 0", r.code == 0, "rc=" .. tostring(r.code) .. " " .. tostring(r.stderr))
 T:arm("2 auth.json is byte-identical to the vault value", fs.exists(AUTH) and fs.read(AUTH) == EXPECTED,
     fs.exists(AUTH) and fs.read(AUTH) or "absent")
+-- GNU stat -c %a, else BSD stat -f %Lp (as the .sh did)
 local st = T:run{ "stat", "-c", "%a", ROOT .. "/" .. AUTH }
+if st.code ~= 0 then st = T:run{ "stat", "-f", "%Lp", ROOT .. "/" .. AUTH } end
 T:arm("3 auth.json is mode 0600", text.trim(st.stdout or "") == "600", st.stdout)
 r = T:run{ W.abs .. "/bin/codex", "--fixture", env = E }
 T:arm("4 codex finds the restored auth.json", r.code == 0, "rc=" .. tostring(r.code) .. " " .. tostring(r.stderr))
