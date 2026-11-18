@@ -209,7 +209,7 @@ fi
 #   `image inspect <tag> --format X` asks for a FIELD. Still replayed by the
 #     handled arm below; still the only form that produces stdout.
 #   `image inspect <tag>` with stdout DISCARDED asks whether the layers can be
-#     touched at all. verify-image-usable.sh:62 uses exactly this form on
+#     touched at all. scripts/lua/verify-image-usable.lua uses exactly this form on
 #     purpose: `image exists`, a size in `images` and `image tree` ALL return
 #     success over an image whose overlay layer is missing, so only inspect
 #     reaches the truth. That caller reads the rc and throws stdout away.
@@ -241,7 +241,7 @@ else
 fi
 
 # THE ARM THAT GIVES THE OTHER THREE THEIR MEANING: a missing image must be
-# UNUSABLE, with podman's own 125, or verify-image-usable.sh cannot tell a
+# UNUSABLE, with podman's own 125, or verify-image-usable.lua cannot tell a
 # broken layer from a good one and 1073-dqtx's whole finding is unobservable
 # under the mock.
 rm -f "$tmp/state/images/$bare_key"
