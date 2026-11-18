@@ -229,7 +229,13 @@ const HIGGS_ATTRIBUTION: &str = "(B) prominently display \u{201c}Built with Higg
 const HIGGS_NOTICE: &str = "(A) provide a copy of this Agreement and the of Meta License \u{2019}s Llama 3 agreement with any such Higgs Materials";
 const HIGGS_FIELD: &str = "v. You will not use the Higgs Materials or any output or results of the Higgs Materials to improve any other large language model (excluding Boson Higgs Audio 2 or derivative works thereof).";
 const HIGGS_THRESHOLD: &str = "If the annual active users of the products or services made available by or for Licensee, or Licensee\u{2019}s affiliates, is greater than 100,000 annual active users in the preceding calendar year, you must request an expanded license from Boson AI";
-const HIGGS_LLAMA: &str = "The terms and conditions of the Meta License Agreement are hereby incorporated herein by reference and Unless stated otherwise below, its terms apply. (Meta Llama 3 Community License, meta-llama/llama3 LICENSE at a0940f9c, sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f; the Llama 3 Acceptable Use Policy it also incorporates is USE_POLICY.md at the same commit, sha256 716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c.)";
+// 2094-h3rq: Meta Llama 3 Community License (meta-llama/llama3 LICENSE at
+// a0940f9c, April 18, 2024) and its Acceptable Use Policy (USE_POLICY.md).
+const LLAMA_ATTRIBUTION: &str = "(B) prominently display \u{201c}Built with Meta Llama 3\u{201d} on a related website, user interface, blogpost, about page, or product documentation.";
+const LLAMA_NOTICE: &str = "iii. You must retain in all copies of the Llama Materials that you distribute the following attribution notice within a \u{201c}Notice\u{201d} text file distributed as a part of such copies: \u{201c}Meta Llama 3 is licensed under the Meta Llama 3 Community License, Copyright \u{a9} Meta Platforms, Inc. All Rights Reserved.\u{201d}";
+const LLAMA_FIELD: &str = "v. You will not use the Llama Materials or any output or results of the Llama Materials to improve any other large language model (excluding Meta Llama 3 or derivative works thereof).";
+const LLAMA_THRESHOLD: &str = "If, on the Meta Llama 3 version release date, the monthly active users of the products or services made available by or for Licensee, or Licensee\u{2019}s affiliates, is greater than 700 million monthly active users in the preceding calendar month, you must request a license from Meta";
+const LLAMA_AUP: &str = "We want everyone to use Llama 3 safely and responsibly. You agree you will not use, or allow others to use, Llama 3 to: ";
 /// The obligation table, keyed by licence id as the register spells it.
 /// An unknown id yields one review obligation naming it.
 pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
@@ -336,7 +342,7 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
         ],
         // 2094-h3rq: Fish S2-Pro. Research AND non-commercial use is granted
         // (hobbyist, evaluation), so it is not forbidden outright.
-        "fish-audio-research-license" => vec![
+        "fish-audio-research-license-2026-03-07" => vec![
             ob(
                 C::Attribution {
                     text: "Built with Fish Audio".into(),
@@ -354,7 +360,7 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
             ),
         ],
         // 2094-h3rq: Higgs Audio v2, a Meta Llama 3 derivative.
-        "boson-higgs-audio-2-community-license" => vec![
+        "boson-higgs-audio-2-community" => vec![
             ob(
                 C::Attribution {
                     text: "Built with Higgs Materials licensed from Boson AI USA, Inc. and Meta Llama 3".into(),
@@ -369,13 +375,26 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
                 },
                 HIGGS_THRESHOLD,
             ),
+        ],
+        // 2094-h3rq: the two texts Higgs Audio 2 incorporates, each its own
+        // licence as demon_attack recorded them.
+        "meta-llama-3-community" => vec![
             ob(
-                C::Review {
-                    clause: "incorporates the Meta Llama 3 Community License (sha256 4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f) and the Llama 3 Acceptable Use Policy (sha256 716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c) by reference".into(),
+                C::Attribution {
+                    text: "Built with Meta Llama 3".into(),
                 },
-                HIGGS_LLAMA,
+                LLAMA_ATTRIBUTION,
+            ),
+            ob(C::Notice, LLAMA_NOTICE),
+            ob(C::FieldOfUse, LLAMA_FIELD),
+            ob(
+                C::SeatOrRevenueThreshold {
+                    detail: "700 million monthly active users: a licence from Meta".into(),
+                },
+                LLAMA_THRESHOLD,
             ),
         ],
+        "meta-llama-3-acceptable-use-policy" => vec![ob(C::FieldOfUse, LLAMA_AUP)],
         "mit" => vec![ob(C::Notice, MIT_NOTICE)],
         _ => vec![ob(
             C::Review {
@@ -411,8 +430,10 @@ const FORBIDDEN_OUTRIGHT: &[(&str, &str)] = &[
 /// v2: the licence PR flow, 2094-h3rq).
 pub const PER_PROJECT_ONLY: &[&str] = &[
     "demucs-weights-unstated",
-    "fish-audio-research-license",
-    "boson-higgs-audio-2-community-license",
+    "fish-audio-research-license-2026-03-07",
+    "boson-higgs-audio-2-community",
+    "meta-llama-3-community",
+    "meta-llama-3-acceptable-use-policy",
 ];
 
 pub fn forbidden_outright(licence_id: &str) -> Option<&'static str> {
@@ -1558,18 +1579,25 @@ pub fn register_admits_with_consent_in(
         Err(e) => e,
     };
     let rows = parse_restricted(restricted_register)?;
-    let Some(r) = find_restricted(&rows, &row.repo, &row.revision, &row.file, &row.sha256) else {
+    let matched = find_restricted(&rows, &row.repo, &row.revision, &row.file, &row.sha256);
+    if matched.is_empty() {
         return Err(format!(
             "{permissive_err}; nor in images/models/licence-register-restricted.tsv"
         ));
-    };
-    admit_restricted_row(
-        r,
-        &row.label(),
-        project_ack_dir,
-        &[requester_scope],
-        verifier,
-    )
+    }
+    // Every licence the file is registered under must admit it (2094-h3rq).
+    let mut first = None;
+    for r in matched {
+        let a = admit_restricted_row(
+            r,
+            &row.label(),
+            project_ack_dir,
+            &[requester_scope],
+            verifier,
+        )?;
+        first.get_or_insert(a);
+    }
+    Ok(first.expect("matched is non-empty"))
 }
 
 fn find_restricted<'a>(
@@ -1578,13 +1606,15 @@ fn find_restricted<'a>(
     revision: &str,
     file: &str,
     sha256: &str,
-) -> Option<&'a RestrictedRow> {
-    rows.iter().find(|r| {
-        r.repo == repo
-            && r.revision == revision
-            && r.file == file
-            && r.sha256.eq_ignore_ascii_case(sha256)
-    })
+) -> Vec<&'a RestrictedRow> {
+    rows.iter()
+        .filter(|r| {
+            r.repo == repo
+                && r.revision == revision
+                && r.file == file
+                && r.sha256.eq_ignore_ascii_case(sha256)
+        })
+        .collect()
 }
 
 /// The D6 gate for one restricted row: not gated, not forbidden outright, its
@@ -1805,25 +1835,40 @@ pub fn admit_artefacts_in(
     let mut ids = Vec::with_capacity(artefacts.len());
     for a in artefacts {
         let label = format!("{}@{} {}", a.repo, a.revision, a.file);
-        let Some(r) = find_restricted(&rows, &a.repo, &a.revision, &a.file, &a.sha256) else {
+        let matched = find_restricted(&rows, &a.repo, &a.revision, &a.file, &a.sha256);
+        if matched.is_empty() {
             return Err(GateRefusal::Unmatched(format!(
                 "{label} (sha256 {}) is not in images/models/licence-register-restricted.tsv; nothing was fetched or queued",
                 a.sha256
             )));
-        };
-        if !r.spdx.eq_ignore_ascii_case(&a.licence) {
+        }
+        if !matched
+            .iter()
+            .any(|r| r.spdx.eq_ignore_ascii_case(&a.licence))
+        {
             return Err(GateRefusal::Unmatched(format!(
                 "{label} is registered under licence {} but the job names {}; nothing was fetched or queued",
-                r.spdx, a.licence
+                matched
+                    .iter()
+                    .map(|r| r.spdx.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" + "),
+                a.licence
             )));
         }
-        let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
-            .map_err(GateRefusal::Row)?;
-        ids.push(
-            admitted
-                .acknowledgement_slug
-                .unwrap_or_else(|| "permissive".to_string()),
-        );
+        // A file under several licences (Higgs v2: Boson, Llama 3, its AUP)
+        // is admitted only when EVERY one is acknowledged (2094-h3rq).
+        let mut slugs = Vec::with_capacity(matched.len());
+        for r in matched {
+            let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
+                .map_err(GateRefusal::Row)?;
+            slugs.push(
+                admitted
+                    .acknowledgement_slug
+                    .unwrap_or_else(|| "permissive".to_string()),
+            );
+        }
+        ids.push(slugs.join("+"));
     }
     Ok(ids)
 }
@@ -2191,7 +2236,7 @@ pub(crate) mod tests {
         let inc_text = b"INCORPORATED\n";
         let inc_sha = format!("{:x}", sha2::Sha256::digest(inc_text));
         let inc = IncorporatedText {
-            id: "meta-llama-3-community-license",
+            id: "meta-llama-3-community",
             url: "https://example.invalid/llama",
             sha256: &inc_sha,
             text: inc_text,
@@ -2199,10 +2244,7 @@ pub(crate) mod tests {
         let pr = licence_pr(&ack, "x", text, "u", &obl, &promises, &[inc]).unwrap();
         assert!(pr.body.contains("### Incorporated by reference"));
         assert!(pr.body.contains("INCORPORATED\n"));
-        assert_eq!(
-            pr.files[3].0,
-            "licences/texts/meta-llama-3-community-license.md"
-        );
+        assert_eq!(pr.files[3].0, "licences/texts/meta-llama-3-community.md");
         let bad = IncorporatedText {
             text: b"OTHER\n",
             ..inc
@@ -2372,51 +2414,179 @@ pub(crate) mod tests {
     #[test]
     fn fish_s2_pro_and_higgs_v2_are_registered_and_classified() {
         let rows = parse_restricted(restricted_register_tsv()).unwrap();
+        let higgs = &["higgs-audio-v2", "higgs-audio-v2-tokenizer"][..];
         for (id, hash, names) in [
             (
-                "fish-audio-research-license",
+                "fish-audio-research-license-2026-03-07",
                 "aa7d9206e9d710590987a3636934f643529c00cd490323594e6206aaa0c32d80",
                 &["fish-s2-pro", "fish-s2-pro-codec"][..],
             ),
             (
-                "boson-higgs-audio-2-community-license",
+                "boson-higgs-audio-2-community",
                 "8b2e018eeb3967a4636ccc57528440b33c14dd6e02ad67571fc7759489dde9a0",
-                &["higgs-audio-v2", "higgs-audio-v2-tokenizer"][..],
+                higgs,
+            ),
+            (
+                "meta-llama-3-community",
+                "4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f",
+                higgs,
+            ),
+            (
+                "meta-llama-3-acceptable-use-policy",
+                "716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c",
+                higgs,
             ),
         ] {
             assert!(forbidden_outright(id).is_none(), "{id}");
-            let table: Vec<ObligationClass> =
-                obligations_for(id).into_iter().map(|o| o.class).collect();
+            let table: Vec<Obligation> = obligations_for(id);
             assert!(
-                !table
-                    .iter()
-                    .any(|c| matches!(c, ObligationClass::Review { clause } if clause.contains("not in the obligation table"))),
+                table.iter().all(|o| !o.clause.is_empty()),
+                "{id}: every clause is quoted"
+            );
+            assert!(
+                !table.iter().any(|o| matches!(&o.class, ObligationClass::Review { clause } if clause.contains("not in the obligation table"))),
                 "{id} is not in the obligation table"
             );
+            let classes: Vec<ObligationClass> = table.into_iter().map(|o| o.class).collect();
             for n in names {
-                let mine: Vec<&RestrictedRow> = rows.iter().filter(|r| r.name == *n).collect();
-                assert!(!mine.is_empty(), "{n} not registered");
+                let mine: Vec<&RestrictedRow> = rows
+                    .iter()
+                    .filter(|r| r.name == *n && r.spdx == id)
+                    .collect();
+                assert!(!mine.is_empty(), "{n} not registered under {id}");
                 for r in mine {
-                    assert_eq!(r.spdx, id);
-                    assert_eq!(r.licence_sha256, hash);
+                    assert_eq!(r.licence_sha256, hash, "{n} {id}");
                     assert_eq!(r.gated, "false");
                     assert_eq!(
                         ObligationClass::render_list(&r.obligations),
-                        ObligationClass::render_list(&table),
-                        "{n}: register cell and obligation table disagree"
+                        ObligationClass::render_list(&classes),
+                        "{n} {id}: register cell and obligation table disagree"
                     );
                 }
             }
         }
-        // Every quoted clause carries text (none left empty for these two).
-        for id in [
-            "fish-audio-research-license",
-            "boson-higgs-audio-2-community-license",
-        ] {
-            assert!(
-                obligations_for(id).iter().all(|o| !o.clause.is_empty()),
-                "{id}"
+        // Each Higgs file carries exactly the three licences.
+        for n in higgs {
+            let mut ids: Vec<&str> = rows
+                .iter()
+                .filter(|r| r.name == *n)
+                .map(|r| r.spdx.as_str())
+                .collect();
+            ids.sort();
+            assert_eq!(
+                ids,
+                [
+                    "boson-higgs-audio-2-community",
+                    "meta-llama-3-acceptable-use-policy",
+                    "meta-llama-3-community"
+                ],
+                "{n}"
             );
+        }
+    }
+
+    /// A file under three licences is admitted only when all three records
+    /// are there: Boson alone, or Boson + Llama, admits nothing.
+    #[test]
+    fn a_higgs_file_needs_all_three_acknowledgements() {
+        let dir = disk_scratch("higgs3");
+        let (key, signers) = enrol(&dir, "operator");
+        let verifier = Verifier::new(&signers);
+        let acks = dir.join("acks");
+        fs::create_dir_all(&acks).unwrap();
+        let rows = parse_restricted(restricted_register_tsv()).unwrap();
+        let r = rows.iter().find(|r| r.name == "higgs-audio-v2").unwrap();
+        let art = RestrictedArtefact {
+            licence: "boson-higgs-audio-2-community".into(),
+            repo: r.repo.clone(),
+            revision: r.revision.clone(),
+            file: r.file.clone(),
+            sha256: r.sha256.clone(),
+        };
+        let mut want = Vec::new();
+        for (id, hash) in [
+            (
+                "boson-higgs-audio-2-community",
+                "8b2e018eeb3967a4636ccc57528440b33c14dd6e02ad67571fc7759489dde9a0",
+            ),
+            (
+                "meta-llama-3-community",
+                "4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f",
+            ),
+            (
+                "meta-llama-3-acceptable-use-policy",
+                "716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c",
+            ),
+        ] {
+            let err = admits_restricted_in(
+                restricted_register_tsv(),
+                "demon_attack",
+                std::slice::from_ref(&art),
+                &acks,
+                &verifier,
+            )
+            .unwrap_err();
+            assert!(err.contains(id), "{id} should be the one missing: {err}");
+            let mut a = nc_ack("project:demon_attack");
+            a.licence = id.into();
+            a.licence_sha256 = hash.into();
+            a.covers = vec![r.repo.clone()];
+            let a = sign(&dir, &key, a);
+            want.push(a.slug());
+            fs::write(acks.join(a.slug() + ".yaml"), a.to_yaml()).unwrap();
+        }
+        let ids = admits_restricted_in(
+            restricted_register_tsv(),
+            "demon_attack",
+            &[art],
+            &acks,
+            &verifier,
+        )
+        .unwrap();
+        assert_eq!(ids, vec![want.join("+")]);
+    }
+
+    /// The six records the operator merged in demon_attack (PRs #6, #7, #9,
+    /// #10, #11), their `licence` and `covers` exactly as merged: the Rust
+    /// slug names each file exactly as it is on demon_attack's main.
+    #[test]
+    fn slug_names_demon_attacks_merged_records_exactly() {
+        for (licence, covers, file) in [
+            (
+                "creativeml-openrail-plus-plus-m-sdxl",
+                "stabilityai/stable-diffusion-xl-base-1.0",
+                "creativeml-openrail-plus-plus-m-sdxl--stabilityai-stable-diffusion-xl-base-1-0.yaml",
+            ),
+            (
+                "creativeml-openrail-plus-plus-m-sdxl-lightning",
+                "ByteDance/SDXL-Lightning",
+                "creativeml-openrail-plus-plus-m-sdxl-lightning--bytedance-sdxl-lightning.yaml",
+            ),
+            (
+                "creativeml-openrail-m",
+                "LayerDiffusion/layerdiffusion-v1",
+                "creativeml-openrail-m--layerdiffusion-layerdiffusion-v1.yaml",
+            ),
+            (
+                "creativeml-openrail-m",
+                "nerijs/pixel-art-xl",
+                "creativeml-openrail-m--nerijs-pixel-art-xl.yaml",
+            ),
+            (
+                "meta-llama-3-community",
+                "bosonai/higgs-tts-2-3b-base",
+                "meta-llama-3-community--bosonai-higgs-tts-2-3b-base.yaml",
+            ),
+            (
+                "meta-llama-3-acceptable-use-policy",
+                "bosonai/higgs-tts-2-3b-base",
+                "meta-llama-3-acceptable-use-policy--bosonai-higgs-tts-2-3b-base.yaml",
+            ),
+        ] {
+            let mut a = nc_ack("project:demon_attack");
+            a.licence = licence.into();
+            a.covers = vec![covers.into()];
+            assert_eq!(format!("{}.yaml", a.slug()), file, "{licence} {covers}");
         }
     }
 
@@ -2429,24 +2599,21 @@ pub(crate) mod tests {
         let repo = "bosonai/higgs-tts-2-3b-base";
         let mut a = nc_ack("project:demo");
         a.covers = vec![repo.into()];
-        a.licence = "boson-higgs-audio-2-community-license".into();
+        a.licence = "boson-higgs-audio-2-community".into();
         let mut b = a.clone();
-        b.licence = "meta-llama-3-community-license".into();
+        b.licence = "meta-llama-3-community".into();
         assert_ne!(a.slug(), b.slug(), "two licences, one file");
         assert_eq!(
             a.slug(),
-            "boson-higgs-audio-2-community-license--bosonai-higgs-tts-2-3b-base"
+            "boson-higgs-audio-2-community--bosonai-higgs-tts-2-3b-base"
         );
         // The multi-cover form carries the licence id too.
         let mut m = a.clone();
         m.covers.push("bosonai/higgs-audio-v2-tokenizer".into());
         let mut n = m.clone();
-        n.licence = "meta-llama-3-community-license".into();
+        n.licence = "meta-llama-3-community".into();
         assert_ne!(m.slug(), n.slug());
-        assert!(
-            m.slug()
-                .starts_with("boson-higgs-audio-2-community-license--")
-        );
+        assert!(m.slug().starts_with("boson-higgs-audio-2-community--"));
         // And the PRs' record paths differ.
         use sha2::Digest as _;
         let path_of = |ack: &Acknowledgement| {
@@ -3015,8 +3182,8 @@ pub(crate) mod tests {
         assert!(artefacts.len() >= 30, "{}", artefacts.len());
         assert_eq!(
             demucs.len(),
-            7,
-            "htdemucs, htdemucs_6s, 3 Fish S2-Pro and 2 Higgs v2 files"
+            11,
+            "htdemucs, htdemucs_6s, 3 Fish S2-Pro rows, 2 Higgs v2 files x 3 licences"
         );
         let demucs: Vec<RestrictedArtefact> = demucs.into_iter().map(to_artefact).collect();
         let err =

@@ -32,13 +32,15 @@ reads.
   register's `licence_sha256`
 - **THEN** nothing is rendered and no PR is opened
 
-#### Scenario: a licence that incorporates another quotes both
+#### Scenario: a file under several licences
 
-- **WHEN** the licence incorporates another text by reference (Higgs Audio 2
-  incorporates the Meta Llama 3 Community License and its Acceptable Use
-  Policy)
-- **THEN** the PR quotes each incorporated text verbatim with its own pinned
-  sha256, and a mismatch on either renders nothing
+- **WHEN** the register lists one file under several licences (Higgs Audio
+  v2: `boson-higgs-audio-2-community`, `meta-llama-3-community`,
+  `meta-llama-3-acceptable-use-policy`)
+- **THEN** the skill opens one PR per licence, each writing its own
+  `<licence-id>--<artefact-slug>.yaml`, so no two PRs write one file
+- **AND** the gate admits the file only when every one of those licences is
+  acknowledged
 
 ### Requirement: the admit gate admits only a record merged into the default branch
 

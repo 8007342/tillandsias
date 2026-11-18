@@ -127,13 +127,18 @@ PR, a merge made outside GitHub, or a record edited after its merge admits
 nothing. The mirror has to have fetched the merge first. Weights are fetched
 to that user's cache only; never bundled in an image or a release.
 
-## A licence that incorporates another
+## A file under several licences
 
-Higgs Audio v2's licence incorporates the Meta Llama 3 Community License by
-reference, and through it the Llama 3 Acceptable Use Policy. Its PR quotes
-all three texts, each with its pinned sha256 (the dry run
-takes `TILLANDSIAS_LICENCE_PR_DRY_RUN_INCORPORATED=<id>|<url>|<file>`
-lines), and the promises name the Llama terms in plain words.
+A file can sit under SEVERAL licences. Higgs Audio v2 is registered under
+three: `boson-higgs-audio-2-community`, and the two texts that licence
+incorporates, `meta-llama-3-community` and
+`meta-llama-3-acceptable-use-policy`, each with its own pinned text. The gate
+admits the file only when all three are acknowledged, so open THREE PRs (one
+per licence id, each its own `licences/<id>` head and its own record file,
+`<licence-id>--<artefact-slug>.yaml`) and hand the user the three links in
+one message. A licence id is spelled exactly as the register spells it.
+(`licence_pr` can also quote an incorporated text inside one PR, for a
+licence not registered that way.)
 
 ## Known gaps
 
