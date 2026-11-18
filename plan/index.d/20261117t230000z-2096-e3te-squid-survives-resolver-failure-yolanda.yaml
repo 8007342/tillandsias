@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-17 at the coordinator's direction (p1: it blocks the operator's GitHub sign-in,
+# hence the v56.11.17.2 Windows promotion and the 2094 studio work). Code is cited by symbol, never by line.
+packets:
+  - packet_id: squid-survives-a-transient-resolver-failure-and-the-in-vm-github-login-survives-a-proxy-restart
+    order: 2096-e3te
+    status: ready
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [proxy, squid, dns, wsl2, github-login]
+    estimated_hours: 5
+    size: M
+    implementer_tier: sonnet
+    owned_files:
+      - images/proxy/squid.conf
+    title: "Squid in tillandsias-proxy stays up through a transient resolver failure, the in-VM GitHub login retries across a proxy restart instead of resolving signed-out, and squid's FATAL line outlives the container"
+    context: |
+      MEASURED on yolanda 2026-11-17, published tray v56.11.17.2 (pid 16204 up since 08:57, never crashed):
+        16:22:54  tray: spawning in-VM PTY {intent=GithubLogin}
+        16:23:04  guest: "WSL (186) ERROR: CheckConnection: getaddrinfo() failed: -5"
+        16:23:04  guest kernel: "squid: squid: potentially unexpected fatal signal 6." (SIGABRT), same second;
+                  the proxy container is recreated (veth down/up); git container then logs
+                  "SSL certificate problem: unable to get local issuer certificate" while the proxy returns
+        16:23:58  squid SIGABRT again
+        16:24:03  tray: "github sign-in state resolved {from=signing-in, to=signed-out}"
+      Four squid SIGABRTs that day (first 08:53). The operator saw the login "crash mid run". Squid's own FATAL
+      line is LOST: the container was recreated, so podman logs of the new one start after the abort, and
+      the kernel line carries only registers. Hypothesis (unproven until the FATAL line is kept): squid aborts
+      on a WSL DNS-tunnel resolver failure (squid.conf has no dns_nameservers line by design, 1863-4knc, so it
+      uses the container resolver that WSL's tunnel feeds).
+    exit_criteria:
+      - "With the proxy container's resolver made unreachable for 10 s (e.g. its nameserver dropped by an nft rule in the guest), squid's PID is unchanged afterwards and a request through the proxy succeeds once DNS returns. Pre-fix result: on yolanda FAILS, squid SIGABRTs (signal 6) and the container is recreated."
+      - "An in-VM GitHub login in progress while tillandsias-proxy restarts retries its requests and ends signed-in (or still signing-in), never resolving to signed-out because of the restart. Pre-fix result: FAILS, signing-in -> signed-out 5 s after the second abort."
+      - "squid's cache.log / FATAL output is written to a guest path that survives the container being recreated, so after a forced abort the FATAL line naming the cause is readable. Pre-fix result: FAILS, only the kernel's register dump remains."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-proxy-survives-resolver-outage.yaml lands in the same commit as the fix (1136-n8sh)"
+    next_action: "Make the FATAL line durable first (criterion 3), reproduce with the DNS-drop, then fix from the named cause."
+    provenance: "yolanda guest journal and tray Event Log, 2026-11-17 16:22-16:24 local; operator report of the failed sign-in."
+    events:
+      - type: filed
+        ts: "2026-11-17T23:00:00Z"
+        host: yolanda
+        summary: "filed p1 at the coordinator's direction from the operator's failed GitHub sign-in"
