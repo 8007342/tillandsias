@@ -582,7 +582,6 @@ scripts scripts/test-check-bash-dialect.sh 2
 scripts scripts/test-check-credential-channel.sh 12
 scripts scripts/test-check-engine-cpu-dispatch.sh 1
 scripts scripts/test-check-jq-callsite-ratchet.sh 1
-scripts scripts/test-check-packet-tier-declared.sh 1
 scripts scripts/test-check-stranded-in-progress.sh 7
 scripts scripts/test-claim-confirmation-names-the-earliest-claimant.sh 1
 scripts scripts/test-claim-wip-limit.sh 2
@@ -617,7 +616,6 @@ scripts scripts/test-default-vault-cli-security.sh 4
 scripts scripts/test-derive-host-identity.sh 1
 scripts scripts/test-dispatch-reap.sh 4
 scripts scripts/test-embed-endpoint-derivation.sh 1
-scripts scripts/test-enclave-network-internal-discovery.sh 1
 scripts scripts/test-enclave-proxy-lib.sh 4
 scripts scripts/test-enclave-service-health.sh 102
 scripts scripts/test-ensure-cosign.sh 5
@@ -643,13 +641,11 @@ scripts scripts/test-forge-seeds-from-salvage-ref.sh 1
 scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-standard-gitconfig-path.sh 2
 scripts scripts/test-forge-swap-service.sh 6
-scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-events-land-callsite.sh 8
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
 scripts scripts/test-gate-divergence-is-declared.sh 6
 scripts scripts/test-gate-memory-refusal.sh 1
-scripts scripts/test-gate-stamp-movers-batching-is-equivalent.sh 10
 scripts scripts/test-gate-stamp-names-content-movers.sh 5
 scripts scripts/test-gate-stamp-portable-digest.sh 1
 scripts scripts/test-gate-stamp-scope.sh 9
@@ -675,7 +671,6 @@ scripts scripts/test-harness-byte-cheap.sh 1
 scripts scripts/test-harness-contract-probe.sh 1
 scripts scripts/test-harness-rollback.sh 6
 scripts scripts/test-headless-sidecar-target-gate.sh 1
-scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
 scripts scripts/test-hook-phase-instrumentation.sh 5
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
@@ -717,7 +712,6 @@ scripts scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh 2
 scripts scripts/test-litmus-step-model.sh 1
 scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-structured-assert.sh 1
-scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts scripts/test-locale-coverage.sh 9
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
@@ -753,7 +747,6 @@ scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
 scripts scripts/test-opencode-vault-auth-content.sh 3
 scripts scripts/test-openspec-pin.sh 2
 scripts scripts/test-orchestrate-enclave.sh 1
-scripts scripts/test-order-citations-resolve.sh 7
 scripts scripts/test-packet-tier-fields.sh 4
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
@@ -763,7 +756,6 @@ scripts scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10
-scripts scripts/test-plan-field-get.sh 2
 scripts scripts/test-plan-fragments-lane-affordance.sh 2
 scripts scripts/test-plan-only-lane-structural.sh 8
 scripts scripts/test-plan-orders-fragment-fold.sh 7
@@ -780,7 +772,6 @@ scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-trailer-states-what-it-saw.sh 2
 scripts scripts/test-pre-push-version-guard-sigpipe.sh 3
 scripts scripts/test-pre-push-version-guard.sh 1
-scripts scripts/test-pre-push-work-ref-lane.sh 12
 scripts scripts/test-pre-receive-yaml-gate.sh 2
 scripts scripts/test-precommit-zero-trace-scan-scope.sh 6
 scripts scripts/test-preflight-front-door.sh 8
@@ -795,9 +786,7 @@ scripts scripts/test-relay-preflight.sh 15
 scripts scripts/test-release-asset-integrity.sh 4
 scripts scripts/test-release-tier-freshness-reads-ci-full.sh 4
 scripts scripts/test-release-tier-freshness.sh 2
-scripts scripts/test-release-tier-timer-render.sh 1
 scripts scripts/test-reopen-is-history-not-loss.sh 4
-scripts scripts/test-repeat-model-flag.sh 2
 scripts scripts/test-reset-flags-are-accepted.sh 2
 scripts scripts/test-reset-state-contract.sh 3
 scripts scripts/test-run-verb-agent-door.sh 3
