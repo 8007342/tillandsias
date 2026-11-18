@@ -329,7 +329,6 @@ scripts scripts/attest-native-lint.sh 2
 scripts scripts/bench-accel-lane.sh 13
 scripts scripts/bench-hot-path-placement.sh 3
 scripts scripts/bench-inference-floor.sh 21
-scripts scripts/bench-semantic-budget.sh 7
 scripts scripts/build-guest-binaries.sh 6
 scripts scripts/build-image.sh 18
 scripts scripts/build-macos-tray.sh 2
@@ -340,7 +339,6 @@ scripts scripts/census-admitted-missing-evidence.sh 9
 scripts scripts/census-litmus-layer-classification.sh 5
 scripts scripts/census-litmus-step-enforcement.sh 4
 scripts scripts/census-sigpipe-verdict-pipelines.sh 6
-scripts scripts/centicolon-backfill.sh 10
 scripts scripts/centicolon-grade.sh 2
 scripts scripts/change-class.sh 3
 scripts scripts/check-added-fragments-parse.sh 3
@@ -440,10 +438,8 @@ scripts scripts/diagnose-macos-provision.sh 3
 scripts scripts/diagnose-proxy.sh 4
 scripts scripts/drain-queue.sh 8
 scripts scripts/e2e-preflight.sh 9
-scripts scripts/e2e-step1-linux.sh 6
 scripts scripts/e2e-step2-linux.sh 6
 scripts scripts/e2e-step2-macos.sh 3
-scripts scripts/e2e-step3-linux.sh 2
 scripts scripts/ensure-cosign.sh 2
 scripts scripts/ensure-nvidia-cdi.sh 10
 scripts scripts/finalize-cycle.sh 3
@@ -487,9 +483,7 @@ scripts scripts/loop-status-metrics-audit.sh 3
 scripts scripts/loop-success-probe.sh 1
 scripts scripts/macos-tray-ax-smoke.sh 3
 scripts scripts/manage-cache.sh 12
-scripts scripts/measure-exec-wire-control-bytes.sh 7
 scripts scripts/measure-forge-spill.sh 1
-scripts scripts/measure-inference-tier.sh 12
 scripts scripts/meta-orchestration-worktree-guard.sh 1
 scripts scripts/mo-full-attest.sh 4
 scripts scripts/native-scratch-dir.sh 1
@@ -514,10 +508,8 @@ scripts scripts/record-expert-accuracy.sh 4
 scripts scripts/record-nix-cache-metrics.sh 8
 scripts scripts/refusal-calibration/apply-relabelled-561.sh 2
 scripts scripts/refusal-calibration/inject-negatives.sh 2
-scripts scripts/refusal-calibration/judge-support.sh 3
 scripts scripts/refusal-calibration/measure-bands.sh 1
 scripts scripts/refusal-calibration/measure-recall-at-k.sh 5
-scripts scripts/refusal-calibration/rebuild-index-with-embedder.sh 12
 scripts scripts/regenerate-readme.sh 8
 scripts scripts/relay-preflight.sh 13
 scripts scripts/release-freeze.sh 8
