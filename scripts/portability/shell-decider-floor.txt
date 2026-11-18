@@ -150,7 +150,6 @@ scripts/test-cmdkey-predicate-discriminates.sh
 scripts/test-codex-device-auth.sh
 scripts/test-codex-mcp-registration.sh
 scripts/test-codex-oauth-harvest.sh
-scripts/test-codex-oauth-restore.sh
 scripts/test-codex-safe-state.sh
 scripts/test-command-policy-audit.sh
 scripts/test-command-policy-consent.sh
@@ -217,13 +216,11 @@ scripts/test-fleet-msg-store.sh
 scripts/test-forge-clone-wait-is-bounded.sh
 scripts/test-forge-config-trust-cross-platform-parity.sh
 scripts/test-forge-entrypoints-source-agent-profile.sh
-scripts/test-forge-findings-persisted.sh
 scripts/test-forge-git-identity-source.sh
 scripts/test-forge-git-index-materialization.sh
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
-scripts/test-forge-localization-staged.sh
 scripts/test-forge-packed-refs-split-brain.sh
 scripts/test-forge-policy-binary-discoverability.sh
 scripts/test-forge-project-guard-hooks.sh
@@ -392,7 +389,6 @@ scripts/test-mirror-relay-state.sh
 scripts/test-mirror-sshd-posture.sh
 scripts/test-mirror-sync-state.sh
 scripts/test-mirror-upstream-auth-overwrite.sh
-scripts/test-mo-full-attest.sh
 scripts/test-mo-full-record-precedes-marker.sh
 scripts/test-mode-only-regression-887-bz88.sh
 scripts/test-must-ship-rows.sh

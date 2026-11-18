@@ -67,7 +67,6 @@ scripts/test-cloudflare-oauth-core.sh 1
 scripts/test-codex-device-auth.sh 1
 scripts/test-codex-mcp-registration.sh 1
 scripts/test-codex-oauth-harvest.sh 2
-scripts/test-codex-oauth-restore.sh 1
 scripts/test-codex-safe-state.sh 1
 scripts/test-command-policy-evaluator.sh 1
 scripts/test-competing-gate-consumer.sh 1
