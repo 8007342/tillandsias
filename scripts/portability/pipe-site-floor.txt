@@ -438,7 +438,6 @@ scripts scripts/dev-host-experts.sh 2
 scripts scripts/dev-inference-ensure.sh 16
 scripts scripts/diagnose-macos-provision.sh 3
 scripts scripts/diagnose-proxy.sh 4
-scripts scripts/dispatch-brief.sh 2
 scripts scripts/drain-queue.sh 8
 scripts scripts/e2e-preflight.sh 9
 scripts scripts/e2e-step1-linux.sh 6
@@ -538,7 +537,6 @@ scripts scripts/select-work-batch.sh 43
 scripts scripts/selective-tillandsias-reset.sh 1
 scripts scripts/session-tokens.sh 1
 scripts scripts/smoke-consecutive-lanes.sh 4
-scripts scripts/smoke-test.sh 9
 scripts scripts/spec-index-ensure.sh 7
 scripts scripts/stage-image-cheatsheets.sh 5
 scripts scripts/stamp-requirement-ids.sh 3

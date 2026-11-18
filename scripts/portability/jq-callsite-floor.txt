@@ -35,7 +35,6 @@
 2 scripts/check-nix-deps-stability.sh
 1 scripts/check-stranded-in-progress.sh
 1 scripts/check-yaml-reader-availability.sh
-8 scripts/claude-mcp.sh
 4 scripts/cycle-metrics.sh
 2 scripts/dev-inference-ensure.sh
 4 scripts/generate-dashboard.sh
