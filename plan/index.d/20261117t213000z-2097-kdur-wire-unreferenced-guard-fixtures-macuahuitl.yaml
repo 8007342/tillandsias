@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: fourteen-green-unreferenced-guard-fixtures-wired-into-a-litmus
+  order: 2097-kdur
+  status: in_progress
+  kind: chore
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [tests, litmus, gate]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'Wire fourteen green, meaningful, never-run shell fixtures (family A of 2096-pq2g) into litmus:unreferenced-guard-fixtures-run'
+  context: |-
+    Part 2 of family A (2096-pq2g). Each fixture was green on macuahuitl 2026-11-17 and pins a named guard regression. None was reachable from any surface in scripts/test-reference-surfaces.manifest.
+  exit_criteria:
+  - 'scripts/check-added-test-is-referenced.sh standing drops by 14, and the litmus runs each fixture and requires its verdict line.'
+  verifiable_closure: 'litmus:unreferenced-guard-fixtures-run'
+  unscoreable: 'none.'
+  next_action: 'None; land the PR.'
+  provenance: 'Operator objective 2026-11-17 (.sh halving), family A.'
+  events:
+  - type: filed
+    ts: '2026-11-17T21:30:00Z'
+    host: macuahuitl
+    summary: filed in_progress with the wiring PR
