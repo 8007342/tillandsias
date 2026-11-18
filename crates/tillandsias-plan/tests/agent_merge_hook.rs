@@ -5,6 +5,8 @@
 //! premise control proving the stub is the `gh` the hook runs). No script, no
 //! interpreter: both stubs are system binaries.
 
+#![cfg(unix)]
+
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
