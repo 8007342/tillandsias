@@ -638,7 +638,6 @@ scripts scripts/test-forge-gitconfig-bidirectional-quarantine.sh 2
 scripts scripts/test-forge-project-guard-hooks.sh 1
 scripts scripts/test-forge-project-trust-seeds.sh 1
 scripts scripts/test-forge-seeds-from-salvage-ref.sh 1
-scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-standard-gitconfig-path.sh 2
 scripts scripts/test-forge-swap-service.sh 6
 scripts scripts/test-fragment-events-land-callsite.sh 8
@@ -809,7 +808,6 @@ scripts scripts/test-sigpipe-verdict-pipelines.sh 3
 scripts scripts/test-silverblue-update-skew-probe.sh 7
 scripts scripts/test-skills-single-source.sh 8
 scripts scripts/test-smoke-verifies-a-signature.sh 7
-scripts scripts/test-spawn-failure-names-program.sh 3
 scripts scripts/test-spec-index-repo-relative-rung.sh 3
 scripts scripts/test-spec-index-staging-capacity.sh 4
 scripts scripts/test-ssh-lane-sidecar.sh 6

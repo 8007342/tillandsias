@@ -223,7 +223,6 @@ scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
 scripts/test-forge-seed-branch-resolution.sh
 scripts/test-forge-seeds-from-salvage-ref.sh
-scripts/test-forge-src-budget-report.sh
 scripts/test-forge-standard-gitconfig-path.sh
 scripts/test-forge-swap-service.sh
 scripts/test-forge-validate.sh
@@ -287,7 +286,6 @@ scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-hooks-refuses-global-hookspath.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-macos-swap-is-interruptible.sh
-scripts/test-install-macos-tray-stop.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
@@ -453,8 +451,6 @@ scripts/test-rerun-failed-rust-tests.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
 scripts/test-reset-state-no-home-refusal.sh
-scripts/test-resolve-open-pr.sh
-scripts/test-resolve-release-run.sh
 scripts/test-resumable-claim-dirt.sh
 scripts/test-run-verb-agent-door.sh
 scripts/test-running-image-freshness.sh
@@ -488,7 +484,6 @@ scripts/test-smoke-agent-watch.sh
 scripts/test-smoke-consecutive-lanes.sh
 scripts/test-smoke-skill-reset-env-matches-policy.sh
 scripts/test-smoke-verifies-a-signature.sh
-scripts/test-spawn-failure-names-program.sh
 scripts/test-spec-index-durable-tier-demotion.sh
 scripts/test-spec-index-repo-relative-rung.sh
 scripts/test-spec-index-staging-capacity.sh
@@ -501,7 +496,6 @@ scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
 scripts/test-summarize-pubspec.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
-scripts/test-terminology-check-memo.sh
 scripts/test-timing-record-carries-reproduced.sh
 scripts/test-timing-record-carries-root.sh
 scripts/test-timing-supervisor-lost.sh

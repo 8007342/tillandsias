@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (family-d agent) 2026-11-18: shell-to-lua family D, batch 5.
+packets:
+  - packet_id: six-more-wired-shell-tests-move-onto-the-lua-fixture-kit
+    order: 2109-r8wd
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, shell-to-lua, fixture-hygiene]
+    estimated_hours: 2
+    size: S
+    implementer_tier: sonnet
+    depends_on: [five-wired-shell-tests-move-onto-the-lua-kit-and-seven-unreferenced-ones-are-deleted]
+    title: "Six shell tests that build.sh or a litmus runs are ported onto lib/lua/common/fixture.lua and deleted"
+    context: |
+      Family D batch 5. Ported (green, then red with the guarded code broken), rewired, .sh deleted:
+      test-terminology-check-memo (build.sh), test-forge-src-budget-report (litmus),
+      test-install-macos-tray-stop (litmus), test-resolve-open-pr (litmus),
+      test-resolve-release-run (litmus), test-spawn-failure-names-program (litmus; its
+      ok:<p>/2 verdict line kept verbatim).
+    exit_criteria:
+      - "Each ported scripts/lua/test-*.lua is green, and red with the code it guards broken (recorded in the PR)."
+    unscoreable: "unpinnable-until-the-guard-exists: the ported scripts/lua/test-*.lua fixtures are this row's deliverables and land in the same commit (1136-n8sh)"
+    next_action: "Land the PR for work/2109-r8wd after work/2108-m4tz."
+    provenance: "macuahuitl family-d agent session 2026-11-18, coordinator direction."
+    events:
+      - type: filed
+        ts: "2026-11-18T07:35:00Z"
+        host: macuahuitl
+        summary: "filed and claimed by the family-d agent for batch 5"

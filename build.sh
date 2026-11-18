@@ -6521,7 +6521,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # checker) are what this pins. A memo that only ever hits has stopped
     # checking and would turn a gate green by never running it.
     _step "Checking the terminology memo keys on the dictionary, the locales and the checker (1054-zvq4)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-terminology-check-memo.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-terminology-check-memo.lua" 2>&1; then
         _error "the terminology memo does not miss on a dictionary, locale or instrument change (1054-zvq4) — see the verdict line above"
         exit 1
     fi
