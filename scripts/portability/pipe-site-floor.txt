@@ -327,9 +327,7 @@ scripts scripts/archive-plan-packets.sh 13
 scripts scripts/archiver-check-memo.sh 2
 scripts scripts/attest-native-lint.sh 2
 scripts scripts/bench-accel-lane.sh 13
-scripts scripts/bench-hot-path-placement.sh 3
 scripts scripts/bench-inference-floor.sh 21
-scripts scripts/bench-semantic-budget.sh 7
 scripts scripts/build-guest-binaries.sh 6
 scripts scripts/build-image.sh 18
 scripts scripts/build-macos-tray.sh 2
@@ -340,7 +338,6 @@ scripts scripts/census-admitted-missing-evidence.sh 9
 scripts scripts/census-litmus-layer-classification.sh 5
 scripts scripts/census-litmus-step-enforcement.sh 4
 scripts scripts/census-sigpipe-verdict-pipelines.sh 6
-scripts scripts/centicolon-backfill.sh 10
 scripts scripts/centicolon-grade.sh 2
 scripts scripts/change-class.sh 3
 scripts scripts/check-added-fragments-parse.sh 3
@@ -439,13 +436,10 @@ scripts scripts/dev-host-experts.sh 2
 scripts scripts/dev-inference-ensure.sh 16
 scripts scripts/diagnose-macos-provision.sh 3
 scripts scripts/diagnose-proxy.sh 4
-scripts scripts/dispatch-brief.sh 2
 scripts scripts/drain-queue.sh 8
 scripts scripts/e2e-preflight.sh 9
-scripts scripts/e2e-step1-linux.sh 6
 scripts scripts/e2e-step2-linux.sh 6
 scripts scripts/e2e-step2-macos.sh 3
-scripts scripts/e2e-step3-linux.sh 2
 scripts scripts/ensure-cosign.sh 2
 scripts scripts/ensure-nvidia-cdi.sh 10
 scripts scripts/finalize-cycle.sh 3
@@ -487,11 +481,7 @@ scripts scripts/litmus-stdlib.sh 10
 scripts scripts/local-ci.sh 49
 scripts scripts/loop-status-metrics-audit.sh 3
 scripts scripts/loop-success-probe.sh 1
-scripts scripts/macos-tray-ax-smoke.sh 3
 scripts scripts/manage-cache.sh 12
-scripts scripts/measure-exec-wire-control-bytes.sh 7
-scripts scripts/measure-forge-spill.sh 1
-scripts scripts/measure-inference-tier.sh 12
 scripts scripts/meta-orchestration-worktree-guard.sh 1
 scripts scripts/mo-full-attest.sh 4
 scripts scripts/native-scratch-dir.sh 1
@@ -513,13 +503,7 @@ scripts scripts/rank-refusal-hits.sh 9
 scripts scripts/reclaim-stranded-claims.sh 6
 scripts scripts/record-ci-phase-result.sh 10
 scripts scripts/record-expert-accuracy.sh 4
-scripts scripts/record-nix-cache-metrics.sh 8
-scripts scripts/refusal-calibration/apply-relabelled-561.sh 2
-scripts scripts/refusal-calibration/inject-negatives.sh 2
-scripts scripts/refusal-calibration/judge-support.sh 3
 scripts scripts/refusal-calibration/measure-bands.sh 1
-scripts scripts/refusal-calibration/measure-recall-at-k.sh 5
-scripts scripts/refusal-calibration/rebuild-index-with-embedder.sh 12
 scripts scripts/regenerate-readme.sh 8
 scripts scripts/relay-preflight.sh 13
 scripts scripts/release-freeze.sh 8
@@ -582,7 +566,6 @@ scripts scripts/test-check-bash-dialect.sh 2
 scripts scripts/test-check-credential-channel.sh 12
 scripts scripts/test-check-engine-cpu-dispatch.sh 1
 scripts scripts/test-check-jq-callsite-ratchet.sh 1
-scripts scripts/test-check-packet-tier-declared.sh 1
 scripts scripts/test-check-stranded-in-progress.sh 7
 scripts scripts/test-claim-confirmation-names-the-earliest-claimant.sh 1
 scripts scripts/test-claim-wip-limit.sh 2
@@ -595,7 +578,6 @@ scripts scripts/test-cloudflare-login.sh 33
 scripts scripts/test-cloudflare-token-rotation.sh 16
 scripts scripts/test-cmdkey-predicate-discriminates.sh 7
 scripts scripts/test-codex-mcp-registration.sh 7
-scripts scripts/test-codex-oauth-restore.sh 1
 scripts scripts/test-command-policy-audit.sh 1
 scripts scripts/test-command-policy-consent.sh 1
 scripts scripts/test-compaction-coverage.sh 2
@@ -618,7 +600,6 @@ scripts scripts/test-default-vault-cli-security.sh 4
 scripts scripts/test-derive-host-identity.sh 1
 scripts scripts/test-dispatch-reap.sh 4
 scripts scripts/test-embed-endpoint-derivation.sh 1
-scripts scripts/test-enclave-network-internal-discovery.sh 1
 scripts scripts/test-enclave-proxy-lib.sh 4
 scripts scripts/test-enclave-service-health.sh 102
 scripts scripts/test-ensure-cosign.sh 5
@@ -641,16 +622,13 @@ scripts scripts/test-forge-gitconfig-bidirectional-quarantine.sh 2
 scripts scripts/test-forge-project-guard-hooks.sh 1
 scripts scripts/test-forge-project-trust-seeds.sh 1
 scripts scripts/test-forge-seeds-from-salvage-ref.sh 1
-scripts scripts/test-forge-src-budget-report.sh 1
 scripts scripts/test-forge-standard-gitconfig-path.sh 2
 scripts scripts/test-forge-swap-service.sh 6
-scripts scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts scripts/test-fragment-events-land-callsite.sh 8
 scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
 scripts scripts/test-gate-divergence-is-declared.sh 6
 scripts scripts/test-gate-memory-refusal.sh 1
-scripts scripts/test-gate-stamp-movers-batching-is-equivalent.sh 10
 scripts scripts/test-gate-stamp-names-content-movers.sh 5
 scripts scripts/test-gate-stamp-portable-digest.sh 1
 scripts scripts/test-gate-stamp-scope.sh 9
@@ -658,14 +636,12 @@ scripts scripts/test-gate-step-append-no-conflict.sh 11
 scripts scripts/test-gate-step-prefix-allocation.sh 8
 scripts scripts/test-gate-step-skip-exit.sh 3
 scripts scripts/test-gate-thresholds-are-chosen.sh 1
-scripts scripts/test-git-credential-helper.sh 5
 scripts scripts/test-git-mirror-dns-identity.sh 2
 scripts scripts/test-git-mirror-existing-volume-hardening.sh 14
 scripts scripts/test-git-mirror-ref-convergence.sh 1
 scripts scripts/test-git-mirror-relay-token-expiry.sh 6
 scripts scripts/test-git-mirror-startup-per-ref.sh 3
 scripts scripts/test-git-mirror-vault-agent-auto-auth.sh 18
-scripts scripts/test-github-token-auto-rotation.sh 1
 scripts scripts/test-github-token-rotation-entry-points.sh 3
 scripts scripts/test-groundtruth-corpus-declaration.sh 8
 scripts scripts/test-groundtruth-regime-fails-closed.sh 4
@@ -676,7 +652,6 @@ scripts scripts/test-harness-byte-cheap.sh 1
 scripts scripts/test-harness-contract-probe.sh 1
 scripts scripts/test-harness-rollback.sh 6
 scripts scripts/test-headless-sidecar-target-gate.sh 1
-scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
 scripts scripts/test-hook-phase-instrumentation.sh 5
 scripts scripts/test-host-tools.sh 30
 scripts scripts/test-image-build-convergence.sh 2
@@ -718,7 +693,6 @@ scripts scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh 2
 scripts scripts/test-litmus-step-model.sh 1
 scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-structured-assert.sh 1
-scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts scripts/test-locale-coverage.sh 9
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
@@ -754,7 +728,6 @@ scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
 scripts scripts/test-opencode-vault-auth-content.sh 3
 scripts scripts/test-openspec-pin.sh 2
 scripts scripts/test-orchestrate-enclave.sh 1
-scripts scripts/test-order-citations-resolve.sh 7
 scripts scripts/test-packet-tier-fields.sh 4
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
@@ -764,12 +737,10 @@ scripts scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10
-scripts scripts/test-plan-field-get.sh 2
 scripts scripts/test-plan-fragments-lane-affordance.sh 2
 scripts scripts/test-plan-only-lane-structural.sh 8
 scripts scripts/test-plan-orders-fragment-fold.sh 7
 scripts scripts/test-podman-mock-refusal.sh 4
-scripts scripts/test-podman-mock-secret-lifecycle.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-deletion-only.sh 1
 scripts scripts/test-pre-push-empty-ref-list.sh 6
@@ -781,7 +752,6 @@ scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-trailer-states-what-it-saw.sh 2
 scripts scripts/test-pre-push-version-guard-sigpipe.sh 3
 scripts scripts/test-pre-push-version-guard.sh 1
-scripts scripts/test-pre-push-work-ref-lane.sh 12
 scripts scripts/test-pre-receive-yaml-gate.sh 2
 scripts scripts/test-precommit-zero-trace-scan-scope.sh 6
 scripts scripts/test-preflight-front-door.sh 8
@@ -796,9 +766,7 @@ scripts scripts/test-relay-preflight.sh 15
 scripts scripts/test-release-asset-integrity.sh 4
 scripts scripts/test-release-tier-freshness-reads-ci-full.sh 4
 scripts scripts/test-release-tier-freshness.sh 2
-scripts scripts/test-release-tier-timer-render.sh 1
 scripts scripts/test-reopen-is-history-not-loss.sh 4
-scripts scripts/test-repeat-model-flag.sh 2
 scripts scripts/test-reset-flags-are-accepted.sh 2
 scripts scripts/test-reset-state-contract.sh 3
 scripts scripts/test-run-verb-agent-door.sh 3
@@ -810,7 +778,6 @@ scripts scripts/test-scorable-obligation-gate.sh 15
 scripts scripts/test-scorable-obligation-splitter.sh 14
 scripts scripts/test-script-exec-bits.sh 3
 scripts scripts/test-seam-writers-canonical.sh 7
-scripts scripts/test-secrets.sh 7
 scripts scripts/test-selector-drops-cross-branch-claims.sh 6
 scripts scripts/test-selector-flags-host-scoped-criteria.sh 4
 scripts scripts/test-session-tokens.sh 2
@@ -825,7 +792,6 @@ scripts scripts/test-sigpipe-verdict-pipelines.sh 3
 scripts scripts/test-silverblue-update-skew-probe.sh 7
 scripts scripts/test-skills-single-source.sh 8
 scripts scripts/test-smoke-verifies-a-signature.sh 7
-scripts scripts/test-spawn-failure-names-program.sh 3
 scripts scripts/test-spec-index-repo-relative-rung.sh 3
 scripts scripts/test-spec-index-staging-capacity.sh 4
 scripts scripts/test-ssh-lane-sidecar.sh 6
@@ -835,7 +801,6 @@ scripts scripts/test-support/github-login-fake.sh 2
 scripts scripts/test-support/litmus-fake-podman-guard.sh 1
 scripts scripts/test-support/podman-mock.sh 25
 scripts scripts/test-support/secret-tool-fake.sh 1
-scripts scripts/test-timing-clock-resolution.sh 2
 scripts scripts/test-timing-record-carries-reproduced.sh 2
 scripts scripts/test-timing-record-carries-root.sh 3
 scripts scripts/test-timing-supervisor-lost.sh 2

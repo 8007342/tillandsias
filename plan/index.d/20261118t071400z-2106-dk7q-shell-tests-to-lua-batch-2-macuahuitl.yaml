@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (family-d agent) 2026-11-18: shell-to-lua family D, batch 2.
+packets:
+  - packet_id: six-more-shell-tests-move-onto-the-lua-fixture-kit-or-onto-the-fixture-mode-they-wrapped
+    order: 2106-dk7q
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, shell-to-lua, fixture-hygiene]
+    estimated_hours: 2
+    size: S
+    implementer_tier: sonnet
+    depends_on: [lua-tests-share-a-fixture-kit-through-require-and-the-first-six-shell-tests-move-onto-it]
+    title: "Four scripts/test-*.sh are ported onto lib/lua/common/fixture.lua and two exec-only wrappers are replaced by direct calls to the fixture mode they wrapped; all six .sh are deleted"
+    context: |
+      Family D batch 2, on top of 2105-bb2e (the kit). Ported to Lua and rewired in their litmus:
+      test-forge-localization-staged, test-claude-forge-remote-control-args, test-codex-oauth-restore,
+      test-build-image-network-isolation. Wrappers removed (their arms live in the callee's fixture
+      mode, unchanged): test-mo-full-attest (litmus opencode-prompt-e2e-shape now runs
+      mo-full-attest.sh fixture), test-forge-findings-persisted (build.sh now runs
+      check-forge-findings-persisted.sh fixture).
+    exit_criteria:
+      - "Each ported scripts/lua/test-*.lua prints ok:<name>:<n> arms, and is red with the code it guards broken (recorded in the PR)."
+    unscoreable: "unpinnable-until-the-guard-exists: the ported scripts/lua/test-*.lua fixtures are this row's deliverables and land in the same commit (1136-n8sh)"
+    next_action: "Land the PR for work/2106-dk7q after work/2105-bb2e."
+    provenance: "macuahuitl family-d agent session 2026-11-18."
+    events:
+      - type: filed
+        ts: "2026-11-18T07:14:00Z"
+        host: macuahuitl
+        summary: "filed and claimed by the family-d agent for batch 2"

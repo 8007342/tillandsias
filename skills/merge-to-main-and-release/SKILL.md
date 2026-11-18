@@ -629,7 +629,7 @@ platform asset.
 >
 > `scripts/resolve-release-run.sh` asserts a positive fact and separates "gh
 > failed" from "gh had nothing to say" — they are different faults.
-> Pinned by `scripts/test-resolve-release-run.sh` (6/6, fake `gh`, no network).
+> Pinned by `scripts/lua/test-resolve-release-run.lua` (6/6, fake `gh`, no network).
 > Found by the 601-462g audit, in this runbook.
 
 The Linux Silverblue smoke-test artifact is the `tillandsias-linux-x86_64` musl binary. Surface its URL to the user.

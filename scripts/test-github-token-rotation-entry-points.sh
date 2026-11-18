@@ -5,7 +5,7 @@
 # process runs the GitHub token due-check (1461-8tyy), and removing any one
 # entry point fails this fixture.
 #
-# test-github-token-auto-rotation.sh pins the due-check LOGIC. Nothing pinned
+# scripts/lua/test-github-token-auto-rotation.lua pins the due-check LOGIC. Nothing pinned
 # its CALLERS: deleting a call left every gate green, and a host whose only
 # resident process had lost its call went back to pushes dying at the 8-hour
 # expiry (lenovinha 2026-09-28, mirror verdict denied/unauthenticated).

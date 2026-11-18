@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (family-d agent) 2026-11-18: shell-to-lua family D, batch 3 (delete-only).
+packets:
+  - packet_id: twenty-shell-fixtures-that-nothing-runs-or-names-are-deleted
+    order: 2107-q3vn
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, fixture-hygiene]
+    estimated_hours: 1
+    size: S
+    implementer_tier: sonnet
+    depends_on: [six-more-shell-tests-move-onto-the-lua-fixture-kit-or-onto-the-fixture-mode-they-wrapped]
+    title: "Twenty scripts/test-*.sh that no gate, litmus, workflow, script, skill or doc names are deleted"
+    context: |
+      Coordinator direction (family D): delete scripts nothing references. Proof: `git grep -F <basename>`
+      over the whole tree, excluding only plan/ (ledger history), scripts/portability/*.txt (ratchet
+      floors, whose rows are removed here), scripts/refusal-calibration/ and
+      scripts/local-delegate-replay/ (recorded measurement data), returned no hit for each, and build.sh
+      does not glob scripts/test-*.sh (1063-nraf: literal names only). Deleted:
+      test-check-carry-forward, test-check-packet-tier-declared, test-e2e-preflight-live-runtime,
+      test-enclave-network-internal-discovery, test-exec-bits-guard-end-to-end,
+      test-fragment-batch-never-collapses-verdicts, test-fragment-status-loss-row-boundary,
+      test-gate-stamp-movers-batching-is-equivalent, test-guest-staging-refuses-a-wireless-binary,
+      test-headless-env-lock-is-single, test-hook-mover-enumeration-is-batched,
+      test-host-slug-resolution, test-litmus-diff-scope, test-litmus-terminal-verdict,
+      test-order-citations-resolve, test-plan-field-get, test-plan-lane-agreeing-deletion,
+      test-pre-push-work-ref-lane, test-release-tier-timer-render, test-repeat-model-flag.
+      They stay recoverable from git history if a property they pinned needs a live fixture again.
+    exit_criteria:
+      - "None of the twenty basenames is found by git grep outside plan/, scripts/refusal-calibration/ and scripts/local-delegate-replay/."
+    unscoreable: "unpinnable-until-the-guard-exists: a deletion has no fixture of its own; the grep in exit_criteria is the check (1136-n8sh)"
+    next_action: "Land the PR for work/2107-q3vn after work/2106-dk7q."
+    provenance: "macuahuitl family-d agent session 2026-11-18, coordinator direction."
+    events:
+      - type: filed
+        ts: "2026-11-18T07:19:00Z"
+        host: macuahuitl
+        summary: "filed and claimed by the family-d agent for the delete-only batch"

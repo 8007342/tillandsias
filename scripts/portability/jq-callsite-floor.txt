@@ -26,7 +26,6 @@
 6 openspec/litmus-tests/litmus-terminal-status-vocabulary-shape.yaml
 14 scripts/bench-accel-lane.sh
 9 scripts/bench-inference-floor.sh
-6 scripts/bench-semantic-budget.sh
 1 scripts/build-image.sh
 1 scripts/check-bare-metal-host-initialized.sh
 1 scripts/check-claim-confirmed.sh
@@ -46,7 +45,6 @@
 14 scripts/local-ci.sh
 1 scripts/loop-success-probe.sh
 1 scripts/manage-cache.sh
-8 scripts/measure-inference-tier.sh
 1 scripts/nix-build-container.sh
 1 scripts/nix-deps-drv-paths.sh
 2 scripts/nix-push-cache.sh
@@ -55,11 +53,7 @@
 1 scripts/probe-nix-capability.sh
 1 scripts/record-ci-phase-result.sh
 3 scripts/record-expert-accuracy.sh
-1 scripts/record-nix-cache-metrics.sh
-10 scripts/refusal-calibration/inject-negatives.sh
-3 scripts/refusal-calibration/judge-support.sh
 9 scripts/refusal-calibration/measure-bands.sh
-12 scripts/refusal-calibration/measure-recall-at-k.sh
 1 scripts/run-litmus-test.sh
 8 scripts/spec-index-ensure.sh
 1 scripts/test-bench-prompt-uniqueness.sh

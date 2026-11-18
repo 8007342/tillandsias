@@ -20,13 +20,13 @@ size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-control-wire/src/lib.rs with the crashloop module
-  - workspace contains scripts/test-guest-crashloop-detection.sh
+  - workspace contains scripts/lua/test-guest-crashloop-detection.lua
 
 critical_path:
   - step: "a driven stop->start / sealed-vault series flips the detector to crash-loop:<subsystem> within the window; a slow-but-progressing provision never flips (no false positive on slow starts)"
-    command: "scripts/test-guest-crashloop-detection.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-guest-crashloop-detection.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok: crash-loop detector trips on a driven restart"
+    expected_behavior: "ok:guest-crashloop-detection:4 arms"
 
   - step: "the cross-platform detector + pinned grammar live in control-wire (both trays consume them, so the two hosts cannot drift)"
     command: "grep -Fq 'pub mod crashloop' crates/tillandsias-control-wire/src/lib.rs && grep -Fq 'crash-loop:[a-z0-9-]+' crates/tillandsias-control-wire/src/lib.rs && grep -Fq 'fn verdict_matches_grammar' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: grammar + detector in control-wire'"
@@ -63,4 +63,4 @@ rollback:
     self-clear once it stops). Inspect is_phase_regression + the windowed
     counter in crates/tillandsias-control-wire/src/lib.rs (crashloop module)
     and the tray/--diagnose wire-in.
-  command: "scripts/test-guest-crashloop-detection.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-guest-crashloop-detection.lua 2>&1"

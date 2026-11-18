@@ -7,7 +7,7 @@
 # Why a behavioural fixture and not a grep for the pattern in trace-coverage.sh:
 # a text pin breaks on any correct refactor and passes any behavioural
 # regression that keeps the string. Its sibling resolvers
-# (test-resolve-open-pr.sh, test-resolve-release-run.sh) are the model.
+# (scripts/lua/test-resolve-open-pr.lua, scripts/lua/test-resolve-release-run.lua) are the model.
 #
 # Every scenario writes ONE temporary YAML inside the repo — the scan is
 # repo-relative, so it has to be reachable — and removes it on every exit path

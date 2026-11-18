@@ -33,13 +33,13 @@ critical_path:
     # control matters most: every other scenario asserts a refusal, and a
     # resolver that refused everything would satisfy them all while making the
     # daily release unmergeable.
-    command: "scripts/test-resolve-open-pr.sh"
-    success_pattern: "PASS: open-pr-resolver fixture"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-open-pr.lua 2>&1"
+    success_pattern: "ok:resolve-open-pr:5 arms"
     timeout_ms: 30000
 
   - step: "RELEASE RUN: the same four outcomes for the workflow-run resolver"
-    command: "scripts/test-resolve-release-run.sh"
-    success_pattern: "PASS: release-run-resolver fixture"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-release-run.lua 2>&1"
+    success_pattern: "ok:resolve-release-run:6 arms"
     timeout_ms: 30000
 
   - step: "GRAMMAR: each resolver emits exactly one line and separates gh-failure from nothing-to-say"
@@ -87,5 +87,5 @@ observability:
     artifact: "scripts/resolve-open-pr.sh + scripts/resolve-release-run.sh"
 
 rollback:
-  on_failure: "run scripts/test-resolve-open-pr.sh and scripts/test-resolve-release-run.sh directly; each names the failing scenario"
-  command: "scripts/test-resolve-open-pr.sh; scripts/test-resolve-release-run.sh"
+  on_failure: "run scripts/lua/test-resolve-open-pr.lua and scripts/lua/test-resolve-release-run.lua directly; each names the failing scenario"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-resolve-release-run.lua 2>&1"
