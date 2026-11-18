@@ -2,7 +2,7 @@
 #
 # The GitHub token in Vault rotates itself inside the 30-minute window before
 # its 8-hour expiry, from the resident process (Linux tray; the guest service on
-# macOS/Windows). Wraps scripts/test-github-token-auto-rotation.sh, whose arms
+# macOS/Windows). Wraps scripts/lua/test-github-token-auto-rotation.lua, whose arms
 # run over a stub Vault store and a stub token endpoint.
 name: litmus:github-token-auto-rotation
 spec: ci-release
@@ -16,17 +16,17 @@ severity: critical
 size: long
 
 preconditions:
-  - workspace contains scripts/test-github-token-auto-rotation.sh
+  - workspace contains scripts/lua/test-github-token-auto-rotation.lua
   - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
   - cargo is available in PATH
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-github-token-auto-rotation.sh && test -x scripts/test-github-token-auto-rotation.sh && echo 'ok: rotation-fixture-parses'"
+    command: "test -f scripts/lua/test-github-token-auto-rotation.lua && echo 'ok: rotation-fixture-parses'"
     timeout_ms: 3000
     expected_behavior: "ok: rotation-fixture-parses"
 
   - step: "every arm passes by name, including the single-exchange-under-concurrency arm and the not-due negative control"
-    command: "out=$(bash scripts/test-github-token-auto-rotation.sh 2>&1); rc=$?; case \"$out\" in (*'ok:github-token-auto-rotation:8/8'*) [ \"$rc\" = 0 ] && echo 'ok: rotation 8/8' ;; (*) printf '%s\\n' \"$out\" | tail -8; exit 1 ;; esac"
+    command: "out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-github-token-auto-rotation.lua 2>&1); rc=$?; case \"$out\" in (*'ok:github-token-auto-rotation:8/8'*) [ \"$rc\" = 0 ] && echo 'ok: rotation 8/8' ;; (*) printf '%s\\n' \"$out\" | tail -8; exit 1 ;; esac"
     timeout_ms: 900000
     expected_behavior: "ok: rotation 8/8"

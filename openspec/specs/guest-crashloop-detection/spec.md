@@ -55,12 +55,12 @@ pass while the shipped state machine is broken.
 
 #### Scenario: The litmus compiles the shipped crate
 
-- **WHEN** `scripts/test-guest-crashloop-detection.sh` runs
+- **WHEN** `scripts/lua/test-guest-crashloop-detection.lua` runs
 - **THEN** it drives the real `crashloop` module's tests and fails if they do
 
 ## Sources of Truth
 
 - `crates/tillandsias-control-wire/` — the `crashloop` state machine
-- `scripts/test-guest-crashloop-detection.sh`
+- `scripts/lua/test-guest-crashloop-detection.lua`
 - `plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md`
 - `openspec/litmus-bindings.yaml` (spec_id `guest-crashloop-detection`)

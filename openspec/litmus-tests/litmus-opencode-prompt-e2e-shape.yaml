@@ -7,7 +7,7 @@
 # Full-mode runs additionally require the typed `MO-FULL:` terminal marker
 # (order 614-2gqx): the launch step rejects exit zero when the marker is
 # absent, malformed, claims an unpushed local commit, or the claimed remote
-# head is never reached. The hermetic fixture (scripts/test-mo-full-attest.sh)
+# head is never reached. The hermetic fixture (scripts/mo-full-attest.sh fixture)
 # proves that gate fails loud for each breach shape before any launch happens.
 #
 # NOTE: Requires forge image built, tillandsias on PATH, and git-mirror
@@ -30,7 +30,7 @@ preconditions:
   - tillandsias binary is installed and on PATH
   - forge image is built and available locally
   - git remote origin is reachable and credential channel is active
-  - scripts/mo-full-attest.sh and scripts/test-mo-full-attest.sh exist
+  - scripts/mo-full-attest.sh exists (its fixture mode carries the arms)
   - scripts/meta-orchestration-worktree-guard.sh and scripts/test-worktree-boundary-guard.sh exist
 
 critical_path:
@@ -39,7 +39,7 @@ critical_path:
   # moved to the post-release smoke (order 2093-clds). The release gate makes no
   # GitHub push and no OpenCode call.
   - step: "run full-mode terminal attestation fixture"
-    command: "scripts/test-mo-full-attest.sh"
+    command: "bash scripts/mo-full-attest.sh fixture"
     timeout_ms: 60000
     expected_behavior: "PASS: mo-full-attest fixture"
   - step: "run startup-boundary guard fixture"

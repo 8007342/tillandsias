@@ -282,7 +282,7 @@ its own marker in the one command that prints it.
 
 Any full-mode run that exits without a valid, converging `MO-FULL:` marker
 has not completed its exit contract — regardless of the process exit code.
-`scripts/mo-full-attest.sh fixture` / `scripts/test-mo-full-attest.sh`
+`scripts/mo-full-attest.sh fixture`
 reproduce the breach shapes hermetically (missing marker, malformed, unpushed
 local commit, branch mismatch, remote-head mismatch, a well-formed but
 fabricated SHA that matches nothing on the remote, clean pass — 7/7).
