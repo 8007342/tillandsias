@@ -472,10 +472,8 @@ scripts scripts/lib/no-tool-path.sh 1
 scripts scripts/lib/tool-materialize.sh 4
 scripts scripts/litmus-covering-specs.sh 9
 scripts scripts/litmus-git-delta-wait.sh 4
-scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
 scripts scripts/litmus-helper-storage-isolation.sh 13
-scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
 scripts scripts/litmus-stdlib.sh 10
 scripts scripts/local-ci.sh 49
 scripts scripts/loop-status-metrics-audit.sh 3
