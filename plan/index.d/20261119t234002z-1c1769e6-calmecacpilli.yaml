@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-cloudflare-login-with-no-tray-running-starts-only-the-vault-enclave-before-the-browser-step-and-never-sends-the-user-to-a-full-init-image-rebuild
+    field: next_action
+    value: |-
+      Factor read_bundle's running check into a seam with an injected ensure; call ensure_vault_running there; reword the four --init remedies; add the fixture.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless cloudflare_store_starts_only_vault. Close on green with the merge sha.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: tillandsias-cloudflare-login-with-no-tray-running-starts-only-the-vault-enclave-before-the-browser-step-and-never-sends-the-user-to-a-full-init-image-rebuild
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

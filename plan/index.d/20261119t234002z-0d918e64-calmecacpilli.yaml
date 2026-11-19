@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-static-aarch64-headless-embeds-an-x86_64-router-sidecar-so-its-router-container-cannot-run-on-an-aarch64-host-and-the-release-arch-check-reads-only-the-outer-binary
+    field: next_action
+    value: |-
+      Add tillandsias-router-sidecar-aarch64-musl to flake.nix beside tillandsias-plan-aarch64-musl; make stageRouterSidecar take the sidecar derivation as a parameter (as stagePlanBin does) and pass the aarch64 one in the aarch64 headless; publish the asset in release.yml's Collect step; add the embedded-sidecar arch assertion and show it red on today's aarch64 headless first.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: aarch64 macOS headless smoke: the embedded router sidecar is aarch64.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-static-aarch64-headless-embeds-an-x86_64-router-sidecar-so-its-router-container-cannot-run-on-an-aarch64-host-and-the-release-arch-check-reads-only-the-outer-binary
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

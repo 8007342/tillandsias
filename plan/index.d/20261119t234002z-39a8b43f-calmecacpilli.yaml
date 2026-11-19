@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-host-gpu-is-one-arbiter-owned-resource-the-per-host-gpu-queue-also-covers-the-inference-engine-ollama
+    field: next_action
+    value: |-
+      On macuahuitl: in gpu_queue.rs add a Holder registry (llm via ollama /api/ps, image, studio) and a need_vram(gb) admission step inside wait_for_gpu; write the red test first with a stub ollama http server; thread evicted_holders into imagegen_tool.rs and studio results; map the sd.cpp OOM line and exit 139 to a typed error in the engine wrapper; register gpu.status and the unload tool in the headless MCP registry.
+
+      [2026-11-19T23:40:02Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless gpu_queue -- an_image_job_evicts_a_resident_llm_and_runs. Close on green with the merge sha.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-host-gpu-is-one-arbiter-owned-resource-the-per-host-gpu-queue-also-covers-the-inference-engine-ollama
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

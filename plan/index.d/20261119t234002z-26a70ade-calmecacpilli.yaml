@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: minmax-work-selection-direction-score-randomization-and-due-diligence-follow-up-umbrella
+    field: next_action
+    value: |-
+      Operator answers the three questions at the end of the triage note (DIRECTION order, stale-rows stage, orphan-draft default); then the children drain in order kbfe, jybu, qkst, with xagc and 4yat claimable by any host now.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] umbrella; closes when its children close; spec delivered in 6083e5e66a
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: minmax-work-selection-direction-score-randomization-and-due-diligence-follow-up-umbrella
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

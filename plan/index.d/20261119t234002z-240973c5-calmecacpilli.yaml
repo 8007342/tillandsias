@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-a-fresh-macos-guest-the-kernel-logs-selinux-invalid-class-0-mid-first-boot-and-from-then-on-every-podman-exec-fails-to-load-libsemanage-so-the-forge-base-build-fails-three-times
+    field: next_action
+    value: |-
+      Reproduce: wipe the VM with scripts/e2e-step2-macos.sh, run --provision, then --opencode. Watch `journalctl -kf | grep -i selinux` over --exec-guest in parallel. If it reproduces, bisect by skipping the vault CIL load, then by running the forge-base build alone.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: macOS e2e smoke (e2e-step2-macos.sh), first podman boot in the guest.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: on-a-fresh-macos-guest-the-kernel-logs-selinux-invalid-class-0-mid-first-boot-and-from-then-on-every-podman-exec-fails-to-load-libsemanage-so-the-forge-base-build-fails-three-times
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)
