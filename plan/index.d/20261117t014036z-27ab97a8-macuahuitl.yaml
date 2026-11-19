@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: forge-open-pr-through-the-tray-2065-ccx9
+    event:
+      type: list-replace
+      ts: "2026-11-17T01:40:36Z"
+      agent_id: linux-macuahuitl-claude-20261117t014032z
+      host: macuahuitl
+      field: exit_criteria
+      items:
+        - "A real call with the Vault GitHub token (GET /repos/{o}/{r}/pulls, then one draft PR opened and closed) succeeds, and the packet records X-Accepted-GitHub-Permissions. Today nobody has made that call."
+        - "From a forge, github.pr_create returns a PR URL for a pushed work ref. Today the tool does not exist."
+        - "tools/list has exactly github.pr_create, github.pr_view and github.pr_list under github.*, and none of them can merge. Today there are none."
+        - "A repo argument is refused with unknown_argument, and an unpushed head is refused with head_not_on_github."
+        - "A successful open shows a curated tray event naming the project and PR number, and a sixth open within an hour from one forge returns rate_limited."
+      summary: |-
+        operator direction 2026-11-17; spec openspec/changes/forge-github-pull-requests

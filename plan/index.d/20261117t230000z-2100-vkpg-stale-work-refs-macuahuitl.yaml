@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl-fedora, 2026-11-17: operator order to delete abandoned
+# branches and stop unlanded work going unnoticed.
+# Report: plan/issues/abandoned-work-audit-2026-11-17.md
+packets:
+- packet_id: the-land-queue-names-every-draft-it-skips-and-unlanded-work-is-a-methodology-defect
+  order: 2100-vkpg
+  status: implemented
+  kind: process+guard
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [land-queue, methodology, coordination]
+  estimated_hours: 2
+  title: The land queue names every draft it skips, and an unlanded work ref is a methodology defect
+  context: 'Audit 2026-11-17 found 1344 dead refs on GitHub (now deleted) and 84 refs holding about 80 agent-hours that never landed. 18 of them were drafts, up to 4900 commits behind. The queue skipped drafts silently and never saw PR-less refs. This order is the openspec change stale-work-refs-are-defects, the ignored-draft advisory, the methodology note and the coordinator skill step.'
+  exit_criteria:
+  - 'scripts/test-land-queue.sh arm 7c passes. It fails on the pre-fix land-queue.sh, measured on 2026-11-17 as blocked:land-queue:1-failed-of-45.'
+  - 'methodology/multi-host-development.yaml carries unlanded_work_is_a_defect with threshold_days 5.'
+  verifiable_closure: 'bash scripts/test-land-queue.sh'
+  next_action: 'Land via PR. Then close the packet with the landing SHA.'
+  provenance: macuahuitl-fedora 2026-11-17, operator order.
+  events:
+  - type: filed
+    ts: '2026-11-17T23:00:00Z'
+    host: macuahuitl
+    summary: filed and implemented in the same PR
+- packet_id: a-stale-work-guard-lists-drafts-and-pr-less-work-refs-older-than-five-days
+  order: 2101-b4pf
+  status: ready
+  kind: guard
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [guard, lua, coordination]
+  estimated_hours: 3
+  title: A stale-work guard lists draft PRs with no live hold and PR-less work refs older than 5 days
+  context: 'Spec delta in openspec/changes/stale-work-refs-are-defects. Today, 18 drafts (#196 to #1064) and 64 PR-less unlanded refs would be listed. A held draft is exempt only when a PR comment carries hold-reason and hold-until no more than 5 days out. Unlanded means a + line in git cherry against linux-next. Lua per the shell-to-lua ratchet; no jq (use tillandsias-plan json get).'
+  exit_criteria:
+  - 'tillandsias-plan script run scripts/lua/check-stale-work-refs.lua --strict exits 1 against origin as of 2026-11-17 and names #196.'
+  - 'Fixture arms: a draft with no hold is listed; a held draft is not; a 6-day PR-less ref with a + cherry line is listed; an ancestor ref is not; a patch-id-equivalent ref is not.'
+  unscoreable: 'unpinnable-until-the-guard-exists: write scripts/lua/test-check-stale-work-refs.lua in the same commit as the guard and move it into verifiable_closure.'
+  next_action: 'Write the Lua guard and fixture, reusing the gh capture shape from land-queue.sh (explicit --limit, refuse a truncated capture). Wire it as advisory into the coordinator pass, not into ./build.sh --check, because it needs network.'
+  provenance: macuahuitl-fedora 2026-11-17, operator order.
+  events:
+  - type: filed
+    ts: '2026-11-17T23:00:00Z'
+    host: macuahuitl
+    summary: filed p1 ready
+- packet_id: the-coordinator-status-carries-a-daily-stale-work-metric
+  order: 2102-9gyk
+  status: ready
+  kind: observability
+  priority: p2
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [coordination, metrics]
+  estimated_hours: 2
+  depends_on: [a-stale-work-guard-lists-drafts-and-pr-less-work-refs-older-than-five-days]
+  title: The coordinator status carries a daily stale-work:<drafts>/<prless> metric with its trend
+  context: 'Unlanded work reached 84 refs before anyone counted it. One number per day in the loop status makes growth visible. Source: the 2101-b4pf guard.'
+  exit_criteria:
+  - 'loop-status carries a stale-work:<drafts>/<prless> line no older than 24 h. The first value recorded is at least 18/1, today''s state, so a zero means the triage happened.'
+  unscoreable: 'unpinnable-until-the-guard-exists: depends on 2101-b4pf output.'
+  next_action: 'After 2101-b4pf lands, append its counts via tillandsias-plan loop-status-append once per day from the coordinator pass.'
+  provenance: macuahuitl-fedora 2026-11-17, operator order.
+  events:
+  - type: filed
+    ts: '2026-11-17T23:00:00Z'
+    host: macuahuitl
+    summary: filed p2 ready
+- packet_id: triage-the-eighteen-stale-drafts-and-sixty-four-pr-less-unlanded-refs
+  order: 2103-pxq4
+  status: ready
+  kind: salvage+triage
+  priority: p1
+  desired_release: v0.5
+  pickup_role: coordinator
+  capability_tags: [coordination, salvage]
+  estimated_hours: 6
+  title: Triage the 18 stale drafts and 64 PR-less unlanded refs, and reconcile 267 landed-but-open packets
+  context: 'The table in plan/issues/abandoned-work-audit-2026-11-17.md lists every kept ref with its SHA, cause, size and packet status. Drafts are recoverable from refs/pull/N/head after their branch is deleted. The 2026-11-17 audit deleted only ancestry- or patch-id-proven refs and left these for a worth-it decision. Packet status on the 18 drafts: 11 ready (the work is unstarted on trunk, so it risks being redone), 2 in_progress (stale claims: 1903-sj5t, 1911-3gqy), 1 blocked (1829-guit), 5 with no packet (1940-lcns, 1558-ixih, 1553-3isv, 1553-q7f4, 1553-6b3a). Also, 202 ready and 65 in_progress packets have work refs that landed by ancestry.'
+  exit_criteria:
+  - 'gh pr list --draft --state open shows no PR older than 5 days without a hold-reason and hold-until comment. Today it shows 18.'
+  - 'Every kept ref in the audit table is either re-implemented on a new work/<order> PR, closed with a tombstone, or deleted with its SHA recorded.'
+  - 'work/437-forge-src-tmpfs-topology is checked for the forge memory ceiling on linux-next. If it is absent, a packet is filed.'
+  unscoreable: 'triage outcome is a judgement per ref; closure is the empty draft list plus the table annotated per row.'
+  next_action: 'Per draft, in PR-number order: read the packet next_action and the draft diff. If the packet still wants it and the diff is small, re-implement fresh off linux-next on a new work/<order> with a non-draft PR. Otherwise append a note to the packet citing refs/pull/N/head <sha> as prior art, and close the draft with a tombstone. For the salvage/* refs from September: delete unless the diff names a file absent from linux-next. Never rebase an old branch.'
+  provenance: macuahuitl-fedora 2026-11-17, operator order.
+  events:
+  - type: filed
+    ts: '2026-11-17T23:00:00Z'
+    host: macuahuitl
+    summary: filed p1 ready

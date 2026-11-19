@@ -17,7 +17,7 @@
 #   2. Zero-trace specs — specs with no @trace annotations in the codebase
 #   3. Stale changes — active changes older than 7 days
 #   4. Cheatsheet source binding — INDEX.json ↔ local: path ↔ file consistency
-#      (via scripts/check-cheatsheet-sources.sh --no-sha)
+#      (via scripts/lua/check-cheatsheet-sources.lua --no-sha)
 #      ERRORS from the binding check are printed as warnings.
 #
 # Usage:
@@ -333,12 +333,17 @@ CHEATSHEET_INPUTS=(cheatsheets/ cheatsheet-sources/ crates/tillandsias-policy/
 
 cheatsheet_source_check() {
     staged_touches "${CHEATSHEET_INPUTS[@]}" || return 0
-    local checker="${REPO_ROOT}/scripts/check-cheatsheet-sources.sh"
-    [[ -f "${checker}" ]] || return 0
+    local checker="scripts/lua/check-cheatsheet-sources.lua"
+    [[ -f "${REPO_ROOT}/${checker}" ]] || return 0
     [[ -f "${REPO_ROOT}/cheatsheet-sources/INDEX.json" ]] || return 0
 
+    local plan_bin=""
+    plan_bin="$(cd "${REPO_ROOT}" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || plan_bin=""
+    [[ -n "${plan_bin}" ]] || return 0   # no script runner: this check is non-blocking anyway
+    case "${plan_bin}" in ./*) plan_bin="${REPO_ROOT}/${plan_bin#./}" ;; esac
+
     local output exit_code
-    output="$(bash "${checker}" --no-sha 2>&1)" || exit_code=$?
+    output="$(cd "${REPO_ROOT}" && "${plan_bin}" script run "${checker}" -- --no-sha 2>&1)" || exit_code=$?
     exit_code="${exit_code:-0}"
 
     if [[ "${exit_code}" -ne 0 ]]; then
