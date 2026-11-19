@@ -1,0 +1,287 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-17 from the operator's direction of the same day. Code is cited by symbol, never by line.
+# Design: openspec/changes/job-admission-and-host-watch/ and plan/issues/local-babysitter-fleet-hardware-and-admission-research-2026-11-17.md
+# Extends, and repeats nothing of, openspec/changes/local-job-watchdog/ (2081-z7sh).
+packets:
+  - packet_id: jobs-wait-their-turn-host-sessions-get-the-watchdog-and-the-judge-runs-where-each-host-has-room
+    order: 2094-65yz
+    status: ready
+    kind: design
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tray, forge, memory, inference, design]
+    estimated_hours: 3
+    size: S
+    implementer_tier: opus
+    title: "DESIGN FIRST - a memory-aware job queue shared by forges and host sessions, the watchdog reachable from the bare host, and the judge placed per hardware capability across the fleet"
+    context: "Operator 2026-11-17: babysitting long-running tasks moves off cloud-model minutes and off until-grep-sleep loops onto small local models on the fleet's own hardware; the babysitter checks status, retries sensibly, minds memory and queues work so several forges share one computer fairly; it must serve forges and agent sessions on the host. The 2026-11-13 watchdog design (2081-z7sh) attends one job in one forge and is not repeated. This story adds what it leaves out: admission and queueing (the 2026-11-15 freeze, 2093-gfak), a host lane for bare-metal sessions, conditions and declared retry policy on a watch, and judge placement for every hardware tier in the fleet matrix. Measured on macuahuitl 2026-11-17: Qwen2.5-0.5B decodes 42.9 tokens/s on CPU and is resident at 936 MB under the runtime's default context; a 7B model decodes 5.3 tokens/s on CPU at 6.9 GB; unprivileged pressure-stall triggers are accepted on /proc/pressure/memory and on tillandsias.slice with a 2 s window and refused with a 1 s window; the slice's memory.events reads high 276147 and oom_kill 0; the Intel NPU opens without root and still has no graph compiler."
+    exit_criteria:
+      - "Each of the eight questions in the design's section 10 carries an operator ruling recorded as an event on this row, and the change's proposal, design, specs and tasks agree with the rulings. Pre-fix result: FAILS, no ruling exists."
+    verifiable_closure: "The operator's rulings as events on this row, and the amended change."
+    unscoreable: "operator-decision: the closure is the operator's rulings on eight questions; no script can produce or check them."
+    next_action: "Left: the operator reads openspec/changes/job-admission-and-host-watch/design.md section 10 and rules on the eight questions, the pressure cadence first. Then amend the change and release the children. Build nothing before that. The seven questions of 2081-z7sh are separate and still open."
+    provenance: "Operator direction 2026-11-17 relayed by the coordinator on macuahuitl; host probe, fleet matrix reading and external research of the same day in plan/issues/local-babysitter-fleet-hardware-and-admission-research-2026-11-17.md."
+    related: [2081-z7sh, 2093-gfak, 2067-dwqd, 1913-ebv8, 1913-fh6l, 2012-kuw4, 2014-slpw, 2002-stjb]
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p1 ready with the design, four spec deltas and nine children; awaiting operator review"
+  - packet_id: queue-submit-starts-a-declared-job-only-when-the-host-has-room-and-lanes-take-turns
+    order: 2094-ay52
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, mcp, forge, memory, queue]
+    estimated_hours: 12
+    size: L
+    implementer_tier: sonnet
+    title: "queue.submit, queue.status, queue.cancel and queue.list start a declared job only when the host has memory headroom for its class, serve lanes round-robin, and attend the admitted job as a watch"
+    context: "Nothing decides whether a heavy job may start. gpu_queue.rs (wait_for_gpu, Arbiter) arbitrates the GPU only; studio_jobs.rs gives one tool's batch a ticket with no admission; forge_budget.rs ForgeBudget sizes a forge and not a job. Three forges and a host gate can each start a 20-thread build in the same minute. This packet builds the queue with pressure as a fixture input: tickets, classes as data read at start, a pure admission function over a snapshot (available memory, recent admissions, class limits, turn), round-robin across lanes with the three-skip reserve rule, the holding rule named in queue.status, per-lane visibility, and registration of each admitted job with the 2081-v7qx watch registry. The queue.* row in host_tools.rs GROUPS and the descriptions are as written in design section 6. Rust in the tray beside the watchdog module; no shell."
+    exit_criteria:
+      - "Three lanes each submit a build job within one second against a fixture snapshot with room for one: exactly one is running, and the other two are admitted one at a time as each predecessor exits. Pre-fix result: FAILS, the lane socket's tools/list carries no queue tool and all three would start at once."
+      - "Lane A submits 10 jobs and lane B then submits 1: lane B's job is admitted no later than second. A control arm with round-robin disabled through the fixture seam admits it eleventh. Pre-fix result: FAILS, no queue exists."
+      - "A heavy job skipped 3 times blocks further light admissions until it has been admitted; queue.status for a blocked light job reports reserved-behind. Pre-fix result: FAILS, no queue exists."
+      - "Lane B asking queue.status for lane A's ticket is answered as for an unknown id, and lane B's own status behind two of lane A's jobs reports position 3 and contains no string from lane A's submissions. Pre-fix result: FAILS, no ticket exists."
+      - "Over 30 minutes of fixture time with nothing queued or running, the queue records zero admission evaluations. Pre-fix result: FAILS, no counter exists."
+      - "A submission whose command is one string, whose class is unknown, or that is the lane's 17th queued job is refused, each with its own named reason, and no ticket is created. Pre-fix result: FAILS, all three are refused alike as an unknown tool."
+    verifiable_closure: "The job_queue module's fixture transcript with all six arms. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the job_queue module and its tests land with the feature; the claimer writes the test names here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for the operator's rulings on 2094-65yz and for 2081-v7qx's watch registry, then build the tickets, the admission function, the fairness rule and the four tools with pressure as a fixture input."
+    provenance: "Design filed 2026-11-17 from operator direction; openspec/changes/job-admission-and-host-watch."
+    related: [2081-v7qx, 2002-stjb, 1955-rjv3, 1913-fh6l]
+    depends_on: [jobs-wait-their-turn-host-sessions-get-the-watchdog-and-the-judge-runs-where-each-host-has-room, watch-register-attends-a-declared-job-by-rules-alone-and-restarts-it-only-by-its-declared-argv]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p1 ready, waits on the operator's rulings and on 2081-v7qx"
+  - packet_id: memory-pressure-reaches-the-queue-as-a-kernel-event-and-it-stops-and-requeues-only-a-job-it-started
+    order: 2094-mzap
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, memory, cgroup, events, queue]
+    estimated_hours: 10
+    size: M
+    implementer_tier: sonnet
+    title: "Memory pressure reaches the queue as a kernel event with no poll; under pressure it admits nothing, and under sustained pressure it stops one job it started itself and puts it back in line"
+    context: "On 2026-11-15 a forge's runaway tests starved macuahuitl and froze the desktop; systemd-oomd marked the scope and the kill never landed (2093-gfak, still open and not fixed by this packet). memory_stall_watch.rs warns and never acts. Measured 2026-11-17 on kernel 7.3.3 without root: a pressure-stall trigger is accepted on /proc/pressure/memory and on tillandsias.slice's memory.pressure with a 2 s window and refused with a 1 s window; the slice's memory.events is readable and counts high 276147. This packet holds those triggers open in the tray, keeps the three levels calm, tight and critical, stops admission at tight, and at critical stops the most recently admitted queue-started job of the lane whose scope holds the most memory, requeues it with a back-off, tells its lane once, and after three requeues escalates with the reason memory. It never signals a forge, a harness or a job it did not start; when nothing is left to stop it sends one desktop notification through the notifier notify_memory_stall uses. The cadence is the operator's question 1 on 2094-65yz and nothing here is built before that ruling."
+    exit_criteria:
+      - "A fixture tight event with two jobs waiting admits neither until the level returns to calm, and both running jobs continue. Pre-fix result: FAILS, no pressure level exists and nothing gates admission."
+      - "A fixture critical level with two queue-started jobs running stops exactly one, returns it to the head of its lane, and delivers exactly one requeued message with the reason memory; a second job is not stopped within the next 2 minutes of fixture time. Pre-fix result: FAILS, nothing is stopped."
+      - "With the level critical and the heaviest lane running a job the queue did not start, that job's process receives no signal from the tray and exactly one desktop notification names the lane's scope. Pre-fix result: FAILS, no such notification path is driven by pressure level."
+      - "On a Linux host with cgroup v2 and an unprivileged user manager, a real allocation inside a throwaway scope under tillandsias.slice raises the level to tight within two trigger windows, with the tray running as the user and no sudo; the transcript records the kernel version and the trigger line accepted. Pre-fix result: FAILS, the tray opens no trigger."
+      - "Over 30 minutes on a calm host the pressure listener records zero wakeups. Pre-fix result: FAILS, no listener and no counter exist."
+    verifiable_closure: "The pressure listener's fixture transcript with the first three and the fifth arms, and the real-host transcript for the fourth. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the listener and its tests land with the feature; the claimer writes the test names here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for the operator's cadence ruling on 2094-65yz and for 2094-ay52's queue, then build the trigger listener, the level machine and the stop-and-requeue path."
+    provenance: "Design filed 2026-11-17 from operator direction; the 2026-11-15 freeze and 2093-gfak; pressure probes on macuahuitl 2026-11-17 in the research note."
+    related: [2093-gfak, 2067-dwqd, 1913-ebv8, 1376-8zdz]
+    depends_on: [queue-submit-starts-a-declared-job-only-when-the-host-has-room-and-lanes-take-turns]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p1 ready, waits on the operator's cadence ruling and on 2094-ay52"
+  - packet_id: a-host-agent-session-submits-and-waits-on-jobs-through-a-host-lane-and-its-job-runs-in-a-scope-with-a-memory-ceiling
+    order: 2094-dyvk
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [tray, mcp, systemd, cgroup, host-session]
+    estimated_hours: 12
+    size: L
+    implementer_tier: sonnet
+    title: "A host agent session reaches watch and queue tools through a host lane and a bridge subcommand; its job runs in a transient user scope with a memory ceiling; watch.wait blocks until the next event"
+    context: "A host session's .mcp.json carries forge-plan and project-info and no client for the tray's lane socket. The release gates run on the host and are waited on by shell loops: 314 sleep lines in 135 files under scripts and skills (counted 2026-11-17). The harness reaps a background waiter under memory pressure and kills a foreground command at its 10-minute limit, and a host gate has no memory limit of its own. This packet adds one host lane listener per project in mcp_socket.rs (attributed by the accepting listener as LaneIdentity with instance host, never mounted into a container, carrying watch, queue and gpu.status only), a bridge subcommand of the installed binary in main.rs that answers tray-not-running by name within a second, host jobs started in a transient systemd user scope beneath tillandsias.slice with MemoryHigh and MemoryMax from the job's class, and watch.wait bounded at 9 minutes. The tool descriptions say that sessions of one user can read one another's host lanes. No shell is added; the same pull request replaces one until-sleep waiter under scripts with a queued job."
+    exit_criteria:
+      - "A host session's tools/list through the bridge names the watch and queue tools and gpu.status and no browser, publish, studio or cloud tool; inside a running forge no host lane path exists. Pre-fix result: FAILS, no host lane and no bridge exist."
+      - "With the tray stopped, queue.submit through the bridge is refused within one second with tray-not-running and the command that starts the tray, and no process is started. Pre-fix result: FAILS, there is no bridge to answer."
+      - "On a Linux host, a host job that allocates past its scope's MemoryMax is stopped inside that scope, its ticket reports the reason memory, no process outside the scope is killed, and machine-wide memory pressure avg10 stays under the tight threshold during the run. A control arm with the ceiling removed through the fixture seam is not stopped. Pre-fix result: FAILS, a host job runs with no scope and no ceiling."
+      - "A host job submitted by one bridge process is still running after that process exits, and a second bridge process on the same project reads its status by ticket id. Pre-fix result: FAILS, the job is a child of the session."
+      - "watch.wait returns within 2 seconds of a job's finish with state done, and returns at its timeout with the current status and zero judge requests when nothing happens. Pre-fix result: FAILS, the tool does not exist."
+    verifiable_closure: "The host lane's fixture transcript with the first, second, fourth and fifth arms, and the real-host transcript for the third. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the host lane, the bridge and their tests land with the feature; the claimer writes the test names here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for the operator's rulings on 2094-65yz and for 2094-ay52's queue, then build the host lane listener, the bridge subcommand, the scope launcher and watch.wait, Linux only."
+    provenance: "Design filed 2026-11-17 from operator direction; openspec/changes/job-admission-and-host-watch design section 4."
+    related: [2081-v7qx, 2081-bdss, 2012-kuw4, 2014-slpw]
+    depends_on: [queue-submit-starts-a-declared-job-only-when-the-host-has-room-and-lanes-take-turns, a-watch-reports-done-or-stuck-exactly-once-on-the-lane-connection-the-lane-inbox-and-the-desktop]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p2 ready, waits on the operator's rulings and on 2094-ay52"
+  - packet_id: a-watch-ends-on-a-declared-literal-condition-and-retries-by-a-declared-policy-that-never-retries-a-full-disk
+    order: 2094-y2bb
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [tray, mcp, forge]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    title: "A watch may end on a declared literal condition (exit, marker line, file exists) and declares its retry policy as data inside the fixed budget, with a built-in list of failures that are never retried"
+    context: "The 2081 watch ends on a progress file of kind checklist, lines or marker, and its restart budget is fixed with only fatal_exit_codes declared. Most host waits are a verdict line in a log or a plain exit. On 2026-11-17 two local models at temperature 0 (Qwen2.5 0.5B and 7B, one sample each) judged a No space left on device build failure retryable; a retry does not free a disk, so that case belongs to the rules. This packet adds until with the closed kinds exit, marker_line and file_exists (literals matched against a whole line or the start of a line, evaluated only at exit and at the deadline timer, the log never watched), and retry with max, back-off, exit codes and up to 8 never-retried log literals, bounded by the 2081 budget, plus a built-in never-retried list shipped as data."
+    exit_criteria:
+      - "A watch declaring a marker_line condition reports done when the log holds the literal as a whole line and the job exits 0, and reports the condition unmet when the only matching text is inside a longer line that does not start with it. Pre-fix result: FAILS, watch.register refuses the unknown until field or ignores it."
+      - "A job that exits non-zero with No space left on device in its last 40 log lines escalates with a reason naming the literal, with zero judge requests and zero restarts; a control arm with the built-in list emptied through the fixture seam reaches the judge. Pre-fix result: FAILS, the episode goes to the judge or is restarted."
+      - "A registration declaring a regular-expression pattern, a retry maximum of 10, or a back-off under 30 seconds is refused, each with its own named reason. Pre-fix result: FAILS, the fields are not recognised."
+    verifiable_closure: "The watchdog module's fixture transcript with the three arms. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the condition and policy tests land with the feature; the claimer writes the test names here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: wait for 2081-v7qx's registry and rules table, then add the until kinds, the retry policy and the built-in literal list."
+    provenance: "Design filed 2026-11-17 from operator direction; the 2026-11-17 classification sample in the research note."
+    related: [2081-v7qx, 2081-ngd8]
+    depends_on: [watch-register-attends-a-declared-job-by-rules-alone-and-restarts-it-only-by-its-declared-argv]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p2 ready, waits on 2081-v7qx"
+  - packet_id: judge-placement-is-a-capability-keyed-table-and-its-cpu-row-is-measured-on-a-desktop-with-an-intel-npu-and-a-discrete-gpu
+    order: 2094-s3ub
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [inference, npu-intel, gpu-cuda, cpu, measurement]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    title: "Hardware tier: desktop with an Intel NPU and a discrete GPU - the judge placement table exists as data keyed by capability, its CPU row is measured beside a running build, and its memory ceiling is enforced"
+    context: "Hardware capability: an x86 desktop with more than 24 GiB of memory, an Intel NPU bound to intel_vpu, a discrete CUDA GPU and no integrated GPU (the fleet's example is the Core Ultra 7 265KF host, 62 GiB). Measured there 2026-11-17 through the host's Ollama, one sample each: Qwen2.5-0.5B decodes 42.9 tokens/s on CPU and is resident at 936 MB under the default 32,768-token context; a 7B model decodes 5.3 tokens/s at 6.9 GB. The NPU opens without root (npu-umd-test Device tests 6 of 6) and has no graph compiler; that row is 2081-4cpi's and is only wired here. This packet creates the placement table under images/inference/tiers as data keyed by what accel_probe.rs reports, the memory-ceiling rule by host memory, the explicit 4,096-token context, and the refusal to load unless the pressure level is calm."
+    exit_criteria:
+      - "The placement table is a data file with one row per capability and a CPU row last; a host whose probe reports an NPU as engine-missing is given the next row with that reason, and watch.status names the row that decided a verdict. Pre-fix result: FAILS, no table exists and placement is not reported per row."
+      - "On a host of this tier, with a 20-thread compile running, the judge on the CPU row (4 threads, lowest priority, 4,096-token context) records its decode rate, its time to a schema-bound verdict and its resident size for each judge tier; the resident size is under the tier's ceiling, and the compile's wall time with and without ten verdicts differs by under 5 percent. Pre-fix result: FAILS, no such measurement exists; the 2026-11-17 samples used the default context and no concurrent build."
+      - "A tier resident above the host's ceiling is refused by name, and an ambiguous episode at pressure level tight starts no judge and escalates. Pre-fix result: FAILS, no ceiling and no pressure check exist."
+    verifiable_closure: "The placement fixture transcript for the first and third arms and the measurement record for the second, filed under plan/issues with the kernel, runtime and model revisions. Pre-fix result: FAILS."
+    unscoreable: "research-measurement: the second arm is a measurement on real hardware of this tier; its numbers are recorded, not asserted against a threshold other than the two stated."
+    next_action: "Nothing is built. Left: wait for 2081-bgh8's judge lane and 2081-ngd8's tier choice, then write the table, the ceiling rule and the measurement. Do not attempt the NPU row here; read 2081-4cpi's result."
+    provenance: "Design filed 2026-11-17 from operator direction; macuahuitl probe of the same day."
+    related: [2081-4cpi, 2081-bgh8, 2081-ngd8, 2081-fqw3]
+    depends_on: [the-watchdog-judge-runs-in-a-container-with-no-network-no-credential-and-a-schema-bound-answer]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p2 ready, waits on the judge lane (2081-bgh8)"
+  - packet_id: the-judge-is-measured-on-a-linux-laptop-with-an-xdna2-npu-and-an-integrated-gpu-and-the-npu-row-stays-blocked-on-its-licence
+    order: 2094-p3i3
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [inference, npu-xdna2, gpu-vulkan, cpu, measurement]
+    estimated_hours: 4
+    size: S
+    implementer_tier: sonnet
+    title: "Hardware tier: Linux laptop with an AMD XDNA2 NPU and an integrated GPU - the judge's CPU and integrated-GPU rows are measured under a 1 GiB ceiling; the NPU row is recorded as blocked on the FastFlowLM licence decision"
+    context: "Hardware capability: a Linux laptop with 12 to 24 GiB of memory, an AMD XDNA2 NPU bound to amdxdna and a Radeon integrated GPU reachable through /dev/dri (the fleet's example is the Ryzen AI 5 340 host, 15.2 GiB; the matrix lists its NPU as engine-missing). On 2026-07-31 Qwen3-0.6B through Lemonade and FastFlowLM decoded 51 to 53 tokens/s on that NPU with prefill near 1,950 tokens/s (plan/issues/npu-experts-poc-2026-07-31.md). FastFlowLM is mostly proprietary (plan/issues/fedora-45-npu-igpu-research-2026-11-06.md), so the NPU row needs the operator's licence decision under order 543 and is not exercised here. Install nothing that carries terms; accept nothing."
+    exit_criteria:
+      - "On a host of this tier the judge's CPU row and its integrated-GPU row (llama-server on Vulkan, the device named explicitly) each record decode rate, time to a schema-bound verdict and resident size for judge tiers J0 and J1 at a 4,096-token context, and each resident size is under 1 GiB. Pre-fix result: FAILS, neither row has been measured on this tier."
+      - "The record states which of installed-and-loaded, installed-with-the-driver-absent, or removed describes the July NPU runtime on that host, and the NPU row in the placement table carries the blocker licence-decision-543 for this capability. Pre-fix result: FAILS, the table has no such row and the runtime's present state is unrecorded."
+    verifiable_closure: "The measurement record filed under plan/issues with kernel, Mesa, runtime and model revisions, and the placement table's two rows for this capability. Pre-fix result: FAILS."
+    unscoreable: "research-measurement: both arms are measurements and a recorded state on real hardware of this tier."
+    next_action: "Nothing is measured. Left: once 2094-s3ub's table and 2081-bgh8's judge lane exist, run the two rows on a host with this hardware and record them; leave the NPU row blocked until order 543 is ruled."
+    provenance: "Design filed 2026-11-17 from operator direction; fleet capability matrix and the 2026-07-31 NPU proof."
+    related: [2081-bgh8, 2081-ngd8]
+    depends_on: [judge-placement-is-a-capability-keyed-table-and-its-cpu-row-is-measured-on-a-desktop-with-an-intel-npu-and-a-discrete-gpu]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p3 ready, waits on the placement table (2094-s3ub)"
+  - packet_id: the-judge-is-measured-on-a-windows-host-whose-npu-and-integrated-gpu-are-invisible-to-the-guest
+    order: 2094-zzg9
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.6
+    pickup_role: windows
+    capability_tags: [inference, npu-xdna2, wsl2, cpu, measurement]
+    estimated_hours: 5
+    size: M
+    implementer_tier: sonnet
+    title: "Hardware tier: Windows host with an XDNA2 NPU - the judge's CPU row is measured inside the WSL2 guest; the host-side NPU and integrated-GPU rows are recorded as blocked or, after the rulings, proved offline and measured"
+    context: "Hardware capability: a Windows host with 12 to 24 GiB of memory whose NPU and integrated GPU are visible to Windows only (the fleet's example is the Ryzen AI 7 350 host, 14.8 GiB; the matrix lists the NPU as engine-missing, the integrated GPU as host-native-only-not-container-reachable, the guest's /dev/dxg as lacking a Vulkan driver, and nothing as schedulable). The judge can run on CPU in the guest today. Reaching the accelerators means a judge process on the Windows host, which cannot have a container's network none; that is question 4 on 2094-65yz, and the NPU path also needs the FastFlowLM licence decision (order 543). Install nothing that carries terms; accept nothing."
+    exit_criteria:
+      - "Inside the guest on a host of this tier, the judge's CPU row records decode rate, time to a schema-bound verdict and resident size for judge tiers J0 and J1 at a 4,096-token context, each resident under 1 GiB, with the guest's memory limit stated. Pre-fix result: FAILS, the matrix lists no schedulable engine on this tier and nothing has been measured."
+      - "The placement table's host-judge rows for this capability each carry either the named blocker (host-judge-ruling, licence-decision-543) or, once ruled, a transcript in which a connection attempted from inside the judge process on the Windows host fails and the row's decode rate and resident size are recorded. Pre-fix result: FAILS, no such row exists."
+      - "The record lists the NPU driver version and which of Lemonade, FastFlowLM and Foundry Local are already present on the Windows side, by listing only. Pre-fix result: FAILS, unrecorded."
+    verifiable_closure: "The measurement record filed under plan/issues and the placement table's rows for this capability. Pre-fix result: FAILS."
+    unscoreable: "requires-native-regime: every arm runs on a Windows host with this hardware and its WSL2 guest; no other host can produce the transcript."
+    next_action: "Nothing is measured. Left: once 2094-s3ub's table and 2081-bgh8's judge lane exist, measure the guest CPU row and record the Windows-side inventory; attempt no host-judge row until question 4 on 2094-65yz is ruled."
+    provenance: "Design filed 2026-11-17 from operator direction; fleet capability matrix rows of 2026-09-04 and 2026-11-08."
+    related: [2081-bgh8, 2081-ngd8]
+    depends_on: [judge-placement-is-a-capability-keyed-table-and-its-cpu-row-is-measured-on-a-desktop-with-an-intel-npu-and-a-discrete-gpu]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p3 ready, waits on the placement table (2094-s3ub)"
+  - packet_id: the-judge-runs-on-the-integrated-gpu-of-a-two-gpu-laptop-and-never-touches-the-discrete-card
+    order: 2094-7t4f
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [inference, gpu-vulkan, gpu-cuda, cpu, measurement]
+    estimated_hours: 4
+    size: S
+    implementer_tier: sonnet
+    title: "Hardware tier: Linux laptop with an integrated and a discrete GPU - the judge is pinned to the integrated device, measured while the discrete card is busy, and leaves the discrete card's memory unchanged"
+    context: "Hardware capability: a Linux laptop with 12 to 24 GiB of memory, a discrete CUDA GPU kept for heavy jobs and an integrated GPU reachable through /dev/dri (the fleet's example is the Ryzen 7 5800H host with 13.5 GiB, an RTX 3070 Laptop and a Radeon Vega; the matrix leaves the integrated GPU unscheduled under discrete-gpu-preferred because the discrete card decoded 4.3 to 4.9 times faster on 2026-09-04). For a 30-token verdict that deficit does not matter and keeping the discrete card free does. Using the integrated GPU for the judge is an exception to that policy and is question 7 on 2094-65yz. The integrated GPU's memory is system memory, so the 1 GiB ceiling applies to it."
+    exit_criteria:
+      - "On a host of this tier, with a job holding the discrete GPU, the judge on the integrated row records decode rate, time to a schema-bound verdict and resident size for judge tiers J0 and J1, and the discrete device's memory in use is the same before and after ten verdicts. A control arm with the device pin removed through the fixture seam shows the discrete device's memory rising. Pre-fix result: FAILS, the integrated GPU is unscheduled and no pin exists."
+      - "The record gives the Vulkan device order on that host and which index is the integrated device, and available memory at idle with the discrete card busy. Pre-fix result: FAILS, unrecorded."
+    verifiable_closure: "The measurement record filed under plan/issues with kernel, Mesa, runtime and model revisions, and the placement table's integrated-GPU row. Pre-fix result: FAILS."
+    unscoreable: "research-measurement: both arms are measurements on real hardware of this tier."
+    next_action: "Nothing is measured. Left: once 2094-s3ub's table and 2081-bgh8's judge lane exist and question 7 on 2094-65yz is ruled, pin the judge to the integrated device on a host with this hardware and record the two arms."
+    provenance: "Design filed 2026-11-17 from operator direction; fleet capability matrix row of 2026-09-26."
+    related: [2081-fqw3, 2081-bgh8]
+    depends_on: [judge-placement-is-a-capability-keyed-table-and-its-cpu-row-is-measured-on-a-desktop-with-an-intel-npu-and-a-discrete-gpu]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p3 ready, waits on the placement table (2094-s3ub) and question 7"
+  - packet_id: the-judge-is-measured-on-apple-silicon-in-the-guest-and-on-metal-only-behind-an-offline-proof
+    order: 2094-3r2k
+    status: ready
+    kind: research
+    priority: p3
+    desired_release: v0.6
+    pickup_role: macos
+    capability_tags: [inference, gpu-metal, cpu, measurement]
+    estimated_hours: 5
+    size: M
+    implementer_tier: sonnet
+    title: "Hardware tier: Apple Silicon - the judge's CPU row is measured inside the Linux guest; Metal on the macOS host is measured only after a ruling and a proof that the host judge cannot connect out"
+    context: "Hardware capability: an Apple Silicon Mac with 12 to 24 GiB of unified memory (the fleet's example is the M5 host with 16 GiB; the matrix lists CPU in a container and CPU and Metal host-native through Ollama as schedulable). The Linux guest sees neither Metal nor the Neural Engine, so the judge is CPU in the guest unless a judge process runs on the macOS host; that is question 4 on 2094-65yz. The Neural Engine is not pursued: the only language-model path found is beta, short-context and reported slower than Metal. Note for the measurer: the darwin gate wrapper stretches sleeps about four times, so time verdicts by the runtime's own counters and not by wall clock under that wrapper."
+    exit_criteria:
+      - "Inside the guest on a host of this tier, the judge's CPU row records decode rate, time to a schema-bound verdict and resident size for judge tiers J0 and J1 at a 4,096-token context, each resident under 1 GiB, with the guest's memory size stated. Pre-fix result: FAILS, unmeasured."
+      - "The placement table's Metal row for this capability carries either the named blocker host-judge-ruling or, once ruled, a transcript in which a connection attempted from inside the sandboxed judge process on the macOS host fails, the process listens on no TCP port, and the row's decode rate and resident size are recorded. Pre-fix result: FAILS, no such row exists."
+    verifiable_closure: "The measurement record filed under plan/issues with macOS, runtime and model revisions, and the placement table's rows for this capability. Pre-fix result: FAILS."
+    unscoreable: "requires-native-regime: every arm runs on an Apple Silicon Mac and its guest; no other host can produce the transcript."
+    next_action: "Nothing is measured. Left: once 2094-s3ub's table and 2081-bgh8's judge lane exist, measure the guest CPU row; attempt no Metal row until question 4 on 2094-65yz is ruled."
+    provenance: "Design filed 2026-11-17 from operator direction; fleet capability matrix row of 2026-10-03."
+    related: [2081-bgh8, 2081-ngd8]
+    depends_on: [judge-placement-is-a-capability-keyed-table-and-its-cpu-row-is-measured-on-a-desktop-with-an-intel-npu-and-a-discrete-gpu]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:47:46Z"
+        host: macuahuitl
+        summary: "filed p3 ready, waits on the placement table (2094-s3ub)"

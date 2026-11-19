@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-13 at the coordinator's request (operator top priority: "like ComfyUI but for muxing music"). Code is cited by symbol, never by line. Generic: any project; the first client is a game whose requirements are its plan/audio-studio/music-requirements.md.
+packets:
+  - packet_id: the-comfyui-studio-runs-generic-audio-node-graphs-from-a-vendored-pinned-node-pack
+    order: 2090-ausx
+    status: in_progress
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, comfyui, audio, licence]
+    estimated_hours: 10
+    size: M
+    owned_files:
+      - images/imagegen-studio/nodes/tillandsias_audio/__init__.py
+      - images/imagegen-studio/nodes/tillandsias_audio/nodes.py
+      - images/imagegen-studio/nodes/tillandsias_audio/dsp.py
+      - images/imagegen-studio/nodes/tillandsias_audio/symbolic.py
+      - images/imagegen-studio/audio-nodes-selftest.py
+      - images/imagegen-studio/sfz-libraries.tsv
+      - images/imagegen-studio/locks/tillandsias_audio.txt
+      - openspec/changes/audio-studio-node-graph/proposal.md
+      - openspec/changes/audio-studio-node-graph/design.md
+      - openspec/changes/audio-studio-node-graph/tasks.md
+      - openspec/changes/audio-studio-node-graph/specs/audio-studio-node-graph/spec.md
+    title: "The ComfyUI studio runs generic audio node graphs (mix, dynamics, R128 loudness, scopes, bar grid, loop export with loop points, MIDI, SFZ sampling) from a vendored node pack pinned by tree digest, plus ACE-Step 1.5 XL-SFT and pinned CC0 SFZ libraries"
+    context: |
+      Operator ruling 2026-11-13 (option A): extend images/imagegen-studio with a pinned audio node pack through the same admission path (node-classes.tsv, custom-nodes.toml, models.tsv, the licence registers); no separate web app; everything host-side generic. The CPU audio appliance (2055-grzz, 2055-d9sa, 2068-*) is extended by design, not duplicated: openspec/changes/audio-studio-node-graph design D1 assigns each of the client's eleven capability families to ComfyUI nodes or the appliance. Batch 1 is this packet; batches 2 and 3 are tasks in that change. Demucs is untouched (restricted, demucs-weights-unstated).
+      custom-nodes.py gains a `vendored:<dir>` row form pinned by tree_digest, checked at image build. The pack needs no pip dependency.
+    exit_criteria:
+      - "audio-nodes-selftest.py, run inside the studio image (CPU, --network=none) with the pack mounted, prints ALL OK: a 1 kHz stereo sine at -6.02 dBFS reads -6.02 LUFS within 0.1 LU; the limiter never exceeds its ceiling; the loop-seam wrap step is under 0.01; a loop exported 0.5 s to 2.5 s at 48 kHz reads back smpl 24000..119999 and ComfyUI's own loader reads the WAV; a 180 bpm MIDI with a tempo event parses to the right seconds; an SFZ render is at the right pitch and silent after release. Pre-fix result: FAILS (no tillandsias_audio module)."
+      - "custom-nodes.py install refuses an edited pack whose tree digest no longer matches custom-nodes.toml with violation:custom-nodes:vendored-tree-not-at-pinned-digest. Pre-fix result: FAILS (no vendored form)."
+      - "Every TillandsiasSFZRender-supported program of the pinned big-rusty-drums, black-and-green-guitars and growlybass commits parses, and every sample path it names exists in that commit's tree."
+      - "A rebuilt studio image on a GPU host runs the design D7 pilot graph through studio.run_workflow, with provenance."
+    unscoreable: "the property self-test runs inside the 28 GB CUDA studio image (python in the image, never on the host); no litmus starts that image yet. Task 1.9 of openspec/changes/audio-studio-node-graph wires it into a Lua fixture."
+    next_action: >
+      Land work/2090-ausx into linux-next; then on a GPU host rebuild the studio image (custom-nodes.py verify must print ok:custom-nodes:6-pinned), place one SFZ library under the I1/sfz cache, and run the D7 pilot graph through studio.run_workflow. The SFZ fetcher (task 3.1) and the Lua fixture (task 1.9) are still left.
+    provenance: |
+      Coordinator relays 2026-11-13 (option A; generic-only ruling; permissive licence set approved). Licences read on the Hugging Face API and the GitHub licence API 2026-11-13 by macuahuitl; self-test and real-library parse run in localhost/tillandsias-imagegen-studio:latest on macuahuitl.
+    events:
+      - type: filed
+        ts: "2026-11-13T23:55:00Z"
+        host: macuahuitl
+        summary: "filed with batch 1 of the audio studio node graph"

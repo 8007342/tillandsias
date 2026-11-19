@@ -1,0 +1,37 @@
+# @trace order:2090-ausx (spec: openspec/changes/audio-studio-node-graph, design D5)
+# THE SFZ INSTRUMENT LIBRARY MANIFEST. Sampled instruments the studio's
+# TillandsiasSFZRender node plays. They are NEVER baked into an image or a
+# release: each is fetched on the user's own machine, on first request, into
+#   cache_root()/models/imagegen/I1/sfz/<name>/
+# which extra_model_paths.yaml maps as the `sfz` folder (read-only at /models).
+# The fetcher (a later slice, tasks 3.x) clones the repository at the pinned
+# commit through the enclave proxy, verifies HEAD equals `commit` (the git
+# commit is the content hash: it covers every sample), checks the LICENSE
+# blob equals `licence_blob`, and drops .git. A row whose licence is not
+# CC0-1.0 or CC-BY-4.0 is refused; CC-BY rows must carry `attribution`, which
+# the render report and the export manifest copy (operator ruling 2026-11-13:
+# CC-BY needs attribution recorded).
+#
+# Read from the GitHub API 2026-11-13 on macuahuitl: default-branch HEAD,
+# /license (spdx_id and the LICENSE blob sha), and the repository size.
+#
+# Columns (TAB-separated):
+#   name          folder under I1/sfz
+#   repo          https clone URL
+#   commit        pinned 40-hex commit
+#   spdx          CC0-1.0 | CC-BY-4.0
+#   licence_path  the licence file in the repository at that commit
+#   licence_blob  git blob sha of that file at that commit
+#   size_kb       repository size the API reported (download estimate)
+#   role          drums | bass | guitar | orchestral (a hint for agents)
+#   attribution   required credit line for CC-BY rows, `-` for CC0
+#name	repo	commit	spdx	licence_path	licence_blob	size_kb	role	attribution
+big-rusty-drums	https://github.com/sfzinstruments/karoryfer.big-rusty-drums	f07ce00df34a46b6b08375be56fe116cf15782bc	CC0-1.0	LICENSE	0e259d42c996742e9e3cba14c677129b2c1b6311	603457	drums	-
+swirly-drums	https://github.com/sfzinstruments/karoryfer.swirly-drums	c40dafe0011cb2e54c0c220ff0fa308a11fc60f5	CC0-1.0	license	0e259d42c996742e9e3cba14c677129b2c1b6311	840413	drums	-
+unruly-drums	https://github.com/sfzinstruments/karoryfer.unruly-drums	9bf75c2a1392f190cd1c264645653629f0b3a097	CC0-1.0	LICENSE	0e259d42c996742e9e3cba14c677129b2c1b6311	659025	drums	-
+black-and-blue-basses	https://github.com/sfzinstruments/karoryfer.black-and-blue-basses	6e7d674cdb41be7a54dbccb15472401ad01099b9	CC0-1.0	license	1625c1793607996fcfc46420e8aa2f3d2b7efd1e	984720	bass	-
+meatbass	https://github.com/sfzinstruments/karoryfer.meatbass	ac9e859564bda286ab5ec672d00ff1aa2fef2895	CC0-1.0	LICENSE	0e259d42c996742e9e3cba14c677129b2c1b6311	249345	bass	-
+growlybass	https://github.com/sfzinstruments/karoryfer.growlybass	4f483268fc66b5a6d5781d421c0d11b8d08d3fc6	CC0-1.0	LICENSE	0e259d42c996742e9e3cba14c677129b2c1b6311	163486	bass	-
+black-and-green-guitars	https://github.com/sfzinstruments/karoryfer.black-and-green-guitars	b3b3249d37dc977a1a297bd2dc053e6d9b6b805c	CC0-1.0	LICENSE	0e259d42c996742e9e3cba14c677129b2c1b6311	454174	guitar	-
+shinyguitar	https://github.com/sfzinstruments/karoryfer.shinyguitar	57243cca85277dbcc120ce17c6178032f93c80f3	CC0-1.0	LICENSE	0e259d42c996742e9e3cba14c677129b2c1b6311	359602	guitar	-
+vcsl	https://github.com/sgossner/VCSL	c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e	CC0-1.0	LICENSE	0e259d42c996742e9e3cba14c677129b2c1b6311	3972029	orchestral	-

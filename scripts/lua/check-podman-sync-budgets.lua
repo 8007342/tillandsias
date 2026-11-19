@@ -20,8 +20,13 @@ local raw_allowed = env.get("PODMAN_SYNC_ESCAPE_HATCHES")
 --      killed when the engine is released (TTL, a studio job, other model files)
 --      and ends with the container; each request on it is bounded by curl's
 --      own --max-time. A fresh exec per call cost ~110 ms (measured on yoga).
--- A sixth needs the same justification here, in the same commit.
-if raw_allowed == nil or raw_allowed == "" then raw_allowed = "5" end
+--   6. job_queue.rs spawn_in_forge (2094-ay52): an admitted queue job, the
+--      caller's declared argv run by `podman exec` in its own forge. A build
+--      or test bundle runs for minutes to about half an hour by design; its
+--      end is the process exit, which the queue waits for as an event (no
+--      poll), and the memory ceiling, not a timeout, bounds it.
+-- A seventh needs the same justification here, in the same commit.
+if raw_allowed == nil or raw_allowed == "" then raw_allowed = "6" end
 if not text.is_match(raw_allowed, "^-?[0-9]+$") then
     verdict.emit("blocked:podman-sync-bounded:invalid-escape-hatches:" .. raw_allowed, 2)
 end

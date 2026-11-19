@@ -96,6 +96,24 @@ _warn()  { echo -e "${YELLOW}[build-image]${NC} $*"; }
 _error() { echo -e "${RED}[build-image]${NC} $*" >&2; }
 _step()  { echo -e "${CYAN}[build-image]${NC} $*"; }
 
+# 1073-dqtx: is <tag> usable, not merely present? The one implementation is
+# scripts/lua/verify-image-usable.lua (ported from verify-image-usable.sh,
+# 2006-me5t), run on the plan binary resolved by execution. A host where no
+# plan binary runs falls back to the single command that Lua wraps, so the
+# check is never weaker than it was: `podman image inspect` is what touches
+# the layers. Returns the verifier's exit code; with-nix-builder.sh calls it.
+_verify_image_usable() {
+    local _tag="$1" _plan=""
+    _plan="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _plan=""
+    case "$_plan" in ./*) _plan="$ROOT/${_plan#./}" ;; esac
+    if [[ -n "$_plan" ]]; then
+        (cd "$ROOT" && "$_plan" script run scripts/lua/verify-image-usable.lua -- "$_tag")
+        return $?
+    fi
+    # shellcheck disable=SC2086
+    "${TILLANDSIAS_PODMAN:-podman}" ${TILLANDSIAS_PODMAN_ARGS:-} image inspect "$_tag" >/dev/null
+}
+
 _verbose_enabled() {
     [[ "${TILLANDSIAS_BUILD_VERBOSE:-0}" == "1" ]]
 }
@@ -707,10 +725,11 @@ _remove_stale_image_tags
     # The summary block below ALREADY ran `image inspect` — for the size, under
     # `2>/dev/null || echo ""` — so the one command that would have caught this
     # was being discarded into a cosmetic field. Delegated to
-    # verify-image-usable.sh so build-image, its fixture and any other caller
-    # read the same implementation rather than three drifting copies.
+    # scripts/lua/verify-image-usable.lua (via _verify_image_usable) so
+    # build-image, its fixture and any other caller read the same
+    # implementation rather than three drifting copies.
     # Exit captured into a variable rather than tested with `if !` (795-imz3).
-    "$SCRIPT_DIR/verify-image-usable.sh" "$IMAGE_TAG" >/dev/null
+    _verify_image_usable "$IMAGE_TAG" >/dev/null
     _usable_rc=$?
     if [[ $_usable_rc -ne 0 ]]; then
         _error "Image ${IMAGE_TAG} was built and EXISTS, but is not usable (1073-dqtx)."

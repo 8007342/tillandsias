@@ -106,7 +106,7 @@ in §Follow-up rows; none is filed by this change.
 
 ## 3. Acceptance — the port that was evicted
 
-- [ ] 3.1 **Port `scripts/verify-image-usable.sh` again** from `fdca0b2bc`,
+- [x] 3.1 **Port `scripts/verify-image-usable.sh` again** from `fdca0b2bc`,
       adding `-- @env-profile podman` (and `-- @env TILLANDSIAS_PODMAN
       TILLANDSIAS_PODMAN_ARGS` as before). `build-image.sh::_verify_image_usable`
       and `with-nix-builder.sh` as in that commit; update the Rust pin in
