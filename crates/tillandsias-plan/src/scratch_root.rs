@@ -392,6 +392,36 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
         })?,
     )?;
 
+    // rename(from, to): rename(2), both ends inside the root. Neither end's
+    // final component is followed, so a link is moved as a link and a link at
+    // `to` is replaced, never written through. The root is never moved, and
+    // an existing `to` is refused unless opts.replace is set.
+    let s = state.clone();
+    t.set(
+        "rename",
+        lua.create_function(
+            move |_, (from, to, opts): (String, String, Option<LuaTable>)| {
+                let st = s.lock().unwrap();
+                let a = resolve(&st, "rename", &from, false)?;
+                let b = resolve(&st, "rename", &to, false)?;
+                if Some(&a) == st.root.as_ref() || Some(&b) == st.root.as_ref() {
+                    return err("rename", "the scratch root itself is never moved");
+                }
+                let replace = opts
+                    .map(|o| o.get::<Option<bool>>("replace"))
+                    .transpose()?
+                    .flatten()
+                    .unwrap_or(false);
+                if !replace && std::fs::symlink_metadata(&b).is_ok() {
+                    return err("rename", format!("'{to}' exists (pass {{replace = true}})"));
+                }
+                std::fs::rename(&a, &b)
+                    .or_else(|e| err("rename", format!("'{from}' -> '{to}': {e}")))?;
+                Ok(true)
+            },
+        )?,
+    )?;
+
     let s = state.clone();
     t.set(
         "chmod",
