@@ -139,6 +139,14 @@ export function start() {
       }
       if (req.method === "GET" && url.pathname === "/load") return send(res, 200, await load());
       if (req.method === "GET" && url.pathname === "/healthz") return send(res, 200, { ok: true });
+      // 2108-dptd: anything else GET is the site's own file at its own path,
+      // read-only from the document root, so the canvas resolves the page's
+      // relative AND root-absolute URLs (url("/assets/x.png")) as the live
+      // site does. The editor's routes above always win.
+      if (req.method === "GET") {
+        const { root } = resolveRoot(PROJECT);
+        return staticFile(res, normalize(join(PROJECT, root)), decodeURIComponent(url.pathname.slice(1)));
+      }
       send(res, 404, { error: "not found" });
     } catch (err) {
       send(res, err.status || 500, { error: String(err.message || err) });

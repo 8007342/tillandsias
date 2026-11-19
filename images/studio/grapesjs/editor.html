@@ -28,12 +28,21 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   // 2108-dptd: no page at the resolved root means nothing to edit; saving
   // would invent one, so the studio stays read-only.
   const readOnly = !loaded.exists;
+  // 2108-dptd: render the page as it looks, through GrapesJS's own canvas
+  // options (its <head> is a component that re-renders, so anything injected
+  // into it is wiped): the head's inline <style> as canvasCss and its local
+  // stylesheets as canvas.styles. The server serves the document root at "/"
+  // too (read-only), so relative and root-absolute asset URLs resolve. None of
+  // this enters the editor's components or CSS, so none of it is saved.
+  const look = StudioPage.canvasLook(loaded.doc, "/");
   const editor = grapesjs.init({
     container: "#gjs",
     fromElement: false,
     // The vendored icon font, never cdnjs (the enclave cannot reach it).
     cssIcons: "/vendor/font-awesome/css/font-awesome.min.css",
     protectedCss: "",
+    canvasCss: look.styles.join("\n"),
+    canvas: { styles: look.links },
     components: loaded.html || "",
     storageManager: { type: "studio", autoload: false, autosave: false },
     plugins: [
@@ -45,13 +54,12 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
           // Every write goes through the studio front, one path per POST; the
           // front guards each path and commits it (1860-auhm), never on the
           // project's default branch (2108-dptd).
-          async store(projectData) {
+          async store() {
             if (readOnly) return;
             const css = ed.getCss();
             const cssChanged = css !== cssAtLoad;
             const files = [[loaded.page, StudioPage.rebuild(loaded.doc, ed.getHtml(), cssChanged ? cssHref : null)]];
             if (cssChanged) files.push([cssPath, css.endsWith("\n") ? css : css + "\n"]);
-            files.push([".tillandsias/studio/grapesjs/project.json", JSON.stringify(projectData ?? {}, null, 2) + "\n"]);
             for (const [path, content] of files) {
               const res = await fetch("/__studio/save", {
                 method: "POST",
@@ -69,37 +77,18 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   const cssHref = "studio.css";
   let cssAtLoad = "";
   editor.onReady(() => { cssAtLoad = editor.getCss(); });
-  // 2108-dptd: render the page as it looks. The canvas frame gets a <base>
-  // at the site's root (so relative asset URLs resolve through /site/), the
-  // head's own stylesheets and inline <style>, and the <body> tag's classes.
-  // None of it enters the editor's components or CSS, so none of it is saved:
-  // the saved head is the original, byte for byte.
-  const look = StudioPage.canvasLook(loaded.doc, "/site/");
-  const dress = (frameDoc) => {
-    if (!frameDoc || frameDoc.documentElement.hasAttribute("data-studio-look")) return;
-    frameDoc.documentElement.setAttribute("data-studio-look", "1");
-    const head = frameDoc.head;
-    const base = frameDoc.createElement("base");
-    base.href = "/site/";
-    head.insertBefore(base, head.firstChild);
-    for (const href of look.links) {
-      const l = frameDoc.createElement("link");
-      l.rel = "stylesheet";
-      l.href = href;
-      head.appendChild(l);
-    }
-    for (const css of look.styles) {
-      const s = frameDoc.createElement("style");
-      s.textContent = css;
-      head.appendChild(s);
-    }
+  // 2108-dptd: the <body> tag's classes and attributes on the canvas body,
+  // display only (idempotent; the wrapper may re-render, so re-applied on
+  // every body load). The saved page keeps its own <body> tag.
+  const dressBody = (frameDoc) => {
+    if (!frameDoc || !frameDoc.body) return;
     for (const [k, v] of Object.entries(look.attrs)) {
-      if (k === "class") v.split(/\s+/).filter(Boolean).forEach((c) => frameDoc.body.classList.add(c));
-      else if (!/^on/i.test(k)) frameDoc.body.setAttribute(k, v);
+      if (k === "class") v.split(/s+/).filter(Boolean).forEach((c) => frameDoc.body.classList.add(c));
+      else if (!/^(on|id$)/i.test(k)) frameDoc.body.setAttribute(k, v);
     }
   };
-  editor.on("canvas:frame:load", ({ window: w }) => dress(w && w.document));
-  editor.onReady(() => dress(editor.Canvas.getDocument()));
+  editor.on("canvas:frame:load:body", ({ window: w }) => dressBody(w && w.document));
+  editor.onReady(() => dressBody(editor.Canvas.getDocument()));
   if (readOnly) {
     banner("Read-only: no page at " + (loaded.page || "index.html") + " (document root from " + loaded.root_from + "). Nothing you do here is saved.");
   }
