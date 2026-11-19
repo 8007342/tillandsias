@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: observatorium-deploys-only-on-stable-promotion
+    event:
+      type: note
+      ts: "2026-11-19T23:18:38Z"
+      agent_id: linux-calmecacpilli-claude-20261119t231838z
+      host: calmecacpilli
+      summary: |
+        Tech-debt triage (calmecacpilli, 2026-11-19). OBSOLETE. Superseded by 2066-obsv, commit 565da9c5c (ancestor of origin/linux-next): operator ruling 2026-11-09, no auto-deploy anywhere; promote-stable.sh step 4 (this packet's mechanism) was removed and the observatorium is published by hand. Evidence it is gone: scripts/lua/test-advance-deploy-ref.lua no longer exists on trunk and origin has no refs/heads/deploy/observatorium. Tombstone; nothing to claim.
