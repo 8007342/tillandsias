@@ -1,0 +1,64 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-18 at macuahuitl-fedora's direction, from an incident yolanda caused: a local tray
+# install mid-session tore down the operator's live tlatoani.net forge and studio.
+packets:
+  - packet_id: a-tray-or-guest-upgrade-or-service-restart-waits-for-the-session-boundary-and-the-install-script-refuses-while-a-session-is-live
+    order: 2109-ar8g
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [tray, upgrade, enclave, forge, install]
+    estimated_hours: 6
+    owned_files:
+      - scripts/build-and-install-windows-local.ps1
+    title: "Any tray or guest upgrade, guest re-injection or headless service restart while a forge or studio session is live is deferred to the session boundary with one tray line and an operator 'install now'; the install script refuses by name while a session is live and waits for the tray to exit instead of killing it"
+    context: |
+      MEASURED 2026-11-19 00:37 UTC on yolanda: scripts/build-and-install-windows-local.ps1 ran
+      Get-Process tillandsias-tray | Stop-Process -Force, then Copy-Item failed on the still-locked exe. The relaunched
+      56.11.18.2 tray logged "adopted guest wiring is stale — re-injecting bootstrap logic" and
+      tillandsias-headless.service restarted twice (16:38:34, 16:38:42 PST). Every --rm container went: the
+      operator's tlatoani.net-forge-claude (its WT terminal too), the forge-2 studio, router, web, git mirror and
+      browsers; proxy and inference exited. The forge's uncommitted .gitignore and openspec/ edits were lost
+      (2109-94ix). Vault came back unsealed; the CA did not churn.
+      Standing rule: never stop a forge with live agents unless asked. Generalises 2104-7t7p (enclave replacement
+      at the boundary) to version changes and restarts.
+    exit_criteria:
+      - "With a forge or studio container running, a tray whose version differs from the guest does NOT re-inject or restart tillandsias-headless; it shows one line (e.g. 'Update waits for tlatoani.net to finish') and a tray action 'Install now'. Pre-fix: FAILS (re-injects at once and the containers are removed)."
+      - "build-and-install-windows-local.ps1 refuses while a forge or studio container is live, naming each, unless -StopLiveSessions is passed. Pre-fix: FAILS (it proceeds)."
+      - "The script asks the tray to exit and waits for the process to end (bounded timeout, then a named refusal), never Stop-Process -Force, and the copy never fails on a locked exe. Pre-fix: FAILS (force kill, then 'being used by another process')."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-upgrade-waits-for-session-boundary.yaml lands in the same commit as the implementation (1136-n8sh)"
+    provenance: "yolanda incident 2026-11-19; tray.log lines 2683-2689; guest journal; coordinator direction."
+    events:
+      - type: filed
+        ts: "2026-11-19T00:55:00Z"
+        host: yolanda
+        summary: "filed from the incident yolanda caused"
+  - packet_id: a-forges-uncommitted-working-tree-survives-container-removal-on-its-mounted-source-volume
+    order: 2109-94ix
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [forge, storage, volumes]
+    estimated_hours: 4
+    title: "The forge's checkout lives on the source volume mounted at /home/forge/src, so an uncommitted edit survives the container's removal and a relaunch (direction pending the operator's ruling)"
+    context: |
+      MEASURED 2026-11-19 on yolanda: after the teardown in 2109-ar8g, tillandsias-source-973201b7… (mounted at
+      /home/forge/src in the forge-2 container) was empty, and no volume held a tlatoani.net checkout; the forge's
+      uncommitted .gitignore and openspec/ edits were gone with the container. The mirror's refs were last written
+      14:29, so nothing had been pushed. The volume is mounted but never holds the tree.
+      DIRECTION PENDING OPERATOR RULING: forges are ephemeral by design; the operator decides whether uncommitted work
+      should survive a teardown (coordinator is asking). Do not implement until the ruling is recorded.
+    exit_criteria:
+      - "Edit a file in a forge without committing, remove the forge container, relaunch the project: the edit is present. Pre-fix: FAILS (the tree is re-cloned and the edit is gone)."
+    next_action: "HOLD: pending the operator's ruling on whether uncommitted work survives a forge teardown."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-forge-worktree-survives-container-removal.yaml lands in the same commit as the implementation (1136-n8sh)"
+    provenance: "yolanda guest volume reads 2026-11-19; coordinator direction."
+    events:
+      - type: filed
+        ts: "2026-11-19T00:55:00Z"
+        host: yolanda
+        summary: "filed as a separate defect, direction pending the operator"
