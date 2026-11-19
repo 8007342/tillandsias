@@ -61,13 +61,10 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
           // project's default branch (2108-dptd).
           async store() {
             if (readOnly) return;
-            const css = ed.getCss();
-            const cssChanged = css !== cssAtLoad;
-            const files = [[loaded.page, StudioPage.rebuild(loaded.doc, ed.getHtml(), cssChanged ? cssHref : null, { baseline, css })]];
-            if (cssChanged) files.push([cssPath, css.endsWith("\n") ? css : css + "\n"]);
+            const { css, files } = pageNow(ed);
             // v4: a store that changes nothing (selecting a component triggers
             // one) posts nothing.
-            if (files.length === 1 && files[0][1] === lastSaved) return;
+            if (files[0][1] === lastSaved && css === (cssSaved === null ? cssAtLoad : cssSaved)) return;
             for (const [path, content] of files) {
               const res = await fetch("/__studio/save", {
                 method: "POST",
@@ -76,6 +73,7 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
               });
               if (!res.ok) throw new Error("save " + path + " failed: " + res.status);
               if (path === loaded.page) lastSaved = content;
+              else cssSaved = css;
             }
           },
         }),
@@ -89,6 +87,20 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   // nodes whose serialisation moved away from it.
   let baseline = null;
   let lastSaved = loaded.doc;
+  let cssSaved = null; // null: as at load
+  const pageNow = (ed) => {
+    const css = ed.getCss();
+    const cssChanged = css !== cssAtLoad;
+    const files = [[loaded.page, StudioPage.rebuild(loaded.doc, ed.getHtml(), cssChanged ? cssHref : null, { baseline, css })]];
+    if (cssChanged) files.push([cssPath, css.endsWith("\n") ? css : css + "\n"]);
+    return { css, files };
+  };
+  // Dirty means a Save would write something: the rebuilt page or the CSS
+  // differs from what was last saved (selecting a component is not a change).
+  const realChange = () => {
+    const { css, files } = pageNow(editor);
+    return files[0][1] !== lastSaved || css !== (cssSaved === null ? cssAtLoad : cssSaved);
+  };
   editor.onReady(() => { cssAtLoad = editor.getCss(); baseline = editor.getHtml(); });
   // 2108-dptd: the <body> tag's classes and attributes on the canvas body,
   // display only (idempotent; the wrapper may re-render, so re-applied on
@@ -105,26 +117,93 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   if (readOnly) {
     banner("Read-only: no page at " + (loaded.page || "index.html") + " (document root from " + loaded.root_from + "). Nothing you do here is saved.");
   }
-  // Save on every change (debounced) through the editor's own storage. The
-  // built-in autosave counts changes it tracked itself, and with autoload off
-  // a change can go uncounted (measured: dirty count 0 after an edit).
-  // v4: never while the text editor is active (a store re-renders the
-  // component and the caret jumps to the start); typing saves once, on
-  // rte:disable. One save per pause, not per keystroke: each save is a commit.
+  // Operator ruling (2108-dptd): an explicit Save, one commit per click; no
+  // autosave commits. The button lights while there are unsaved changes; a
+  // Save with no real change commits nothing (the store's no-op check).
+  // GrapesJS's own dirty count can miss a change with autoload off (measured:
+  // 0 after an edit), so the studio tracks its own flag.
+  let dirty = false;
+  const draftKey = "studio-draft:" + loaded.page;
+  const draftStore = {
+    get() { try { return JSON.parse(localStorage.getItem(draftKey) || "null"); } catch { return null; } },
+    set(v) { try { localStorage.setItem(draftKey, JSON.stringify(v)); } catch {} },
+    clear() { try { localStorage.removeItem(draftKey); } catch {} },
+  };
+  const setDirty = (v) => {
+    dirty = v;
+    document.documentElement.setAttribute("data-studio-dirty", String(v));
+    const btn = editor.Panels.getButton("options", "studio-save");
+    if (btn) btn.set("active", v);
+  };
+  editor.Commands.add("studio-save", {
+    async run(ed) {
+      if (readOnly) return;
+      // Close the text editor first, so the typed text is in the model.
+      if (ed.getEditing()) ed.select(null);
+      try {
+        await ed.store();
+        setDirty(false);
+        draftStore.clear();
+        document.documentElement.setAttribute("data-studio-save", "saved");
+      } catch (e) {
+        document.documentElement.setAttribute("data-studio-save", "error");
+        alert("Not saved: " + (e && e.message ? e.message : e));
+      } finally {
+        ed.stopCommand("studio-save");
+      }
+    },
+  });
+  editor.onReady(() => {
+    if (readOnly) return;
+    editor.Panels.addButton("options", {
+      id: "studio-save", className: "fa fa-floppy-o", command: "studio-save",
+      attributes: { title: "Save (one commit)" },
+    });
+    // A crash-recovery draft from this browser, for this same page, only.
+    const d = draftStore.get();
+    if (d && d.doc === loaded.doc && (d.html !== baseline || d.css !== cssAtLoad)
+        && confirm("Restore your unsaved studio changes from " + new Date(d.at).toLocaleString() + "?")) {
+      editor.setComponents(innerOfBody(d.html));
+      editor.setStyle(d.css);
+      setDirty(true);
+    } else if (d) {
+      draftStore.clear();
+    }
+  });
+  const innerOfBody = (h) => StudioPage.innerOf(h);
+  // Local draft only, never a commit: written after a pause, never while the
+  // text editor is active (a re-render there moves the caret).
   let pending;
-  const schedule = () => {
-    if (readOnly || baseline === null) return;
-    document.documentElement.setAttribute("data-studio-save", "scheduled");
+  const draft = () => {
     clearTimeout(pending);
-    pending = setTimeout(() => (editor.getEditing() ? null : editor.store()), 1500);
+    pending = setTimeout(() => {
+      if (editor.getEditing()) return;
+      draftStore.set({ doc: loaded.doc, html: editor.getHtml(), css: editor.getCss(), at: Date.now() });
+    }, 1000);
   };
   editor.on("update component:add component:remove component:update component:styleUpdate", () => {
-    if (editor.getEditing()) return;
-    schedule();
+    if (readOnly || baseline === null) return;
+    // While typing the model lags the text box; the check runs when it closes.
+    if (editor.getEditing()) return setDirty(true);
+    check();
   });
-  editor.on("rte:disable", schedule);
+  let checking;
+  const check = () => {
+    clearTimeout(checking);
+    checking = setTimeout(() => {
+      if (editor.getEditing()) return;
+      setDirty(realChange());
+      if (dirty) draft(); else draftStore.clear();
+    }, 300);
+  };
+  editor.on("rte:disable", check);
+  window.addEventListener("beforeunload", (e) => {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
   // Fixture hook (scripts/lua/test-studio-grapesjs.lua): one real edit, saved
-  // by the editor's own autosave, proves the browser path end to end.
+  // by the Save command, proves the browser path end to end.
   if (location.hash === "#selftest") {
     const mark = (k, v) => document.documentElement.setAttribute("data-selftest-" + k, String(v));
     editor.on("storage:start:store", () => mark("store", "started"));
@@ -132,7 +211,8 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
     editor.on("storage:error", (e) => mark("error", e && e.message ? e.message : e));
     editor.onReady(() => {
       editor.addComponents("<p>studio-selftest</p>");
-      mark("dirty", editor.getDirtyCount());
+      mark("dirty", realChange());
+      editor.runCommand("studio-save");
     });
   }
 })();

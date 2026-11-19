@@ -145,7 +145,12 @@ arms++;
   check(7, outv4 === want, JSON.stringify(outv4));
   const lost = page.rebuild(d, now.replace("<!--studio-keep:0-->", ""), null, { baseline: base, css: "" });
   check(7, lost.includes('var q = "<b>";') && !lost.includes("iriib") && !lost.includes("ijvv2"), JSON.stringify(lost));
-  check(7, editor.includes('editor.on("rte:disable", schedule)') && /if \(editor\.getEditing\(\)\) return;/.test(editor) && editor.includes("StudioPage.protect(loaded.html") && editor.includes("files[0][1] === lastSaved"), "editor-saves-while-typing-or-unprotected");
+  check(7, editor.includes('editor.on("rte:disable", check)') && /if \(editor\.getEditing\(\)\) return setDirty\(true\);/.test(editor) && editor.includes("StudioPage.protect(loaded.html") && editor.includes("files[0][1] === lastSaved"), "editor-saves-while-typing-or-unprotected");
+  // Operator ruling: an explicit Save (one commit per click), never an
+  // autosave commit; a beforeunload guard; the autosave is a local draft only.
+  check(7, editor.includes('editor.Commands.add("studio-save"') && editor.includes('command: "studio-save"'), "no-save-button");
+  check(7, (editor.match(/\.store\(\)/g) || []).length === 1 && /await ed\.store\(\);\s*setDirty\(false\)/.test(editor), "a-store-outside-the-save-command");
+  check(7, editor.includes('addEventListener("beforeunload"') && editor.includes("localStorage.setItem(draftKey"), "no-unload-guard-or-draft");
   arms++;
 }
 
