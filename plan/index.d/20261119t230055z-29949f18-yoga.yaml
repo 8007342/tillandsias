@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-strict-fragments-refuses-a-duplicate-order-token-and-next-order-names-no-bare-order-beside-the-minted-one
+    field: next_action
+    value: |-
+      Write the duplicate-order fixture first and watch check --strict-fragments pass it; then add the order-uniqueness refusal and reword the advisory.
+
+
+      [2026-11-19T23:00:55Z yoga] Released by yoga 2026-11-19 (coordinator direction). The implementation is one commit, 6d84bb533 on origin/work/1903-sj5t (re-pushed 2026-11-19; 3 files, +187): check --strict-fragments refuses one order on two packet_ids, and the next-order advisory cites no order. PR #676 was CLOSED unmerged 2026-11-17 in the stale-draft triage. Left: merge origin/linux-next into the ref, run scripts/relay-preflight.sh, open a PR, land it. yoga holds no further local WIP.
+    ts: "2026-11-19T23:00:55Z"
+    host: yoga
+
+events:
+  - packet_id: check-strict-fragments-refuses-a-duplicate-order-token-and-next-order-names-no-bare-order-beside-the-minted-one
+    event:
+      type: progress
+      ts: "2026-11-19T23:00:55Z"
+      host: yoga
+      summary: |-
+        status 'Write the duplicate-order fixture first and watch check --strict-fragments pass it; then add the order-uniqueness refusal and reword the advisory.
+        
+        
+        [2026-11-19T23:00:55Z yoga] Released by yoga 2026-11-19 (coordinator direction). The implementation is one commit, 6d84bb533 on origin/work/1903-sj5t (re-pushed 2026-11-19; 3 files, +187): check --strict-fragments refuses one order on two packet_ids, and the next-order advisory cites no order. PR #676 was CLOSED unmerged 2026-11-17 in the stale-draft triage. Left: merge origin/linux-next into the ref, run scripts/relay-preflight.sh, open a PR, land it. yoga holds no further local WIP.' (not terminal) with evidence_refs: b639b1b17
+  - packet_id: check-strict-fragments-refuses-a-duplicate-order-token-and-next-order-names-no-bare-order-beside-the-minted-one
+    event:
+      type: note
+      ts: "2026-11-19T23:00:55Z"
+      host: yoga
+      summary: |-
+        release at coordinator direction
