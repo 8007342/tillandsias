@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: provider-device-sign-in-is-budgeted-by-the-provider-window-not-the-container-default
+    field: status
+    value: implemented
+    ts: "2026-11-19T23:49:04Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: provider-device-sign-in-is-budgeted-by-the-provider-window-not-the-container-default
+    event:
+      type: note
+      ts: "2026-11-19T23:49:04Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19: retired status normalized (coordinator ruling); was 'claimed' (macbookair, no activity since 2026-10-28); fix PR #688 merged

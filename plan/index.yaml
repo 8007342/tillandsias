@@ -42727,7 +42727,14 @@ plan_index:
             CORRECTION to this packet's context, before the quote spreads: the cited "zero masked producer failures exist in 249 executed tests" is sharpened by 901-jtvi batch 1 to LATENT, NOT ABSENT. The seven converted sites were `cargo test … | grep -q 'test result: ok'`, and that invocation emits TWO 'test result:' lines — one binary failing while another passes still matches the passing line and reports SUCCESS, with cargo's non-zero exit discarded. The suite-wide pipefail sweep found nothing because everything currently passes; the pipelines were waiting for the first failure, in the assertion that reports whether our tests pass. This does not weaken the packet's thrust (blanket pipefail still produced 4 false positives and 0 true ones) — it strengthens the migration's case relative to both.
 
     - packet_id: gate-cycle-runs-a-flat-list-instead-of-a-plan
-      split_into: gate-shared-ledger-parse,archiver-check-internal-profile,gate-ledger-native-fs-staging-windows
+      split_into:
+        - gate-shared-ledger-parse
+        - archiver-check-internal-profile
+      notes: |
+        Triage 2026-11-19 (calmecacpilli, coordinator ruling): split_into was one
+        comma-joined string; it is now a list. Its third entry,
+        gate-ledger-native-fs-staging-windows, names no packet in the ledger, so it
+        moved here as an intended-but-unfiled slice (Windows native-fs ledger staging).
       order: 941-trcf
       status: blocked
       title: |
