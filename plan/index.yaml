@@ -661,6 +661,97 @@ capabilities:
         host_kind: windows
       timestamp: "2026-09-12T04:07:21.223908100+00:00"
       probe_identity: 0.4.260819+dd67baad90407fa3
+  # calmecacpilli: floor tier (8GB RAM, i7-4650U), ledger/paperwork; coordinator ruling macuahuitl-fedora 2026-11-19
+  - ts: "2026-11-19T23:07:14Z"
+    host: linux_immutable
+    locus: bare-metal
+    document:
+      {
+        "schema_version": 3,
+        "legacy_tier": "cpu",
+        "devices": [
+          {
+            "device_class": "cpu",
+            "vendor": "intel",
+            "name": "Intel(R) Core(TM) i7-4650U CPU @ 1.70GHz",
+            "device_node": null,
+            "fw_version": null,
+            "driver": null,
+            "usable": true,
+            "unusable_reason": null,
+            "policy_unscheduled": null,
+            "lanes": [
+              "container",
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": [
+              "fma",
+              "avx",
+              "avx2"
+            ],
+            "cpu_cores": {
+              "physical": 2,
+              "logical": 4
+            },
+            "system_ram_gb": 7.683540344238281,
+            "name_source": "measured",
+            "memory_model": null,
+            "vram_gb": null
+          },
+          {
+            "device_class": "gpu",
+            "vendor": "intel",
+            "name": "Haswell-ULT Integrated Graphics Controller",
+            "device_node": "/dev/dri/renderD128",
+            "fw_version": null,
+            "driver": "i915",
+            "usable": false,
+            "unusable_reason": "intel-compute-runtime-missing",
+            "policy_unscheduled": null,
+            "lanes": [
+              "host-native"
+            ],
+            "memory_bandwidth_gbps": null,
+            "memory_bandwidth_source": "unknown",
+            "cpu_flags": null,
+            "cpu_cores": null,
+            "system_ram_gb": null,
+            "name_source": "measured",
+            "memory_model": null,
+            "vram_gb": null
+          }
+        ],
+        "engines": [
+          {
+            "name": "ollama",
+            "backend": "llama-server",
+            "supported_device_classes": [
+              "cpu",
+              "gpu"
+            ],
+            "lanes": [
+              "container"
+            ]
+          }
+        ],
+        "measurements": [],
+        "host": {
+          "is_battery_present": true,
+          "kernel_release": "7.2.15-300.fc45.x86_64",
+          "host_id": "calmecacpilli",
+          "host_id_source": "node-name",
+          "host_kind": "linux",
+          "side": "native-linux"
+        },
+        "timestamp": "2026-11-19T23:07:15.546694335+00:00",
+        "probe_identity": "56.11.4+6919ebe049230588",
+        "enumeration_gaps": [],
+        "hardware_fingerprint": "hw2-3002084434df78cb",
+        "render_nodes": [],
+        "envelope_source": "measured"
+      }
 plan_index:
   version: v1
   root: plan/
