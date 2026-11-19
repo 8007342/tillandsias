@@ -9,63 +9,62 @@ size: e2e
 preconditions:
   - podman is installed and running in rootless mode
   - forge image is available (tillandsias-forge:*)
-  - jq is available for JSON parsing
   - /tmp has write access for test ephemeral containers
   - test workspace directory can be created at ~/.cache/tillandsias/test-*
 
 critical_path:
   - step: "baseline: verify forge image exists"
-    command: "scripts/litmus-helper-storage-isolation.sh check-image"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- check-image"
     timeout_ms: 10000
     expected_behavior: "FORGE_IMAGE_OK"
 
   - step: "create test project directories: project-a and project-b"
-    command: "scripts/litmus-helper-storage-isolation.sh create-dirs"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- create-dirs"
     timeout_ms: 5000
     expected_behavior: "TEST_DIRS_CREATED"
 
   - step: "launch project-a forge container with volumes: src RO, workspace RW"
-    command: "scripts/litmus-helper-storage-isolation.sh launch-project-a"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- launch-project-a"
     timeout_ms: 15000
     expected_behavior: "PROJECT_A_LAUNCHED"
 
   - step: "launch project-b forge container with separate volumes"
-    command: "scripts/litmus-helper-storage-isolation.sh launch-project-b"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- launch-project-b"
     timeout_ms: 15000
     expected_behavior: "PROJECT_B_LAUNCHED"
 
   - step: "test project-a: verify /src is read-only (EROFS on write)"
-    command: "scripts/litmus-helper-storage-isolation.sh verify-src-readonly"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- verify-src-readonly"
     timeout_ms: 10000
     expected_behavior: "SRC_READONLY_VERIFIED"
 
   - step: "test project-a: verify /workspace is read-write"
-    command: "scripts/litmus-helper-storage-isolation.sh verify-workspace-rw"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- verify-workspace-rw"
     timeout_ms: 10000
     expected_behavior: "WORKSPACE_RW_VERIFIED"
 
   - step: "test project-b: verify /workspace is isolated (no project-a files)"
-    command: "scripts/litmus-helper-storage-isolation.sh verify-workspace-isolation"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- verify-workspace-isolation"
     timeout_ms: 10000
     expected_behavior: "WORKSPACE_ISOLATION_VERIFIED"
 
   - step: "test project-a: verify /tmp is ephemeral (new tmpfs on container start)"
-    command: "scripts/litmus-helper-storage-isolation.sh verify-tmp-ephemeral"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- verify-tmp-ephemeral"
     timeout_ms: 10000
     expected_behavior: "TMP_EPHEMERAL_VERIFIED"
 
   - step: "relaunch project-a and verify /tmp is clean (ephemeral)"
-    command: "scripts/litmus-helper-storage-isolation.sh verify-tmp-clean-relaunch"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- verify-tmp-clean-relaunch"
     timeout_ms: 15000
     expected_behavior: "TMP_EPHEMERAL_CONFIRMED"
 
   - step: "verify project-a workspace persists across container restarts"
-    command: "scripts/litmus-helper-storage-isolation.sh verify-workspace-persistence"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- verify-workspace-persistence"
     timeout_ms: 5000
     expected_behavior: "WORKSPACE_PERSISTENCE_VERIFIED"
 
   - step: "cleanup: remove test containers and directories"
-    command: "scripts/litmus-helper-storage-isolation.sh cleanup"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-storage-isolation.lua --timeout 3m -- cleanup"
     timeout_ms: 15000
 
 observability:
