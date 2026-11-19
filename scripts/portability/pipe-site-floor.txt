@@ -531,11 +531,6 @@ scripts scripts/smoke-consecutive-lanes.sh 4
 scripts scripts/spec-index-ensure.sh 7
 scripts scripts/stage-image-cheatsheets.sh 5
 scripts scripts/stamp-requirement-ids.sh 3
-scripts scripts/summarize-cargo.sh 10
-scripts scripts/summarize-go-mod.sh 8
-scripts scripts/summarize-package-json.sh 1
-scripts scripts/summarize-pubspec.sh 7
-scripts scripts/summarize-pyproject.sh 3
 scripts scripts/terminology-check-memo.sh 3
 scripts scripts/test-a-claim-names-a-workstation.sh 5
 scripts scripts/test-agent-identity.sh 4
@@ -816,7 +811,6 @@ scripts scripts/test-spec-index-repo-relative-rung.sh 3
 scripts scripts/test-spec-index-staging-capacity.sh 4
 scripts scripts/test-ssh-lane-sidecar.sh 6
 scripts scripts/test-status-channel-absent-is-first-class.sh 10
-scripts scripts/test-summarize-pubspec.sh 3
 scripts scripts/test-support/github-login-fake.sh 2
 scripts scripts/test-support/litmus-fake-podman-guard.sh 1
 scripts scripts/test-support/podman-mock.sh 25

@@ -23,7 +23,7 @@ committed_for_project: false
 ## Provenance
 
 - <https://github.com/8007342/tillandsias> — Tillandsias forge methodology and project bootstrap discipline
-- **Last updated:** 2026-04-27
+- **Last updated:** 2026-11-19
 
 ## Overview
 
@@ -115,7 +115,7 @@ Each line is a JSON object:
 
 ## Summarizer Interface
 
-Each language/framework gets a summarizer script (`summarize-<type>.sh`) under `/opt/summarizers/` in the forge image.
+A summarizer is a drop-in script (`summarize-<type>.sh`) under `/opt/summarizers/` or `<project>/.tillandsias/summarizers/`. No image populates `/opt/summarizers/` today and none ship in this repository (withdrawn, order 2114-sdj6); a project may add its own.
 
 **Contract**:
 ```bash
@@ -146,7 +146,7 @@ summarize-cargo.sh [path-to-Cargo.toml]
 ```
 
 **Registry**:
-- System summarizers live at `/opt/summarizers/` (forged in image)
+- System summarizers would live at `/opt/summarizers/` (no image populates it today)
 - Project-local summarizers at `<project>/.tillandsias/summarizers/` (optional, loaded by dispatcher)
 - Dispatcher walks both and invokes all
 
