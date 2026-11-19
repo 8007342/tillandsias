@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: bash-dialect-catch-gnu-bre-and-unguarded-source
+    field: next_action
+    value: |-
+      Add both idioms to scripts/check-bash-dialect.sh with a fixture arm each in scripts/test-bash-dialect.sh (a positive control for the portable form, so the rule cannot be satisfied by a scanner that flags everything). Sweep the existing corpus for further instances before turning the rule on; grandfather nothing silently.
+
+
+      [2026-11-19T23:53:45Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-bash-dialect.sh is now scripts/lua/check-bash-dialect.lua (250020c53, 1384-ddua). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:53:45Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: bash-dialect-catch-gnu-bre-and-unguarded-source
+    event:
+      type: note
+      ts: "2026-11-19T23:53:45Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage: cited file deleted on trunk
