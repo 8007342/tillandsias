@@ -175,7 +175,7 @@ Domains not present trip the manual-review gate.
 
 ## 5. Cheatsheet ↔ source binding & validation
 
-`scripts/check-cheatsheet-sources.sh`:
+`scripts/lua/check-cheatsheet-sources.lua`:
 1. Parse every cheatsheet's `## Provenance` for URL lines and `local:` paths.
 2. For each URL, look up in `INDEX.json`. Missing → ERROR.
 3. For each `local:` path, confirm file exists OR `.meta.yaml` exists with `redistribution: do-not-bundle`.
@@ -241,7 +241,7 @@ Effort: ~2 hours of supervised fetcher runs (~1 minute per URL, mostly automatab
 ### Chunk 1 — tooling
 - `scripts/fetch-cheatsheet-source.sh`
 - `scripts/regenerate-source-index.sh` + `--check` mode
-- `scripts/check-cheatsheet-sources.sh`
+- `scripts/lua/check-cheatsheet-sources.lua`
 - `scripts/refresh-cheatsheet-sources.sh [--max-age-days N]`
 - `scripts/audit-cheatsheet-sources.sh` (CSV migration triage)
 - `cheatsheet-sources/license-allowlist.toml`
@@ -261,7 +261,7 @@ Mechanical rewrite of every Provenance section to add `local:` paths and license
 Commit: `chore(cheatsheets): bind Provenance sections to verbatim local sources`
 
 ### Chunk 4 — CI / validation hook
-Wire `scripts/check-cheatsheet-sources.sh` into `openspec validate` and pre-commit. `[verified: <sha-prefix>]` suffix on each INDEX.md line.
+Wire `scripts/lua/check-cheatsheet-sources.lua` into `openspec validate` and pre-commit. `[verified: <sha-prefix>]` suffix on each INDEX.md line.
 
 Commit: `feat(ci): validate cheatsheet ↔ verbatim-source binding on every commit`
 

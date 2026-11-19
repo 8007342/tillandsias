@@ -189,7 +189,14 @@ got2="$(env -i PATH="$NOCARGO" HOME="$W/home" bash -c '
 #      fresh or re-imaged host looks like. GIT_CONFIG_NOSYSTEM and an empty HOME
 #      remove the global and system files; without both, the runner's own
 #      identity leaks in and the arm passes for the wrong reason.
-GUARD="$ROOT/scripts/check-committable-branch.sh"
+GUARD="$ROOT/scripts/lua/check-committable-branch.lua"
+# The guard is a Lua decider (2100-vkpg carry): run it on the plan binary by
+# ABSOLUTE path, since the arms below farm PATH down to bash + git. The runner
+# scrubs GIT_CONFIG_*/GIT_AUTHOR_* from the child (child_env.rs), so the empty
+# HOME plus user.useConfigOnly is what makes the no-identity arm hermetic.
+GUARD_PLAN="${TILLANDSIAS_SCRIPT_RUNNER_BIN:-}"
+[ -n "$GUARD_PLAN" ] || GUARD_PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || GUARD_PLAN=""
+case "$GUARD_PLAN" in ./*) GUARD_PLAN="$ROOT/${GUARD_PLAN#./}" ;; esac
 mkdir -p "$W/norepo"
 git init -q "$W/noident"
 # HOST-REGIME NOTE. On pirria the hostname is `pirria.(none)` and git refuses
@@ -202,7 +209,7 @@ git init -q "$W/noident"
 ( cd "$W/noident" && git config user.useConfigOnly true )
 ( cd "$W/noident" && git checkout -q -b linux-next 2>/dev/null || true )
 got="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
-        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
+        "$GUARD_PLAN" script run "$GUARD" 2>/dev/null)"
 [ "$got" = "blocked:no-git-identity" ] \
     && ok "a host with no git identity is refused (blocked:no-git-identity)" \
     || bad "no-identity host — want blocked:no-git-identity, got: $got"
@@ -210,7 +217,7 @@ got="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
 # The remedy must be PRINTED, not implied: the measured incident cost a whole
 # cycle's work because the failure named no fix at the point it was hit.
 remedy="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
-        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>&1 >/dev/null)"
+        "$GUARD_PLAN" script run "$GUARD" 2>&1 >/dev/null)"
 case "$remedy" in
     *"git config user.email"*) ok "the refusal names the exact git config remedy" ;;
     *) bad "the refusal does not name the remedy: $remedy" ;;
@@ -220,7 +227,7 @@ esac
 # stop every healthy host in the fleet.
 ( cd "$W/noident" && git config user.name t && git config user.email t@example.invalid )
 got="$(cd "$W/noident" && env -i PATH="$NOCARGO" HOME="$W/empty-home" \
-        GIT_CONFIG_NOSYSTEM=1 bash "$GUARD" 2>/dev/null)"
+        "$GUARD_PLAN" script run "$GUARD" 2>/dev/null)"
 case "$got" in
     ok:branch-*) ok "an identity present passes the guard ($got)" ;;
     *) bad "identity present — want ok:branch-*, got: $got" ;;

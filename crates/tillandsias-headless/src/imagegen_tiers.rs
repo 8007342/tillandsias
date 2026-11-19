@@ -36,6 +36,10 @@ pub const PERMISSIVE_LICENCES: &[&str] = &[
     // 1954-dvz9 obligations spec carries it.
     "openrail",
     "openrail-m",
+    // Operator ruling 2026-11-14 (order 2090-ausx): CC BY 4.0, with its
+    // attribution obligation (licence_consent::obligations_for "cc-by-4.0");
+    // the register row's comment records the credit line.
+    "cc-by-4.0",
 ];
 
 /// Never shippable, whatever a row's licence column claims (design.md section 3).

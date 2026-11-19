@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-17 at the coordinator's direction: item 3 of the 2096-e3te fix plan, held behind
+# the job-queue rules (2094-ay52, PR #1131, still draft) so nobody codes against draft rules.
+packets:
+  - packet_id: a-live-session-defers-enclave-replacement-to-its-boundary-through-the-job-queue-and-the-tray-says-so
+    order: 2104-7t7p
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [enclave, ca, vault, proxy, job-queue, tray-status]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    depends_on:
+      - squid-survives-a-transient-resolver-failure-and-the-in-vm-github-login-survives-a-proxy-restart
+    title: "While a session (login, forge, studio) holds the enclave, a stale-CA or stale-image replacement of the proxy or the Vault is queued as a job that runs at the session boundary, never raced, and the tray shows one status line"
+    context: |
+      OPERATOR RULE 2026-11-17 (yolanda): the enclave is ephemeral and thrown away freely, but only at a session
+      boundary. 2096-e3te measured the failure: a CA re-mint mid-login made ensure_proxy_running replace the
+      proxy ("proxy CA is stale ... replacing the proxy") and the Vault was recreated on a fresh volume, so the
+      login's token write hit "Failed to connect to vault port 8200". 2096-e3te stops the re-mint itself; this
+      packet makes ANY replacement wait for the boundary. Coordinator: the queued replacement and its trigger
+      go through the 2094-ay52 job-queue rules so the babysitter sees them.
+    exit_criteria:
+      - "With a GitHub login session open, a caller that finds the proxy CA stale does NOT replace the proxy or the Vault; it submits a replacement job and returns. The proxy's container id and the Vault's container id and volume are unchanged until the session ends. Pre-fix result: FAILS, ensure_proxy_running replaces the proxy at once."
+      - "When the session ends, the queued replacement runs once through queue.submit, and queue.status shows it (the babysitter's view)."
+      - "While the replacement is pending, the tray shows one line naming it (e.g. 'Enclave refresh waits for the login to finish')."
+    next_action: "HOLD: do not start until 2094-ay52 (queue-submit-starts-a-declared-job-only-when-the-host-has-room-and-lanes-take-turns, PR #1131) lands; that row is not on trunk yet, so it cannot be a depends_on edge. Add the edge when it lands."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-enclave-replacement-waits-for-session-boundary.yaml lands in the same commit as the implementation (1136-n8sh)"
+    provenance: "2096-e3te notes (yolanda 2026-11-17); operator ruling in the yolanda session; coordinator direction."
+    events:
+      - type: filed
+        ts: "2026-11-18T01:30:00Z"
+        host: yolanda
+        summary: "filed as 2096-e3te item 3, held behind 2094-ay52 (#1131 draft)"
