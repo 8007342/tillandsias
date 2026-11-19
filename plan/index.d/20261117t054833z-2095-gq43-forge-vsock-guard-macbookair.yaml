@@ -31,4 +31,4 @@ packets:
   next_action: 'Land PR #1128 through the queue.'
   provenance: macbookair-macos 2026-11-17, split from #1107 (closed, superseded by #1121) at the coordinator's request.
   events:
-  - {type: filed, ts: '2026-11-17T06:00:00Z', host: macbookair, summary: filed with PR #1128}
+  - {type: filed, ts: '2026-11-17T06:00:00Z', host: macbookair, summary: 'filed with PR #1128'}
