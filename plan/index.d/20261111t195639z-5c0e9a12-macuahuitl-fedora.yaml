@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story headless-host-v05 — operator answer to OQ-3 (2026-11-11), triage 2080-294s.
+packets:
+  - packet_id: every-tray-action-has-a-headless-cli-equivalent-and-a-check-is-red-on-one-that-does-not
+    order: 2082-fidv
+    status: ready
+    kind: enhancement
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: headless-host-v05
+    capability_tags: [headless, cli, parity, rust, lua]
+    estimated_hours: 4
+    title: |
+      A Linux host with no tray (a Raspberry Pi fleet node, a server with no desktop) runs the headless tillandsias, as the macOS VM and WSL2 guest already do, and nothing proves every tray action is reachable from the CLI; a check maps each tray menu action to its CLI verb and is red on one with none.
+    context: |
+      Operator answer to OQ-3, 2026-11-11: the CLI works normally there (tillandsias --claude --cloud 8007342/<project> opens an interactive terminal; --github-login and --cloudflare-login work). Related rows: 1291-38mt (aarch64 Pi install), 683-2n4k (--init refuses from the headless lane), 945-vpg3 (Windows headless forge launch), 273 (guest agent-attach argv), 628-r2vk (parity-matrix railguard). Table is Lua data; the check reads the tray action registries on all three trays.
+    exit_criteria:
+      - 'the check lists every tray action on Linux, macOS and Windows trays and fails on one with no CLI verb; today there is no table, so it fails'
+      - 'on an aarch64 Linux host with no desktop session, --github-login, --cloudflare-login and --claude --cloud <project> each complete'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity check is the deliverable; write it in the same commit and move this text into verifiable_closure.'
+    next_action: 'Nothing is done. Enumerate the tray action registries first, then write the Lua table and check.'
+    provenance: operator answer OQ-3 2026-11-11 via coordinator; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1291-38mt, 683-2n4k, 945-vpg3, 273, 628-r2vk]
+    events:
+      - {type: filed, ts: '2026-11-11T19:56:39Z', host: macuahuitl-fedora, summary: filed p1 from the OQ-3 operator answer}
+  - packet_id: the-cloudflare-work-queue-carries-preview-and-dev-wrangler-container-jobs-a-headless-host-can-take
+    order: 2082-tusw
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    story: headless-host-v05
+    capability_tags: [cloudflare, fleet, wrangler, rust]
+    estimated_hours: 6
+    title: |
+      After --cloudflare-login a headless host joins the Cloudflare work queue, but the queue has no job types for starting a preview wrangler container or a dev wrangler container; add both, so work can be delegated to an always-on host and a build is tested on its public hostname (for example alpha.demonattack.tlatoani.net) without spending Cloudflare build minutes.
+    context: |
+      Operator answer to OQ-3, 2026-11-11. Builds on the rendezvous and lease machine (1548-9n28, 1548-5t00); the public hostname mapping from a home host is 378 (tunnel + DNS), annotated, not refiled. Respects cloud-builds-are-intentional-only and one-cloud-build-per-day: the wrangler container runs locally and costs no Cloudflare build minutes. Idle ruling: the container is an on-demand class (1800-465n) and the host waits on the queue by event or exponential backoff, never a fixed short poll.
+    exit_criteria:
+      - 'a queued preview-wrangler job is leased by a headless host, starts the container, and its URL answers on the mapped public hostname; a dev-wrangler job likewise; today neither job type exists'
+    unscoreable: 'unpinnable-until-the-guard-exists: the job-type fixture under a simulated queue is the deliverable.'
+    next_action: 'Nothing is done. Define the two job kinds in tillandsias-fleet-core first.'
+    provenance: operator answer OQ-3 2026-11-11 via coordinator; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1548-9n28, 1548-5t00, 378, 1800-465n, 1291-38mt]
+    events:
+      - {type: filed, ts: '2026-11-11T19:56:39Z', host: macuahuitl-fedora, summary: filed p2 from the OQ-3 operator answer}

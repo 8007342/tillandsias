@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: port-litmus-run-one-and-generate-icns-to-lua-and-delete-the-shell-originals-family-b-part-three
+    order: 2096-y7sx
+    status: in_progress
+    kind: cleanup
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-reduction, scripts, family-b, lua]
+    estimated_hours: 2
+    title: |
+      Family B part 3: port the two still-useful hand-run unreferenced shell scripts (litmus-run-one, generate_icns) to scripts/lua and delete the .sh originals
+    context: |
+      Operator ruling 2026-11-17 (Lua first). litmus-run-one.lua builds its scratch root under target/ (fs.write is repo-confined) and maps the runner's rc to ok/violation; verified on macuahuitl with litmus-accel-capability-probe-contract-shape (PASS, exit 0, scratch dir removed). generate-icns.lua is macOS-only; on Linux it exits 3 could-not-run:generate-icns:sips-16 as designed; it has not been run on darwin.
+    exit_criteria:
+      - 'tillandsias-plan script run scripts/lua/litmus-run-one.lua -- <an instant litmus file> exits 0 with ok:litmus-run-one:<name>'
+      - 'on a darwin host, tillandsias-plan script run scripts/lua/generate-icns.lua exits 0 and rewrites icon.icns'
+    verifiable_closure: 'run both commands above; git ls-files scripts/litmus-run-one.sh generate_icns.sh prints nothing'
+    unscoreable: 'none.'
+    next_action: 'Land the work/2096-y7sx PR; a macOS host runs generate-icns.lua once to confirm the darwin path.'
+    provenance: operator ruling 2026-11-17 relayed by the coordinator; ported on macuahuitl by a Claude agent.
+    depends_on: []
+    related: [2094-amtg, 2095-m87j]
+    events:
+      - {type: filed, ts: '2026-11-17T22:30:00Z', host: macuahuitl-fedora, summary: filed in_progress by macuahuitl-fedora}

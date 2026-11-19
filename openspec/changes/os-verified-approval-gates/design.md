@@ -1,3 +1,5 @@
+> Superseded in part by `specs/approval-human-gate` (operator ruling 2026-11-16: the threat model is ungated agent action, not identity; signer identity, allowed_signers, FIDO2 and cross-host verification are deferred).
+
 ## Context
 
 Cost-bearing actions reach the cloud through three host-side doors:

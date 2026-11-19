@@ -1,0 +1,75 @@
+# The admission queue's policy, as data (orders 2094-ay52, 2095-kgdj).
+#
+# Design: openspec/changes/job-admission-and-host-watch, sections 2.2, 3.2,
+# 5 and 11. The three classes and their reserves were approved as proposed by
+# the operator on 2026-11-17 (ruling 6). Figures marked "proposed" in the
+# design are starting values for the operator to change, here and only here.
+#
+# Read once at tray start by crate::job_queue::Policy. The per-host running
+# limit of `build` comes from tillandsias_core::forge_budget::ForgeBudget, so
+# no second sizing rule exists.
+
+# Refused at submission beyond this many queued jobs in one lane.
+max_queued_per_lane = 16
+# Retry a lane-queue-full refusal after this long (proposed).
+lane_full_retry_after_seconds = 300
+# A lane's head job skipped this many times becomes `reserved`.
+reserved_after_skips = 3
+# A job admitted this recently still has its reserve subtracted from
+# MemAvailable: it has not yet taken the memory it will take.
+recent_admission_seconds = 120
+# The pressure level must have been calm this long; a `pressure` hold says so.
+calm_after_seconds = 60
+# The bundle size callers are told to aim for (proposed).
+bundle_minutes = 30
+# The watch restart budget of 2081 (ceiling, not a default to widen).
+max_restarts = 3
+restart_window_minutes = 30
+# watch.wait blocks at most this long: under the harness's 10-minute limit.
+wait_max_minutes = 9
+# A job stopped for memory and requeued this many times ends `escalated`.
+max_requeues = 3
+# Back-off before a requeued job may be admitted again (proposed).
+requeue_backoff_seconds = [120, 600, 1800]
+# At most one queue-started job is stopped per this many seconds.
+stop_interval_seconds = 120
+# Failures never retried, matched as literals in a job's last log lines.
+never_retried = [
+    "No space left on device",
+    "Cannot allocate memory",
+    "Permission denied",
+]
+
+# The host's floor: MemAvailable must stay above the larger of these after a
+# job's reserve (proposed).
+[floor]
+min_gib = 4
+percent = 10
+
+[[class]]
+name = "light"
+meant_for = "a download, a render step, a script"
+reserve_min_gib = 1
+reserve_percent = 0
+running_limit = 8
+
+[[class]]
+name = "build"
+meant_for = "a compile or a test suite"
+reserve_min_gib = 4
+reserve_percent = 10
+# ForgeBudget::concurrent_forges_on_this_host()
+running_limit_from_forge_budget = true
+
+[[class]]
+name = "heavy"
+meant_for = "a release gate, an image build, a full test matrix"
+reserve_min_gib = 8
+reserve_percent = 25
+running_limit = 1
+
+# A job's memory ceiling is its reserve times this, never above
+# ceiling_max_percent of the host's memory (design 4.3, proposed).
+[ceiling]
+reserve_multiple = 3
+max_percent = 50

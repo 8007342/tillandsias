@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: delete-nine-obsolete-unreferenced-shell-scripts-whose-questions-are-answered-family-b-part-two
+    order: 2095-m87j
+    status: in_progress
+    kind: cleanup
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-reduction, scripts, family-b]
+    estimated_hours: 1
+    title: |
+      Family B part 2: delete nine unreferenced shell scripts whose subject is closed or duplicated (one-shot benches for completed orders, centicolon-backfill, diagnose-git-mirror, e2e-step1/3-linux, two refusal-calibration harnesses)
+    context: |
+      Operator ruling 2026-11-17: unreferenced non-test shell scripts must go. Each was re-derived unreferenced on origin/linux-next outside plan/, docs/ and the portability floors. Benches belong to completed orders (393, 926-bin4, 937-68n4); centicolon-backfill is superseded by the centicolon Lua graders; refusal is decided by margin (1820-m2kq completed), so the Tier B judge and the embedder rebuild harness are obsolete; e2e-step1/3-linux and diagnose-git-mirror duplicate one build.sh / tillandsias / podman run invocation. Recoverable from git history.
+    exit_criteria:
+      - 'git ls-files for the nine paths prints nothing; no floor file names them'
+    verifiable_closure: 'git ls-files scripts/centicolon-backfill.sh scripts/e2e-step1-linux.sh scripts/refusal-calibration/judge-support.sh prints nothing'
+    unscoreable: 'none.'
+    next_action: 'Land the work/2095-m87j PR into linux-next.'
+    provenance: operator ruling 2026-11-17 relayed by the coordinator; scanned on macuahuitl by a Claude agent.
+    depends_on: []
+    related: [2094-amtg, 2096-y7sx]
+    events:
+      - {type: filed, ts: '2026-11-17T22:10:00Z', host: macuahuitl-fedora, summary: filed in_progress by macuahuitl-fedora}

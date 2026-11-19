@@ -329,7 +329,6 @@ scripts scripts/attest-native-lint.sh 2
 scripts scripts/bench-accel-lane.sh 13
 scripts scripts/bench-hot-path-placement.sh 3
 scripts scripts/bench-inference-floor.sh 21
-scripts scripts/bench-semantic-budget.sh 7
 scripts scripts/build-guest-binaries.sh 6
 scripts scripts/build-image.sh 18
 scripts scripts/build-macos-tray.sh 2
@@ -340,7 +339,6 @@ scripts scripts/census-admitted-missing-evidence.sh 9
 scripts scripts/census-litmus-layer-classification.sh 5
 scripts scripts/census-litmus-step-enforcement.sh 4
 scripts scripts/census-sigpipe-verdict-pipelines.sh 6
-scripts scripts/centicolon-backfill.sh 10
 scripts scripts/centicolon-grade.sh 2
 scripts scripts/change-class.sh 3
 scripts scripts/check-added-fragments-parse.sh 3
@@ -414,7 +412,6 @@ scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
-scripts scripts/check-tray-string-corpus-drift.sh 2
 scripts scripts/check-unrunnable-platform-arms.sh 5
 scripts scripts/check-version-bump-isolation.sh 2
 scripts scripts/check-windows-only-sources-verified.sh 12
@@ -438,13 +435,10 @@ scripts scripts/dev-host-experts.sh 2
 scripts scripts/dev-inference-ensure.sh 16
 scripts scripts/diagnose-macos-provision.sh 3
 scripts scripts/diagnose-proxy.sh 4
-scripts scripts/dispatch-brief.sh 2
 scripts scripts/drain-queue.sh 8
 scripts scripts/e2e-preflight.sh 9
-scripts scripts/e2e-step1-linux.sh 6
 scripts scripts/e2e-step2-linux.sh 6
 scripts scripts/e2e-step2-macos.sh 3
-scripts scripts/e2e-step3-linux.sh 2
 scripts scripts/ensure-cosign.sh 2
 scripts scripts/ensure-nvidia-cdi.sh 10
 scripts scripts/finalize-cycle.sh 3
@@ -481,16 +475,13 @@ scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
-scripts scripts/litmus-run-one.sh 4
 scripts scripts/litmus-stdlib.sh 10
 scripts scripts/local-ci.sh 49
 scripts scripts/loop-status-metrics-audit.sh 3
 scripts scripts/loop-success-probe.sh 1
 scripts scripts/macos-tray-ax-smoke.sh 3
 scripts scripts/manage-cache.sh 12
-scripts scripts/measure-exec-wire-control-bytes.sh 7
 scripts scripts/measure-forge-spill.sh 1
-scripts scripts/measure-inference-tier.sh 12
 scripts scripts/meta-orchestration-worktree-guard.sh 1
 scripts scripts/mo-full-attest.sh 4
 scripts scripts/native-scratch-dir.sh 1
@@ -515,10 +506,8 @@ scripts scripts/record-expert-accuracy.sh 4
 scripts scripts/record-nix-cache-metrics.sh 8
 scripts scripts/refusal-calibration/apply-relabelled-561.sh 2
 scripts scripts/refusal-calibration/inject-negatives.sh 2
-scripts scripts/refusal-calibration/judge-support.sh 3
 scripts scripts/refusal-calibration/measure-bands.sh 1
 scripts scripts/refusal-calibration/measure-recall-at-k.sh 5
-scripts scripts/refusal-calibration/rebuild-index-with-embedder.sh 12
 scripts scripts/regenerate-readme.sh 8
 scripts scripts/relay-preflight.sh 13
 scripts scripts/release-freeze.sh 8
@@ -538,7 +527,6 @@ scripts scripts/select-work-batch.sh 43
 scripts scripts/selective-tillandsias-reset.sh 1
 scripts scripts/session-tokens.sh 1
 scripts scripts/smoke-consecutive-lanes.sh 4
-scripts scripts/smoke-test.sh 9
 scripts scripts/spec-index-ensure.sh 7
 scripts scripts/stage-image-cheatsheets.sh 5
 scripts scripts/stamp-requirement-ids.sh 3
@@ -648,7 +636,6 @@ scripts scripts/test-fragment-status-loss.sh 7
 scripts scripts/test-freshness-regime-budget.sh 22
 scripts scripts/test-gate-divergence-is-declared.sh 6
 scripts scripts/test-gate-memory-refusal.sh 1
-scripts scripts/test-gate-stamp-movers-batching-is-equivalent.sh 10
 scripts scripts/test-gate-stamp-names-content-movers.sh 5
 scripts scripts/test-gate-stamp-portable-digest.sh 1
 scripts scripts/test-gate-stamp-scope.sh 9
@@ -718,7 +705,6 @@ scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-structured-assert.sh 1
 scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
-scripts scripts/test-locale-coverage.sh 9
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
 scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
@@ -865,7 +851,6 @@ scripts scripts/update-convergence-dashboard.sh 32
 scripts scripts/validate-spec-cheatsheet-binding.sh 3
 scripts scripts/validate-traces.sh 17
 scripts scripts/verify-closure.sh 37
-scripts scripts/verify-image-usable.sh 1
 scripts scripts/verify-version-monotonic.sh 2
 scripts scripts/windows-host-capability-probe.sh 15
 scripts scripts/with-nix-builder.sh 4
