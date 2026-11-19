@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    field: status
+    value: in_progress
+    ts: "2026-11-19T22:57:57Z"
+    host: yoga
+
+events:
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    event:
+      type: progress
+      ts: "2026-11-19T22:57:57Z"
+      host: yoga
+      summary: |-
+        status 'in_progress' (not terminal) with evidence_refs: e38bf6d27
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    event:
+      type: note
+      ts: "2026-11-19T22:57:57Z"
+      host: yoga
+      summary: |-
+        claimed at macuahuitl-fedora's direction
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    event:
+      type: note
+      ts: "2026-11-19T22:57:57Z"
+      host: yoga
+      summary: |-
+        wip-override by yoga: coordinator assigned 2110-ghw2 directly (release blocker); stale holds reported to coordinator for triage — admitted past: refused:set-field:wip-limit:6/5 — yoga already holds 6 in_progress packet(s) outside a story: 1827-3rj4, 1903-sj5t, 1908-9q4c, 1911-3gqy, 1957-msjs, 2083-nfne (1367-2sbc; the limit is 5, from methodology/distributed-work.yaml packet_discipline.wip_limit).

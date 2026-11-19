@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: browser-forwarders-and-networks-leak-and-pin-the-shared-stack
+    field: next_action
+    value: |-
+      Label the forwarder, add the exit watcher, exclude -fwd- from the live-lane check, then the sweeper and cap.
+
+      [2026-11-19T23:00:56Z yoga] Released by yoga 2026-11-19 (coordinator direction). The implementation is one commit, dea0ee662 on origin/work/1911-3gqy (re-pushed 2026-11-19; 2 files, +156/-25): a browser window exit reaps its forwarder and network. PR #690 was CLOSED unmerged 2026-11-17 in the stale-draft triage. Left: merge origin/linux-next into the ref, run scripts/relay-preflight.sh, open a PR, land it. yoga holds no further local WIP.
+    ts: "2026-11-19T23:00:56Z"
+    host: yoga
+
+events:
+  - packet_id: browser-forwarders-and-networks-leak-and-pin-the-shared-stack
+    event:
+      type: progress
+      ts: "2026-11-19T23:00:56Z"
+      host: yoga
+      summary: |-
+        status 'Label the forwarder, add the exit watcher, exclude -fwd- from the live-lane check, then the sweeper and cap.
+        
+        [2026-11-19T23:00:56Z yoga] Released by yoga 2026-11-19 (coordinator direction). The implementation is one commit, dea0ee662 on origin/work/1911-3gqy (re-pushed 2026-11-19; 2 files, +156/-25): a browser window exit reaps its forwarder and network. PR #690 was CLOSED unmerged 2026-11-17 in the stale-draft triage. Left: merge origin/linux-next into the ref, run scripts/relay-preflight.sh, open a PR, land it. yoga holds no further local WIP.' (not terminal) with evidence_refs: b639b1b17
+  - packet_id: browser-forwarders-and-networks-leak-and-pin-the-shared-stack
+    event:
+      type: note
+      ts: "2026-11-19T23:00:56Z"
+      host: yoga
+      summary: |-
+        release at coordinator direction
