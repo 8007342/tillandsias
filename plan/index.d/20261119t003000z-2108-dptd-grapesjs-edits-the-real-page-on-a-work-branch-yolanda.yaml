@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda 2026-11-18 at macuahuitl-fedora's direction; the operator is waiting to author tlatoani.net.
+packets:
+  - packet_id: the-grapesjs-studio-edits-the-sites-real-page-losslessly-and-only-ever-on-a-work-branch
+    order: 2108-dptd
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, grapesjs, git]
+    estimated_hours: 4
+    owned_files:
+      - images/studio/studio-front.js
+      - images/studio/grapesjs/server.mjs
+      - images/studio/grapesjs/editor.html
+      - images/studio/grapesjs/vendor.mjs
+      - images/studio/Containerfile.grapesjs
+    title: "GrapesJS loads and saves the site's real page (wrangler assets.directory, else app_dir, else the root), keeps <html> attributes and <head> byte-identical, never commits on the default branch, and shows its icons with no CDN"
+    context: |
+      MEASURED 2026-11-18 on yolanda with tlatoani.net (static site in public/, wrangler.jsonc assets.directory):
+      GET /load returned {"html":""} (it reads the root index.html); saves target root index.html/styles.css; page()
+      rebuilds a bare head (drops title, meta, OG, inline style/script, html lang); font-awesome 4.7.0 loads from
+      cdnjs, unreachable in the enclave, so panel icons are missing; autosave fires 300 ms after any click; and the
+      forge-2 checkout was on main (discipline 0), so a save would commit on the auto-deploying branch.
+      Interim: forge-2 switched by hand to grapesjs/tlatoani-net-work/first-edit. Coordinator rulings: root from
+      wrangler assets.directory, else app_dir, else repo root; head preserved byte for byte; saves never on the
+      default branch, the studio switches to a work branch (2095-6cwr); no edit is saved when the root has no page.
+    exit_criteria:
+      - "GET /load on a public/index.html site returns that page's body. Pre-fix: FAILS ({html:''})."
+      - "A one-word edit produces a commit touching only public/index.html, with everything outside <body> byte-identical. Pre-fix: FAILS (root index.html, bare head)."
+      - "A save on a checkout whose branch is the default leaves the default branch unchanged and lands on a work branch. Pre-fix: FAILS (commits on main)."
+      - "The editor loads its icon font from the vendored copy; no cdnjs URL is referenced. Pre-fix: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the arms land in images/studio/studio-front.selftest.js and a grapesjs server selftest in the same commit (1136-n8sh)"
+    provenance: "tlatoani.net-forge findings relayed by macuahuitl-fedora 2026-11-18; yolanda reads of images/studio."
+    events:
+      - type: filed
+        ts: "2026-11-19T00:30:00Z"
+        host: yolanda
+        summary: "filed at the coordinator's direction"

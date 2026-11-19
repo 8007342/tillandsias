@@ -1523,12 +1523,14 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # landed — an unwired guard is inert, and inert is the 599-4wzr class.
     # The packet is windows-owned; if they give it a fail threshold, this
     # block should move to the tracked-failure shape the others use.
-    if [[ -f "scripts/check-tray-string-corpus-drift.sh" ]]; then
-        bash scripts/check-tray-string-corpus-drift.sh 2>&1 | tee /tmp/tray-string-corpus-drift.log || true
+    # 2094-ay52: ported to Lua (scripts/lua/check-tray-string-corpus-drift.lua).
+    _td_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _td_plan=""
+    if [[ -f "scripts/lua/check-tray-string-corpus-drift.lua" && -n "$_td_plan" ]]; then
+        "$_td_plan" script run scripts/lua/check-tray-string-corpus-drift.lua 2>&1 | tee /tmp/tray-string-corpus-drift.log || true
         log_pass "Tray string-corpus drift reported (792-77bt, informational)"
         archive_check_log "tray-string-corpus-drift" "pass" /tmp/tray-string-corpus-drift.log
     else
-        log_fail_missing_guard "tray-string-corpus-drift" "scripts/check-tray-string-corpus-drift.sh"
+        log_fail_missing_guard "tray-string-corpus-drift" "scripts/lua/check-tray-string-corpus-drift.lua (or no runnable tillandsias-plan)"
         archive_check_log "tray-string-corpus-drift" "skipped"
     fi
 
