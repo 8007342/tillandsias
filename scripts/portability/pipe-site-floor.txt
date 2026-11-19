@@ -123,7 +123,6 @@ litmus openspec/litmus-tests/litmus-gate-stamp-portable-digest.yaml 2
 litmus openspec/litmus-tests/litmus-gate-step-prefix-allocation.yaml 2
 litmus openspec/litmus-tests/litmus-generic-index-deterministic-subset.yaml 8
 litmus openspec/litmus-tests/litmus-gh-auth-script-shape.yaml 1
-litmus openspec/litmus-tests/litmus-git-delta-wait-shape.yaml 6
 litmus openspec/litmus-tests/litmus-git-mirror-dns-identity.yaml 1
 litmus openspec/litmus-tests/litmus-git-mirror-no-anonymous-daemon-write.yaml 1
 litmus openspec/litmus-tests/litmus-git-mirror-seed-failure-surfaced-shape.yaml 1
@@ -471,7 +470,6 @@ scripts scripts/lib-wsl-exec.sh 2
 scripts scripts/lib/no-tool-path.sh 1
 scripts scripts/lib/tool-materialize.sh 4
 scripts scripts/litmus-covering-specs.sh 9
-scripts scripts/litmus-git-delta-wait.sh 4
 scripts scripts/litmus-helper-event-driven.sh 6
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-stdlib.sh 10
