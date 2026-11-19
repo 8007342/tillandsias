@@ -106,4 +106,20 @@ const cf = readFileSync(join(here, "..", "Containerfile.grapesjs"), "utf8");
 check(5, /vendor\.mjs "\$FONT_AWESOME_VERSION" "\$FONT_AWESOME_INTEGRITY"/.test(cf), "font-awesome-not-vendored-in-image");
 arms++;
 
+// Arm 6: the canvas renders the page as it looks (pre-fix: white canvas, the
+// head's inline style never reached the frame): canvasLook yields the head's
+// inline CSS, local stylesheets under /site/ (never a remote one), and the
+// body's classes; the editor dresses the frame with them; the server serves
+// the document root read-only under /site/ and refuses a traversal.
+const look = page.canvasLook(
+  HEAD_PART.replace("</head>", '<link rel="stylesheet" href="./css/site.css"><link rel="stylesheet" href="https://cdn.example/x.css">\n</head>') + "x" + TAIL_PART,
+  "/site/");
+check(6, look.styles.length === 1 && look.styles[0] === "h1{color:#c33}", JSON.stringify(look.styles));
+check(6, look.links.length === 1 && look.links[0] === "/site/css/site.css", JSON.stringify(look.links));
+check(6, look.attrs.class === "home" && look.attrs["data-k"] === "v", JSON.stringify(look.attrs));
+check(6, /StudioPage\.canvasLook\(loaded\.doc, "\/site\/"\)/.test(editor) && editor.includes('editor.on("canvas:frame:load"'), "editor-does-not-dress-the-canvas");
+const srv = readFileSync(join(here, "server.mjs"), "utf8");
+check(6, /url\.pathname\.startsWith\("\/site\/"\)/.test(srv) && /staticFile\(res, base,/.test(srv), "server-has-no-site-route");
+arms++;
+
 process.stdout.write(`ok:studio-grapesjs-page:${arms}-arms\n`);

@@ -69,6 +69,37 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   const cssHref = "studio.css";
   let cssAtLoad = "";
   editor.onReady(() => { cssAtLoad = editor.getCss(); });
+  // 2108-dptd: render the page as it looks. The canvas frame gets a <base>
+  // at the site's root (so relative asset URLs resolve through /site/), the
+  // head's own stylesheets and inline <style>, and the <body> tag's classes.
+  // None of it enters the editor's components or CSS, so none of it is saved:
+  // the saved head is the original, byte for byte.
+  const look = StudioPage.canvasLook(loaded.doc, "/site/");
+  const dress = (frameDoc) => {
+    if (!frameDoc || frameDoc.documentElement.hasAttribute("data-studio-look")) return;
+    frameDoc.documentElement.setAttribute("data-studio-look", "1");
+    const head = frameDoc.head;
+    const base = frameDoc.createElement("base");
+    base.href = "/site/";
+    head.insertBefore(base, head.firstChild);
+    for (const href of look.links) {
+      const l = frameDoc.createElement("link");
+      l.rel = "stylesheet";
+      l.href = href;
+      head.appendChild(l);
+    }
+    for (const css of look.styles) {
+      const s = frameDoc.createElement("style");
+      s.textContent = css;
+      head.appendChild(s);
+    }
+    for (const [k, v] of Object.entries(look.attrs)) {
+      if (k === "class") v.split(/\s+/).filter(Boolean).forEach((c) => frameDoc.body.classList.add(c));
+      else if (!/^on/i.test(k)) frameDoc.body.setAttribute(k, v);
+    }
+  };
+  editor.on("canvas:frame:load", ({ window: w }) => dress(w && w.document));
+  editor.onReady(() => dress(editor.Canvas.getDocument()));
   if (readOnly) {
     banner("Read-only: no page at " + (loaded.page || "index.html") + " (document root from " + loaded.root_from + "). Nothing you do here is saved.");
   }

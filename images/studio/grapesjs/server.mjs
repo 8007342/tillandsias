@@ -27,7 +27,8 @@ const VENDOR = join(HERE, "vendor");
 const TYPES = {
   ".js": "text/javascript", ".css": "text/css", ".html": "text/html; charset=utf-8",
   ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".eot": "application/vnd.ms-fontobject",
-  ".svg": "image/svg+xml", ".otf": "font/otf",
+  ".svg": "image/svg+xml", ".otf": "font/otf", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif", ".ico": "image/x-icon", ".json": "application/json",
 };
 
 // JSONC: drop // and /* */ comments outside strings, then trailing commas.
@@ -124,6 +125,14 @@ export function start() {
       }
       if (req.method === "GET" && url.pathname === "/studio-page.js") {
         return send(res, 200, await readFile(join(HERE, "studio-page.js"), "utf8"), TYPES[".js"]);
+      }
+      // 2108-dptd: the site's own files (its stylesheets, images, fonts),
+      // read-only from the document root, so the canvas renders the page as
+      // it looks; the canvas resolves the page's relative URLs against /site/.
+      if (req.method === "GET" && url.pathname.startsWith("/site/")) {
+        const { root } = resolveRoot(PROJECT);
+        const base = normalize(join(PROJECT, root));
+        return staticFile(res, base, decodeURIComponent(url.pathname.slice("/site/".length)));
       }
       if (req.method === "GET" && url.pathname.startsWith("/vendor/")) {
         return staticFile(res, VENDOR, url.pathname.slice("/vendor/".length));

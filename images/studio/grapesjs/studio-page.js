@@ -41,7 +41,32 @@
     }
     return withLink(parts.before, cssHref) + inner + parts.after;
   }
-  const api = { rebuild, innerOf, split };
+  // What the canvas needs to render the page as it looks, never saved: the
+  // head's inline <style> text, its stylesheet links (relative ones resolved
+  // under `siteBase`), and the <body> open tag's attributes.
+  function canvasLook(doc, siteBase) {
+    const parts = split(String(doc || ""));
+    const head = parts ? parts.before : "";
+    const styles = [];
+    const links = [];
+    head.replace(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi, (_, css) => { styles.push(css); return ""; });
+    head.replace(/<link\b[^>]*>/gi, (tag) => {
+      if (!/\brel\s*=\s*["']?stylesheet/i.test(tag)) return "";
+      const m = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(tag);
+      const href = m && (m[1] || m[2] || m[3]);
+      if (!href || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(href)) return ""; // no remote stylesheet: the enclave cannot fetch it
+      links.push(siteBase + href.replace(/^\.?\//, ""));
+      return "";
+    });
+    const attrs = {};
+    const open = /<body\b([^>]*)>/i.exec(head);
+    if (open) open[1].replace(/([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g, (_, k, a, b, c) => {
+      attrs[k] = a ?? b ?? c ?? "";
+      return "";
+    });
+    return { styles, links, attrs };
+  }
+  const api = { rebuild, innerOf, split, canvasLook };
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.StudioPage = api;
 })(typeof window !== "undefined" ? window : globalThis);
