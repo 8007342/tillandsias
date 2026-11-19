@@ -148,8 +148,12 @@ arms++;
   check(7, editor.includes('editor.on("rte:disable", check)') && /if \(editor\.getEditing\(\)\) return setDirty\(true\);/.test(editor) && editor.includes("StudioPage.protect(loaded.html") && editor.includes("files[0][1] === lastSaved"), "editor-saves-while-typing-or-unprotected");
   // Operator ruling: an explicit Save (one commit per click), never an
   // autosave commit; a beforeunload guard; the autosave is a local draft only.
-  check(7, editor.includes('editor.Commands.add("studio-save"') && editor.includes('command: "studio-save"'), "no-save-button");
+  check(7, editor.includes('editor.Commands.add("studio-save"') && editor.includes('id: "studio-save"'), "no-save-button");
   check(7, (editor.match(/\.store\(\)/g) || []).length === 1 && /await ed\.store\(\);\s*setDirty\(false\)/.test(editor), "a-store-outside-the-save-command");
+  // Measured live (391b35635): setting a panel button's "active" flag RUNS its
+  // command, so marking dirty that way saved every edit on RTE close.
+  const code = editor.replace(/^\s*\/\/[^\n]*$/gm, "");
+  check(7, !/\.set\(\s*["']active["']/.test(code) && /togglable: false/.test(code) && code.includes('command: (ed) => ed.runCommand("studio-save")'), "dirty-state-can-run-the-save-command");
   check(7, editor.includes('addEventListener("beforeunload"') && editor.includes("localStorage.setItem(draftKey"), "no-unload-guard-or-draft");
   arms++;
 }

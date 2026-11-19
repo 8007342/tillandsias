@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="/vendor/font-awesome/css/font-awesome.min.css">
 <style>
 html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
+.gjs-pn-btn.studio-dirty { color: #ffca6f; text-shadow: 0 0 6px #ffca6f; }
 #studio-banner { position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; padding: 6px 10px;
   font: 13px system-ui, sans-serif; background: #7a2e00; color: #fff; }
 </style>
@@ -132,8 +133,10 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   const setDirty = (v) => {
     dirty = v;
     document.documentElement.setAttribute("data-studio-dirty", String(v));
+    // Shown as a class, NEVER the button's "active" flag: setting active on a
+    // panel button RUNS its command, which saved every edit (measured live).
     const btn = editor.Panels.getButton("options", "studio-save");
-    if (btn) btn.set("active", v);
+    if (btn) btn.set("className", "fa fa-floppy-o" + (v ? " studio-dirty" : ""));
   };
   editor.Commands.add("studio-save", {
     async run(ed) {
@@ -156,9 +159,15 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   editor.onReady(() => {
     if (readOnly) return;
     editor.Panels.addButton("options", {
-      id: "studio-save", className: "fa fa-floppy-o", command: "studio-save",
+      id: "studio-save", className: "fa fa-floppy-o", togglable: false,
+      // A click is the only caller of the Save command.
+      command: (ed) => ed.runCommand("studio-save"),
       attributes: { title: "Save (one commit)" },
     });
+    // Typing in the text editor fires no editor event; the frame's input does.
+    const watchInput = (doc) => doc && doc.addEventListener("input", () => { if (!readOnly) setDirty(true); });
+    watchInput(editor.Canvas.getDocument());
+    editor.on("canvas:frame:load:body", ({ window: w }) => watchInput(w && w.document));
     // A crash-recovery draft from this browser, for this same page, only.
     const d = draftStore.get();
     if (d && d.doc === loaded.doc && (d.html !== baseline || d.css !== cssAtLoad)
