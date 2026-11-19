@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: the-macos-tray-reads-its-icon-from-a-path-that-exists-only-inside-the-bundle-or-on-the-build-host-so-a-bare-binary-shows-t-and-the-two-tests-pin-the-build-hosts-source-tree-as-the-contract
+    event:
+      type: completed
+      ts: "2026-11-19T23:46:29Z"
+      agent_id: linux-calmecacpilli-claude-20261119t234629z
+      host: calmecacpilli
+      summary: |
+        Tech-debt triage (calmecacpilli, 2026-11-19). CLOSED on the recorded live PASS: progress 2026-09-23T22:40:22Z, '1b PASS on macbookair, installed via install-macos.sh v56.9.23.1'. Fix 3da4258f39 is an ancestor of tag v56.9.23.1 (git merge-base --is-ancestor). Coordinator rule 2026-11-19: host + release + date + version contains the fix.
