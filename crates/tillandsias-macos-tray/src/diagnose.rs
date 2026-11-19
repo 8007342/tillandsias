@@ -3717,9 +3717,9 @@ mod tests {
     #[test]
     fn every_fetch_site_forgets_the_stale_vault_credentials_2094_53uw() {
         // Production code only: the text before each file's test module.
-        let full = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let full = include_str!("diagnose.rs");
         let diag = &full[..full.find("#[cfg(test)]\nmod tests {").unwrap()];
-        let host = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/action_host.rs"));
+        let host = include_str!("action_host.rs");
         let host = &host[..host.find("#[cfg(test)]\nmod tests").unwrap_or(host.len())];
         let sites = diag.matches("fetch_fedora_cloud_image(&manifest").count()
             + host.matches("vz.fetch_fedora_cloud_image(").count();
