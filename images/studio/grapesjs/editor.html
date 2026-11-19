@@ -41,7 +41,10 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
     // The vendored icon font, never cdnjs (the enclave cannot reach it).
     cssIcons: "/vendor/font-awesome/css/font-awesome.min.css",
     protectedCss: "",
-    canvasCss: look.styles.join("\n"),
+    // GrapesJS's frameStyle paints the canvas body white; a page that puts its
+    // background on :root (tlatoani.net) would show white. Cleared BEFORE the
+    // page's CSS, so a page that styles body itself still wins.
+    canvasCss: ["body{background-color:transparent}"].concat(look.styles).join("\n"),
     canvas: { styles: look.links },
     components: loaded.html || "",
     storageManager: { type: "studio", autoload: false, autosave: false },

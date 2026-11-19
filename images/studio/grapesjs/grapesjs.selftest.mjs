@@ -121,7 +121,7 @@ check(6, look.styles.length === 1 && look.styles[0] === "h1{color:#c33}", JSON.s
 check(6, look.links.length === 1 && look.links[0] === "/css/site.css", JSON.stringify(look.links));
 check(6, look.attrs.class === "home" && look.attrs["data-k"] === "v", JSON.stringify(look.attrs));
 check(6, /StudioPage\.canvasLook\(loaded\.doc, "\/"\)/.test(editor), "editor-does-not-read-the-look");
-check(6, editor.includes('canvasCss: look.styles.join("\\n")') && editor.includes("canvas: { styles: look.links }"), "look-not-passed-through-grapesjs-canvas-options");
+check(6, editor.includes('canvasCss: ["body{background-color:transparent}"].concat(look.styles).join("\\n")') && editor.includes("canvas: { styles: look.links }"), "look-not-passed-through-grapesjs-canvas-options-or-white-body-kept");
 check(6, !editor.includes("project.json"), "a-save-still-writes-studio-state");
 const srv = readFileSync(join(here, "server.mjs"), "utf8").replace(/\/\/[^\n]*/g, "");
 check(6, /if \(req\.method === "GET"\) \{\s*const \{ root \} = resolveRoot\(PROJECT\);\s*return staticFile\(res, normalize\(join\(PROJECT, root\)\)/.test(srv), "no-document-root-fallback");
