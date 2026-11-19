@@ -46,7 +46,9 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
     // page's CSS, so a page that styles body itself still wins.
     canvasCss: ["body{background-color:transparent}"].concat(look.styles).join("\n"),
     canvas: { styles: look.links },
-    components: loaded.html || "",
+    // v4: <script>/<noscript>/<template> stay out of the editor (GrapesJS
+    // drops scripts); a save puts their original bytes back.
+    components: StudioPage.protect(loaded.html || "").html,
     storageManager: { type: "studio", autoload: false, autosave: false },
     plugins: [
       (ed) =>
@@ -61,7 +63,7 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
             if (readOnly) return;
             const css = ed.getCss();
             const cssChanged = css !== cssAtLoad;
-            const files = [[loaded.page, StudioPage.rebuild(loaded.doc, ed.getHtml(), cssChanged ? cssHref : null)]];
+            const files = [[loaded.page, StudioPage.rebuild(loaded.doc, ed.getHtml(), cssChanged ? cssHref : null, { baseline, css })]];
             if (cssChanged) files.push([cssPath, css.endsWith("\n") ? css : css + "\n"]);
             for (const [path, content] of files) {
               const res = await fetch("/__studio/save", {
@@ -79,7 +81,10 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   const cssPath = (loaded.root === "." ? "" : loaded.root + "/") + "studio.css";
   const cssHref = "studio.css";
   let cssAtLoad = "";
-  editor.onReady(() => { cssAtLoad = editor.getCss(); });
+  // v4: the editor's own serialisation at load; a save rewrites only the
+  // nodes whose serialisation moved away from it.
+  let baseline = null;
+  editor.onReady(() => { cssAtLoad = editor.getCss(); baseline = editor.getHtml(); });
   // 2108-dptd: the <body> tag's classes and attributes on the canvas body,
   // display only (idempotent; the wrapper may re-render, so re-applied on
   // every body load). The saved page keeps its own <body> tag.
@@ -98,13 +103,21 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   // Save on every change (debounced) through the editor's own storage. The
   // built-in autosave counts changes it tracked itself, and with autoload off
   // a change can go uncounted (measured: dirty count 0 after an edit).
+  // v4: never while the text editor is active (a store re-renders the
+  // component and the caret jumps to the start); typing saves once, on
+  // rte:disable. One save per pause, not per keystroke: each save is a commit.
   let pending;
-  editor.on("update component:add component:remove component:update component:styleUpdate", () => {
-    if (readOnly) return;
+  const schedule = () => {
+    if (readOnly || baseline === null) return;
     document.documentElement.setAttribute("data-studio-save", "scheduled");
     clearTimeout(pending);
-    pending = setTimeout(() => editor.store(), 300);
+    pending = setTimeout(() => (editor.getEditing() ? null : editor.store()), 1500);
+  };
+  editor.on("update component:add component:remove component:update component:styleUpdate", () => {
+    if (editor.getEditing()) return;
+    schedule();
   });
+  editor.on("rte:disable", schedule);
   // Fixture hook (scripts/lua/test-studio-grapesjs.lua): one real edit, saved
   // by the editor's own autosave, proves the browser path end to end.
   if (location.hash === "#selftest") {

@@ -127,4 +127,26 @@ const srv = readFileSync(join(here, "server.mjs"), "utf8").replace(/\/\/[^\n]*/g
 check(6, /if \(req\.method === "GET"\) \{\s*const \{ root \} = resolveRoot\(PROJECT\);\s*return staticFile\(res, normalize\(join\(PROJECT, root\)\)/.test(srv), "no-document-root-fallback");
 arms++;
 
+// Arm 7 (v4, operator test on tlatoani.net): a save keeps the body's <script>
+// (pre-fix: GrapesJS dropped the QR script), rewrites only the edited node
+// (pre-fix: the whole body minified onto one line), keeps only the ids the CSS
+// uses, puts the managed link on its own indented line, and the editor never
+// saves while the text editor is active (pre-fix: the caret jumped).
+{
+  const d = '<!doctype html>\n<html>\n<head>\n  <title>x</title>\n</head>\n<body class="a">\n  <header>\n    <h1 class="t" data-x="1">Demon Attack</h1>\n    <p>uno</p>\n  </header>\n  <script>\n  var q = "<b>";\n  </script>\n</body>\n</html>\n';
+  const prot = page.protect(page.split(d).inner);
+  check(7, !prot.html.includes("<script") && prot.kept.length === 1, prot.html);
+  const base = '<body id="w"><header id="ijvv2"><h1 data-x="1" class="t">Demon Attack</h1><p>uno</p></header><!--studio-keep:0--></body>';
+  const now = base.replace('class="t">Demon Attack', 'class="t" id="iriib">Demon<br/>Attack');
+  const outv4 = page.rebuild(d, now, "studio.css", { baseline: base, css: "#iriib{text-align:center;}" });
+  const want = d
+    .replace("</head>", '  <link rel="stylesheet" href="studio.css">\n</head>')
+    .replace('<h1 class="t" data-x="1">Demon Attack</h1>', '<h1 data-x="1" class="t" id="iriib">Demon<br/>Attack</h1>');
+  check(7, outv4 === want, JSON.stringify(outv4));
+  const lost = page.rebuild(d, now.replace("<!--studio-keep:0-->", ""), null, { baseline: base, css: "" });
+  check(7, lost.includes('var q = "<b>";') && !lost.includes("iriib") && !lost.includes("ijvv2"), JSON.stringify(lost));
+  check(7, editor.includes('editor.on("rte:disable", schedule)') && /if \(editor\.getEditing\(\)\) return;/.test(editor) && editor.includes("StudioPage.protect(loaded.html"), "editor-saves-while-typing-or-unprotected");
+  arms++;
+}
+
 process.stdout.write(`ok:studio-grapesjs-page:${arms}-arms\n`);
