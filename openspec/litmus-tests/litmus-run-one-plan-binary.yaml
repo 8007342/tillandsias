@@ -1,0 +1,38 @@
+# @trace spec:litmus-framework, order:2116-x9ph
+name: litmus:run-one-plan-binary
+spec: litmus-framework
+phase: pre-build
+description: >
+  scripts/lua/litmus-run-one.lua runs one litmus file in a scratch project
+  root. A step there must resolve the CHECKOUT's own plan binary (from
+  CARGO_TARGET_DIR or the checkout's target/), never a stale copy found on
+  PATH, or a verb new on the branch under test reads as rc=2 (measured with
+  `lock run`, 2115-jkdv). The fixture asserts the resolved path; before the
+  fix it resolved ~/.local/bin/tillandsias-plan and failed.
+severity: medium
+size: quick
+
+preconditions:
+  - a built plan binary under the checkout's target/ (or CARGO_TARGET_DIR)
+
+critical_path:
+  - step: "a step inside litmus-run-one's scratch root resolves the checkout's plan binary"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; out=$(\"$P\" script run scripts/lua/litmus-run-one.lua --timeout 5m -- scripts/fixtures/litmus-run-one/litmus-run-one-plan-binary-probe.yaml 2>&1); rc=$?; [ \"$rc\" = 0 ] && grep -q '^ok:litmus-run-one:litmus:run-one-plan-binary-probe$' <<<\"$out\" && echo 'ok: run-one-resolves-checkout-binary' || { grep -E 'output=|violation' <<<\"$out\"; echo \"FAIL: rc=$rc\"; exit 1; }"
+    timeout_ms: 120000
+    expected_behavior: "ok: run-one-resolves-checkout-binary"
+
+observability:
+  traces:
+    - "@trace spec:litmus-framework"
+  expected_log: "litmus-run-one scratch root hands steps the checkout's plan binary"
+  log_fields:
+    spec: "litmus-framework"
+    test: "run-one-plan-binary"
+    artifact: "target/litmus-run-one.* (removed by the helper)"
+
+rollback:
+  on_failure: >
+    litmus-run-one.lua must link the checkout's target/{release,debug} (or
+    CARGO_TARGET_DIR's) into its scratch target/ so resolve_plan_binary finds
+    the branch's own build before PATH.
+  command: "grep -n '2116-x9ph' scripts/lua/litmus-run-one.lua"

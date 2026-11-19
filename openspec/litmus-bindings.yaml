@@ -770,6 +770,7 @@ specs:
 - spec_id: litmus-framework
   status: active
   litmus_tests:
+  - litmus:run-one-plan-binary
   - litmus:fake-podman-direct-invocation-safety
   - litmus:litmus-parse-instruments-agree
   - litmus:litmus-podman-preflight-diagnosis-shape
