@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: scoped-forge-diagnostics-collection-query-and-curated-events-research
+    field: next_action
+    value: |-
+      Operator ruling 2026-10-18 on visibility. Sibling forges are NOT visible to each other. Each forge sees the aggregated logs of exactly:
+      (a) itself;
+      (b) the containers it started and whose lifecycle it controls, such as its development web preview and the other containers it launched;
+      (c) curated, broadcastable events from global (shared) containers.
+      Global events are producer-authored facts with no raw logs, for example a token refresh or a garbage-collection reap. They reach ALL concurrent forges.
+      Several forges run concurrently, each with its own set of web and other containers, so scope is per forge, never per project or per network.
+      Retention, from the earlier ruling: the current forge session only.
+      Next: author ONE OpenSpec change extending runtime-diagnostics-stream with this scope model, with a red fixture for each arm:
+      - a forge cannot read another forge's or another forge's children's logs;
+      - a forge reads its own children's logs;
+      - a global event reaches every concurrent forge, carries only allowlisted fields and no credential canaries.
+
+      [2026-11-11T19:03:07Z macuahuitl-fedora] blind-design triage 2026-11-11 (2080-294s): this row reads implemented but three mcp_socket fixtures are still ignored as red until 1779-sq9g is implemented and openspec forge-diagnostics-scope is 0 of 7 tasks; the agent wait/cursor/token-budget slices are filed as 2080-g7gw, 2080-gqc4, 2080-hpys. Verify before trusting the implemented status.
+    ts: "2026-11-11T19:03:07Z"
+    host: macuahuitl-fedora

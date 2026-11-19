@@ -96,7 +96,7 @@ required_tools() {
     # still pass, because each prefers the compiled plan binary and only
     # falls back to jq. Listing it would report a working host as broken.
     cat <<'SPEC'
-git|binary|gate|macos,linux,windows|check-committable-branch.sh|blocked:not-a-git-repo|every check reads the outgoing diff|xcode-select --install
+git|binary|gate|macos,linux,windows|lua/check-committable-branch.lua|blocked:not-a-git-repo|every check reads the outgoing diff|xcode-select --install
 timeout|binary|gate|macos|check-credential-channel.sh|blocked:gh-cli-only|GNU coreutils. check-credential-channel.sh bounds gh api with it; without it the probe returns 127 and the guard reported a KEYRING fault on a platform with no keyring (988-7kxf). MEASURED here: omitting timeout AND gtimeout flips ok:gh-keyring-push-verified to blocked:gh-cli-only. PRECONDITION (1004-x9ua): this prover only reaches the timeout dependency AFTER the credential guard gets past its token arm, so on a host with a dead or absent gh token it answers missing:no-credential-channel either way and proves nothing about coreutils. test-host-tools.sh detects that by comparing the with-tool and without-tool verdicts and SKIPS, named, rather than reporting a coreutils fault|brew install coreutils
 cargo|binary|gate|macos,linux,windows|-|-|the gate compiles and clippies the workspace|rustup toolchain install stable
 rustc|binary|gate|macos,linux,windows|-|-|same as cargo|rustup toolchain install stable

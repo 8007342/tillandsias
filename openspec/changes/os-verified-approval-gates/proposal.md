@@ -1,3 +1,5 @@
+> Superseded in part by `specs/approval-human-gate` (operator ruling 2026-11-16: the threat model is ungated agent action, not identity; signer identity, allowed_signers, FIDO2 and cross-host verification are deferred).
+
 ## Why
 
 Cloud minutes are metered, finite and paid by the operator. Today any agent

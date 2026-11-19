@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-18 at macuahuitl-fedora's direction, from a live incident on yolanda.
+packets:
+  - packet_id: the-windows-tray-finds-raises-and-reattaches-its-forge-terminal-and-never-starts-a-second-instance
+    order: 2107-trki
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [tray, terminal, forge, windows-terminal]
+    estimated_hours: 5
+    owned_files:
+      - crates/tillandsias-windows-tray/src/main.rs
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+    title: "A running forge's terminal is never lost from view: the tray finds and un-minimises its window after a resume or display change, offers Show terminal, and re-attaches to the running instance instead of starting a second one"
+    context: |
+      MEASURED 2026-11-18 ~16:05 PST on yolanda: after lid close, travel and resume on another wifi, the operator's
+      tlatoani.net-forge terminal had vanished from the desktop while the session still answered over Remote Control.
+      The chain was intact: WindowsTerminal.exe 18724 -> OpenConsole 5236 + wsl.exe 15440 (14:42:16)
+      "wsl.exe --cd %LOCALAPPDATA%\tillandsias\ -d tillandsias -- /usr/local/bin/tillandsias-headless --cloud
+      8007342/tlatoani.net --claude" -> wslhost 18312; the forge container stayed up. EnumWindows: hwnd 1508676
+      "tlatoani.net-forge" visible=True iconic=True rect -21333,-21333 (minimised); single display 1280x800. Who
+      minimised it is unknown (resume/display change or the operator); tray.log has nothing after launch (13:56:17).
+      Recovered with ShowWindow(SW_RESTORE)+SetForegroundWindow; operator confirmed live.
+      The tray keeps no handle on the terminal it launched, so lost-from-view is indistinguishable from dead, and if
+      WT really closed nothing would re-attach to the still-running forge.
+      OPERATOR RULING (relayed by the coordinator): forge agents are tray-hosted and visible, not headless.
+    exit_criteria:
+      - "After a resume or display change, the tray finds its forge window and un-minimises it, or at least lists it under Show terminal. Pre-fix: FAILS (the tray holds no window handle)."
+      - "Show terminal on a running forge raises its window when one exists; when none exists (WT closed) it opens a terminal that re-attaches to the running instance. Pre-fix: FAILS (no such entry)."
+      - "Re-attaching never starts a second instance of a running forge (no instance 2, no new container). Pre-fix: FAILS (a relaunch becomes instance 2, 1956-4pxj)."
+    next_action: "Optional diagnostic, not required before the fix: reproduce the lid-close minimisation (close the lid with a forge terminal open, resume, EnumWindows the WT windows) to learn whether Windows or the operator minimised it."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-windows-tray-reattaches-forge-terminal.yaml lands in the same commit as the implementation (1136-n8sh)"
+    provenance: "yolanda live incident 2026-11-18; operator report in the yolanda session; coordinator direction."
+    events:
+      - type: filed
+        ts: "2026-11-19T00:08:00Z"
+        host: yolanda
+        summary: "filed at the coordinator's direction from the lid-close incident"

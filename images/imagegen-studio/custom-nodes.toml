@@ -45,3 +45,18 @@ repo = "https://github.com/lldacing/ComfyUI_BiRefNet_ll"
 commit = "5443a2aa16cfbd98bb2f7dcc8bdcb70439e08529"
 license = "MIT"
 lock = "locks/ComfyUI_BiRefNet_ll.txt"
+
+# 2090-ausx (openspec/changes/audio-studio-node-graph): the audio node pack,
+# VENDORED in this repository (nodes/tillandsias_audio), reviewed as our own
+# code. A `repo` of "vendored:<dir>" makes custom-nodes.py copy it from the
+# build context; the pin is then its TREE DIGEST (custom-nodes.py digest <dir>),
+# checked at install, so an edit to the pack without a new digest fails the
+# image build. No pip dependency: numpy, scipy and torch come from ComfyUI's
+# own requirements, decoding from ComfyUI's PyAV loader. No network, no
+# downloads; SFZ instruments are read from the read-only `sfz` model folder.
+[[node]]
+name = "tillandsias_audio"
+repo = "vendored:nodes/tillandsias_audio"
+commit = "e926c0b813c8ff79c83059bf24666ad8fcd9fcfd"
+license = "GPL-3.0-or-later"
+lock = "locks/tillandsias_audio.txt"

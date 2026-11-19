@@ -34,12 +34,23 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# 2031-zq68: a RUNNABLE plan binary, so build-image.sh's usability check runs
+# scripts/lua/verify-image-usable.lua through the Lua door and not its
+# no-plan-binary fallback. The 2006-me5t port passed here locally only because
+# this fixture's tree had none, and was evicted at a gate that had one.
+PLAN_BIN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || PLAN_BIN=""
+case "$PLAN_BIN" in ./*) PLAN_BIN="$ROOT/${PLAN_BIN#./}" ;; esac
+[[ -n "$PLAN_BIN" ]] || fail "no runnable tillandsias-plan for the Lua path (build it: cargo build --release -p tillandsias-plan)"
+
 # --- fake podman: an image store that is a file of tag lines ----------------
 mkdir -p "$WORK/bin"
 cat > "$WORK/bin/podman" <<'FAKE'
 #!/usr/bin/env bash
 set -euo pipefail
-STORE="$FAKE_PODMAN_STORE"
+# 2031-zq68: the store is named by a TILLANDSIAS_FIXTURE_ variable, which the
+# Lua door passes to its children (the TILLANDSIAS_ layer); FAKE_PODMAN_STORE
+# is ALSO set, undeclared, as the control: a child of the door must not see it.
+STORE="$TILLANDSIAS_FIXTURE_PODMAN_STORE"
 _norm() { echo "${1#localhost/}"; }
 case "${1:-}" in
   --version) echo "podman version 0.0.0-fake"; exit 0 ;;
@@ -49,7 +60,9 @@ case "${1:-}" in
   image)
     case "${2:-}" in
       exists) grep -qxF "$(_norm "$3")" "$STORE" && exit 0 || exit 1 ;;
-      inspect) echo 0; exit 0 ;;
+      inspect)
+        echo "inspect $3 fake-store-visible=${FAKE_PODMAN_STORE:+yes}" >> "$STORE.calls"
+        echo 0; exit 0 ;;
     esac
     exit 0 ;;
   tag)
@@ -97,7 +110,9 @@ EOF
     env -i \
         HOME="$home" \
         PATH="$WORK/bin:/usr/bin:/bin" \
+        TILLANDSIAS_FIXTURE_PODMAN_STORE="$ARM_STORE" \
         FAKE_PODMAN_STORE="$ARM_STORE" \
+        TILLANDSIAS_PLAN_BIN="$PLAN_BIN" \
         TERM=dumb \
         bash "$SCRIPT_DIR/build-image.sh" "$IMG" > "$ARM_OUT" 2>&1 \
         || { cat "$ARM_OUT"; fail "$arm: build-image.sh exited nonzero"; }
@@ -109,6 +124,13 @@ grep -qxF "tillandsias-${IMG}:v${SKEW_VERSION}" "$ARM_STORE" \
     || { cat "$ARM_OUT"; fail "skew: the installed binary's tag v${SKEW_VERSION} is not in the store after the rebuild — the launch path is orphaned"; }
 grep -qi "version skew" "$ARM_OUT" \
     || fail "skew: the rebuild aliased the installed tag without saying so"
+# 2031-zq68: the usability check ran through the Lua door. Its child is the
+# only `image inspect` caller that cannot see the undeclared FAKE_PODMAN_STORE
+# (build-image.sh's own size probe is bash and sees it), so an inspect with
+# fake-store-visible= empty is the door's child, and its podman found the
+# store through the declared TILLANDSIAS_FIXTURE_ name.
+grep -qE "^inspect [^ ]+ fake-store-visible=$" "$ARM_STORE.calls" 2>/dev/null \
+    || { cat "$ARM_OUT"; cat "$ARM_STORE.calls" 2>/dev/null; fail "skew: verify-image-usable.lua did not run through the Lua door (no inspect without FAKE_PODMAN_STORE)"; }
 
 # --- arm 2: skew, installed tag ALREADY present (the 2026-08-15 failure) ----
 run_arm skew-preexisting "$SKEW_VERSION" "tillandsias-${IMG}:v${SKEW_VERSION}"

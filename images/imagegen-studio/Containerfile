@@ -1,4 +1,4 @@
-# @trace order:1874-zry8, order:1921-7aa5 (spec: openspec/changes/local-image-generation, design section 7)
+# @trace order:1874-zry8, order:1921-7aa5, order:2090-ausx (spec: openspec/changes/local-image-generation, design section 7)
 # OPTIONAL ComfyUI studio, a forge sibling. Never built unless a project sets
 # `[imagegen] studio = true`; a project without it never builds or runs this.
 #
@@ -53,6 +53,8 @@ COPY probe-placement.py /opt/tillandsias/probe-placement.py
 # ComfyUI-Manager path anywhere in the image.
 COPY custom-nodes.toml custom-nodes.py /opt/tillandsias/
 COPY locks/ /opt/tillandsias/locks/
+# 2090-ausx: vendored node packs (repo "vendored:<dir>" in the manifest).
+COPY nodes/ /opt/tillandsias/nodes/
 RUN python /opt/tillandsias/custom-nodes.py install /opt/tillandsias/custom-nodes.toml /opt/comfyui/custom_nodes \
     && python /opt/tillandsias/custom-nodes.py verify /opt/tillandsias/custom-nodes.toml /opt/comfyui/custom_nodes / \
     && useradd -u 1001 -m -s /usr/sbin/nologin studio \

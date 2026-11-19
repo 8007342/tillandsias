@@ -357,6 +357,16 @@ fi
 # Two values per ready PR on alternating lines, paired by `paste - -` and
 # ordered by number: the subset has no sort_by or string interpolation.
 _cands="$("$PLAN" json get -r '.[] | select(.isDraft | not) | .number, .headRefName' < "$_qjson" | paste - - | sort -n)"
+# ORDER 2100-vkpg: A DRAFT IS SKIPPED, AND SKIPPING IT SILENTLY IS HOW 18 DRAFTS
+# (#196..#1064, 220 to 4900 commits behind) SAT FOR WEEKS WITHOUT ANYONE NOTICING.
+# Name every draft the queue passes over, every run, so the skip is visible in
+# the one log the coordinator always reads. Advisory: a draft can be a held PR.
+_drafts="$("$PLAN" json get -r '.[] | select(.isDraft) | .number, .headRefName' < "$_qjson" | paste - - | sort -n)"
+if [ -n "$_drafts" ]; then
+    while read -r _dn _dh; do
+        say "advisory:land-queue:ignored-draft:#$_dn:$_dh — drafts never land; un-draft (gh pr ready $_dn) or close it with a tombstone (2100-vkpg)"
+    done <<< "$_drafts"
+fi
 rm -f "$_qjson"
 
 if [ -z "$_cands" ]; then

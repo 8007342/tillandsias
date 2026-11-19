@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# The rulings were given by the operator directly to the coordinator on 2026-11-17 and relayed to the filing session; the filing session did not hear them first-hand.
+events:
+  - packet_id: a-forge-hands-a-long-running-job-to-a-local-watchdog-instead-of-polling-it-from-the-cloud
+    event:
+      type: decision
+      ts: "2026-11-17T20:06:25Z"
+      host: macuahuitl
+      summary: "OPERATOR RULINGS 2026-11-17 on the seven questions of openspec/changes/local-job-watchdog design section 10, given directly to the coordinator on macuahuitl and relayed; each is the filing session's recommendation. (1) Cadence: one re-armed deadline timer per watched job, 10 minutes by default, floor 2: approved. (2) Restart budget: 3 restarts in 30 minutes, back-offs 30 s, 2 min, 10 min: approved. (3) A desktop notification is enough for a session that has ended its turn, with watch.wait (2094-dyvk) as the working path; no backstop wake. (4) Start the judge at the already-pinned Qwen2.5-0.5B, promoted only on measurement. (5) Intel NPU graph compiler: read its licence first; do not ship it before that. (6) A host with no local inference escalates ambiguous episodes; watch.register is not refused there. (7) Zeroclaw: untouched. Left on this row: amend openspec/changes/local-job-watchdog proposal, design, spec and tasks to agree with the rulings (not done by this event; the rulings are also tabled in openspec/changes/job-admission-and-host-watch/design.md section 10), then release the children; 2081-v7qx no longer waits on the cadence ruling."
+  - packet_id: with-memory-critically-short-and-no-queued-job-left-the-tray-freezes-and-never-kills-the-forge-using-the-most-memory-and-notifies-the-operator
+    event:
+      type: decision
+      ts: "2026-11-17T20:06:25Z"
+      host: macuahuitl
+      summary: "OPERATOR RULING 2026-11-17, given directly to the coordinator and relayed: a frozen forge is thawed only by the operator from the tray, never automatically. This row's context calls that proposed and not yet ruled, and its next_action ends by asking the operator; both are now settled. Left: unchanged otherwise, build after 2094-mzap's pressure levels exist."
+  - packet_id: jobs-wait-their-turn-host-sessions-get-the-watchdog-and-the-judge-runs-where-each-host-has-room
+    event:
+      type: note
+      ts: "2026-11-17T20:06:25Z"
+      host: macuahuitl
+      summary: "Operator 2026-11-17, relayed by the coordinator: the one point the earlier decision event left unruled is settled (a frozen forge is thawed only by the operator from the tray, never automatically), and the seven questions of 2081-z7sh are all ruled as recommended (recorded on that row). design.md section 10 carries both. No operator question remains open on this story."
