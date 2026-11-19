@@ -1,10 +1,13 @@
 #!/bin/bash
 set -ex
 
+# ORDER 2115-jkdv: the smoke lock is `tillandsias-plan lock run` (was scripts/with-smoke-lock.sh).
+PLAN_BIN="$(. scripts/plan-binary-probe.sh && resolve_plan_binary)"
+
 mkdir -p target/smoke-e2e
 
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$PLAN_BIN" lock run --name release-smoke-e2e -- \
   bash -c 'curl -fsSL http://localhost:8000/install.sh | bash' 2>&1 \
   | tee target/smoke-e2e/01-install.log
 
@@ -12,7 +15,7 @@ hash -r
 ~/.local/bin/tillandsias --version | tee target/smoke-e2e/01-version.txt
 
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$PLAN_BIN" lock run --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 
 # ORDER 900-z3kv — the reset empties the podman store and reaches NONE of the
@@ -33,7 +36,7 @@ scripts/clear-vault-host-credentials.sh 2>&1 | tee target/smoke-e2e/02-clear-cre
 scripts/probe-credential-cold-state.sh 2>&1 | tee target/smoke-e2e/02-credential-state.txt || true
 
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$PLAN_BIN" lock run --name release-smoke-e2e -- \
   ~/.local/bin/tillandsias --debug --init 2>&1 | tee target/smoke-e2e/03-init.log
 
 INIT_RC=${PIPESTATUS[0]}
@@ -46,7 +49,7 @@ fi
 # shared hosted free tier. The token is spelled out so the prompt cannot match it.
 SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$PLAN_BIN" lock run --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 ~/.local/bin/tillandsias . --opencode --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 grep -q 'SMOKE-AGENT-OK' target/smoke-e2e/04-opencode.log

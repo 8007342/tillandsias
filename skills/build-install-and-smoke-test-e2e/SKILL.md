@@ -149,7 +149,7 @@ Per-OS build-script guard:
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
-  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name build-install-smoke-e2e -- \
   ./build.sh --ci-full --install 2>&1 | tee "$LOG_DIR/01-build-install.log"
 BUILD_RC=${PIPESTATUS[0]}
 printf 'build_install_exit=%s\n' "$BUILD_RC" | tee "$LOG_DIR/01-build-install-exit.txt"
@@ -290,7 +290,7 @@ the clearer only after `test "${ps[0]}" -eq 0`; any intervening command,
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
-  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name build-install-smoke-e2e -- \
   podman system reset --force 2>&1 | tee "$LOG_DIR/02-reset.log"
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee "$LOG_DIR/02-reset-exit.txt"
 test "$RESET_RC" -eq 0
@@ -347,7 +347,7 @@ order 222). When `TILLANDSIAS_SMOKE_RESET_MODE=selective` is set, use
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
-  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name build-install-smoke-e2e -- \
   scripts/selective-tillandsias-reset.sh 2>&1 | tee "$LOG_DIR/02-reset.log"
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee "$LOG_DIR/02-reset-exit.txt"
 test "$RESET_RC" -eq 0
@@ -414,7 +414,7 @@ gate**.
 ```bash
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh/fish expand it empty'; exit 2; }
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
-  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name build-install-smoke-e2e -- \
   tillandsias --init --debug 2>&1 | tee "$LOG_DIR/03-init.log"
 INIT_RC=${PIPESTATUS[0]}; printf 'init_exit=%s\n' "$INIT_RC" | tee "$LOG_DIR/03-init-exit.txt"
 test "$INIT_RC" -eq 0
@@ -506,7 +506,7 @@ findings.
 # cannot satisfy the grep.
 SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
-  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name build-install-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode \
   --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee "$LOG_DIR/04-meta-orchestration.log"
