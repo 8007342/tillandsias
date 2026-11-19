@@ -142,8 +142,14 @@ else
 end
 
 -- 5: the population of live-ref diff bases, and each one's fallback.
--- check-landing-provenance reads trunk's own history (REF), not a diff base.
-local EXEMPT = { ["scripts/lua/check-landing-provenance.lua"] = true }
+-- These read trunk's own history (REF via git log), not a diff base
+-- (check-landed-but-open and check-ready-rows-with-landed-work surfaced
+-- when 2080-8i25 taught the census the Lua `x = "origin/linux-next"` shape).
+local EXEMPT = {
+    ["scripts/lua/check-landing-provenance.lua"] = true,
+    ["scripts/lua/check-landed-but-open.lua"] = true,
+    ["scripts/lua/check-ready-rows-with-landed-work.lua"] = true,
+}
 local sites, unfrozen, searched = {}, {}, 0
 local function scan(dir, suffix)
     for _, f in ipairs(fs.walk(dir)) do
@@ -158,6 +164,9 @@ local function scan(dir, suffix)
                     if not code:match("^#") and not code:match("^%-%-") then
                         local live = code:find(":-origin/linux-next}", 1, true) or code:find('BASE = "origin/linux-next"', 1, true)
                             or code:find("origin/linux-next...HEAD", 1, true) or code:find("origin/linux-next}\"...HEAD", 1, true)
+                            -- a Lua port's fallback assignment (2080-8i25: check-packet-tier-declared.lua
+                            -- spells it base_ref = "origin/linux-next"; the census missed it)
+                            or (suffix == ".lua" and code:find('[%w_]+ = "origin/linux%-next"') ~= nil)
                         if live then
                             n = n + 1
                             local frozen = has(code, "TILLANDSIAS_GATE_DIFF_BASE")
