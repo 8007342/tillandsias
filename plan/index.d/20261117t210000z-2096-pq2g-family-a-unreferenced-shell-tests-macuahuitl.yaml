@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+- packet_id: family-a-unreferenced-shell-tests-retired-ported-or-wired
+  order: 2096-pq2g
+  status: in_progress
+  kind: chore
+  priority: p1
+  desired_release: v0.5
+  pickup_role: linux
+  capability_tags: [shell-to-lua, tests, gate]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 6
+  title: 'Family A of the .sh halving: the 43 scripts/test-*.sh no gate surface reaches are each retired, ported to Lua or wired'
+  context: |-
+    Operator objective 2026-11-17: halve the .sh files on linux-next (1023) within 7 days; Lua first. scripts/check-added-test-is-referenced.sh printed standing=43 on 2026-11-17 (surfaces=6).
+    Each test was run once on macuahuitl, one at a time, under a 600 s timeout and a 6 GiB memory cap, then classified: red because its subject is gone -> delete; green and meaningful -> wire into a gate step or litmus, or port to scripts/lua; green but vacuous -> delete.
+    The verdict table lives in each PR description.
+  exit_criteria:
+  - 'scripts/check-added-test-is-referenced.sh prints standing=0, or names every remaining unreferenced test in scripts/unreferenced-grandfathered.txt with a reason.'
+  verifiable_closure: 'bash scripts/check-added-test-is-referenced.sh'
+  unscoreable: 'none.'
+  next_action: 'Land the PRs for work/2096-pq2g and its sibling branches; the tests left red for host reasons (toolbox on PATH, a stamped HEAD, darwin-only PlistBuddy) need a fixture fix before they can be wired.'
+  provenance: 'Operator objective relayed by the macuahuitl coordinator, 2026-11-17.'
+  events:
+  - type: filed
+    ts: '2026-11-17T21:00:00Z'
+    host: macuahuitl
+    summary: filed in_progress for family A of the .sh halving

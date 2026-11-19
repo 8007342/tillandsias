@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# The three questions the operator left open when approving the obligation
+# evidence contract (umbrella 2080-3tzc) on 2026-11-11, carried as their own row
+# so closing the umbrella does not lose them.
+packets:
+  - packet_id: three-obligation-evidence-questions-stay-as-proposed-until-the-operator-rules-wsl-and-forge-platform-witness-signer-and-refusal-on-increase
+    order: 2081-2wf3
+    status: needs_clarification
+    kind: design
+    priority: p2
+    desired_release: v0.6
+    pickup_role: operator
+    size: S
+    capability_tags: [centicolon, methodology, design]
+    estimated_hours: 1
+    related: [2080-3tzc, 2080-axw3, 2080-hnit, 2080-kugs]
+    spec: openspec/changes/obligation-evidence-contract
+    title: "Three obligation-evidence questions stand as proposed until the operator rules: which platform a WSL or forge record fills, who signs a witness, and whether a release-distance increase ever refuses"
+    context: |
+      On 2026-11-11 the operator approved openspec/changes/obligation-evidence-contract
+      and the change of denominator to (obligation, platform) cells. Three
+      questions in the change's design.md were left open and the rows proceed
+      on the proposal for each:
+      1. A record made inside WSL on a Windows host fills the windows cell (the
+         bare-metal host's platform); a forge record fills no cell unless the
+         forge's host platform is passed in. Row 2080-axw3 builds this.
+      2. Witnesses are unsigned first and labelled so; a signing key comes
+         later. Row 2080-hnit builds the verifier with both strengths.
+      3. The release non-increase check is a report. Whether it ever refuses,
+         and against which number, is a bar raise not yet asked for. Row
+         2080-kugs builds the report.
+      A different ruling on 1 changes one mapping in the record writer; on 2 it
+      adds a key enrolment row; on 3 it adds an approved_bar_raises entry.
+    exit_criteria:
+      - "design.md of the change records the operator's ruling on each of the three questions, or says in the operator's words that the proposal stands. Today each reads proposed, not ruled."
+    verifiable_closure: "The three entries under Open Questions in the change's design.md each carry a dated ruling, and any row the ruling changes has a correction recorded."
+    unscoreable: |
+      awaiting-operator-ruling: three design questions; the rows that build the
+      proposed answers carry their own closures.
+    next_action: >
+      Operator: rule on the three questions when convenient; nothing is blocked
+      meanwhile, each row proceeds on the proposal.
+    provenance: "Filed 2026-11-11 on macuahuitl when the umbrella 2080-3tzc was closed on the operator's approval, relayed by the coordinator."
+    events:
+      - type: filed
+        ts: "2026-11-11T18:56:36Z"
+        host: macuahuitl
+        summary: "filed needs_clarification: three questions left open by the 2026-11-11 approval"

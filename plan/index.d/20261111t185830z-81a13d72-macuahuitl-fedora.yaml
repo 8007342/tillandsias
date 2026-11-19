@@ -1,0 +1,145 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story forge-events-v05 — 2026-11-11 blind-design triage (order 2080-294s).
+# Extends forge-diagnostics-scope (1779-sq9g), whose row reads implemented while three
+# mcp_socket fixtures are still #[ignore = "red until 1779-sq9g is implemented"].
+packets:
+  - packet_id: a-forge-agent-waits-once-for-the-event-it-cares-about-instead-of-polling-tools
+    order: 2080-g7gw
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: forge-events-v05
+    capability_tags: [mcp, diagnostics, events, rust]
+    estimated_hours: 5
+    title: |
+      Forge agents cannot ask what happened or wait for it; the lane MCP socket offers a blocking wait(correlation or event types, timeout) that returns the completion event with no intermediate calls, and a forge never receives an event whose source is a sibling forge.
+    context: |
+      Judge 1 packet 4 (operator request 2026-10-18), blind events design. host_tools.rs has no events, state or wait tool. Event viewing must not disturb services (2026-11-11 idle ruling): wait is served from the host's existing event bus, never by polling the services. Sibling isolation per forge-log-visibility-ruling.
+    exit_criteria:
+      - 'the three ignored 1779-sq9g fixtures in mcp_socket.rs run un-ignored and pass'
+      - 'a fixture starts an image ensure, calls wait once and receives the completion event with zero intermediate tool calls'
+      - 'a forge cannot obtain an event whose source is a sibling forge'
+    verifiable_closure: 'cargo test -p tillandsias-headless mcp_socket with the 1779-sq9g fixtures un-ignored; red today'
+    next_action: 'Nothing is done. Remove the ignore attributes, watch them fail, implement wait on the existing event bus.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1779-sq9g, 1799-dav6]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p1 from the 2026-11-11 blind-design triage}
+  - packet_id: forge-event-reads-carry-a-cursor-that-reports-a-gap-and-a-snapshot-call
+    order: 2080-gqc4
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    story: forge-events-v05
+    capability_tags: [mcp, events, rust]
+    estimated_hours: 3
+    title: |
+      An agent that reads events cannot tell it missed some; every read returns a cursor, a read from an expired cursor returns an explicit gap with the count lost, and a snapshot call returns current state so the agent can resynchronise.
+    context: |
+      Blind events design, judge 1 packet 4.
+    exit_criteria:
+      - 'a fixture overflowing the buffer between two reads gets gap with a non-zero count, then a snapshot; today no cursor exists'
+    unscoreable: 'unpinnable-until-the-guard-exists: the overflow fixture is the deliverable.'
+    next_action: 'Nothing is done. After 2080-g7gw defines the event read.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [a-forge-agent-waits-once-for-the-event-it-cares-about-instead-of-polling-tools]
+    related: [1779-sq9g]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: every-forge-event-and-log-read-honours-a-max-tokens-budget-and-says-what-it-left-out
+    order: 2080-hpys
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    story: forge-events-v05
+    capability_tags: [mcp, events, tokens, rust]
+    estimated_hours: 2
+    title: |
+      An event or log read can return any amount of text into the agent's context; every read takes max_tokens and returns at most that estimate plus a header saying how many events were not shown.
+    context: |
+      Blind events design, judge 1 packet 4.
+    exit_criteria:
+      - 'a read with max_tokens=200 over 1000 events returns at most the estimate and a header naming the count not shown; today preview.logs has no budget'
+    unscoreable: 'unpinnable-until-the-guard-exists: the budget fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [a-forge-agent-waits-once-for-the-event-it-cares-about-instead-of-polling-tools]
+    related: [1779-sq9g]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: a-forge-agent-asks-one-status-tool-what-is-happening-and-when-to-retry
+    order: 2080-hrvi
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    story: forge-events-v05
+    capability_tags: [mcp, forge, observability, rust]
+    estimated_hours: 4
+    title: |
+      Each lane tool invents its own retry_after; one status tool on the lane socket returns own-forge state, the containers the forge started and curated states of shared services with retry_after_s, using only enums, bounded numbers, registered names and the caller's own ids.
+    context: |
+      Judge 2 G12. Fits the existing socket; no new process. Shared services may be on another fleet host (multi-machine ruling 2026-11-11); the state names the service, not a local container id.
+    exit_criteria:
+      - 'tools/list on a lane socket includes the status tool and a second forge''s ids never appear in its result; today no such tool is listed'
+    unscoreable: 'unpinnable-until-the-guard-exists: the tool fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judge 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: [a-forge-agent-waits-once-for-the-event-it-cares-about-instead-of-polling-tools]
+    related: [1779-sq9g]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: language-models-are-pulled-by-digest-from-a-register-onto-a-read-only-mount
+    order: 2080-i5qu
+    status: ready
+    kind: enhancement
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    story: forge-events-v05
+    capability_tags: [supply-chain, models, inference, licence]
+    estimated_hours: 5
+    title: |
+      images/inference/entrypoint.sh runs ollama pull by tag with no register row or licence record, and the model cache is mounted read-write into the engine; models come from a shipped register by digest, the mount is read-only except during a pull, and an unregistered model is refused with model_refused. Security Low to Medium.
+    context: |
+      Merges judge 1 packet 15 and judge 2 G9. Studio weights already go through restricted_fetch (register row, sha256, licence gate). Register is Lua data; the gate is Rust.
+    exit_criteria:
+      - 'the entrypoint refuses a model absent from the register; after a pull the stored manifest digest equals the register''s; podman inspect shows the cache mount read-only outside a pull; today any tag is pulled read-write'
+    unscoreable: 'unpinnable-until-the-guard-exists: the refusal fixture is the deliverable.'
+    next_action: 'Nothing is done.'
+    provenance: blind-design judges 1 and 2; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [1957-emar, 1954-dvz9]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p2 from the 2026-11-11 blind-design triage}
+  - packet_id: the-tray-lists-which-provider-sign-ins-were-restored-into-each-running-forge
+    order: 2080-ipyz
+    status: ready
+    kind: feature
+    priority: p3
+    desired_release: v0.6
+    pickup_role: any
+    story: forge-events-v05
+    capability_tags: [vault, tray, operator-decision]
+    estimated_hours: 2
+    title: |
+      Harness sign-in documents are restored into forges and nothing enumerates them; the tray lists, per running forge, which provider credential documents it holds, until OQ-16 decides whether a gateway can keep them out entirely.
+    context: |
+      Judge 1 packet 18. Complements 2080-7euu (forge policies cannot write a sign-in, credential audit order) and 2080-xz8m (credential census).
+    exit_criteria:
+      - 'the tray''s forge view names each restored provider document per forge; today nothing enumerates them'
+    unscoreable: 'unpinnable-until-the-guard-exists: the listing test is the deliverable.'
+    next_action: 'Nothing is done. Waits on OQ-16 for scope.'
+    provenance: blind-design judge 1; filed by macuahuitl-fedora, triage 2080-294s.
+    depends_on: []
+    related: [2080-7euu, 2080-xz8m]
+    events:
+      - {type: filed, ts: '2026-11-11T18:58:30Z', host: macuahuitl-fedora, summary: filed p3 from the 2026-11-11 blind-design triage}

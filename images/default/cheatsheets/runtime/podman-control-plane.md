@@ -46,8 +46,8 @@ runtime / build / tests
 Verification ladder:
 
 ```text
-scripts/local_test.sh  -> pure Rust model/policy
-scripts/small_test.sh  -> Rust entrypoints via fake/replay backends
-scripts/large_test.sh  -> real rootless Podman
-scripts/full_test.sh   -> installed binary + composed user flow
+cargo test -p tillandsias-podman                                          -> pure Rust model/policy
+cargo test -p tillandsias-podman backend::                                -> Rust entrypoints via fake/replay backends
+cargo test -p tillandsias-podman --test podman_integration -- --ignored   -> real rootless Podman
+./build.sh --ci-full --install                                            -> installed binary + composed user flow
 ```

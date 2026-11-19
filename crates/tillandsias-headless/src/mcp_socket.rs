@@ -493,6 +493,9 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
             tools.push(validate_family_descriptor());
             // 1957-emar: the GPU arbiter's status and unload, beside them.
             tools.extend(crate::gpu_queue::tool_descriptors());
+            // 2094-ay52 / 2095-kgdj: the admission queue and watch.wait, with
+            // this host's class figures in their schemas.
+            tools.extend(crate::job_queue::live::descriptors());
             // 1959-xsy5 (D12): the GPU-free pixel finish, beside it.
             tools.push(crate::pixel_finish::descriptor());
             // 1959-xsy5 (D13): the review contact sheet, beside it.
@@ -541,6 +544,30 @@ pub(crate) fn handle_mcp_jsonrpc_streaming(
                         lane_freshness(build_identity(), installed_build_identity().as_deref())
                     )
                 });
+                if let Some(id) = req.get("id") {
+                    resp["id"] = id.clone();
+                }
+                return Some(resp);
+            }
+            // 2094-ay52 / 2095-kgdj: the lane is the socket's identity, never an
+            // argument. A refusal is a tool result with isError, in one shape.
+            if crate::job_queue::is_tool(tool_name) {
+                let empty = serde_json::json!({});
+                let arguments = req["params"].get("arguments").unwrap_or(&empty);
+                let result = match crate::job_queue::live::call(
+                    project_label,
+                    instance,
+                    tool_name,
+                    arguments,
+                ) {
+                    Ok(v) => tillandsias_browser_mcp::framing::tool_result_content(v),
+                    Err(refusal) => {
+                        let mut r = tillandsias_browser_mcp::framing::tool_result_content(refusal);
+                        r["isError"] = serde_json::json!(true);
+                        r
+                    }
+                };
+                let mut resp = serde_json::json!({ "jsonrpc": "2.0", "result": result });
                 if let Some(id) = req.get("id") {
                     resp["id"] = id.clone();
                 }
@@ -3461,5 +3488,259 @@ mod lane_server_who_tests {
             " (exe deleted)"
         );
         assert_eq!(super::exe_note("/usr/bin/tillandsias"), "");
+    }
+}
+
+/// Orders 2094-ay52 and 2095-kgdj, through the lane dispatcher: the queue
+/// tools are listed, every restriction is in their descriptions and schemas,
+/// every refusal has one shape, and a lane sees only its own tickets.
+///
+/// Under test the queue starts nothing and sees a host with no free memory,
+/// so every accepted job stays queued and positions are deterministic.
+/// Each test uses its own project label: lanes never share tickets.
+#[cfg(test)]
+mod job_queue_lane_fixtures {
+    use super::*;
+
+    fn rpc(project: &str, method: &str, params: serde_json::Value) -> serde_json::Value {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let browser = lane_browser_server(project, "default", None, true);
+        handle_mcp_jsonrpc(
+            project,
+            "default",
+            &serde_json::json!({"jsonrpc":"2.0","id":1,"method":method,"params":params}),
+            &browser,
+            &rt,
+        )
+        .unwrap()
+    }
+
+    /// The structured payload of a tool call, refusal or not.
+    fn call(project: &str, tool: &str, args: serde_json::Value) -> serde_json::Value {
+        let reply = rpc(
+            project,
+            "tools/call",
+            serde_json::json!({"name": tool, "arguments": args}),
+        );
+        assert!(
+            reply.get("error").is_none(),
+            "{tool} answers as a tool result, not a JSON-RPC error: {reply}"
+        );
+        reply["result"]["structuredContent"].clone()
+    }
+
+    fn tools(project: &str) -> Vec<serde_json::Value> {
+        rpc(project, "tools/list", serde_json::json!({}))["result"]["tools"]
+            .as_array()
+            .cloned()
+            .unwrap()
+    }
+
+    fn job(name: &str) -> serde_json::Value {
+        serde_json::json!({
+            "name": name,
+            "command": ["cargo", "test", "-j", "4", "--", name],
+            "class": "build",
+            "idempotent": true
+        })
+    }
+
+    #[test]
+    fn the_queue_tools_and_their_index_row_are_listed() {
+        let names: Vec<String> = tools("jq-list")
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect();
+        for t in [
+            "queue.submit",
+            "queue.status",
+            "queue.cancel",
+            "queue.list",
+            "watch.wait",
+        ] {
+            assert!(names.iter().any(|n| n == t), "{t} listed: {names:?}");
+        }
+        let init = rpc("jq-list", "initialize", serde_json::json!({}));
+        let text = init["result"]["instructions"].as_str().unwrap();
+        let line = text
+            .lines()
+            .find(|l| l.starts_with("- queue.*"))
+            .unwrap_or_else(|| panic!("a queue.* index line: {text}"));
+        for needle in ["no cloud tokens", "not protected", "compile", "test suite"] {
+            assert!(line.contains(needle), "{needle:?} in {line}");
+        }
+    }
+
+    /// 2095-kgdj: deleting any one restriction from a description or schema
+    /// fails this test, naming the restriction.
+    #[test]
+    fn every_restriction_is_stated_in_the_affordances() {
+        let tools = tools("jq-afford");
+        let tool = |name: &str| -> serde_json::Value {
+            tools
+                .iter()
+                .find(|t| t["name"] == name)
+                .cloned()
+                .unwrap_or_else(|| panic!("{name} is listed"))
+        };
+        let text = |name: &str| -> String { tool(name).to_string() };
+        let submit = text("queue.submit");
+        let wait = tool("watch.wait");
+        let checks: &[(&str, bool)] = &[
+            (
+                "stop-and-requeue",
+                submit.contains("may be stopped and started again later"),
+            ),
+            (
+                "last-resort freeze",
+                submit.contains("frozen until the user resumes it")
+                    && submit.contains("never kills your forge"),
+            ),
+            (
+                "three classes in the schema",
+                tool("queue.submit")["inputSchema"]["properties"]["class"]["enum"]
+                    == serde_json::json!(["light", "build", "heavy"]),
+            ),
+            (
+                "class reserve, ceiling and running limit on this host",
+                ["light", "build", "heavy"].iter().all(|c| {
+                    let d = tool("queue.submit")["inputSchema"]["properties"]["class"]
+                        ["x-class-limits"][c]
+                        .to_string();
+                    d.contains("reserve_gib")
+                        && d.contains("ceiling_gib")
+                        && d.contains("running_limit")
+                }),
+            ),
+            (
+                "idempotent is required, with no default",
+                tool("queue.submit")["inputSchema"]["required"]
+                    .as_array()
+                    .is_some_and(|r| r.iter().any(|f| f == "idempotent"))
+                    && tool("queue.submit")["inputSchema"]["properties"]["idempotent"]
+                        .get("default")
+                        .is_none(),
+            ),
+            (
+                "run once when not idempotent",
+                submit.contains("idempotent: false") && submit.contains("run once"),
+            ),
+            ("bundle size named", submit.contains("about 30 minutes")),
+            (
+                "restart budget",
+                submit.contains("at most 3 restarts in 30 minutes"),
+            ),
+            (
+                "a full disk is never retried",
+                submit.contains("full disk") && submit.contains("never retried"),
+            ),
+            (
+                "the 9 minute wait bound is a schema maximum",
+                wait["inputSchema"]["properties"]["timeout_minutes"]["maximum"] == 9,
+            ),
+            (
+                "a return at the bound is not an event",
+                wait["description"]
+                    .as_str()
+                    .is_some_and(|d| d.contains("not an event")),
+            ),
+            (
+                "own-lane visibility",
+                ["queue.status", "queue.list", "queue.cancel", "watch.wait"]
+                    .iter()
+                    .all(|t| text(t).contains("only this lane's")),
+            ),
+            (
+                "wait with watch.wait, not a sleep loop",
+                submit.contains("watch.wait") && submit.contains("do not sleep"),
+            ),
+            (
+                "the command is an argv, no shell",
+                tool("queue.submit")["inputSchema"]["properties"]["command"]["type"] == "array",
+            ),
+        ];
+        let missing: Vec<&str> = checks
+            .iter()
+            .filter(|(_, ok)| !ok)
+            .map(|(name, _)| *name)
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "restrictions missing from the affordances: {missing:?}"
+        );
+    }
+
+    #[test]
+    fn every_refusal_has_one_shape_and_creates_no_ticket() {
+        let p = "jq-refuse";
+        let mut string_cmd = job("s");
+        string_cmd["command"] = serde_json::json!("cargo test && notify");
+        let mut no_idem = job("i");
+        no_idem.as_object_mut().unwrap().remove("idempotent");
+        let mut bad_class = job("c");
+        bad_class["class"] = serde_json::json!("huge");
+        for (args, reason, retry, limits) in [
+            (string_cmd, "command-not-argv", false, false),
+            (no_idem, "idempotent-required", false, false),
+            (bad_class, "unknown-class", false, true),
+        ] {
+            let r = call(p, "queue.submit", args);
+            assert_eq!(r["refused"], true, "{r}");
+            assert_eq!(r["reason"], reason, "{r}");
+            assert!(r["message"].as_str().is_some_and(|m| !m.is_empty()), "{r}");
+            assert_eq!(r.get("retry_after_seconds").is_some(), retry, "{r}");
+            assert_eq!(r.get("class_limits").is_some(), limits, "{r}");
+            assert!(r.get("ticket").is_none(), "{r}");
+        }
+        assert_eq!(
+            call(p, "queue.list", serde_json::json!({}))["tickets"],
+            serde_json::json!([])
+        );
+
+        for i in 0..16 {
+            let r = call(p, "queue.submit", job(&format!("bundle-{i}")));
+            assert_eq!(r["state"], "queued", "job {i}: {r}");
+        }
+        let r = call(p, "queue.submit", job("bundle-16"));
+        assert_eq!(r["reason"], "lane-queue-full", "{r}");
+        assert!(r["retry_after_seconds"].as_u64().is_some(), "{r}");
+        assert!(
+            r["class_limits"]["build"]["running_limit"]
+                .as_u64()
+                .is_some(),
+            "{r}"
+        );
+        assert_eq!(
+            call(p, "queue.list", serde_json::json!({}))["tickets"]
+                .as_array()
+                .unwrap()
+                .len(),
+            16
+        );
+    }
+
+    #[test]
+    fn a_lane_sees_only_its_own_tickets() {
+        // Two lanes of one tray: the lane is the socket's project label.
+        let (a, b) = ("jq-vis-a", "jq-vis-b");
+        let a1 = call(a, "queue.submit", job("secret-alpha"));
+        let _a2 = call(a, "queue.submit", job("secret-beta"));
+        let b1 = call(b, "queue.submit", job("mine"));
+        let a_id = a1["ticket"].as_str().unwrap();
+        let other = call(b, "queue.status", serde_json::json!({"ticket": a_id}));
+        assert_eq!(other["reason"], "unknown-ticket", "{other}");
+        let cancel = call(b, "queue.cancel", serde_json::json!({"ticket": a_id}));
+        assert_eq!(cancel["reason"], "unknown-ticket", "{cancel}");
+        let mine = call(
+            b,
+            "queue.status",
+            serde_json::json!({"ticket": b1["ticket"]}),
+        );
+        assert_eq!(mine["position"], 3, "{mine}");
+        assert!(mine["holding"].as_str().is_some(), "{mine}");
+        let all = format!("{mine}{}", call(b, "queue.list", serde_json::json!({})));
+        for leak in ["secret-alpha", "secret-beta", a, a_id] {
+            assert!(!all.contains(leak), "{leak} leaked to lane B: {all}");
+        }
     }
 }
