@@ -36,9 +36,18 @@ fs.mkdir(S .. "/cheatsheet-sources")
 fs.mkdir(S .. "/crates/tillandsias-policy/src")
 fs.write(S .. "/" .. HOOK, fs.read(HOOK))
 local COUNTER = "calls.log"
-for _, c in ipairs({ "check-cheatsheet-tiers.sh", "check-cheatsheet-sources.sh" }) do
-    fs.write(S .. "/scripts/" .. c, "#!/usr/bin/env bash\necho " .. c .. " >> \"$(git rev-parse --show-toplevel)/" .. COUNTER .. "\"\nexit 0\n")
-end
+fs.write(S .. "/scripts/check-cheatsheet-tiers.sh", "#!/usr/bin/env bash\necho check-cheatsheet-tiers.sh >> \"$(git rev-parse --show-toplevel)/" .. COUNTER .. "\"\nexit 0\n")
+-- The sources checker is Lua on trunk, run through the plan binary the hook
+-- resolves with scripts/plan-binary-probe.sh. Stub the probe to hand back a stub
+-- runner that counts a `script run scripts/lua/check-cheatsheet-sources.lua`,
+-- so the hook's scoping stays real and no real plan binary is needed.
+fs.mkdir(S .. "/scripts/lua")
+fs.write(S .. "/scripts/lua/check-cheatsheet-sources.lua", "-- stub\n")
+fs.write(S .. "/scripts/stub-plan", "#!/usr/bin/env bash\n"
+    .. "[ \"$1 $2 $3\" = \"script run scripts/lua/check-cheatsheet-sources.lua\" ] || exit 9\n"
+    .. "echo check-cheatsheet-sources.lua >> \"$(git rev-parse --show-toplevel)/" .. COUNTER .. "\"\nexit 0\n")
+fs.write(S .. "/scripts/plan-binary-probe.sh", "resolve_plan_binary() { printf '%s\\n' ./scripts/stub-plan; }\n")
+proc.run({ argv = { "chmod", "+x", S .. "/scripts/stub-plan" } })
 fs.write(S .. "/cheatsheet-sources/INDEX.json", "{}\n")
 fs.write(S .. "/README.md", "seed\n")
 fs.write(S .. "/.gitignore", COUNTER .. "\n")

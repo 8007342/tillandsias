@@ -323,7 +323,7 @@ staged_touches() {
     return 1
 }
 CHEATSHEET_INPUTS=(cheatsheets/ cheatsheet-sources/ crates/tillandsias-policy/
-    scripts/check-cheatsheet-tiers.sh scripts/check-cheatsheet-sources.sh Cargo.lock)
+    scripts/check-cheatsheet-tiers.sh scripts/lua/check-cheatsheet-sources.lua Cargo.lock)
 
 # --- 4. Cheatsheet source binding check ------------------------------------
 # Legacy verbatim source layer check — kept for the three-release retention
