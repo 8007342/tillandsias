@@ -1,4 +1,4 @@
-# @trace order:1860-auhm, order:2108-dptd (web-studio-lanes change, not yet archived; rebind to web-studio-lane when archived)
+# @trace order:1860-auhm, order:2108-dptd, order:2110-pk4s (web-studio-lanes change, not yet archived; rebind to web-studio-lane when archived)
 name: litmus:studio-saves-pass-one-guard-and-are-committed
 spec: local-web-preview
 phase: pre-build
@@ -14,12 +14,12 @@ critical_path:
   - step: "four arms in the forge image: refusals write and commit nothing and are evented; an allowlisted save is committed and evented; an identical save commits nothing; the HTTP front refuses traversal (403), commits a save, 404s a PWA path, 400s a bad body"
     command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-studio-front.lua"
     timeout_ms: 180000
-    expected_behavior: "ok:studio-front:5-arms+studio-grapesjs-page:7-arms"
+    expected_behavior: "ok:studio-front:5-arms+studio-grapesjs-page:7-arms+studio-puck-site:5-arms"
 
 observability:
   traces:
     - "@trace order:1860-auhm"
-  expected_log: "ok:studio-front:5-arms+studio-grapesjs-page:7-arms"
+  expected_log: "ok:studio-front:5-arms+studio-grapesjs-page:7-arms+studio-puck-site:5-arms"
   log_fields:
     spec: "local-web-preview"
     test: "studio-saves-pass-one-guard-and-are-committed"
