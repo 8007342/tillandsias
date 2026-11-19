@@ -110,6 +110,19 @@ pub(crate) const GROUPS: &[Group] = &[
         starts: "nothing; cloud.usage reads with the host's stored GitHub App and Cloudflare tokens and names any permission a provider refuses",
         use_when: "before a release, a merge to main or a deploy, or when the user asks how much of the month's free build minutes are left",
     },
+    // 2094-ay52 / 2095-kgdj: design section 6.
+    Group {
+        prefix: "queue.*",
+        does: "start a heavy job when this computer has room for it, and attend it: other projects' jobs and yours take turns, and a job may be stopped and requeued instead of freezing the machine. Costs no cloud tokens; a lane sees only its own jobs",
+        starts: "queue.submit starts your declared command (an argv, no shell; idempotent and a class light, build or heavy are required) when memory allows; no model and no container is started by queueing. Only if memory is critically short and no queued job is left to stop, the forge using the most memory is frozen, never killed",
+        use_when: "any compile, test suite, image build or batch that uses many cores or several GiB, split into bundles of about 30 minutes that are safe to restart. Prefer it over running the command yourself: a job started outside the queue is not protected and can stall every project on this computer",
+    },
+    Group {
+        prefix: "watch.*",
+        does: "wait for a queued job's next event inside one call (watch.wait, at most 9 minutes; a return at the bound is not an event)",
+        starts: "nothing; it costs no tokens while it waits",
+        use_when: "you would otherwise sleep and look, or schedule a wake",
+    },
     Group {
         prefix: "webstudio.*",
         does: "co-edit this project in a visual web studio (GrapesJS, Decap, Tina, Puck, Onlook) that the operator opens",
@@ -150,7 +163,7 @@ pub(crate) fn instructions() -> String {
 pub(crate) fn index_descriptor() -> serde_json::Value {
     serde_json::json!({
         "name": INDEX_TOOL,
-        "description": "Which host tool does what, grouped: preview.* (local web preview, starts a sibling web container), toolchain.* (flutter image), image.* (local image generation), studio.* (headless ComfyUI pipeline), browser.* (host browser windows), cloudflare.* (read-only account views), webstudio.* (visual co-edit studios). Call it when you are unsure which tool starts what. Starts nothing.",
+        "description": "Which host tool does what, grouped: preview.* (local web preview, starts a sibling web container), toolchain.* (flutter image), image.* (local image generation), studio.* (headless ComfyUI pipeline), browser.* (host browser windows), cloudflare.* (read-only account views), queue.* (start a heavy job when the computer has room), watch.* (wait for a queued job's next event), webstudio.* (visual co-edit studios). Call it when you are unsure which tool starts what. Starts nothing.",
         "inputSchema": { "type": "object", "properties": {} }
     })
 }
@@ -277,5 +290,28 @@ mod tests {
                 "studio_open"
             ]
         );
+    }
+}
+
+/// 2095-kgdj: in-forge agents read the queue's three sentences (queue heavy
+/// work; make it idempotent and bundle it; wait with watch.wait) in the
+/// forge-wide guidance and in the forge-quick-intro skill.
+#[cfg(test)]
+mod queue_guidance_tests {
+    #[test]
+    fn the_forge_guidance_and_quick_intro_name_the_queue() {
+        let root = std::path::PathBuf::from(
+            std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR"),
+        )
+        .join("../..");
+        for rel in [
+            "images/default/config-overlay/mcp/forge-agent-guidance.md",
+            "skills/forge-quick-intro/SKILL.md",
+        ] {
+            let text = std::fs::read_to_string(root.join(rel)).unwrap();
+            for needle in ["queue.submit", "idempotent", "watch.wait"] {
+                assert!(text.contains(needle), "{rel} names {needle}");
+            }
+        }
     }
 }

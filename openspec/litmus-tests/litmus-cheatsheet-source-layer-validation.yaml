@@ -8,11 +8,11 @@ size: instant
 
 preconditions:
   - workspace contains scripts/ and cheatsheets/
-  - bash is available in PATH
+  - a tillandsias-plan binary with `script run` resolves
 
 critical_path:
   - step: "run the source validator in no-sha mode"
-    command: "bash scripts/check-cheatsheet-sources.sh --no-sha"
+    command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha"
     timeout_ms: 5000
 
 observability:
@@ -24,5 +24,5 @@ observability:
     test: "cheatsheet-source-layer-validation"
 
 rollback:
-  on_failure: "inspect scripts/check-cheatsheet-sources.sh and openspec/specs/cheatsheet-source-layer/spec.md for drift"
-  command: "bash scripts/check-cheatsheet-sources.sh --no-sha"
+  on_failure: "inspect scripts/lua/check-cheatsheet-sources.lua and openspec/specs/cheatsheet-source-layer/spec.md for drift"
+  command: ". scripts/plan-binary-probe.sh; \"$(resolve_plan_binary)\" script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha"

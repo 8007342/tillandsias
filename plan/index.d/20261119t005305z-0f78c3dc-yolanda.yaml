@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: live-authoring-autocommits-locally-on-a-studio-work-branch-and-squashes-on-merge-so-the-remote-never-carries-micro-commits-or-temp-assets
+    event:
+      type: note
+      ts: "2026-11-19T00:53:05Z"
+      agent_id: windows-yolanda-claude-20261119t005242z
+      host: yolanda
+      summary: |-
+        2108-dptd (tlatoani.net verification 2026-11-19): GrapesJS saves no longer commit studio state (.tillandsias/studio/grapesjs/project.json is not written); a text edit commits only the page (public/index.html) on grapesjs/<project>-work/<date>. A Style Manager change additionally writes <root>/studio.css and one link in the head. Open: whether studio.css reaches main at merge as-is.

@@ -145,16 +145,23 @@ _nix_builder_ensure_image() {
         #
         # Inherits build-image.sh's check rather than re-deriving one: two
         # readers of the same question drift apart (1081-gynk).
-        local _verify="$(dirname "${_NB_SELF}")/verify-image-usable.sh"
-        if [[ -x "$_verify" ]]; then
-            "$_verify" "$_NB_IMAGE_NAME" >/dev/null
-            local _rc=$?
-            if [[ $_rc -ne 0 ]]; then
-                echo "[nix-builder] '$_NB_IMAGE_NAME' exists but is NOT usable — rebuilding without cache (1073-dqtx)" >&2
-                podman rmi -f "$_NB_IMAGE_NAME" >/dev/null 2>&1 || true
-            else
-                return 0
-            fi
+        # The check is scripts/lua/verify-image-usable.lua since 2006-me5t, on
+        # the plan binary resolved by execution; with no runnable plan binary
+        # the single `podman image inspect` it wraps runs instead.
+        local _root _plan="" _rc
+        _root="$(cd "$(dirname "${_NB_SELF}")/.." && pwd)"
+        _plan="$(cd "$_root" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _plan=""
+        case "$_plan" in ./*) _plan="$_root/${_plan#./}" ;; esac
+        if [[ -n "$_plan" ]]; then
+            (cd "$_root" && "$_plan" script run scripts/lua/verify-image-usable.lua -- "$_NB_IMAGE_NAME") >/dev/null
+            _rc=$?
+        else
+            podman image inspect "$_NB_IMAGE_NAME" >/dev/null 2>&1
+            _rc=$?
+        fi
+        if [[ $_rc -ne 0 ]]; then
+            echo "[nix-builder] '$_NB_IMAGE_NAME' exists but is NOT usable — rebuilding without cache (1073-dqtx)" >&2
+            podman rmi -f "$_NB_IMAGE_NAME" >/dev/null 2>&1 || true
         else
             return 0
         fi

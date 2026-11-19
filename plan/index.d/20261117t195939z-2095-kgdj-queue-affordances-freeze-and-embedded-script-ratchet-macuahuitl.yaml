@@ -1,0 +1,94 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl 2026-11-17 from the operator's rulings and requirements of the same day, relayed by the coordinator. Code is cited by symbol, never by line.
+# Design: openspec/changes/job-admission-and-host-watch/ (sections 3.2, 10 and 11).
+packets:
+  - packet_id: every-restriction-of-the-queue-and-watch-tools-is-in-their-descriptions-schemas-and-responses-and-a-job-declares-whether-it-is-idempotent
+    order: 2095-kgdj
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [tray, mcp, forge, docs, queue]
+    estimated_hours: 8
+    size: M
+    implementer_tier: sonnet
+    title: "Every restriction of the queue and watch tools is stated in their descriptions, schemas and responses; a job declares idempotent and a class; a non-idempotent job is run once and never rerun"
+    context: "Operator requirement 2026-11-17, relayed by the coordinator: an agent must learn every restriction of the service from the tool affordances without reading the design. That covers: that the queue may stop and requeue a job or freeze a forge; the job classes and memory ceilings; the retry policy and what is never retried (a full disk); the watch.wait bound of 9 minutes; per-forge visibility. Each goes into the queue.submit and watch descriptions and schemas, and into every refusal and requeue response as a reason, retry_after_seconds where waiting can help, and the class limits. Callers are told to submit work that is idempotent and safe to restart from its start, in reasonably sized bundles (about 30 minutes, a proposed figure). queue.submit gains a required idempotent field with no default beside the class estimate: a job declared not idempotent is never requeued or restarted, is stopped only after every idempotent queue-started job, and when stopped ends as failed with the reason stopped-memory, reported once. The class figures in a description are the ones in force on the serving host. The same three sentences go into images/default/config-overlay/mcp/forge-agent-guidance.md and skills/forge-quick-intro so in-forge agents see them. Design section 11; spec delta job-admission-queue, the two requirements on idempotent jobs and on affordances."
+    exit_criteria:
+      - "An affordance test asserts that the descriptions and schemas of queue.submit, queue.status, watch.register, watch.status and watch.wait state each of: stop-and-requeue, the last-resort freeze, the three classes with this host's reserve, ceiling and running limit, the restart budget, a full disk as never retried, the 9 minute wait bound as a schema maximum, and own-lane visibility; deleting any one of them from the source makes the test fail naming that restriction. Pre-fix result: FAILS, the tools and the test do not exist."
+      - "Every refusal produced by the queue and watch tools in the fixture transcript carries a reason from the closed set and a message; the refusals for a full lane queue and for pressure carry retry_after_seconds and class limits; the refusal for a command given as one string carries no retry_after_seconds. Pre-fix result: FAILS, no refusal shape exists."
+      - "A submission without idempotent is refused with idempotent-required and creates no ticket. Pre-fix result: FAILS, the field is unknown."
+      - "At a fixture critical level with one idempotent and one non-idempotent queue-started job running, the idempotent one is stopped and requeued; with only the non-idempotent one running, it is stopped, its ticket ends failed with stopped-memory, its command is not run again, and its lane receives exactly one message. A control arm with the run-once rule disabled through the fixture seam runs it a second time. Pre-fix result: FAILS, every stopped job is requeued."
+      - "An agent given only the lane socket's tools/list and initialize instructions and asked to run a six-hour test suite submits several queue.submit jobs, each within the bundle size the description names and each with idempotent true and a class, submits no single job for the whole suite, and waits with watch.wait with no sleep loop; the transcript records the model, the harness and three of three runs agreeing. Pre-fix result: FAILS, the tool list names no queue and the agent runs the suite as one command."
+      - "A search of images/default/config-overlay/mcp/forge-agent-guidance.md and skills/forge-quick-intro finds queue.submit, idempotent and watch.wait in each. Pre-fix result: FAILS, a search of both for queue.submit finds nothing."
+    verifiable_closure: "The affordance test and the job_queue fixture transcript for the first four arms, the agent transcript for the fifth, and the two guidance files for the sixth. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the affordance test lands with the descriptions; the claimer writes its name here in the same commit (1136-n8sh). The fifth arm is an agent-behaviour measurement and is recorded, not gated."
+    next_action: "Nothing is built. Left: with or directly after 2094-ay52's tools, write the descriptions and schemas from design section 11, the refusal shape, the idempotent field and run-once rule, the affordance test, the two guidance edits, and run the bundle-splitting arm three times."
+    provenance: "Operator requirement 2026-11-17 relayed by the coordinator on macuahuitl; openspec/changes/job-admission-and-host-watch design section 11."
+    related: [2094-ay52, 2094-mzap, 2081-ic4j]
+    depends_on: [queue-submit-starts-a-declared-job-only-when-the-host-has-room-and-lanes-take-turns]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:59:39Z"
+        host: macuahuitl
+        summary: "filed p1 ready, waits on 2094-ay52's tools"
+  - packet_id: with-memory-critically-short-and-no-queued-job-left-the-tray-freezes-and-never-kills-the-forge-using-the-most-memory-and-notifies-the-operator
+    order: 2095-wq8z
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, memory, cgroup, forge, podman]
+    estimated_hours: 8
+    size: M
+    implementer_tier: sonnet
+    title: "Last resort: with memory critically short and no queue-started job left to stop, the tray freezes (cgroup freezer, never a kill) the forge using the most memory, notifies the operator, and thaws it from the tray"
+    context: "Operator ruling 3 of 2026-11-17 on 2094-65yz, relayed by the coordinator: when nothing queued is left to stop, freeze the forge using the most memory and notify the operator; freeze, not kill. This supersedes the notify-only last step that 2094-mzap's third exit criterion describes; mzap still delivers the pressure levels and the stop-and-requeue, and this packet adds the step after it. On 2026-11-15 a forge running tests outside any queue froze the desktop while systemd-oomd marked its scope and never killed it (2093-gfak, still open). Measured on macuahuitl 2026-11-17: the cgroup.freeze file of a rootless forge's libpod scope under tillandsias.slice is owned by the user, so no root is needed; nothing was written to it. A freeze stops the forge taking more memory and loses no process; it does not release memory. Proposed and not yet ruled: a frozen forge is thawed only by the operator from the tray, never automatically. While frozen, the forge's lane and the tray report frozen and its watches' timers are paused."
+    exit_criteria:
+      - "At a fixture critical level with no queue-started job running and two forge scopes, the scope holding the most memory is frozen and the other is not; every process of the frozen scope still exists; exactly one desktop notification names the forge and the thaw action. A control arm with one queue-started job running freezes no forge and stops that job instead. Pre-fix result: FAILS, nothing freezes a forge and the last step only notifies."
+      - "On a Linux host with rootless podman, a real forge-like container under tillandsias.slice that allocates until the level is critical is frozen by the tray running as the user with no sudo: its cgroup.events reads frozen 1, its process ids are unchanged, and after a thaw from the tray the same process ids continue and cgroup.events reads frozen 0. Pre-fix result: FAILS, the container runs on until the host stalls."
+      - "No second forge is frozen within 2 minutes of the first, and no forge is thawed without the tray action over 30 minutes of fixture time at calm. Pre-fix result: FAILS, no freeze state exists."
+      - "While a forge is frozen its lane's queue.status and watch.status report frozen, and a watch whose stall interval elapses during the freeze records no stall episode and no judge request. Pre-fix result: FAILS, no frozen state is reported."
+    verifiable_closure: "The fixture transcript for the first, third and fourth arms and the real-host transcript for the second, with the kernel and podman versions. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the freeze path and its tests land with the feature; the claimer writes the test names here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: after 2094-mzap's pressure levels exist, add the freeze step, the frozen state, the tray thaw action and the notification; ask the operator whether thaw stays manual before closing."
+    provenance: "Operator ruling 3 of 2026-11-17 relayed by the coordinator on macuahuitl; openspec/changes/job-admission-and-host-watch design section 3.2."
+    related: [2094-mzap, 2093-gfak, 2067-dwqd, 1913-ebv8]
+    depends_on: [memory-pressure-reaches-the-queue-as-a-kernel-event-and-it-stops-and-requeues-only-a-job-it-started]
+    events:
+      - type: filed
+        ts: "2026-11-17T19:59:39Z"
+        host: macuahuitl
+        summary: "filed p1 ready, waits on 2094-mzap's pressure levels"
+  - packet_id: an-embedded-script-ratchet-counts-heredoc-to-interpreter-sites-and-inline-awk-jq-python-bodies-and-its-counter-only-falls
+    order: 2095-9igs
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: any
+    capability_tags: [scripts, lua, gate, migration]
+    estimated_hours: 8
+    size: M
+    implementer_tier: sonnet
+    title: "An embedded-script ratchet: a gate counts heredoc-to-interpreter sites in shell files and multi-line inline awk, jq and python bodies, refuses any increase, and its recorded floor only falls"
+    context: "Operator direction 2026-11-17, relayed by the coordinator. The operator's language order is Lua, then Rust, then Go. Shell files still carry other programs inside them: by the coordinator's count on linux-next that day, 192 heredoc-to-interpreter sites in 97 shell files and 75 multi-line inline awk, jq or python -c bodies. The filing session did not reproduce those figures (one quick pattern of its own matched 2 sites), so the pattern is not yet pinned and pinning it is the first criterion. An embedded block has no exit code of its own, no name a log can cite and no test, which is what makes a failure inside one ambiguous to a watcher. Model the guard on scripts/check-jq-callsite-ratchet.sh (order 1375-tsfu): the pattern written out in the header with its known non-matches and limits, a declared population, a floor file of count and path lines under scripts/portability rewritten downward only by the guard's own ratchet mode, standing debt never red, any increase refused by name, an empty population refused. New gates are Lua (convergence.yaml carried_obligations), so the guard is Lua. A ported block becomes a file in the operator's language order with a real exit code that emits the shared log events of the runtime-logging and log-schema-versioning specs, so a watch can read its outcome from a declared log without a model."
+    exit_criteria:
+      - "The guard's header states the two patterns, their known non-matches and limits and the population, and on linux-next its count line reports the heredoc-to-interpreter sites with their file count and the multi-line inline bodies; the record says whether these equal the coordinator's 192 in 97 and 75 and, if not, which pattern difference explains it. Pre-fix result: FAILS, no guard exists and the figures are unreproduced."
+      - "A fixture tree that adds one heredoc-to-interpreter site to a file at its floor is refused with a line naming the file; a tree that adds one multi-line inline awk body is refused likewise; a tree that removes a site passes and the ratchet mode lowers that file's floor line; no mode raises a floor line. Pre-fix result: FAILS, all four trees pass every gate today."
+      - "A fixture tree with an empty population is refused by name and not reported ok. Pre-fix result: FAILS, no guard exists."
+      - "One embedded block is ported in the same pull request to a file with its own exit code that emits one schema-valid log event on success and one on failure; a negative arm makes the ported file fail and shows a non-zero exit and the failure event, where the embedded original's failure was swallowed or indistinct. Pre-fix result: FAILS, the block has no exit code or event of its own."
+      - "The guard runs in ./build.sh --check and in --preflight and the floor total after the port is lower than before it. Pre-fix result: FAILS, no floor exists."
+    verifiable_closure: "The guard's own fixture script under scripts/, named by the claimer in the same commit, with the four tree arms and the population arm; and the count line on linux-next. Pre-fix result: FAILS."
+    unscoreable: "unpinnable-until-the-guard-exists: the guard and its fixture land together; the claimer writes the fixture's script name here in the same commit (1136-n8sh)."
+    next_action: "Nothing is built. Left: read scripts/check-jq-callsite-ratchet.sh and its fixture, pin the two patterns against the coordinator's figures, write the Lua guard, the floor file and the fixture, port one block, and wire the guard into the check and preflight tiers."
+    provenance: "Operator direction 2026-11-17 relayed by the coordinator on macuahuitl; the site counts are the coordinator's and are unverified by the filing session."
+    related: [1375-tsfu, 2094-y2bb, 2094-dyvk]
+    depends_on: []
+    events:
+      - type: filed
+        ts: "2026-11-17T19:59:39Z"
+        host: macuahuitl
+        summary: "filed p2 ready; independent of the queue packets"

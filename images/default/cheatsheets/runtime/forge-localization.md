@@ -81,7 +81,7 @@ that no script read — the entrypoint install/warning strings, never wired):
    ```
 6. **Run coverage test** to verify all 50 variables are present:
    ```bash
-   bash scripts/test-locale-coverage.sh
+   tillandsias-plan script run scripts/lua/check-locale-coverage.lua
    ```
 
 ## Help System
@@ -153,7 +153,7 @@ COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 
 Run automated locale coverage test:
 ```bash
-bash scripts/test-locale-coverage.sh
+tillandsias-plan script run scripts/lua/check-locale-coverage.lua
 ```
 
 **Tests**:

@@ -1,0 +1,3 @@
+# Hashed lock for tillandsias_audio (2090-ausx): no requirements. numpy, scipy,
+# torch and av are ComfyUI's own (requirements.txt at the pinned v0.40.0);
+# pip check after install proves the closure is satisfied.

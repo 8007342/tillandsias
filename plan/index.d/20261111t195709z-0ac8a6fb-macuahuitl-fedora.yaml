@@ -1,0 +1,16 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-linux-install-path-serves-aarch64-so-a-raspberry-pi-5-curl-installs-and-runs-the-headless-binary-on-bare-metal-the-release-already-builds-the-static-aarch64-headless-but-the-installer-refuses-the-arch
+    field: next_action
+    value: |-
+      (1) install.sh: select the asset by architecture, refuse others by name; (2) release.yml: publish the aarch64 binary under the name the installer selects and keep the x86_64 path byte-identical; (3) a macOS host proves the aarch64 binary's --version and the sidecar arch inside its VM; (4) the operator brings one Pi 5 up and runs arm 1 and 2 by hand once, with the output pasted to the row, before the litmus is bound to any tier.
+
+
+      [2026-11-11T19:57:09Z macuahuitl-fedora] OQ-3 operator answer 2026-11-11 (triage 2080-294s): a Linux host with no tray runs the headless binary with the full CLI (interactive cloud forge sessions, both sign-in verbs, the Cloudflare login); the parity check is 2082-fidv.
+    ts: "2026-11-11T19:57:09Z"
+    host: macuahuitl-fedora

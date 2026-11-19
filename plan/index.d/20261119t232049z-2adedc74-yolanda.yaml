@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-tray-host-process-dies-silently-unsupervised
+    field: status
+    value: completed
+    ts: "2026-11-19T23:20:49Z"
+    host: yolanda
+
+events:
+  - packet_id: windows-tray-host-process-dies-silently-unsupervised
+    event:
+      type: completed
+      ts: "2026-11-19T23:20:49Z"
+      host: yolanda
+      summary: |-
+        status 'completed' with evidence_refs: PR #1130 merged (work/783-eeii ancestor of linux-next). Re-verified on yolanda 2026-11-19: tray-lifecycle.state has start + heartbeat for pid 328 (56.11.18.2); --diagnose prints 'Tray process: running (pid 328, ..., heartbeat 27s ago)'; criterion 2 forensics on trunk at plan/issues/enhancement/tray-host-process-silent-death-2026-08-16.md (death 2 attributed to Quit 14:04:46, death 1 not attributable with queries).
