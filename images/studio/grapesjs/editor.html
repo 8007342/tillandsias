@@ -65,6 +65,9 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
             const cssChanged = css !== cssAtLoad;
             const files = [[loaded.page, StudioPage.rebuild(loaded.doc, ed.getHtml(), cssChanged ? cssHref : null, { baseline, css })]];
             if (cssChanged) files.push([cssPath, css.endsWith("\n") ? css : css + "\n"]);
+            // v4: a store that changes nothing (selecting a component triggers
+            // one) posts nothing.
+            if (files.length === 1 && files[0][1] === lastSaved) return;
             for (const [path, content] of files) {
               const res = await fetch("/__studio/save", {
                 method: "POST",
@@ -72,6 +75,7 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
                 body: JSON.stringify({ path, content }),
               });
               if (!res.ok) throw new Error("save " + path + " failed: " + res.status);
+              if (path === loaded.page) lastSaved = content;
             }
           },
         }),
@@ -84,6 +88,7 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
   // v4: the editor's own serialisation at load; a save rewrites only the
   // nodes whose serialisation moved away from it.
   let baseline = null;
+  let lastSaved = loaded.doc;
   editor.onReady(() => { cssAtLoad = editor.getCss(); baseline = editor.getHtml(); });
   // 2108-dptd: the <body> tag's classes and attributes on the canvas body,
   // display only (idempotent; the wrapper may re-render, so re-applied on

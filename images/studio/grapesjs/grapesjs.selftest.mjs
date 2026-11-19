@@ -145,7 +145,7 @@ arms++;
   check(7, outv4 === want, JSON.stringify(outv4));
   const lost = page.rebuild(d, now.replace("<!--studio-keep:0-->", ""), null, { baseline: base, css: "" });
   check(7, lost.includes('var q = "<b>";') && !lost.includes("iriib") && !lost.includes("ijvv2"), JSON.stringify(lost));
-  check(7, editor.includes('editor.on("rte:disable", schedule)') && /if \(editor\.getEditing\(\)\) return;/.test(editor) && editor.includes("StudioPage.protect(loaded.html"), "editor-saves-while-typing-or-unprotected");
+  check(7, editor.includes('editor.on("rte:disable", schedule)') && /if \(editor\.getEditing\(\)\) return;/.test(editor) && editor.includes("StudioPage.protect(loaded.html") && editor.includes("files[0][1] === lastSaved"), "editor-saves-while-typing-or-unprotected");
   arms++;
 }
 
