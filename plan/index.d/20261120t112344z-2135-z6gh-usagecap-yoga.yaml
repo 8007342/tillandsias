@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction (found diagnosing release blocker 7).
+packets:
+  - packet_id: the-expert-usage-log-is-rotated-or-capped-so-cycle-metrics-does-not-read-its-whole-history-every-cycle
+    order: 2135-z6gh
+    status: ready
+    kind: debt
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [metrics, logs, cycle-metrics]
+    estimated_hours: 3
+    owned_files:
+      - scripts/cycle-metrics.sh
+    title: "The expert-usage log is rotated or capped, so cycle-metrics does not grep and jq its whole history every cycle"
+    context: |
+      scripts/cycle-metrics.sh reads all of forge-expert-usage.jsonl (USAGE_LOG, line ~302) on every cycle: five greps and
+      a jq over the full file. MEASURED 2026-11-20: macuahuitl's log is 93 MB (coordinator), plus a 15 MB copy under
+      ~/.local/bin/.cache; on yoga a 162 MB synthetic log made --experts-only take 28 s against 0.3 s empty. Cost grows
+      without bound with a host's history, and the coordinator logs the most expert calls.
+    exit_criteria:
+      - "forge-expert-usage.jsonl is bounded (rotation by size or age, or a windowed read in cycle-metrics); a 160 MB history no longer makes --experts-only take more than 2 s. Pre-fix: FAILS (28 s)."
+      - "The windowed figures cycle-metrics prints (calls, answered, answer_rate) are unchanged for the window they claim."
+    unscoreable: "a timing over a constructed log is the measure"
+    provenance: "yoga timing and the coordinator's macuahuitl du, 2026-11-20."
+    events:
+      - type: filed
+        ts: "2026-11-20T11:23:44Z"
+        host: yoga
+        summary: "filed at the coordinator's direction"

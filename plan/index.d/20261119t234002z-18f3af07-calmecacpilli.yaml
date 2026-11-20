@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-macos-v56-10-18-1-browser-open-of-an-allowed-routed-url-fails-with-browser-launch-failed-because-the-window-cdp-socket-never-appears
+    field: next_action
+    value: |-
+      Reproduce in a macOS forge. During the 30 s wait, use --exec-guest to capture `podman ps -a --filter name=browser`, the browser container's log, and `ls /run/user/0/tillandsias/browser/`.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: macOS smoke: browser open; the CDP socket appears.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: on-macos-v56-10-18-1-browser-open-of-an-allowed-routed-url-fails-with-browser-launch-failed-because-the-window-cdp-socket-never-appears
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

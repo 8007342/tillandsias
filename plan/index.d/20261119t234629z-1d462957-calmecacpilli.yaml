@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: salvage-dirty-worktree-reports-paths-as-unstageable-and-skipped-when-it-has-in-fact-salvaged-them-so-its-summary-names-the-opposite-of-what-the-ref-carries
+    field: next_action
+    value: |-
+      Reproduce first; it needs no macOS host and no gate. In any checkout: `git rm` a tracked file, run scripts/salvage-dirty-worktree.sh with a throwaway slug, and compare the tool's skip lines and summary count against `git diff --stat <ref>^ <ref>` for the ref it just created — expect the named path to appear as removed in the diff while the tool claims it was skipped. Then read the staging step in scripts/salvage-dirty-worktree.sh; the mechanism named in `context` is a CANDIDATE from the observed behaviour, not a source read, so confirm it before fixing it. Do NOT close this by silencing the line for deletions — the negative control in verifiable_closure exists to refuse that.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/derive-vsock-seccomp.sh and test-vsock-seccomp-derivation.sh were retired into Rust derive_vsock_seccomp (9c0479ad2, 830-xsk2); they were only citations, the salvage-output goal stands. Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: salvage-dirty-worktree-reports-paths-as-unstageable-and-skipped-when-it-has-in-fact-salvaged-them-so-its-summary-names-the-opposite-of-what-the-ref-carries
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

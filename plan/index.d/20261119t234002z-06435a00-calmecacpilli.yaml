@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-agents-read-the-operators-cloudflare-account-through-a-host-side-get-only-mcp-allowlist-that-holds-the-vault-stored-sign-in-itself-so-the-token-never-enters-the-forge-a-tool-result-a-log-or-an-error
+    field: next_action
+    value: |-
+      When a WIP slot frees (#508/#509/#510): read mcp_socket.rs's tool dispatch and the browser-mcp allowlist pattern; write cloudflare_mcp.rs with the allowlist table, the GET-only client over the existing HttpClient seam, the scope probe and redaction; extend the fake with the Builds endpoints; add the fixture arms.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: forge read-only Cloudflare MCP tools answer against a real account.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: forge-agents-read-the-operators-cloudflare-account-through-a-host-side-get-only-mcp-allowlist-that-holds-the-vault-stored-sign-in-itself-so-the-token-never-enters-the-forge-a-tool-result-a-log-or-an-error
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

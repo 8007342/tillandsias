@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-peer-autonomy-charter-gives-peers-row-queues-scope-authority-and-four-escalation-triggers
+    field: next_action
+    value: 'write the peer autonomy charter (3-5 row queues, peers open their own PRs, coordinator relays and rules) into methodology/distributed-work.yaml; exit: methodology_ask ''peer autonomy'' returns it'
+    ts: "2026-11-19T23:20:34Z"
+    host: calmecacpilli
+    replaces_sha256: "875675c1a9bbb6b3443074530f269df06e483574a2e79299aef2f8b2eb80088a"
+
+events:
+  - packet_id: a-peer-autonomy-charter-gives-peers-row-queues-scope-authority-and-four-escalation-triggers
+    event:
+      type: note
+      ts: "2026-11-19T23:20:34Z"
+      host: calmecacpilli
+      summary: |-
+        coordinator (row owner) ruling 2026-11-19: re-shape

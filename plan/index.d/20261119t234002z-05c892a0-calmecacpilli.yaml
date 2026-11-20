@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: idle-containers-are-reaped-by-a-watchdog-that-outlives-the-launcher-with-per-class-grace-and-local-serving-relaunches-on-demand
+    field: next_action
+    value: |-
+      Children in order haat → qgu5 → xdcx; mvmc in parallel with xdcx; dav6 after 1779-sq9g's GlobalEvent; 6yyp last. Do not add a persistent user service; do not reap previews with the lane; core containers join idle reaping only after 1801-6ci7 measures them fast and idempotent; browser windows are reaped with their lane's clock, with no separate 24 h cap.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] umbrella; closes when its children close; spec delivered in 23cf890ed7
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: idle-containers-are-reaped-by-a-watchdog-that-outlives-the-launcher-with-per-class-grace-and-local-serving-relaunches-on-demand
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)
