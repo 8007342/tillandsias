@@ -57,7 +57,7 @@ seed
 { entry fields; printf 'status:\n  - packet_id: fixture-642\n    field: pickup_role\n    value: windows\n    ts: "2026-08-26T00:00:00Z"\n    host: h1\n'; } \
     > "$W/plan/index.d/both.yaml"
 BOTH="$(fold)"
-if printf '%s' "$BOTH" | grep -q 'v0.9'; then
+if grep -q 'v0.9' <<<"$BOTH"; then
     # pickup_role is not in the query projection; assert it through the ledger
     # integrity read instead of asserting nothing.
     "$BIN" --index "$W/plan/index.yaml" check >/dev/null 2>&1 \
@@ -85,7 +85,7 @@ seed
 printf 'fields:\n  - packet_id: no-such-packet\n    field: desired_release\n    value: v9.9\n    ts: "2026-08-26T00:00:00Z"\n    host: h1\n' \
     > "$W/plan/index.d/orphan.yaml"
 OUT="$("$BIN" --index "$W/plan/index.yaml" check 2>&1)"
-printf '%s' "$OUT" | grep -qi 'no-such-packet' \
+grep -qi 'no-such-packet' <<<"$OUT" \
     && ok "an orphaned fields: entry is NAMED, not silently discarded" \
     || bad "orphaned fields: entry vanished without a gap report: [$OUT]"
 

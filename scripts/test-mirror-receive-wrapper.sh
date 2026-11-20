@@ -97,24 +97,24 @@ mode_refusals() {
     # a) non-receive verb refused
     out="$("${common[@]}" SSH_USER_AUTH="$AUTH_FILE" SSH_ORIGINAL_COMMAND="ls -la" sh "$WRAPPER" 2>&1)" \
         && { fail non-receive-accepted; return 1; }
-    printf '%s\n' "$out" | grep -qx 'fail:tillandsias-receive:not-receive-pack' \
+    grep -qx 'fail:tillandsias-receive:not-receive-pack' <<<"$out" \
         || { echo "$out" >&2; fail non-receive-wrong-cause; return 1; }
     # b) missing auth info refused
     out="$("${common[@]}" SSH_ORIGINAL_COMMAND="git-receive-pack 'x'" sh "$WRAPPER" 2>&1)" \
         && { fail no-auth-accepted; return 1; }
-    printf '%s\n' "$out" | grep -qx 'fail:tillandsias-receive:no-auth-info' \
+    grep -qx 'fail:tillandsias-receive:no-auth-info' <<<"$out" \
         || { echo "$out" >&2; fail no-auth-wrong-cause; return 1; }
     # c) plain (non-cert) auth info refused
     printf 'publickey ssh-ed25519 %s\n' "$(awk '{print $2}' "$d/key.pub")" > "$d/plain-auth"
     out="$("${common[@]}" SSH_USER_AUTH="$d/plain-auth" SSH_ORIGINAL_COMMAND="git-receive-pack 'x'" sh "$WRAPPER" 2>&1)" \
         && { fail plain-key-accepted; return 1; }
-    printf '%s\n' "$out" | grep -qx 'fail:tillandsias-receive:no-cert-in-auth-info' \
+    grep -qx 'fail:tillandsias-receive:no-cert-in-auth-info' <<<"$out" \
         || { echo "$out" >&2; fail plain-key-wrong-cause; return 1; }
     # d) missing project refused
     out="$(env TILLANDSIAS_RECEIVE_ROOT="$d/root" TILLANDSIAS_RECEIVE_PROJECT= \
         SSH_USER_AUTH="$AUTH_FILE" SSH_ORIGINAL_COMMAND="git-receive-pack 'x'" sh "$WRAPPER" 2>&1)" \
         && { fail no-project-accepted; return 1; }
-    printf '%s\n' "$out" | grep -qx 'fail:tillandsias-receive:no-project' \
+    grep -qx 'fail:tillandsias-receive:no-project' <<<"$out" \
         || { echo "$out" >&2; fail no-project-wrong-cause; return 1; }
     echo "ok:receive-fixture:refusals-loud-and-named"
 }
@@ -267,7 +267,7 @@ echo inner:m5-fixed-path-ok'
 mode_m5_container() {
     build_image
     out="$(run_inner "$INNER_M5")"
-    if printf '%s' "$out" | grep -q 'inner:m5-fixed-path-ok'; then
+    if grep -q 'inner:m5-fixed-path-ok' <<<"$out"; then
         echo "ok:receive-fixture:m5-wrong-path-lands-in-fixed-repo"
         return 0
     fi

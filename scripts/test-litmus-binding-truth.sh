@@ -144,9 +144,9 @@ run_checker() { # dir, checker-path -> prints verdict, sets RC
 # Declared intended-spec, bound under wrong-spec -> must REFUSE, naming both.
 A="$W/a1"; build_tree "$A" "intended-spec"; bind_under "$A" "wrong-spec"
 out="$(run_checker "$A" "$CHECKER")"
-if printf '%s' "$out" | grep -q '^violation:binding-spec-mismatch:' \
-   && printf '%s' "$out" | grep -q 'declared=intended-spec' \
-   && printf '%s' "$out" | grep -q 'bound-under=wrong-spec'; then
+if grep -q '^violation:binding-spec-mismatch:' <<<"$out" \
+   && grep -q 'declared=intended-spec' <<<"$out" \
+   && grep -q 'bound-under=wrong-spec' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail "arm 1 (2a): a misbound litmus was not refused with both ids -- got: $out"
@@ -167,7 +167,7 @@ if ! grep -q 'MUTATED-NO-CROSSCHECK' "$MUTANT"; then
     fail "arm 2: the mutation did not apply; the refusal line has been reworded"
 else
     out="$(run_checker "$A" "$MUTANT")"
-    if printf '%s' "$out" | grep -q '^ok:litmus-bindings:'; then
+    if grep -q '^ok:litmus-bindings:' <<<"$out"; then
         pass=$((pass + 1))
     else
         fail "arm 2: removing the cross-check did NOT restore acceptance -- arm 1 may pass for another reason -- got: $out"
@@ -179,8 +179,8 @@ rm -f "$MUTANT"; MUTANT=""
 # Bound under NO block -> must REFUSE as unbound (660-ryhn, must stay true).
 B="$W/a3"; build_tree "$B" "intended-spec"
 out="$(run_checker "$B" "$CHECKER")"
-if printf '%s' "$out" | grep -q '^violation:unbound-litmus:' \
-   && printf '%s' "$out" | grep -q 'truth-probe'; then
+if grep -q '^violation:unbound-litmus:' <<<"$out" \
+   && grep -q 'truth-probe' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail "arm 3 (2b): an unbound litmus was not refused -- got: $out"
@@ -198,7 +198,7 @@ if ! grep -q 'MUTATED-NO-UNBOUND' "$MUTANT"; then
     fail "arm 4: the mutation did not apply; the unbound refusal has been reworded"
 else
     out="$(run_checker "$B" "$MUTANT")"
-    if printf '%s' "$out" | grep -q '^ok:litmus-bindings:'; then
+    if grep -q '^ok:litmus-bindings:' <<<"$out"; then
         pass=$((pass + 1))
     else
         fail "arm 4: removing the unbound check did NOT restore acceptance -- got: $out"

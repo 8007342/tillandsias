@@ -372,7 +372,7 @@ scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
 scripts scripts/check-gate-step-regimes.sh 1
 scripts scripts/check-groundtruth-regime-invariance.sh 3
-scripts scripts/check-host-tools.sh 105
+scripts scripts/check-host-tools.sh 104
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
 scripts scripts/check-litmus-mutation-arms-mutate.sh 3
@@ -475,7 +475,7 @@ scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
-scripts scripts/litmus-stdlib.sh 10
+scripts scripts/litmus-stdlib.sh 4
 scripts scripts/local-ci.sh 49
 scripts scripts/loop-status-metrics-audit.sh 3
 scripts scripts/loop-success-probe.sh 1
@@ -483,7 +483,7 @@ scripts scripts/macos-tray-ax-smoke.sh 3
 scripts scripts/manage-cache.sh 12
 scripts scripts/measure-forge-spill.sh 1
 scripts scripts/meta-orchestration-worktree-guard.sh 1
-scripts scripts/mo-full-attest.sh 4
+scripts scripts/mo-full-attest.sh 3
 scripts scripts/native-scratch-dir.sh 1
 scripts scripts/nix-build-container.sh 23
 scripts scripts/nix-cache-service.sh 4
@@ -657,7 +657,6 @@ scripts scripts/test-hardware-fingerprint.sh 1
 scripts scripts/test-harness-affinity-selection.sh 10
 scripts scripts/test-harness-byte-cheap.sh 1
 scripts scripts/test-harness-contract-probe.sh 1
-scripts scripts/test-harness-rollback.sh 6
 scripts scripts/test-headless-sidecar-target-gate.sh 1
 scripts scripts/test-hook-mover-enumeration-is-batched.sh 1
 scripts scripts/test-hook-phase-instrumentation.sh 5
@@ -683,7 +682,7 @@ scripts scripts/test-lane-instrument-vs-ledger.sh 6
 scripts scripts/test-ledger-prose-roundtrip.sh 8
 scripts scripts/test-ledger-ts-guard.sh 2
 scripts scripts/test-ledger-write-reaches-its-reader.sh 22
-scripts scripts/test-litmus-binding-truth.sh 8
+scripts scripts/test-litmus-binding-truth.sh 1
 scripts scripts/test-litmus-fake-backend-under-remote-podman.sh 1
 scripts scripts/test-litmus-fake-podman-hermetic.sh 1
 scripts scripts/test-litmus-grep-escapes.sh 1
@@ -691,7 +690,7 @@ scripts scripts/test-litmus-item-opener-refused.sh 5
 scripts scripts/test-litmus-kill-adjudicator.sh 14
 scripts scripts/test-litmus-missing-bound-test-reds.sh 3
 scripts scripts/test-litmus-no-plan-binary.sh 2
-scripts scripts/test-litmus-parse-instruments-agree.sh 7
+scripts scripts/test-litmus-parse-instruments-agree.sh 3
 scripts scripts/test-litmus-parse-only-duplicate-key.sh 7
 scripts scripts/test-litmus-podman-preflight-trigger.sh 1
 scripts scripts/test-litmus-retired-phase-skip.sh 6
@@ -704,9 +703,8 @@ scripts scripts/test-litmus-structured-assert.sh 1
 scripts scripts/test-litmus-terminal-verdict.sh 2
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
-scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
-scripts scripts/test-lww-channel-alias.sh 3
+scripts scripts/test-lww-channel-alias.sh 1
 scripts scripts/test-lww-channel-consumers.sh 2
 scripts scripts/test-macos-model-share-writable.sh 1
 scripts scripts/test-macos-signing-seam.sh 1
@@ -717,11 +715,11 @@ scripts scripts/test-memo-hit-observability.sh 1
 scripts scripts/test-meta-orchestration-opsx-sync-merge.sh 2
 scripts scripts/test-metrics-log-fallback-is-loud.sh 1
 scripts scripts/test-metrics-log-path-agreement.sh 1
-scripts scripts/test-mirror-host-cert-and-sshd.sh 11
-scripts scripts/test-mirror-receive-wrapper.sh 8
+scripts scripts/test-mirror-host-cert-and-sshd.sh 5
+scripts scripts/test-mirror-receive-wrapper.sh 3
 scripts scripts/test-mirror-refuses-when-broken.sh 2
 scripts scripts/test-mirror-relay-state.sh 2
-scripts scripts/test-mirror-sshd-posture.sh 5
+scripts scripts/test-mirror-sshd-posture.sh 2
 scripts scripts/test-mirror-sync-state.sh 5
 scripts scripts/test-mirror-upstream-auth-overwrite.sh 2
 scripts scripts/test-mode-only-regression-887-bz88.sh 3

@@ -74,7 +74,7 @@ out="$("$BIN" loop-status-append "$frag" </dev/null 2>&1)"; rc=$?
 after="$(ls plan/loop_status.d | wc -l | tr -d ' ')"
 if [ "$after" -gt "$before" ]; then
     check ok "a bare positional path is honoured as the fragment"
-elif [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q -e '--file' && printf '%s' "$out" | grep -q '<'; then
+elif [ "$rc" -ne 0 ] && grep -q -e '--file' <<<"$out" && grep -q '<' <<<"$out"; then
     check ok "a bare positional path is refused with a usage error naming both forms"
 else
     check FAIL "a bare positional path is honoured or refused, never dropped" \
@@ -119,7 +119,7 @@ fi
 # "fragment carries no ## Cycle section" against zero bytes is a false report
 # about a file that was never opened. The message must name what it read.
 out="$("$BIN" loop-status-append </dev/null 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -qi '0 bytes'; then
+if [ "$rc" -ne 0 ] && grep -qi '0 bytes' <<<"$out"; then
     check ok "an empty stdin names the byte count rather than blaming the fragment's shape"
 else
     check FAIL "an empty stdin names the byte count" "rc=$rc out=[$(printf '%s' "$out" | tail -2)]"
@@ -128,14 +128,14 @@ fi
 # ── 4/5. POSITIVE CONTROLS — without these the arms above are satisfied by a
 #         binary that refuses everything.
 out="$("$BIN" loop-status-append --host fixture < "$frag" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'plan/loop_status.d/'; then
+if [ "$rc" -eq 0 ] && grep -q 'plan/loop_status.d/' <<<"$out"; then
     check ok "the stdin form still writes a fragment"
 else
     check FAIL "the stdin form still writes a fragment" "rc=$rc out=[$(printf '%s' "$out" | tail -2)]"
 fi
 
 out="$("$BIN" loop-status-append --host fixture --file "$frag" </dev/null 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'plan/loop_status.d/'; then
+if [ "$rc" -eq 0 ] && grep -q 'plan/loop_status.d/' <<<"$out"; then
     check ok "the --file form still writes a fragment"
 else
     check FAIL "the --file form still writes a fragment" "rc=$rc out=[$(printf '%s' "$out" | tail -2)]"
@@ -145,7 +145,7 @@ fi
 bad="$tmp/bad.md"
 printf '# Cycle 2026-09-04T10:45:00Z (single hash, wrong level)\n\nbody\n' > "$bad"
 out="$("$BIN" loop-status-append --host fixture --file "$bad" </dev/null 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && ! printf '%s' "$out" | grep -qi '0 bytes'; then
+if [ "$rc" -ne 0 ] && ! grep -qi '0 bytes' <<<"$out"; then
     check ok "a malformed fragment reports its shape, not an empty read"
 else
     check FAIL "a malformed fragment reports its shape" "rc=$rc out=[$(printf '%s' "$out" | tail -2)]"

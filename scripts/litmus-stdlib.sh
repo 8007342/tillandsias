@@ -319,15 +319,15 @@ mf_stage_sh() {
 # conversion bug. Each variant below exists so the rewrite can be FAITHFUL:
 # whatever flag the original carried, there is a consumer with exactly those
 # semantics and no thinking required at the call site.
-mf_holds()         { eval "printf '%s\\n' \"\$$1\"" | grep -q  -- "$2"; }
-mf_holds_ere()     { eval "printf '%s\\n' \"\$$1\"" | grep -qE -- "$2"; }
-mf_holds_literal() { eval "printf '%s\\n' \"\$$1\"" | grep -qF -- "$2"; }
-mf_holds_line()    { eval "printf '%s\\n' \"\$$1\"" | grep -qx -- "$2"; }
+mf_holds()         { grep -q -- "$2" <<<"${!1}"; }
+mf_holds_ere()     { grep -qE -- "$2" <<<"${!1}"; }
+mf_holds_literal() { grep -qF -- "$2" <<<"${!1}"; }
+mf_holds_line()    { grep -qx -- "$2" <<<"${!1}"; }
 # -qi and -qiE. Added because the corpus has them (6 sites) and APPROXIMATING a
 # case-insensitive match with a case-sensitive consumer would be exactly the
 # flag-dropping this file exists to prevent.
-mf_holds_i()       { eval "printf '%s\\n' \"\$$1\"" | grep -qi  -- "$2"; }
-mf_holds_i_ere()   { eval "printf '%s\\n' \"\$$1\"" | grep -qiE -- "$2"; }
+mf_holds_i()       { grep -qi -- "$2" <<<"${!1}"; }
+mf_holds_i_ere()   { grep -qiE -- "$2" <<<"${!1}"; }
 mf_lacks()         { ! mf_holds "$1" "$2"; }
 mf_lacks_ere()     { ! mf_holds_ere "$1" "$2"; }
 mf_lacks_literal() { ! mf_holds_literal "$1" "$2"; }
