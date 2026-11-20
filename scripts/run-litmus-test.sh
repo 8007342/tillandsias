@@ -77,7 +77,11 @@ fi
 # 83x podman-cli rebuild-failed-before-test). Inside the toolbox podman still
 # reaches the host through the wrapper's host-escape shim. Mutable Linux,
 # macOS, Windows and forges pass through with zero overhead.
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/with-tillandsias-builder.sh"
+# Only when present: fixtures copy this runner into fake trees that carry no
+# wrapper, and those keep their previous (host) behaviour.
+_litmus_builder="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/with-tillandsias-builder.sh"
+[[ -f "$_litmus_builder" ]] && source "$_litmus_builder"
+unset _litmus_builder
 
 # ============================================================================
 # CONFIGURATION & GLOBALS
