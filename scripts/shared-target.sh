@@ -38,6 +38,31 @@ shared_target_digest() { # ROOT -> digest of the checkout path and its index
     { printf '%s\n' "$root"; git -C "$root" ls-files -s; } | sha256sum | cut -d' ' -f1
 }
 
+# ORDER 2146-4svj. shared_target_forget_build_scripts CANON PREV_ROOT
+#
+# Touching this checkout's files is NOT enough for a build script that emits
+# cargo:rerun-if-changed: cargo then reruns it only when THOSE paths change,
+# and they are ABSOLUTE paths into the PREVIOUS owner's checkout, which nobody
+# touched. Measured 2026-11-20 on lenovinha: a gate in wt-2118-77ew ran with
+# tillandsias-embed's assets embedded from wt-2118-tnut's images/ (651 assets
+# against this tree's 653), so the embedded-regime test went red — and a
+# green gate could equally have vouched for another worktree's assets.
+# So on an owner change, every build script whose recorded output names the
+# previous root is forgotten (its run fingerprint and its output), and cargo
+# reruns it against this checkout. Prints how many it forgot.
+shared_target_forget_build_scripts() {
+    local canon="$1" prev_root="$2" out dir name n=0
+    [ -n "$canon" ] && [ -d "$canon" ] && [ -n "$prev_root" ] || { echo 0; return 0; }
+    while IFS= read -r out; do
+        [ -n "$out" ] || continue
+        dir="${out%/output}"            # <profile>/build/<pkg>-<hash>
+        name="${dir##*/}"
+        rm -rf -- "${dir%/build/*}/.fingerprint/$name" "$dir"
+        n=$((n + 1))
+    done < <(grep -l -F -- "rerun-if-changed=$prev_root/" "$canon"/*/build/*/output "$canon"/*/*/build/*/output 2>/dev/null)
+    echo "$n"
+}
+
 shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touches on owner change
     local root canon owner digest prev wait
     root="$(cd "$1" && pwd)" || return 1
@@ -104,10 +129,21 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
         # Not a ledger of intent: cargo trusts mtime alone, so make every
         # tracked file newer than whatever the previous owner built.
         git -C "$root" ls-files -z --full-name -- ":/" | (cd "$(git -C "$root" rev-parse --show-toplevel)" && xargs -0 touch -c 2>/dev/null) || true
+        _st_forgot=0
+        [ "${prev%% *}" = "$root" ] || _st_forgot="$(shared_target_forget_build_scripts "$canon" "${prev%% *}")"
         printf '%s %s\n' "$root" "$digest" > "$owner"
-        echo "shared-target: owner changed (was: ${prev:-none}); tracked files of $root touched so cargo re-fingerprints from this checkout" >&2
+        echo "shared-target: owner changed (was: ${prev:-none}); tracked files of $root touched so cargo re-fingerprints from this checkout; ${_st_forgot} build script(s) that read the previous checkout will rerun (2146-4svj)" >&2
     fi
     export CARGO_TARGET_DIR="$canon"
     export TILLANDSIAS_SHARED_TARGET_HELD="$canon|$root|$$"
     echo "shared-target: on CARGO_TARGET_DIR=$canon (locked, owner $root)" >&2
 }
+
+# Executed rather than sourced (the fixture's entry point,
+# scripts/lua/test-shared-target-forgets-build-scripts.lua).
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    case "${1:-}" in
+        forget-build-scripts) shift; shared_target_forget_build_scripts "$@"; exit $? ;;
+        *) echo "usage: scripts/shared-target.sh forget-build-scripts <canon> <prev-root>  (or source it)" >&2; exit 2 ;;
+    esac
+fi
