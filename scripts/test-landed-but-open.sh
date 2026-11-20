@@ -55,7 +55,7 @@ printf '1111-aaaa ready\n2222-bbbb completed\n3333-cccc ready\n4444-dddd ready\n
 # 2093-lbop: the litmus runner exports PROJECT_ROOT, and the Lua runtime
 # resolves the repository from it before the cwd, so inside a gate the checker
 # read the REAL checkout's history (landings=4 orders=4, 2/6). Clear both.
-run() { (cd "$R" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT "$PLAN" script run "$C" -- --ref HEAD --since "1 day ago" --status-file "$W/status" "$@"); }
+run() { (cd "$R" && env -u TILLANDSIAS_REPO_ROOT "$PLAN" script run "$C" -- --ref HEAD --since "1 day ago" --status-file "$W/status" "$@"); }
 out="$(run)"; rc=$?
 
 grep -q "^suspect:1111-aaaa:ready:${A_SHA} " <<<"$out" &&

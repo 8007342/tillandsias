@@ -305,7 +305,7 @@ cp "$ROOT/scripts/lua/check-litmus-dead-inputs.lua" "$ctl/scripts/lua/"
 # The guard is Lua since 1643-q3at; run it with the repo's own plan binary.
 DI_PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || DI_PLAN=""
 case "$DI_PLAN" in ./*) DI_PLAN="$ROOT/${DI_PLAN#./}" ;; esac
-dead_inputs() { (cd "$ctl" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT "$DI_PLAN" script run scripts/lua/check-litmus-dead-inputs.lua 2>&1); }
+dead_inputs() { (cd "$ctl" && "$DI_PLAN" script run scripts/lua/check-litmus-dead-inputs.lua 2>&1); }
 printf 'fn main(){}\n' > "$ctl/crates/real/src/main.rs"
 git -C "$ctl" init -q
 git -C "$ctl" config user.email t@example.com

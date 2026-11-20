@@ -1038,6 +1038,33 @@ fn validate_repo_root(root: PathBuf) -> Result<PathBuf, String> {
     Ok(root)
 }
 
+/// Whether `root` is the cwd's NEAREST repository root: the first ancestor of
+/// the cwd, itself included, holding `plan/index.yaml` or `.git` (the same
+/// marker the cwd walk in locate_repo_root uses), both canonicalised.
+/// Containment alone is not enough: fixtures build scratch trees under the
+/// checkout's own target/, so the cwd is inside PROJECT_ROOT while its tree
+/// is the scratch one. No marker above the cwd keeps the old answer
+/// (PROJECT_ROOT counts when it contains the cwd); an unreadable cwd or root
+/// answers false.
+fn project_root_is_the_cwds_repo(root: &Path) -> bool {
+    let (Ok(cwd), Ok(root)) = (
+        std::env::current_dir().and_then(|c| c.canonicalize()),
+        root.canonicalize(),
+    ) else {
+        return false;
+    };
+    let mut dir = cwd.as_path();
+    loop {
+        if dir.join("plan/index.yaml").is_file() || dir.join(".git").exists() {
+            return dir == root;
+        }
+        match dir.parent() {
+            Some(p) => dir = p,
+            None => return cwd.starts_with(&root),
+        }
+    }
+}
+
 fn locate_repo_root() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("TILLANDSIAS_REPO_ROOT") {
         let pb = PathBuf::from(p);
@@ -1045,9 +1072,15 @@ fn locate_repo_root() -> Option<PathBuf> {
             return Some(pb);
         }
     }
+    // ORDER 2120-a44w: PROJECT_ROOT counts only when the cwd is inside it. The
+    // litmus runner exports it for its children (1268-m2ir), so a fixture that
+    // runs a guard from a scratch repo used to have the guard read the REAL
+    // checkout instead: a negative control "passed a dead glob", and the
+    // status-loss fixture read real rows. Outside it, the cwd's own repo wins
+    // (the walk below). TILLANDSIAS_REPO_ROOT stays an explicit override.
     if let Ok(p) = std::env::var("PROJECT_ROOT") {
         let pb = PathBuf::from(p);
-        if pb.is_dir() {
+        if pb.is_dir() && project_root_is_the_cwds_repo(&pb) {
             return Some(pb);
         }
     }
