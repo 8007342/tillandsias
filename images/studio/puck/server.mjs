@@ -13,12 +13,20 @@
 //                                 P must be a .json under .tillandsias/studio/puck/
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { join, normalize, isAbsolute } from "node:path";
+import { join, normalize, isAbsolute, extname, sep } from "node:path";
+import { existsSync } from "node:fs";
 
 const PROJECT = process.env.STUDIO_PROJECT || "/project";
 const HOST = process.env.STUDIO_HOST || "127.0.0.1";
 const PORT = Number(process.env.STUDIO_PORT || 4097);
-const HERE = "/opt/studio/puck";
+const HERE = process.env.STUDIO_HERE || "/opt/studio/puck";
+const SITE_PUBLIC = process.env.STUDIO_PUCK_PUBLIC;
+const PUBLIC = normalize(SITE_PUBLIC && existsSync(join(SITE_PUBLIC, "editor.html")) ? SITE_PUBLIC : join(HERE, "public"));
+const TYPES = {
+  ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
+  ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+  ".webp": "image/webp", ".avif": "image/avif", ".woff": "font/woff", ".woff2": "font/woff2", ".ttf": "font/ttf",
+};
 const PAGES = ".tillandsias/studio/puck/";
 
 // A load reads the checkout, so it is held to the lane's own data.
@@ -41,11 +49,25 @@ createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "text/plain" });
       return res.end("ok\n");
     }
-    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/editor.js" || url.pathname === "/editor.css")) {
-      const file = url.pathname === "/" ? "editor.html" : url.pathname.slice(1);
-      const body = await readFile(join(HERE, "public", file));
-      const type = file.endsWith(".js") ? "text/javascript" : file.endsWith(".css") ? "text/css" : "text/html; charset=utf-8";
-      res.writeHead(200, { "content-type": type });
+    // 2110-pk4s: the editor built against the site's config (build-site.mjs,
+    // outside the checkout) when there is one, else the image's demo editor.
+    // Any file of that build (editor.js/.css, puck.css, assets/) is served.
+    if (req.method === "GET" && url.pathname !== "/__studio/load") {
+      const file = url.pathname === "/" ? "editor.html" : decodeURIComponent(url.pathname.slice(1));
+      const full = normalize(join(PUBLIC, file));
+      if (!full.startsWith(PUBLIC + sep)) return send(res, 404, { error: "not found" });
+      let body;
+      try { body = await readFile(full); } catch {
+        // The site's own public files (its url("/assets/…")), read-only, as the
+        // live site serves them; the editor build always wins.
+        const site = normalize(join(PROJECT, "public"));
+        const alt = normalize(join(site, file));
+        if (!alt.startsWith(site + sep)) return send(res, 404, { error: "not found" });
+        try { body = await readFile(alt); } catch { return send(res, 404, { error: "not found" }); }
+        res.writeHead(200, { "content-type": TYPES[extname(alt)] || "application/octet-stream", "cache-control": "no-store" });
+        return res.end(body);
+      }
+      res.writeHead(200, { "content-type": TYPES[extname(full)] || "application/octet-stream", "cache-control": "no-store" });
       return res.end(body);
     }
     if (req.method === "GET" && url.pathname === "/__studio/load") {

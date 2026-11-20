@@ -12,9 +12,19 @@ clone_project_from_mirror
 checkout="/home/forge/src/${TILLANDSIAS_PROJECT:?TILLANDSIAS_PROJECT names the project the studio edits}"
 [ -d "$checkout/.git" ] || { echo "refused:studio-puck:no-checkout:$checkout" >&2; exit 1; }
 
+# 2110-pk4s: with a site puck.config, build the editor against it and the
+# site's deps, in a cache OUTSIDE the checkout. On a refusal the studio still
+# starts, serving the image's demo editor, and says why.
+site_public=""
+verdict="$(cd /opt/studio/puck && node /opt/studio/puck/build-site.mjs "$checkout" | tail -n 1)" || true
+echo "$verdict" >&2
+case "$verdict" in
+  ok:studio-puck:site-build:*) site_public="${verdict#ok:studio-puck:site-build:}" ;;
+esac
+
 # Started outside the checkout: a studio's own caches must never land in it.
 (cd /opt/studio/puck && \
-  STUDIO_PROJECT="$checkout" STUDIO_HOST=127.0.0.1 STUDIO_PORT=4097 \
+  STUDIO_PROJECT="$checkout" STUDIO_HOST=127.0.0.1 STUDIO_PORT=4097 STUDIO_PUCK_PUBLIC="$site_public" \
   exec node /opt/studio/puck/server.mjs) &
 editor_pid=$!
 trap 'kill "$editor_pid" 2>/dev/null || true' INT TERM EXIT
