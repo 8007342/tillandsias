@@ -273,7 +273,8 @@ forge_upstream_auth_verdict() {
       # -a: an ABSENT container and a STOPPED one are different faults, and the
       # difference is the whole point of this packet.
       _ccc_any="$(podman ps -a --filter 'name=tillandsias-git' --format '{{.Names}} {{.Status}}' 2>/dev/null | head -1)"
-      _ccc_img_any="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -m1 'tillandsias-git' || true)"
+      _ccc_imgs="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null || true)"
+      _ccc_img_any="$(grep -m1 'tillandsias-git' <<<"$_ccc_imgs" || true)"
       if [ -n "$_ccc_running" ]; then
         if podman run --rm --entrypoint ls "$_ccc_running" /usr/local/share/git-service/ 2>/dev/null |
             grep -q '^probe-upstream-auth'; then

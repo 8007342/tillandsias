@@ -153,7 +153,7 @@ printf '%s\n' "$rec"
 # So a blocked cycle could never complete its exit contract through this script,
 # and the failure mode punished the honest disposition: a cycle willing to say it
 # was blocked could not attest, while a cycle claiming COMPLETE sailed through.
-[ "$rc" -eq 0 ] && printf '%s' "$rec" | grep -qE '^MO-FULL: (COMPLETE|BLOCKED)' || {
+[ "$rc" -eq 0 ] && grep -qE '^MO-FULL: (COMPLETE|BLOCKED)' <<<"$rec" || {
     _afford "mo-full-attest.sh record did not report MO-FULL: COMPLETE or BLOCKED, so no attestation line is proven written" "read the record output printed above. Before any re-run, check git status plan/mo-full-attestations.d: if a line for this head is already there, commit it instead of recording again (a second record appends a duplicate)"
     echo "refused:finalize:record-failed — the ledger line was not written; do NOT emit a marker." >&2
     exit 4
