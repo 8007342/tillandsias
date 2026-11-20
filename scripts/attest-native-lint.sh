@@ -45,13 +45,17 @@ while [ "$#" -gt 0 ]; do
         --ref) MODE=ref ;;
         --push) PUSH=1 ;;
         --at) AT="${2:?--at needs a commit}"; shift ;;
-        *) echo "refused:attest-native-lint:unknown-arg:$1"; exit 2 ;;
+        *) echo "refused:attest-native-lint:unknown-arg:$1"
+           echo "  why: an unknown argument would otherwise be ignored, and a mistyped --ref would write a commit instead" >&2
+           echo "  remedy: use only --ref, --push and --at <commit> (see the header of scripts/attest-native-lint.sh)" >&2
+           exit 2 ;;
     esac
     shift
 done
 if [ -n "$AT" ] && [ "$MODE" != ref ]; then
     echo "refused:attest-native-lint:at-needs-ref"
     echo "  why: --at lints another commit's content; only a ref can record that without a commit on this branch" >&2
+    echo "  remedy: add --ref: scripts/attest-native-lint.sh --ref --push --at <commit>" >&2
     exit 2
 fi
 
@@ -87,9 +91,19 @@ esac
 
 # --at: lint another commit's content in THIS checkout, and always come back.
 if [ -n "$AT" ]; then
-    git rev-parse --verify --quiet "$AT^{commit}" >/dev/null || { echo "refused:attest-native-lint:at-unknown:$AT"; exit 2; }
+    if ! git rev-parse --verify --quiet "$AT^{commit}" >/dev/null; then
+        echo "refused:attest-native-lint:at-unknown:$AT"
+        echo "  why: --at names no commit in this repository, so there is no content to lint" >&2
+        echo "  remedy: fetch it first (git fetch origin <branch>), then pass the commit or origin/<branch>" >&2
+        exit 2
+    fi
     _back="$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)"
-    git switch -q --detach "$AT" || { echo "refused:attest-native-lint:at-switch-failed:$AT"; exit 2; }
+    if ! git switch -q --detach "$AT"; then
+        echo "refused:attest-native-lint:at-switch-failed:$AT"
+        echo "  why: this checkout could not switch to $AT to lint its content (git's message is above)" >&2
+        echo "  remedy: resolve what git names (usually an untracked file in the way), then re-run" >&2
+        exit 2
+    fi
     trap 'git switch -q "$_back" 2>/dev/null || git switch -q --detach "$_back"' EXIT
 fi
 

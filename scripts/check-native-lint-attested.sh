@@ -83,7 +83,10 @@ while [ "$#" -gt 0 ]; do
         --base) base="${2:?--base needs a ref}"; shift ;;
         --hold) HOLD=1 ;;
         --candidate) CANDIDATE="${2:?--candidate needs a ref}"; shift ;;
-        *) echo "refused:native-lint:unknown-arg:$1"; exit 2 ;;
+        *) echo "refused:native-lint:unknown-arg:$1"
+           echo "  why: an unknown argument would otherwise be ignored, and a mistyped --hold would evict instead of holding" >&2
+           echo "  remedy: use only --base <ref>, --hold and --candidate <ref>, or --list alone" >&2
+           exit 2 ;;
     esac
     shift
 done
