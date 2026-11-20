@@ -68,19 +68,19 @@ if [ "$got" = "pull-failed-tls-untrusted" ]; then fail="${fail}classifier-always
 # The TRUST case must name itself loudly AND say that no-models will lie, since
 # being mistaken for an empty cache is the whole defect.
 out="$(report _ "x509: certificate signed by unknown authority")"
-printf '%s' "$out" | grep -q "reason=pull-failed-tls-untrusted" \
+grep -q "reason=pull-failed-tls-untrusted" <<<"$out" \
     && pass=$((pass + 1)) || fail="${fail}report-omits-token "
-printf '%s' "$out" | grep -q "NOT an empty cache" \
+grep -q "NOT an empty cache" <<<"$out" \
     && pass=$((pass + 1)) || fail="${fail}report-omits-no-models-warning "
 
 # EVIDENCE SURVIVES. A classifier that hides the output it classified is a
 # nicer-looking swallow than the one this replaced.
-printf '%s' "$out" | grep -q "pull-output|" \
+grep -q "pull-output|" <<<"$out" \
     && pass=$((pass + 1)) || fail="${fail}report-drops-evidence "
 
 # A non-trust failure must NOT carry the trust remedy, or the remedy is noise.
 out2="$(report _ "Error: connection refused")"
-printf '%s' "$out2" | grep -q "NOT an empty cache" \
+grep -q "NOT an empty cache" <<<"$out2" \
     && fail="${fail}non-trust-carries-trust-remedy " || pass=$((pass + 1))
 
 if [ -n "$fail" ]; then
