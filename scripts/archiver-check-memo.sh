@@ -18,12 +18,21 @@
 # Usage:
 #   scripts/archiver-check-memo.sh digest          -> prints the digest
 #   scripts/archiver-check-memo.sh check           -> ok:archiver-check-memoized:<d8> (exit 0) | miss:<reason> (exit 1)
-#   scripts/archiver-check-memo.sh record          -> writes the memo for the current digest
+#   scripts/archiver-check-memo.sh record          -> adds the current digest to the memo set
 #   TILLANDSIAS_ARCHIVER_MEMO=<path> overrides the memo file (fixtures).
 set -uo pipefail
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "miss:not-a-git-repo"; exit 1; }
-GIT_DIR="$(git rev-parse --absolute-git-dir 2>/dev/null)" || { echo "miss:no-git-dir"; exit 1; }
-MEMO="${TILLANDSIAS_ARCHIVER_MEMO:-$GIT_DIR/tillandsias-archiver-check.memo}"
+# ORDER 2118-tnut (operator 2026-11-20, landing-pipeline P10 item d): the memo
+# lives in the COMMON git dir, shared by every worktree of this clone, and
+# holds a SET of verified digests rather than one. It used to live in the
+# per-worktree git dir with a single digest, so every fresh gate worktree
+# missed by construction: 31 hits in 424 runs on lenovinha, one miss 316 s
+# under load. A digest is CONTENT only (ledger bytes, instrument bytes, plan
+# binary bytes), so one worktree vouches for another only when every input is
+# byte-identical — never for a different tree that happens to share a path.
+GIT_COMMON="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || { echo "miss:no-git-dir"; exit 1; }
+MEMO="${TILLANDSIAS_ARCHIVER_MEMO:-$GIT_COMMON/tillandsias-archiver-check.memo}"
+MEMO_KEEP=64   # digests kept; the oldest drop first
 cd "$ROOT" || exit 1
 . scripts/plan-binary-probe.sh
 if command -v sha256sum >/dev/null 2>&1; then SHA=(sha256sum); else SHA=(shasum -a 256); fi
@@ -46,14 +55,16 @@ _digest() {
             [ -f "$f" ] && { printf '%s\n' "$f"; "${SHA[@]}" < "$f"; }
         done
         printf 'archiver-backend:%s\n' "${TILLANDSIAS_ARCHIVER_BACKEND:-default}"
-        # The plan binary's identity — resolved through the sanctioned probe
-        # (746-htj9: never a hardcoded target/ path), by size+mtime: a rebuild
-        # changes both, and hashing a 30 MB binary on every gate would cost
-        # what this memo saves.
+        # The plan binary's identity, resolved through the sanctioned probe
+        # (746-htj9: never a hardcoded target/ path), by CONTENT (2118-tnut).
+        # It used to be path + size + mtime, which made two worktrees' identical
+        # builds look different and a same-path rebuild with a copied mtime look
+        # the same. Hashing it costs milliseconds against a check of seconds.
         local _plan_bin
         if _plan_bin="$(resolve_plan_binary 2>/dev/null)" && [ -n "$_plan_bin" ] && [ -e "$_plan_bin" ]; then
-            printf '%s\n' "$_plan_bin"
-            stat -c '%s %Y' "$_plan_bin" 2>/dev/null || stat -f '%z %m' "$_plan_bin" 2>/dev/null
+            printf 'plan-binary:'; "${SHA[@]}" < "$_plan_bin"
+        else
+            printf 'plan-binary:none\n'
         fi
     } | "${SHA[@]}" | cut -d' ' -f1
 }
@@ -62,11 +73,15 @@ case "${1:-}" in
     digest) _digest ;;
     check)
         d="$(_digest)"
-        if [ -r "$MEMO" ] && [ "$(tr -d '[:space:]' < "$MEMO")" = "$d" ]; then
+        if [ -r "$MEMO" ] && grep -qxF -- "$d" "$MEMO"; then
             echo "ok:archiver-check-memoized:${d:0:8}"; exit 0
         fi
         [ -r "$MEMO" ] && echo "miss:ledger-or-instrument-changed" || echo "miss:no-memo"
         exit 1 ;;
-    record) _digest > "$MEMO" && echo "ok:archiver-check-memo-recorded:$(cut -c1-8 < "$MEMO")" ;;
+    record)
+        d="$(_digest)"
+        tmp="$MEMO.tmp.$$"
+        { [ -r "$MEMO" ] && grep -vxF -- "$d" "$MEMO"; printf '%s\n' "$d"; } | tail -n "$MEMO_KEEP" > "$tmp" \
+            && mv -f "$tmp" "$MEMO" && echo "ok:archiver-check-memo-recorded:${d:0:8}" ;;
     *) echo "usage: $0 digest|check|record" >&2; exit 2 ;;
 esac
