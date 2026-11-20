@@ -1,5 +1,6 @@
 -- @trace order:2096-y7sx, order:956-llei
 -- @env-profile podman
+-- @env CARGO_TARGET_DIR
 --
 -- litmus-run-one.lua — run ONE litmus file through the real runner, by path.
 -- Ported from scripts/litmus-run-one.sh (family B, operator ruling 2026-11-17:
@@ -90,6 +91,21 @@ for _, b in ipairs(ls("openspec")) do
 end
 for _, b in ipairs(ls("methodology")) do
     link(root .. "/methodology/" .. b, tmp .. "/methodology/" .. b)
+end
+
+-- ORDER 2116-x9ph. The scratch target/ was EMPTY, so a step's
+-- resolve_plan_binary (which probes ./target/{release,debug} from the cwd)
+-- fell through to `command -v tillandsias-plan`: a stale ~/.local/bin copy. A
+-- verb added on the branch under test then answered "unknown subcommand", rc=2
+-- (measured with `lock run`, 2115-jkdv). Steps must see the checkout's own
+-- build, so the build profile dirs are linked in from CARGO_TARGET_DIR when
+-- set, else from the checkout's target/. TILLANDSIAS_PLAN_BIN still wins
+-- inside the probe, as everywhere else.
+local ctd = env.get("CARGO_TARGET_DIR")
+local build_root = (ctd ~= nil and ctd ~= "") and ctd or (root .. "/target")
+for _, profile in ipairs({ "release", "debug" }) do
+    local d = build_root .. "/" .. profile
+    if fs.exists(d) then link(d, tmp .. "/target/" .. profile) end
 end
 
 local rel_tmp = tmp:sub(#root + 2)

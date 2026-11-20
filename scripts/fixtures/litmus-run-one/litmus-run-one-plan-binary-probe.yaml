@@ -1,0 +1,15 @@
+# Fixture for litmus:litmus-run-one-plan-binary (order 2116-x9ph). NOT in the
+# corpus: it is run only through scripts/lua/litmus-run-one.lua, whose scratch
+# root must hand a step the CHECKOUT's own plan binary, never a stale copy
+# found on PATH.
+name: litmus:run-one-plan-binary-probe
+spec: run-one-plan-binary-probe
+phase: pre-build
+description: a step inside litmus-run-one's scratch root resolves the checkout's own plan binary
+severity: low
+size: instant
+critical_path:
+  - step: "resolve_plan_binary answers the checkout's build, not PATH"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; top=\"$(dirname \"$(readlink -f scripts)\")\"; want=\"$(readlink -f \"${CARGO_TARGET_DIR:-$top/target}/release/tillandsias-plan\")\"; got=\"$(readlink -f \"$P\")\"; [ -n \"$got\" ] && [ \"$got\" = \"$want\" ] && echo 'ok: checkout-plan-binary' || { echo \"FAIL: resolved $got, want $want\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: checkout-plan-binary"
