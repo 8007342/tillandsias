@@ -115,7 +115,7 @@ cp "$HELPER" scripts/push-plan-fragments-to-trunk.sh
 # after it instead: a missing source file is swallowed here, so the scratch ran
 # short and only the downstream arm noticed — by reporting nothing.
 for f in plan-binary-probe.sh gate-stamp.sh common.sh check-issue-citation-convention.sh \
-         check-added-fragments-parse.sh check-fragment-ts-skew.sh \
+         check-added-fragments-parse.sh \
          check-scorable-obligation-added.sh \
          check-append-vs-origin-fold.sh agent-identity.sh; do
     cp "$ROOT/scripts/$f" "scripts/$f" 2>/dev/null || true
@@ -129,7 +129,7 @@ done
 # checkers the lane calls are scripts/lua/*.lua, run through the one runner;
 # their .sh files are gone, so they join this list by their own paths rather
 # than the bare-name loop above.
-for f in scripts/lua/check-no-base64-script-injection.lua scripts/lua/check-fragment-status-loss.lua; do
+for f in scripts/lua/check-no-base64-script-injection.lua scripts/lua/check-fragment-status-loss.lua scripts/lua/check-fragment-ts-skew.lua; do
     cp "$ROOT/$f" "$f" 2>/dev/null || true
     [ -f "$f" ] || { echo "FAIL: fixture scratch is missing $f (source: $ROOT/$f)"; exit 2; }
 done
