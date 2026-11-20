@@ -109,7 +109,7 @@ fail=""
 out="$(run_sweep)"
 
 # (a) recent claim on a long-worked packet must NOT be flagged.
-if printf '%s\n' "$out" | grep -q '^stranded.*long-worked-recent-claim'; then
+if grep -q '^stranded.*long-worked-recent-claim' <<<"$out"; then
     fail="${fail}recent-claim-wrongly-flagged "
 else
     pass=$((pass + 1))
@@ -117,21 +117,21 @@ fi
 
 # (b) stale claim on a long-worked packet MUST be flagged. This is the arm the
 #     old predicate could not satisfy at all.
-if printf '%s\n' "$out" | grep -q '^stranded.*long-worked-stale-claim'; then
+if grep -q '^stranded.*long-worked-stale-claim' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}stale-claim-not-flagged "
 fi
 
 # The row carries its age, so a reader does not re-derive it.
-if printf '%s\n' "$out" | grep -q '^stranded.*long-worked-stale-claim.*idle-since=[0-9-]*T'; then
+if grep -q '^stranded.*long-worked-stale-claim.*idle-since=[0-9-]*T' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}stale-row-missing-idle-since "
 fi
 
 # POPULATION is confessed, so a green cannot be misread as health over nothing.
-if printf '%s\n' "$out" | grep -qE '^summary: population=2 in_progress=2 stranded=1 threshold_events=[0-9]+$'; then
+if grep -qE '^summary: population=2 in_progress=2 stranded=1 threshold_events=[0-9]+$' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}summary-shape:$(printf '%s\n' "$out" | grep '^summary:') "
@@ -143,7 +143,7 @@ fi
 out_wide="$(TILLANDSIAS_PLAN_BIN="$D/plan" TILLANDSIAS_STRANDED_HOURS=96 \
     TILLANDSIAS_STRANDED_NOW_EPOCH="$NOW_EPOCH" \
     scripts/check-stranded-in-progress.sh 2>/dev/null)"
-if printf '%s\n' "$out_wide" | grep -qE '^summary: population=2 in_progress=2 stranded=0 '; then
+if grep -qE '^summary: population=2 in_progress=2 stranded=0 ' <<<"$out_wide"; then
     pass=$((pass + 1))
 else
     fail="${fail}threshold-not-honoured "
@@ -153,7 +153,7 @@ fi
 # not be able to choose a different window (the 943-unii lesson).
 bad="$(TILLANDSIAS_PLAN_BIN="$D/plan" TILLANDSIAS_STRANDED_HOURS=abc \
     scripts/check-stranded-in-progress.sh 2>/dev/null)"
-if printf '%s\n' "$bad" | grep -q '^summary: unavailable:bad-stranded-hours:abc$'; then
+if grep -q '^summary: unavailable:bad-stranded-hours:abc$' <<<"$bad"; then
     pass=$((pass + 1))
 else
     fail="${fail}bad-threshold-not-refused "

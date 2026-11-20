@@ -41,9 +41,9 @@ fi
 # Both candidate dirs must be named. A sweep that lost one would still pass a
 # test that only stubbed the other, which is exactly how the original defect
 # hid, so assert the intent textually as well as behaviourally.
-printf '%s' "$BLOCK" | grep -q '/Applications' || fail "block-does-not-name-system-applications"
-printf '%s' "$BLOCK" | grep -q 'HOME/Applications' || fail "block-does-not-name-home-applications"
-printf '%s' "$BLOCK" | grep -q 'Tillandsias.app.bak' || fail "block-does-not-remove-the-bak-sibling"
+grep -q '/Applications' <<<"$BLOCK" || fail "block-does-not-name-system-applications"
+grep -q 'HOME/Applications' <<<"$BLOCK" || fail "block-does-not-name-home-applications"
+grep -q 'Tillandsias.app.bak' <<<"$BLOCK" || fail "block-does-not-remove-the-bak-sibling"
 # The tray must be STOPPED before its bundle is deleted. Asserted textually,
 # never behaviourally: a fixture that ran `pkill -f tillandsias-tray` would
 # kill the real tray on a developer's machine. Found live 2026-08-30 — the
@@ -54,8 +54,8 @@ printf '%s' "$BLOCK" | grep -q 'Tillandsias.app.bak' || fail "block-does-not-rem
 # made this fail with "block-does-not-stop-the-running-tray" about a block that
 # still stops the tray. The failure message named a property that still held,
 # which is how a correct change gets "fixed" back into a defect.
-printf '%s' "$BLOCK" | grep -qE 'pkill -TERM( -[a-zA-Z])? (tillandsias-tray|"[$]_tray")' || fail "block-does-not-stop-the-running-tray"
-printf '%s' "$BLOCK" | grep -qF 'TILLANDSIAS_UNINSTALL_TRAY_PROC:-tillandsias-tray}' || fail "tray-seam-default-is-not-the-tray"
+grep -qE 'pkill -TERM( -[a-zA-Z])? (tillandsias-tray|"[$]_tray")' <<<"$BLOCK" || fail "block-does-not-stop-the-running-tray"
+grep -qF 'TILLANDSIAS_UNINSTALL_TRAY_PROC:-tillandsias-tray}' <<<"$BLOCK" || fail "tray-seam-default-is-not-the-tray"
 
 # Behavioural: stub BOTH dirs with an app and its .bak, run the block with
 # /Applications and $HOME redirected into the sandbox, assert both are empty.
@@ -72,7 +72,7 @@ echo stub > "$FAKE_HOME/Library/LaunchAgents/com.tillandsias.tray.plist"
 # 1401-p3k7: the system dir is a seam now; point it at the sandbox. The block
 # must default to /Applications, and the run must never see the default: a
 # sed rewrite that silently stopped matching would have run the real sweep.
-printf '%s' "$BLOCK" | grep -qF 'TILLANDSIAS_UNINSTALL_APPS_DIR:-/Applications}' || fail "apps-seam-default-is-not-system-applications"
+grep -qF 'TILLANDSIAS_UNINSTALL_APPS_DIR:-/Applications}' <<<"$BLOCK" || fail "apps-seam-default-is-not-system-applications"
 printf '%s\n' "$BLOCK" > "$TMP/block.sh"
 export TILLANDSIAS_UNINSTALL_APPS_DIR="$FAKE_SYS" TILLANDSIAS_UNINSTALL_TRAY_PROC="nonce-tray-1401"
 

@@ -2498,7 +2498,7 @@ run_tests_for_spec() {
             test_inputs="$(get_test_inputs "$test_file")"
             test_file_rel="${test_file#"$PROJECT_ROOT"/}"
             if [[ -n "$test_inputs" ]] \
-                && ! printf '%s\n' "$DIFF_SCOPE_CHANGED" | grep -qxF "$test_file_rel" \
+                && ! grep -qxF "$test_file_rel" <<<"$DIFF_SCOPE_CHANGED" \
                 && ! litmus_inputs_intersect_diff "$test_inputs" "$DIFF_SCOPE_CHANGED"; then
                 log_test_result "$spec_id" "$test_name" "SKIP" \
                     "Diff-scoped: declared inputs untouched since ${DIFF_SCOPE_BASE_SHA:0:12}"

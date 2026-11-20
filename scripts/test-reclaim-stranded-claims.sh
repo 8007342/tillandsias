@@ -48,10 +48,10 @@ run() { ( cd "$1" && shift && TILLANDSIAS_PLAN_BIN="$PLAN" bash scripts/reclaim-
 # --- case 1: a claim 48h old is reclaimed by --apply ------------------------
 d="$WORK/stale"; scaffold "$d" "2026-08-21T00:00:00Z"
 out="$(run "$d" --now "$NOW")" || fail "case 1: dry-run must exit 0, got: $out"
-printf '%s\n' "$out" | grep -q '^reclaim	901-aaaa	fix-claimed	' \
+grep -q '^reclaim	901-aaaa	fix-claimed	' <<<"$out" \
     || fail "case 1: stale claim not listed for reclaim: $out"
 out="$(run "$d" --apply --now "$NOW")" || fail "case 1: apply that reclaims must exit 0, got: $out"
-printf '%s\n' "$out" | grep -q 'summary: candidates=1 reclaimed=1 refused=0 mode=apply' \
+grep -q 'summary: candidates=1 reclaimed=1 refused=0 mode=apply' <<<"$out" \
     || fail "case 1: wrong apply summary: $out"
 status="$(cd "$d" && "$PLAN" status 901-aaaa | cut -f2)"
 [ "$status" = "ready" ] || fail "case 1: packet not returned to ready, status=$status"
@@ -60,12 +60,12 @@ echo "ok: case 1 — a 48h-old claim is reclaimed and the packet is ready again"
 # --- case 2 (NEGATIVE CONTROL): a fresh claim is refused, typed, non-zero ---
 d="$WORK/fresh"; scaffold "$d" "2026-08-22T23:00:00Z"   # 1h before NOW
 out="$(run "$d" --now "$NOW")" || fail "case 2: dry-run with refusals must exit 0, got: $out"
-printf '%s\n' "$out" | grep -q '^refused	901-aaaa	fix-claimed	within-ttl$' \
+grep -q '^refused	901-aaaa	fix-claimed	within-ttl$' <<<"$out" \
     || fail "case 2: fresh claim not refused by name: $out"
 out="$(run "$d" --apply --now "$NOW")"
 rc=$?
 [ "$rc" -eq 1 ] || fail "case 2: apply that reclaims NOTHING must exit 1, got rc=$rc: $out"
-printf '%s\n' "$out" | grep -q 'summary: candidates=1 reclaimed=0 refused=1 mode=apply' \
+grep -q 'summary: candidates=1 reclaimed=0 refused=1 mode=apply' <<<"$out" \
     || fail "case 2: wrong no-op summary: $out"
 echo "ok: case 2 — a fresh claim is declined by name and the no-op apply is non-zero"
 
@@ -73,7 +73,7 @@ echo "ok: case 2 — a fresh claim is declined by name and the no-op apply is no
 d="$WORK/none"; scaffold "$d" "2026-08-21T00:00:00Z"
 ( cd "$d" && TILLANDSIAS_PLAN_BIN="$PLAN" "$PLAN" set-field 901-aaaa status ready --host fixturehost --reason "fixture reset" >/dev/null )
 out="$(run "$d" --apply --now "$NOW")" || fail "case 3: empty sweep must exit 0, got: $out"
-printf '%s\n' "$out" | grep -q 'summary: candidates=0 reclaimed=0 refused=0 mode=apply' \
+grep -q 'summary: candidates=0 reclaimed=0 refused=0 mode=apply' <<<"$out" \
     || fail "case 3: wrong empty summary: $out"
 echo "ok: case 3 — an empty stranded set is a clean zero, not an error"
 
@@ -89,7 +89,7 @@ for flag in --ttl-hours --now; do
     out="$(timeout 20 bash -c "cd '$d' && TILLANDSIAS_PLAN_BIN='$PLAN' bash scripts/reclaim-stranded-claims.sh $flag" 2>&1)"; rc=$?
     [ "$rc" = 124 ] && fail "case 4: bare $flag HUNG (the pre-943-unii defect)"
     [ "$rc" = 2 ] || fail "case 4: bare $flag must exit 2, got rc=$rc: $out"
-    printf '%s\n' "$out" | grep -q "mode=refused-missing-value:$flag" \
+    grep -q "mode=refused-missing-value:$flag" <<<"$out" \
         || fail "case 4: bare $flag must name itself in the verdict: $out"
 done
 echo "ok: case 4 — a bare value-taking flag refuses by name instead of hanging"
@@ -104,7 +104,7 @@ d="$WORK/badttl"; scaffold "$d" "2026-08-21T00:00:00Z"
 for bad in abc 0 -5; do
     out="$(run "$d" --ttl-hours "$bad" 2>&1)"; rc=$?
     [ "$rc" = 2 ] || fail "case 5: --ttl-hours $bad must exit 2, got rc=$rc: $out"
-    printf '%s\n' "$out" | grep -q "mode=refused-bad-ttl:$bad" \
+    grep -q "mode=refused-bad-ttl:$bad" <<<"$out" \
         || fail "case 5: --ttl-hours $bad must name its own cause, not expire-claims: $out"
 done
 echo "ok: case 5 — a non-positive-integer TTL refuses with its own named cause"
@@ -114,9 +114,9 @@ echo "ok: case 5 — a non-positive-integer TTL refuses with its own named cause
 # script that refuses everything.
 d="$WORK/goodargs"; scaffold "$d" "2026-08-21T00:00:00Z"
 out="$(run "$d" --ttl-hours 24 --now "$NOW")" || fail "case 6: a valid --ttl-hours must be accepted, got: $out"
-printf '%s\n' "$out" | grep -q 'mode=dry-run' || fail "case 6: wrong summary: $out"
+grep -q 'mode=dry-run' <<<"$out" || fail "case 6: wrong summary: $out"
 out="$(run "$d" --ttl-hours=24 --now "$NOW")" || fail "case 6: the = form must be accepted, got: $out"
-printf '%s\n' "$out" | grep -q 'mode=dry-run' || fail "case 6: wrong = form summary: $out"
+grep -q 'mode=dry-run' <<<"$out" || fail "case 6: wrong = form summary: $out"
 echo "ok: case 6 — valid arguments in both forms are still accepted"
 
 echo "PASS: reclaim stranded claims (6/6)"
