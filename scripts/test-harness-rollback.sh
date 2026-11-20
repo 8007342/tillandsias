@@ -53,8 +53,8 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 # Fixture 1: broken @latest with a recorded last-good → rollback.
 echo "1.2.3" > "$(harness_last_good_file codex)"
 out="$(ensure_forge_harnesses 2>&1)"
-echo "$out" | grep -q "rolling back to last-good 1.2.3" || fail "no rollback attempt: $out"
-echo "$out" | grep -q "rollback to 1.2.3 OK" || fail "rollback did not verify: $out"
+grep -q "rolling back to last-good 1.2.3" <<<"$out" || fail "no rollback attempt: $out"
+grep -q "rollback to 1.2.3 OK" <<<"$out" || fail "rollback did not verify: $out"
 [ "$("$NPM_CONFIG_PREFIX/bin/codex" --version)" = "1.2.3" ] || fail "binary not rolled back"
 echo "fixture 1 ok: broken @latest rolled back to last-good"
 
@@ -62,7 +62,7 @@ echo "fixture 1 ok: broken @latest rolled back to last-good"
 rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock" "$NPM_CONFIG_PREFIX/bin/codex"
 rm -f "$(harness_last_good_file codex)" "$HOME/.cache/tillandsias-project/harness-update-stamp"
 out="$(ensure_forge_harnesses 2>&1)" || fail "updater must stay fail-soft"
-echo "$out" | grep -q "no last-good recorded" || fail "missing loud no-last-good trace: $out"
+grep -q "no last-good recorded" <<<"$out" || fail "missing loud no-last-good trace: $out"
 echo "fixture 2 ok: no last-good is loud but non-fatal"
 
 # Fixture 3: healthy install records last-good.
@@ -107,7 +107,7 @@ export TILLANDSIAS_HARNESS_FALLBACK_DIR="$WORK/empty-fallback"
 rm -rf "$HOME/.cache/tillandsias-project/npm-update.lock" "$NPM_CONFIG_PREFIX/bin"/*
 rm -f "$HOME/.cache/tillandsias-project/harness-update-stamp"
 out="$(PATH="$WORK/failnpm:$PATH" ensure_forge_harnesses 2>&1)" || fail "floor must stay fail-soft"
-echo "$out" | grep -q "WARNING: no agent harness is installed" || fail "missing first-run floor warning: $out"
+grep -q "WARNING: no agent harness is installed" <<<"$out" || fail "missing first-run floor warning: $out"
 [ ! -f "$HOME/.cache/tillandsias-project/harness-update-stamp" ] \
     || fail "cadence stamp must be cleared so the next launch retries"
 echo "fixture 5 ok: pristine cache + dead egress fails LOUD and clears the cadence stamp"
@@ -119,9 +119,9 @@ rm -f "$HOME/.cache/tillandsias-project/harness-update-stamp"
 printf '#!/bin/bash\ncase "$*" in *--help*) echo "  --json"; echo "  --output-last-message"; echo "  --dangerously-bypass-approvals-and-sandbox"; exit 0;; esac\necho cached\n' > "$NPM_CONFIG_PREFIX/bin/codex"
 chmod +x "$NPM_CONFIG_PREFIX/bin/codex"
 out="$(PATH="$WORK/failnpm:$PATH" ensure_forge_harnesses 2>&1)" || fail "updater must stay fail-soft"
-echo "$out" | grep -q "WARNING: no agent harness is installed" \
+grep -q "WARNING: no agent harness is installed" <<<"$out" \
     && fail "update path with a cached harness must stay silent: $out"
-echo "$out" | grep -q "npm update failed" || fail "expected the quiet non-fatal trace: $out"
+grep -q "npm update failed" <<<"$out" || fail "expected the quiet non-fatal trace: $out"
 echo "fixture 6 ok: cached-harness update failure stays silent (order-181 fail-soft intact)"
 unset TILLANDSIAS_HARNESS_FALLBACK_DIR
 

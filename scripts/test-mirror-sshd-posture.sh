@@ -77,7 +77,7 @@ positive() {
         --entrypoint /bin/bash \
         "$IMAGE_TAG" -c "$INNER_POSITIVE" 2>&1)"
     rc=$?
-    if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'inner:banner-ok'; then
+    if [ $rc -eq 0 ] && grep -q 'inner:banner-ok' <<<"$out"; then
         echo "ok:sshd-under-posture:banner-accepted"
         return 0
     fi
@@ -98,7 +98,7 @@ positive() {
 # from that podman default, not only from our explicit flag.
 INNER_NEGATIVE='err="$(ssh-keygen -q -N "" -t ed25519 -f /tmp/hostkey 2>&1)"
 rc=$?
-if [ $rc -ne 0 ] && printf "%s" "$err" | grep -qi "read-only file system"; then
+if [ $rc -ne 0 ] && grep -qi "read-only file system" <<<"$err"; then
     echo "inner:named-cause-ok"; exit 0
 fi
 echo "inner:unexpected rc=$rc err=$err"; exit 94'
@@ -110,7 +110,7 @@ negative() {
         --entrypoint /bin/bash \
         "$IMAGE_TAG" -c "$INNER_NEGATIVE" 2>&1)"
     rc=$?
-    if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q 'inner:named-cause-ok'; then
+    if [ $rc -eq 0 ] && grep -q 'inner:named-cause-ok' <<<"$out"; then
         echo "ok:sshd-negative-control:read-only-blocks-writable-state"
         return 0
     fi

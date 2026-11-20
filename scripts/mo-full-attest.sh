@@ -425,7 +425,7 @@ record_attest() {
     fi
     # shellcheck disable=SC2034
     read -r _tag disp local_sha branch remote_sha <<< "$marker"
-    if [ "$local_sha" != "$remote_sha" ] || ! printf '%s' "$local_sha" | grep -qE "$SHA_RE"; then
+    if [ "$local_sha" != "$remote_sha" ] || ! grep -qE "$SHA_RE" <<<"$local_sha"; then
         echo "MO-FULL: FAIL record: internal error — self returned an unverifiable marker: $marker"
         return 1
     fi
