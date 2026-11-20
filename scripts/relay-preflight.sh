@@ -92,6 +92,17 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 cd "$ROOT" || exit 2
 
+# ORDER 2110-ghw2: on an immutable host (Silverblue) run inside the
+# tillandsias-builder toolbox, exactly as build.sh does. The host is bare: its
+# cargo has no linker and it has no perl, so every cargo-backed decider,
+# crate test and litmus step failed for a HOST reason (yoga, trunk f3a546f74:
+# ci-release 8 red, 83x podman-cli rebuild-failed-before-test). Podman still
+# reaches the host through the wrapper's host-escape shim. Mutable Linux,
+# macOS, Windows and forges pass through with zero overhead. At the ENTRY
+# point, not inside run-litmus-test.sh: fixtures run the runner with injected
+# fake tools (a fake podman on PATH), and a re-exec there escaped them.
+[[ -f "$SELF_DIR/with-tillandsias-builder.sh" ]] && source "$SELF_DIR/with-tillandsias-builder.sh"
+
 # ORDER 1522-ey4h — RUN THE MERGED COPY OF THIS TOOL, NOT THE PRE-MERGE ONE.
 # The merge below rewrites scripts/relay-preflight.sh on disk, but git replaces
 # the file (a new inode), so this process keeps executing the PRE-merge text:
@@ -243,7 +254,16 @@ for ref in ${refs[@]+"${refs[@]}"}; do
         exit 1
     fi
     _t="$(timing_now_ms)"
-    if ! _cap git merge --no-ff --no-edit "$ref"; then
+    # ORDER 2110-ghw2: the scratch merge commit is never pushed, but git still
+    # needs a committer. Inside the builder toolbox the hostname is `toolbx`
+    # with no domain, so git's auto-detected address is `<user>@toolbx.(none)`
+    # and it REFUSES ("Committer identity unknown"), which this tool reported
+    # as merge-conflict (yoga, 2026-11-20). Only when git has no identity of
+    # its own; a configured one is used as before.
+    _ident=()
+    git var GIT_COMMITTER_IDENT >/dev/null 2>&1 \
+        || _ident=(-c user.name=relay-preflight -c user.email=relay-preflight@invalid)
+    if ! _cap git ${_ident[@]+"${_ident[@]}"} merge --no-ff --no-edit "$ref"; then
         _item "merge:$ref" red "$_t"
         printf '%s\n' "$_CAP_OUT" | sed 's/^/  /' >&2
         _restore_clean
