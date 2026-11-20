@@ -173,6 +173,29 @@ else
     check FAIL "no pressure file -> UNCLASSIFIED"; printf '%s\n' "$out" | grep -E 'TIMEOUT|cpu.pressure|load1|SKIP|Error|error' | head -5 | sed 's/^/     /'
 fi
 
+# --- Arms 4-5 (ORDER 2132-2yjt): CPU flat, but I/O or memory stalled ---------
+# v56.11.20.1 ci-full on macuahuitl: three steps TIMED OUT at 2% cpu stall,
+# labelled "cause UNCLASSIFIED", while the host had ~29 GB swapped out; the
+# same steps take 4-5% of their budget on an idle host. The CPU counter cannot
+# see paging, so the adjudicator also reads io.pressure and memory.pressure
+# beside it. Pre-fix: FAILS (no io/memory line at all).
+for _res in io memory; do
+    if [ "$_res" = io ]; then _label='I/O'; else _label='MEMORY'; fi
+    printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=5000000\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > "$psi"
+    rm -f "$tmp/io.pressure" "$tmp/memory.pressure"
+    printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=1000000\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n' > "$tmp/$_res.pressure"
+    write_probe "echo 'some avg10=0.00 avg60=0.00 avg300=0.00 total=90000000' > \${LITMUS_PSI_FILE%/*}/$_res.pressure; sleep 30"
+    out="$(LITMUS_PSI_FILE="$psi" run_probe)"
+    if reached_timeout "$out" \
+       && grep -q 'cpu.pressure some-stall 0us over [0-9]*s (0%) in this cgroup — CPU starvation EXCLUDED' <<<"$out" \
+       && grep -q "$_res.pressure some-stall 89000000us over [0-9]*s ([0-9]*%) in this cgroup — step STALLED ON $_label at kill time" <<<"$out"; then
+        check ok "flat cpu, advancing $_res counter -> names the $_label stall"
+    else
+        check FAIL "flat cpu, advancing $_res counter -> names the $_label stall"; grep -E 'TIMEOUT|pressure' <<<"$out" | head -5 | sed 's/^/     /'
+    fi
+done
+rm -f "$tmp/io.pressure" "$tmp/memory.pressure"
+
 total=$((pass + fail))
 if [ "$fail" -eq 0 ]; then
     echo "PASS: litmus kill-time adjudicator diffs cpu.pressure ${pass}/${total} arms (956-llei)"
