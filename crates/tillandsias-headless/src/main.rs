@@ -20869,6 +20869,7 @@ pub(crate) fn run_opencode_web_mode(
             debug,
         );
         let opencode_args = apply_web_lane(opencode_args, lane, version);
+        let opencode_args = apply_studio_repo_web(opencode_args, lane, project_remote_url.as_deref());
         client
             .run_container_observed(
                 "opencode-web-forge",
@@ -20989,6 +20990,25 @@ fn apply_web_lane(mut args: Vec<String>, lane: &studio::WebLane, version: &str) 
         && i + 1 < args.len()
     {
         args[i + 1] = entry.clone();
+    }
+    args
+}
+
+/// ORDER 2120-sv7m: a studio's "Open PR" link needs the project's GitHub page,
+/// which its forge cannot see (its origin is the git mirror). Only the bare
+/// `https://github.com/<owner>/<repo>` is passed, as STUDIO_REPO_WEB, next to
+/// TILLANDSIAS_STUDIO; a remote that is not GitHub, or that carries userinfo,
+/// passes nothing. The OpenCode lane is unchanged.
+fn apply_studio_repo_web(mut args: Vec<String>, lane: &studio::WebLane, remote: Option<&str>) -> Vec<String> {
+    if lane.service == "opencode" {
+        return args;
+    }
+    let Some(web) = remote.and_then(studio::github_web) else {
+        return args;
+    };
+    let marker = format!("TILLANDSIAS_STUDIO={}", lane.studio_id());
+    if let Some(i) = args.iter().position(|a| *a == marker) {
+        args.splice(i + 1..i + 1, ["--env".to_string(), format!("STUDIO_REPO_WEB={web}")]);
     }
     args
 }
@@ -39078,6 +39098,15 @@ esac
         );
         assert_eq!(
             apply_web_lane(base.clone(), &studio::WebLane::opencode(), version),
+            base
+        );
+        // 2120-sv7m: the studio gets the bare GitHub page, never a token.
+        let with = apply_studio_repo_web(args.clone(), &stub, Some("https://github.com/o/r.git"));
+        assert_eq!(&with[3..7], ["--env", "TILLANDSIAS_STUDIO=stub", "--env", "STUDIO_REPO_WEB=https://github.com/o/r"]);
+        assert_eq!(apply_studio_repo_web(args.clone(), &stub, Some("https://t:SECRET@github.com/o/r")), args);
+        assert_eq!(apply_studio_repo_web(args.clone(), &stub, None), args);
+        assert_eq!(
+            apply_studio_repo_web(base.clone(), &studio::WebLane::opencode(), Some("https://github.com/o/r")),
             base
         );
         assert_eq!(

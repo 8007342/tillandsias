@@ -9,6 +9,7 @@
 <style>
 html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
 .gjs-pn-btn.studio-dirty { color: #ffca6f; text-shadow: 0 0 6px #ffca6f; }
+.gjs-pn-btn.studio-hidden { display: none; }
 #studio-banner { position: fixed; z-index: 10; left: 0; right: 0; bottom: 0; padding: 6px 10px;
   font: 13px system-ui, sans-serif; background: #7a2e00; color: #fff; }
 </style>
@@ -138,6 +139,26 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
     const btn = editor.Panels.getButton("options", "studio-save");
     if (btn) btn.set("className", "fa fa-floppy-o" + (v ? " studio-dirty" : ""));
   };
+  // 2120-sv7m: "Open PR" opens GitHub's compare page for the studio's pushed
+  // work branch in a new tab; the operator opens the PR there, signed in as
+  // themselves (the PR is the gate to main; the studio holds no token). It is
+  // hidden until the front reports a pushed branch with a link.
+  let prUrl = null;
+  const refreshPr = async () => {
+    try {
+      const st = await (await fetch("/__studio/branch", { cache: "no-store" })).json();
+      prUrl = st && st.compare_url ? st.compare_url : null;
+    } catch (_) { prUrl = null; }
+    const b = editor.Panels.getButton("options", "studio-pr");
+    if (b) b.set("className", "fa fa-code-fork" + (prUrl ? "" : " studio-hidden"));
+    document.documentElement.setAttribute("data-studio-pr", prUrl ? "ready" : "none");
+  };
+  editor.Commands.add("studio-pr", {
+    run(ed) {
+      if (prUrl) window.open(prUrl, "_blank", "noopener");
+      ed.stopCommand("studio-pr");
+    },
+  });
   editor.Commands.add("studio-save", {
     async run(ed) {
       if (readOnly) return;
@@ -148,6 +169,7 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
         setDirty(false);
         draftStore.clear();
         document.documentElement.setAttribute("data-studio-save", "saved");
+        refreshPr();
       } catch (e) {
         document.documentElement.setAttribute("data-studio-save", "error");
         alert("Not saved: " + (e && e.message ? e.message : e));
@@ -164,6 +186,12 @@ html, body { margin: 0; height: 100%; } #gjs { height: 100vh; }
       command: (ed) => ed.runCommand("studio-save"),
       attributes: { title: "Save (one commit)" },
     });
+    editor.Panels.addButton("options", {
+      id: "studio-pr", className: "fa fa-code-fork studio-hidden", togglable: false,
+      command: (ed) => ed.runCommand("studio-pr"),
+      attributes: { title: "Open PR on GitHub (review your saves before they reach the site)" },
+    });
+    refreshPr();
     // Typing in the text editor fires no editor event; the frame's input does.
     const watchInput = (doc) => doc && doc.addEventListener("input", () => { if (!readOnly) setDirty(true); });
     watchInput(editor.Canvas.getDocument());

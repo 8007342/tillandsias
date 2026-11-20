@@ -29,6 +29,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const SAVE_PATH = '/__studio/save';
+const BRANCH_PATH = '/__studio/branch';
 const MAX_SAVE_BYTES = 8 * 1024 * 1024;
 const PWA_KILL_PATHS = new Set([
     '/site.webmanifest', '/manifest.json', '/manifest.webmanifest',
@@ -179,6 +180,27 @@ function relay(cfg, branch) {
     return true;
 }
 
+// 2120-sv7m: GET /__studio/branch, for the editors' "Open PR" link. The PR is
+// opened by the operator, signed in as themselves, from GitHub's compare page
+// (which links the PR once one exists); no token is held. repoWeb is the bare
+// https://github.com/<owner>/<repo> the launcher passes as STUDIO_REPO_WEB.
+function compareUrl(repoWeb, base, branch) {
+    if (!/^https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/.test(repoWeb || '')) return null;
+    const seg = /^[A-Za-z0-9._/-]+$/;
+    if (!seg.test(base) || !seg.test(branch) || branch.includes('..')) return null;
+    return `${repoWeb}/compare/${base}...${branch}?expand=1`;
+}
+
+function branchState(cfg) {
+    const branch = currentBranch(cfg.checkout);
+    const base = defaultBranch(cfg.checkout);
+    if (!branch || branch === base) return { branch: branch || null, pushed: false, compare_url: null };
+    const head = git(cfg.checkout, ['rev-parse', 'HEAD']).trim();
+    let tracked = '';
+    try { tracked = git(cfg.checkout, ['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`]).trim(); } catch (_) { /* never pushed */ }
+    return { branch, pushed: tracked === head, compare_url: tracked ? compareUrl(cfg.repoWeb, base, branch) : null };
+}
+
 // Guard, write, commit. Every accepted save is a commit (operator ruling
 // 2026-10-25): concurrent edits are ordered by commit, never last-write-wins.
 function save(cfg, requested, content) {
@@ -286,6 +308,7 @@ function loadConfig(env) {
         ownWriter: studio.save_adapter === 'own-writer',
         checkout: env.STUDIO_CHECKOUT || `/home/forge/src/${env.TILLANDSIAS_PROJECT || ''}`,
         pushTimeoutMs: Number(env.STUDIO_PUSH_TIMEOUT_MS || 30000),
+        repoWeb: env.STUDIO_REPO_WEB || '',
         workBranch: env.STUDIO_WORK_BRANCH || `${slug(id)}/${slug(env.TILLANDSIAS_PROJECT)}-work/${day}`,
     };
 }
@@ -328,6 +351,14 @@ function start(env) {
             }
             res.writeHead(out.status, { 'content-type': 'application/json' });
             res.end(JSON.stringify(out.body));
+            return;
+        }
+        if (url.pathname === BRANCH_PATH) {
+            if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+            let body;
+            try { body = branchState(cfg); } catch (e) { body = { branch: null, pushed: false, compare_url: null }; }
+            res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+            res.end(JSON.stringify(body));
             return;
         }
         const bracket = cfg.ownWriter && !READ_METHODS.has(req.method);
@@ -376,6 +407,6 @@ function start(env) {
     return server;
 }
 
-module.exports = { guard, save, sweep, changedPaths, globToRegExp, loadConfig, start, ensureWorkBranch, defaultBranch, relay };
+module.exports = { guard, save, sweep, changedPaths, globToRegExp, loadConfig, start, ensureWorkBranch, defaultBranch, relay, branchState, compareUrl };
 
 if (require.main === module) start(process.env);

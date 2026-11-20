@@ -149,6 +149,12 @@ function relayArm() {
     check(6, ev.some((e) => e.startsWith('event:studio.push ') && e.includes(`branch=${branch}`)), ev.join(''));
     const mainAfter = execFileSync('git', ['--git-dir', bare, 'rev-parse', 'refs/heads/main'], { encoding: 'utf8' }).trim();
     check(6, mainAfter === mainBefore, 'default-branch-moved-on-origin');
+    // the "Open PR" link: the compare page, only for a pushed branch and a
+    // bare GitHub page; a token-bearing value yields none.
+    const st = front.branchState({ ...cfg, repoWeb: 'https://github.com/o/site' });
+    check(6, st.pushed === true && st.compare_url === `https://github.com/o/site/compare/main...${branch}?expand=1`, `branch-state:${JSON.stringify(st)}`);
+    check(6, front.branchState({ ...cfg, repoWeb: 'https://t:SECRET@github.com/o/site' }).compare_url === null, 'token-bearing-repo-web-linked');
+    check(6, front.compareUrl('https://github.com/o/site', 'main', '../x') === null, 'hostile-branch-linked');
     // unreachable origin: still saved, reported, evented.
     g(['remote', 'set-url', 'origin', path.join(tmp, 'no-such-mirror.git')]);
     const ev2 = [];

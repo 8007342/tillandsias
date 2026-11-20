@@ -388,6 +388,18 @@ pub(crate) fn parse_studio_refs(stdout: &str, remote: Option<&str>, base: &str) 
 /// the project's cloud remote, in its https or ssh spelling. Anything else
 /// (a non-GitHub host, a malformed path) is `None`, never a guess.
 pub(crate) fn compare_url(remote: &str, base: &str, branch: &str) -> Option<String> {
+    let web = github_web(remote)?;
+    let seg_ok = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_./".contains(c));
+    if !seg_ok(base) || !seg_ok(branch) || branch.contains("..") {
+        return None;
+    }
+    Some(format!("{web}/compare/{base}...{branch}?expand=1"))
+}
+
+/// `https://github.com/<owner>/<repo>` from the project's cloud remote, or
+/// `None`. Only this is handed to a studio (STUDIO_REPO_WEB), so nothing a
+/// remote URL can carry besides owner and repo (userinfo, a token) reaches it.
+pub(crate) fn github_web(remote: &str) -> Option<String> {
     let r = remote.trim();
     let path = r
         .strip_prefix("https://github.com/")
@@ -402,11 +414,7 @@ pub(crate) fn compare_url(remote: &str, base: &str, branch: &str) -> Option<Stri
     if parts.next().is_some() || !ok(owner) || !ok(repo) {
         return None;
     }
-    let seg_ok = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_./".contains(c));
-    if !seg_ok(base) || !seg_ok(branch) || branch.contains("..") {
-        return None;
-    }
-    Some(format!("https://github.com/{owner}/{repo}/compare/{base}...{branch}?expand=1"))
+    Some(format!("https://github.com/{owner}/{repo}"))
 }
 
 /// One commit in the feed.
@@ -898,6 +906,8 @@ mod tests {
         assert_eq!(compare_url("https://github.com/o/r", "main", "grapesjs/x?y=1"), None);
         assert_eq!(compare_url("https://github.com/o/r", "main", "../x"), None);
         assert_eq!(compare_url("https://github.com/o/r/extra", "main", "grapesjs/x"), None);
+        assert_eq!(github_web("https://x-access-token:SECRET@github.com/o/r.git"), None);
+        assert_eq!(github_web("https://github.com/o/r.git").as_deref(), Some("https://github.com/o/r"));
         assert!(parse_studio_refs("", None, "main").is_empty());
         assert_eq!(parse_studio_refs(out, None, "main")[0].compare_url, None);
     }
