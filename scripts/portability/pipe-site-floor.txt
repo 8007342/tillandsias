@@ -854,7 +854,6 @@ scripts scripts/verify-closure.sh 37
 scripts scripts/verify-version-monotonic.sh 2
 scripts scripts/windows-host-capability-probe.sh 15
 scripts scripts/with-nix-builder.sh 4
-scripts scripts/with-smoke-lock.sh 1
 scripts scripts/with-tillandsias-builder.sh 10
 scripts scripts/with-tillandsias-process-cleanup.sh 2
 scripts scripts/with-wsl2-builder.sh 15

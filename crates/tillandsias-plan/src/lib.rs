@@ -94,6 +94,7 @@ pub mod run_verb;
 // ORDER 1384-bqhy: `script run` (the Lua decider runner) and the one classify.
 pub mod script_run;
 
+pub mod lock_run;
 /// Order 977-56fd — the seven-state obligation lattice, the product order over
 /// spec and project states, and the refinement operator that
 /// `methodology/math-foundations.yaml` describes and nothing implemented.

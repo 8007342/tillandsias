@@ -68,6 +68,7 @@ fn capability_tokens() -> Vec<&'static str> {
 const DISPATCH_ARMS: &[&str] = &[
     "set-field",
     "session-tokens",
+    "lock",
     "append-event",
     "answer",
     "arrival-routing-check",
@@ -470,6 +471,11 @@ const USAGE: &str = concat!(
     "                                     then answer it. Unrouted questions are unsupported.\n",
     "           methodology-index [--root D]\n",
     "                                     every indexed path with its file:line (the query surface)\n",
+    "           lock run [--name N] [--timeout SECS|none] [--root DIR] [--log FILE] -- CMD...\n",
+    "                                     ORDER 2115-jkdv. Run CMD under a host-wide named flock\n",
+    "                                     (replaces scripts/with-smoke-lock.sh). CMD inherits the TTY and\n",
+    "                                     stdio but never the lock fd (CLOEXEC); exit is CMD's, 75 on\n",
+    "                                     lock-wait timeout, 64 usage.\n",
     "           session-tokens [--since <utc>] [--transcript <path>]\n",
     "                                     ORDER 1437-3pj7. This session's BILLED tokens from the harness\n",
     "                                     transcript (message.usage, deduplicated by message.id), plus the\n",
@@ -5935,6 +5941,10 @@ fn main() {
     // (that is how the outside-a-checkout negative control is driven).
     // ORDER 1437-3pj7 — a session's billed token spend from its transcript.
     // Early: it reads the harness transcript, never the ledger.
+    // ORDER 2115-jkdv — `lock run`: early, it never reads the ledger.
+    if args[0] == "lock" {
+        std::process::exit(tillandsias_plan::lock_run::main(&args[1..]));
+    }
     if args[0] == "session-tokens" {
         let mut since = std::env::var("TILLANDSIAS_CYCLE_START_TS")
             .ok()

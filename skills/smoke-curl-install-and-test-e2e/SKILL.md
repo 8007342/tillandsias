@@ -403,7 +403,7 @@ unset the installer defaults to the stable channel.
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 _T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name release-smoke-e2e -- \
   bash -c "curl -fsSL '${SMOKE_BASE}/install.sh' | TILLANDSIAS_RELEASE_BASE='${SMOKE_BASE}' bash" 2>&1 \
   | tee target/smoke-e2e/01-install.log
 INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" | tee target/smoke-e2e/01-install-exit.txt
@@ -682,7 +682,7 @@ push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 _T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee target/smoke-e2e/02-reset-exit.txt
   # 900-z3kv (operator ruling 2026-09-13, landed by yoga): the reset is the baseline, and
@@ -907,7 +907,7 @@ metered or slow link pays it every time.
 [ -n "${BASH_VERSION:-}" ] || { echo 'FAIL: run this block under bash — PIPESTATUS is a bash array and zsh expands it empty'; exit 2; }
 _T0="$(timing_now_ms)"
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name release-smoke-e2e -- \
   tillandsias --debug --init 2>&1 | tee target/smoke-e2e/03-init.log
 INIT_RC=${PIPESTATUS[0]}
 timing_emit smoke-init-pristine smoke "$_T0" "${INIT_RC:-1}" || true; printf 'init_exit=%s\n' "$INIT_RC" | tee target/smoke-e2e/03-init-exit.txt
@@ -1233,7 +1233,7 @@ _WATCH_PID=$!
 # can never satisfy the grep below.
 SMOKE_PROMPT='Smoke check, one turn only. Run `bash scripts/check-credential-channel.sh` in the checkout and show its last line. Then reply with the word SMOKE-AGENT, a hyphen, and the word OK, all on one line with no spaces. Load no skill and do nothing else.'
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
-  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" lock run --name release-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias --cloud 8007342/tillandsias --opencode --prompt "$SMOKE_PROMPT" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 LANE_RC=${PIPESTATUS[0]}; printf 'opencode_exit=%s\n' "$LANE_RC" | tee target/smoke-e2e/04-opencode-exit.txt
