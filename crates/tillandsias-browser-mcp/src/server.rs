@@ -188,6 +188,13 @@ impl BrowserMcpServer {
             windows: Arc::new(WindowRegistry::default()),
             debounce: Arc::new(DebounceTable::default()),
         }
+        .with_idle_reaper()
+    }
+
+    /// ORDER 2142-3kt8: every registry this server uses has its idle reaper.
+    fn with_idle_reaper(self) -> Self {
+        self.windows.start_idle_reaper(Arc::clone(&self.debounce));
+        self
     }
 
     /// Dispatch an RPC request to the appropriate handler.
@@ -271,7 +278,7 @@ impl BrowserMcpServer {
     ) -> Self {
         self.windows = windows;
         self.debounce = debounce;
-        self
+        self.with_idle_reaper()
     }
 
     /// The owner a window opened here records: `<project>/<instance>`.
@@ -443,7 +450,7 @@ impl BrowserMcpServer {
         let tools = json!([
             {
                 "name": "browser.open",
-                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode). The window stays open after this session ends, until browser.close or the user closes it. On the first window of an engine the host builds its image (several minutes): the reply is then {state: \"preparing\", step, total, notice, retry_after_s} with no window_id; call browser.open again after retry_after_s until it opens, and that reply's notice says the engine was prepared.",
+                "description": "Open a browser window for a project-local URL. The reply's headless field says whether a human can see it: headless: true means NO human can see the window, and only agents drive it (over CDP in dev mode). The window stays open after this session ends, until browser.close, the user closes it, or it sits idle (no CDP command and no user input) past the idle limit (default 15 minutes), when it is stopped and calls on it answer browser.closed:idle. Close it with browser.close when you are done. On the first window of an engine the host builds its image (several minutes): the reply is then {state: \"preparing\", step, total, notice, retry_after_s} with no window_id; call browser.open again after retry_after_s until it opens, and that reply's notice says the engine was prepared.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -624,7 +631,7 @@ impl BrowserMcpServer {
             },
             {
                 "name": "browser.close",
-                "description": "Close a browser window",
+                "description": "Close a browser window when you are done with it: stops its container and its forwarder and removes its profile",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -658,6 +665,26 @@ impl BrowserMcpServer {
         };
         let args = Self::requested_arguments(request);
 
+        // ORDER 2142-3kt8: a call naming a window is that window's activity,
+        // and a window the idle reaper closed answers with the reason.
+        if let Some(window_id) = args.get("window_id").and_then(|v| v.as_str()) {
+            if let Some(reason) = self.windows.take_reaped(window_id, &self.owner()) {
+                return Self::tool_error(
+                    id,
+                    format!(
+                        "browser.closed:{reason} {window_id}: this window was stopped after {} with no CDP command or user input; open a new one with browser.open",
+                        if reason == "idle" {
+                            "its idle limit"
+                        } else {
+                            "its 48 h lifetime"
+                        }
+                    ),
+                );
+            }
+            if self.windows.owned_by(window_id, &self.owner()) {
+                self.windows.touch_window_activity(window_id);
+            }
+        }
         let response = match tool_name {
             "browser.open" => self.handle_browser_open(id, args),
             "browser.list_windows" => self.handle_browser_list_windows(id),
@@ -897,6 +924,24 @@ impl BrowserMcpServer {
                     .unwrap_or_default(),
             }),
         };
+        // ORDER 2142-3kt8: record user input in a headed DEV window, so the
+        // idle reaper does not close a window a person is using. Dev windows
+        // only: a non-dev window never runs page script (read_url pins that),
+        // so it cannot see input and is not idle-reaped (see
+        // WindowEntry::idle_reapable). Best effort.
+        if !headless
+            && dev
+            && let Some(cdp) = entry.cdp.as_ref()
+        {
+            if let Some(session) = cdp.main_session() {
+                let _ = cdp.connection().call(
+                    Some(&session),
+                    "Page.addScriptToEvaluateOnNewDocument",
+                    json!({ "source": crate::window_registry::INPUT_LISTENER_SCRIPT }),
+                );
+            }
+            let _ = cdp.evaluate(crate::window_registry::INPUT_LISTENER_SCRIPT);
+        }
         let notice = entry.notice.clone();
         let window_id = entry.window_id.clone();
         self.windows.insert(entry);
@@ -914,8 +959,22 @@ impl BrowserMcpServer {
                 "headless": headless,
                 "service_workers": service_workers,
                 "notice": notice,
+                // ORDER 2142-3kt8: the affordance, every time.
+                "lifecycle": Self::lifecycle_hint(),
             }),
         }
+    }
+
+    /// ORDER 2142-3kt8: what the agent is told about a window's end.
+    fn lifecycle_hint() -> String {
+        let idle = match crate::window_registry::idle_timeout() {
+            Some(d) if d.as_secs() % 60 == 0 => format!("{} minutes", d.as_secs() / 60),
+            Some(d) => format!("{} seconds", d.as_secs()),
+            None => "never (idle limit disabled)".to_string(),
+        };
+        format!(
+            "Close it with browser.close when you are done. A window with no CDP command and no user input for {idle} is stopped automatically; a call on it then answers browser.closed:idle, and browser.open opens a new one."
+        )
     }
 
     /// `browser.set_device{window_id, device}`: re-emulate a live window.
@@ -2450,6 +2509,151 @@ mod tests {
             .as_str()
             .unwrap_or("")
             .to_string())
+    }
+
+    // ---- ORDER 2142-3kt8: dev-browser lifecycle discipline ----
+
+    async fn call_tool_dbg(
+        server: &BrowserMcpServer,
+        name: &str,
+        args: serde_json::Value,
+    ) -> String {
+        let response = server
+            .handle_request(RpcRequest {
+                id: Some(7),
+                method: "tools/call".to_string(),
+                params: json!({ "name": name, "arguments": args }),
+            })
+            .await;
+        format!("{response:?}")
+    }
+
+    /// Criterion (1): a window with no CDP command and no input past the idle
+    /// limit is stopped WITH its container, and the agent's next call on it
+    /// names the reason; an active window survives. Pre-fix there was no
+    /// reaper at all: the 24 h check had no caller, which is how five headless
+    /// windows on macuahuitl ran for 13-17 hours.
+    #[tokio::test]
+    async fn an_idle_window_is_reaped_with_its_container_and_an_active_one_survives() {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            routed: vec![
+                "www.acme.localhost:18443".to_string(),
+                "flutter.acme.localhost:18443".to_string(),
+            ],
+            no_display: true, // headless: the macuahuitl case
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        let idle = open(&server, "https://www.acme.localhost:18443/")
+            .await
+            .expect("opens");
+        let active = open(&server, "https://flutter.acme.localhost:18443/")
+            .await
+            .expect("opens");
+        let limit = crate::window_registry::idle_timeout().expect("idle limit on by default");
+        server.windows.age_for_test(&idle, limit.as_secs() + 60);
+        server.windows.age_for_test(&active, 60);
+
+        let closed = server.windows.reap(&server.debounce);
+        assert_eq!(
+            closed,
+            vec![(idle.clone(), "idle")],
+            "only the idle window is reaped"
+        );
+        assert_eq!(
+            host.stops.lock().len(),
+            1,
+            "its container (and forwarder) were stopped"
+        );
+        assert!(!server.windows.contains(&idle));
+        assert!(
+            server.windows.contains(&active),
+            "an active window survives"
+        );
+
+        let reply = call_tool_dbg(&server, "browser.read_url", json!({ "window_id": idle })).await;
+        assert!(reply.contains("browser.closed:idle"), "{reply}");
+        let again = call_tool_dbg(&server, "browser.read_url", json!({ "window_id": idle })).await;
+        assert!(
+            again.contains("WINDOW_NOT_FOUND"),
+            "the reason is reported once: {again}"
+        );
+    }
+
+    /// A headed NON-dev window runs no page script, so input in it cannot be
+    /// seen; a person can see and close it. It is not idle-reaped (the 48 h
+    /// lifetime still bounds it).
+    #[tokio::test]
+    async fn a_headed_non_dev_window_is_not_idle_reaped() {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host.clone() as Arc<dyn BrowserContainers>),
+        );
+        let window = open(&server, "https://www.acme.localhost:18443/")
+            .await
+            .expect("opens");
+        let limit = crate::window_registry::idle_timeout().expect("idle limit on by default");
+        server.windows.age_for_test(&window, limit.as_secs() + 60);
+        assert!(server.windows.reap(&server.debounce).is_empty());
+        assert!(host.stops.lock().is_empty());
+    }
+
+    /// The idle limit defaults to 15 minutes and is configurable; 0 disables it.
+    #[test]
+    fn the_idle_limit_defaults_to_fifteen_minutes() {
+        assert_eq!(crate::window_registry::DEFAULT_IDLE_MINUTES, 15);
+    }
+
+    /// Criterion (2): the open result and both tool descriptions tell the
+    /// agent to close the window, and what happens when it does not.
+    #[tokio::test]
+    async fn browser_open_and_close_name_the_close_affordance() {
+        let host = Arc::new(RecordingContainers {
+            preview_tls_port: Some(18443),
+            ..Default::default()
+        });
+        let server = BrowserMcpServer::with_project_label(
+            McpServerConfig::default(),
+            "acme",
+            Some(host as Arc<dyn BrowserContainers>),
+        );
+        let opened = call_tool_dbg(
+            &server,
+            "browser.open",
+            json!({ "url": "https://www.acme.localhost:18443/" }),
+        )
+        .await;
+        assert!(
+            opened.contains("Close it with browser.close when you are done"),
+            "{opened}"
+        );
+        assert!(opened.contains("browser.closed:idle"), "{opened}");
+        let tools = format!(
+            "{:?}",
+            server.handle_tools_list(&RpcRequest {
+                id: Some(2),
+                method: "tools/list".into(),
+                params: json!({})
+            })
+        );
+        assert!(
+            tools.contains("Close it with browser.close when you are done"),
+            "browser.open description"
+        );
+        assert!(
+            tools.contains("stops its container and its forwarder"),
+            "browser.close description"
+        );
     }
 
     /// 1788-qlwq slice 10 (kumbia-kombat): with the www preview window open,

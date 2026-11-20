@@ -145,6 +145,7 @@ flutter run -d web-server
 - To publish a release build instead, run `flutter build web`, then call
   `publish_local` with `{"category": "WEB", "app_dir": "game/build/web"}`
   (the path relative to the project root).
+  Close it with `browser.close {"window_id": ...}` when you are done; a window with no CDP command and no user input for 15 minutes is stopped automatically (calls on it then answer `browser.closed:idle`; open a new one with `browser.open`).
 
 Tell the user the URL `flutter run` printed. **Do not** print
 `http://localhost:8080`: that URL means nothing to the human.

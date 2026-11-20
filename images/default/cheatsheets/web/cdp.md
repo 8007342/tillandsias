@@ -45,6 +45,8 @@ on a Unix socket in a per-window 0700 host directory, for ONE client: the
 tray's broker (`crates/tillandsias-browser-mcp/src/{cdp_client,window_cdp}.rs`).
 When that client disconnects, the relay ends Chromium.
 
+Close it with `browser.close {"window_id": ...}` when you are done; a window with no CDP command and no user input for 15 minutes is stopped automatically (calls on it then answer `browser.closed:idle`; open a new one with `browser.open`).
+
 - The connection is browser-level. `Target.setAutoAttach {autoAttach: true,
   flatten: true, waitForDebuggerOnStart: true}` attaches the existing page and
   every later page (popups arrive paused); page commands then carry the
