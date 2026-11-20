@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by tlatoanis-macbook-air, 2026-11-20. Coordinator P5 (landing redesign), ruling (b)+(c).
+packets:
+- packet_id: native-lint-attestations-are-refs-keyed-to-the-crate-subtree-and-a-merged-combination-holds-instead-of-evicting
+  order: 2112-nlrf
+  status: in_progress
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [land-queue, native-lint, macos, ci-release]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: 'Native-lint attestations are refs (refs/attest/native-lint/<crate-subtree-sha>) written by darwin preflight, and the queue HOLDS a PR whose merged crate content is unlinted instead of evicting it'
+  context: >-
+    MEASURED 2026-11-20 in a scratch repo with the real scripts. When the base did not touch the crate (the P5 exit as first written), the check already passed: the trailer stays in base..HEAD with the same subtree. The case that costs round trips is when the base DID change the crate: refused:native-lint:stale, and the PR is evicted for another PR's change. Coordinator ruling (b)+(c): an unlinted combination must not land, but the PR is HELD, not evicted.
+    Built in this ref:
+    - attest-native-lint.sh --ref [--push] [--at <commit>] writes refs/attest/native-lint/<tree>. The ref points at a parentless commit whose tree IS the linted subtree, so it verifies itself. It adds no branch commit, and --at lints another commit's content in this single checkout and switches back.
+    - check-native-lint-attested.sh accepts a valid ref. A forged ref, whose tree is not its name, does not count. --hold answers hold:native-lint:<pkg>:<merged-subtree> (rc 3) when the candidate's own subtree was attested but the merged one was not. An author's own unattested edit still refuses.
+    - darwin ./build.sh --preflight writes and pushes the ref when the tree changes the crate. A clippy failure refuses the preflight.
+    Queue side, owned by yoga: land-queue.sh calls the check with --hold, labels the PR needs:native-lint with the merged subtree sha, keeps it queued, and fetches +refs/attest/*:refs/attest/*.
+  exit_criteria:
+  - 'scripts/lua/test-native-lint-hold.lua gives 7/7. Against the pre-change scripts, arm 3 (CASE 2 holds with the merged subtree, rc 3) FAILS with rc=1 refused:native-lint:stale.'
+  - 'After attest --ref --at <merge>, the SAME candidate passes with no new commit on the branch (arms 4-5).'
+  - 'The existing scripts/test-native-lint-attested.sh still gives 10/10. Both existing callers pass only --base, so they are unchanged.'
+  - 'Queue (yoga): a CASE 2 candidate yields one hold plus a label and zero evictions, and passes once the ref exists.'
+  verifiable_closure: 'test-native-lint-hold.lua and test-native-lint-attested.sh on darwin, then a real attest --ref --push of a macos-tray subtree.'
+  unscoreable: 'none.'
+  next_action: 'yoga wires --hold, the label and the refs/attest fetch in land-queue.sh. The darwin host services needs:native-lint labels with attest-native-lint.sh --ref --push --at <merge>.'
+  provenance: 'tlatoanis-macbook-air 2026-11-20. Proposal adopted by the coordinator (macuahuitl-fedora) as P5; ruling (b)+(c) after the measurement.'
+  events:
+  - {type: filed, ts: '2026-11-20T20:00:00Z', host: tlatoanis-macbook-air, summary: 'filed with its PR'}
+- packet_id: native-lint-attest-and-check-scripts-are-ported-to-lua
+  order: 2113-nlpt
+  status: ready
+  kind: chore
+  priority: p3
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua, shell-burn-down, land-queue]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: 'Port scripts/attest-native-lint.sh and scripts/check-native-lint-attested.sh to Lua once land-queue.sh and land-on-platform-branch.sh can call a Lua decider'
+  context: >-
+    2112-nlrf extended both scripts in shell, because both callers (land-queue.sh, owned by yoga, and land-on-platform-branch.sh) invoke them with bash and parse their verdict lines. This packet carries that shell-to-lua obligation. Keep the verdict grammar and exit codes (ok/refused/override/hold, 0/1/3), and port test-native-lint-attested.sh in the same change.
+  exit_criteria:
+  - 'Both scripts are deleted, Lua twins exist, and both callers run the twins.'
+  - 'test-native-lint-attested and test-native-lint-hold pass against the twins.'
+  verifiable_closure: 'The two fixtures pass and no caller names the .sh.'
+  unscoreable: 'none.'
+  next_action: 'After 2112-nlrf lands and yoga has wired the hold.'
+  provenance: 'tlatoanis-macbook-air 2026-11-20, the carried shell-to-lua obligation of 2112-nlrf.'
+  events:
+  - {type: filed, ts: '2026-11-20T20:00:00Z', host: tlatoanis-macbook-air, summary: 'filed as the waiver target of 2112-nlrf'}

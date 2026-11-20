@@ -1993,6 +1993,34 @@ PFEOF
         echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
         exit 1
     fi
+    # ORDER 2112-nlrf. On darwin, a tree that changes a cfg-gated crate gets its
+    # native lint attested HERE, as refs/attest/native-lint/<crate-subtree-sha>
+    # (no commit on the branch), so the land queue needs no separate
+    # attest-native-lint.sh round trip. Only a clean, committed tree: the ref
+    # names committed content. A clippy failure refuses the preflight (that is a
+    # real lint failure); an unpushable ref is kept locally and named.
+    if [ "$(uname -s)" = Darwin ] && [ -f "$SCRIPT_DIR/scripts/attest-native-lint.sh" ] \
+       && [ "${TILLANDSIAS_PREFLIGHT_NATIVE_LINT:-1}" != 0 ]; then
+        _nl_base="${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}"
+        _nl_ht="$(git -C "$SCRIPT_DIR" rev-parse --verify --quiet HEAD:crates/tillandsias-macos-tray 2>/dev/null)" || _nl_ht=""
+        _nl_bt="$(git -C "$SCRIPT_DIR" rev-parse --verify --quiet "$_nl_base:crates/tillandsias-macos-tray" 2>/dev/null)" || _nl_bt=""
+        if [ -n "$_nl_ht" ] && [ "$_nl_ht" != "$_nl_bt" ]; then
+            if ! git -C "$SCRIPT_DIR" diff --quiet || ! git -C "$SCRIPT_DIR" diff --cached --quiet; then
+                echo "note:preflight:native-lint-ref:skipped:dirty-tree — commit, then re-run to attest crates/tillandsias-macos-tray=$_nl_ht" >&2
+            else
+                _nl_out="$(cd "$SCRIPT_DIR" && bash scripts/attest-native-lint.sh --ref --push 2>&1)"; _nl_rc=$?
+                case "$_nl_rc:$_nl_out" in
+                    0:*ok:attest-native-lint:ref*) echo "ok:preflight:native-lint-ref:$(printf '%s\n' "$_nl_out" | grep -m1 '^ok:attest-native-lint:' | cut -d: -f3-)" >&2 ;;
+                    1:*failed:attest-native-lint:push*) echo "note:preflight:native-lint-ref:written-not-pushed — git push origin refs/attest/native-lint/$_nl_ht" >&2 ;;
+                    *) printf '%s\n' "$_nl_out" >&2
+                       _afford "the macOS tray crate failed its native clippy lint (clippy -p tillandsias-macos-tray --all-targets -D warnings, run by scripts/attest-native-lint.sh); the land queue would refuse it, and on trunk it would redden every Mac build" \
+                           "fix the clippy findings above, commit, and re-run ./build.sh --preflight"
+                       echo "refused:preflight:native-lint:tillandsias-macos-tray rc=$_nl_rc" >&2
+                       exit 1 ;;
+                esac
+            fi
+        fi
+    fi
     if [ "$_pf_unanswered" -gt 0 ]; then
         # DELIBERATELY NOT `ok:`. The old line said ok: here and exited 0, and a
         # reader who saw both concluded the guards had passed — on Windows that
