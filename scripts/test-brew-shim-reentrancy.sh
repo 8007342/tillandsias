@@ -156,7 +156,7 @@ out="$(env -u TILLANDSIAS_BREW_SHIM_INSTALLING \
     TILLANDSIAS_PROJECT_CACHE="$W/cache" \
     TILLANDSIAS_BREW_AUTOINSTALL=0 \
     "$W/shims/faketool" --version 2>&1)"
-if echo "$out" | grep -q "is not installed" && [ ! -s "$W/installs.log" ]; then
+if grep -q "is not installed" <<<"$out" && [ ! -s "$W/installs.log" ]; then
     ok "AUTOINSTALL=0 still hints without invoking brew at all (ordering preserved)"
 else
     bad "AUTOINSTALL=0 path changed — hint missing or brew was invoked"

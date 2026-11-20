@@ -71,7 +71,7 @@ trace_lifecycle() { CAPTURED="$CAPTURED $*"; }
 if harness_contract_ok opencode; then
     fail "case2: a harness missing a flag we pass MUST fail the contract"
 fi
-printf '%s' "$CAPTURED" | grep -q -- "--format" \
+grep -q -- "--format" <<<"$CAPTURED" \
     || fail "case2: the failure must NAME the missing flag. Got: $CAPTURED"
 trace_lifecycle() { :; }
 echo "case 2 ok: missing flag is DETECTED and named"

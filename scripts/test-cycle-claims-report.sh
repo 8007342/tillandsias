@@ -17,7 +17,7 @@ cd "$ROOT" || exit 2
 
 pass=0; fail=0
 check() { # name expected-regex actual
-    if printf '%s' "$3" | grep -qE "$2"; then pass=$((pass+1)); else
+    if grep -qE "$2" <<<"$3"; then pass=$((pass+1)); else
         fail=$((fail+1)); echo "FAIL: $1"; echo "  want=~[$2]"; echo "  got =[$(printf '%s' "$3" | head -3)]"
     fi
 }

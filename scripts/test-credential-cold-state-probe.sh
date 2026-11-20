@@ -102,7 +102,7 @@ case "$line_v" in
 esac
 if [ -z "$md_expect" ]; then
     ok "SKIPPED arm 4: the line verdict is '$line_v' (could-not-run); the md form has no counterpart to compare"
-elif printf '%s' "$md_out" | grep -q "$md_expect"; then
+elif grep -q "$md_expect" <<<"$md_out"; then
     ok "the md form reports the same verdict as the line form ($md_expect)"
 else
     bad "the md form disagrees with the line form ($line_v): the findings file would record a different claim than the operator saw"
