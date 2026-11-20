@@ -48,4 +48,4 @@ rollback:
     A fixture writing the live ledger is the defect: move its probe into a
     scaffold (see scripts/test-pending-capability-row-does-not-wedge.sh) rather
     than trusting an exit trap, which a SIGKILL never runs.
-  command: "bash scripts/check-no-fixture-writes-live-ledger.sh"
+  command: "tillandsias-plan script run scripts/lua/check-no-fixture-writes-live-ledger.lua"
