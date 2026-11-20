@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pre-push-hook-demands-a-green-check-stamp-on-the-local-tree-for-a-push-that-only-deletes-a-remote-ref-which-transfers-no-tree
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:19Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-pre-push-hook-demands-a-green-check-stamp-on-the-local-tree-for-a-push-that-only-deletes-a-remote-ref-which-transfers-no-tree
+    event:
+      type: note
+      ts: "2026-11-17T22:18:19Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1427-r2d2 commit 2396ae69513d (1427-r2d2 in its subject) reached linux-next at f4016962e1ad. Status moves to implemented, not completed: the exit criteria were not re-run.

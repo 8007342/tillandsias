@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-embed-build-script-fails-for-x86-64-pc-windows-gnu-in-check-cross-target-build
+    field: status
+    value: in_progress
+    ts: "2026-11-19T23:46:24Z"
+    host: lenovinha
+
+events:
+  - packet_id: tillandsias-embed-build-script-fails-for-x86-64-pc-windows-gnu-in-check-cross-target-build
+    event:
+      type: note
+      ts: "2026-11-19T23:46:24Z"
+      host: lenovinha
+      summary: |-
+        claimed by lenovinha at macuahuitl-fedora's direction; fix committed on work/2112-2tbv

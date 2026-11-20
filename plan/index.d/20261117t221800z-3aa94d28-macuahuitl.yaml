@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-launcher-is-only-installed-by-a-gate-that-must-pass-so-a-fleet-that-builds-daily-runs-a-binary-from-the-last-green-day
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:00Z"
+    host: macuahuitl
+
+events:
+  - packet_id: the-launcher-is-only-installed-by-a-gate-that-must-pass-so-a-fleet-that-builds-daily-runs-a-binary-from-the-last-green-day
+    event:
+      type: note
+      ts: "2026-11-17T22:18:00Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1237-f9dy commit 99a640a0901f (1237-f9dy in its subject) reached linux-next at 71c1ff2df81f. Status moves to implemented, not completed: the exit criteria were not re-run.

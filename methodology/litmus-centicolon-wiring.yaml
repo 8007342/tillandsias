@@ -7,7 +7,7 @@ litmus_centicolon_wiring:
 
   note_on_calculation: >
     The complex arithmetic previously documented here is managed by the
-    tillandsias-litmus CLI (or equivalent future tooling). Agents MUST NOT
+    plan tooling (the tillandsias-litmus CLI was never built; 2080-8i25). Agents MUST NOT
     attempt to calculate CentiColon budgets and residuals manually.
     Rely on the CLI output to identify the highest residual obligation.
 

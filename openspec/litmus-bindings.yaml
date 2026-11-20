@@ -189,6 +189,7 @@ specs:
   - litmus:census-enforced-reachability-split
   - litmus:added-test-is-referenced-shape
   - litmus:unreferenced-slow-and-regime-fixtures-run
+  - litmus:unreferenced-lane-fixtures-run
   - litmus:unreferenced-guard-fixtures-run
   - litmus:verify-closure-shape
   - litmus:reset-flags-accepted
