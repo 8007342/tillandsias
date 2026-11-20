@@ -357,7 +357,9 @@ _run_decider() { # name -> sets DEC_OUT, returns rc
         check-script-exec-bits) _cap bash "$SELF_DIR/check-script-exec-bits.sh" ;;
         check-added-fragments-parse) DEC_OUT="$(TILLANDSIAS_FRAGMENT_PARSE_BASE="$BASE" bash "$SELF_DIR/check-added-fragments-parse.sh" 2>&1)"; return $? ;;
         check-scorable-obligation-added) _cap bash "$SELF_DIR/check-scorable-obligation-added.sh" "$BASE" ;;
-        check-gate-step-regimes) _cap bash "$SELF_DIR/check-gate-step-regimes.sh" ;;
+        check-gate-step-regimes)
+            _lua_runner "$name" || return 3
+            _cap env TILLANDSIAS_REPO_ROOT="$ROOT" "$_lb" script run "$SELF_DIR/lua/check-gate-step-regimes.lua" ;;
         check-added-test-is-referenced) DEC_OUT="$(TILLANDSIAS_ADDED_TEST_BASE="$BASE" bash "$SELF_DIR/check-added-test-is-referenced.sh" 2>&1)"; return $? ;;
         check-refusal-affordance-added) DEC_OUT="$(TILLANDSIAS_AFFORDANCE_BASE="$BASE" bash "$SELF_DIR/check-refusal-affordance-added.sh" 2>&1)"; return $? ;;
         check-rust-source-pin-added) DEC_OUT="$(TILLANDSIAS_RUST_PIN_BASE="$BASE" bash "$SELF_DIR/check-rust-source-pin-added.sh" 2>&1)"; return $? ;;

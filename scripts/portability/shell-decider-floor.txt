@@ -29,7 +29,6 @@ scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-fragment-closure-evidence-added.sh
 scripts/check-gate-memory-floor.sh
-scripts/check-gate-step-regimes.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
@@ -249,7 +248,6 @@ scripts/test-gate-step-append-no-conflict.sh
 scripts/test-gate-step-metrics-isolation.sh
 scripts/test-gate-step-prefix-across-refs.sh
 scripts/test-gate-step-prefix-allocation.sh
-scripts/test-gate-step-regimes.sh
 scripts/test-gate-step-skip-exit.sh
 scripts/test-gate-thresholds-are-chosen.sh
 scripts/test-ghost-trace-yaml-anchoring.sh
