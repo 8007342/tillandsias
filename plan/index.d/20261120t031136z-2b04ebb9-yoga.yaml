@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:36Z"
+    host: yoga
+
+events:
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:36Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: a-failed-on-demand-image-build-is-remembered-by-image-and-inputs-digest-and-every-later-launch-refuses-within-seconds-with-the-cause-and-remedy-until-the-inputs-change-or-the-operator-retries
+    event:
+      type: note
+      ts: "2026-11-20T03:11:36Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-headless ensure_prints_one_verdict_line - 1 passed. Candidate landing commit - 28196f208.

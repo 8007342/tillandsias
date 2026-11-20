@@ -1,0 +1,40 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-18, at the coordinator's request (shell-halving drive).
+packets:
+- packet_id: lua-runner-gets-a-declared-scratch-root-door-with-file-verbs-and-an-advisory-lock
+  order: 2106-scrt
+  status: in_progress
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua, shell-burn-down, script-runner, macos]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: The Lua runner gets scratch.* (declare, mkdir, write, read, list, exists, rm, chmod, lock) over ONE declared root outside the repo-rooted fs.* doors
+  context: >-
+    fs.* is rooted at the checkout. A shell script whose work lives in $TMPDIR, or in a shared
+    CARGO_TARGET_DIR, could therefore be "ported" only by proc.run-ing rm, chmod and ls, and the
+    coordinator ruled that such ports do not count toward halving linux-next's .sh files.
+    scratch.declare(path) accepts a root once per script. After canonicalisation the root must sit at
+    or under $TMPDIR, <repo>/target or $CARGO_TARGET_DIR. Every verb refuses paths that leave the root,
+    either lexically (..) or through a symlink: the deepest existing ancestor is canonicalised. A write,
+    rm or lock never follows a link at the final component. The root itself is never removed.
+    scratch.lock(path, {shared, timeout_ms}) is flock(2) and interlocks with the perl flock that build.sh
+    holds. It retries non-blocking inside the caller's own deadline, because flock has no timed wait.
+    Stacked on work/2105-bb2e (#1149): common.fixture's T:scratch/short_scratch now create and remove
+    their dirs through scratch.*, declaring target/plan-scratch as the kit's root.
+    First ports onto the door: prune-darwin-stale-objects.sh and its fixture, which are now
+    scripts/lua/prune-darwin-stale-objects.lua and scripts/lua/test-prune-darwin-stale-objects.lua. The
+    holder in the fixture is the test process and the prune is a child process, so the measured
+    interlock is the real cross-process flock. build.sh and gate step 910-1924-dobj run the Lua.
+  exit_criteria:
+  - 'crates/tillandsias-plan/tests/lua_scratch_root.rs passes, and fails on the pre-change binary (scratch is nil). It covers: a root under TMPDIR gets every verb; a root outside every base is refused and not created; .. escapes are refused for every verb; a symlink escape is refused for read, write, mkdir, list and chmod while rm removes only the link; an exclusive lock under a shared holder returns timeout after at least its deadline, and a free lock is taken at once; a second root is refused, and the root is never removed.'
+  - 'prune-darwin-stale-objects.sh and test-prune-darwin-stale-objects.sh are deleted, and the Lua twins pass 7/7 on darwin.'
+  verifiable_closure: 'cargo test -p tillandsias-plan --test lua_scratch_root (6 passed on tlatoanis-macbook-air 2026-11-18). tillandsias-plan script run scripts/lua/test-prune-darwin-stale-objects.lua gives ok:prune-darwin-stale-objects:7. A real prune of this checkout target/debug/deps took 0.23 s: files=2533 groups=11 kept=211.'
+  unscoreable: 'none.'
+  next_action: 'Land after #1149. Then port the $HOME-sandboxed macOS fixtures onto scratch.* (test-e2e-step2-macos, test-install-macos-setup-is-quiet, test-install-macos-swap-is-interruptible).'
+  provenance: 'macbookair-macos 2026-11-18, coordinator request (macuahuitl-fedora). Noted while testing on darwin, and present before this change on 2105-bb2e: test-plan-binary-survives-wrapper.lua uses GNU touch -d, which fails on BSD touch; test-ipv6-probe.lua is red on darwin.'
+  events:
+  - {type: filed, ts: '2026-11-18T00:00:00Z', host: macbookair, summary: filed with the scratch-root PR}

@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: delete-install-forge-swap-service-sh-the-binary-swap-on-is-the-one-installer
+    order: 2118-ihuh
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-rust, debt, swap, install]
+    estimated_hours: 2
+    owned_files:
+      - scripts/install-forge-swap-service.sh
+      - scripts/test-forge-swap-service.sh
+    title: |
+      Slice 3: delete scripts/install-forge-swap-service.sh. tillandsias --swap on|off (Rust, 1448-kmyn) already installs the same tree from embedded assets. Repoint test-forge-swap-service.sh to the binary, with arm 8 pinning every installed file to its scripts/forge-swap/ source.
+    context: |
+      Coordinator ruling (B) 2026-11-20. The test drove the .sh for arms 1-7 and compared the binary's tree to the script's in arm 8. Every arm now installs through --swap on --prefix, and arm 8 compares each installed file with its source, placeholders substituted, at its mode. Measured on lenovinha: 24/24 against a binary built from this tree. Arm 8 FAILS when a source drifts (an appended line in swap.conf gave "FAIL 8 ... etc/tillandsias/swap.conf").
+      HELD, not ported (coordinator ruling C): scripts/install-cycle-timer.sh and scripts/install-release-tier-timer.sh install schedules on operator machines. They are a Rust verb candidate, later, not a debt port today.
+    exit_criteria:
+      - 'scripts/install-forge-swap-service.sh is gone; git grep for it outside plan/ names only the deletion notes'
+      - 'scripts/test-forge-swap-service.sh passes against a fresh build, and arm 8 fails when a scripts/forge-swap/ source drifts from the embedded asset'
+    verifiable_closure: |
+      scripts/test-forge-swap-service.sh prints ok:forge-swap-service:24 arms against a binary built from the landed tree. Arm 8 fails when any scripts/forge-swap/ source is edited without a rebuild.
+    next_action: Preflight, push work/2118-ihuh, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T02:47:06Z"
+        host: lenovinha
+        summary: Delete install-forge-swap-service.sh; the binary's swap on is the one installer.

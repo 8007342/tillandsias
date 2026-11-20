@@ -185,7 +185,14 @@ elif [[ "$(uname -s)" == "Darwin" ]]; then
     # unpacked (2026-10-29), so the edit loop keeps unpacked and every build
     # prunes the objects no linked binary can read (~0.1 s steady state).
     _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
-    "$SCRIPT_DIR/scripts/prune-darwin-stale-objects.sh" "$_deps_dir" >&2 || true
+    # Lua since 2106-scrt (scratch.* reaches a CARGO_TARGET_DIR outside the
+    # repo). With no runnable plan binary yet the prune waits for a later build.
+    _prune_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _prune_bin=""
+    if [[ -n "$_prune_bin" ]]; then
+        (cd "$SCRIPT_DIR" && "$_prune_bin" script run scripts/lua/prune-darwin-stale-objects.lua "$_deps_dir") >&2 || true
+    else
+        echo "skipped:darwin-stale-objects:no runnable plan binary yet" >&2
+    fi
     # Hold a SHARED lock for the rest of this run, so another build.sh's
     # prune skips while this one's cargo writes into the target. fd 7 stays
     # open in this shell and every cargo it spawns; the lock goes with it.
@@ -3892,6 +3899,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    if ! _run_lua_decider "scripts/lua/check-workspace-members-used.lua" 2>&1; then
+        _error "a workspace member has no dependent, no binary and no allowlist reason, or a crates/ directory has no Cargo.toml (2080-8i25)"
+        exit 1
+    fi
+
     if ! _run_lua_decider "scripts/lua/check-smoke-agent-prompt-is-minimal.lua" 2>&1; then
         _error "a smoke skill hands its forge agent the /meta-orchestration loop — a smoke spends one short turn on the shared hosted model (1941-smkp)"
         exit 1
@@ -6518,7 +6530,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 911-m7js: the archiver-check memo hits only on an unchanged ledger AND
     # unchanged instrument; a fragment written or removed flips it.
     _step "Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-check-memo.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-archiver-check-memo.lua" 2>&1; then
         _error "the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
         exit 1
     fi
