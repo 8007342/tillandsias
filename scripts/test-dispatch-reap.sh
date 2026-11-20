@@ -174,7 +174,7 @@ await_marked() { # await_marked <pid> <token>; 0 if the token appears, 1 on time
         # toolbox, which is why the awaits below reported that pb and pc never
         # became visible when both were running the whole time.
         marked="$(tillandsias_marked_pids "$token" 2>/dev/null)"
-        if printf '%s\n' "$marked" | grep -qxF "$pid"; then
+        if grep -qxF "$pid" <<<"$marked"; then
             return 0
         fi
         sleep 0.05
@@ -210,7 +210,7 @@ fi
 # Same hazard, opposite assertion: a SIGPIPE-induced "failure" would make this
 # arm PASS vacuously — worse than a false red, and it would survive indefinitely.
 _marked_a="$(tillandsias_marked_pids "$TOKEN_A")"
-if printf '%s\n' "$_marked_a" | grep -qxF "$pb"; then false; else true; fi
+if grep -qxF "$pb" <<<"$_marked_a"; then false; else true; fi
 check "a differently-marked process is NOT in this token's kill set" $?
 
 # 4. The reap kills the marked tree.

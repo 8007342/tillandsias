@@ -129,9 +129,9 @@ missing=""
 for f in $CHECKED_FEATURES; do
     upper="$(echo "$f" | tr 'a-z' 'A-Z')"
     host_has=0
-    printf '%s\n' "$host_flags" | grep -qx -- "$f" && host_has=1
+    grep -qx -- "$f" <<<"$host_flags" && host_has=1
     build_has=0
-    printf '%s\n' "$sysinfo" | grep -qE "(^|[^A-Z_])${upper} = 1([^0-9]|$)" && build_has=1
+    grep -qE "(^|[^A-Z_])${upper} = 1([^0-9]|$)" <<<"$sysinfo" && build_has=1
     if [ "$build_has" = 1 ]; then
         dispatched="${dispatched:+$dispatched,}$f"
     fi
