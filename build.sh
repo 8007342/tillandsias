@@ -1316,6 +1316,7 @@ FLAG_CHECK=false
 # ORDER 1305-udgs — the fast-refusal front door: runs the tree-only guards and
 # exits, and NEVER compiles.
 FLAG_PREFLIGHT=false
+FLAG_FLOOR=false
 FLAG_PREFLIGHT_FULL=false
 # ORDER 1916-tsel — the warm-forge fast loop; see scripts/gate-changed.sh.
 FLAG_CHANGED=false
@@ -1346,6 +1347,7 @@ while [[ $# -gt 0 ]]; do
         --test)           FLAG_TEST=true ;;
         --check)          FLAG_CHECK=true ;;
         --preflight)      FLAG_PREFLIGHT=true ;;
+        --floor)          FLAG_FLOOR=true ;;
         --changed)
             FLAG_CHANGED=true
             if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
@@ -1660,6 +1662,25 @@ _report_build_root() {
 }
 if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
 # END-BUILD-ROOT-PLACEMENT
+
+# ORDER 2130-fl0r — `./build.sh --floor`: the required local check before a
+# work/* push (operator 2026-11-20: it replaces the worker-side --preflight
+# requirement; the landing queue runs the full preflight and gate on arrival).
+# fmt, Lua parse, and the packet's own litmus, under two minutes, no build.
+# Dispatched before ALL setup, like --preflight: a check has no side effects.
+if [[ "$FLAG_FLOOR" == true ]]; then
+    git -C "$SCRIPT_DIR" fetch -q origin linux-next 2>/dev/null || true
+    _fl_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _fl_bin=""
+    if [[ -z "$_fl_bin" ]]; then
+        echo "could-not-run:floor:no-plan-binary — cargo build --release -p tillandsias-plan" >&2
+        exit 2
+    fi
+    # A native Windows plan binary resolves a bare `bash` to WSL's bash.exe;
+    # hand it this shell, in a spelling it can execute.
+    _fl_bash="$BASH"; command -v cygpath >/dev/null 2>&1 && _fl_bash="$(cygpath -w "$BASH")"
+    cd "$SCRIPT_DIR" && TILLANDSIAS_FLOOR_BASH="$_fl_bash" TILLANDSIAS_PLAN_BIN="$_fl_bin" \
+        exec "$_fl_bin" script run scripts/lua/build-floor.lua
+fi
 
 # ORDER 1305-udgs — `./build.sh --preflight`: every guard that can refuse a push,
 # before the SHA, in seconds.
