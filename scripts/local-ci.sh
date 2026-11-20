@@ -1036,7 +1036,7 @@ if [[ -x "scripts/freshness-inventory.sh" ]]; then
     # host has no stale components at all, and under `pipefail` that is the
     # pipeline's status — an advisory step must not hand a failure upward on the
     # HAPPY path, whatever the caller's errexit state happens to be.
-    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k3,3nr | head -5 || true)"
+    _fresh_flagged="$(grep -E '^freshness-stale:' <<<"$_fresh_report" | sort -t' ' -k3,3nr | awk 'NR <= 5' || true)"
     if [[ -n "$_fresh_flagged" ]]; then
         log_info "Top stalest components (audit candidates — advisory only):"
         while IFS= read -r line; do

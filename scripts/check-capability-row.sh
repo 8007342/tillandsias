@@ -322,7 +322,7 @@ set_minus() {
     _sm_a="$1"; _sm_b="$2"
     [ "$_sm_a" = "-" ] && { printf '%s\n' "-"; return 0; }
     _sm_out="$(printf '%s\n' "$_sm_a" | tr '+' '\n' | grep . | while read -r _sm_t; do
-        printf '%s\n' "$_sm_b" | tr '+' '\n' | grep -qxF "$_sm_t" || printf '%s\n' "$_sm_t"
+        grep -qxF "$_sm_t" <<<"${_sm_b//+/$'\n'}" || printf '%s\n' "$_sm_t"
     done | tr '\n' '+' | sed 's/+$//')"
     printf '%s\n' "${_sm_out:--}"
 }

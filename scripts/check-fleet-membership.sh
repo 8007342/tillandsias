@@ -178,7 +178,7 @@ if [ "$PROBES" != "1" ]; then
     _skip "credential-channel:probes-disabled"
 elif [ -x "$ROOT/scripts/check-credential-channel.sh" ]; then
     out="$(bash "$ROOT/scripts/check-credential-channel.sh" 2>&1)"; rc=$?
-    verdict="$(printf '%s\n' "$out" | grep -E -m1 -e '^(ok|blocked|skip):' || printf '%s\n' "$out" | tail -1)"
+    verdict="$(grep -E -m1 -e '^(ok|blocked|skip):' <<<"$out" || tail -1 <<<"$out")"
     if [ "$rc" = 0 ]; then _ok "credential-channel:${verdict}"; else _todo "credential-channel:${verdict}:stop-and-report"; fi
 else
     _skip "credential-channel:no-guard"
