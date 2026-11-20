@@ -54,15 +54,15 @@ run_id_case() {
         failures+=("$name: refusal leaked stdout '$out' — a refused id must print NOTHING a claim could use")
         return 0
     fi
-    if [ "$want_out_re" != "-" ] && ! printf '%s' "$out" | grep -qE "$want_out_re"; then
+    if [ "$want_out_re" != "-" ] && ! grep -qE "$want_out_re" <<<"$out"; then
         failures+=("$name: stdout '$out' !~ $want_out_re")
         return 0
     fi
-    if [ "$want_err_re" != "-" ] && ! printf '%s' "$err" | grep -qE "$want_err_re"; then
+    if [ "$want_err_re" != "-" ] && ! grep -qE "$want_err_re" <<<"$err"; then
         failures+=("$name: stderr '$err' !~ $want_err_re")
         return 0
     fi
-    if [ "$want_rc" -eq 0 ] && ! printf '%s' "$out" | grep -qE "$ID_RE"; then
+    if [ "$want_rc" -eq 0 ] && ! grep -qE "$ID_RE" <<<"$out"; then
         failures+=("$name: id '$out' violates the sanitized-id grammar $ID_RE")
         return 0
     fi

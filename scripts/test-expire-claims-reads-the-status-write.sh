@@ -116,7 +116,7 @@ mk_lease "$D" 20260901t230453z-stale leased-stale "$OLD_TS" hostb
 OUT="$(sweep "$D")"
 
 # ── ARM 1: the measured case — recent status write, ancient event ──────────
-if printf '%s\n' "$OUT" | grep -q 'leased-fresh'; then
+if grep -q 'leased-fresh' <<<"$OUT"; then
     bad "ARM 1: a row claimed 24 minutes ago is listed as an expire candidate"
     printf '%s\n' "$OUT" | grep 'leased-fresh' | sed 's/^/      /'
 else
@@ -125,7 +125,7 @@ fi
 
 # ── ARM 2: attribution comes from the write, not the last toucher ──────────
 line="$(printf '%s\n' "$OUT" | grep 'leased-stale' || true)"
-if printf '%s' "$line" | grep -q 'claimant:hostb'; then
+if grep -q 'claimant:hostb' <<<"$line"; then
     ok "ARM 2: a genuinely old claim IS listed, and is attributed to the host that WROTE the status (hostb), not to the host of the newest event (hosta)"
 elif [ -n "$line" ]; then
     bad "ARM 2: listed but misattributed: $(printf '%s' "$line" | cut -c1-110)"
@@ -141,7 +141,7 @@ fi
 # event — which reading the code showed to be wrong. Pinned so the lease fix
 # cannot quietly remove the fallback.
 line="$(printf '%s\n' "$OUT" | grep 'unleased-old' || true)"
-if printf '%s' "$line" | grep -q 'claimant:hostc'; then
+if grep -q 'claimant:hostc' <<<"$line"; then
     ok "ARM 3: with NO status write the event fallback still ages and attributes the row (hostc) — deliberate, and unchanged by the fix"
 else
     bad "ARM 3: the event fallback was lost: $(printf '%s' "${line:-<not listed>}" | cut -c1-110)"
