@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: image-builds-pass-an-explicit-build-network-so-the-users-pasta-ipv4-only-applies-and-a-dead-ipv6-path-is-named
+    field: next_action
+    value: |-
+      Add --network=private to the three build argv sites with a test per site; reuse is_ipv6_functional for the note; ask macuahuitl for the live arm.
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk and the test fns exist; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless a_build_names_a_dead_ipv6_path_and_only_that; image_build_argv_uses_docker_format_for_healthchecks; cargo test -p tillandsias-podman existing_unsquashed_or_mislabeled_image_is_rebuilt_once. Close on green with the merge sha.
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: image-builds-pass-an-explicit-build-network-so-the-users-pasta-ipv4-only-applies-and-a-dead-ipv6-path-is-named
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

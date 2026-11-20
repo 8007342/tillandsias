@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-ledger-distillation-advisory-cannot-refuse-a-cut-yet-its-fixture-pins-head-at-or-under-threshold-and-refused-the-v56-9-21-1-ledger-land-at-the-eleventh-row
+    field: next_action
+    value: |-
+      A fixture arm that asserts a property of the live checkout is green only
+      while the checkout happens to satisfy it (the fixture's own header says
+      the live table was AT threshold when it was written — so the very next
+      cut's row was the red, by construction). The remedy is the fixture's,
+      not the ledger's: ARM 1 builds its under-threshold table in a temp repo
+      (the checker takes --ref and reads README from a git ref, so `git init`
+      + one commit with a 3-row table is enough) and a new arm asserts the
+      over-threshold case on the same scaffold with threshold+1 rows; both
+      positive controls on the historical refs stay. The distillation itself
+      was done at a3e60457c (v56.9.11.1 … v56.9.13.1 folded into one span, 8
+      rows after); this row is about the gate, not the README. Related:
+      1274-cbk7 (a fixture pinning a live-checkout property), 914-nkc4.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/test-ledger-distillation-advisory.sh is now scripts/lua/test-ledger-distillation-advisory.lua (c7d6ad609). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-ledger-distillation-advisory-cannot-refuse-a-cut-yet-its-fixture-pins-head-at-or-under-threshold-and-refused-the-v56-9-21-1-ledger-land-at-the-eleventh-row
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk
