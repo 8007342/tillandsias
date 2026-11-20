@@ -91,13 +91,13 @@ A git pre-push hook MUST regenerate the README before allowing a push to the rem
 
 #### Scenario: Hook runs before push
 - **WHEN** a developer runs `git push`
-- **THEN** the hook `scripts/install-readme-pre-push-hook.sh` (if installed) executes
+- **THEN** the hook `scripts/install-readme-pre-push-hook.sh` (if installed) executes <!-- spec-path-absent: ok (withdrawn by openspec change withdraw-readme-pre-push-hook, order 2118-kaeq; removed from this spec when that change is archived) -->
 - **AND** it runs `scripts/regenerate-readme.sh` if the README is stale
 - **AND** it stages the updated README automatically
 - **AND** if the hook finds changes, it aborts the push with a message: "README updated; please review and push again"
 
 #### Scenario: Hook installation is explicit
-- **WHEN** a developer runs `scripts/install-readme-pre-push-hook.sh`
+- **WHEN** a developer runs `scripts/install-readme-pre-push-hook.sh` <!-- spec-path-absent: ok (withdrawn by openspec change withdraw-readme-pre-push-hook, order 2118-kaeq; removed from this spec when that change is archived) -->
 - **THEN** the hook is installed to `.git/hooks/pre-push`
 - **AND** it is tracked in git (via a wrapper that installs on clone)
 

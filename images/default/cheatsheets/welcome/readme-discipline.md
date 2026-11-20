@@ -23,7 +23,7 @@ committed_for_project: false
 ## Provenance
 
 - <https://github.com/8007342/tillandsias> — Tillandsias forge methodology and project bootstrap discipline
-- **Last updated:** 2026-04-27
+- **Last updated:** 2026-11-20
 
 ## Overview
 
@@ -221,17 +221,14 @@ requires_cheatsheets:
 
 A README is regenerated under any of these conditions, in priority order:
 
-1. **Pre-push hook fires**: `scripts/install-readme-pre-push-hook.sh` placed a
-   hook that runs `regenerate-readme.sh` before each `git push`. This is the
-   common, automatic case.
-2. **`/bootstrap-readme` skill is invoked**: human or agent runs the slash
+1. **`/bootstrap-readme` skill is invoked**: human or agent runs the slash
    command. Used for first-time setup, repair flow, or when an agent has
    reason to re-derive the README without a push.
-3. **A `severity: regen-trigger` line lands in `readme.traces`**: the next
+2. **A `severity: regen-trigger` line lands in `readme.traces`**: the next
    `/startup` invocation will regenerate even when the current README passes
    validation. Used by summarizers that detect "drift that wouldn't fail the
    validator" (e.g., new optional dependency, refactored architecture).
-4. **Validator emits a non-zero exit code**: structural problems (missing H1,
+3. **Validator emits a non-zero exit code**: structural problems (missing H1,
    malformed YAML, etc.) require regeneration. The validator's WARN-level
    staleness signal does not block, but should still be acted on.
 
