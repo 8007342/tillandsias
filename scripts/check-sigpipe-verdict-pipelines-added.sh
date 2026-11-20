@@ -223,6 +223,65 @@ _is_verdict_context() {
     return 1
 }
 
+# ORDER 2141-2m3f. THE MIRROR SHAPE: a WRITER piped into a READER THAT MAY NOT
+# READ. No early-exit consumer is involved, so the class above cannot see it:
+# #1187 was evicted by test-git-credential-helper.sh:53,
+#   printf 'protocol=https\n\n' | "$HELPER" erase >/dev/null 2>&1 || fail ...
+# where the helper's erase exits WITHOUT reading stdin, printf takes EPIPE, and
+# pipefail fails a line whose helper did exactly what it should. Even a 16-byte
+# literal producer lost, so producer SIZE is no discriminator here: the reader
+# is. A consumer is presumed to read all of stdin only when its first word is a
+# known full reader; anything else (a variable command, a credential helper, a
+# script) may exit first. Early-exit readers (grep, head, sed) stay with the
+# class above. The status must still DECIDE something: a leading
+# if/while/until/elif, a `!`, or `&&`/`||` after the consumer.
+SIGPIPE_FULL_READERS=' cat tail awk gawk mawk sort uniq wc tee tr cut base64 md5sum sha1sum sha256sum jq yq xargs od hexdump cmp diff column paste fold fmt rev tac nl comm join split read while '
+# _mask_quoted <line> — the line with every `|` inside '...' or "..." replaced by
+# \x02, so a regex alternation in a quoted pattern is never read as a pipe.
+_mask_quoted() {
+    local l="$1" out="" c q="" i
+    for (( i = 0; i < ${#l}; i++ )); do
+        c="${l:i:1}"
+        if [ -z "$q" ]; then
+            case "$c" in "'"|'"') q="$c" ;; esac
+        elif [ "$c" = "$q" ]; then
+            q=""
+        elif [ "$c" = '|' ]; then
+            c=$'\x02'
+        fi
+        out="$out$c"
+    done
+    printf '%s' "$out"
+}
+_writer_into_nonreader() {
+    local l s prod rest cons w after
+    case "$1" in *printf*'|'*|*echo*'|'*) ;; *) return 1 ;; esac
+    case "${1#"${1%%[![:space:]]*}"}" in '#'*) return 1 ;; esac   # a comment decides nothing
+    l="$(_mask_quoted "$1")"
+    s="${l//||/$'\x01'}"                      # mask `||` so `|` means a pipe
+    [[ "$s" == *'|'* ]] || return 1
+    prod="${s%%|*}"; rest="${s#*|}"
+    [[ "$prod" =~ (^|[[:space:]\(!\;\&])(printf|echo)([[:space:]]|$) ]] || return 1
+    cons="${rest%%[|;&$'\x01']*}"
+    cons="${cons#"${cons%%[![:space:]]*}"}"
+    w="${cons%%[[:space:]]*}"; w="${w//\"/}"; w="${w//\'/}"; w="${w##*/}"
+    [ -n "$w" ] || return 1
+    # Not a command this rule can judge: a subshell, a keyword, an assignment.
+    case "$w" in '('*|if|then|do|else|'{'*|*=*) return 1 ;; esac
+    case "$w" in grep|egrep|fgrep|head|sed) return 1 ;; esac
+    # A reader behind a variable is still that reader ("$JQ", "${JQ_CMD[@]}").
+    case "$w" in *JQ*|*jq*) return 1 ;; esac
+    case "$SIGPIPE_FULL_READERS" in *" $w "*) return 1 ;; esac
+    case "$l" in
+        [[:space:]]*if\ *|if\ *|[[:space:]]*elif\ *|elif\ *|\
+        [[:space:]]*while\ *|while\ *|[[:space:]]*until\ *|until\ *) return 0 ;;
+    esac
+    [[ "$prod" =~ (^|[[:space:]])\![[:space:]] ]] && return 0
+    after="${rest#*"$cons"}"
+    [[ "$after" == *'&&'* || "$after" == *$'\x01'* ]] && return 0
+    return 1
+}
+
 file_sets_pipefail() {
     grep -qE '^[[:space:]]*set[[:space:]]+-[a-zA-Z]*o[[:space:]]+pipefail' "$1" 2>/dev/null
 }
@@ -315,6 +374,16 @@ while IFS= read -r f; do
         # exemption would have been honest and cheaper; the rewrite is better
         # because a here-string cannot SIGPIPE AT ALL, so the question stops
         # being asked instead of being answered every time someone reads it.
+        if _writer_into_nonreader "$added"; then
+            violations=$((violations + 1))
+            echo "REFUSED: $f — this change ADDS a writer piped into a reader that may not read (2141-2m3f):" >&2
+            echo "         $(sed 's/^[[:space:]]*//' <<<"$added" | cut -c1-100)" >&2
+            echo "         If the reader exits without consuming stdin, the writer takes EPIPE and" >&2
+            echo "         pipefail fails a line whose command succeeded. Feed it a here-string:" >&2
+            echo "         cmd <<<\"\$var\"   (or cmd <<<\$'literal')" >&2
+            echo "         Reviewed and the reader always consumes stdin? append: # sigpipe-ok: <reason>" >&2
+            continue
+        fi
         _is_verdict_context "$added" || continue
         grep -qE "$EARLY_EXIT_CONSUMER_RE" <<<"$added" || continue
         producer="${added%%|*}"
