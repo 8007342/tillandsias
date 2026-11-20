@@ -487,7 +487,6 @@ scripts scripts/mo-full-attest.sh 4
 scripts scripts/native-scratch-dir.sh 1
 scripts scripts/nix-build-container.sh 23
 scripts scripts/nix-cache-service.sh 4
-scripts scripts/nix-deps-drv-paths.sh 6
 scripts scripts/nix-push-cache.sh 9
 scripts scripts/nix-toolbox.sh 9
 scripts scripts/openspec-pin.sh 4
