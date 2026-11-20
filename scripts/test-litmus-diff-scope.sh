@@ -91,8 +91,22 @@ nonyq_dir="$suite_tmp/nonyq-bin"
 mkdir -p "$nonyq_dir"
 sanitized_path=""
 IFS=: read -ra _parts <<<"$PATH"
+_shadowed=0
 for _d in "${_parts[@]}"; do
-    [[ -x "$_d/yq" ]] && continue
+    if [[ -x "$_d/yq" ]]; then
+        # 2110-ghw2: never drop the whole dir. In the Fedora builder toolbox yq
+        # is /usr/bin/yq beside bash itself, and dropping /usr/bin left the
+        # parity arm with no bash. Link the dir's other entries instead.
+        for _e in "$_d"/*; do
+            [[ "${_e##*/}" == yq ]] && continue
+            [[ -e "$nonyq_dir/${_e##*/}" ]] || ln -s "$_e" "$nonyq_dir/${_e##*/}" 2>/dev/null
+        done
+        if [[ "$_shadowed" == 0 ]]; then
+            sanitized_path="${sanitized_path:+$sanitized_path:}$nonyq_dir"
+            _shadowed=1
+        fi
+        continue
+    fi
     sanitized_path="${sanitized_path:+$sanitized_path:}$_d"
 done
 
