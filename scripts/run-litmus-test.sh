@@ -70,6 +70,15 @@ if [[ "$(uname)" == "Linux" ]]; then
     trap _litmus_exit_cleanup EXIT
 fi
 
+# ORDER 2110-ghw2: on an immutable host (Silverblue) re-exec inside the
+# tillandsias-builder toolbox, exactly as build.sh does. The host is bare: its
+# cargo has no linker and it has no perl, so every step that compiles or shells
+# out to a build tool failed for a HOST reason (yoga, trunk f3a546f74: 8 red,
+# 83x podman-cli rebuild-failed-before-test). Inside the toolbox podman still
+# reaches the host through the wrapper's host-escape shim. Mutable Linux,
+# macOS, Windows and forges pass through with zero overhead.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/with-tillandsias-builder.sh"
+
 # ============================================================================
 # CONFIGURATION & GLOBALS
 # ============================================================================
