@@ -39,7 +39,7 @@ critical_path:
     expected_behavior: "ok: spawn-failure-fixture-parses"
 
   - step: "both arms pass: the NotFound mapping names program and PATH, and the collapse is strict"
-    command: "bash scripts/lua/test-spawn-failure-names-program.lua | tail -1"
+    command: "P=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-spawn-failure-names-program.lua 2>&1"
     timeout_ms: 900000
     expected_behavior: "ok:spawn-failure-names-program:2/2"
 
