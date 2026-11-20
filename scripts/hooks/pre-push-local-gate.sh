@@ -1561,16 +1561,24 @@ attempt_plan_only_lane() {
         # PAST ts is accepted and its skew printed — a delayed push is real and
         # common, and requiring a declaration for it would turn every relay fold
         # into a refusal or a ritual.
-        if [[ -f scripts/check-fragment-ts-skew.sh ]]; then
-            if ! out="$(bash scripts/check-fragment-ts-skew.sh 2>&1)"; then
+        if [[ -f scripts/lua/check-fragment-ts-skew.lua ]]; then
+            # ORDER 2124-mwzr: the guard is Lua on `script run` (ported from the
+            # .sh), asked of the plan_bin this lane already resolved, like
+            # check-fragment-status-loss below: a binary with no `script run`
+            # cannot run it, and a guard that cannot run refuses here, never skips.
+            if ! grep -qx script <<<"$("$plan_bin" capabilities 2>/dev/null)"; then
+                echo "plan-only lane: validation FAILED — $plan_bin has no \`script run\`, so check-fragment-ts-skew cannot run (rebuild: cargo build --release -p tillandsias-plan; full gate required)" >&2
+                return 1
+            fi
+            if ! out="$("$plan_bin" script run scripts/lua/check-fragment-ts-skew.lua 2>&1)"; then
                 echo "plan-only lane: validation FAILED — a fragment carries a FUTURE timestamp (1313-w78k):" >&2
                 echo "$out" | head -12 | sed 's/^/  /' >&2
                 return 1
             fi
             # The past-skew notes are information, not a verdict: print them.
-            printf '%s\n' "$out" | grep -E '^note:fragment-ts-past:' >&2 || true
+            grep -E '^note:fragment-ts-past:' <<<"$out" >&2 || true
         else
-            LANE_NOTES+=("scripts/check-fragment-ts-skew.sh absent — skipped")
+            LANE_NOTES+=("scripts/lua/check-fragment-ts-skew.lua absent — skipped")
         fi
 
         if [[ -f scripts/lua/check-fragment-status-loss.lua ]]; then
