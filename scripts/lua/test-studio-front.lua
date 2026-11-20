@@ -28,7 +28,7 @@
 -- Verdict: ok:studio-front:<n>-arms | violation:studio-front:<why> (1) |
 --          could-not-run:studio-front:<why> (2)
 -- 2108-dptd: then images/studio/grapesjs/grapesjs.selftest.mjs (5 arms) in the same image;
--- the ok line is ok:studio-front:<n>-arms+studio-grapesjs-page:<m>-arms.
+-- the ok line is ok:studio-front:<n>-arms+studio-grapesjs-page:<m>-arms+studio-puck-site:<k>-arms (2110-pk4s).
 
 local function judge(ok, stdout)
     local out = text.trim(stdout or "")
@@ -93,10 +93,27 @@ local p = proc.run{ argv = { "podman", "run", "--rm", "--network=none", "--pull=
     timeout_ms = 120000 }
 log.raw(text.trim((p.stdout or "") .. "\n" .. (p.stderr or "")))
 local plast = (text.trim(p.stdout or "")):match("([^\n]*)$") or ""
-if p.ok and plast:find("^ok:studio%-grapesjs%-page:") then
-    verdict.emit(v .. "+" .. plast:gsub("^ok:", ""), 0)
-end
 if plast:find("^refused:studio%-grapesjs%-page:") then
     verdict.emit("violation:" .. plast:gsub("^refused:", ""), 1)
 end
-verdict.emit("could-not-run:studio-grapesjs-page:podman:" .. tostring(p.status or "?"), 2)
+if not (p.ok and plast:find("^ok:studio%-grapesjs%-page:")) then
+    verdict.emit("could-not-run:studio-grapesjs-page:podman:" .. tostring(p.status or "?"), 2)
+end
+
+-- 2110-pk4s: the Puck site-build and Save arms (site config found, cache
+-- outside the checkout, Save is the only writer, the site's public/ served),
+-- images/studio/puck/puck.selftest.mjs. No network: npm is stubbed.
+local k = proc.run{ argv = { "podman", "run", "--rm", "--network=none", "--pull=never",
+    "--security-opt=label=disable",
+    "-v", here .. "/images/studio:/s:ro",
+    "--entrypoint", "node", image, "/s/puck/puck.selftest.mjs" },
+    timeout_ms = 120000 }
+log.raw(text.trim((k.stdout or "") .. "\n" .. (k.stderr or "")))
+local klast = (text.trim(k.stdout or "")):match("([^\n]*)$") or ""
+if k.ok and klast:find("^ok:studio%-puck%-site:") then
+    verdict.emit(v .. "+" .. plast:gsub("^ok:", "") .. "+" .. klast:gsub("^ok:", ""), 0)
+end
+if klast:find("^refused:studio%-puck%-site:") then
+    verdict.emit("violation:" .. klast:gsub("^refused:", ""), 1)
+end
+verdict.emit("could-not-run:studio-puck-site:podman:" .. tostring(k.status or "?"), 2)
