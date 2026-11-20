@@ -110,9 +110,10 @@ fi
 # A ref is valid only if its commit's tree IS the subtree it is named for and
 # its message carries this platform's Native-Lint line for this path.
 ref_valid() { # ref_valid <path> <tree>
-    local r="refs/attest/native-lint/$2"
+    local r="refs/attest/native-lint/$2" msg
     [ "$(git rev-parse --verify --quiet "$r^{tree}" 2>/dev/null)" = "$2" ] || return 1
-    git log -1 --format=%B "$r" 2>/dev/null | grep -q "^Native-Lint: [^ ]* $platform $1=$2 "
+    msg="$(git log -1 --format=%B "$r" 2>/dev/null)" || return 1
+    grep -q "^Native-Lint: [^ ]* $platform $1=$2 " <<<"$msg"
 }
 
 trailers=(); done_list=""; refs=(); exists_list=""

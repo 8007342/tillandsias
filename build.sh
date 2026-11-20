@@ -2013,7 +2013,7 @@ PFEOF
                     0:*ok:attest-native-lint:ref*) echo "ok:preflight:native-lint-ref:$(printf '%s\n' "$_nl_out" | grep -m1 '^ok:attest-native-lint:' | cut -d: -f3-)" >&2 ;;
                     1:*failed:attest-native-lint:push*) echo "note:preflight:native-lint-ref:written-not-pushed — git push origin refs/attest/native-lint/$_nl_ht" >&2 ;;
                     *) printf '%s\n' "$_nl_out" >&2
-                       _afford "the macOS tray crate failed its native clippy lint (cargo clippy -p tillandsias-macos-tray --all-targets -- -D warnings); the land queue would refuse it, and on trunk it would redden every Mac build" \
+                       _afford "the macOS tray crate failed its native clippy lint (clippy -p tillandsias-macos-tray --all-targets -D warnings, run by scripts/attest-native-lint.sh); the land queue would refuse it, and on trunk it would redden every Mac build" \
                            "fix the clippy findings above, commit, and re-run ./build.sh --preflight"
                        echo "refused:preflight:native-lint:tillandsias-macos-tray rc=$_nl_rc" >&2
                        exit 1 ;;

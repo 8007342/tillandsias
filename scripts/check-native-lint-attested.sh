@@ -98,9 +98,10 @@ fi
 # parentless commit whose tree IS that subtree and whose message carries the
 # Native-Lint line. Prints the attesting host, or nothing.
 ref_host() { # ref_host <platform> <path> <tree>
-    local r="refs/attest/native-lint/$3" l
+    local r="refs/attest/native-lint/$3" l msg
     [ "$(git rev-parse --verify --quiet "$r^{tree}" 2>/dev/null)" = "$3" ] || return 1
-    l="$(git log -1 --format=%B "$r" 2>/dev/null | grep -m1 "^Native-Lint: [^ ]* $1 $2=$3 ")" || return 1
+    msg="$(git log -1 --format=%B "$r" 2>/dev/null)" || return 1
+    l="$(grep -m1 "^Native-Lint: [^ ]* $1 $2=$3 " <<<"$msg")" || return 1
     set -- $l
     printf '%s' "$2"
 }
@@ -144,7 +145,7 @@ EOF
         cand_tree="$(git rev-parse --verify --quiet "$CANDIDATE:$path" 2>/dev/null)" || cand_tree=""
         if [ -n "$cand_tree" ] && [ "$cand_tree" != "$head_tree" ]; then
             if ref_host "$platform" "$path" "$cand_tree" >/dev/null \
-               || printf '%s\n' "$trailers" | grep -q "^[^ ]* $platform $path=$cand_tree "; then
+               || grep -q "^[^ ]* $platform $path=$cand_tree " <<<"$trailers"; then
                 held="$head_tree"
             fi
         fi
