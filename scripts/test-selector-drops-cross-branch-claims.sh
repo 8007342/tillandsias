@@ -189,7 +189,7 @@ _DROP='^cross-branch: .* is claimed on a sibling branch'
 _stub clean
 out="$(_run)"
 n="$(printf '%s\n' "$out" | grep -c '^packet' || true)"
-if [ "${n:-0}" -ge 1 ] && ! printf '%s' "$out" | grep -qE "$_DROP"; then
+if [ "${n:-0}" -ge 1 ] && ! grep -qE "$_DROP" <<<"$out"; then
     ok "a clean sibling check leaves the batch alone and says nothing"
 elif [ "${n:-0}" -lt 1 ]; then
     bad "a clean check emptied the batch — it said: $(printf '%s\n' "$out" | grep -m1 -E '^(refused|blocked|cross-branch):' || printf '(nothing typed)')"
@@ -206,7 +206,7 @@ fi
 _stub held
 ctl="$(_run)"
 ctl_n="$(printf '%s\n' "$ctl" | grep -c '^packet' || true)"
-if [ "${ctl_n:-0}" -ge 1 ] && ! printf '%s' "$ctl" | grep -qE "$_DROP"; then
+if [ "${ctl_n:-0}" -ge 1 ] && ! grep -qE "$_DROP" <<<"$ctl"; then
     bad "arm 1's predicate ALSO holds when packets were really dropped — it discriminates nothing"
 else
     ok "CONTROL: arm 1's predicate fails when a drop really happened — it has teeth"
@@ -221,7 +221,7 @@ if [ "${n:-0}" -eq 0 ]; then
 else
     bad "$n held packet(s) were still offered"
 fi
-if printf '%s' "$out" | grep -q '^cross-branch: .* is claimed on a sibling branch'; then
+if grep -q '^cross-branch: .* is claimed on a sibling branch' <<<"$out"; then
     ok "the drop is NAMED, not silent"
 else
     bad "packets were dropped without saying why — a host cannot tell that from an empty queue"
@@ -237,12 +237,12 @@ fi
 _stub blind
 out="$(_run)"
 n="$(printf '%s\n' "$out" | grep -c '^packet' || true)"
-if [ "${n:-0}" -ge 1 ] && ! printf '%s' "$out" | grep -qE "$_DROP"; then
+if [ "${n:-0}" -ge 1 ] && ! grep -qE "$_DROP" <<<"$out"; then
     ok "a checker that cannot look leaves the batch alone"
 else
     bad "an unanswerable check emptied the batch or dropped from it — a blip would stop the host (packets=$n)"
 fi
-if printf '%s' "$out" | grep -q 'says NOTHING about who holds'; then
+if grep -q 'says NOTHING about who holds' <<<"$out"; then
     ok "and it says the check could not run, rather than implying nothing is held"
 else
     bad "the could-not-fold path is silent; that reads as 'nobody holds these'"
