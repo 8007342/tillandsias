@@ -1,0 +1,36 @@
+# @trace spec:ci-release
+# @trace order:2118-77ew
+#
+# Operator 2026-11-20, landing-pipeline redesign P2: /tmp on macuahuitl held
+# 22 of 32 GB in about 16k entries (7.7k tillandsias-test-cache-*), and
+# build-check had drifted from 28-31 to 50-53 min. A gate now runs under ONE
+# private TMPDIR that is removed at the end, whatever the outcome
+# (scripts/gate-tmpdir.sh, entered from build.sh for --check/--test/--ci*/
+# --release). Red before 2118-77ew: there was no wrapper to call.
+name: litmus:gate-leaves-nothing-in-tmp
+spec: ci-release
+phase: pre-build
+description: A gate run under scripts/gate-tmpdir.sh leaves 0 new entries in the parent TMPDIR after success, failure and TERM; exit codes, stdin and nesting pass through; without the wrapper the same child leaks
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), mktemp, timeout and sleep; scratch dirs under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "control leaks; with the wrapper 0 new entries after success, failure and TERM; rc, stdin and nesting pass through"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-gate-tmpdir.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:gate-tmpdir:12 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "twelve arms: control leak, private tg dir, 0 entries, rc, failed cleanup, set -e rc, set -e cleanup, TERM forwarded, TERM cleanup, TERM rc, nesting, stdin"
+  log_fields:
+    spec: "ci-release"
+    test: "gate-leaves-nothing-in-tmp"
+
+rollback:
+  on_failure: "read the FAIL lines; the wrapper is scripts/gate-tmpdir.sh, entered near the top of build.sh"
+  command: "grep -n gate_tmpdir_run build.sh scripts/gate-tmpdir.sh"

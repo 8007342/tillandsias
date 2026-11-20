@@ -59,6 +59,23 @@ source "$_BUILDER_DIR/scripts/with-tillandsias-builder.sh"
 # windows lane.
 source "$_BUILDER_DIR/scripts/with-wsl2-builder.sh"
 
+# ORDER 2118-77ew (operator 2026-11-20, landing-pipeline P2): a gate leaves
+# nothing in /tmp. Gate modes run as a child under ONE private TMPDIR that is
+# removed when the run ends, whatever the outcome (scripts/gate-tmpdir.sh).
+# The child sees TILLANDSIAS_GATE_TMPDIR and runs in place.
+if [ -z "${TILLANDSIAS_GATE_TMPDIR:-}" ]; then
+    for _gt_a in "$@"; do
+        case "$_gt_a" in
+            --check|--test|--ci|--ci-full|--release)
+                source "$_BUILDER_DIR/scripts/gate-tmpdir.sh"
+                gate_tmpdir_run "$_BUILDER_DIR/build.sh" "$@"
+                exit $?
+                ;;
+        esac
+    done
+    unset _gt_a
+fi
+
 # When TILLANDSIAS_BUILD_LANE=container is set, route nix invocations through
 # the tillandsias-builder container (images/builder/Containerfile — the one
 # lineage; distro nix): /nix on a named volume so a relaunch lands warm, the
