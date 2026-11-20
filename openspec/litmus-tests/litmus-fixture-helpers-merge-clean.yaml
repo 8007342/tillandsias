@@ -1,0 +1,36 @@
+# @trace spec:ci-release
+# @trace order:2118-asur
+#
+# Operator 2026-11-20, landing-pipeline redesign P4 row 3: sibling branches
+# that each added a helper to lib/lua/common/fixture.lua appended above the
+# same `return M` and conflicted. Helpers now live one per file in
+# lib/lua/common/fixture/, installed by the kit in name order. Red before
+# 2118-asur row 3: the kit had no per-file helpers, so the split arm's merged
+# tree lacks both new helpers.
+name: litmus:fixture-helpers-merge-clean
+spec: ci-release
+phase: pre-build
+description: Two sibling branches each adding a common.fixture helper merge clean and the merged kit installs both; appending both to fixture.lua conflicts; a helper replacing a core method is refused
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary) and git; scratch repos carrying a copy of the kit under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "control appends conflict; per-file helpers merge clean, both load, the moved helpers and core still load, a core-replacing helper is refused"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-fixture-helpers-merge-clean.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:fixture-helpers-merge-clean:5 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "five arms: control conflicts, clean merge, both new helpers, moved helpers and core, core replacement refused"
+  log_fields:
+    spec: "ci-release"
+    test: "fixture-helpers-merge-clean"
+
+rollback:
+  on_failure: "read the FAIL lines; the installer is the do-block at the end of lib/lua/common/fixture.lua; helpers are lib/lua/common/fixture/*.lua"
+  command: "ls lib/lua/common/fixture/ && tail -30 lib/lua/common/fixture.lua"

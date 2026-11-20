@@ -1,0 +1,36 @@
+# @trace spec:ci-release
+# @trace order:2118-asur
+#
+# Operator 2026-11-20, landing-pipeline redesign P4 row 2: sibling branches
+# binding tests to the same spec conflicted in openspec/litmus-bindings.yaml.
+# The registry stays one file (30+ direct readers) and merges structurally,
+# per spec: a three-way set merge of litmus_tests, theirs' field change where
+# ours kept the base (scripts/lua/merge-litmus-bindings.lua). Red before
+# 2118-asur row 2: the driver arm conflicts like the control.
+name: litmus:litmus-bindings-merge-per-spec
+spec: ci-release
+phase: pre-build
+description: On a copy of the real registry, sibling branches binding tests to the same spec, adding spec blocks, bumping a date and unbinding a test merge clean through merge=litmus-bindings; without the attribute they conflict; a self-merge is byte-identical
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary) and git; scratch repos under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "a control merge without the attribute conflicts; with merge=litmus-bindings the sibling bindings merge clean, every change kept, and a self-merge of the real registry is byte-identical"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-merge-litmus-bindings.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:merge-litmus-bindings:9 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "nine arms: control conflicts, clean, both bindings kept, date bump, unbind kept, both blocks, parses, no unmerged paths, lossless self-merge"
+  log_fields:
+    spec: "ci-release"
+    test: "litmus-bindings-merge-per-spec"
+
+rollback:
+  on_failure: "read the FAIL lines; the driver is scripts/lua/merge-litmus-bindings.lua, the wiring .gitattributes and scripts/ensure-hooks.sh"
+  command: "git check-attr merge -- openspec/litmus-bindings.yaml && git config --get merge.litmus-bindings.driver"

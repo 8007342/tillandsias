@@ -93,6 +93,15 @@ if [ "$(git -C "$ROOT" config --local --get merge.floor-min.driver 2>/dev/null)"
         && _say "installed:merge-driver:floor-min"
 fi
 
+# ORDER 2118-asur row 2: the litmus-bindings registry merges structurally
+# (sibling bindings to the same spec never conflict).
+bindings_driver='P="$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" && "$P" script run scripts/lua/merge-litmus-bindings.lua -- %O %A %B'
+if [ "$(git -C "$ROOT" config --local --get merge.litmus-bindings.driver 2>/dev/null)" != "$bindings_driver" ]; then
+    git -C "$ROOT" config --local merge.litmus-bindings.name "litmus bindings: three-way set merge per spec (2118-asur)" 2>/dev/null
+    git -C "$ROOT" config --local merge.litmus-bindings.driver "$bindings_driver" 2>/dev/null \
+        && _say "installed:merge-driver:litmus-bindings"
+fi
+
 # The current marker is the installer's, read from it so the two cannot drift.
 want="$(sed -n 's/^PREPUSH_MARKER="# \(tillandsias-pre-push-v[0-9][0-9]*\)"$/\1/p' "$INSTALLER" 2>/dev/null)"
 if [ -z "$want" ]; then

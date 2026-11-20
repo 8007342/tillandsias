@@ -170,6 +170,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:floor-merge-driver-merges-clean
+  - litmus:litmus-bindings-merge-per-spec
+  - litmus:fixture-helpers-merge-clean
   - litmus:release-is-one-cloud-build
   - litmus:gate-step-private-metrics-fallback
   - litmus:prebuilt-resolver-refuses-stale
