@@ -137,11 +137,11 @@ trap cleanup EXIT
 git -C "$REPO" worktree add -q --detach "$WT" "$head" 2>/dev/null || cnr worktree-add-failed
 
 # 4 native-lint
-lint_out="$(cd "$WT" && TILLANDSIAS_NATIVE_LINT_BASE="$base" $LINT 2>/dev/null)"; lrc=$?
+lint_out="$(cd "$WT" && TILLANDSIAS_NATIVE_LINT_BASE="$base" $LINT)"; lrc=$?   # stderr passes through: its why/remedy
 case "$lrc" in
     0) ;;
     1|3)
-        pkg="$(printf '%s\n' "$lint_out" | sed -n 's/^refused:native-lint:[a-z]*:\([^ ]*\).*/\1/p' | head -n 1)"
+        pkg="$(printf '%s\n' "$lint_out" | sed -n 's/^refused:native-lint:[a-z]*:\([^ ]*\).*/\1/p' | head -n 1)"  # affordance-ok: parses check-native-lint-attested output; it printed the why/remedy to stderr
         [ "$DRY_RUN" -eq 1 ] || "$GH" pr edit "$PR" --add-label needs:native-lint >/dev/null 2>&1 || true
         say "hold:native-lint:${pkg:-unknown}:$short"
         exit 1 ;;
