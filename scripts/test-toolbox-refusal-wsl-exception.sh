@@ -54,6 +54,12 @@ run_without_toolbox() {
     fi
 
     sed -e "s#/proc/version#$d/proc-version#g"         -e "s#/etc/os-release#$d/os-release#g"         "$REAL" >"$d/under-test.sh"
+    # The wrapper sources these from its own directory (podman-neutralize-proxy.sh
+    # before the toolbox check), so the copy needs them beside it or it aborts on
+    # "No such file" before printing the FATAL arm 2 asserts (2110-ghw2).
+    for _h in podman-neutralize-proxy.sh lib-env-forward.sh lib-dispatch-reap.sh; do
+        cp "$(dirname "$REAL")/$_h" "$d/$_h"
+    done
     if cmp -s "$REAL" "$d/under-test.sh"; then
         echo "FAIL: fixture substitution matched nothing — the test would be exercising the unmodified script" >&2
         rm -rf "$d"
@@ -62,7 +68,21 @@ run_without_toolbox() {
 
     # No toolbox on PATH, and every skip-guard that could short-circuit the
     # decision explicitly cleared, so each arm reaches the branch it targets.
-    PATH="/usr/bin:/bin"     TILLANDSIAS_SKIP_TOOLBOX=     TOOLBOX_PATH=     container=         bash "$d/under-test.sh" true >"$d/out" 2>&1
+    # A PATH with NO toolbox. "/usr/bin:/bin" is not one on an immutable host:
+    # Silverblue ships /usr/bin/toolbox, so this arm's premise was false there and
+    # it passed only because the copied wrapper used to abort on a missing helper
+    # (2110-ghw2). Link every /usr/bin entry except toolbox, then ASSERT the premise.
+    mkdir -p "$d/bin"
+    for _e in /usr/bin/*; do
+        [ "${_e##*/}" = toolbox ] && continue
+        ln -s "$_e" "$d/bin/${_e##*/}" 2>/dev/null
+    done
+    if PATH="$d/bin" command -v toolbox >/dev/null 2>&1; then
+        echo "FAIL: premise: the no-toolbox PATH still resolves toolbox" >&2
+        rm -rf "$d"
+        return 125
+    fi
+    PATH="$d/bin"     TILLANDSIAS_SKIP_TOOLBOX=     TOOLBOX_PATH=     container=         bash "$d/under-test.sh" true >"$d/out" 2>&1
     local rc=$?
     cat "$d/out"
     rm -rf "$d"
