@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: shell-debt-batch-2-port-the-top-level-litmus-helper-scripts-to-lua
+    order: 2111-y8ch
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, scripts, litmus]
+    estimated_hours: 4
+    owned_files:
+      - scripts/litmus-helper-tray-network-bootstrap.sh
+      - scripts/litmus-helper-browser-isolation.sh
+      - scripts/litmus-helper-event-driven.sh
+      - scripts/litmus-helper-storage-isolation.sh
+      - scripts/litmus-git-delta-wait.sh
+    title: |
+      Batch 2 of the lenovinha shell slice: port the non-test litmus-* helper scripts to scripts/lua/, update every litmus yaml caller, delete each .sh in the same PR.
+    context: |
+      Template: scripts/lua/litmus-helper-nix-cache-size.lua. Output grammar the litmus steps match is kept byte-for-byte; each mode adds a house verdict line. No jq.
+    exit_criteria:
+      - 'no scripts/litmus-helper-*.sh or scripts/litmus-git-delta-wait.sh remains, and git grep for them outside plan/ is empty'
+      - 'the owning litmus specs pass via scripts/run-litmus-test.sh (enclave-network for tray-network-bootstrap)'
+      - './build.sh --preflight on the merged work ref: no refused: line except the pre-existing check-cross-target-build red'
+    verifiable_closure: |
+      litmus:tray-network-bootstrap (spec enclave-network), litmus:podman-idiomatic-event-driven and litmus:podman-idiomatic-storage-isolation-runtime run through the lua helpers; the event-driven arm is red on the deleted .sh step sequence (create=0) and green on the port.
+    next_action: Port event-driven, storage-isolation and git-delta-wait; preflight; push work/2111-y8ch; open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, slice assigned by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-19T22:58:19Z"
+        host: lenovinha
+        summary: Batch 2 of the lenovinha shell slice — litmus helpers to lua.

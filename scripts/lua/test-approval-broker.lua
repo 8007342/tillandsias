@@ -8,9 +8,9 @@
 --
 -- A test ed25519 key stands in for the hardware key. polkit's pkcheck is a
 -- stub on PATH that allows (the software path's user check); one arm stubs it
--- to deny. Everything lives in a scratch dir: its own state dir
--- (TILLANDSIAS_APPROVAL_STATE_DIR), allowed_signers
--- (TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS) and a scratch git repo for the note.
+-- to deny. Everything lives in a scratch dir: its own XDG_STATE_HOME (the
+-- broker state and allowed_signers sit at <xdg>/tillandsias/approvals; no
+-- tillandsias variable redirects them, 2083-nfne) and a scratch git repo for the note.
 --
 -- Arms:
 --   1 REQUEST   request exits 0 and names a record file.
@@ -54,7 +54,9 @@ end
 
 local REL = "target/plan-scratch/approval-broker-" .. tostring(math.random(100000, 999999)) .. tostring(math.random(100000, 999999))
 local S = ROOT .. "/" .. REL
-fs.mkdir(REL .. "/state")
+local STATE = "/xdg/tillandsias/approvals"
+fs.mkdir(REL .. STATE)
+fs.mkdir(REL .. "/xdg-unenrolled")
 fs.mkdir(REL .. "/repo")
 fs.mkdir(REL .. "/allow")
 fs.mkdir(REL .. "/deny")
@@ -72,7 +74,7 @@ end
 local kg = proc.run({ argv = { "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", "", "-f", S .. "/key" }, timeout_ms = 30000 })
 if kg.code ~= 0 then verdict.could_not_run(NAME, "ssh-keygen could not make a test key: " .. (kg.stderr or "")) end
 local pub = text.trim(fs.read(REL .. "/key.pub") or "")
-fs.write(REL .. "/allowed_signers", "operator namespaces=\"" .. NS .. "\" " .. pub .. "\n")
+fs.write(REL .. STATE .. "/allowed_signers", "operator namespaces=\"" .. NS .. "\" " .. pub .. "\n")
 
 -- pkcheck stubs: one allows, one denies.
 fs.write(REL .. "/allow/pkcheck", "#!/bin/sh\nexit 0\n")
@@ -107,8 +109,7 @@ local function broker(args, stub)
     for _, a in ipairs(args) do argv[#argv + 1] = a end
     local r = proc.run({ argv = argv, timeout_ms = 60000, env = {
         PATH = S .. "/" .. (stub or "allow") .. ":" .. SYS_PATH,
-        TILLANDSIAS_APPROVAL_STATE_DIR = S .. "/state",
-        TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS = S .. "/allowed_signers",
+        XDG_STATE_HOME = S .. "/xdg",
     } })
     return (r.status == "exited" and r.code or -1), (r.stdout or ""), (r.stderr or "")
 end
@@ -138,7 +139,7 @@ fs.write(REL .. "/statement.sig", sig)
 
 local function sshverify(text_)
     local r = proc.run({ argv = { "ssh-keygen", "-Y", "verify", "-n", NS, "-I", "operator",
-        "-f", S .. "/allowed_signers", "-s", S .. "/statement.sig" }, stdin = text_, timeout_ms = 30000 })
+        "-f", S .. STATE .. "/allowed_signers", "-s", S .. "/statement.sig" }, stdin = text_, timeout_ms = 30000 })
     return r.code, text.trim((r.stdout or "") .. (r.stderr or ""))
 end
 
@@ -195,9 +196,9 @@ local host = statement:match("\nhost: ([^\n]*)\n") or ""
 if host ~= "" and hn ~= "" and not has(host, hn) then ok("the host field is an opaque enrolment id, not the host name (" .. host .. ")")
 else bad("host field '" .. host .. "' (uname -n '" .. hn .. "')") end
 for _, d in ipairs({ "Merge /home/someone/project into linux-next", "Merge for someone@example.org" }) do
-    local before = #fs.walk(REL .. "/state")
+    local before = #fs.walk(REL .. STATE)
     local prc, po, pe = request(d)
-    local after = #fs.walk(REL .. "/state")
+    local after = #fs.walk(REL .. STATE)
     if prc ~= 0 and has(po .. pe, "refused:approval-request:personal-data") and after == before then
         ok("a detail carrying personal data is refused before signing: " .. d)
     else
@@ -206,9 +207,9 @@ for _, d in ipairs({ "Merge /home/someone/project into linux-next", "Merge for s
 end
 
 -- 7 DENIED
-local before = #fs.walk(REL .. "/state")
+local before = #fs.walk(REL .. STATE)
 local drc, dout, derr = request("Merge work/1879-5jkt into linux-next", "deny")
-local after = #fs.walk(REL .. "/state")
+local after = #fs.walk(REL .. STATE)
 if drc ~= 0 and has(dout .. derr, "refused:approval-request:user-check-denied") and after == before
     and not has(dout, "BEGIN SSH SIGNATURE") then
     ok("with pkcheck denying, nothing is signed and no record is written")
@@ -223,16 +224,15 @@ local function unenrolled(args)
     for _, a in ipairs(args) do argv[#argv + 1] = a end
     local r = proc.run({ argv = argv, timeout_ms = 60000, env = {
         PATH = S .. "/allow:" .. SYS_PATH,
-        TILLANDSIAS_APPROVAL_STATE_DIR = S .. "/state",
-        TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS = S .. "/no-such-allowed-signers",
+        XDG_STATE_HOME = S .. "/xdg-unenrolled",
     } })
     return (r.status == "exited" and r.code or -1), (r.stdout or "") .. (r.stderr or "")
 end
-before = #fs.walk(REL .. "/state")
+before = #fs.walk(REL .. "/xdg-unenrolled")
 local nrc, no = unenrolled({ "request", "--action", "merge-into-integration", "--project", "8007342/tillandsias",
     "--target", "refs/heads/linux-next", "--from", FROM, "--to", TO,
     "--detail", "Merge work/1879-5jkt into linux-next", "--key", S .. "/key" })
-after = #fs.walk(REL .. "/state")
+after = #fs.walk(REL .. "/xdg-unenrolled")
 if nrc ~= 0 and has(no, "refused:approval-request:not-enrolled") and after == before then
     ok("with no allowed_signers, request refuses (not-enrolled) and writes nothing")
 else bad("unenrolled request (rc=" .. nrc .. ", state files " .. before .. "->" .. after .. "): " .. no:sub(1, 200)) end

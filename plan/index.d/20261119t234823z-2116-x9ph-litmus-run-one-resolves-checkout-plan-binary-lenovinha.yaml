@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: litmus-run-one-scratch-root-resolves-the-checkout-plan-binary-not-a-stale-path-copy
+    order: 2116-x9ph
+    status: in_progress
+    kind: bug
+    priority: p2
+    pickup_role: linux
+    capability_tags: [litmus, plan-binary, lua]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/litmus-run-one.lua
+      - openspec/litmus-tests/litmus-run-one-plan-binary.yaml
+      - scripts/fixtures/litmus-run-one/litmus-run-one-plan-binary-probe.yaml
+    title: |
+      litmus-run-one.lua's scratch root had an empty target/, so a step's resolve_plan_binary fell through to a stale ~/.local/bin/tillandsias-plan and a verb new on the branch read as rc=2. Link the checkout's (or CARGO_TARGET_DIR's) release/ and debug/ in.
+    context: |
+      Found 2026-11-19 porting with-smoke-lock to lock run (2115-jkdv): the fd-isolation litmus passed under run-litmus-test.sh and failed rc=2 under litmus-run-one with bin=~/.local/bin/tillandsias-plan.
+    exit_criteria:
+      - 'litmus:run-one-plan-binary passes; its fixture fails on the pre-fix helper (measured: resolved ~/.local/bin/tillandsias-plan, want <checkout>/target/release/tillandsias-plan)'
+    verifiable_closure: |
+      litmus:run-one-plan-binary: its fixture resolved ~/.local/bin/tillandsias-plan and failed before the fix, and passes after.
+    next_action: Preflight, push work/2116-x9ph, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-19T23:48:23Z"
+        host: lenovinha
+        summary: litmus-run-one resolves the checkout plan binary, not a stale PATH copy.
