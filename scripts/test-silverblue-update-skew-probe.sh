@@ -60,20 +60,20 @@ run() { bash "$PROBE" "$@" 2>&1; }
 
 # 1. THE DEFECT: akmods layered, update offered, depsolve failure in the journal
 out="$(run --status-from "$W/status-akmods" --check-from "$W/check-offered" --journal-from "$W/journal-depsolve")"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q 'skew:akmods-kernel-devel-matched:'; then
+if [ "$rc" -eq 1 ] && grep -q 'skew:akmods-kernel-devel-matched:' <<<"$out"; then
     ok "the three conditions together report skew, with the offered version named"
 else bad "the skew case gave rc=$rc: $out"; fi
 
 # 2. NEGATIVE CONTROL A — no akmods layered. yoga's real shape, and the scope
 #    test that proved the cause was akmods rather than GPU drivers generally.
 out="$(run --status-from "$W/status-rocm" --check-from "$W/check-offered" --journal-from "$W/journal-depsolve")"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'ok:no-skew:no-akmods-layered'; then
+if [ "$rc" -eq 0 ] && grep -q 'ok:no-skew:no-akmods-layered' <<<"$out"; then
     ok "no akmods layered reports no-skew even with a depsolve failure in the journal"
 else bad "the no-akmods case gave rc=$rc: $out"; fi
 
 # 3. NEGATIVE CONTROL B — akmods layered but nothing offered to depsolve against.
 out="$(run --status-from "$W/status-akmods" --check-from "$W/check-none" --journal-from "$W/journal-depsolve")"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'ok:no-skew:no-update-offered'; then
+if [ "$rc" -eq 0 ] && grep -q 'ok:no-skew:no-update-offered' <<<"$out"; then
     ok "no update offered reports no-skew"
 else bad "the no-update case gave rc=$rc: $out"; fi
 
@@ -81,7 +81,7 @@ else bad "the no-update case gave rc=$rc: $out"; fi
 #    akmods host forever: layered AND offered, but the journal shows no
 #    depsolve failure. "An update is pending" is not "this host cannot apply it".
 out="$(run --status-from "$W/status-akmods" --check-from "$W/check-offered" --journal-from "$W/journal-quiet")"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'no-depsolve-failure'; then
+if [ "$rc" -eq 0 ] && grep -q 'no-depsolve-failure' <<<"$out"; then
     ok "a quiet journal reports no-skew — pending is not the same as blocked"
 else bad "the quiet-journal case gave rc=$rc: $out"; fi
 
@@ -89,7 +89,7 @@ else bad "the quiet-journal case gave rc=$rc: $out"; fi
 #    feeds a cycle preamble; a silent "ok" from a question that could not be
 #    asked is the failure this fleet has paid for repeatedly.
 out="$(run --status-from "$W/status-akmods" --check-from "$W/check-offered" --journal-from "$W/nonexistent")"; rc=$?
-if [ "$rc" -eq 3 ] && printf '%s' "$out" | grep -q 'could-not-run'; then
+if [ "$rc" -eq 3 ] && grep -q 'could-not-run' <<<"$out"; then
     ok "an unreadable journal is could-not-run, not a clean verdict"
 else bad "the unreadable-journal case gave rc=$rc: $out"; fi
 

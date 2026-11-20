@@ -54,10 +54,10 @@ fi
 #    Before this, `blocked:spec-index:payload-failed` named the step while the
 #    cause was a filesystem two layers away that the reader never chose.
 blk="$(sed -n '/blocked:spec-index:payload-failed/,/exit 1; }/p' "$SRC" | tail -n +2)"
-if printf '%s' "$blk" | grep -q 'staging dir:' \
-   && printf '%s' "$blk" | grep -q 'index root:' \
-   && printf '%s' "$blk" | grep -q 'df -Ph' \
-   && printf '%s' "$blk" | grep -q 'TILLANDSIAS_SPEC_INDEX_TMPDIR'; then
+if grep -q 'staging dir:' <<<"$blk" \
+   && grep -q 'index root:' <<<"$blk" \
+   && grep -q 'df -Ph' <<<"$blk" \
+   && grep -q 'TILLANDSIAS_SPEC_INDEX_TMPDIR' <<<"$blk"; then
     pass=$((pass+1))
 else
     fail=$((fail+1)); echo "FAIL: the payload-failed verdict does not name the directory and remedy"

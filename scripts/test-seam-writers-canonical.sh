@@ -50,7 +50,7 @@ writer_file() {  # $1=path  $2=extra line
 # ARM 1 — a writer with NO canonical reference is refused and NAMED.
 a1="$tmp/a1/src"; writer_file "$a1/lonely.rs" ""
 out="$("$PLAN" script run "$CHECK" "$a1" "$VAR" "$CANON" 2>&1)"; rc=$?
-if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "refused:seam-writer-uncanonical:.*lonely.rs"; then
+if [ $rc -ne 0 ] && grep -q "refused:seam-writer-uncanonical:.*lonely.rs" <<<"$out"; then
     pass "ARM 1: an uncanonical writer is refused and named"
 else
     fail "ARM 1: expected refusal naming lonely.rs, got rc=$rc: $out"
@@ -62,8 +62,8 @@ a2="$tmp/a2/src"
 writer_file "$a2/main.rs" "fn l() { let _g = crate::runtime_assets::${CANON}(); }"
 writer_file "$a2/accel_probe.rs" 'fn l() { static SEAM_LOCK: Mutex<()> = Mutex::new(()); let _g = SEAM_LOCK.lock(); }'
 out="$("$PLAN" script run "$CHECK" "$a2" "$VAR" "$CANON" 2>&1)"; rc=$?
-if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "accel_probe.rs" \
-   && ! printf '%s' "$out" | grep -q "refused:seam-writer-uncanonical:.*main.rs"; then
+if [ $rc -ne 0 ] && grep -q "accel_probe.rs" <<<"$out" \
+   && ! grep -q "refused:seam-writer-uncanonical:.*main.rs" <<<"$out"; then
     pass "ARM 2: the private-mutex module is named, the canonical one is not"
 else
     fail "ARM 2: expected accel_probe.rs named and main.rs clean, got rc=$rc: $out"
@@ -72,7 +72,7 @@ fi
 # ARM 3a — a real CODE reference satisfies the check.
 a3="$tmp/a3/src"; writer_file "$a3/ok.rs" "fn l() { let _g = crate::runtime_assets::${CANON}(); }"
 out="$("$PLAN" script run "$CHECK" "$a3" "$VAR" "$CANON" 2>&1)"; rc=$?
-if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q "^ok:seam-writers-canonical:1$"; then
+if [ $rc -eq 0 ] && grep -q "^ok:seam-writers-canonical:1$" <<<"$out"; then
     pass "ARM 3a: a real code reference passes"
 else
     fail "ARM 3a: expected ok:seam-writers-canonical:1, got rc=$rc: $out"
@@ -81,7 +81,7 @@ fi
 # ARM 3b — the SAME symbol, present only inside a comment, must NOT satisfy it.
 a3b="$tmp/a3b/src"; writer_file "$a3b/commented.rs" "// serialised by ${CANON}, honest"
 out="$("$PLAN" script run "$CHECK" "$a3b" "$VAR" "$CANON" 2>&1)"; rc=$?
-if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "refused:seam-writer-uncanonical:.*commented.rs"; then
+if [ $rc -ne 0 ] && grep -q "refused:seam-writer-uncanonical:.*commented.rs" <<<"$out"; then
     pass "ARM 3b: a comment-only reference does NOT satisfy the check"
 else
     fail "ARM 3b: a commented lock name was accepted as a real one, rc=$rc: $out"
@@ -90,7 +90,7 @@ fi
 # ARM 4 — POSITIVE CONTROL. No writers at all must refuse, never report ok:0.
 a4="$tmp/a4/src"; mkdir -p "$a4"; echo 'fn nothing() {}' > "$a4/empty.rs"
 out="$("$PLAN" script run "$CHECK" "$a4" "$VAR" "$CANON" 2>&1)"; rc=$?
-if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q "refused:seam-var-has-no-writers:$VAR"; then
+if [ $rc -ne 0 ] && grep -q "refused:seam-var-has-no-writers:$VAR" <<<"$out"; then
     pass "ARM 4: a vanished target refuses rather than passing vacuously"
 else
     fail "ARM 4: expected refused:seam-var-has-no-writers, got rc=$rc: $out"
@@ -134,7 +134,7 @@ done >> "$a5/large.rs"
 # ever reaching the code path that breaks it. `bash -o pipefail` stands in for
 # the future caller who adds the option, or sources this from a stricter script.
 out="$(bash -o pipefail -c '"$0" script run "$@"' "$PLAN" "$CHECK" "$a5" "$VAR" "$CANON" 2>&1)"; rc=$?
-if [ $rc -eq 0 ] && printf '%s' "$out" | grep -q "^ok:seam-writers-canonical:3$"; then
+if [ $rc -eq 0 ] && grep -q "^ok:seam-writers-canonical:3$" <<<"$out"; then
     pass "ARM 5: all three writers counted under pipefail, the large one included"
 else
     fail "ARM 5: expected exactly 3 writers under pipefail, got rc=$rc: $out"
