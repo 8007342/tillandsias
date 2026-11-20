@@ -4,7 +4,6 @@
 scripts/build-macos-tray.sh 1
 scripts/census-litmus-layer-classification.sh 1
 scripts/census-litmus-step-enforcement.sh 1
-scripts/centicolon-backfill.sh 2
 scripts/check-append-vs-origin-fold.sh 1
 scripts/check-capability-row.sh 2
 scripts/check-containers-conf-proxy-env.sh 1
@@ -17,7 +16,6 @@ scripts/check-mcp-live-build.sh 1
 scripts/check-mcp-surface.sh 1
 scripts/check-mo-full-attestations.sh 1
 scripts/check-no-tracked-binaries.sh 1
-scripts/check-packet-tier-declared.sh 1
 scripts/check-plan-binary-current.sh 1
 scripts/check-release-asset-integrity.sh 1
 scripts/check-script-exec-bits.sh 1
@@ -25,7 +23,6 @@ scripts/check-spec-index-resolution-agreement.sh 2
 scripts/check-tracked-files-unwritten.sh 1
 scripts/check-windows-tray-clippy.sh 1
 scripts/clamp-ca-material.sh 1
-scripts/claude-mcp.sh 2
 scripts/cycle-preflight.sh 2
 scripts/diagnose-proxy.sh 1
 scripts/e2e-preflight.sh 1
@@ -43,7 +40,6 @@ scripts/land-queue.sh 4
 scripts/litmus-covering-specs.sh 3
 scripts/local-ci.sh 6
 scripts/materialize-macos-tar-to-img.sh 1
-scripts/measure-inference-tier.sh 1
 scripts/nix-build-container.sh 2
 scripts/preflight-fixtures-default-target.sh 1
 scripts/refusal-calibration/apply-relabelled-561.sh 1
@@ -54,7 +50,6 @@ scripts/test-append-vs-origin-fold.sh 1
 scripts/test-bash-composition-hazards.sh 1
 scripts/test-build-image-installed-version-alias.sh 1
 scripts/test-build-step-timing-attribution.sh 1
-scripts/test-cache-semantics.sh 6
 scripts/test-census-enforced-reachability-split.sh 1
 scripts/test-check-credential-channel.sh 1
 scripts/test-check-installer-prompts.sh 1

@@ -11,7 +11,7 @@ Annotation count: 61
 
 ### Three-tier classification of cheatsheets
 
-Every cheatsheet under `cheatsheets/` MUST declare exactly one redistribution tier in its YAML frontmatter `tier:` field. The three permitted values are `bundled`, `distro-packaged`, and `pull-on-demand`. When `tier:` is omitted, the validator (`scripts/check-cheatsheet-sources.sh`) SHALL infer it from the first entry in `source_urls[]` by matching the URL's host against `cheatsheets/license-allowlist.toml`'s `default_tier` for that domain; if no domain match exists, the inferred tier SHALL default to `pull-on-demand` (the safe-default — never accidentally bundle an unaudited domain). The cheatsheet author MAY override the allowlist default by setting `tier:` explicitly and citing the per-document license in `## Provenance`.
+Every cheatsheet under `cheatsheets/` MUST declare exactly one redistribution tier in its YAML frontmatter `tier:` field. The three permitted values are `bundled`, `distro-packaged`, and `pull-on-demand`. When `tier:` is omitted, the validator (`scripts/lua/check-cheatsheet-sources.lua`) SHALL infer it from the first entry in `source_urls[]` by matching the URL's host against `cheatsheets/license-allowlist.toml`'s `default_tier` for that domain; if no domain match exists, the inferred tier SHALL default to `pull-on-demand` (the safe-default — never accidentally bundle an unaudited domain). The cheatsheet author MAY override the allowlist default by setting `tier:` explicitly and citing the per-document license in `## Provenance`.
 
 #### Scenario: Bundled tier — explicit declaration
 
@@ -217,7 +217,7 @@ The agent's GENERATED summary cheatsheet SHALL land in `/opt/cheatsheets/` (the 
 
 ### Distro-packaged tier — package validation
 
-A `tier: distro-packaged` cheatsheet MUST declare `package: <name>` in its frontmatter, where `<name>` is the OS package providing the doc files. The cheatsheet SHALL also declare `local: <path>` pointing to the file inside the forge image (e.g., `/usr/share/javadoc/java-21-openjdk/api/index.html`). At validation time, `scripts/check-cheatsheet-sources.sh` SHALL confirm `<name>` is listed in the forge image's package manifest. The package manifest SHALL be discoverable via one of: `flake.nix` `contents` attribute, `images/default/Containerfile` `dnf install` lines, or a dedicated `images/default/distro-packages.txt` file (in that fallback order).
+A `tier: distro-packaged` cheatsheet MUST declare `package: <name>` in its frontmatter, where `<name>` is the OS package providing the doc files. The cheatsheet SHALL also declare `local: <path>` pointing to the file inside the forge image (e.g., `/usr/share/javadoc/java-21-openjdk/api/index.html`). At validation time, `scripts/lua/check-cheatsheet-sources.lua` SHALL confirm `<name>` is listed in the forge image's package manifest. The package manifest SHALL be discoverable via one of: `flake.nix` `contents` attribute, `images/default/Containerfile` `dnf install` lines, or a dedicated `images/default/distro-packages.txt` file (in that fallback order).
 
 At runtime, the in-forge agent SHALL read the cheatsheet and follow the `local:` path directly — no fetch, no recipe, no proxy round-trip. The frontmatter `source_urls[]` records the upstream truth so structural-drift comparisons remain possible (host or in-forge agent SHALL be able to compare the package's local content against upstream).
 
@@ -236,7 +236,7 @@ At runtime, the in-forge agent SHALL read the cheatsheet and follow the `local:`
 
 #### Scenario: Local path absent inside forge image
 
-- **WHEN** `scripts/check-cheatsheet-sources.sh` runs in-image post-build
+- **WHEN** `scripts/lua/check-cheatsheet-sources.lua` runs in-image post-build
 - **AND** a `tier: distro-packaged` cheatsheet's `local:` path does NOT exist on the image filesystem
 - **THEN** the validator SHALL emit ERROR identifying the missing local path
 - **AND** the cheatsheet's INDEX badge SHALL revert to `[distro-packaged: MISSING]`
@@ -344,7 +344,7 @@ When the validator infers a cheatsheet's tier from `source_urls[0]`'s host, it S
 
 - **WHEN** the allowlist's `default_tier` for `docs.example.com` changes from `bundled` to `pull-on-demand`
 - **AND** an existing cheatsheet inferred `bundled` from that allowlist entry
-- **THEN** the next `scripts/check-cheatsheet-sources.sh` run SHALL emit `WARN: tier auto-flipped to pull-on-demand for cheatsheets/<path> (allowlist change)`
+- **THEN** the next `scripts/lua/check-cheatsheet-sources.lua` run SHALL emit `WARN: tier auto-flipped to pull-on-demand for cheatsheets/<path> (allowlist change)`
 - **AND** the cheatsheet's effective tier in the build SHALL be `pull-on-demand` until the author confirms or overrides
 
 ---
@@ -503,7 +503,7 @@ Smallest actionable boundary:
 - `bash scripts/check-cheatsheet-tiers.sh --strict`
 
 Sibling tests:
-- `bash scripts/check-cheatsheet-sources.sh --no-sha`
+- `tillandsias-plan script run scripts/lua/check-cheatsheet-sources.lua -- --no-sha`
 - `bash scripts/regenerate-cheatsheet-index.sh --check`
 
 Scoped follow-up:

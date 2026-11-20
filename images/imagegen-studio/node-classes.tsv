@@ -231,3 +231,28 @@ comfyui-core	TrimAudioDuration
 comfyui-core	AudioConcat
 # demon_attack headroom workflow: attenuate before integer export (comfy_extras/nodes_audio.py at the pinned v0.40.0: node_id AudioAdjustVolume :721).
 comfyui-core	AudioAdjustVolume
+# 2090-ausx: the rest of the core audio nodes (comfy_extras/nodes_audio.py at the pinned v0.40.0, node_id PreviewAudio :301, SplitAudioChannels :488, JoinAudioChannels :523, AudioMerge :651, EmptyAudio :760, AudioEqualizer3Band :806).
+comfyui-core	PreviewAudio
+comfyui-core	SplitAudioChannels
+comfyui-core	JoinAudioChannels
+comfyui-core	AudioMerge
+comfyui-core	EmptyAudio
+comfyui-core	AudioEqualizer3Band
+
+# ---- tillandsias_audio (vendored, pinned by tree digest in custom-nodes.toml; 2090-ausx) ----
+tillandsias_audio	TillandsiasAudioPan
+tillandsias_audio	TillandsiasAudioMixBus
+tillandsias_audio	TillandsiasAudioCrossfade
+tillandsias_audio	TillandsiasAudioLoopSeam
+tillandsias_audio	TillandsiasAudioEQ
+tillandsias_audio	TillandsiasAudioCompressor
+tillandsias_audio	TillandsiasAudioLimiter
+tillandsias_audio	TillandsiasAudioSaturate
+tillandsias_audio	TillandsiasAudioLoudness
+tillandsias_audio	TillandsiasAudioNormalizeLoudness
+tillandsias_audio	TillandsiasAudioScope
+tillandsias_audio	TillandsiasBarGrid
+tillandsias_audio	TillandsiasSaveLoopWAV
+tillandsias_audio	TillandsiasLoadMIDI
+tillandsias_audio	TillandsiasMIDITransform
+tillandsias_audio	TillandsiasSFZRender

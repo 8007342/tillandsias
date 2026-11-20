@@ -217,6 +217,25 @@ const DEMUCS_UNCLEAR: &str = "The license of the weights is not clear: MusDB con
 const DEMUCS_6S: &str = "The 6 source variant of htdemucs was trained only on Meta internal dataset, which likely means CC-NC-BY license is applicable, as it was the case for all models released by FAIR.";
 const NVIDIA_UNREAD: &str = "the NVIDIA Open Model License Agreement (June 2024) is published only as a PDF at developer.download.nvidia.com, which this host could not fetch; its clauses are classed from the licence as remembered and are not quoted. Read it before relying on these classes.";
 
+// 2094-h3rq: Fish Audio Research License Agreement (fishaudio/s2-pro
+// LICENSE.md, Last Updated March 7, 2026), quoted without its Markdown bold.
+const FISH_NC: &str = "Any use of the Fish Audio Materials or Derivative Works for a Commercial Purpose requires a separate written license agreement from Fish Audio. No commercial rights are granted under this Agreement.";
+const FISH_ATTRIBUTION: &str = "(iii) prominently display \"Built with Fish Audio\" on a related website, user interface, blogpost, about page, or product documentation.";
+const FISH_NOTICE: &str = "(i) provide a copy of this Agreement to that third party, (ii) retain the following attribution notice within a \"Notice\" text file distributed as a part of such copies: \"This model is licensed under the Fish Audio Research License, Copyright © 39 AI, INC. All Rights Reserved.\"";
+const FISH_FIELD: &str = "Furthermore, You will not use the Fish Audio Materials or Derivative Works, or any output or results of the Fish Audio Materials or Derivative Works, to create or improve any foundational generative AI model (excluding the Models or Derivative Works).";
+const FISH_AUP: &str = "Your use of the Fish Audio Materials and Derivative Works, including any output or results of the Fish Audio Materials or Derivative Works, must comply with applicable laws and regulations (including Trade Control Laws and equivalent regulations) and adhere to Fish Audio's Acceptable Use Policy, which is hereby incorporated by reference. (The Acceptable Use Policy text is not pinned here.)";
+// 2094-h3rq: Boson Higgs Audio 2 Community License Agreement (June 20, 2025).
+const HIGGS_ATTRIBUTION: &str = "(B) prominently display \u{201c}Built with Higgs Materials licensed from Boson AI USA, Inc., Copyright Boson AI USA, Inc., All Rights Reserved and Meta Llama 3 licensed under the Meta Llama 3 Community License, Copyright Meta Platforms, Inc., All Right Reserved\". based on Meta Llama 3\u{201d} on a related website, user interface, blogpost, about page, or product documentation.";
+const HIGGS_NOTICE: &str = "(A) provide a copy of this Agreement and the of Meta License \u{2019}s Llama 3 agreement with any such Higgs Materials";
+const HIGGS_FIELD: &str = "v. You will not use the Higgs Materials or any output or results of the Higgs Materials to improve any other large language model (excluding Boson Higgs Audio 2 or derivative works thereof).";
+const HIGGS_THRESHOLD: &str = "If the annual active users of the products or services made available by or for Licensee, or Licensee\u{2019}s affiliates, is greater than 100,000 annual active users in the preceding calendar year, you must request an expanded license from Boson AI";
+// 2094-h3rq: Meta Llama 3 Community License (meta-llama/llama3 LICENSE at
+// a0940f9c, April 18, 2024) and its Acceptable Use Policy (USE_POLICY.md).
+const LLAMA_ATTRIBUTION: &str = "(B) prominently display \u{201c}Built with Meta Llama 3\u{201d} on a related website, user interface, blogpost, about page, or product documentation.";
+const LLAMA_NOTICE: &str = "iii. You must retain in all copies of the Llama Materials that you distribute the following attribution notice within a \u{201c}Notice\u{201d} text file distributed as a part of such copies: \u{201c}Meta Llama 3 is licensed under the Meta Llama 3 Community License, Copyright \u{a9} Meta Platforms, Inc. All Rights Reserved.\u{201d}";
+const LLAMA_FIELD: &str = "v. You will not use the Llama Materials or any output or results of the Llama Materials to improve any other large language model (excluding Meta Llama 3 or derivative works thereof).";
+const LLAMA_THRESHOLD: &str = "If, on the Meta Llama 3 version release date, the monthly active users of the products or services made available by or for Licensee, or Licensee\u{2019}s affiliates, is greater than 700 million monthly active users in the preceding calendar month, you must request a license from Meta";
+const LLAMA_AUP: &str = "We want everyone to use Llama 3 safely and responsibly. You agree you will not use, or allow others to use, Llama 3 to: ";
 /// The obligation table, keyed by licence id as the register spells it.
 /// An unknown id yields one review obligation naming it.
 pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
@@ -321,6 +340,61 @@ pub fn obligations_for(licence_id: &str) -> Vec<Obligation> {
                 DEMUCS_UNCLEAR,
             ),
         ],
+        // 2094-h3rq: Fish S2-Pro. Research AND non-commercial use is granted
+        // (hobbyist, evaluation), so it is not forbidden outright.
+        "fish-audio-research-license-2026-03-07" => vec![
+            ob(
+                C::Attribution {
+                    text: "Built with Fish Audio".into(),
+                },
+                FISH_ATTRIBUTION,
+            ),
+            ob(C::Notice, FISH_NOTICE),
+            ob(C::NonCommercial, FISH_NC),
+            ob(C::FieldOfUse, FISH_FIELD),
+            ob(
+                C::Review {
+                    clause: "the Fish Audio Acceptable Use Policy is incorporated by reference and is not pinned".into(),
+                },
+                FISH_AUP,
+            ),
+        ],
+        // 2094-h3rq: Higgs Audio v2, a Meta Llama 3 derivative.
+        "boson-higgs-audio-2-community" => vec![
+            ob(
+                C::Attribution {
+                    text: "Built with Higgs Materials licensed from Boson AI USA, Inc. and Meta Llama 3".into(),
+                },
+                HIGGS_ATTRIBUTION,
+            ),
+            ob(C::Notice, HIGGS_NOTICE),
+            ob(C::FieldOfUse, HIGGS_FIELD),
+            ob(
+                C::SeatOrRevenueThreshold {
+                    detail: "100,000 annual active users: an expanded licence from Boson AI".into(),
+                },
+                HIGGS_THRESHOLD,
+            ),
+        ],
+        // 2094-h3rq: the two texts Higgs Audio 2 incorporates, each its own
+        // licence as demon_attack recorded them.
+        "meta-llama-3-community" => vec![
+            ob(
+                C::Attribution {
+                    text: "Built with Meta Llama 3".into(),
+                },
+                LLAMA_ATTRIBUTION,
+            ),
+            ob(C::Notice, LLAMA_NOTICE),
+            ob(C::FieldOfUse, LLAMA_FIELD),
+            ob(
+                C::SeatOrRevenueThreshold {
+                    detail: "700 million monthly active users: a licence from Meta".into(),
+                },
+                LLAMA_THRESHOLD,
+            ),
+        ],
+        "meta-llama-3-acceptable-use-policy" => vec![ob(C::FieldOfUse, LLAMA_AUP)],
         "mit" => vec![ob(C::Notice, MIT_NOTICE)],
         _ => vec![ob(
             C::Review {
@@ -349,6 +423,17 @@ const FORBIDDEN_OUTRIGHT: &[(&str, &str)] = &[
         "insightface-non-commercial",
         "InsightFace weights are for non-commercial research purposes only",
     ),
+];
+
+/// Licences acknowledged per project only: no standing operator grant covers
+/// them (Demucs: operator ruling 2026-11-09, 2068-eeti; Fish S2-Pro and Higgs
+/// v2: the licence PR flow, 2094-h3rq).
+pub const PER_PROJECT_ONLY: &[&str] = &[
+    "demucs-weights-unstated",
+    "fish-audio-research-license-2026-03-07",
+    "boson-higgs-audio-2-community",
+    "meta-llama-3-community",
+    "meta-llama-3-acceptable-use-policy",
 ];
 
 pub fn forbidden_outright(licence_id: &str) -> Option<&'static str> {
@@ -470,14 +555,18 @@ fn slugify(s: &str) -> String {
 }
 
 impl Acknowledgement {
-    /// The file stem: the artefact slug, or grantor-scope-expiry for a grant
-    /// covering several artefacts.
+    /// The file stem: `<licence-id>--` then the artefact slug, or
+    /// grantor-scope-expiry for a grant covering several artefacts.
     pub fn slug(&self) -> String {
-        if self.covers.len() == 1 {
+        // `<licence-id>--<artefact-slug>` (2094-h3rq): one repo can need
+        // several licence texts (Higgs v2: Boson, Llama 3), and a name keyed
+        // on the artefact alone made their PRs write one file.
+        let what = if self.covers.len() == 1 {
             slugify(&self.covers[0])
         } else {
             slugify(&format!("{}-{}-{}", self.grantor, self.scope, self.expiry))
-        }
+        };
+        format!("{}--{what}", slugify(&self.licence))
     }
 
     /// The canonical statement that is signed byte for byte (D3's shape).
@@ -726,7 +815,7 @@ pub fn obligations_spec(artefact: &str, licence_id: &str, obligations: &[Obligat
     s.push_str("## Purpose\n\n");
     s.push_str(&format!(
         "This project depends on {artefact} and must now adhere to {list}, the obligations its licence `{licence_id}` carries. \
-         The acknowledgement that accepted the licence is under `licences/acknowledgements/`, signed with an OS-verified key and committed with this spec. \
+         The acknowledgement that accepted the licence is under `licences/acknowledgements/`, approved by a human (the merge of its licence pull request, or an OS-verified signature) and committed with this spec. \
          Tillandsias records these obligations; honouring them over the project's lifetime is the project's own work, and each requirement below says how.\n\n"
     ));
     s.push_str("## Requirements\n\n");
@@ -855,6 +944,144 @@ fn scenario_body(o: &Obligation, artefact: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// The licence pull request (order 2094-h3rq)
+// ---------------------------------------------------------------------------
+
+/// What the accept-licence skill opens in the PROJECT repo: head
+/// `licences/<licence id>`, base the default branch. The skill only opens
+/// it; the human merge in the GitHub web UI is the approval.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LicencePr {
+    pub head: String,
+    pub title: String,
+    pub body: String,
+    /// `(path in the project repo, content)`.
+    pub files: Vec<(String, String)>,
+}
+
+/// The licence text file the PR quotes, beside the record.
+pub fn licence_text_path(licence_id: &str) -> String {
+    format!("licences/texts/{}.md", slugify(licence_id))
+}
+
+/// Render the licence PR. `licence_text` must hash to `ack.licence_sha256`
+/// (a record against other bytes is refused here, not at merge time);
+/// `promises` is the plain-language list of what the user agrees to, one
+/// sentence each.
+pub fn licence_pr(
+    ack: &Acknowledgement,
+    artefact: &str,
+    licence_text: &[u8],
+    licence_url: &str,
+    obligations: &[Obligation],
+    promises: &[String],
+    incorporated: &[IncorporatedText],
+) -> Result<LicencePr, String> {
+    use sha2::Digest as _;
+    let got = format!("{:x}", sha2::Sha256::digest(licence_text));
+    if got != ack.licence_sha256 {
+        return Err(format!(
+            "licence text hashes to {got}, not the pinned {}; nothing rendered",
+            ack.licence_sha256
+        ));
+    }
+    let text = String::from_utf8_lossy(licence_text);
+    let id = slugify(&ack.licence);
+    let record_path = format!("{ACK_REPO_DIR}/{}.yaml", ack.slug());
+    let spec_path = format!("openspec/specs/third-party-licence-{id}/spec.md");
+    let text_path = licence_text_path(&ack.licence);
+    let mut body = String::new();
+    body.push_str(&format!(
+        "## Accept the {} licence for {artefact}\n\n",
+        ack.licence
+    ));
+    body.push_str("**Pressing Merge on this pull request is your acceptance.** Nothing else asks you; nobody can press it for you (agents are refused).\n\n");
+    body.push_str("### What you promise, in plain words\n\n");
+    for p in promises {
+        body.push_str(&format!("- {p}\n"));
+    }
+    body.push_str(&format!(
+        "\nScope: `{}` · use: `{}` · until: `{}`\n\n",
+        ack.scope, ack.r#use, ack.expiry
+    ));
+    body.push_str("### What this records\n\n");
+    body.push_str(&format!(
+        "| File | What it is |\n|---|---|\n| `{record_path}` | the acknowledgement the licence gate reads once merged |\n| `{spec_path}` | the obligations this project now carries, one requirement each |\n| `{text_path}` | the licence text, verbatim |\n\n"
+    ));
+    body.push_str(&format!(
+        "The licence text is pinned: sha256 `{}`, from <{licence_url}>. If the text below differs by one byte, the hash differs and the gate refuses the record.\n\n",
+        ack.licence_sha256
+    ));
+    body.push_str("### Obligations\n\n");
+    for o in obligations {
+        if o.clause.is_empty() {
+            body.push_str(&format!("- **{}**\n", o.class.title()));
+        } else {
+            body.push_str(&format!("- **{}**: \"{}\"\n", o.class.title(), o.clause));
+        }
+    }
+    body.push_str("\n<details><summary>The licence, verbatim</summary>\n\n");
+    body.push_str("````text\n");
+    body.push_str(&text);
+    if !text.ends_with('\n') {
+        body.push('\n');
+    }
+    body.push_str("````\n\n</details>\n\n");
+    let mut extra_files = Vec::new();
+    if !incorporated.is_empty() {
+        body.push_str("### Incorporated by reference\n\nThis licence makes these texts part of its terms; pressing Merge accepts them too.\n\n");
+    }
+    for inc in incorporated {
+        let got = format!("{:x}", sha2::Sha256::digest(inc.text));
+        if got != inc.sha256 {
+            return Err(format!(
+                "incorporated text {} hashes to {got}, not the pinned {}; nothing rendered",
+                inc.id, inc.sha256
+            ));
+        }
+        let t = String::from_utf8_lossy(inc.text);
+        body.push_str(&format!(
+            "<details><summary>{}, verbatim (sha256 <code>{}</code>, from {})</summary>\n\n````text\n{}{}````\n\n</details>\n\n",
+            inc.id,
+            inc.sha256,
+            inc.url,
+            t,
+            if t.ends_with('\n') { "" } else { "\n" }
+        ));
+        extra_files.push((licence_text_path(inc.id), t.into_owned()));
+    }
+    body.push_str("---\nOpened by the accept-licence skill. Until a human merges this in the GitHub web UI, the licence gate admits nothing. Closing it unmerged declines.\n");
+    let mut files = vec![
+        (record_path, ack.to_yaml()),
+        (
+            spec_path,
+            obligations_spec(artefact, &ack.licence, obligations),
+        ),
+        (text_path, text.into_owned()),
+    ];
+    files.extend(extra_files);
+    Ok(LicencePr {
+        // `licences/<record file stem>`: one licence can cover several
+        // artefacts (Higgs model + tokenizer), and a head named after the
+        // licence alone collides (demon_attack #13-#15).
+        head: format!("{LICENCE_HEAD_PREFIX}{}", ack.slug()),
+        title: format!("Accept the {} licence for {artefact}", ack.licence),
+        body,
+        files,
+    })
+}
+
+/// A text the licence incorporates by reference (Higgs Audio 2 incorporates
+/// the Meta Llama 3 Community License), quoted and pinned beside it.
+#[derive(Debug, Clone, Copy)]
+pub struct IncorporatedText<'a> {
+    pub id: &'a str,
+    pub url: &'a str,
+    pub sha256: &'a str,
+    pub text: &'a [u8],
+}
+
+// ---------------------------------------------------------------------------
 // The gate
 // ---------------------------------------------------------------------------
 
@@ -864,26 +1091,55 @@ fn scenario_body(o: &Obligation, artefact: &str) -> String {
 #[derive(Debug, Clone)]
 pub struct Verifier {
     pub allowed_signers: PathBuf,
+    /// When set (order 2094-h3rq), the approval is a human GitHub merge, not
+    /// a signature: records are read from the gate's default branch, and the
+    /// project dir and `signature` are not consulted. When unset, the SSHSIG
+    /// path is unchanged: an unsigned record admits nothing.
+    pub merge_gate: Option<MergeGate>,
 }
 
 impl Verifier {
     pub fn new(allowed_signers: &Path) -> Self {
         Self {
             allowed_signers: allowed_signers.to_path_buf(),
+            merge_gate: None,
         }
     }
 
-    /// The host's enrolled signers: `TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS`, or
-    /// `<state dir>/approvals/allowed_signers`.
+    /// The merge gate over `gate` (order 2094-h3rq).
+    pub fn merged(gate: MergeGate) -> Self {
+        Self {
+            allowed_signers: PathBuf::new(),
+            merge_gate: Some(gate),
+        }
+    }
+
+    /// The gate `project`'s request goes through on this host, chosen from
+    /// HOST state only (never from the forge's environment or request): when
+    /// the project's git mirror answers, the merge gate over its default
+    /// branch, with GitHub's confirmation required; a mirror that answers
+    /// but whose default branch cannot be resolved REFUSES (never a fall
+    /// back). With no mirror, the SSHSIG gate, where an unsigned record
+    /// admits nothing.
+    pub fn for_project_host(project: &str) -> Result<Self, String> {
+        let probe = git_out(
+            &GitSource::Mirror(project.to_string()),
+            &["rev-parse", "--is-bare-repository"],
+        );
+        match probe {
+            Ok(_) => Ok(Self {
+                merge_gate: Some(MergeGate::for_mirror(project)?),
+                ..Self::for_host()
+            }),
+            Err(_) => Ok(Self::for_host()),
+        }
+    }
+
+    /// The host's enrolled signers: `<approval state dir>/allowed_signers`.
+    /// No variable overrides this file (2083-nfne): an override let any
+    /// caller point the gate at signers it wrote itself.
     pub fn for_host() -> Self {
-        let p = std::env::var_os("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                tillandsias_core::config::state_dir()
-                    .join("approvals")
-                    .join("allowed_signers")
-            });
-        Self::new(&p)
+        Self::new(&crate::approval::state_dir().join("allowed_signers"))
     }
 
     pub fn verify(&self, statement: &str, armored: &str, principal: &str) -> Result<(), String> {
@@ -934,6 +1190,329 @@ impl Verifier {
     }
 }
 
+// ---------------------------------------------------------------------------
+// The merge gate (order 2094-h3rq)
+// ---------------------------------------------------------------------------
+
+/// Where acknowledgement records live inside a project repo.
+pub const ACK_REPO_DIR: &str = "licences/acknowledgements";
+
+/// The head-branch prefix the accept-licence skill opens its PRs from.
+pub const LICENCE_HEAD_PREFIX: &str = "licences/";
+
+/// The approval behind an admitted record when the gate is the merge gate:
+/// a human merged the project's `licences/<id>` pull request into the default
+/// branch. Everything but `merged_by` is read from the repo, offline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MergeEvidence {
+    pub pr: u64,
+    pub merge_sha: String,
+    /// The merge commit's committer date (GitHub writes it at merge time).
+    pub merged_at: String,
+    /// Only from the online check (`gh api .../pulls/<n>`). `None` offline:
+    /// git does not carry who pressed Merge, and the gate never guesses.
+    pub merged_by: Option<String>,
+    /// `offline`, `online-confirmed`, or `online-unavailable: <why>`.
+    pub check: String,
+}
+
+/// The merge gate: admits only a record present on `default_ref` of `repo`
+/// (the project's checkout or mirror clone) that arrived there in a GitHub
+/// pull-request merge and is unchanged since. A record only in the working
+/// tree, or only on an unmerged branch, admits nothing.
+#[derive(Debug, Clone)]
+pub struct MergeGate {
+    pub repo: GitSource,
+    /// e.g. `origin/main`, or `main` in the bare mirror.
+    pub default_ref: String,
+    /// `owner/name` for the online check.
+    pub github_repo: Option<String>,
+    pub online: Online,
+}
+
+/// Where the merge gate reads git. HOST-SIDE ONLY: nothing a forge sends or
+/// sets chooses it (no environment variable; order 2094-h3rq, coordinator
+/// ruling 2026-11-17).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitSource {
+    /// A repository on this host's filesystem (fixtures, a host checkout).
+    Local(PathBuf),
+    /// The project's git mirror, `tillandsias-git-<project>` at
+    /// `/srv/git/<project>`, reached through the host's podman.
+    Mirror(String),
+}
+
+/// How the gate uses the GitHub API.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Online {
+    /// Offline evidence only; merged_by unknown.
+    Off,
+    /// Confirm when reachable; unreachable leaves the offline evidence,
+    /// labelled `online-unavailable`.
+    Optional,
+    /// Admit nothing without GitHub's confirmation. The mirror accepts forge
+    /// pushes (relayed to GitHub), and a forge can push a commit that LOOKS
+    /// like a GitHub merge (committer name and a gpgsig header are just
+    /// bytes; nothing here verifies GitHub's key), so a mirror-read record
+    /// needs GitHub to say the PR merged at that sha.
+    Required,
+}
+
+fn git_out(src: &GitSource, args: &[&str]) -> Result<String, String> {
+    match src {
+        GitSource::Local(repo) => {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(repo)
+                .args(args)
+                .stdin(Stdio::null())
+                .output()
+                .map_err(|e| format!("git: {e}"))?;
+            if !out.status.success() {
+                return Err(format!(
+                    "git {}: {}",
+                    args.join(" "),
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ));
+            }
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        }
+        GitSource::Mirror(project) => {
+            let mut c = crate::podman_command();
+            c.args(mirror_git_argv(project, args));
+            crate::podman_command_output(c, false)
+                .map_err(|e| format!("mirror git {}: {e}", args.join(" ")))
+        }
+    }
+}
+
+/// `owner/name` from the source's `origin` URL when it is GitHub.
+fn github_repo_of(src: &GitSource) -> Option<String> {
+    let url = git_out(src, &["remote", "get-url", "origin"]).ok()?;
+    url.trim()
+        .trim_end_matches(".git")
+        .split_once("github.com")
+        .map(|(_, r)| r.trim_start_matches([':', '/']).to_string())
+        .filter(|r| r.split('/').count() == 2)
+}
+
+/// The podman argv that runs `git <args>` in `project`'s mirror.
+pub fn mirror_git_argv(project: &str, args: &[&str]) -> Vec<String> {
+    let mut v = vec![
+        "exec".to_string(),
+        format!("tillandsias-git-{project}"),
+        "git".to_string(),
+        "-C".to_string(),
+        format!("/srv/git/{project}"),
+    ];
+    v.extend(args.iter().map(|a| a.to_string()));
+    v
+}
+
+/// `#123` from `Merge pull request #123 from owner/licences/x` (a merge
+/// commit, whose head must be a licences/ branch) or from a squash subject
+/// ending `(#123)`.
+fn pr_from_subject(subject: &str, parents: usize) -> Option<u64> {
+    if parents == 2 {
+        let rest = subject.strip_prefix("Merge pull request #")?;
+        let (num, from) = rest.split_once(" from ")?;
+        let (_owner, head) = from.split_once('/')?;
+        if !head.starts_with(LICENCE_HEAD_PREFIX) {
+            return None;
+        }
+        return num.parse().ok();
+    }
+    if parents == 1 {
+        let s = subject.trim_end();
+        let inner = s.strip_suffix(')')?;
+        let idx = inner.rfind("(#")?;
+        return inner[idx + 2..].parse().ok();
+    }
+    None
+}
+
+impl MergeGate {
+    /// `repo` with its default branch resolved from `origin/HEAD`, and the
+    /// GitHub `owner/name` read from the `origin` URL when it is GitHub.
+    pub fn for_repo(repo: &Path) -> Result<Self, String> {
+        let src = GitSource::Local(repo.to_path_buf());
+        let head = git_out(
+            &src,
+            &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+        )
+        .map_err(|e| format!("cannot resolve the default branch (origin/HEAD): {e}"))?;
+        let online = if std::env::var_os("TILLANDSIAS_LICENCE_ACK_ONLINE").is_some() {
+            Online::Optional
+        } else {
+            Online::Off
+        };
+        Ok(Self {
+            github_repo: github_repo_of(&src),
+            repo: src,
+            default_ref: head.trim().to_string(),
+            online,
+        })
+    }
+
+    /// `project`'s git mirror: a bare repository whose `HEAD` is the default
+    /// branch. Online confirmation is REQUIRED (see [`Online::Required`]).
+    pub fn for_mirror(project: &str) -> Result<Self, String> {
+        let src = GitSource::Mirror(project.to_string());
+        let head = git_out(&src, &["symbolic-ref", "--short", "HEAD"])
+            .map_err(|e| format!("cannot resolve the mirror's default branch: {e}"))?;
+        Ok(Self {
+            github_repo: github_repo_of(&src),
+            repo: src,
+            default_ref: head.trim().to_string(),
+            online: Online::Required,
+        })
+    }
+
+    /// Every record on the default branch (NOT the working tree).
+    pub fn records(&self) -> Vec<(String, Acknowledgement)> {
+        let mut out = Vec::new();
+        let Ok(list) = git_out(
+            &self.repo,
+            &[
+                "ls-tree",
+                "--name-only",
+                &format!("{}:{ACK_REPO_DIR}", self.default_ref),
+            ],
+        ) else {
+            return out;
+        };
+        for name in list.lines() {
+            let Some(slug) = name.strip_suffix(".yaml") else {
+                continue;
+            };
+            let spec = format!("{}:{ACK_REPO_DIR}/{name}", self.default_ref);
+            if let Ok(text) = git_out(&self.repo, &["show", &spec])
+                && let Ok(a) = Acknowledgement::from_yaml(&text)
+            {
+                out.push((slug.to_string(), a));
+            }
+        }
+        out
+    }
+
+    /// The evidence that `slug`'s record reached the default branch through a
+    /// GitHub PR merge, or why it did not.
+    pub fn evidence(&self, slug: &str) -> Result<MergeEvidence, String> {
+        let path = format!("{ACK_REPO_DIR}/{slug}.yaml");
+        let log = git_out(
+            &self.repo,
+            &[
+                "log",
+                "--first-parent",
+                "--diff-filter=AM",
+                "-n1",
+                "--format=%H%x00%P%x00%cn%x00%ce%x00%cI%x00%s",
+                &self.default_ref,
+                "--",
+                &path,
+            ],
+        )?;
+        let line = log.trim_end_matches('\n');
+        if line.is_empty() {
+            return Err(format!(
+                "{path} is not on the default branch {}: an unmerged pull request admits nothing",
+                self.default_ref
+            ));
+        }
+        let f: Vec<&str> = line.split('\0').collect();
+        if f.len() != 6 {
+            return Err(format!("unreadable git log line for {path}"));
+        }
+        let (sha, parents, cn, ce, date, subject) = (f[0], f[1], f[2], f[3], f[4], f[5]);
+        let nparents = parents.split_whitespace().count();
+        if cn != "GitHub" || ce != "noreply@github.com" {
+            return Err(format!(
+                "{path} last changed on {} in {sha} committed by {cn} <{ce}>, not by a GitHub pull-request merge",
+                self.default_ref
+            ));
+        }
+        let raw = git_out(&self.repo, &["cat-file", "commit", sha])?;
+        if !raw.lines().any(|l| l.starts_with("gpgsig ")) {
+            return Err(format!(
+                "{sha} claims GitHub as committer but carries no GitHub signature"
+            ));
+        }
+        let Some(pr) = pr_from_subject(subject, nparents) else {
+            return Err(format!(
+                "{sha} is not a merge of a {LICENCE_HEAD_PREFIX} pull request (subject {subject:?})"
+            ));
+        };
+        let mut ev = MergeEvidence {
+            pr,
+            merge_sha: sha.to_string(),
+            merged_at: date.to_string(),
+            merged_by: None,
+            check: "offline".into(),
+        };
+        if self.online == Online::Off {
+            return Ok(ev);
+        }
+        let Some(gh) = &self.github_repo else {
+            return match self.online {
+                Online::Required => Err(format!(
+                    "{sha}: GitHub must confirm PR #{pr}, and the repo names no GitHub origin"
+                )),
+                _ => {
+                    ev.check = "online-unavailable: no GitHub origin".into();
+                    Ok(ev)
+                }
+            };
+        };
+        {
+            match online_pr(gh, pr) {
+                Ok((merged, merge_sha, by)) => {
+                    if !merged || merge_sha != ev.merge_sha {
+                        return Err(format!(
+                            "GitHub says PR #{pr} merged={merged} merge_commit_sha={merge_sha}, not {}",
+                            ev.merge_sha
+                        ));
+                    }
+                    ev.merged_by = Some(by);
+                    ev.check = "online-confirmed".into();
+                }
+                // No network is not a pass and not a refusal: the offline
+                // evidence stands, labelled, and merged_by stays unknown.
+                Err(e) if self.online == Online::Required => {
+                    return Err(format!(
+                        "GitHub could not confirm PR #{pr} ({e}); a mirror-read record admits only with that confirmation, retry when GitHub is reachable"
+                    ));
+                }
+                Err(e) => ev.check = format!("online-unavailable: {e}"),
+            }
+        }
+        Ok(ev)
+    }
+}
+
+/// `(merged, merge_commit_sha, merged_by)` for PR `n` of `owner/name`, read
+/// through `gh api` (a read; never a merge).
+fn online_pr(github_repo: &str, n: u64) -> Result<(bool, String, String), String> {
+    let out = Command::new("gh")
+        .args([
+            "api",
+            &format!("repos/{github_repo}/pulls/{n}"),
+            "--jq",
+            "[.merged, .merge_commit_sha, (.merged_by.login // \"\")] | @tsv",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("gh: {e}"))?;
+    if !out.status.success() {
+        return Err(String::from_utf8_lossy(&out.stderr).trim().to_string());
+    }
+    let s = String::from_utf8_lossy(&out.stdout);
+    let f: Vec<&str> = s.trim_end().split('\t').collect();
+    if f.len() != 3 {
+        return Err(format!("unexpected gh api output {s:?}"));
+    }
+    Ok((f[0] == "true", f[1].to_string(), f[2].to_string()))
+}
+
 /// What an admitted fetch carries into provenance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Admission {
@@ -942,6 +1521,8 @@ pub struct Admission {
     pub acknowledged_by: Option<String>,
     pub acknowledgement_slug: Option<String>,
     pub obligations: Vec<ObligationClass>,
+    /// The merge that approved the record, under the merge gate.
+    pub merge: Option<MergeEvidence>,
 }
 
 /// Read every `*.yaml` under `dir` that parses as an acknowledgement.
@@ -1008,23 +1589,31 @@ pub fn register_admits_with_consent_in(
                 acknowledged_by: None,
                 acknowledgement_slug: None,
                 obligations: Vec::new(),
+                merge: None,
             });
         }
         Err(e) => e,
     };
     let rows = parse_restricted(restricted_register)?;
-    let Some(r) = find_restricted(&rows, &row.repo, &row.revision, &row.file, &row.sha256) else {
+    let matched = find_restricted(&rows, &row.repo, &row.revision, &row.file, &row.sha256);
+    if matched.is_empty() {
         return Err(format!(
             "{permissive_err}; nor in images/models/licence-register-restricted.tsv"
         ));
-    };
-    admit_restricted_row(
-        r,
-        &row.label(),
-        project_ack_dir,
-        &[requester_scope],
-        verifier,
-    )
+    }
+    // Every licence the file is registered under must admit it (2094-h3rq).
+    let mut first = None;
+    for r in matched {
+        let a = admit_restricted_row(
+            r,
+            &row.label(),
+            project_ack_dir,
+            &[requester_scope],
+            verifier,
+        )?;
+        first.get_or_insert(a);
+    }
+    Ok(first.expect("matched is non-empty"))
 }
 
 fn find_restricted<'a>(
@@ -1033,13 +1622,15 @@ fn find_restricted<'a>(
     revision: &str,
     file: &str,
     sha256: &str,
-) -> Option<&'a RestrictedRow> {
-    rows.iter().find(|r| {
-        r.repo == repo
-            && r.revision == revision
-            && r.file == file
-            && r.sha256.eq_ignore_ascii_case(sha256)
-    })
+) -> Vec<&'a RestrictedRow> {
+    rows.iter()
+        .filter(|r| {
+            r.repo == repo
+                && r.revision == revision
+                && r.file == file
+                && r.sha256.eq_ignore_ascii_case(sha256)
+        })
+        .collect()
 }
 
 /// The D6 gate for one restricted row: not gated, not forbidden outright, its
@@ -1072,7 +1663,21 @@ fn admit_restricted_row(
     }
     let now = chrono::Utc::now();
     let mut reasons: Vec<String> = Vec::new();
-    for (slug, ack) in read_acknowledgements(project_ack_dir) {
+    // Under the merge gate the MERGED records come from the default branch,
+    // never from the working tree (order 2094-h3rq). Signed records in the
+    // project dir still verify by their SSHSIG against the host's enrolled
+    // signers: the signature gate is replaced only for unsigned records, and
+    // an unsigned record outside the default branch admits nothing.
+    let mut records: Vec<(String, Acknowledgement, bool)> = Vec::new();
+    if let Some(g) = &verifier.merge_gate {
+        records.extend(g.records().into_iter().map(|(s, a)| (s, a, true)));
+    }
+    records.extend(
+        read_acknowledgements(project_ack_dir)
+            .into_iter()
+            .map(|(s, a)| (s, a, false)),
+    );
+    for (slug, ack, merged) in records {
         if !ack.covers.iter().any(|c| c == &r.repo) {
             continue;
         }
@@ -1098,13 +1703,25 @@ fn admit_restricted_row(
             reasons.push(format!("{slug}: expired at {}", ack.expiry));
             continue;
         }
-        match verifier.verify(&ack.statement_text(), &ack.signature, &ack.grantor) {
-            Ok(()) => {
+        let approved = match (&verifier.merge_gate, merged) {
+            (Some(g), true) => g.evidence(&slug).map(Some),
+            _ => verifier
+                .verify(&ack.statement_text(), &ack.signature, &ack.grantor)
+                .map(|()| None),
+        };
+        match approved {
+            Ok(merge) => {
                 return Ok(Admission {
                     licence: r.spdx.clone(),
-                    acknowledged_by: Some(ack.grantor.clone()),
+                    acknowledged_by: Some(
+                        merge
+                            .as_ref()
+                            .and_then(|m| m.merged_by.clone())
+                            .unwrap_or_else(|| ack.grantor.clone()),
+                    ),
                     acknowledgement_slug: Some(slug),
                     obligations: r.obligations.clone(),
+                    merge,
                 });
             }
             Err(e) => reasons.push(format!("{slug}: {e}")),
@@ -1165,12 +1782,15 @@ pub fn admits_restricted(
     project: &str,
     artefacts: &[RestrictedArtefact],
 ) -> Result<Vec<String>, String> {
+    let verifier = Verifier::for_project_host(project).map_err(|e| {
+        format!("consent_required: {project}: the licence gate cannot read its repo: {e}")
+    })?;
     admits_restricted_in(
         RESTRICTED_REGISTER_TSV,
         project,
         artefacts,
         &project_acknowledgement_dir(project),
-        &Verifier::for_host(),
+        &verifier,
     )
 }
 
@@ -1231,25 +1851,40 @@ pub fn admit_artefacts_in(
     let mut ids = Vec::with_capacity(artefacts.len());
     for a in artefacts {
         let label = format!("{}@{} {}", a.repo, a.revision, a.file);
-        let Some(r) = find_restricted(&rows, &a.repo, &a.revision, &a.file, &a.sha256) else {
+        let matched = find_restricted(&rows, &a.repo, &a.revision, &a.file, &a.sha256);
+        if matched.is_empty() {
             return Err(GateRefusal::Unmatched(format!(
                 "{label} (sha256 {}) is not in images/models/licence-register-restricted.tsv; nothing was fetched or queued",
                 a.sha256
             )));
-        };
-        if !r.spdx.eq_ignore_ascii_case(&a.licence) {
+        }
+        if !matched
+            .iter()
+            .any(|r| r.spdx.eq_ignore_ascii_case(&a.licence))
+        {
             return Err(GateRefusal::Unmatched(format!(
                 "{label} is registered under licence {} but the job names {}; nothing was fetched or queued",
-                r.spdx, a.licence
+                matched
+                    .iter()
+                    .map(|r| r.spdx.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" + "),
+                a.licence
             )));
         }
-        let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
-            .map_err(GateRefusal::Row)?;
-        ids.push(
-            admitted
-                .acknowledgement_slug
-                .unwrap_or_else(|| "permissive".to_string()),
-        );
+        // A file under several licences (Higgs v2: Boson, Llama 3, its AUP)
+        // is admitted only when EVERY one is acknowledged (2094-h3rq).
+        let mut slugs = Vec::with_capacity(matched.len());
+        for r in matched {
+            let admitted = admit_restricted_row(r, &label, project_ack_dir, &scopes, verifier)
+                .map_err(GateRefusal::Row)?;
+            slugs.push(
+                admitted
+                    .acknowledgement_slug
+                    .unwrap_or_else(|| "permissive".to_string()),
+            );
+        }
+        ids.push(slugs.join("+"));
     }
     Ok(ids)
 }
@@ -1352,6 +1987,779 @@ pub(crate) mod tests {
 
     /// 1954-dvz9's named test: the same non-commercial row is refused without
     /// an acknowledgement in the project and admitted with a signed one.
+    fn git(repo: &Path, committer: (&str, &str), args: &[&str]) -> String {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args([
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "init.defaultBranch=main",
+            ])
+            .args(args)
+            .env("GIT_AUTHOR_NAME", "owner")
+            .env("GIT_AUTHOR_EMAIL", "owner@example.invalid")
+            .env("GIT_COMMITTER_NAME", committer.0)
+            .env("GIT_COMMITTER_EMAIL", committer.1)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .expect("git");
+        assert!(
+            out.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    const OWNER: (&str, &str) = ("owner", "owner@example.invalid");
+    const WEB_FLOW: (&str, &str) = ("GitHub", "noreply@github.com");
+
+    /// A merge commit of `head` into `origin/main` with `committer`, signed
+    /// (a gpgsig header, as GitHub's web-flow writes) when `signed`.
+    fn merge_into_main(
+        repo: &Path,
+        head: &str,
+        subject: &str,
+        committer: (&str, &str),
+        signed: bool,
+    ) {
+        let tree = git(repo, OWNER, &["rev-parse", &format!("{head}^{{tree}}")]);
+        let base = git(repo, OWNER, &["rev-parse", "refs/remotes/origin/main"]);
+        let tip = git(repo, OWNER, &["rev-parse", head]);
+        let c = git(
+            repo,
+            committer,
+            &["commit-tree", &tree, "-p", &base, "-p", &tip, "-m", subject],
+        );
+        let sha = if signed {
+            let raw = git(repo, OWNER, &["cat-file", "commit", &c]);
+            let (hdr, body) = raw.split_once("\n\n").unwrap();
+            let signed = format!(
+                "{hdr}\ngpgsig -----BEGIN PGP SIGNATURE-----\n \n wsBcBAABCAAQBQJfixture\n -----END PGP SIGNATURE-----\n\n{body}\n"
+            );
+            let p = repo.join(".git").join("signed-commit");
+            fs::write(&p, signed).unwrap();
+            git(
+                repo,
+                OWNER,
+                &["hash-object", "-t", "commit", "-w", p.to_str().unwrap()],
+            )
+        } else {
+            c
+        };
+        git(
+            repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", &sha],
+        );
+    }
+
+    /// ORDER 2094-h3rq: the merge gate admits a record only once a GitHub
+    /// pull-request merge put it on the default branch. Every record here is
+    /// UNSIGNED, so nothing but the merge can be what admits it.
+    #[test]
+    fn the_merge_gate_admits_only_a_record_merged_into_the_default_branch() {
+        let dir = disk_scratch("merge");
+        let repo = dir.join("project");
+        fs::create_dir_all(&repo).unwrap();
+        git(&repo, OWNER, &["init", "-q"]);
+        fs::write(repo.join("README"), "demo\n").unwrap();
+        git(&repo, OWNER, &["add", "README"]);
+        git(&repo, OWNER, &["commit", "-qm", "base"]);
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let base = git(&repo, OWNER, &["rev-parse", "refs/remotes/origin/main"]);
+        let reset = || {
+            git(
+                &repo,
+                OWNER,
+                &["update-ref", "refs/remotes/origin/main", &base],
+            )
+        };
+        let gate = MergeGate::for_repo(&repo).unwrap();
+        assert_eq!(gate.default_ref, "origin/main");
+        let verifier = Verifier::merged(gate);
+        let row = nc_row();
+        let ack = nc_ack("project:demo");
+        assert!(ack.signature.is_empty());
+        let admit = || {
+            register_admits_with_consent_in(
+                crate::imagegen_models::register_tsv(),
+                RESTRICTED,
+                &row,
+                // The project dir holds the record too: it must not count.
+                &repo.join(ACK_REPO_DIR),
+                "project:demo",
+                &verifier,
+            )
+        };
+
+        // The PR branch carries the record; the working tree has it checked out.
+        git(
+            &repo,
+            OWNER,
+            &["checkout", "-qb", "licences/cc-by-nc-sa-4.0"],
+        );
+        fs::create_dir_all(repo.join(ACK_REPO_DIR)).unwrap();
+        let rel = format!("{ACK_REPO_DIR}/{}.yaml", ack.slug());
+        fs::write(repo.join(&rel), ack.to_yaml()).unwrap();
+        git(&repo, OWNER, &["add", &rel]);
+        git(&repo, OWNER, &["commit", "-qm", "licence: cc-by-nc-sa-4.0"]);
+
+        // An open, unmerged PR admits nothing, though the file is right there.
+        let err = admit().unwrap_err();
+        assert!(err.contains("licence_acknowledgement_required"), "{err}");
+
+        // A merge an agent made and pushed (land-queue shape) is not a GitHub merge.
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #7 from o/licences/cc-by-nc-sa-4.0",
+            ("land-queue", "land-queue@localhost"),
+            false,
+        );
+        let err = admit().unwrap_err();
+        assert!(err.contains("not by a GitHub pull-request merge"), "{err}");
+
+        // GitHub's committer without GitHub's signature is a forgery.
+        reset();
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #7 from o/licences/cc-by-nc-sa-4.0",
+            WEB_FLOW,
+            false,
+        );
+        let err = admit().unwrap_err();
+        assert!(err.contains("no GitHub signature"), "{err}");
+
+        // The web-UI merge admits it, with the evidence.
+        reset();
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #7 from o/licences/cc-by-nc-sa-4.0",
+            WEB_FLOW,
+            true,
+        );
+        let ok = admit().unwrap();
+        let m = ok.merge.clone().expect("merge evidence");
+        assert_eq!(m.pr, 7);
+        assert_eq!(
+            m.merge_sha,
+            git(&repo, OWNER, &["rev-parse", "refs/remotes/origin/main"])
+        );
+        assert!(!m.merged_at.is_empty());
+        // Offline, who pressed Merge is unknown, never guessed.
+        assert_eq!(m.merged_by, None);
+        assert_eq!(m.check, "offline");
+
+        // The mirror's gate REQUIRES GitHub's confirmation: without it the
+        // same structurally perfect merge admits nothing (a forge can push
+        // bytes that look like a GitHub merge).
+        let strict = Verifier::merged(MergeGate {
+            online: Online::Required,
+            github_repo: None,
+            ..MergeGate::for_repo(&repo).unwrap()
+        });
+        let err = register_admits_with_consent_in(
+            crate::imagegen_models::register_tsv(),
+            RESTRICTED,
+            &row,
+            &repo.join(ACK_REPO_DIR),
+            "project:demo",
+            &strict,
+        )
+        .unwrap_err();
+        assert!(err.contains("GitHub must confirm"), "{err}");
+
+        // Edited on the default branch after the merge: the merge no longer
+        // vouches for these bytes.
+        git(
+            &repo,
+            OWNER,
+            &["checkout", "-q", "--detach", "refs/remotes/origin/main"],
+        );
+        let mut edited = nc_ack("project:demo");
+        edited.r#use = "commercial".into();
+        fs::write(repo.join(&rel), edited.to_yaml()).unwrap();
+        git(&repo, OWNER, &["commit", "-qam", "widen use"]);
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        let err = admit().unwrap_err();
+        assert!(err.contains("not by a GitHub pull-request merge"), "{err}");
+    }
+
+    #[test]
+    fn the_licence_pr_quotes_the_pinned_text_and_refuses_other_bytes() {
+        use sha2::Digest as _;
+        let text = b"LICENCE TEXT\nline two\n";
+        let mut ack = nc_ack("project:demo");
+        ack.licence_sha256 = format!("{:x}", sha2::Sha256::digest(text));
+        let obl = obligations_for(&ack.licence);
+        let promises = vec!["I will not sell anything made with it.".to_string()];
+        let pr = licence_pr(
+            &ack,
+            "fixture/nc-weights",
+            text,
+            "https://example.invalid/l",
+            &obl,
+            &promises,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(pr.head, "licences/cc-by-nc-sa-4-0--fixture-nc-weights");
+        assert!(
+            pr.body
+                .contains("Pressing Merge on this pull request is your acceptance")
+        );
+        assert!(pr.body.contains("LICENCE TEXT\nline two\n"));
+        assert!(pr.body.contains(&ack.licence_sha256));
+        let (rec_path, rec) = &pr.files[0];
+        assert_eq!(rec_path, &format!("{ACK_REPO_DIR}/{}.yaml", ack.slug()));
+        assert_eq!(Acknowledgement::from_yaml(rec).unwrap(), ack);
+        assert_eq!(pr.files[2].1.as_bytes(), text);
+        let err = licence_pr(
+            &ack,
+            "x",
+            b"LICENCE TEXT\nline 2\n",
+            "u",
+            &obl,
+            &promises,
+            &[],
+        )
+        .unwrap_err();
+        assert!(err.contains("not the pinned"), "{err}");
+        // An incorporated text is pinned too: other bytes render nothing.
+        let inc_text = b"INCORPORATED\n";
+        let inc_sha = format!("{:x}", sha2::Sha256::digest(inc_text));
+        let inc = IncorporatedText {
+            id: "meta-llama-3-community",
+            url: "https://example.invalid/llama",
+            sha256: &inc_sha,
+            text: inc_text,
+        };
+        let pr = licence_pr(&ack, "x", text, "u", &obl, &promises, &[inc]).unwrap();
+        assert!(pr.body.contains("### Incorporated by reference"));
+        assert!(pr.body.contains("INCORPORATED\n"));
+        assert_eq!(pr.files[3].0, "licences/texts/meta-llama-3-community.md");
+        let bad = IncorporatedText {
+            text: b"OTHER\n",
+            ..inc
+        };
+        let err = licence_pr(&ack, "x", text, "u", &obl, &promises, &[bad]).unwrap_err();
+        assert!(err.contains("incorporated text"), "{err}");
+    }
+
+    /// The skill's DRY RUN: render a licence PR to a local dir, opening
+    /// nothing. Inputs from the environment (TILLANDSIAS_LICENCE_PR_DRY_RUN=
+    /// <out dir>, plus _TEXT, _URL, _LICENCE, _REPO, _SCOPE, _HOST, _PROMISES
+    /// as lines). Run: cargo test -p tillandsias-headless --features
+    /// host-services licence_pr_dry_run -- --ignored
+    #[test]
+    #[ignore = "a renderer driven by env, not a check"]
+    fn licence_pr_dry_run() {
+        use sha2::Digest as _;
+        let env = |k: &str| std::env::var(format!("TILLANDSIAS_LICENCE_PR_DRY_RUN{k}")).unwrap();
+        let out = PathBuf::from(env(""));
+        let text = fs::read(env("_TEXT")).unwrap();
+        let ack = Acknowledgement {
+            licence: env("_LICENCE"),
+            licence_sha256: format!("{:x}", sha2::Sha256::digest(&text)),
+            covers: vec![env("_REPO")],
+            grantor: "project-owner".into(),
+            scope: env("_SCOPE"),
+            r#use: "non-sale".into(),
+            expiry: "standing".into(),
+            signed_at: chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string(),
+            strength: "github-merge".into(),
+            host: env("_HOST"),
+            signature: String::new(),
+        };
+        let promises: Vec<String> = env("_PROMISES").lines().map(str::to_string).collect();
+        let obl = obligations_for(&ack.licence);
+        // _INCORPORATED (optional): lines `<id>|<url>|<path>`.
+        let inc_raw: Vec<(String, String, Vec<u8>, String)> =
+            std::env::var("TILLANDSIAS_LICENCE_PR_DRY_RUN_INCORPORATED")
+                .unwrap_or_default()
+                .lines()
+                .filter(|l| !l.trim().is_empty())
+                .map(|l| {
+                    let mut it = l.splitn(3, '|');
+                    let id = it.next().unwrap().to_string();
+                    let url = it.next().unwrap().to_string();
+                    let bytes = fs::read(it.next().unwrap()).unwrap();
+                    let sha = format!("{:x}", sha2::Sha256::digest(&bytes));
+                    (id, url, bytes, sha)
+                })
+                .collect();
+        let inc: Vec<IncorporatedText> = inc_raw
+            .iter()
+            .map(|(id, url, bytes, sha)| IncorporatedText {
+                id,
+                url,
+                sha256: sha,
+                text: bytes,
+            })
+            .collect();
+        let pr = licence_pr(
+            &ack,
+            &env("_REPO"),
+            &text,
+            &env("_URL"),
+            &obl,
+            &promises,
+            &inc,
+        )
+        .unwrap();
+        for (p, c) in &pr.files {
+            let dst = out.join("files").join(p);
+            fs::create_dir_all(dst.parent().unwrap()).unwrap();
+            fs::write(dst, c).unwrap();
+        }
+        fs::write(out.join("pr-body.md"), &pr.body).unwrap();
+        fs::write(
+            out.join("pr-meta.txt"),
+            format!(
+                "head: {}\nbase: <default branch>\ntitle: {}\n",
+                pr.head, pr.title
+            ),
+        )
+        .unwrap();
+    }
+
+    /// The merge gate replaces the signature only for unsigned records: a
+    /// SIGNED record in the project dir (the demucs shape) still admits by
+    /// its SSHSIG when the project has a mirror.
+    #[test]
+    fn a_signed_record_still_admits_under_the_merge_gate() {
+        let dir = disk_scratch("merge-signed");
+        let (key, signers) = enrol(&dir, "operator");
+        let repo = dir.join("project");
+        fs::create_dir_all(&repo).unwrap();
+        git(&repo, OWNER, &["init", "-q"]);
+        git(
+            &repo,
+            OWNER,
+            &["commit", "-q", "--allow-empty", "-m", "base"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let verifier = Verifier {
+            allowed_signers: signers,
+            merge_gate: Some(MergeGate::for_repo(&repo).unwrap()),
+        };
+        let acks = dir.join("acks");
+        fs::create_dir_all(&acks).unwrap();
+        let unsigned = nc_ack("project:demo");
+        fs::write(acks.join("unsigned.yaml"), unsigned.to_yaml()).unwrap();
+        let admit = || {
+            register_admits_with_consent_in(
+                crate::imagegen_models::register_tsv(),
+                RESTRICTED,
+                &nc_row(),
+                &acks,
+                "project:demo",
+                &verifier,
+            )
+        };
+        assert!(admit().is_err(), "an unsigned, unmerged record admitted");
+        let signed = sign(&dir, &key, nc_ack("project:demo"));
+        fs::write(acks.join("signed.yaml"), signed.to_yaml()).unwrap();
+        let ok = admit().unwrap();
+        assert_eq!(ok.acknowledgement_slug.as_deref(), Some("signed"));
+        assert_eq!(ok.merge, None);
+    }
+
+    /// The gate's source is host state only: no environment variable a forge
+    /// could carry picks the repo, and the mirror is reached by podman exec.
+    #[test]
+    fn the_merge_gate_source_is_host_side_only() {
+        let src = include_str!("licence_consent.rs");
+        let var = concat!("TILLANDSIAS_LICENCE_", "ACK_REPO");
+        assert!(!src.contains(var), "{var} is read again");
+        assert_eq!(
+            mirror_git_argv("demon_attack", &["symbolic-ref", "--short", "HEAD"]),
+            [
+                "exec",
+                "tillandsias-git-demon_attack",
+                "git",
+                "-C",
+                "/srv/git/demon_attack",
+                "symbolic-ref",
+                "--short",
+                "HEAD"
+            ]
+        );
+    }
+
+    /// 2094-h3rq: demon_attack's licences are registered, pinned, classified
+    /// from their text, and admissible with an acknowledgement (neither is
+    /// research-only: Fish grants non-commercial use, Higgs is a community
+    /// licence with a user threshold).
+    #[test]
+    fn fish_s2_pro_and_higgs_v2_are_registered_and_classified() {
+        let rows = parse_restricted(restricted_register_tsv()).unwrap();
+        let higgs = &["higgs-audio-v2", "higgs-audio-v2-tokenizer"][..];
+        for (id, hash, names) in [
+            (
+                "fish-audio-research-license-2026-03-07",
+                "aa7d9206e9d710590987a3636934f643529c00cd490323594e6206aaa0c32d80",
+                &["fish-s2-pro", "fish-s2-pro-codec"][..],
+            ),
+            (
+                "boson-higgs-audio-2-community",
+                "8b2e018eeb3967a4636ccc57528440b33c14dd6e02ad67571fc7759489dde9a0",
+                higgs,
+            ),
+            (
+                "meta-llama-3-community",
+                "4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f",
+                higgs,
+            ),
+            (
+                "meta-llama-3-acceptable-use-policy",
+                "716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c",
+                higgs,
+            ),
+        ] {
+            assert!(forbidden_outright(id).is_none(), "{id}");
+            let table: Vec<Obligation> = obligations_for(id);
+            assert!(
+                table.iter().all(|o| !o.clause.is_empty()),
+                "{id}: every clause is quoted"
+            );
+            assert!(
+                !table.iter().any(|o| matches!(&o.class, ObligationClass::Review { clause } if clause.contains("not in the obligation table"))),
+                "{id} is not in the obligation table"
+            );
+            let classes: Vec<ObligationClass> = table.into_iter().map(|o| o.class).collect();
+            for n in names {
+                let mine: Vec<&RestrictedRow> = rows
+                    .iter()
+                    .filter(|r| r.name == *n && r.spdx == id)
+                    .collect();
+                assert!(!mine.is_empty(), "{n} not registered under {id}");
+                for r in mine {
+                    assert_eq!(r.licence_sha256, hash, "{n} {id}");
+                    assert_eq!(r.gated, "false");
+                    assert_eq!(
+                        ObligationClass::render_list(&r.obligations),
+                        ObligationClass::render_list(&classes),
+                        "{n} {id}: register cell and obligation table disagree"
+                    );
+                }
+            }
+        }
+        // Each Higgs file carries exactly the three licences.
+        for n in higgs {
+            let mut ids: Vec<&str> = rows
+                .iter()
+                .filter(|r| r.name == *n)
+                .map(|r| r.spdx.as_str())
+                .collect();
+            ids.sort();
+            assert_eq!(
+                ids,
+                [
+                    "boson-higgs-audio-2-community",
+                    "meta-llama-3-acceptable-use-policy",
+                    "meta-llama-3-community"
+                ],
+                "{n}"
+            );
+        }
+    }
+
+    /// A file under three licences is admitted only when all three records
+    /// are there: Boson alone, or Boson + Llama, admits nothing.
+    #[test]
+    fn a_higgs_file_needs_all_three_acknowledgements() {
+        let dir = disk_scratch("higgs3");
+        let (key, signers) = enrol(&dir, "operator");
+        let verifier = Verifier::new(&signers);
+        let acks = dir.join("acks");
+        fs::create_dir_all(&acks).unwrap();
+        let rows = parse_restricted(restricted_register_tsv()).unwrap();
+        let r = rows.iter().find(|r| r.name == "higgs-audio-v2").unwrap();
+        let art = RestrictedArtefact {
+            licence: "boson-higgs-audio-2-community".into(),
+            repo: r.repo.clone(),
+            revision: r.revision.clone(),
+            file: r.file.clone(),
+            sha256: r.sha256.clone(),
+        };
+        let mut want = Vec::new();
+        for (id, hash) in [
+            (
+                "boson-higgs-audio-2-community",
+                "8b2e018eeb3967a4636ccc57528440b33c14dd6e02ad67571fc7759489dde9a0",
+            ),
+            (
+                "meta-llama-3-community",
+                "4fa551d4f938f68b8c1e6afa9d28befb70e3f33f75d0753248d530364aeea40f",
+            ),
+            (
+                "meta-llama-3-acceptable-use-policy",
+                "716a6b46e9bc75220c7b78f27382f7d0b8ca4c95818661a0936c081708f87f7c",
+            ),
+        ] {
+            let err = admits_restricted_in(
+                restricted_register_tsv(),
+                "demon_attack",
+                std::slice::from_ref(&art),
+                &acks,
+                &verifier,
+            )
+            .unwrap_err();
+            assert!(err.contains(id), "{id} should be the one missing: {err}");
+            let mut a = nc_ack("project:demon_attack");
+            a.licence = id.into();
+            a.licence_sha256 = hash.into();
+            a.covers = vec![r.repo.clone()];
+            let a = sign(&dir, &key, a);
+            want.push(a.slug());
+            fs::write(acks.join(a.slug() + ".yaml"), a.to_yaml()).unwrap();
+        }
+        let ids = admits_restricted_in(
+            restricted_register_tsv(),
+            "demon_attack",
+            &[art],
+            &acks,
+            &verifier,
+        )
+        .unwrap();
+        assert_eq!(ids, vec![want.join("+")]);
+    }
+
+    /// The six records the operator merged in demon_attack (PRs #6, #7, #9,
+    /// #10, #11), their `licence` and `covers` exactly as merged: the Rust
+    /// slug names each file exactly as it is on demon_attack's main.
+    #[test]
+    fn slug_names_demon_attacks_merged_records_exactly() {
+        for (licence, covers, file) in [
+            (
+                "creativeml-openrail-plus-plus-m-sdxl",
+                "stabilityai/stable-diffusion-xl-base-1.0",
+                "creativeml-openrail-plus-plus-m-sdxl--stabilityai-stable-diffusion-xl-base-1-0.yaml",
+            ),
+            (
+                "creativeml-openrail-plus-plus-m-sdxl-lightning",
+                "ByteDance/SDXL-Lightning",
+                "creativeml-openrail-plus-plus-m-sdxl-lightning--bytedance-sdxl-lightning.yaml",
+            ),
+            (
+                "creativeml-openrail-m",
+                "LayerDiffusion/layerdiffusion-v1",
+                "creativeml-openrail-m--layerdiffusion-layerdiffusion-v1.yaml",
+            ),
+            (
+                "creativeml-openrail-m",
+                "nerijs/pixel-art-xl",
+                "creativeml-openrail-m--nerijs-pixel-art-xl.yaml",
+            ),
+            (
+                "meta-llama-3-community",
+                "bosonai/higgs-tts-2-3b-base",
+                "meta-llama-3-community--bosonai-higgs-tts-2-3b-base.yaml",
+            ),
+            (
+                "meta-llama-3-acceptable-use-policy",
+                "bosonai/higgs-tts-2-3b-base",
+                "meta-llama-3-acceptable-use-policy--bosonai-higgs-tts-2-3b-base.yaml",
+            ),
+        ] {
+            let mut a = nc_ack("project:demon_attack");
+            a.licence = licence.into();
+            a.covers = vec![covers.into()];
+            assert_eq!(format!("{}.yaml", a.slug()), file, "{licence} {covers}");
+        }
+    }
+
+    /// demon_attack #4/#6/#7 (coordinator, 2026-11-17): Higgs v2 needs three
+    /// licence texts on ONE repo, and records named after the artefact alone
+    /// wrote the same file, so the PRs conflicted and a web-UI resolution
+    /// would overwrite a record. The file name carries the licence id.
+    #[test]
+    fn two_licences_on_one_repo_get_two_record_files() {
+        let repo = "bosonai/higgs-tts-2-3b-base";
+        let mut a = nc_ack("project:demo");
+        a.covers = vec![repo.into()];
+        a.licence = "boson-higgs-audio-2-community".into();
+        let mut b = a.clone();
+        b.licence = "meta-llama-3-community".into();
+        assert_ne!(a.slug(), b.slug(), "two licences, one file");
+        assert_eq!(
+            a.slug(),
+            "boson-higgs-audio-2-community--bosonai-higgs-tts-2-3b-base"
+        );
+        // The multi-cover form carries the licence id too.
+        let mut m = a.clone();
+        m.covers.push("bosonai/higgs-audio-v2-tokenizer".into());
+        let mut n = m.clone();
+        n.licence = "meta-llama-3-community".into();
+        assert_ne!(m.slug(), n.slug());
+        assert!(m.slug().starts_with("boson-higgs-audio-2-community--"));
+        // And the PRs' record paths differ.
+        use sha2::Digest as _;
+        let path_of = |ack: &Acknowledgement| {
+            let mut ack = ack.clone();
+            ack.licence_sha256 = format!("{:x}", sha2::Sha256::digest(b"T"));
+            licence_pr(&ack, repo, b"T", "u", &[], &[], &[])
+                .unwrap()
+                .files[0]
+                .0
+                .clone()
+        };
+        assert_ne!(path_of(&a), path_of(&b));
+    }
+
+    /// The merge evidence keys on the FILE the default branch holds, not on
+    /// [`Acknowledgement::slug`]: records merged under the old artefact-only
+    /// name (demon_attack #4, #5) still admit after the rename.
+    #[test]
+    fn an_old_name_record_merged_before_the_rename_still_admits() {
+        let dir = disk_scratch("merge-oldname");
+        let repo = dir.join("project");
+        fs::create_dir_all(&repo).unwrap();
+        git(&repo, OWNER, &["init", "-q"]);
+        git(
+            &repo,
+            OWNER,
+            &["commit", "-q", "--allow-empty", "-m", "base"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+        git(
+            &repo,
+            OWNER,
+            &[
+                "symbolic-ref",
+                "refs/remotes/origin/HEAD",
+                "refs/remotes/origin/main",
+            ],
+        );
+        let ack = nc_ack("project:demo");
+        let old = "fixture-nc-weights";
+        assert_ne!(ack.slug(), old, "the premise: the name scheme changed");
+        git(
+            &repo,
+            OWNER,
+            &["checkout", "-qb", "licences/cc-by-nc-sa-4.0"],
+        );
+        fs::create_dir_all(repo.join(ACK_REPO_DIR)).unwrap();
+        let rel = format!("{ACK_REPO_DIR}/{old}.yaml");
+        fs::write(repo.join(&rel), ack.to_yaml()).unwrap();
+        git(&repo, OWNER, &["add", &rel]);
+        git(&repo, OWNER, &["commit", "-qm", "licence"]);
+        merge_into_main(
+            &repo,
+            "licences/cc-by-nc-sa-4.0",
+            "Merge pull request #4 from o/licences/cc-by-nc-sa-4.0",
+            WEB_FLOW,
+            true,
+        );
+        let ok = register_admits_with_consent_in(
+            crate::imagegen_models::register_tsv(),
+            RESTRICTED,
+            &nc_row(),
+            &dir.join("none"),
+            "project:demo",
+            &Verifier::merged(MergeGate::for_repo(&repo).unwrap()),
+        )
+        .unwrap();
+        assert_eq!(ok.acknowledgement_slug.as_deref(), Some(old));
+        assert_eq!(ok.merge.unwrap().pr, 4);
+    }
+
+    /// demon_attack #13-#15 (2026-11-17): the Higgs model and tokenizer share
+    /// three licences, and a head named after the licence alone collided with
+    /// the model PRs' branches. The head is `licences/<record file stem>`.
+    #[test]
+    fn two_artefacts_under_one_licence_get_two_head_branches() {
+        use sha2::Digest as _;
+        let text = b"T";
+        let pr_for = |repo: &str| {
+            let mut a = nc_ack("project:demon_attack");
+            a.licence = "meta-llama-3-community".into();
+            a.licence_sha256 = format!("{:x}", sha2::Sha256::digest(text));
+            a.covers = vec![repo.into()];
+            licence_pr(&a, repo, text, "u", &[], &[], &[]).unwrap()
+        };
+        let model = pr_for("bosonai/higgs-tts-2-3b-base");
+        let tok = pr_for("bosonai/higgs-audio-v2-tokenizer");
+        assert_ne!(
+            model.head, tok.head,
+            "one licence, two artefacts, one branch"
+        );
+        assert_eq!(
+            tok.head,
+            "licences/meta-llama-3-community--bosonai-higgs-audio-v2-tokenizer"
+        );
+        // The head names the record file, and keeps the licences/ prefix the
+        // merge gate requires of a merge commit's head.
+        let stem = tok.files[0]
+            .0
+            .trim_start_matches(&format!("{ACK_REPO_DIR}/"))
+            .trim_end_matches(".yaml")
+            .to_string();
+        assert_eq!(tok.head, format!("{LICENCE_HEAD_PREFIX}{stem}"));
+        assert_eq!(
+            pr_from_subject(
+                &format!("Merge pull request #13 from 8007342/{}", tok.head),
+                2
+            ),
+            Some(13)
+        );
+    }
+
+    #[test]
+    fn a_merge_commit_from_a_non_licences_head_is_not_a_licence_approval() {
+        assert_eq!(
+            pr_from_subject("Merge pull request #7 from o/licences/llama3", 2),
+            Some(7)
+        );
+        assert_eq!(
+            pr_from_subject("Merge pull request #7 from o/work/x", 2),
+            None
+        );
+        assert_eq!(pr_from_subject("licence: fish (#12)", 1), Some(12));
+        assert_eq!(pr_from_subject("licence: fish", 1), None);
+    }
+
     #[test]
     fn register_admits_nc_row_only_with_recorded_acknowledgement() {
         let dir = disk_scratch("nc");
@@ -1655,7 +3063,7 @@ pub(crate) mod tests {
         fs::write(&signers, "").unwrap();
         // SAFETY: tests in this module run in one process; the variable is
         // read back immediately and only names a path inside the scratch dir.
-        unsafe { std::env::set_var("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS", &signers) };
+        unsafe { std::env::set_var("TILLANDSIAS_APPROVAL_STATE_DIR", &dir) };
         let verifier = Verifier::for_host();
         assert_eq!(verifier.allowed_signers, signers);
         let permissive = ModelFile {
@@ -1727,11 +3135,17 @@ pub(crate) mod tests {
         // The yaml record round-trips, and the committed seeds are the four
         // records of acknowledgement #1, unsigned.
         let seeds = [
-            include_str!("../../../licences/acknowledgements/nikopueringer-corridorkey2-0.yaml"),
-            include_str!("../../../licences/acknowledgements/nvidia-c-radiov4-so400m.yaml"),
-            include_str!("../../../licences/acknowledgements/ruicheng-moge-2-vitb-normal.yaml"),
             include_str!(
-                "../../../licences/acknowledgements/google-deepmind-representations4d.yaml"
+                "../../../licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml"
+            ),
+            include_str!(
+                "../../../licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml"
+            ),
+            include_str!(
+                "../../../licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml"
+            ),
+            include_str!(
+                "../../../licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml"
             ),
         ];
         let acks = operator_standing_acknowledgements();
@@ -1745,13 +3159,16 @@ pub(crate) mod tests {
                 seed.signature.is_empty(),
                 "the seed is signed by the operator, not by a build"
             );
-            assert_eq!(seed.slug(), slugify(&ack.covers[0]));
+            assert_eq!(
+                seed.slug(),
+                format!("{}--{}", slugify(&ack.licence), slugify(&ack.covers[0]))
+            );
         }
         // Every repo in the register is covered by one seed record, except
         // Demucs: operator ruling 2026-11-09, acknowledged per project with
         // NO standing grant (2068-eeti), so no seed may cover it.
         for r in &rows {
-            if r.spdx == "demucs-weights-unstated" {
+            if PER_PROJECT_ONLY.contains(&r.spdx.as_str()) {
                 assert!(
                     !acks.iter().any(|a| a.covers.contains(&r.repo)),
                     "{}: a standing seed covers {}; Demucs has no standing grant",
@@ -1848,10 +3265,14 @@ pub(crate) mod tests {
         // has no standing grant, so those records must NOT admit it.
         let (demucs, ck): (Vec<&RestrictedRow>, Vec<&RestrictedRow>) = rows
             .iter()
-            .partition(|r| r.spdx == "demucs-weights-unstated");
+            .partition(|r| PER_PROJECT_ONLY.contains(&r.spdx.as_str()));
         let artefacts: Vec<RestrictedArtefact> = ck.into_iter().map(to_artefact).collect();
         assert!(artefacts.len() >= 30, "{}", artefacts.len());
-        assert_eq!(demucs.len(), 2, "htdemucs and htdemucs_6s");
+        assert_eq!(
+            demucs.len(),
+            11,
+            "htdemucs, htdemucs_6s, 3 Fish S2-Pro rows, 2 Higgs v2 files x 3 licences"
+        );
         let demucs: Vec<RestrictedArtefact> = demucs.into_iter().map(to_artefact).collect();
         let err =
             admits_restricted_in(&pinned, "demon_attack", &demucs, &acks, &verifier).unwrap_err();
@@ -1860,10 +3281,19 @@ pub(crate) mod tests {
         let ids =
             admits_restricted_in(&pinned, "demon_attack", &artefacts, &acks, &verifier).unwrap();
         assert_eq!(ids.len(), artefacts.len());
-        assert_eq!(ids[0], "nikopueringer-corridorkey2-0");
-        assert!(ids.iter().any(|i| i == "nvidia-c-radiov4-so400m"));
-        assert!(ids.iter().any(|i| i == "ruicheng-moge-2-vitb-normal"));
-        assert!(ids.iter().any(|i| i == "google-deepmind-representations4d"));
+        assert_eq!(
+            ids[0],
+            "corridor-key-licence-2-0--nikopueringer-corridorkey2-0"
+        );
+        assert!(
+            ids.iter()
+                .any(|i| i == "nvidia-open-model-license--nvidia-c-radiov4-so400m")
+        );
+        assert!(ids.iter().any(|i| i == "mit--ruicheng-moge-2-vitb-normal"));
+        assert!(
+            ids.iter()
+                .any(|i| i == "cc-by-4-0--google-deepmind-representations4d")
+        );
 
         // No record: refused, naming the first artefact.
         let err = admits_restricted_in(
@@ -1917,5 +3347,96 @@ pub(crate) mod tests {
         unsafe { std::env::set_var("TILLANDSIAS_LICENCE_ACK_DIR", &acks) };
         assert_eq!(project_acknowledgement_dir("demon_attack"), acks);
         let _ = admits_restricted("demon_attack", &ck);
+    }
+    /// The words that would walk a user through a manual approval flow
+    /// (incident 2026-11-14, 2083-nfne).
+    const MANUAL_FLOW: &[&str] = &[
+        "ssh-keygen",
+        "--approval-enrol",
+        "--approval-sign",
+        "heredoc",
+        "<<",
+        "paste",
+        "clipboard",
+        "copying",
+        "copy the",
+    ];
+
+    /// Every bullet item of `skill` that names a manual-flow word without
+    /// being a prohibition, and how many prohibition items name one. An
+    /// item is a prohibition when it opens with "Do NOT" or "NEVER".
+    fn manual_flow_instructions(skill: &str) -> (Vec<String>, usize) {
+        let mut items: Vec<String> = Vec::new();
+        for line in skill.lines() {
+            let t = line.trim_start();
+            if let Some(rest) = t.strip_prefix("- ").or_else(|| {
+                t.split_once(". ")
+                    .filter(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+                    .map(|(_, r)| r)
+            }) {
+                items.push(rest.to_string());
+            } else if t.is_empty() || t.starts_with('#') {
+                items.push(String::new());
+            } else if let Some(last) = items.last_mut() {
+                last.push(' ');
+                last.push_str(t);
+            } else {
+                items.push(t.to_string());
+            }
+        }
+        let mut offending = Vec::new();
+        let mut prohibitions = 0;
+        for item in items {
+            let lower = item.to_lowercase();
+            if !MANUAL_FLOW.iter().any(|w| lower.contains(w)) {
+                continue;
+            }
+            if item.starts_with("Do NOT") || item.starts_with("NEVER") {
+                prohibitions += 1;
+            } else {
+                offending.push(item);
+            }
+        }
+        (offending, prohibitions)
+    }
+
+    /// 2083-nfne: the accept-licence skill can never instruct a manual or
+    /// terminal flow. Every mention of ssh-keygen, the tray's enrol/sign
+    /// flags, a heredoc or a paste sits inside a prohibition, and the
+    /// prohibition itself is present (so a skill that drops the section is
+    /// not green by having nothing to check).
+    #[test]
+    fn the_accept_licence_skill_never_instructs_a_manual_flow() {
+        let skill = include_str!("../../../skills/accept-licence/SKILL.md");
+        let (offending, prohibitions) = manual_flow_instructions(skill);
+        assert!(
+            prohibitions >= 1,
+            "the skill lost its prohibition of the manual flow"
+        );
+        assert!(
+            offending.is_empty(),
+            "the skill instructs a manual flow: {offending:#?}"
+        );
+    }
+
+    /// 2083-nfne: a variable naming an allowed_signers file does not move
+    /// the gate. The signers the gate reads are the ones under the approval
+    /// state dir, whatever `TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS` says.
+    #[test]
+    fn an_allowed_signers_variable_does_not_redirect_the_gate() {
+        let dir = disk_scratch("signers-override");
+        let elsewhere = dir.join("agent-written-signers");
+        // SAFETY: tests in this module run in one process; the variable
+        // names a path inside the scratch dir and nothing else reads it.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS", &elsewhere);
+        }
+        let read = Verifier::for_host().allowed_signers;
+        unsafe { std::env::remove_var("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS") };
+        assert_ne!(read, elsewhere, "the variable redirected the gate");
+        assert_eq!(
+            read.file_name().and_then(|n| n.to_str()),
+            Some("allowed_signers")
+        );
     }
 }

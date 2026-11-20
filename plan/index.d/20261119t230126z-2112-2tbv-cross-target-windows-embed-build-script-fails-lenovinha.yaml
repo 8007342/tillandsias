@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: tillandsias-embed-build-script-fails-for-x86-64-pc-windows-gnu-in-check-cross-target-build
+    order: 2112-2tbv
+    status: ready
+    kind: bug
+    priority: p1
+    pickup_role: linux
+    capability_tags: [cross-target, windows, build, release]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-embed/build.rs
+    title: |
+      check-cross-target-build refuses x86_64-pc-windows-gnu on linux-next: the custom build command of tillandsias-embed fails, so ./build.sh --preflight is red for every tree and a Windows release candidate may be blocked.
+    context: |
+      Measured on lenovinha 2026-11-19 in the tillandsias-builder toolbox: error: failed to run custom build command for tillandsias-embed v56.10.20, then refused:cross-target:x86_64-pc-windows-gnu. Seen on work refs whose crates/ and Cargo.* are byte-identical to origin/linux-next, so it is pre-existing on trunk. The underlying build-script error text was not captured yet; first step is to capture it.
+    exit_criteria:
+      - 'tillandsias-plan script run scripts/lua/check-cross-target-build.lua prints no refused:cross-target:x86_64-pc-windows-gnu line on linux-next; red today'
+      - './build.sh --preflight on linux-next shows refused=0 for check-cross-target-build'
+    verifiable_closure: |
+      ./build.sh --check runs check-cross-target-build to completion and prints ok:cross-target:x86_64-pc-windows-gnu; before the fix the same gate printed refused:cross-target with the tillandsias-embed build-script panic.
+    next_action: Run cargo check --target x86_64-pc-windows-gnu -p tillandsias-embed -vv in the builder to capture the build-script stderr; fix the build script or the toolbox's mingw toolchain accordingly.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-19T23:01:26Z"
+        host: lenovinha
+        summary: tillandsias-embed build script fails for x86_64-pc-windows-gnu; preflight red on trunk.

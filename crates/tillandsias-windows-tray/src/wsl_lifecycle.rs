@@ -622,6 +622,17 @@ impl WslLifecycle {
             .join("guest-wiring.json")
     }
 
+    /// ORDER 783-eeii: the host tray's start / heartbeat / exit record,
+    /// `%LOCALAPPDATA%\tillandsias\state\tray-lifecycle.state`. A file for the
+    /// same reason as the record above: the reader (`--diagnose`, `--forge`, the
+    /// NEXT tray) is never the process that wrote it.
+    pub fn tray_lifecycle_record_path() -> PathBuf {
+        local_app_data()
+            .join("tillandsias")
+            .join("state")
+            .join("tray-lifecycle.state")
+    }
+
     pub fn cache_root() -> PathBuf {
         local_app_data().join("tillandsias").join("cache")
     }

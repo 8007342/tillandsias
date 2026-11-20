@@ -3892,6 +3892,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    if ! _run_lua_decider "scripts/lua/check-workspace-members-used.lua" 2>&1; then
+        _error "a workspace member has no dependent, no binary and no allowlist reason, or a crates/ directory has no Cargo.toml (2080-8i25)"
+        exit 1
+    fi
+
     if ! _run_lua_decider "scripts/lua/check-smoke-agent-prompt-is-minimal.lua" 2>&1; then
         _error "a smoke skill hands its forge agent the /meta-orchestration loop — a smoke spends one short turn on the shared hosted model (1941-smkp)"
         exit 1
@@ -5837,6 +5842,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Cheatsheet-reference fixture passed"
+
+    # Locale bundles and help scripts are complete and parse (2096-pq2g; the
+    # Lua port of the never-run scripts/test-locale-coverage.sh).
+    _step "Checking locale bundle coverage and help-script syntax (2096-pq2g)..."
+    if ! _run_lua_decider "scripts/lua/check-locale-coverage.lua" 2>&1; then
+        _error "a full locale bundle lacks an L_* name en.sh defines, or a bundle/help script does not parse (2096-pq2g)"
+        exit 1
+    fi
+    _info "Locale coverage check passed"
 
     # The forge browser-claim guard's own fixture (1746-2szd): this tree, the
     # pre-fix forge-quick-intro refused, negations, an image that ships a
