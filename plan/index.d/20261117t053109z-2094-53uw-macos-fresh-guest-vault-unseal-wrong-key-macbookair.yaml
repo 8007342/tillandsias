@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-17, from the v56.11.17.2 macOS release smoke.
+packets:
+- packet_id: macos-fresh-guest-vault-unseals-with-a-stale-host-keychain-share-and-dies-wrong-key
+  order: 2094-53uw
+  status: ready
+  kind: bug
+  priority: p0
+  desired_release: v0.5
+  pickup_role: macos
+  capability_tags: [macos, vault, keychain, release, smoke]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 4
+  title: v56.11.17.2 on macOS - after the VM substrate is destroyed and re-provisioned, tillandsias-vault exits 1 on every boot with "unseal request returned HTTP 400 wrong key"
+  context: >-
+    Release smoke v56.11.17.2 (tray git 6f0f31e4e), macbookair, 2026-11-17, run_start
+    2026-11-17T05:26:06Z. Curl-install exit 0, cosign verified 1/1, scripts/e2e-step2-macos.sh
+    destroyed ~/Library/Application Support/tillandsias (7.8G) and Caches (698M), --provision exit 0,
+    fresh rootfs, --diagnose provisioned/rootfs_present/version all true. Then every guest boot
+    (--exec-guest) shows tillandsias-vault "Exited (1)": vault-entrypoint "subsequent boot: using
+    unseal key from secret" -> "FATAL: unseal request returned HTTP 400: wrong key" -> "cipher:
+    message authentication failed". The host Keychain item vault-shamir-share-v1 (service
+    tillandsias) was NOT rewritten by this provision: cdat 2026-11-01, mdat 2026-11-08 (metadata
+    only read; the secret was not printed). So the fresh guest's Vault was initialised with a new
+    share on its first boot and the host keeps delivering the old one (the 803-49re / keychain
+    volume resync class). e2e-step2-macos.sh does not clear the share (reset_state.rs
+    KEPT_CREDENTIALS keeps it by 1437-8c6p for SOFT resets), so either the macOS smoke's destroy
+    step must clear it like Linux 900-z3kv does, or (the product bug) a guest whose Vault was
+    freshly initialised must hand its new share back and the tray must replace the stale one, or a
+    share that fails to unseal a fresh store must trigger re-init instead of a crash loop. An
+    operator who deletes the VM directory hits this with no recovery path. The provision marker
+    has no completion line (only provision-start 05:26:59Z and guest-upgrade ok 05:28:18Z).
+  exit_criteria:
+  - 'On macOS, destroy the VM dir with the Keychain share kept, re-provision, boot: tillandsias-vault is Up and unsealed. Today it exits 1 with HTTP 400 wrong key on every boot.'
+  - 'The share in the host Keychain after a fresh-guest first boot is the one that guest Vault was initialised with (mdat moves); a stale share is never delivered to a store it did not initialise.'
+  - 'scripts/e2e-step2-macos.sh states whether it clears vault-shamir-share-v1 / vault-root-token-v1, and the macOS smoke records a credential-cold or credential-warm verdict like the Linux lane.'
+  verifiable_closure: 'macOS smoke of a published release: step2 + --provision + --exec-guest podman ps shows tillandsias-vault Up, and podman logs carry no "wrong key".'
+  unscoreable: 'none.'
+  next_action: 'Read installation_uuid.rs (deliver/collect of vault-shamir-share-v1, lines ~261-520) and collect_vault_handover_on_ready in action_host.rs; check whether --provision/--exec-guest ever collect the handover, then reproduce with the published tray.'
+  provenance: macbookair-macos 2026-11-17, smoke-curl-install-and-test-e2e on v56.11.17.2; evidence target/smoke-e2e/04-vault-logs.log on macbookair.
+  events:
+  - {type: filed, ts: '2026-11-17T05:45:00Z', host: macbookair, summary: filed p0 ready from the v56.11.17.2 macOS smoke}

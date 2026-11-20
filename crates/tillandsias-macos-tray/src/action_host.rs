@@ -2127,6 +2127,7 @@ async fn run_start(
             )
         })?;
         eprintln!("[tillandsias-tray] Start VM: Fedora Cloud image ready");
+        crate::diagnose::forget_stale_vault_credentials();
     }
 
     // Host-visible boot phases (parity with windows-tray's StartingVm/
