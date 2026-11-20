@@ -111,7 +111,14 @@ elseif mode == "check-ensure_enclave_network-present" then
         for _, l in ipairs(src) do
             local starts_want = is_fn_start(l, want)
             if starts_want then in_fn = true end
-            if in_fn and has(l, "ensure_enclave_network") then found = true; break end
+            -- ORDER 2112-3bub: a spawn path that brings its prerequisites up
+            -- through the dependency model (container_deps::ensure_forge_launch,
+            -- order 252) gets the enclave network from it. EnclaveNetwork is a
+            -- ForgeLaunch dependency, and the unit test
+            -- forge_launch_brings_up_networks_ca_and_proxy_before_itself pins
+            -- it ahead of the launch. ensure_enclave_for_project moved to
+            -- that model and read as "missing" to a literal-call grep.
+            if in_fn and (has(l, "ensure_enclave_network") or has(l, "container_deps::ensure_forge_launch(")) then found = true; break end
             if is_fn_start(l) and in_fn and not starts_want then break end
         end
         if not found then fail(want .. " missing ensure_enclave_network") end
