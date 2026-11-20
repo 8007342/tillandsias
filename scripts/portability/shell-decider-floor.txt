@@ -75,7 +75,6 @@ scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
-scripts/check-unrunnable-platform-arms.sh
 scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-clippy.sh
