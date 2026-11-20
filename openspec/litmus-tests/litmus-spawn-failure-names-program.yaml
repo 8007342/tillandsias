@@ -28,25 +28,25 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-spawn-failure-names-program.sh
-  - workspace contains scripts/test-spawn-program-captured-before-spawn.sh
+  - workspace contains scripts/lua/test-spawn-failure-names-program.lua
+  - workspace contains scripts/lua/test-spawn-program-captured-before-spawn.lua
   - a cargo toolchain is resolvable, or the fixture skips by name
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-spawn-failure-names-program.sh && test -x scripts/test-spawn-failure-names-program.sh && echo 'ok: spawn-failure-fixture-parses'"
+    command: "test -f scripts/lua/test-spawn-failure-names-program.lua && echo 'ok: spawn-failure-fixture-parses'"
     timeout_ms: 5000
     expected_behavior: "ok: spawn-failure-fixture-parses"
 
   - step: "both arms pass: the NotFound mapping names program and PATH, and the collapse is strict"
-    command: "bash scripts/test-spawn-failure-names-program.sh | tail -1"
+    command: "bash scripts/lua/test-spawn-failure-names-program.lua | tail -1"
     timeout_ms: 900000
     expected_behavior: "ok:spawn-failure-names-program:2/2"
 
   - step: "the program name is captured BEFORE the spawn, because the spawn borrows the command mutably"
     # 1928-s9ae: scoped to the enclosing function; the whole-file first-occurrence
     # compare went red when 1911-3dqo added an unrelated earlier spawn.
-    command: "bash scripts/test-spawn-program-captured-before-spawn.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-spawn-program-captured-before-spawn.lua 2>&1"
     timeout_ms: 10000
     expected_behavior: "ok: program captured before spawn"
 

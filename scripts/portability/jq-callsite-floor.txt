@@ -52,10 +52,7 @@
 1 scripts/probe-nix-capability.sh
 1 scripts/record-ci-phase-result.sh
 3 scripts/record-expert-accuracy.sh
-1 scripts/record-nix-cache-metrics.sh
-10 scripts/refusal-calibration/inject-negatives.sh
 9 scripts/refusal-calibration/measure-bands.sh
-12 scripts/refusal-calibration/measure-recall-at-k.sh
 1 scripts/run-litmus-test.sh
 8 scripts/spec-index-ensure.sh
 1 scripts/test-bench-prompt-uniqueness.sh

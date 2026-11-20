@@ -19,7 +19,7 @@
 # them from data rather than inheriting these.
 #
 # The default question set is the RELABELLED-561 ground truth (in=458 near=33
-# far=70), read straight from the baseline TSV — see apply-relabelled-561.sh
+# far=70), read straight from the baseline TSV — see apply-relabelled-561.sh (deleted 2026-11-18; restore from 112ebb71e)
 # for why questions-wide-579.jsonl's labels must not be scored as truth.
 #
 #   scripts/refusal-calibration/measure-margin-bands.sh \

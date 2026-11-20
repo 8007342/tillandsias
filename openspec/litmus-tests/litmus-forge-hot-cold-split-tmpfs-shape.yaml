@@ -55,9 +55,9 @@ preconditions:
 
 critical_path:
   - step: "order 1445-7u63: a full /home/forge/src names the exhausted source budget instead of blaming the mirror (4 arms)"
-    command: "bash scripts/test-forge-src-budget-report.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-src-budget-report.lua 2>&1"
     timeout_ms: 30000
-    success_pattern: "PASS: forge-src-budget-report"
+    success_pattern: "ok:forge-src-budget-report:4 arms"
     failure_pattern: "FAIL:"
   - step: "Req 1 + 2: 4 forge profiles each declare /opt/cheatsheets:size=8m,mode=0755 tmpfs"
     # Spec § HOT tier mandates /opt/cheatsheets at 8 MB / mode 0755.
