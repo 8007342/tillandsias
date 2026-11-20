@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-run-one-scratch-root-resolves-the-checkout-plan-binary-not-a-stale-path-copy
+    field: verifiable_closure
+    value: 'The fixture scripts/fixtures/litmus-run-one/litmus-run-one-plan-binary-probe.yaml, run through scripts/lua/litmus-run-one.lua, resolves the checkout''s target/release/tillandsias-plan (red before the fix: it resolved ~/.local/bin). Its corpus test lands with PR #1177.'
+    ts: "2026-11-20T00:30:57Z"
+    host: lenovinha
+    replaces_sha256: "aa0313eabbf4c1a49a5a34dea07e108789c41ed75f6c1fd65ece9ddbaca75019"
+
+events:
+  - packet_id: litmus-run-one-scratch-root-resolves-the-checkout-plan-binary-not-a-stale-path-copy
+    event:
+      type: note
+      ts: "2026-11-20T00:30:57Z"
+      host: lenovinha
+      summary: |-
+        closure named a litmus that exists only on the unlanded work ref (885-92iu)
