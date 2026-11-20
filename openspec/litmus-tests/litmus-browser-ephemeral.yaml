@@ -1,5 +1,5 @@
 name: litmus:browser-ephemeral
-spec: host-chromium-on-demand
+spec: host-browser-mcp, browser-isolation-core, browser-isolation-framework, chromium-debug-variant, chromium-safe-variant
 description: Verify Chromium launcher uses an ephemeral profile, GUI app-mode, and cleans it on exit
 severity: critical
 size: e2e
@@ -57,9 +57,9 @@ critical_path:
 observability:
   traces:
     - "@trace spec:browser-isolation-launcher"
-    - "@trace spec:host-chromium-on-demand"
+    - "@trace spec:host-browser-mcp"
     - "@trace spec:chromium-safe-variant"
-    - "@trace spec:host-chromium-on-demand"
+    - "@trace spec:host-browser-mcp"
   expected_log: "Browser launcher recorded ephemeral profile and cleaned it after exit"
   log_fields:
     spec: "host-chromium-on-demand"

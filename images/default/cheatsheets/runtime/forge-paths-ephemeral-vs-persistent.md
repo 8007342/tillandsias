@@ -28,7 +28,7 @@ This is project-internal architecture; the authority is the Tillandsias spec + s
 - Tillandsias cache contract: <https://github.com/8007342/tillandsias/blob/main/openspec/specs/forge-cache-dual/spec.md>
 - Mount source code: <https://github.com/8007342/tillandsias/blob/main/crates/tillandsias-core/src/container_profile.rs>
 - Env var exports: <https://github.com/8007342/tillandsias/blob/main/images/default/lib-common.sh>
-- **Last updated:** 2026-04-25
+- **Last updated:** 2026-11-20
 
 ## Use when
 
@@ -126,19 +126,17 @@ cargo metadata --format-version 1 | jq .target_directory
 # expect: /home/forge/.cache/tillandsias-project/cargo/target
 ```
 
-## Host-side data: the bundled Chromium binary tree
+## Host-side data: no bundled Chromium (retired)
 
-@trace spec:host-chromium-on-demand
+@trace spec:host-browser-mcp
 
-`scripts/install.sh` (and the `tillandsias --install-chromium` subcommand) install a pinned Chrome for Testing build into the user's **data** directory — NOT the cache directory. This is host-side, NOT forge-side, but it falls under the same "regenerable only by an explicit installer run, never automatically" category that the per-project cache (above) does, and the rationale is identical: caches are by spec deletable at any time but the running tray cannot regenerate the Chromium binary on its own. If the user wipes the cache directory the tray must keep working; if they wipe the data directory they explicitly opted out.
-
-| Platform | Install root | Regenerable by | Auto-cleaned? |
-|---|---|---|---|
-| Linux | `${XDG_DATA_HOME:-$HOME/.local/share}/tillandsias/chromium/` | `tillandsias --install-chromium` (or re-running the curl installer) | No |
-| macOS | `$HOME/Library/Application Support/tillandsias/chromium/` | same | No |
-| Windows | `%LOCALAPPDATA%\tillandsias\chromium\` | same | No |
-
-A `current` symlink (Unix) or directory junction (Windows) in the install root points at the active version. At most TWO version subdirectories coexist: the active one and the immediately-previous one (rollback safety net). Older versions are GC'd by the installer at the end of every successful install. See `openspec/specs/host-chromium/spec.md` for the full requirement set.
+There is no host-side Chromium tree any more. Every browser window runs in the
+`tillandsias-chromium-framework` container (order 1649-xqet). The old
+host-Chromium installer and its cache are retired, and the
+`host-chromium-on-demand` spec is a tombstone (order 2118-fk3w, openspec change
+`retire-host-chromium-on-demand`). A leftover
+`~/.local/share/tillandsias/chromium/` or `~/.cache/tillandsias/chromium/` from
+an older release is unused and safe to delete.
 
 ## Pull on Demand
 

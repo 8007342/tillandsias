@@ -1,11 +1,21 @@
+<!-- @tombstone superseded:host-browser-mcp+browser-window-modes -->
 <!-- @trace spec:host-chromium-on-demand -->
-# host-chromium-on-demand Specification
+# host-chromium-on-demand Specification (Tombstone)
 
 ## Status
 
-status: active
+status: obsolete
 promoted-from: openspec/changes/archive/2026-04-26-host-chromium-on-demand/
 annotation-count: 25
+
+## Deprecation Notice
+
+Retired (order 2118-fk3w, change `retire-host-chromium-on-demand`). There is no
+host Chromium: every browser window runs in the tillandsias-chromium-framework
+container (1649-xqet). The live obligations are owned by `host-browser-mcp`
+(window, process-per-window ephemeral profile, engine-only rule) and
+`browser-window-modes` (separation from personal browsers, proposed by
+`open-it-browser`). The text below is historical.
 
 ## Purpose
 

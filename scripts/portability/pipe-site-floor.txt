@@ -146,7 +146,6 @@ litmus openspec/litmus-tests/litmus-harness-curl-install-shape.yaml 3
 litmus openspec/litmus-tests/litmus-headless-keepalive.yaml 1
 litmus openspec/litmus-tests/litmus-headless-least-privilege-delegation-shape.yaml 3
 litmus openspec/litmus-tests/litmus-host-browser-mcp-lane-socket-shape.yaml 7
-litmus openspec/litmus-tests/litmus-host-chromium-on-demand-shape.yaml 2
 litmus openspec/litmus-tests/litmus-host-expert-refresh-gate-shape.yaml 1
 litmus openspec/litmus-tests/litmus-host-guest-no-cfg-transport-selection.yaml 2
 litmus openspec/litmus-tests/litmus-host-kind-evidence-not-from-workspace.yaml 1
@@ -459,7 +458,6 @@ scripts scripts/hardware-fingerprint.sh 4
 scripts scripts/hash-image-sources.sh 3
 scripts scripts/host-capability-probe.sh 3
 scripts scripts/inference-tier-probe.sh 4
-scripts scripts/install-chromium.sh 21
 scripts scripts/install-hooks.sh 7
 scripts scripts/land-on-platform-branch.sh 11
 scripts scripts/land-queue.sh 1

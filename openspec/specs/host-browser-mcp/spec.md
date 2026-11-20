@@ -178,7 +178,7 @@ A single Chromium process SHALL host exactly one CDP target. The MCP
 server SHALL NOT use `Target.createTarget` to multiplex multiple
 windows into a single process.
 
-@trace spec:host-browser-mcp, spec:host-chromium-on-demand
+@trace spec:host-browser-mcp
 
 #### Scenario: Each open call spawns its own chromium process
 
@@ -455,7 +455,7 @@ A Chromium version bump in `host-chromium-on-demand` SHALL trigger a
 refresh of the `cheatsheets/web/cdp.md` pinned method matrix and a
 re-run of the integration test suite before the new image ships.
 
-@trace spec:host-browser-mcp, spec:host-chromium-on-demand
+@trace spec:host-browser-mcp
 
 #### Scenario: CDP method matrix is verifiable against upstream docs
 
