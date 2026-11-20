@@ -5,7 +5,8 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
@@ -63,39 +64,107 @@ pub struct WindowSummary {
     pub headless: bool,
 }
 
+/// ORDER 2142-3kt8. How long a window may go with no CDP command and no user
+/// input before the idle reaper stops it (and its forwarder). Measured on
+/// macuahuitl 2026-11-20: five headless `browser.open` windows outlived their
+/// work by 13-17 hours, each GPU process at 250-300% CPU, and drove 30 GB of
+/// swap. The old 24 h constant was never even checked (no caller). Default 15
+/// minutes; `TILLANDSIAS_BROWSER_IDLE_MINUTES=0` disables the idle limit.
+/// `TILLANDSIAS_BROWSER_IDLE_SECS` overrides it in seconds (fixtures).
+pub const DEFAULT_IDLE_MINUTES: u64 = 15;
+
+pub fn idle_timeout() -> Option<Duration> {
+    if let Some(secs) = std::env::var("TILLANDSIAS_BROWSER_IDLE_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+    {
+        return (secs > 0).then(|| Duration::from_secs(secs));
+    }
+    let minutes = std::env::var("TILLANDSIAS_BROWSER_IDLE_MINUTES")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_IDLE_MINUTES);
+    (minutes > 0).then(|| Duration::from_secs(minutes * 60))
+}
+
+/// How often the reaper looks (`TILLANDSIAS_BROWSER_REAP_SECS`, default 30).
+fn reap_interval() -> Duration {
+    let secs = std::env::var("TILLANDSIAS_BROWSER_REAP_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .unwrap_or(30);
+    Duration::from_secs(secs)
+}
+
+/// The page script that records the last user input, so a headed window a
+/// person is using is not reaped while the agent is quiet. Installed on every
+/// new document of the window (and once on the current one) at open.
+pub const INPUT_LISTENER_SCRIPT: &str = "(() => { if (window.__tillandsiasInput) return; \
+window.__tillandsiasInput = true; window.__tillandsiasLastInput = Date.now(); \
+for (const t of ['pointerdown','keydown','wheel','touchstart']) \
+addEventListener(t, () => { window.__tillandsiasLastInput = Date.now(); }, {capture: true, passive: true}); })()";
+
 impl WindowEntry {
-    /// @trace spec:browser-window-timeout
-    /// Check if window has exceeded idle timeout (24 hours).
     pub fn is_idle_timeout(&self) -> bool {
-        const IDLE_TIMEOUT_SECS: u64 = 24 * 60 * 60; // 24 hours
-        self.last_activity.elapsed().as_secs() > IDLE_TIMEOUT_SECS
+        idle_timeout().is_some_and(|limit| self.last_activity.elapsed() > limit)
     }
 
-    /// @trace spec:browser-window-timeout
-    /// Check if window has exceeded absolute lifetime (48 hours).
     pub fn is_lifetime_exceeded(&self) -> bool {
         const MAX_LIFETIME_SECS: u64 = 48 * 60 * 60; // 48 hours
         self.created_at.elapsed().as_secs() > MAX_LIFETIME_SECS
     }
 
-    /// @trace spec:browser-window-timeout
-    /// Mark window as having recent activity (reset idle timer).
     pub fn touch_activity(&mut self) {
         self.last_activity = Instant::now();
     }
 
-    /// @trace spec:browser-window-timeout
-    /// Get time until idle timeout in seconds. Returns 0 if already timed out.
     pub fn seconds_until_idle_timeout(&self) -> u64 {
-        const IDLE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
-        let elapsed = self.last_activity.elapsed().as_secs();
-        IDLE_TIMEOUT_SECS.saturating_sub(elapsed)
+        match idle_timeout() {
+            Some(limit) => limit
+                .as_secs()
+                .saturating_sub(self.last_activity.elapsed().as_secs()),
+            None => u64::MAX,
+        }
+    }
+
+    /// Which windows the idle limit applies to: headless ones (no person can
+    /// see them; the macuahuitl case) and dev windows (which carry the input
+    /// listener). A headed non-dev window runs no page script, so input in it
+    /// cannot be seen; a person can see and close it, and only the 48 h
+    /// lifetime bounds it.
+    pub fn idle_reapable(&self) -> bool {
+        self.headless || self.dev
+    }
+
+    /// Did a person use this window inside the idle limit? Only a headed
+    /// window can have one; the page listener answers (absent -> no).
+    fn user_input_recent(&self) -> bool {
+        if self.headless {
+            return false;
+        }
+        let (Some(cdp), Some(limit)) = (self.cdp.as_ref(), idle_timeout()) else {
+            return false;
+        };
+        let Ok(value) = cdp.evaluate("window.__tillandsiasLastInput || 0") else {
+            return false;
+        };
+        let last_ms = value.as_f64().unwrap_or(0.0) as u128;
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis())
+            .unwrap_or(0);
+        last_ms > 0 && now_ms.saturating_sub(last_ms) < limit.as_millis()
     }
 }
 
 #[derive(Debug, Default)]
 pub struct WindowRegistry {
     windows: Mutex<HashMap<WindowId, WindowEntry>>,
+    /// ORDER 2142-3kt8: windows the reaper closed, by id -> (owning lane,
+    /// reason), so the agent's next call on one answers `browser.closed:<reason>`.
+    reaped: Mutex<HashMap<WindowId, (String, &'static str)>>,
+    reaper_started: AtomicBool,
 }
 
 #[derive(Debug, Default)]
@@ -211,6 +280,98 @@ impl WindowRegistry {
         } else {
             false
         }
+    }
+}
+
+impl WindowRegistry {
+    /// ORDER 2142-3kt8. Close every window idle past the limit (or past its
+    /// 48 h lifetime): CDP dropped, container and forwarder stopped, profile
+    /// removed. A headed window a person used inside the limit is kept and its
+    /// clock reset. Returns the closed ids with their reason.
+    pub fn reap(&self, debounce: &DebounceTable) -> Vec<(WindowId, &'static str)> {
+        let candidates: Vec<(WindowId, &'static str)> = self
+            .windows
+            .lock()
+            .values()
+            .filter_map(|e| {
+                if e.is_lifetime_exceeded() {
+                    Some((e.window_id.clone(), "lifetime"))
+                } else if e.idle_reapable() && e.is_idle_timeout() {
+                    Some((e.window_id.clone(), "idle"))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let mut closed = Vec::new();
+        for (window_id, reason) in candidates {
+            if reason == "idle" {
+                let used = self
+                    .windows
+                    .lock()
+                    .get(&window_id)
+                    .map(|e| e.user_input_recent())
+                    .unwrap_or(false);
+                if used {
+                    self.touch_window_activity(&window_id);
+                    continue;
+                }
+            }
+            if let Some(entry) = close_window(self, debounce, &window_id) {
+                crate::launcher::remove_profile_dir(&entry.user_data_dir);
+                info!(window_id = %window_id, reason, "browser.closed");
+                self.reaped
+                    .lock()
+                    .insert(window_id.clone(), (entry.owning_lane.clone(), reason));
+                closed.push((window_id, reason));
+            }
+        }
+        closed
+    }
+
+    /// Tests: pretend `window_id` has been quiet for `secs`.
+    #[cfg(test)]
+    pub fn age_for_test(&self, window_id: &str, secs: u64) {
+        if let Some(e) = self.windows.lock().get_mut(window_id) {
+            e.last_activity = Instant::now()
+                .checked_sub(Duration::from_secs(secs))
+                .unwrap_or(e.last_activity);
+        }
+    }
+
+    /// The reason the reaper closed `window_id`, if it did and `lane` owned
+    /// it. Read once: the record is consumed.
+    pub fn take_reaped(&self, window_id: &str, lane: &str) -> Option<&'static str> {
+        let mut reaped = self.reaped.lock();
+        match reaped.get(window_id) {
+            Some((owner, reason)) if owner == lane => {
+                let reason = *reason;
+                reaped.remove(window_id);
+                Some(reason)
+            }
+            _ => None,
+        }
+    }
+
+    /// Start the idle reaper for this registry, once. It holds only a weak
+    /// reference, so it ends with the registry.
+    pub fn start_idle_reaper(self: &Arc<Self>, debounce: Arc<DebounceTable>) {
+        if self.reaper_started.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let weak = Arc::downgrade(self);
+        let every = reap_interval();
+        let _ = std::thread::Builder::new()
+            .name("browser-idle-reaper".into())
+            .spawn(move || {
+                loop {
+                    std::thread::sleep(every);
+                    let Some(registry) = weak.upgrade() else {
+                        break;
+                    };
+                    registry.reap(&debounce);
+                }
+            });
     }
 }
 
