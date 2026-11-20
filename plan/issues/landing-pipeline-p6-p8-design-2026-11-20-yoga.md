@@ -62,9 +62,33 @@ and today it is solved by stacking locally.
   in the same train and ordered first. The union gate covers both.
 - Cycles or a missing parent print `could-not-run:host:depends-on-cycle:#N`.
 
-## Open questions for the coordinator
+## Coordinator answers (macuahuitl-fedora, 2026-11-20)
 
-1. The train size K: this draft defaults to 4. Should it be per class?
-2. Does a P6 admission label survive a merge of linux-next into the ref
-   (a new sha)? This draft says no, and it re-admits.
-3. P8: is the trailer or the body line canonical?
+1. Train size K is 4 for full-class trains and 6 for scoped or light ones.
+   Both are configurable. Log the flake rate per train, and widen K only on
+   measurement.
+2. Admission is keyed to the PR HEAD sha.
+   - Trunk movement alone does NOT void it, because the queue re-checks merge
+     conflicts when it builds each train.
+   - A new PR head, including a PR-side merge of linux-next, voids it.
+     Re-admission is cheap.
+   - Authors no longer need to merge linux-next just to stay current.
+3. Depends-On: the PR BODY line `Depends-On: #N` is canonical, so it can be
+   edited without a commit. The trailer is also accepted, and the body wins
+   on conflict.
+
+## P6 as implemented
+
+`scripts/land-admit.sh`, with the fixture `scripts/test-land-admit.sh`
+(9 arms, bound in `build.sh` after test-land-queue).
+- Checks run cheapest first: ref shape, draft, plan lane, native-lint, then
+  floor. Native-lint was moved ahead of the floor because it is cheaper.
+- Admission is recorded as a PR comment ending in the machine line
+  `<!-- land-admit:admitted pr=N head=<sha> lane=<full|plan> -->`, plus the
+  best-effort label `land:admitted`. There is no per-sha label, so labels do
+  not pile up.
+- `land-admit.sh --admitted-head N` gives the queue the admitted sha to
+  compare with headRefOid.
+- `build.sh --floor` does not exist yet. Without an injected floor command,
+  the verdict is `could-not-run:host:floor-mode-absent`, never an eviction.
+- Wiring the admission lane into land-queue's candidate read comes next.
