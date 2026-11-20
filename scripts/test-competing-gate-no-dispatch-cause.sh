@@ -45,12 +45,12 @@ run() { OUT="$(env -u TILLANDSIAS_WRAPPER_MARK -u TILLANDSIAS_WRAPPER_TOKEN bash
 
 echo "arm 1 — an UNDISPATCHED caller gets a cause naming that, not a missing assertion"
 run --caller-context undispatched
-if [ "$RC" -eq 3 ] && printf '%s' "$OUT" | grep -q 'competing-gate:no-dispatch'; then
+if [ "$RC" -eq 3 ] && grep -q 'competing-gate:no-dispatch' <<<"$OUT"; then
     ok "could-not-run:competing-gate:no-dispatch (rc=3)"
 else
     bad "expected no-dispatch at rc=3; rc=$RC out=$(printf '%s' "$OUT" | head -1)"
 fi
-if printf '%s' "$OUT" | grep -qi 'NOTHING TO FIX HERE'; then
+if grep -qi 'NOTHING TO FIX HERE' <<<"$OUT"; then
     ok "and says there is nothing to fix, so it is not read as a wiring bug"
 else
     bad "the cause does not distinguish itself from FIX THE CALL SITE"
@@ -58,7 +58,7 @@ fi
 
 echo "arm 2 — a caller INSIDE the dispatch gets its own cause"
 run --caller-context dispatched
-if [ "$RC" -eq 3 ] && printf '%s' "$OUT" | grep -q 'competing-gate:inside-dispatch'; then
+if [ "$RC" -eq 3 ] && grep -q 'competing-gate:inside-dispatch' <<<"$OUT"; then
     ok "could-not-run:competing-gate:inside-dispatch (rc=3)"
 else
     bad "expected inside-dispatch at rc=3; rc=$RC out=$(printf '%s' "$OUT" | head -1)"
@@ -76,7 +76,7 @@ fi
 echo "arm 4 — NEGATIVE CONTROL: a caller asserting NOTHING still gets the loud old cause"
 # Otherwise the new token becomes a bucket that swallows genuine wiring bugs.
 run
-if [ "$RC" -eq 3 ] && printf '%s' "$OUT" | grep -q 'no-host-side-assertion'; then
+if [ "$RC" -eq 3 ] && grep -q 'no-host-side-assertion' <<<"$OUT"; then
     ok "unchanged: no-host-side-assertion (rc=3) — a wrapper that forgot is still visible"
 else
     bad "the omitting caller's message changed; rc=$RC out=$(printf '%s' "$OUT" | head -1)"
@@ -84,7 +84,7 @@ fi
 
 echo "arm 5 — NEGATIVE CONTROL: a bad context value is a CALLER CONTRACT refusal, not a substrate limit"
 run --caller-context sideways
-if [ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q 'caller-contract'; then
+if [ "$RC" -eq 2 ] && grep -q 'caller-contract' <<<"$OUT"; then
     ok "refused:competing-gate:caller-contract (rc=2) — 2 stays distinct from 3"
 else
     bad "a typo'd context did not refuse at rc=2; rc=$RC out=$(printf '%s' "$OUT" | head -1)"
@@ -121,13 +121,13 @@ if [ -z "$_cg_line" ]; then
     _cg_line=1
 fi
 site="$(sed -n "${_cg_line},$((_cg_line + 14))p" "$ROOT/build.sh")"
-if printf '%s' "$site" | grep -q '|| true'; then
+if grep -q '|| true' <<<"$site"; then
     bad "build.sh still discards the exit code with \`|| true\` (1150-q462)"
 else
     ok "the exit code is captured, not discarded"
 fi
-if printf '%s' "$site" | grep -qE '^ *2\)' && printf '%s' "$site" | grep -qE '^ *3\)' \
-   && printf '%s' "$site" | grep -qE '^ *\*\)'; then
+if grep -qE '^ *2\)' <<<"$site" && grep -qE '^ *3\)' <<<"$site" \
+   && grep -qE '^ *\*\)' <<<"$site"; then
     ok "2, 3 and an unknown-code arm are each handled"
 else
     bad "the consumer does not enumerate 2 apart from 3 with an unknown-code arm"
@@ -135,7 +135,7 @@ fi
 
 echo "arm 9 — the check stays ADVISORY: this row changed what is said and read, never whether a gate refuses"
 if grep -q 'TILLANDSIAS_COMPETING_GATE_ADVISORY' "$CHECK" \
-   && ! printf '%s' "$site" | grep -qE '^ *(2|3)\).*exit '; then
+   && ! grep -qE '^ *(2|3)\).*exit ' <<<"$site"; then
     ok "no exit path was added at the call site; 1141-vf9w's staging is untouched"
 else
     bad "the consumer can now end the gate — that is 1141-vf9w's decision to make, not this row's"
