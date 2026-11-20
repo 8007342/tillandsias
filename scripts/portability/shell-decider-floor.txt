@@ -526,7 +526,6 @@ scripts/test-ssh-lane-sidecar.sh
 scripts/test-status-channel-absent-is-first-class.sh
 scripts/test-stranded-plan-writes.sh
 scripts/test-subdomain-routing.sh
-scripts/test-summarize-pubspec.sh
 scripts/test-sync-image-cheatsheets-for-commit.sh
 scripts/test-terminology-check-memo.sh
 scripts/test-timing-clock-resolution.sh
