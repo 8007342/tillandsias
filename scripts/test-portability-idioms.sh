@@ -217,9 +217,30 @@ printf '%s\n' "$OUT" | grep -qE 'plan-binary-probe\.sh:[0-9]+' \
     && ok "REMOTE CONTEXT control: a bare idiom outside a dispatch IS still flagged" \
     || bad "REMOTE CONTEXT control: the remote-context rule is swallowing host code"
 
-printf '%s\n' "$OUT" | grep -q 'check-plan-ledger-readers.sh' \
-    && bad "NEGATIVE CONTROL: flagged grep -r over the CANONICAL skills/ tree" \
-    || ok "NEGATIVE CONTROL: the canonical tree is not a symlink farm"
+# NEGATIVE CONTROL, CONSTRUCTED (2118-9awa). Its live subject was
+# check-plan-ledger-readers.sh (`grep -rl ... skills/`), deleted when it was
+# ported to lua, which left this arm vacuously green. Both directions are built
+# here, as the DIALECT BRANCH control above is: a grep -r over the canonical
+# skills/ must not be flagged, and the same grep over .claude/skills/ (the
+# runtime symlink farm) must be. That way the arm cannot pass on an empty corpus.
+_sw="$(mktemp -d "$ROOT/target/plan-scratch/portability-skills.XXXXXX" 2>/dev/null || mktemp -d "${TMPDIR:-/tmp}/portability-skills.XXXXXX")"
+mkdir -p "$_sw/real/scripts" "$_sw/real/skills/a" "$_sw/farm/scripts" "$_sw/farm/.claude/skills/a"
+printf '#!/usr/bin/env bash\ngrep -rl "token" scripts/ skills/\n' > "$_sw/real/scripts/scan-skills.sh"
+# The rule is textual: a grep -r that names a DOTTED runtime dir (a symlink
+# farm by construction) is flagged, and plain skills/ is the canonical tree.
+# Assembled at runtime so this file does not carry its own subject (as _D).
+_farm_dir=".cla""ude/skills/"
+printf '#!/usr/bin/env bash\ngrep -rl "token" scripts/ %s\n' "$_farm_dir" > "$_sw/farm/scripts/scan-skills.sh"
+_s_real="$(TILLANDSIAS_PORTABILITY_ROOT="$_sw/real" run_guard 2>&1)"
+_s_farm="$(TILLANDSIAS_PORTABILITY_ROOT="$_sw/farm" run_guard 2>&1)"
+rm -rf "$_sw"
+if printf '%s\n' "$_s_real" | grep -q 'scan-skills\.sh'; then
+    bad "NEGATIVE CONTROL: flagged grep -r over a canonical (real) skills/ tree (constructed)"
+elif ! printf '%s\n' "$_s_farm" | grep -q 'scan-skills\.sh'; then
+    bad "NEGATIVE CONTROL premise: grep -r over a skills/ symlink farm is NOT flagged either, so the real-tree pass proves nothing (constructed)"
+else
+    ok "NEGATIVE CONTROL: grep -r over a real skills/ tree is not flagged, over a symlink farm it is (constructed)"
+fi
 
 # ── cost ───────────────────────────────────────────────────────────────────
 # The first cut took 102s by forking grep for every line of every script. A
