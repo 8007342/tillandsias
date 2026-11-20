@@ -28,18 +28,18 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-spawn-failure-names-program.sh
+  - workspace contains scripts/lua/test-spawn-failure-names-program.lua
   - workspace contains scripts/test-spawn-program-captured-before-spawn.sh
   - a cargo toolchain is resolvable, or the fixture skips by name
 
 critical_path:
   - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-spawn-failure-names-program.sh && test -x scripts/test-spawn-failure-names-program.sh && echo 'ok: spawn-failure-fixture-parses'"
+    command: "test -f scripts/lua/test-spawn-failure-names-program.lua && echo 'ok: spawn-failure-fixture-parses'"
     timeout_ms: 5000
     expected_behavior: "ok: spawn-failure-fixture-parses"
 
   - step: "both arms pass: the NotFound mapping names program and PATH, and the collapse is strict"
-    command: "bash scripts/test-spawn-failure-names-program.sh | tail -1"
+    command: "bash scripts/lua/test-spawn-failure-names-program.lua | tail -1"
     timeout_ms: 900000
     expected_behavior: "ok:spawn-failure-names-program:2/2"
 

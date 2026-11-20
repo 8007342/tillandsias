@@ -14,23 +14,23 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-forge-localization-staged.sh
+  - workspace contains scripts/lua/test-forge-localization-staged.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-forge-localization-staged.sh && test -x scripts/test-forge-localization-staged.sh && echo 'ok: parse'"
+  - step: "fixture is present"
+    command: "test -f scripts/lua/test-forge-localization-staged.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "translated help and every locale bundle are staged by both image paths"
-    command: "bash scripts/test-forge-localization-staged.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-localization-staged.lua 2>&1"
     timeout_ms: 10000
-    expected_behavior: "PASS: forge-localization-staged"
+    expected_behavior: "ok:forge-localization-staged:"
 
 observability:
   traces:
     - "@trace spec:default-image"
-  expected_log: "PASS: forge-localization-staged"
+  expected_log: "ok:forge-localization-staged:4 arms"
   log_fields:
     spec: "default-image"
     test: "forge-localization-staged-shape"
@@ -40,4 +40,4 @@ rollback:
   on_failure: >
     A translation added under images/default must be COPYed by the Containerfile
     and staged by flake.nix in the same change, or it ships nowhere.
-  command: "bash scripts/test-forge-localization-staged.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-localization-staged.lua 2>&1"

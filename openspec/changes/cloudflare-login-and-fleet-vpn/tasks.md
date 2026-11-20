@@ -43,7 +43,7 @@ closure is the fixture named in its packet's `verifiable_closure`.
 - [ ] 4.3 Vault policy files: only the host resident process reads the
       refresh path; forge policies read neither.
 - [ ] 4.4 `scripts/test-cloudflare-token-rotation.sh` (five arms mirroring
-      `test-github-token-auto-rotation.sh` plus the three-entry-point
+      `scripts/lua/test-github-token-auto-rotation.lua` plus the three-entry-point
       mutation arms of 1489-8qd6).
 
 ## 5. The login command [1505-kc5f, opus]
