@@ -1,5 +1,5 @@
 name: litmus:browser-ephemeral
-spec: host-browser-mcp
+spec: host-browser-mcp, browser-isolation-core, browser-isolation-framework, chromium-debug-variant, chromium-safe-variant
 description: Verify Chromium launcher uses an ephemeral profile, GUI app-mode, and cleans it on exit
 severity: critical
 size: e2e
