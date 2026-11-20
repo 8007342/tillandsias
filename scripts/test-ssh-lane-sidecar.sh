@@ -179,14 +179,14 @@ echo inner:m2-exact-path-403'
 
 scenario_ready() {
     out="$(run_inner "$INNER_READY")"
-    echo "$out" | grep -q '^inner:ready-and-served$' \
+    grep -q '^inner:ready-and-served$' <<<"$out" \
         && echo "ok:lane-fixture:ready-fingerprint-socket-and-agent-serving" \
         || { echo "fail:lane-fixture:ready ($out)"; return 1; }
 }
 
 scenario_negatives() {
     out="$(run_inner "$INNER_NEGATIVES")"
-    echo "$out" | grep -q '^inner:negatives-refused$' \
+    grep -q '^inner:negatives-refused$' <<<"$out" \
         && echo "ok:lane-fixture:host-type+two-principal+wrong-principal-all-refused" \
         || { echo "fail:lane-fixture:negatives ($out)"; return 1; }
 }
@@ -207,7 +207,7 @@ scenario_renewal() {
 
 scenario_m2() {
     out="$(run_inner "$INNER_M2")"
-    echo "$out" | grep -q '^inner:m2-exact-path-403$' \
+    grep -q '^inner:m2-exact-path-403$' <<<"$out" \
         && echo "ok:lane-fixture:m2-own-path-signs-other-path-403" \
         || { echo "fail:lane-fixture:m2 ($out)"; return 1; }
 }

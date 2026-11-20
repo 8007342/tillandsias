@@ -56,7 +56,7 @@ packets:
     status: ready
 EOF
 out="$(run_orders "$WORK/c1")"
-printf '%s' "$out" | grep -q 'duplicate-order:700-aaaa' \
+grep -q 'duplicate-order:700-aaaa' <<<"$out" \
     || fail "case 1: a fragment colliding with the base was not detected: $out"
 echo "case 1 ok: a fragment colliding with a base order is caught"
 
@@ -72,9 +72,9 @@ packets:
     status: ready
 EOF
 out="$(run_orders "$WORK/c2")"
-printf '%s' "$out" | grep -q 'ok: plan orders unique' \
+grep -q 'ok: plan orders unique' <<<"$out" \
     || fail "case 2: a non-colliding fragment must pass: $out"
-printf '%s' "$out" | grep -q '1 from fragments' \
+grep -q '1 from fragments' <<<"$out" \
     || fail "case 2: the fragment was not folded (count missing): $out"
 echo "case 2 ok: a non-colliding fragment passes and is counted"
 
@@ -97,7 +97,7 @@ packets:
     status: ready
 EOF
 out="$(run_orders "$WORK/c3")"
-printf '%s' "$out" | grep -q 'duplicate-order:800-dupe' \
+grep -q 'duplicate-order:800-dupe' <<<"$out" \
     || fail "case 3: two colliding fragments were not detected: $out"
 echo "case 3 ok: two fragments colliding with each other are caught"
 
@@ -133,9 +133,9 @@ status:
     ts: "2026-08-19T10:00:00Z"
 EOF
 out="$(run_orders "$WORK/c4")"
-printf '%s' "$out" | grep -q 'ok: plan orders unique' \
+grep -q 'ok: plan orders unique' <<<"$out" \
     || fail "case 4: a fragment-completed duplicate must grandfather, not violate: $out"
-printf '%s' "$out" | grep -q '1 grandfathered' \
+grep -q '1 grandfathered' <<<"$out" \
     || fail "case 4: expected the group to be counted as grandfathered: $out"
 echo "case 4 ok: the status LWW channel is applied before the open-member test"
 
@@ -146,7 +146,7 @@ echo "case 4 ok: the status LWW channel is applied before the open-member test"
 # ---------------------------------------------------------------------------
 rm "$WORK/c4/plan/index.d/close-old.yaml"
 out="$(run_orders "$WORK/c4")"
-printf '%s' "$out" | grep -q 'duplicate-order:700-aaaa' \
+grep -q 'duplicate-order:700-aaaa' <<<"$out" \
     || fail "case 5: without the status override the duplicate must violate: $out"
 echo "case 5 ok: removing the override restores the violation"
 
