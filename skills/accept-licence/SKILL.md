@@ -16,7 +16,7 @@ and turns it into a spec for the agreeing project".
 
 The approval is a HUMAN MERGE in the GitHub web UI (operator direction
 2026-11-16; spec `os-verified-approval-gates/specs/approval-merge-gate`).
-Zero setup: no key, no enrolment, no terminal, no copying. You prepare one
+Zero setup: no key, no enrolment, no terminal. You prepare one
 pull request; the user reads it and presses Merge, or closes it to decline.
 
 ## Hard rules
@@ -27,6 +27,10 @@ pull request; the user reads it and presses Merge, or closes it to decline.
   a merge naming a `licences/` head, any merge whose head resolves to
   `licences/`, and any merge whose head it cannot resolve);
   a refusal is the design, not an obstacle to route around.
+- NEVER walk the user through a manual or terminal flow: no `ssh-keygen`,
+  no `--approval-enrol` or `--approval-sign`, no heredoc, nothing to paste
+  or copy into a terminal or a clipboard. The Merge button in the web UI is the
+  whole approval.
 - Never click through gated terms, and never accept research-only terms
   (`licence_forbids_use`) on anyone's behalf: say so and stop.
 - The licence text is quoted byte for byte. If its sha256 is not the pinned

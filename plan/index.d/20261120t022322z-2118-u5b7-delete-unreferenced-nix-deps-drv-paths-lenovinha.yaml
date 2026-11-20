@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: delete-unreferenced-and-toolbox-broken-nix-deps-drv-paths-sh
+    order: 2118-u5b7
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, nix]
+    estimated_hours: 1
+    owned_files:
+      - scripts/nix-deps-drv-paths.sh
+    title: |
+      nix-* batch: delete scripts/nix-deps-drv-paths.sh. Nothing executes it, and it cannot work in the Silverblue nix lane.
+    context: |
+      Measured on lenovinha 2026-11-20, after scripts/nix-toolbox.sh ensure brought up the tillandsias-nix toolbox (ok:nix-toolbox:toolbox, no sudo, layering or host nix):
+      - on the host it prints blocked:nix-deps-drv:show-failed, because it calls nix directly and there is no host nix;
+      - inside the toolbox (nix-toolbox.sh run) it prints blocked:nix-deps-drv:no-deps-input. jq is absent from the toolbox, so its jq filter yields nothing although nix derivation show succeeds;
+      - this nix keys inputs.drvs by store-path BASENAME (pi35…-cargo-package-deps-0.0.1.drv), not the /nix/store/ path its grammar promised.
+      Its only reference was a comment in release-preflight-local.sh. Standing rule: unreferenced scripts are deleted, not ported.
+      The other nix scripts: nix-build-container.sh runs INSIDE the builder container, with no plan binary, so it stays sh under the toolbox/entrypoint exception. nix-push-cache.sh waits for its openspec change (coordinator ruling).
+    exit_criteria:
+      - 'scripts/nix-deps-drv-paths.sh is gone; git grep for it outside plan/ and the refusal-calibration data is empty'
+      - './build.sh --preflight refused=0'
+    unscoreable: "a pure deletion of an unreferenced script; scored by git grep for nix-deps-drv-paths outside plan/ and the refusal-calibration data printing nothing, which no litmus pins"
+    next_action: Preflight, push work/2118-u5b7, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T02:23:22Z"
+        host: lenovinha
+        summary: Delete unreferenced nix-deps-drv-paths.sh (broken in the toolbox lane, which has no jq).

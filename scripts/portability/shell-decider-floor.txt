@@ -51,7 +51,6 @@ scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-opsx-generated-dirt.sh
-scripts/check-packet-tier-declared.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
@@ -88,7 +87,6 @@ scripts/test-agent-identity.sh
 scripts/test-all-fragments-intact.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
-scripts/test-archiver-check-memo.sh
 scripts/test-archiver-concurrent-check.sh
 scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
@@ -105,8 +103,6 @@ scripts/test-brew-shim-tier2-warning.sh
 scripts/test-bsd-count-shapes.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
-scripts/test-build-sh-darwin-install-refusal.sh
-scripts/test-build-sh-darwin-tool-remediation.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-build-version-label.sh
 scripts/test-capabilities-envelope-names-its-source.sh
@@ -128,7 +124,6 @@ scripts/test-check-engine-cpu-dispatch.sh
 scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-macos-stock-binaries.sh
 scripts/test-check-opsx-generated-dirt.sh
-scripts/test-check-packet-tier-declared.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
 scripts/test-claim-confirmation-names-the-earliest-claimant.sh
@@ -302,7 +297,6 @@ scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-hooks-refuses-global-hookspath.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-macos-swap-is-interruptible.sh
-scripts/test-install-macos-tray-stop.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
