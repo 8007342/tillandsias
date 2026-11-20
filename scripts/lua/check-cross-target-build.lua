@@ -92,6 +92,24 @@ end
 -- dependency tree on every host. --target-dir keeps it beside the gate's own.
 local argv = { "cargo", "clippy", "--workspace", "--all-targets", "--target", TARGET }
 local target_dir = env.get("CARGO_TARGET_DIR")
+-- ORDER 2112-2tbv. NO CARGO_TARGET_DIR means the caller did NOT enter the
+-- shared target (./build.sh --preflight skips it on purpose: the land queue
+-- holds that lock ~20 minutes per gate on macuahuitl, and preflight must stay
+-- near a minute). Building in the checkout's target/ is then unsafe: on the
+-- main checkout it IS the shared dir. A tillandsias-embed build-script unit
+-- last built by another worktree read as fresh by mtime (1590-j20f), and its
+-- stale binary panicked on observatorium/lib, a path 2066-obsv moved to
+-- tools/trace-viewer. That printed refused:cross-target on trunk. Unentered
+-- callers therefore get a target dir PRIVATE to this checkout, keyed by its
+-- path, which no worktree shares and no lock guards. The entered gate (and a
+-- forge, which exports its own) keeps the dir it was handed.
+if target_dir == nil or target_dir == "" then
+    local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" } })
+    local root = text.trim(top.stdout or "")
+    if top.status == "exited" and top.code == 0 and root ~= "" then
+        target_dir = root .. "/target/cross-target-private-" .. hash.sha256(root):sub(1, 12)
+    end
+end
 if target_dir ~= nil and target_dir ~= "" then
     argv[#argv + 1] = "--target-dir"
     argv[#argv + 1] = target_dir
