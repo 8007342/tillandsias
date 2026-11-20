@@ -55,7 +55,7 @@ cat >"$MOCK" <<'EOF'
 #!/usr/bin/env bash
 while IFS= read -r line; do
   ref="$(printf '%s' "$line" | awk '{print $3}')"
-  if printf '%s' "$ref" | grep -q stranded; then
+  if grep -q stranded <<<"$ref"; then
     echo "refusing non-fast-forward: $ref" >&2
     exit 1
   fi
@@ -97,7 +97,7 @@ if ! grep -q stranded <<<"$STRANDED"; then
   exit 1
 fi
 # The fast-forwardable 'main' ref must have succeeded (not in stranded).
-if printf '%s' "$STRANDED" | grep -q 'refs/heads/main'; then
+if grep -q 'refs/heads/main' <<<"$STRANDED"; then
   echo "FAIL: fast-forwardable main was reported stranded (per-ref isolation broken)" >&2
   exit 1
 fi
