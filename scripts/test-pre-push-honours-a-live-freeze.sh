@@ -132,8 +132,8 @@ before="$(tip linux-next)"
 rc=0; out="$(G push origin linux-next 2>&1)" || rc=$?
 if [ "$rc" -ne 0 ] && [ "$(tip linux-next)" = "$before" ]; then
     named_marker=0; named_branch=0
-    printf '%s\n' "$out" | grep -qF "$MARKER" && named_marker=1
-    printf '%s\n' "$out" | grep -qE "'linux-next' is FROZEN" && named_branch=1
+    grep -qF "$MARKER" <<<"$out" && named_marker=1
+    grep -qE "'linux-next' is FROZEN" <<<"$out" && named_branch=1
     if [ "$named_marker" -eq 1 ] && [ "$named_branch" -eq 1 ]; then
         ok "ARM 2: the code push is refused, the branch does not move, and the refusal NAMES the marker and the branch"
     else
@@ -213,7 +213,7 @@ rc=0
 out="$(printf 'refs/heads/linux-next %s refs/heads/linux-next %s\n' "$(git rev-parse HEAD)" "$(git rev-parse HEAD~1)" \
     | bash scripts/hooks/pre-push-local-gate.sh origin "$W/does-not-exist.git" 2>&1)" || rc=$?
 git remote set-url origin "$W/bare.git"
-if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q 'release-freeze check could not reach'; then
+if [ "$rc" -eq 0 ] && grep -q 'release-freeze check could not reach' <<<"$out"; then
     ok "ARM 5: an unreachable remote WARNS and admits, naming the check — the push's own failure is the backstop, and an offline host is not stranded"
 else
     bad "ARM 5: rc=$rc, warned=$(printf '%s\n' "$out" | grep -c 'could not reach')"

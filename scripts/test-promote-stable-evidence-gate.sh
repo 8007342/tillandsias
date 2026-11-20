@@ -301,7 +301,7 @@ seed_platform windows "$VER"
 : > "$VIOLATIONS"
 _force_err="$(PATH="$WORK/bin:$PATH" VIOLATIONS="$VIOLATIONS" \
     bash "$WORK/root/scripts/promote-stable.sh" "$VER" --dry-run --force 2>&1 >/dev/null)"
-if printf '%s' "$_force_err" | grep -q 'missing platform(s): linux,macos'; then
+if grep -q 'missing platform(s): linux,macos' <<<"$_force_err"; then
     printf 'ok   %-52s -> names linux,macos\n' "--force warning names what was overridden"
     pass=$((pass + 1))
 else
@@ -324,8 +324,8 @@ EOF
 _disc_out="$(PATH="$WORK/bin:$PATH" VIOLATIONS="$VIOLATIONS" \
     bash "$WORK/root/scripts/promote-stable.sh" "$VER" --dry-run 2>"$WORK/disc.err")"
 _disc_err="$(cat "$WORK/disc.err")"
-if printf '%s' "$_disc_out" | grep -q '^would-promote:' \
-   && printf '%s' "$_disc_err" | grep -q 'disclaiming'; then
+if grep -q '^would-promote:' <<<"$_disc_out" \
+   && grep -q 'disclaiming' <<<"$_disc_err"; then
     printf 'ok   %-52s -> promoted + warned\n' "PASS-but-disclaimed counts, and warns loudly"
     pass=$((pass + 1))
 else
@@ -358,7 +358,7 @@ seed_platform linux "$VER"
 _one_out="$(PATH="$WORK/bin:$PATH" VIOLATIONS="$VIOLATIONS" TILLANDSIAS_REQUIRED_PLATFORMS="linux" \
     bash "$WORK/root/scripts/promote-stable.sh" "$VER" --dry-run 2>/dev/null \
     | grep -E '^(would-promote|refused):' | tail -1)"
-if printf '%s' "$_one_out" | grep -q '^would-promote:'; then
+if grep -q '^would-promote:' <<<"$_one_out"; then
     printf 'ok   %-52s -> would-promote\n' "REQUIRED_PLATFORMS=linux is satisfied by linux"
     pass=$((pass + 1))
 else
