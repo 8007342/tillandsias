@@ -489,34 +489,6 @@ _tb_dispatch() {
 
 ENV_FORWARD="$(tillandsias_env_forward_prefix)"
 
-# ORDER 2110-ghw2: CARRY THE HOST'S GIT IDENTITY ACROSS. `toolbox run` drops
-# GIT_* from the environment, and inside the toolbox the hostname is `toolbx`
-# with no domain, so git's auto-detected address is `<user>@toolbx.(none)` and
-# every commit, merge or identity check refuses ("Committer identity unknown";
-# relay-preflight's scratch merge, the committable-branch guard's
-# blocked:no-git-identity). Measured on yoga 2026-11-20: GIT_COMMITTER_EMAIL set
-# on the host arrived unset, and `git var GIT_COMMITTER_IDENT` failed inside
-# while it resolved on the host. Each variable is the caller's own value when
-# set, else what git resolves on the host; nothing is forwarded when git cannot
-# resolve one, so a host without an identity behaves exactly as before.
-_tb_git_ident() { # $1 = AUTHOR|COMMITTER, $2 = NAME|EMAIL
-    local _v="GIT_${1}_${2}" _id
-    if [ -n "${!_v:-}" ]; then printf '%s' "${!_v}"; return 0; fi
-    _id="$(git var "GIT_${1}_IDENT" 2>/dev/null)" || return 1
-    case "$2" in
-        NAME)  printf '%s' "${_id%% <*}" ;;
-        EMAIL) _id="${_id#*<}"; printf '%s' "${_id%%>*}" ;;
-    esac
-}
-for _tb_who in AUTHOR COMMITTER; do
-    for _tb_what in NAME EMAIL; do
-        if _tb_val="$(_tb_git_ident "$_tb_who" "$_tb_what")" && [ -n "$_tb_val" ]; then
-            ENV_FORWARD="${ENV_FORWARD}export GIT_${_tb_who}_${_tb_what}=$(printf '%q' "$_tb_val"); "
-        fi
-    done
-done
-unset _tb_who _tb_what _tb_val
-
 # ORDER 1141-vf9w — ASK ABOUT COMPETING GATES HERE, ON THE HOST, BEFORE THE
 # DISPATCH. This is the only place on a Silverblue host where the question can
 # be answered: build.sh re-execs into the toolbox before its own fast refusals,
