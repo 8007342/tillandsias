@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: check-n-z-lua-port-batch-1-yaml-reader-spec-script-paths-fixture-ledger-stranded-plan-ledger-readers
+    order: 2118-9awa
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, scripts, check]
+    estimated_hours: 6
+    owned_files:
+      - scripts/check-yaml-reader-availability.sh
+      - scripts/check-spec-script-paths.sh
+      - scripts/check-no-fixture-writes-live-ledger.sh
+      - scripts/check-stranded-plan-writes.sh
+      - scripts/check-plan-ledger-readers.sh
+    title: |
+      check-[n-z] Lua port batch 1: port five check-*.sh scripts to scripts/lua/ (yaml-reader-availability, spec-script-paths, no-fixture-writes-live-ledger, stranded-plan-writes, plan-ledger-readers). Repoint every caller, including each one's own test-*.sh, and delete each .sh in the same PR.
+    context: |
+      Coordinator split, agreed with yoga 2026-11-20: lenovinha takes check-[n-z]*.sh and yoga takes check-[a-m]*.sh. Excluded: the windows pairs, the Family D files (#1149-#1157) and test-forge-swap-service.sh. Each port keeps its verdict grammar and exit codes. New code carries no jq.
+    exit_criteria:
+      - 'the five .sh are gone, each with a scripts/lua/<name>.lua whose verdict lines and exit codes match the .sh on the tree and on each test fixture'
+      - 'every caller (gate step, litmus, test, methodology, skill) names the lua; ./build.sh --preflight refused=0'
+    unscoreable: "a port, scored by each script's own existing test and litmus passing against the lua; the batch adds no new pin"
+    next_action: Port check-yaml-reader-availability first, then the rest smallest-first; run each test against the lua.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T04:51:30Z"
+        host: lenovinha
+        summary: check-[n-z] lua port batch 1 (five scripts).
