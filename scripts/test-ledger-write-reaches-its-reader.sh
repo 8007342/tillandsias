@@ -318,12 +318,12 @@ ok "denominator: the reader sees all 7 fixture ready packets"
 # in 458 and stated plainly that the silent population — done in the tree,
 # next_action silent — is unmeasured and unreachable by text scan. This arm is
 # that measurement: it asks git, not prose.
-if printf '%s\n' "$out" | grep -qxF '900-land'; then
+if grep -qxF '900-land' <<<"$out"; then
     ok "arm3: a ready packet with a landed commit naming its order is reported"
 else
     bad "arm3: ready-but-landed was NOT reported"
 fi
-if printf '%s\n' "$out" | grep -qxF '900-heal'; then
+if grep -qxF '900-heal' <<<"$out"; then
     bad "arm3: a healthy packet was reported (the negative control's failure, one arm later)"
 else
     ok "arm3: the healthy packet is still not reported when another packet fires"
@@ -339,12 +339,12 @@ printf 'baa01f 900-land\n' >> "$_fx/landed-docs.txt"
 landed_docs="$(landed_orders_from "$_fx/landed-docs.txt")"
 printf '%s\n' "$landed_docs" > "$_fx/landed-docs.orders"
 out2="$(report_ready_but_landed "$_fx/ledger.yaml" "$_fx/landed-docs.orders")"
-if printf '%s\n' "$out2" | grep -qxF '900-refs'; then
+if grep -qxF '900-refs' <<<"$out2"; then
     bad "arm3-narrow: a packet referenced by a docs( subject was reported as landed (over-reporting)"
 else
     ok "arm3-narrow: a docs(900-refs) subject does not report (prose is not a claim)"
 fi
-if printf '%s\n' "$out2" | grep -qxF '900-heal'; then
+if grep -qxF '900-heal' <<<"$out2"; then
     bad "arm3-narrow: a packet referenced INSIDE a subject was reported as landed (over-reporting)"
 else
     ok "arm3-narrow: a mid-subject mention of 900-heal does not cross-report"
@@ -359,7 +359,7 @@ fi
 landed_ref="$(landed_orders_from <(printf '%s\n' '00000aa fix(900-refs): close the packet'))"
 printf '%s\n' "$landed_ref" > "$_fx/landed-ref.orders"
 out3="$(report_ready_but_landed "$_fx/ledger.yaml" "$_fx/landed-ref.orders")"
-if printf '%s\n' "$out3" | grep -qxF '900-refs'; then
+if grep -qxF '900-refs' <<<"$out3"; then
     ok "arm3-narrow: the narrowed reader fires on a genuinely landed fix(900-refs)"
 else
     bad "arm3-narrow: the narrowed reader stopped firing on completion-shaped subjects"
@@ -369,7 +369,7 @@ fi
 # event anywhere) must produce NO report even though the fixture HAS a claimed
 # packet. Run it first, exactly as the packet's plan dictates.
 _claimed="$(report_ready_but_claimed "$_fx/ledger.yaml" "$_fx/fragments.d")"
-if printf '%s\n' "$_claimed" | grep -qxF '900-heal'; then
+if grep -qxF '900-heal' <<<"$_claimed"; then
     bad "arm1: the healthy packet was reported by the claim-without-status check"
 else
     ok "arm1: the healthy packet produces no report from the claim check"
@@ -379,12 +379,12 @@ fi
 # still reads `ready` — exactly the write that lands where the fold does not
 # look. The check that cannot see this is satisfied at zero and looks like a
 # remedy; it must name the order.
-if printf '%s\n' "$_claimed" | grep -qxF '900-clm'; then
+if grep -qxF '900-clm' <<<"$_claimed"; then
     ok "arm1: a ready packet with a claim event and no release is reported"
 else
     bad "arm1: claim-without-status was NOT reported"
 fi
-if printf '%s\n' "$_claimed" | grep -qxF '900-land'; then
+if grep -qxF '900-land' <<<"$_claimed"; then
     bad "arm1: a ready packet WITHOUT a claim event was reported (over-reporting)"
 else
     ok "arm1: the claim check does not report on claim-free packets"
@@ -431,7 +431,7 @@ fi
 # to `ready` deliberately — status matches events, nothing is blind. A checker
 # that reports it has a false-positive on the healthy case, which is the failure
 # this packet's negative control exists to catch.
-if printf '%s\n' "$_claimed" | grep -qxF '900-rel'; then
+if grep -qxF '900-rel' <<<"$_claimed"; then
     bad "arm1: a claim resolved by a typed release was reported (over-reporting)"
 else
     ok "arm1: a released claim is not reported (status matches its events)"
@@ -446,27 +446,27 @@ fi
 # (exit 1) — the checker agreeing at zero while the fixture plainly carries
 # both markers.
 _prose="$(blocked_in_prose_orders "$_fx/ledger.yaml")"
-if printf '%s\n' "$_prose" | grep -qxF '900-blk'; then
+if grep -qxF '900-blk' <<<"$_prose"; then
     ok "arm2: blocker-in-note-summary (900-blk) is reported"
 else
     bad "arm2: blocker-in-note-summary (900-blk) was NOT reported"
 fi
-if printf '%s\n' "$_prose" | grep -qxF '900-crt'; then
+if grep -qxF '900-crt' <<<"$_prose"; then
     ok "arm2: blocker-in-exit-criterion (900-crt) is reported"
 else
     bad "arm2: blocker-in-exit-criterion (900-crt) was NOT reported"
 fi
-if printf '%s\n' "$_prose" | grep -qxF '900-heal'; then
+if grep -qxF '900-heal' <<<"$_prose"; then
     bad "arm2: a healthy packet was reported by the prose scan (over-reporting)"
 else
     ok "arm2: the prose scan does not report healthy packets"
 fi
-if printf '%s\n' "$_prose" | grep -qxF '900-land'; then
+if grep -qxF '900-land' <<<"$_prose"; then
     bad "arm2: a marker-free ready packet was reported by the prose scan (over-reporting)"
 else
     ok "arm2: the prose scan does not report marker-free ready packets"
 fi
-if printf '%s\n' "$_prose" | grep -qxF '900-clm'; then
+if grep -qxF '900-clm' <<<"$_prose"; then
     bad "arm2: a claim-carrying packet was reported by the prose scan (over-reporting)"
 else
     ok "arm2: the prose scan is independent of the claim check (900-clm silent)"

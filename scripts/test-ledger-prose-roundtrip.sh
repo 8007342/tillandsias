@@ -121,9 +121,9 @@ rm -rf "$WORK"/index.d
 out="$( cd "$WORK" && TILLANDSIAS_AGENT_ID=linux-testhost-opus5-20260903t054300z "$BIN" --index "$WORK/index.yaml" \
     append-event roundtrip-fixture note --summary-file - --host testhost < "$WORK/note.md" 2>&1 )"
 stored="$(cat "$WORK"/index.d/*.yaml 2>/dev/null || true)"
-if printf '%s' "$stored" | grep -q 'accel_mem_budget_gb' \
-   && printf '%s' "$stored" | grep -q '\$(nproc)' \
-   && printf '%s' "$stored" | grep -q '`balanced`'; then
+if grep -q 'accel_mem_budget_gb' <<<"$stored" \
+   && grep -q '\$(nproc)' <<<"$stored" \
+   && grep -q '`balanced`' <<<"$stored"; then
     ok "--summary-file - (stdin) preserves backticks and \$(...)"
 else
     bad "stdin path lost characters: $out"
@@ -132,14 +132,14 @@ rm -rf "$WORK"/index.d
 
 # ── 3. argv refuses residue ──────────────────────────────────────────────────
 out="$(run_append --summary 'lost the closing ` here')"; rc=$?
-if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q 'unbalanced backtick'; then
+if [ $rc -ne 0 ] && grep -q 'unbalanced backtick' <<<"$out"; then
     ok "argv path REFUSES an unbalanced backtick"
 else
     bad "argv path accepted an unbalanced backtick (rc=$rc)"
 fi
 
 out="$(run_append --summary 'a literal $(hostname) survived')"; rc=$?
-if [ $rc -ne 0 ] && printf '%s' "$out" | grep -q 'command substitution'; then
+if [ $rc -ne 0 ] && grep -q 'command substitution' <<<"$out"; then
     ok "argv path REFUSES a literal \$("
 else
     bad "argv path accepted a literal \$( (rc=$rc)"

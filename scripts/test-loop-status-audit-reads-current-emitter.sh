@@ -72,7 +72,7 @@ else
     emitted="$(bash scripts/cycle-metrics.sh 2>/dev/null | grep -m1 '^skippable: ' || true)"
     if [ -z "$emitted" ]; then
         echo "skip: ARM 4 — cycle-metrics.sh emitted no skippable line on this host; the tie is UNTESTED here, not satisfied"
-    elif printf '%s' "$emitted" | grep -qE "$SHAPE"; then
+    elif grep -qE "$SHAPE" <<<"$emitted"; then
         ok "ARM 4 (teeth): the audit's own SHAPE matches what cycle-metrics.sh emits RIGHT NOW"
     else
         bad "ARM 4: SHAPE does not match the live emitter — they have drifted apart again. emitted: ${emitted:0:80}"
@@ -96,7 +96,7 @@ d="$(mkcorpus a6)"
 printf '## Cycle\n\nno machine block.\n' > "$d/20260917t120000z-deadbeef-hostr.md"
 printf '## Cycle\n\nnone here either.\n' > "$d/20260917t110000z-deadbeef-hosts.md"
 err="$(TILLANDSIAS_LOOP_STATUS_DIR="$d" bash "$AUDIT" 2>&1 >/dev/null)"; rc=$?
-if printf '%s' "$err" | grep -q "violation:anchor-matches-nothing"; then
+if grep -q "violation:anchor-matches-nothing" <<<"$err"; then
     ok "ARM 6: a corpus with zero readable lines refuses with a FORMAT-DRIFT verdict, not a host verdict"
 else
     bad "ARM 6: zero readable lines produced no drift verdict — every host reads NOT-PASTING and the parser is never suspected"

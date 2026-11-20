@@ -80,8 +80,8 @@ YAML
 # ── ARM 1: the wrong opener is REFUSED, and the refusal names the key ────────
 out="$(bash "$RUNNER" --parse-only "$TMP/merged.yaml" 2>&1)"; rc=$?
 if [ "$rc" -ne 0 ] \
-   && printf '%s' "$out" | grep -q 'PARSE ERROR' \
-   && printf '%s' "$out" | grep -q "'- name:'"; then
+   && grep -q 'PARSE ERROR' <<<"$out" \
+   && grep -q "'- name:'" <<<"$out"; then
     ok "ARM 1: '- name:' item refused, and the refusal names the offending key"
 else
     bad "ARM 1: expected a PARSE ERROR naming '- name:', got rc=$rc: $out"
@@ -89,7 +89,7 @@ fi
 
 # ── ARM 2: an unquoted step name is refused for the same reason ──────────────
 out="$(bash "$RUNNER" --parse-only "$TMP/unquoted.yaml" 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'double-quoted scalar'; then
+if [ "$rc" -ne 0 ] && grep -q 'double-quoted scalar' <<<"$out"; then
     ok "ARM 2: unquoted step name refused, remedy named"
 else
     bad "ARM 2: expected refusal naming the double-quoted scalar, got rc=$rc: $out"
@@ -109,7 +109,7 @@ sed 's/^\( *\)malformed_items+=.*/\1:/' "$RUNNER" > "$TMP/mutant.sh" 2>/dev/null
   || cp "$RUNNER" "$TMP/mutant.sh"
 if ! grep -q 'malformed_items+=' "$TMP/mutant.sh"; then
     out="$(bash "$TMP/mutant.sh" --parse-only "$TMP/merged.yaml" 2>&1)"; rc=$?
-    if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q ':1 step(s)'; then
+    if [ "$rc" -eq 0 ] && grep -q ':1 step(s)' <<<"$out"; then
         ok "ARM 3: MUTANT reproduces the silent merge — two items in, '1 step(s)', exit 0, no diagnostic"
     else
         bad "ARM 3: mutant did not reproduce the pre-fix merge (rc=$rc): $out"
@@ -122,7 +122,7 @@ fi
 # The count is the assertion, not exit 0: the defect this guards produces a
 # green exit with a wrong count, so a rc-only check would pass on it.
 out="$(bash "$RUNNER" --parse-only "$TMP/valid.yaml" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q ':2 step(s)'; then
+if [ "$rc" -eq 0 ] && grep -q ':2 step(s)' <<<"$out"; then
     ok "ARM 4: valid two-item file still parses as exactly 2 steps"
 else
     bad "ARM 4: expected ok with 2 step(s), got rc=$rc: $out"

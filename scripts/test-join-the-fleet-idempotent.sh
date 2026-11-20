@@ -74,12 +74,12 @@ if [ -n "$claimed" ] && [ "$claimed" = "$nskip" ]; then
 else
     bad "arm2: verdict claims skipped=${claimed:-?} but $nskip skip lines were printed"
 fi
-if printf '%s\n' "$o3" | grep -q -e '^skip:join-the-fleet:toolbox:forge$'; then
+if grep -q -e '^skip:join-the-fleet:toolbox:forge$' <<<"$o3"; then
     good "toolbox is a named skip in a forge"
 else
     bad "arm2: toolbox not skipped by name in a forge"
 fi
-if printf '%s\n' "$o3" | grep -q -E -e '^ok:join-the-fleet:(toolbox|substrate)'; then
+if grep -q -E -e '^ok:join-the-fleet:(toolbox|substrate)' <<<"$o3"; then
     bad "arm2: a host-only step reported ran in a forge"
 else
     good "no host-only step reported as ran"
@@ -89,7 +89,7 @@ fi
 echo "arm 3 — TROUBLESHOOTING: a missing pre-push hook yields todo: naming the installer, rc=1"
 mkdir -p "$W/scaffold.git/hooks"
 o4="$(JOIN_FLEET_GIT_DIR="$W/scaffold.git" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"; r4=$?
-if printf '%s\n' "$o4" | grep -q -e '^todo:join-the-fleet:hooks:scripts/install-hooks.sh$' && [ "$r4" != 0 ]; then
+if grep -q -e '^todo:join-the-fleet:hooks:scripts/install-hooks.sh$' <<<"$o4" && [ "$r4" != 0 ]; then
     good "todo: names the hook installer, rc=$r4"
 else
     bad "arm3: expected todo:join-the-fleet:hooks:scripts/install-hooks.sh with rc!=0, got rc=$r4: $(printf '%s\n' "$o4" | tail -2 | tr '\n' ' ')"
@@ -109,24 +109,24 @@ git -C "$scratch" config rerere.enabled false
 o5="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
 git -C "$scratch" config rerere.enabled true
 o6="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
-if printf '%s\n' "$o5" | grep -q -e '^todo:join-the-fleet:rerere:git config rerere.enabled true$'; then
+if grep -q -e '^todo:join-the-fleet:rerere:git config rerere.enabled true$' <<<"$o5"; then
     good "rerere off: todo names 'git config rerere.enabled true'"
 else
     bad "arm4: rerere off did not yield the todo: $(printf '%s\n' "$o5" | grep -e rerere | tr '\n' ' ')"
 fi
-if printf '%s\n' "$o6" | grep -q -e '^ok:join-the-fleet:rerere$'; then
+if grep -q -e '^ok:join-the-fleet:rerere$' <<<"$o6"; then
     good "rerere on: ok:join-the-fleet:rerere"
 else
     bad "arm4: rerere on did not yield ok: $(printf '%s\n' "$o6" | grep -e rerere | tr '\n' ' ')"
 fi
 
 echo "arm 5 — WORK REF: a checkout on work/<order> is noted, never a branch todo"
-if printf '%s\n' "$o6" | grep -q -e '^note:join-the-fleet:branch:work/1317-9ugn$'; then
+if grep -q -e '^note:join-the-fleet:branch:work/1317-9ugn$' <<<"$o6"; then
     good "note:join-the-fleet:branch:work/1317-9ugn printed"
 else
     bad "arm5: no branch note for the work ref: $(printf '%s\n' "$o6" | grep -e branch | tr '\n' ' ')"
 fi
-if printf '%s\n' "$o6" | grep -q -e '^todo:join-the-fleet:branch:'; then
+if grep -q -e '^todo:join-the-fleet:branch:' <<<"$o6"; then
     bad "arm5: a work ref was reported as a branch todo"
 else
     good "no branch todo on a work ref"
