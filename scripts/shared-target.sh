@@ -76,8 +76,10 @@ shared_target_forget_build_scripts() {
         n=$((n + 1))
     done < <(
         # shellcheck disable=SC2016 — awk program, not shell
-        awk -v cur="$root" -v roots="$roots" -v canon="$canon" '
-            BEGIN { nr = split(roots, R, "\n") }
+        # roots is multi-line: through the environment, never awk -v (BSD awk
+        # rejects a newline in a -v value; 1399-wtpq).
+        ST_ROOTS="$roots" awk -v cur="$root" -v canon="$canon" '
+            BEGIN { nr = split(ENVIRON["ST_ROOTS"], R, "\n") }
             FNR == 1 { flagged = 0 }
             flagged { next }
             /^cargo::?rerun-if-changed=\// {
