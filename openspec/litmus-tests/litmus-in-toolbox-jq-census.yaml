@@ -1,0 +1,46 @@
+# @trace spec:ci-release, order:2119-swiw
+name: litmus:in-toolbox-jq-census
+spec: ci-release
+phase: pre-build
+description: >
+  The census of jq call sites in code that runs where jq is NOT installed: a
+  script run inside the tillandsias-nix toolbox (nix-toolbox.sh run), or a
+  script in an image whose Containerfile does not install jq. It is 0, or each
+  remaining site has a named exception in scripts/lua/check-in-toolbox-jq.lua.
+  Measured 2026-11-20 on lenovinha: the nix toolbox has no jq, so a jq filter
+  there yields an empty answer and no error (2118-u5b7). New code uses
+  tillandsias-plan json get.
+severity: medium
+size: instant
+
+preconditions:
+  - a built plan binary (resolve_plan_binary)
+
+critical_path:
+  - step: "the live tree has no jq call site where jq is not installed"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/check-in-toolbox-jq.lua 2>/dev/null"
+    timeout_ms: 15000
+    expected_behavior: "sites=0"
+
+  - step: "NEGATIVE CONTROL: a planted toolbox-run consumer and an image consumer are both refused"
+    # The fixture is built here, not committed: committed .sh files with jq
+    # would themselves be new sites for the jq call-site ratchet (1375-tsfu).
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; mkdir -p target; F=$(mktemp -d \"$PWD/target/in-toolbox-jq.XXXXXX\"); mkdir -p \"$F/images/nojq\" \"$F/images/hasjq\" \"$F/scripts\"; printf 'FROM scratch\\n# no jq installed, only mentioned\\n' > \"$F/images/nojq/Containerfile\"; printf '#!/bin/sh\\n# jq in a comment is not a site\\nv=$(jq -r .a f.json)\\n' > \"$F/images/nojq/run.sh\"; printf 'FROM scratch\\nRUN dnf install -y jq\\n' > \"$F/images/hasjq/Containerfile\"; printf '#!/bin/sh\\njq -r .a x.json\\n' > \"$F/images/hasjq/run.sh\"; printf '#!/bin/bash\\nbash \"$ROOT/scripts/nix-toolbox.sh\" run -- bash scripts/inner.sh\\n' > \"$F/scripts/outer.sh\"; printf '#!/bin/bash\\njq -r keys drv.json\\n' > \"$F/scripts/inner.sh\"; out=$(\"$P\" script run scripts/lua/check-in-toolbox-jq.lua -- --root \"$F\" 2>/dev/null); rc=$?; rm -rf \"$F\"; [ \"$rc\" = 1 ] && grep -q '^violation:in-toolbox-jq:scripts/inner.sh:2$' <<<\"$out\" && grep -q '^violation:in-toolbox-jq:images/nojq/run.sh:3$' <<<\"$out\" && ! grep -q 'images/hasjq' <<<\"$out\" && echo 'ok: census-refuses-planted-sites' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: census-refuses-planted-sites"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "in-toolbox jq census at 0; planted sites refused"
+  log_fields:
+    spec: "ci-release"
+    test: "in-toolbox-jq-census"
+    artifact: "scripts/lua/check-in-toolbox-jq.lua; a scratch fixture under target/ (removed in-step)"
+
+rollback:
+  on_failure: >
+    A jq call site was added where jq is not installed. Port it to
+    tillandsias-plan json get (jq filter grammar), or name it in EXCEPTIONS
+    with the reason the plan binary cannot be used there.
+  command: "tillandsias-plan script run scripts/lua/check-in-toolbox-jq.lua"
