@@ -79,7 +79,6 @@ scripts/check-unrunnable-platform-arms.sh
 scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-clippy.sh
-scripts/check-windows-tray-diagnose-surface.sh
 scripts/check-yaml-reader-availability.sh
 scripts/test-a-claim-names-a-workstation.sh
 scripts/test-added-test-is-referenced.sh
@@ -559,11 +558,8 @@ scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
 scripts/test-vsock-handshake-wire-v2.sh
 scripts/test-warm-tier-model.sh
-scripts/test-windows-host-lane-refusal-controls.sh
-scripts/test-windows-host-lane-refusal.sh
 scripts/test-windows-only-sources-verified.sh
 scripts/test-windows-tray-clippy.sh
-scripts/test-windows-tray-diagnose-surface.sh
 scripts/test-worktree-boundary-guard.sh
 scripts/test-wsl-exec-channel-carries-exit-status.sh
 scripts/test-wsl2-builder-shell-options.sh
