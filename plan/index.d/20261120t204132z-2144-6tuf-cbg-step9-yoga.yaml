@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: RC attempt 2 release blocker (coordinator).
+packets:
+  - packet_id: committable-branch-guard-shape-step-9-probes-a-directory-that-is-provably-not-a-repository
+    order: 2144-6tuf
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, fixtures, release-blocker]
+    estimated_hours: 1
+    owned_files:
+      - openspec/litmus-tests/litmus-committable-branch-guard-shape.yaml
+    title: "committable-branch-guard-shape step 9 probes a directory that is provably not a repository, whatever TMPDIR is"
+    context: |
+      RC attempt 2 (2026-11-20): step 9 "outside a git checkout" printed FAIL: premise: blocked:no-git-identity. The guard
+      checks not-a-repo FIRST, so reaching the identity check means `mktemp -d` landed INSIDE a git checkout: under the gate
+      TMPDIR is beneath the checkout, and `git rev-parse --git-dir` there resolves to the checkout's own .git (measured on
+      yoga). An identity would not fix it; the arm would then answer ok:branch-linux-next.
+    exit_criteria:
+      - "Step 9's probe directory carries a .git file pointing at a nonexistent gitdir, and the step asserts its premise (git rev-parse fails there) before reading the verdict; it passes with TMPDIR inside the checkout. Pre-fix with TMPDIR inside the checkout: FAILS with blocked:no-git-identity or ok:branch-*."
+    unscoreable: "the litmus step is the measure"
+    provenance: "RC attempt 2 2026-11-20, coordinator relay; yoga repro."
+    events:
+      - type: filed
+        ts: "2026-11-20T20:41:32Z"
+        host: yoga
+        summary: "filed and claimed (release blocker)"
