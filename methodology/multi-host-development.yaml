@@ -1419,6 +1419,21 @@ multi_host_development:
       owning host — partial local evidence plus an honest residual note
       beats both silence and false completion.
 
+  # ── OPERATOR RULINGS 2026-11-20: the landing queue (order 2143-z5uj) ────────
+  landing_queue:
+    provenance: "operator 2026-11-20, relayed by the coordinator (macuahuitl-fedora); the operator called one-PR-per-full-gate in strict number order an unacceptable bottleneck"
+    rulings:
+      - "A batch or class train gates the LANDED UNION TREE once; a scoped batch follows the 2026-09-20 scoped-tier conditions (scoped stamps only, a full run under 24 h old or the selector refuses, main always full). Implementation: the P7 batch-train packet."
+      - "--floor replaces the worker-side --preflight requirement for work/* refs. Until build.sh --floor exists, the worker-side door stays ./build.sh --preflight."
+      - "A plan-ledger-only PR (every merge-delta path classifies plan-ledger) lands through the plan-lane checks (tillandsias-plan check: fragment parse and ledger validation) with NO build-check. scripts/land-queue.sh: TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE, default 1."
+    mechanics:
+      reread: "scripts/land-queue.sh re-reads gh pr list before EVERY candidate, so a label or close made mid-run takes effect at the next candidate."
+      order: "label land:priority first, then PR number."
+      hold: "label land:hold keeps a PR out of the queue and is named every run; it replaces draft-as-hold (a draft is still skipped, never landed)."
+      host_state: "a host-state failure (could-not-run:host:<reason>, e.g. plan-binary-stale) skips that candidate and the run continues; nothing is evicted for it."
+      flaky_rerun: "a gate red whose failing lines name only tests the candidate's diff does not touch is re-run ONCE on the identical tree: green prints flaky:<test> and lands, red prints evicted:<test>. A red naming no test, or a touched test, is judged on the first run."
+    vocabulary: "one stdout line per candidate or batch, <class>:<scope>:<detail>; precedence could-not-run:host:<reason> > hold:<trunk-red|native-lint>:... > evicted:<test> > flaky:<test>; cleared:stale-head:host resets stale-head. Agreed fleet-wide 2026-11-20 (yoga, lenovinha, coordinator). evicted is the ONLY class that removes a PR."
+
 # ── OPERATOR DIRECTIVE 2026-08-31: loop cadence and stagger ────────────────────
 loop_cadence:
   directive: >
