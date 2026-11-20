@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga-silverblue, 2026-11-17, on operator direction 2026-11-16 relayed by macuahuitl-fedora.
+packets:
+- packet_id: accept-licence-opens-a-github-pr-and-the-human-merge-is-the-gate
+  order: 2094-h3rq
+  status: claimed
+  kind: feature
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [licence, approval, github, hook, skill]
+  size: M
+  implementer_tier: opus
+  estimated_hours: 6
+  title: accept-licence opens a licences/<id> PR in the project and a human merge in the GitHub web UI is the approval gate
+  context: >-
+    Operator direction 2026-11-16 (relayed by macuahuitl-fedora). Zero-setup replacement for the
+    SSHSIG signing flow of 2022-ygqj/2022-89hm/2022-hn2k for the first customers (demon_attack:
+    Fish S2-Pro, Higgs v2 incl. Llama 3 terms). The skill crafts ONE pull request in the PROJECT
+    repo, head licences/<licence-id>, base the default branch, carrying the acknowledgement YAML,
+    the obligations spec, the licence text verbatim with its pinned sha256 and a plain-language
+    summary, and hands the user ONE URL to press Merge. The admit gate admits only a record that
+    reached the default branch through a GitHub merge. Agents never merge (hook refusal).
+  exit_criteria:
+  - 'The admit gate refuses a record that is in the checkout but did not reach the default branch through a GitHub PR merge commit, and an unsigned unmerged YAML admits nothing (test mutates the gate and goes red).'
+  - 'Evidence on admission: pr number, merge sha, merged_at, and merged_by only from an online check; offline merged_by is reported unknown, never fabricated.'
+  - 'tillandsias-plan policy classify-bash refuses gh pr merge on a licences/ head and any merges-API call (test mutates the rule and goes red).'
+  - 'The accept-licence skill renders the PR (files plus body) and opens it with gh pr create only; a dry-run renders to a local dir with no network write.'
+  - 'Known gap recorded in openspec/changes/os-verified-approval-gates: a host agent holding the operator GitHub token can merge through the API and GitHub records the same evidence as a web merge.'
+  verifiable_closure: 'cargo test -p tillandsias-headless licence_consent and -p tillandsias-plan bash_policy, plus a real licence PR merged by the operator in demon_attack and admitted.'
+  unscoreable: 'none.'
+  next_action: 'Draft PR open on work/2094-h3rq; operator review of the dry-run render; then first real PR on demon_attack.'
+  provenance: yoga-silverblue 2026-11-17 on operator direction 2026-11-16; relates 2022-ygqj.
+  events:
+  - {type: filed, ts: '2026-11-17T00:00:00Z', host: yoga, summary: filed p1 claimed by yoga}

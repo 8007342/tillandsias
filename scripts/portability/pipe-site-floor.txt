@@ -388,7 +388,6 @@ scripts scripts/check-no-competing-gate.sh 6
 scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-opsx-generated-dirt.sh 1
-scripts scripts/check-packet-tier-declared.sh 4
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
@@ -412,7 +411,6 @@ scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
-scripts scripts/check-tray-string-corpus-drift.sh 2
 scripts scripts/check-unrunnable-platform-arms.sh 5
 scripts scripts/check-version-bump-isolation.sh 2
 scripts scripts/check-windows-only-sources-verified.sh 12
@@ -476,7 +474,6 @@ scripts scripts/litmus-helper-browser-isolation.sh 3
 scripts scripts/litmus-helper-event-driven.sh 6
 scripts scripts/litmus-helper-storage-isolation.sh 13
 scripts scripts/litmus-helper-tray-network-bootstrap.sh 3
-scripts scripts/litmus-run-one.sh 4
 scripts scripts/litmus-stdlib.sh 10
 scripts scripts/local-ci.sh 49
 scripts scripts/loop-status-metrics-audit.sh 3
@@ -523,7 +520,6 @@ scripts scripts/select-work-batch.sh 43
 scripts scripts/selective-tillandsias-reset.sh 1
 scripts scripts/session-tokens.sh 1
 scripts scripts/smoke-consecutive-lanes.sh 4
-scripts scripts/smoke-test.sh 9
 scripts scripts/spec-index-ensure.sh 7
 scripts scripts/stage-image-cheatsheets.sh 5
 scripts scripts/stamp-requirement-ids.sh 3
@@ -553,8 +549,6 @@ scripts scripts/test-brew-shim-reentrancy.sh 2
 scripts scripts/test-brew-shim-tier2-warning.sh 6
 scripts scripts/test-bsd-count-shapes.sh 6
 scripts scripts/test-build-sh-ci-full-install-prep.sh 1
-scripts scripts/test-build-sh-darwin-install-refusal.sh 5
-scripts scripts/test-build-sh-darwin-tool-remediation.sh 8
 scripts scripts/test-build-step-timing-attribution.sh 1
 scripts scripts/test-capabilities-envelope-names-its-source.sh 4
 scripts scripts/test-capability-routing.sh 24
@@ -694,7 +688,6 @@ scripts scripts/test-litmus-step-model.sh 1
 scripts scripts/test-litmus-step-pipefail.sh 3
 scripts scripts/test-litmus-structured-assert.sh 1
 scripts scripts/test-litmus-tracked-file-kill-safety.sh 2
-scripts scripts/test-locale-coverage.sh 9
 scripts scripts/test-long-running-view-refuses-at-completion.sh 26
 scripts scripts/test-loop-status-append-input.sh 6
 scripts scripts/test-loop-status-audit-reads-current-emitter.sh 2
@@ -832,7 +825,6 @@ scripts scripts/update-convergence-dashboard.sh 32
 scripts scripts/validate-spec-cheatsheet-binding.sh 3
 scripts scripts/validate-traces.sh 17
 scripts scripts/verify-closure.sh 37
-scripts scripts/verify-image-usable.sh 1
 scripts scripts/verify-version-monotonic.sh 2
 scripts scripts/windows-host-capability-probe.sh 15
 scripts scripts/with-nix-builder.sh 4

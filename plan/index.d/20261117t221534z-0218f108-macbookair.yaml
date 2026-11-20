@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-inference-container-cannot-write-the-macos-model-cache-share-so-the-engine-self-install-fatals-on-every-launch
+    field: context
+    value: |-
+      FOUND on tlatoanis-macbook-air 2026-09-14 while taking 804-deux part (a)
+      — the guest-side models-versus-images split on a POPULATED cache. The
+      cache could not be populated, and this is why.
+
+      WHAT HAPPENS. The `tillandsias-inference` container starts, tries to
+      self-install the ollama binary into `${OLLAMA_MODELS}.tools`, and dies:
+
+        [inference] Installing ollama binary (first run)...
+        mkdir: cannot create directory '/home/ollama/.ollama/models/.tools': Permission denied
+        [inference] WARN: cannot create /home/ollama/.ollama/models/.tools/ollama (volume ownership? see order 313)
+        [inference] engine payload verified: v0.34.0/arm64 sha256 ok
+        tar: /home/ollama/.ollama/models/.tools: Cannot open: No such file or directory
+        tar: Error is not recoverable: exiting now
+        [inference] ollama install FAILED (see errors above) — will retry next launch (non-fatal)
+        [inference] FATAL: no ollama binary available (self-install failed above) — exiting so the next launch retries
+
+      "will retry next launch (non-fatal)" followed immediately by "FATAL"
+      describes a retry that cannot ever succeed: the cause is a permission
+      structure, not a transient.
+
+      THE MECHANISM, discriminated by measurement rather than inferred. Three
+      actors, same directory:
+
+        host, macOS          uid 501 (tlatoani), mode 0755
+        guest, as root       mkdir in the share -> OK
+        container, uid 1000  mkdir in the share -> Permission denied
+        container, uid 1000  mkdir in /tmp (non-share) -> OK
+
+      So the container is not broadly unable to write, and the share is not
+      broadly unwritable. virtiofs presents the host directory to the guest as
+      ROOT-OWNED 0755 (confirmed in-guest: `drwxr-xr-x 2 root root`), the
+      inference container runs as uid 1000 (`id` -> uid=1000(ollama)), and
+      ordinary Unix semantics then forbid it creating an entry. Nothing is
+      misbehaving; the ownership the share arrives with and the uid the
+      container runs as were never reconciled.
+
+      WHY IT HAS BEEN INVISIBLE. On Linux the model cache is a podman VOLUME,
+      which podman can chown — order 313 is exactly that lesson, and the
+      entrypoint's own WARN text still says "volume ownership? see order 313".
+      The macOS lane replaced the volume with a virtiofs share (804-deux part
+      1) and inherited none of that. It only bites on an EMPTY cache: once
+      `.tools/` exists, the extract has a target and later launches work — so a
+      host whose cache was populated before the share existed never sees it.
+      This host's cache was emptied by the v56.9.13.1 clean-room smoke hours
+      earlier, which is why it surfaced now.
+
+      CONSEQUENCE. On a macOS host with a clean model cache the inference lane
+      cannot start at all, and by construction cannot pull a model — so the
+      model cache stays empty forever, and every downstream claim about
+      local experts on macOS rests on a lane that has not run. 804-deux's part
+      (a) is BLOCKED on this: the populated cache it wants to measure is
+      unreachable through the product's own path.
+
+
+      [2026-11-17T22:15:34Z macbookair] 2026-11-17 macbookair: scripts/test-macos-model-share-writable.sh defaulted to a stale dist/ dev bundle (56.11.4.1) and printed a FALSE violation:no-arm-output-guest-unreachable; against the installed v56.11.17.2 tray it honestly skipped (no-version-tagged-inference-image). Fix: prefer the installed /Applications tray, or refuse a bundle older than the checkout VERSION.
+    ts: "2026-11-17T22:15:34Z"
+    host: macbookair

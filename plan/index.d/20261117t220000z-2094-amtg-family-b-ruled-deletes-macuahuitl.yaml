@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: delete-the-ten-unreferenced-shell-scripts-already-ruled-deletable-family-b-part-one
+    order: 2094-amtg
+    status: in_progress
+    kind: cleanup
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-reduction, scripts, family-b]
+    estimated_hours: 1
+    title: |
+      Family B part 1: delete ten unreferenced shell scripts (the four *_test.sh wrappers, smoke-test, deferred-specs, dispatch-brief, claude-mcp, build-web, update-config)
+    context: |
+      Operator ruling 2026-11-17: unreferenced non-test shell scripts must go; fleet objective halve the .sh count. Re-derived on origin/linux-next: none of these ten has a reference outside plan/, docs/ and the portability floor files. Stale mentions fixed in cheatsheets/runtime/podman-control-plane.md (both copies) and skills/haiku-delegate/SKILL.md; floor entries removed.
+    exit_criteria:
+      - 'git ls-files for the ten paths prints nothing'
+      - 'git grep for each basename outside plan/ and *.tsv data prints nothing'
+    verifiable_closure: 'git ls-files scripts/full_test.sh scripts/smoke-test.sh scripts/claude-mcp.sh build-web.sh update-config.sh prints nothing'
+    unscoreable: 'none.'
+    next_action: 'Land the work/2094-amtg PR into linux-next.'
+    provenance: operator ruling 2026-11-17 relayed by the coordinator; scanned on macuahuitl by a Claude agent.
+    depends_on: []
+    related: [2095-m87j, 2096-y7sx]
+    events:
+      - {type: filed, ts: '2026-11-17T22:00:00Z', host: macuahuitl-fedora, summary: filed in_progress by macuahuitl-fedora}

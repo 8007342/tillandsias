@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed and taken by yolanda 2026-11-19 at macuahuitl-fedora's direction (operator: yolanda owns Puck and GrapesJS authoring end to end).
+packets:
+  - packet_id: the-puck-studio-edits-the-sites-own-puck-config-and-saves-one-commit-per-click
+    order: 2110-pk4s
+    status: claimed
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, puck, git]
+    estimated_hours: 6
+    owned_files:
+      - images/studio/Containerfile.puck
+      - images/studio/puck/server.mjs
+      - images/studio/puck/studio-puck
+      - images/studio/puck/build/editor.jsx
+      - images/studio/puck/build-site.mjs
+    title: "The Puck studio builds its editor against the site's own puck.config and deps, outside the checkout, and saves .tillandsias/studio/puck/pages/<page>.json with an explicit Save (dirty state, one commit per click, no-op commits nothing, local draft only)"
+    context: |
+      MEASURED 2026-11-19 by tlatoani.net-forge on work/research-puck-vite (Vite 8, React 19, @puckeditor/core 0.24.1,
+      src/puck.config.tsx default-export Config, data at .tillandsias/studio/puck/pages/home.json): the page renders
+      correctly in Puck, but Publish has no write endpoint a dev window can reach (browser.open allows only
+      https www.<project>.localhost). The studio-puck image bundles a two-block demo config with @measured/puck
+      0.20.2 at image build time and never loads the site's config; its Publish commits per click with no dirty
+      state. Coordinator rulings: build it like GrapesJS; no raw forge dev port; editor route never ships to prod;
+      operator ruling 2108-dptd applies (explicit Save, no autosave commits, draft only in browser storage);
+      node_modules outside the checkout.
+    exit_criteria:
+      - "With src/puck.config.tsx present, the studio editor renders the site's own components. Pre-fix: FAILS (demo Heading/Paragraph only)."
+      - "A change marks dirty without saving; one Save click makes exactly one commit of pages/<page>.json, pretty-printed; a Save with no change commits nothing. Pre-fix: FAILS (no dirty state; every Publish commits)."
+      - "No studio build output or node_modules lands in the checkout. Pre-fix: n/a (no build)."
+    unscoreable: "unpinnable-until-the-guard-exists: the arms land in a puck selftest in the same commit (1136-n8sh)"
+    provenance: "tlatoani.net-forge findings and macuahuitl-fedora routing 2026-11-19; yolanda reads of images/studio/puck."
+    events:
+      - type: filed
+        ts: "2026-11-19T03:00:00Z"
+        host: yolanda
+        summary: "filed at the coordinator's direction"
+      - type: claimed
+        ts: "2026-11-19T03:00:00Z"
+        host: yolanda
+        summary: "claimed by yolanda; 2108-dptd in PR #1158 awaiting land"

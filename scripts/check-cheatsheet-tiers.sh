@@ -23,7 +23,7 @@
 # Exits 0 only if all ERROR-level checks pass. With --strict, warnings also
 # cause a non-zero exit and are treated as CI drift.
 #
-# Complement to scripts/check-cheatsheet-sources.sh (the legacy verbatim-source
+# Complement to scripts/lua/check-cheatsheet-sources.lua (the legacy verbatim-source
 # validator); they overlap on cheatsheet enumeration but apply orthogonal
 # checks. Once the verbatim source layer is fully retired (Wave 4 tombstones),
 # this script becomes the canonical validator.
