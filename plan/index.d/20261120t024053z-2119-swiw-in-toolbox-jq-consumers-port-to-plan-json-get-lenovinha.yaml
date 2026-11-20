@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: jq-consumers-that-run-inside-toolboxes-or-containers-port-to-tillandsias-plan-json-get
+    order: 2119-swiw
+    status: ready
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [jq, toolbox, container, shell-to-lua, debt]
+    estimated_hours: 6
+    owned_files:
+      - scripts/portability/jq-callsite-floor.txt
+    title: |
+      Census every jq call site in scripts that run INSIDE a toolbox or container (tillandsias-nix, tillandsias-builder, images/*), and port each to tillandsias-plan json get. Do not add jq to the toolbox. Exit is a census at 0, or each remaining site with a named exception.
+    context: |
+      Found 2026-11-20 on lenovinha (2118-u5b7): jq is absent from the tillandsias-nix toolbox. scripts/nix-deps-drv-paths.sh therefore printed blocked:nix-deps-drv:no-deps-input inside it although nix derivation show succeeded: the jq filter silently yielded nothing. Every in-toolbox jq consumer fails the same quiet way. Coordinator direction: new code carries no jq; port to tillandsias-plan json get (jq-compatible filter grammar, e.g. json get -r .a.b), not to a jq install. Where the plan binary cannot be present (a container without it), the site needs a named exception.
+    exit_criteria:
+      - 'a census script or litmus lists jq call sites in scripts that execute inside a toolbox or container; it prints 0, or each remaining site with a named exception'
+      - 'each ported site is exercised inside its toolbox or container (not on the host) and gives the same answer it gave with jq'
+    unscoreable: "unpinnable-until-the-guard-exists: the census litmus (litmus-in-toolbox-jq-census.yaml) is this packet's own deliverable and is written in the same change as the first ports"
+    next_action: Enumerate scripts invoked via nix-toolbox.sh run, with-tillandsias-builder.sh and with-nix-builder.sh, and image entrypoints; grep each for jq; record the census; port the cheapest first.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T02:40:53Z"
+        host: lenovinha
+        summary: in-toolbox jq consumers port to tillandsias-plan json get; census to 0 or named exceptions.
