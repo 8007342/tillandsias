@@ -11,7 +11,7 @@
 name: litmus:shared-target-owner-change-reruns-build-scripts
 spec: ci-release
 phase: pre-build
-description: On a shared-target owner change, every build script whose recorded output names the previous checkout is forgotten (fingerprint and output) so cargo reruns it here; this checkout's own and prefix-lookalike roots are kept
+description: On a shared-target owner change, every build script whose recorded rerun-if-changed paths belong to a checkout other than the current one (longest worktree root wins) is forgotten so cargo reruns it here; registry and OUT_DIR paths never cause a forget
 severity: medium
 size: instant
 
@@ -22,12 +22,12 @@ critical_path:
   - step: "forgets the build scripts that read the previous checkout in both profiles, keeps this checkout's and a prefix lookalike's, and shared_target_enter calls it"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-shared-target-forgets-build-scripts.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "ok:shared-target-forgets-build-scripts:7 arms"
+    expected_behavior: "ok:shared-target-forgets-build-scripts:12 arms"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "seven arms: count, debug forgotten, release forgotten, own kept, lookalike kept, no-prev no-op, wiring"
+  expected_log: "twelve arms: other worktrees, a third worktree, the main checkout and a deleted worktree forgotten; own, registry and OUT_DIR kept; wt-1 vs wt-10 boundary; main as owner; wiring"
   log_fields:
     spec: "ci-release"
     test: "shared-target-owner-change-reruns-build-scripts"

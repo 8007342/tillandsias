@@ -38,28 +38,62 @@ shared_target_digest() { # ROOT -> digest of the checkout path and its index
     { printf '%s\n' "$root"; git -C "$root" ls-files -s; } | sha256sum | cut -d' ' -f1
 }
 
-# ORDER 2146-4svj. shared_target_forget_build_scripts CANON PREV_ROOT
+# ORDER 2146-4svj. shared_target_forget_build_scripts CANON ROOT
 #
 # Touching this checkout's files is NOT enough for a build script that emits
 # cargo:rerun-if-changed: cargo then reruns it only when THOSE paths change,
-# and they are ABSOLUTE paths into the PREVIOUS owner's checkout, which nobody
-# touched. Measured 2026-11-20 on lenovinha: a gate in wt-2118-77ew ran with
-# tillandsias-embed's assets embedded from wt-2118-tnut's images/ (651 assets
-# against this tree's 653), so the embedded-regime test went red — and a
-# green gate could equally have vouched for another worktree's assets.
-# So on an owner change, every build script whose recorded output names the
-# previous root is forgotten (its run fingerprint and its output), and cargo
-# reruns it against this checkout. Prints how many it forgot.
+# and they are ABSOLUTE paths into whichever checkout last ran it. Cargo keeps
+# one build-script unit per feature set and profile, and the unit's identity
+# does not include the checkout path, so each unit is owned by whichever
+# worktree built it last — not necessarily the previous owner. Measured
+# 2026-11-20 on lenovinha: a gate in wt-2118-tnut linked tillandsias-embed's
+# test unit built a day earlier from wt-gate-2112 (651 assets against this
+# tree's 653), and a first fix that forgot only the PREVIOUS owner's outputs
+# left it red. A green gate could equally have vouched for another worktree's
+# assets.
+#
+# So every build script whose recorded rerun-if-changed paths belong to a
+# checkout OTHER than ROOT is forgotten (its run fingerprint and its output),
+# and cargo reruns it here. A path belongs to the LONGEST checkout root that
+# contains it (git worktree list; the main checkout contains target/work/*
+# worktrees), so a path under a deleted worktree belongs to the main
+# checkout and is forgotten too. Paths outside every checkout (the cargo
+# registry, /usr) and a build script's own OUT_DIR (<target>/.../build/<unit>/out)
+# never cause a forget. Not "anything under the target dir": this clone's
+# worktrees live in target/work/, inside it, and a first draft that excluded
+# the whole target dir kept a wt-gate-2112 unit it should have forgotten. Over-forgetting costs a rerun, never a
+# wrong verdict. Prints how many it forgot.
 shared_target_forget_build_scripts() {
-    local canon="$1" prev_root="$2" out dir name n=0
-    [ -n "$canon" ] && [ -d "$canon" ] && [ -n "$prev_root" ] || { echo 0; return 0; }
+    local canon="$1" root="$2" roots out dir name n=0
+    [ -n "$canon" ] && [ -d "$canon" ] && [ -n "$root" ] || { echo 0; return 0; }
+    roots="$(git -C "$root" worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')"
+    roots="$(printf '%s\n%s\n' "$roots" "$root" | sed '/^$/d' | LC_ALL=C sort -u)"
     while IFS= read -r out; do
         [ -n "$out" ] || continue
         dir="${out%/output}"            # <profile>/build/<pkg>-<hash>
         name="${dir##*/}"
         rm -rf -- "${dir%/build/*}/.fingerprint/$name" "$dir"
         n=$((n + 1))
-    done < <(grep -l -F -- "rerun-if-changed=$prev_root/" "$canon"/*/build/*/output "$canon"/*/*/build/*/output 2>/dev/null)
+    done < <(
+        # shellcheck disable=SC2016 — awk program, not shell
+        awk -v cur="$root" -v roots="$roots" -v canon="$canon" '
+            BEGIN { nr = split(roots, R, "\n") }
+            FNR == 1 { flagged = 0 }
+            flagged { next }
+            /^cargo::?rerun-if-changed=\// {
+                p = $0; sub(/^cargo::?rerun-if-changed=/, "", p)
+                # the OUT_DIR of a build script. NOT every path under the target
+                # dir: the worktrees of this clone live in target/work/, inside it.
+                if (index(p, canon "/") == 1 && p ~ /\/build\/[^\/]+\/out(\/|$)/) next
+                best = ""
+                for (i = 1; i <= nr; i++) {
+                    r = R[i]
+                    if (r != "" && (p == r || index(p, r "/") == 1) && length(r) > length(best)) best = r
+                }
+                if (best != "" && best != cur) { print FILENAME; flagged = 1 }
+            }
+        ' "$canon"/*/build/*/output "$canon"/*/*/build/*/output 2>/dev/null
+    )
     echo "$n"
 }
 
@@ -129,10 +163,9 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
         # Not a ledger of intent: cargo trusts mtime alone, so make every
         # tracked file newer than whatever the previous owner built.
         git -C "$root" ls-files -z --full-name -- ":/" | (cd "$(git -C "$root" rev-parse --show-toplevel)" && xargs -0 touch -c 2>/dev/null) || true
-        _st_forgot=0
-        [ "${prev%% *}" = "$root" ] || _st_forgot="$(shared_target_forget_build_scripts "$canon" "${prev%% *}")"
+        _st_forgot="$(shared_target_forget_build_scripts "$canon" "$root")"
         printf '%s %s\n' "$root" "$digest" > "$owner"
-        echo "shared-target: owner changed (was: ${prev:-none}); tracked files of $root touched so cargo re-fingerprints from this checkout; ${_st_forgot} build script(s) that read the previous checkout will rerun (2146-4svj)" >&2
+        echo "shared-target: owner changed (was: ${prev:-none}); tracked files of $root touched so cargo re-fingerprints from this checkout; ${_st_forgot} build script(s) that read another checkout will rerun (2146-4svj)" >&2
     fi
     export CARGO_TARGET_DIR="$canon"
     export TILLANDSIAS_SHARED_TARGET_HELD="$canon|$root|$$"
@@ -144,6 +177,6 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     case "${1:-}" in
         forget-build-scripts) shift; shared_target_forget_build_scripts "$@"; exit $? ;;
-        *) echo "usage: scripts/shared-target.sh forget-build-scripts <canon> <prev-root>  (or source it)" >&2; exit 2 ;;
+        *) echo "usage: scripts/shared-target.sh forget-build-scripts <canon> <root>  (or source it)" >&2; exit 2 ;;
     esac
 fi
