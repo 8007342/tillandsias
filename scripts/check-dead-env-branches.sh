@@ -107,13 +107,13 @@ if [ "${1:-}" = "--self-test" ]; then
     out="$(DEAD_ENV_ROOT="$t" bash "${BASH_SOURCE[0]}" 2>&1)"
     rc=$?
     [ "$rc" -eq 1 ] || { echo "SELF-TEST FAIL: planted dead var must exit 1, got rc=$rc"; exit 1; }
-    printf '%s\n' "$out" | grep -q 'TILLANDSIAS_SELFTEST_DEAD_VAR' \
+    grep -q 'TILLANDSIAS_SELFTEST_DEAD_VAR' <<<"$out" \
         || { echo "SELF-TEST FAIL: planted dead var not named: $out"; exit 1; }
-    printf '%s\n' "$out" | grep -q 'TILLANDSIAS_SELFTEST_LIVE_VAR' \
+    grep -q 'TILLANDSIAS_SELFTEST_LIVE_VAR' <<<"$out" \
         && { echo "SELF-TEST FAIL: assigned var wrongly reported: $out"; exit 1; }
-    printf '%s\n' "$out" | grep -q 'TILLANDSIAS_SELFTEST_DOC_VAR' \
+    grep -q 'TILLANDSIAS_SELFTEST_DOC_VAR' <<<"$out" \
         && { echo "SELF-TEST FAIL: documented var wrongly reported: $out"; exit 1; }
-    printf '%s\n' "$out" | grep -q 'TILLANDSIAS_SELFTEST_TUNE_VAR' \
+    grep -q 'TILLANDSIAS_SELFTEST_TUNE_VAR' <<<"$out" \
         && { echo "SELF-TEST FAIL: nonempty-default tunable wrongly reported: $out"; exit 1; }
     # ORDER 829-dkuc. THE EVIDENCE MUST BE FOR THE VARIABLE IT IS FILED UNDER.
     #
@@ -128,49 +128,49 @@ if [ "${1:-}" = "--self-test" ]; then
     # This arm pins it in the direction that matters: the _PFX row must cite the
     # line that made it a candidate, not the earlier _PFX_SUFFIX assignment.
     _pfx_ev="$(printf '%s\n' "$out" | grep -A2 "^  ${P}_PFX$" | tail -n +2)"
-    printf '%s\n' "$_pfx_ev" | grep -q "${P}_PFX:-" \
+    grep -q "${P}_PFX:-" <<<"$_pfx_ev" \
         || { echo "SELF-TEST FAIL: prefix-dead var's evidence omits its own gating read: $_pfx_ev"; exit 1; }
-    printf '%s\n' "$_pfx_ev" | grep -q "${P}_PFX_SUFFIX=" \
+    grep -q "${P}_PFX_SUFFIX=" <<<"$_pfx_ev" \
         && { echo "SELF-TEST FAIL: evidence cites a DIFFERENT variable's line: $_pfx_ev"; exit 1; }
 
     # 1166-99mk. NEGATIVE CONTROL: TILLANDSIAS_SELFTEST_DEAD_VAR (asserted
     # dead above) has no assignment in ANY shape, including this one, so
     # widening ASSIGNED must not spare it.
-    printf '%s\n' "$out" | grep -q "${P}_ENVPFX_VAR" \
+    grep -q "${P}_ENVPFX_VAR" <<<"$out" \
         && { echo "SELF-TEST FAIL: \$(VAR=1 cmd) env-prefix assignment not recognized: $out"; exit 1; }
 
     # 1167-ga24. A Rust env::var read with a nonempty unwrap_or_else default
     # is a TUNABLE, parity with the shell \${VAR:-nonempty} exclusion.
-    printf '%s\n' "$out" | grep -q "${P}_RUST_TUNABLE_VAR" \
+    grep -q "${P}_RUST_TUNABLE_VAR" <<<"$out" \
         && { echo "SELF-TEST FAIL: rust env::var with nonempty default wrongly reported dead: $out"; exit 1; }
     # NEGATIVE CONTROL: a Rust env::var read with no default, assignment or
     # doc must still be reported dead -- the tunable exclusion must not
     # swallow a genuinely dead Rust read.
-    printf '%s\n' "$out" | grep -q "${P}_RUST_DEAD_VAR" \
+    grep -q "${P}_RUST_DEAD_VAR" <<<"$out" \
         || { echo "SELF-TEST FAIL: rust env::var with no default wrongly spared: $out"; exit 1; }
 
     # 1168-bbbe. A Rust \`///\` doc comment above the read documents it.
-    printf '%s\n' "$out" | grep -q "${P}_RUST_DOC_ONLY_VAR" \
+    grep -q "${P}_RUST_DOC_ONLY_VAR" <<<"$out" \
         && { echo "SELF-TEST FAIL: rust /// doc comment not recognized as DOCUMENTED: $out"; exit 1; }
     # BOUNDARY CONTROL: a plain // comment (not a doc comment) must NOT
     # document -- only \`///\`/\`//!\` extend the DOCUMENTED pass. Doubles as
     # a negative control: this var has no assignment either, so it must stay
     # dead exactly like TILLANDSIAS_SELFTEST_DEAD_VAR.
-    printf '%s\n' "$out" | grep -q "${P}_RUST_PLAINCOMMENT_VAR" \
+    grep -q "${P}_RUST_PLAINCOMMENT_VAR" <<<"$out" \
         || { echo "SELF-TEST FAIL: plain // comment wrongly treated as documentation: $out"; exit 1; }
     # 1168-bbbe. A wrapper setter (any receiver, method literally \`set\`)
     # assigns, the same as set_var/.env.
-    printf '%s\n' "$out" | grep -q "${P}_RUST_WRAPSET_VAR" \
+    grep -q "${P}_RUST_WRAPSET_VAR" <<<"$out" \
         && { echo "SELF-TEST FAIL: wrapper .set(\"VAR\", ...) not recognized as ASSIGNED: $out"; exit 1; }
 
     # 1169-zw44. This detector's own comments (mimicked by the same-basename
     # file above) must not manufacture a permanent read -- a self-quote
     # counts as neither documentation nor a read, so the variable must be
     # invisible to the report entirely (not dead, not live).
-    printf '%s\n' "$out" | grep -q "${P}_SELFQUOTE_VAR" \
+    grep -q "${P}_SELFQUOTE_VAR" <<<"$out" \
         && { echo "SELF-TEST FAIL: self-referential comment manufactured a phantom read: $out"; exit 1; }
 
-    printf '%s\n' "$out" | grep -q 'dead=4 verdict=dead-branches-found' \
+    grep -q 'dead=4 verdict=dead-branches-found' <<<"$out" \
         || { echo "SELF-TEST FAIL: wrong verdict line: $out"; exit 1; }
     echo "SELF-TEST PASS: dead named, assigned/documented/tunable spared, env-prefix/rust-default/rust-doc/wrapper-set/self-quote shapes covered, evidence anchored"
     exit 0
@@ -304,9 +304,9 @@ dead_list=""
 while IFS= read -r var; do
     [ -n "$var" ] || continue
     total=$((total + 1))
-    printf '%s\n' "$assigns" | grep -qxF "$var" && continue
+    grep -qxF "$var" <<<"$assigns" && continue
     unassigned=$((unassigned + 1))
-    printf '%s\n' "$docs" | grep -qxF "$var" && continue
+    grep -qxF "$var" <<<"$docs" && continue
     if ! grep -qxF "$var" <<<"$gating"; then
         tunable=$((tunable + 1))     # every read carries a nonempty default
         continue
