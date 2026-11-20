@@ -325,6 +325,90 @@ pub(crate) fn changes_git_args(cursor: Option<&str>) -> Result<Vec<String>, Stri
     Ok(a)
 }
 
+/// 2120-sv7m: the studio work branches as origin (the project's git mirror)
+/// has them. A studio commits in ITS forge's checkout and pushes its work
+/// branch `<studio>/<project>-work/<date>` to the mirror, which relays it to
+/// the cloud; the lane asking `webstudio.changes` runs in another forge, so it
+/// fetches those refs before reading them. One refspec per registry studio,
+/// so nothing outside `<studio>/` is fetched.
+pub(crate) fn studio_fetch_args() -> Vec<String> {
+    let mut a = vec!["fetch".to_string(), "-q".to_string(), "origin".to_string()];
+    for s in &registry().studios {
+        a.push(format!("+refs/heads/{0}/*:refs/remotes/origin/{0}/*", s.id));
+    }
+    a
+}
+
+pub(crate) fn studio_refs_args() -> Vec<String> {
+    let mut a = vec![
+        "for-each-ref".to_string(),
+        "--format=%(refname:strip=3)%1f%(objectname)%1f%(committerdate:iso-strict)%1f%(subject)".to_string(),
+    ];
+    for s in &registry().studios {
+        a.push(format!("refs/remotes/origin/{}/", s.id));
+    }
+    a
+}
+
+/// One studio work branch on origin.
+#[derive(Debug, serde::Serialize, PartialEq)]
+pub(crate) struct StudioBranch {
+    pub branch: String,
+    pub sha: String,
+    pub date: String,
+    pub subject: String,
+    /// The GitHub page the operator opens the PR from (signed in as
+    /// themselves: the PR is the user gate, and no token is held anywhere).
+    /// When a PR for the branch already exists, GitHub's compare page links
+    /// to it. `None` when the remote is not a GitHub repository.
+    pub compare_url: Option<String>,
+}
+
+pub(crate) fn parse_studio_refs(stdout: &str, remote: Option<&str>, base: &str) -> Vec<StudioBranch> {
+    stdout
+        .lines()
+        .filter_map(|l| {
+            let mut f = l.split('\u{1f}');
+            let (branch, sha, date, subject) = (f.next()?, f.next()?, f.next()?, f.next().unwrap_or(""));
+            if branch.is_empty() || sha.is_empty() {
+                return None;
+            }
+            Some(StudioBranch {
+                branch: branch.to_string(),
+                sha: sha.to_string(),
+                date: date.to_string(),
+                subject: subject.to_string(),
+                compare_url: remote.and_then(|r| compare_url(r, base, branch)),
+            })
+        })
+        .collect()
+}
+
+/// `https://github.com/<owner>/<repo>/compare/<base>...<branch>?expand=1` from
+/// the project's cloud remote, in its https or ssh spelling. Anything else
+/// (a non-GitHub host, a malformed path) is `None`, never a guess.
+pub(crate) fn compare_url(remote: &str, base: &str, branch: &str) -> Option<String> {
+    let r = remote.trim();
+    let path = r
+        .strip_prefix("https://github.com/")
+        .or_else(|| r.strip_prefix("http://github.com/"))
+        .or_else(|| r.strip_prefix("git@github.com:"))
+        .or_else(|| r.strip_prefix("ssh://git@github.com/"))?;
+    let path = path.trim_end_matches('/');
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    let mut parts = path.split('/');
+    let (owner, repo) = (parts.next()?, parts.next()?);
+    let ok = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    if parts.next().is_some() || !ok(owner) || !ok(repo) {
+        return None;
+    }
+    let seg_ok = |s: &str| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_./".contains(c));
+    if !seg_ok(base) || !seg_ok(branch) || branch.contains("..") {
+        return None;
+    }
+    Some(format!("https://github.com/{owner}/{repo}/compare/{base}...{branch}?expand=1"))
+}
+
 /// One commit in the feed.
 #[derive(Debug, serde::Serialize, PartialEq)]
 pub(crate) struct Change {
@@ -707,7 +791,7 @@ pub(crate) fn tool_descriptors() -> Vec<serde_json::Value> {
         }),
         serde_json::json!({
             "name": "webstudio.changes",
-            "description": "Commits in this project since a cursor (a commit id; omit it for the last 20), oldest first, each with its author, subject, saved paths and diff. Web-studio saves appear here as studio(<id>): save <paths>. Pass the last sha back as the next cursor. Starts nothing.",
+            "description": "Commits in this project since a cursor (a commit id; omit it for the last 20), oldest first, each with its author, subject, saved paths and diff. Web-studio saves appear here as studio(<id>): save <paths>. Pass the last sha back as the next cursor. Also lists studio_branches: each studio work branch (<studio>/<project>-work/<date>) on the project's git mirror, with its tip and a compare_url the operator opens to create the PR (no token is used; the PR is the user's gate to main). Starts nothing.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "cursor": { "type": "string" } }
@@ -748,7 +832,31 @@ pub(crate) fn call(
         "webstudio.open" => open_from_lane(project, instance, args, &*lane_launcher()),
         "webstudio.changes" => changes_git_args(args["cursor"].as_str())
             .and_then(|a| git_in_lane(project, instance, &a))
-            .map(|out| serde_json::json!({ "changes": parse_changes(&out) })),
+            .map(|out| {
+                // 2120-sv7m: studio saves live on studio work branches on
+                // origin, not in this lane's HEAD. A fetch failure is reported,
+                // never fatal: the HEAD feed above still stands.
+                let fetched = git_in_lane(project, instance, &studio_fetch_args());
+                let base = git_in_lane(
+                    project,
+                    instance,
+                    &["symbolic-ref".into(), "--short".into(), "refs/remotes/origin/HEAD".into()],
+                )
+                .ok()
+                .map(|b| b.trim().trim_start_matches("origin/").to_string())
+                .filter(|b| !b.is_empty())
+                .unwrap_or_else(|| "main".to_string());
+                let remote = lane_launcher().project_remote(project).ok();
+                let branches = git_in_lane(project, instance, &studio_refs_args())
+                    .map(|o| parse_studio_refs(&o, remote.as_deref(), &base))
+                    .unwrap_or_default();
+                serde_json::json!({
+                    "changes": parse_changes(&out),
+                    "studio_branches": branches,
+                    "studio_branches_fetch": match fetched { Ok(_) => "ok".to_string(), Err(e) => e },
+                    "pr": "open the PR from compare_url in the operator's own browser; it links the PR once one exists",
+                })
+            }),
         "webstudio.publish_request" => Err(
             "publish is not wired yet: the handoff to the deploy tool is order 1866-9696"
                 .to_string(),
@@ -760,6 +868,39 @@ pub(crate) fn call(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 2120-sv7m: studio work branches are fetched per studio and listed with
+    /// the compare page the operator opens the PR from; nothing but a GitHub
+    /// remote yields a URL, and a hostile branch name yields none.
+    #[test]
+    fn studio_branches_are_fetched_per_studio_and_carry_the_compare_url() {
+        let f = studio_fetch_args();
+        assert_eq!(&f[..3], ["fetch", "-q", "origin"]);
+        assert!(f.contains(&"+refs/heads/grapesjs/*:refs/remotes/origin/grapesjs/*".to_string()));
+        assert!(f.contains(&"+refs/heads/puck/*:refs/remotes/origin/puck/*".to_string()));
+        assert!(f[3..].iter().all(|r| r.starts_with("+refs/heads/") && r.contains("/*:refs/remotes/origin/")));
+        let r = studio_refs_args();
+        assert!(r.contains(&"refs/remotes/origin/grapesjs/".to_string()));
+
+        let out = "grapesjs/tlatoani-net-work/20261119\u{1f}2665b8ee1\u{1f}2026-11-20T02:50:26+00:00\u{1f}studio(grapesjs): save public/index.html\n";
+        let b = parse_studio_refs(out, Some("https://github.com/8007342/tlatoani.net.git"), "main");
+        assert_eq!(b.len(), 1);
+        assert_eq!(b[0].branch, "grapesjs/tlatoani-net-work/20261119");
+        assert_eq!(
+            b[0].compare_url.as_deref(),
+            Some("https://github.com/8007342/tlatoani.net/compare/main...grapesjs/tlatoani-net-work/20261119?expand=1")
+        );
+        assert_eq!(
+            compare_url("git@github.com:o/r.git", "main", "puck/r-work/20261120").as_deref(),
+            Some("https://github.com/o/r/compare/main...puck/r-work/20261120?expand=1")
+        );
+        assert_eq!(compare_url("https://gitlab.com/o/r", "main", "grapesjs/x"), None);
+        assert_eq!(compare_url("https://github.com/o/r", "main", "grapesjs/x?y=1"), None);
+        assert_eq!(compare_url("https://github.com/o/r", "main", "../x"), None);
+        assert_eq!(compare_url("https://github.com/o/r/extra", "main", "grapesjs/x"), None);
+        assert!(parse_studio_refs("", None, "main").is_empty());
+        assert_eq!(parse_studio_refs(out, None, "main")[0].compare_url, None);
+    }
 
     /// 2067-uc3k: the window opens exactly once, only after the studio
     /// answers; a failed launch or an exhausted budget opens nothing and says

@@ -120,9 +120,52 @@ server.on('listening', async () => {
     check(4, junk.status === 400, `junk:${junk.status}`);
     arms++;
     await ownWriterArm();
+    relayArm();
     fs.rmSync(tmp, { recursive: true, force: true });
     process.stdout.write(`ok:studio-front:${arms}-arms\n`);
 });
+
+// 6 2120-sv7m: a save reaches origin (the project's git mirror, which relays
+// to the cloud). The studio's work branch, and only it, is pushed; the
+// default branch on origin is untouched. An unreachable origin never loses
+// the save: it is committed, reported pushed:false, and evented.
+function relayArm() {
+    const bare = path.join(tmp, 'mirror.git');
+    execFileSync('git', ['init', '-q', '--bare', bare]);
+    g(['push', '-q', bare, 'main:main']);
+    const mainBefore = execFileSync('git', ['--git-dir', bare, 'rev-parse', 'refs/heads/main'], { encoding: 'utf8' }).trim();
+    g(['remote', 'add', 'origin', bare]);
+    const ev = [];
+    process.stdout.write = (s) => { ev.push(String(s)); return true; };
+    const r = front.save(cfg, 'index.html', '<h1>relayed</h1>\n');
+    restore();
+    const branch = g(['symbolic-ref', '--short', 'HEAD']).trim();
+    const head = g(['rev-parse', 'HEAD']).trim();
+    let remote = '';
+    try { remote = execFileSync('git', ['--git-dir', bare, 'rev-parse', `refs/heads/${branch}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch (_) { /* absent */ }
+    check(6, branch !== 'main', `saved-on-default:${branch}`);
+    check(6, remote === head, `not-on-origin:${branch}:${remote || 'absent'}!=${head}`);
+    check(6, r.body.pushed === true && r.body.branch === branch, `body:${JSON.stringify(r.body)}`);
+    check(6, ev.some((e) => e.startsWith('event:studio.push ') && e.includes(`branch=${branch}`)), ev.join(''));
+    const mainAfter = execFileSync('git', ['--git-dir', bare, 'rev-parse', 'refs/heads/main'], { encoding: 'utf8' }).trim();
+    check(6, mainAfter === mainBefore, 'default-branch-moved-on-origin');
+    // unreachable origin: still saved, reported, evented.
+    g(['remote', 'set-url', 'origin', path.join(tmp, 'no-such-mirror.git')]);
+    const ev2 = [];
+    process.stdout.write = (s) => { ev2.push(String(s)); return true; };
+    const r2 = front.save(cfg, 'index.html', '<h1>offline</h1>\n');
+    restore();
+    check(6, r2.status === 200 && r2.body.sha && r2.body.pushed === false, `offline-body:${JSON.stringify(r2.body)}`);
+    check(6, ev2.some((e) => e.startsWith('event:studio.push_failed ')), ev2.join(''));
+    // a no-op save pushes nothing new but still reports the branch state.
+    g(['remote', 'set-url', 'origin', bare]);
+    process.stdout.write = () => true;
+    const r3 = front.save(cfg, 'index.html', '<h1>offline</h1>\n');
+    restore();
+    const remote3 = execFileSync('git', ['--git-dir', bare, 'rev-parse', `refs/heads/${branch}`], { encoding: 'utf8' }).trim();
+    check(6, r3.body.sha === null && remote3 === g(['rev-parse', 'HEAD']).trim(), `retry-unpushed:${JSON.stringify(r3.body)}`);
+    arms++;
+}
 
 // 5 an own-writer studio (decap): a write request the front proxies is
 // bracketed. The allowlisted file it wrote is committed, the off-allowlist one

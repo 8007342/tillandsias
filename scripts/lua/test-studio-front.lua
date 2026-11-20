@@ -14,7 +14,11 @@
 --     allowlisted one, 404s a PWA path and 400s a malformed body;
 --   5 an own-writer studio (decap): what a proxied write request wrote is
 --     committed when allowlisted and removed when not, and an edit made
---     before the request (the agent's) is left untouched.
+--     before the request (the agent's) is left untouched;
+--   6 2120-sv7m: a save pushes the studio's work branch (never the default
+--     branch) to origin, the project's git mirror, which relays it to the
+--     cloud; an unreachable origin keeps the save, says pushed:false, events
+--     studio.push_failed, and the next save pushes it.
 -- Also checks the committed registry JSON is what registry.lua generates.
 --
 -- The verdict is the container's STDOUT alone (1926-pjn8): pull progress on

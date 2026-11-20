@@ -154,6 +154,31 @@ function ensureWorkBranch(cfg) {
     return name;
 }
 
+// 2120-sv7m: a save reaches origin. In a forge, origin is the project's git
+// mirror, which relays each push to the cloud remote synchronously, so the
+// studio pushes credential-free and never holds a token. Only the studio's own
+// work branch is pushed, never the default branch: main changes only through a
+// PR the operator opens. An unreachable or refusing origin never loses the
+// save: it stays committed, the body says pushed:false, and the next save
+// pushes it, because every save pushes HEAD (a no-op when origin has it).
+function relay(cfg, branch) {
+    if (!branch || branch === defaultBranch(cfg.checkout)) return false;
+    try { if (!git(cfg.checkout, ['remote', 'get-url', 'origin']).trim()) return false; } catch (_) { return false; }
+    const head = git(cfg.checkout, ['rev-parse', 'HEAD']).trim();
+    try {
+        execFileSync('git', ['-C', cfg.checkout, 'push', '-q', 'origin', `HEAD:refs/heads/${branch}`], {
+            encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: cfg.pushTimeoutMs,
+            env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+        });
+    } catch (e) {
+        const why = String(e.stderr || e.message || '').trim().split('\n').pop() || 'push-failed';
+        event('studio.push_failed', { studio: cfg.id, branch, sha: head, why });
+        return false;
+    }
+    event('studio.push', { studio: cfg.id, branch, sha: head });
+    return true;
+}
+
 // Guard, write, commit. Every accepted save is a commit (operator ruling
 // 2026-10-25): concurrent edits are ordered by commit, never last-write-wins.
 function save(cfg, requested, content) {
@@ -162,7 +187,7 @@ function save(cfg, requested, content) {
         event('studio.save_refused', { studio: cfg.id, path: requested, reason: g.reason });
         return { status: 403, body: { refused: g.reason } };
     }
-    ensureWorkBranch(cfg);
+    const branch = ensureWorkBranch(cfg);
     fs.mkdirSync(path.dirname(g.abs), { recursive: true });
     fs.writeFileSync(g.abs, content);
     git(cfg.checkout, ['add', '--', g.rel]);
@@ -173,7 +198,8 @@ function save(cfg, requested, content) {
         sha = git(cfg.checkout, ['rev-parse', 'HEAD']).trim();
     }
     event('studio.save', { studio: cfg.id, path: g.rel, sha: sha || 'unchanged' });
-    return { status: 200, body: { path: g.rel, sha: sha || null } };
+    const pushed = relay(cfg, branch);
+    return { status: 200, body: { path: g.rel, sha: sha || null, branch, pushed } };
 }
 
 // Own-writer studios (Decap, Tina) write the checkout themselves, through
@@ -216,6 +242,7 @@ function tracked(checkout, rel) {
 // Returns the paths it put back, so the front can tell the browser.
 function sweep(cfg, before) {
     const refused = [];
+    let committed = false;
     const after = changedPaths(cfg.checkout);
     const touched = [...after.keys()].filter((p) => after.get(p) !== before.get(p));
     for (const p of [...before.keys()]) if (!after.has(p)) touched.push(p);
@@ -238,7 +265,9 @@ function sweep(cfg, before) {
         const verb = fs.existsSync(g.abs) ? 'save' : 'delete';
         git(cfg.checkout, ['commit', '-q', '-m', `studio(${cfg.id}): ${verb} ${g.rel}`, '--', g.rel]);
         event('studio.save', { studio: cfg.id, path: g.rel, sha: git(cfg.checkout, ['rev-parse', 'HEAD']).trim() });
+        committed = true;
     }
+    if (committed) relay(cfg, currentBranch(cfg.checkout));
     return refused;
 }
 
@@ -256,6 +285,7 @@ function loadConfig(env) {
         allowlist: studio.write_allowlist,
         ownWriter: studio.save_adapter === 'own-writer',
         checkout: env.STUDIO_CHECKOUT || `/home/forge/src/${env.TILLANDSIAS_PROJECT || ''}`,
+        pushTimeoutMs: Number(env.STUDIO_PUSH_TIMEOUT_MS || 30000),
         workBranch: env.STUDIO_WORK_BRANCH || `${slug(id)}/${slug(env.TILLANDSIAS_PROJECT)}-work/${day}`,
     };
 }
@@ -346,6 +376,6 @@ function start(env) {
     return server;
 }
 
-module.exports = { guard, save, sweep, changedPaths, globToRegExp, loadConfig, start, ensureWorkBranch, defaultBranch };
+module.exports = { guard, save, sweep, changedPaths, globToRegExp, loadConfig, start, ensureWorkBranch, defaultBranch, relay };
 
 if (require.main === module) start(process.env);

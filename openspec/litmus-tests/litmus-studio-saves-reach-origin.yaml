@@ -1,0 +1,35 @@
+# @trace order:2120-sv7m (web-studio-lanes change, not yet archived; rebind to web-studio-lane when archived)
+name: litmus:studio-saves-reach-origin
+spec: local-web-preview
+phase: pre-build
+description: A studio save (GrapesJS, Puck, any front-saved studio) pushes the studio's work branch, never the default branch, to origin (the project's git mirror, which relays it to the cloud) with no credential; an unreachable origin keeps the save and reports pushed:false; webstudio.changes fetches the studios' branches per studio and lists each with the GitHub compare page the operator opens the PR from
+severity: high
+size: long
+
+preconditions:
+  - workspace contains images/studio/studio-front.js and crates/tillandsias-headless
+  - podman is available with a local tillandsias-forge image (node and git run inside it, --network none)
+  - cargo is available in PATH
+
+critical_path:
+  - step: "arm 6 of the studio front in the forge image: a save lands on a bare origin as the work branch, origin's default branch does not move, an unreachable origin keeps the save as pushed:false with event studio.push_failed, and the next save pushes it. Pre-fix: refused:studio-front:6:not-on-origin"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-studio-front.lua"
+    timeout_ms: 180000
+    expected_behavior: "ok:studio-front:6-arms"
+  - step: "webstudio.changes fetches only <studio>/* refs and lists each studio branch with a GitHub compare_url; a non-GitHub remote or a hostile branch name yields none"
+    command: "cargo test -p tillandsias-headless --features host-services --bin tillandsias -- studio::tests::studio_branches_are_fetched_per_studio_and_carry_the_compare_url"
+    timeout_ms: 900000
+    expected_behavior: "test result: ok. 1 passed"
+
+observability:
+  traces:
+    - "@trace order:2120-sv7m"
+  expected_log: "ok:studio-front:6-arms"
+  log_fields:
+    spec: "local-web-preview"
+    test: "studio-saves-reach-origin"
+    artifact: "images/studio/studio-front.js + studio-front.selftest.js + crates/tillandsias-headless/src/studio.rs"
+
+rollback:
+  on_failure: "inspect relay() in images/studio/studio-front.js and studio_fetch_args/compare_url in crates/tillandsias-headless/src/studio.rs"
+  command: "git log -3 --format=%s -- images/studio/studio-front.js"
