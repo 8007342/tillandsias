@@ -80,7 +80,7 @@ and today it is solved by stacking locally.
 ## P6 as implemented
 
 `scripts/land-admit.sh`, with the fixture `scripts/test-land-admit.sh`
-(9 arms, bound in `build.sh` after test-land-queue).
+(9 arms, bound as gate step `scripts/gate-steps.d/940-2143-z5uj-land-admit.step`).
 - Checks run cheapest first: ref shape, draft, plan lane, native-lint, then
   floor. Native-lint was moved ahead of the floor because it is cheaper.
 - Admission is recorded as a PR comment ending in the machine line

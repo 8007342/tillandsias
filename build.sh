@@ -6961,11 +6961,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
         _error "scripts/test-land-queue.sh failed — the landing queue may land into a frozen trunk or mis-order, evict or re-queue candidates; read the fixture output above"
         exit 1
     fi
-    _step "Checking test-land-admit (2143-z5uj P6 admission lane)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-land-admit.sh" 2>&1; then
-        _error "scripts/test-land-admit.sh failed — the admission lane may admit a draft/red/unlinted PR, or evict on a host that cannot run the floor; read the fixture output above"
-        exit 1
-    fi
     _step "Checking test-ensure-hooks (1255-s4im)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-ensure-hooks.sh" 2>&1; then
         _error "scripts/test-ensure-hooks.sh failed — a toolchain-less checkout may no longer arm its push guards (1255-s4im); read the fixture output above"
