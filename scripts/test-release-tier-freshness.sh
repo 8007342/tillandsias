@@ -49,7 +49,7 @@ run_guard() {
 
 check() { # check <label> <expected-rc> <expected-token> <actual-rc> <output>
     local label="$1" erc="$2" tok="$3" arc="$4" out="$5"
-    if [ "$arc" -eq "$erc" ] && printf '%s' "$out" | grep -q "$tok"; then
+    if [ "$arc" -eq "$erc" ] && grep -q "$tok" <<<"$out"; then
         pass=$((pass + 1))
     else
         fail=$((fail + 1))

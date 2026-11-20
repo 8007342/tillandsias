@@ -100,7 +100,7 @@ for f in openspec/litmus-tests/*.yaml; do
         if [ "$rc" -eq 0 ]; then pass=$((pass+1)); continue; fi
         # Non-zero exit. Would the runner still call it OK? Approximate the
         # matcher's FINAL fallback: case-insensitive fixed-string containment.
-        if printf '%s' "$out" | grep -Fqi "$exp"; then
+        if grep -Fqi "$exp" <<<"$out"; then
             mispass=$((mispass+1))
             printf '%s\t[step %d]\trc=%d\texpected=%s\n' "$f" "$i" "$rc" "$exp" \
               >> "$OUT"
