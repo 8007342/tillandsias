@@ -39,7 +39,7 @@ local BIN = W.rel .. "/target/release/tillandsias-plan"
 local function stale()
     fs.write(BIN, "#!/bin/sh\nexit 0\n")
     T:must{ "chmod", "+x", W.abs .. "/target/release/tillandsias-plan" }
-    T:must{ "touch", "-d", "2020-01-01", W.abs .. "/target/release/tillandsias-plan" }
+    T:must{ "touch", "-t", "202001010000", W.abs .. "/target/release/tillandsias-plan" }
     T:must{ "touch", W.abs .. "/crates/tillandsias-plan/src/lib.rs" }
 end
 local function refresh(extra)

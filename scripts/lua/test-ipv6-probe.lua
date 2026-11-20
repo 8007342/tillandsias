@@ -14,11 +14,15 @@
 -- Ported from scripts/test-ipv6-probe.sh onto common.fixture.
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-ipv6-probe.lua
--- Verdict: ok:ipv6-probe:<n> arms | violation:ipv6-probe:<n>-failed
+-- Verdict: ok:ipv6-probe:<n> arms | violation:ipv6-probe:<n>-failed | skip:ipv6-probe:linux-only-unit-tests:<uname>
 
 local fixture = require "common.fixture"
 local T = fixture.new("ipv6-probe")
 local ROOT = fixture.repo_root()
+-- The six unit tests are #[cfg(target_os = "linux")]: elsewhere cargo runs 0
+-- of them, which is not a red, it is a regime with no subject.
+local uname = text.trim(proc.run{ argv = { "uname", "-s" } }.stdout or "")
+if uname ~= "Linux" then T:skip("linux-only-unit-tests:" .. uname) end
 
 local cargo = { "cargo" }
 if proc.run{ argv = { "which", "cargo" } }.code ~= 0 then cargo = { "toolbox", "run", "cargo" } end
