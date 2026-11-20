@@ -105,8 +105,8 @@ if [[ "$run_nix_probe" == "1" ]]; then
     # nix-daemon.socket` — the host-daemon ask the operator withdrew on
     # 2026-08-16 (606-um5s). scripts/nix-toolbox.sh resolves a usable nix
     # WITHOUT one: the live daemon if there is one, else a rootless chroot
-    # store under $HOME, else nix inside the tillandsias-nix toolbox. The three
-    # other nix consumers (check-nix-deps-stability.sh, nix-deps-drv-paths.sh,
+    # store under $HOME, else nix inside the tillandsias-nix toolbox. The two
+    # other nix consumers (check-nix-deps-stability.sh,
     # build-guest-binaries.sh) already take their flags this way; this was the
     # last one that did not.
     nix_rung="$(bash "$ROOT/scripts/nix-toolbox.sh" ensure)" || {

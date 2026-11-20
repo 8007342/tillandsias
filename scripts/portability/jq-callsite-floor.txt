@@ -45,7 +45,6 @@
 1 scripts/loop-success-probe.sh
 1 scripts/manage-cache.sh
 1 scripts/nix-build-container.sh
-1 scripts/nix-deps-drv-paths.sh
 2 scripts/nix-push-cache.sh
 2 scripts/nix-toolbox.sh
 2 scripts/probe-complement-selfcheck.sh
