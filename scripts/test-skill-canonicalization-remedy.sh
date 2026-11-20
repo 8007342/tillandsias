@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1055-6yp8
 #
-# Fixture: check-skill-canonicalization.sh must judge what is COMMITTED, and its
+# Fixture: check-skill-canonicalization (now scripts/lua/check-skill-canonicalization.lua) must judge what is COMMITTED, and its
 # printed REMEDY must not damage a correct tree.
 #
 # WHAT IS BROKEN, measured on yolanda 2026-09-04. The check decides with
@@ -36,11 +36,19 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-UNDER_TEST="$ROOT/scripts/check-skill-canonicalization.sh"
-[ -f "$UNDER_TEST" ] || { echo "SKIP: check-skill-canonicalization.sh not present" >&2; exit 0; }
+# ORDER 2118-98dq: the checker is scripts/lua/check-skill-canonicalization.lua,
+# run by the plan binary from inside each scratch repo (its fs and git calls
+# are scoped to the repo it runs in). Scratch repos live under target/.
+UNDER_TEST="$ROOT/scripts/lua/check-skill-canonicalization.lua"
+[ -f "$UNDER_TEST" ] || { echo "FAIL: scripts/lua/check-skill-canonicalization.lua not present" >&2; exit 1; }
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+[ -n "$PLAN" ] || { echo "FAIL: no plan binary resolves; the checker under test is a lua decider" >&2; exit 1; }
+run_in() { (cd "$1" && "$PLAN" script run scripts/lua/check-skill-canonicalization.lua); }
 command -v git >/dev/null 2>&1 || { echo "SKIP: no git(1)" >&2; exit 0; }
 
-WORK="$(mktemp -d)"
+mkdir -p "$ROOT/target"
+WORK="$(mktemp -d "$ROOT/target/skill-canon.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT INT TERM
 
@@ -62,8 +70,8 @@ _result() { # name expected actual
 # reproduces on Linux and macOS too, not only where it was found.
 build_repo() { # $1 = dir
     local r="$1"
-    mkdir -p "$r/scripts" "$r/skills/hello-world" "$r/.claude/skills"
-    cp "$UNDER_TEST" "$r/scripts/check-skill-canonicalization.sh"
+    mkdir -p "$r/scripts/lua" "$r/skills/hello-world" "$r/.claude/skills"
+    cp "$UNDER_TEST" "$r/scripts/lua/check-skill-canonicalization.lua"
     printf 'a canonical skill\n' > "$r/skills/hello-world/SKILL.md"
     git -C "$r" init -q
     git -C "$r" config core.symlinks false
@@ -84,7 +92,7 @@ echo "== 1055-6yp8: skill-canonicalization on a checkout that cannot make symlin
 # ---- ARM 1: a correct tree must not be reported as a violation --------------
 R1="$WORK/correct"
 build_repo "$R1"
-out1="$(bash "$R1/scripts/check-skill-canonicalization.sh" 2>/dev/null)"
+out1="$(run_in "$R1" 2>/dev/null)"
 rc1=$?
 mode="$(git -C "$R1" ls-files -s .claude/skills/hello-world | awk '{print $1}')"
 _result "arm1-index-really-says-symlink" "120000" "$mode"
@@ -144,7 +152,7 @@ mkdir -p "$R3B/.claude/skills/only-here"
 printf 'hand-written\n' > "$R3B/.claude/skills/only-here/SKILL.md"
 git -C "$R3B" add .claude/skills/only-here >/dev/null 2>&1
 git -C "$R3B" commit -qm exclusive >/dev/null 2>&1
-remedy_out="$(bash "$R3B/scripts/check-skill-canonicalization.sh" 2>/dev/null)"
+remedy_out="$(run_in "$R3B" 2>/dev/null)"
 case "$remedy_out" in
     *"does NOT already exist"*) guarded=yes ;;
     *)                          guarded=no ;;
@@ -163,7 +171,7 @@ mkdir -p "$R4/.claude/skills/only-here"
 printf 'hand-written, exclusive to one harness\n' > "$R4/.claude/skills/only-here/SKILL.md"
 git -C "$R4" add .claude/skills/only-here >/dev/null 2>&1
 git -C "$R4" commit -qm exclusive >/dev/null 2>&1
-out4="$(bash "$R4/scripts/check-skill-canonicalization.sh" 2>/dev/null)"
+out4="$(run_in "$R4" 2>/dev/null)"
 case "$out4" in
     violation:harness-exclusive-skill:*) verdict4=violation ;;
     ok:*)                                verdict4=ok ;;
@@ -193,7 +201,7 @@ git -C "$R5" update-index --add --cacheinfo "120000,$blob5,.claude/skills"
 # does walk through into the canonical tree.
 ln -s ../skills "$R5/.claude/skills" 2>/dev/null || cp -r "$R5/skills" "$R5/.claude/skills"
 git -C "$R5" commit -qm dirlink >/dev/null 2>&1
-out5="$(bash "$R5/scripts/check-skill-canonicalization.sh" 2>/dev/null)"
+out5="$(run_in "$R5" 2>/dev/null)"
 case "$out5" in
     ok:skills-canonical:*) verdict5=ok ;;
     violation:*)           verdict5="violation:$out5" ;;
@@ -215,7 +223,7 @@ printf 'hand-written copy, not a link
 ' > "$R6/.claude/skills/second-skill/SKILL.md"
 git -C "$R6" add skills/second-skill .claude/skills/second-skill >/dev/null 2>&1
 git -C "$R6" commit -qm mutant >/dev/null 2>&1
-out6="$(bash "$R6/scripts/check-skill-canonicalization.sh" 2>/dev/null)"
+out6="$(run_in "$R6" 2>/dev/null)"
 case "$out6" in
     violation:harness-exclusive-skill:*) verdict6=violation ;;
     ok:*)                                verdict6=ok ;;
