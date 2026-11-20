@@ -266,6 +266,7 @@ Phase 1 (this design): build.sh keeps flags and `cargo build --release -p tillan
 | scripts/hooks/* entry stubs | git execs them with `sh` | each stub is `exec "$PLAN_BIN" hook <name> "$@"`; the logic moves |
 | images/*/entrypoint*.sh until the image ships the binary | the container starts before anything else | migrate after the image build copies the plan binary; `lib-*.sh` first |
 | `scripts/ensure_toolbox.sh` | it creates the toolbox that carries tools | stays; its callers stop needing it as tools move into the binary |
+| `scripts/check-gate-memory-floor.sh` | it runs at the top of build.sh, before a fresh clone has a plan binary to run Lua with | stays; a port would turn a seconds-long memory refusal into could-not-run exactly when the gate is starved (coordinator ruling 2026-11-20, 2124-mwzr) |
 
 ## 7. Pilot: three deciders with recorded incidents, as sketches
 
