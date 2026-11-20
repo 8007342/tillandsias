@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-vault-image-and-the-forge-toolchain-images-are-built-through-ensure-image-exists-so-there-is-one-build-path-with-one-lock-one-marker-and-one-verdict
+    field: next_action
+    value: |-
+      After 1776-brk3 lands: replace build_vault_image's body with the seam call; keep its debug line; make prepare consult the marker; red tests first. Linux host for the lock arm.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: live podman: the Vault image and toolchain prepare go through on-demand ensure.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-vault-image-and-the-forge-toolchain-images-are-built-through-ensure-image-exists-so-there-is-one-build-path-with-one-lock-one-marker-and-one-verdict
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-tag-push-whose-commit-is-already-on-a-freshly-fetched-origin-main-skips-the-gate-stamp-and-its-scope-but-keeps-release-preflight-and-the-version-guard-and-the-release-runbook-matches-what-was-measured
+    field: status
+    value: completed
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-tag-push-whose-commit-is-already-on-a-freshly-fetched-origin-main-skips-the-gate-stamp-and-its-scope-but-keeps-release-preflight-and-the-version-guard-and-the-release-runbook-matches-what-was-measured
+    event:
+      type: completed
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 0a9a914b79 PASS: gate-stamp-scope (17/17)
+  - packet_id: a-tag-push-whose-commit-is-already-on-a-freshly-fetched-origin-main-skips-the-gate-stamp-and-its-scope-but-keeps-release-preflight-and-the-version-guard-and-the-release-runbook-matches-what-was-measured
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

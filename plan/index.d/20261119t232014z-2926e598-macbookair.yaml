@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-tray-proxy-preamble-never-mints-the-guest-ca-private-key-in-plaintext
+    field: status
+    value: completed
+    ts: "2026-11-19T23:20:14Z"
+    host: macbookair
+
+events:
+  - packet_id: macos-tray-proxy-preamble-never-mints-the-guest-ca-private-key-in-plaintext
+    event:
+      type: completed
+      ts: "2026-11-19T23:20:14Z"
+      host: macbookair
+      summary: |-
+        status 'completed' with evidence_refs: b639b1b17
+  - packet_id: macos-tray-proxy-preamble-never-mints-the-guest-ca-private-key-in-plaintext
+    event:
+      type: note
+      ts: "2026-11-19T23:20:14Z"
+      host: macbookair
+      summary: |-
+        cargo test -p tillandsias-macos-tray the_preamble_never_mints_a_private_key: 1 passed on darwin (tlatoanis-macbook-air) at linux-next b639b1b17; 1898-hyhf completed

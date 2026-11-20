@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-landing-queue-grammar-admits-only-suffixed-orders-so-every-legacy-bare-order-row-is-outside-the-queue-and-lands-by-hand
+    field: next_action
+    value: |-
+      Coordinator picks the branch of criterion 1. If the grammar widens, land the regex change in scripts/land-queue.sh and methodology in one PR with the fixture arm; if it does not, write the legacy path into the queue's skip comment and join-the-fleet section 3. Until then a worker holding a bare-order row lands it by a direct gated land from its own checkout (what yoga did 2026-10-13), never by inventing a suffix.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-landing-provenance.sh is now scripts/lua/check-landing-provenance.lua (cca849005). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-landing-queue-grammar-admits-only-suffixed-orders-so-every-legacy-bare-order-row-is-outside-the-queue-and-lands-by-hand
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

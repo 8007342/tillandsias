@@ -250,7 +250,7 @@ _toolbox_exists() {
 # init so `./build.sh --check` does not fail with "Missing host build tools".
 _toolbox_initialized() {
     toolbox run --container "$TOOLBOX_NAME" \
-        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && command -v podman && command -v nix && command -v node && command -v systemd-run && command -v getfattr && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
+        bash -c 'command -v gcc && command -v musl-gcc && command -v pkg-config && command -v ruby && command -v rustup && command -v jq && command -v yq && command -v rg && command -v openssl && command -v x86_64-w64-mingw32-gcc && command -v podman && command -v nix && command -v node && command -v systemd-run && command -v getfattr && command -v dbus-daemon && rustup target list --installed 2>/dev/null | grep -qxF x86_64-unknown-linux-musl && rustup target list --installed 2>/dev/null | grep -qxF x86_64-pc-windows-gnu' \
         &>/dev/null 2>&1
 }
 
@@ -346,7 +346,7 @@ if ! _toolbox_initialized; then
             ruby perl-FindBin \
             procps-ng findutils diffutils \
             jq yq ripgrep openssl \
-            attr \
+            attr dbus-daemon \
             nodejs systemd \
             mingw64-gcc \
         2>&1 | while IFS= read -r line; do printf '  [dnf] %s\n' "$line"; done

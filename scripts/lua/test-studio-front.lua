@@ -1,5 +1,5 @@
 -- @env PATH HOME XDG_RUNTIME_DIR
--- @trace order:1860-auhm, spec:web-studio-lane
+-- @trace order:1860-auhm, order:2108-dptd, spec:web-studio-lane
 --
 -- test-studio-front.lua — the studio write-back guard and its front, run where
 -- they run: inside a forge image (its node and git), --network none, never on
@@ -23,6 +23,8 @@
 -- the arms need); with none present the test could not run.
 -- Verdict: ok:studio-front:<n>-arms | violation:studio-front:<why> (1) |
 --          could-not-run:studio-front:<why> (2)
+-- 2108-dptd: then images/studio/grapesjs/grapesjs.selftest.mjs (5 arms) in the same image;
+-- the ok line is ok:studio-front:<n>-arms+studio-grapesjs-page:<m>-arms.
 
 local function judge(ok, stdout)
     local out = text.trim(stdout or "")
@@ -74,4 +76,23 @@ local v, code = judge(r.ok, r.stdout)
 if code == 2 then
     verdict.emit("could-not-run:studio-front:podman:" .. tostring(r.status or "?"), 2)
 end
-verdict.emit(v, code)
+if code ~= 0 then verdict.emit(v, code) end
+
+-- 2108-dptd: the GrapesJS page arms (document root, lossless head, work
+-- branch, vendored icons), images/studio/grapesjs/grapesjs.selftest.mjs.
+local p = proc.run{ argv = { "podman", "run", "--rm", "--network=none", "--pull=never",
+    "--security-opt=label=disable",
+    "-v", here .. "/images/studio:/s:ro",
+    "-v", here .. "/crates/tillandsias-headless/data:/d:ro",
+    "-e", "STUDIO_FRONT=/s/studio-front.js",
+    "--entrypoint", "node", image, "/s/grapesjs/grapesjs.selftest.mjs", "/d/studios.json" },
+    timeout_ms = 120000 }
+log.raw(text.trim((p.stdout or "") .. "\n" .. (p.stderr or "")))
+local plast = (text.trim(p.stdout or "")):match("([^\n]*)$") or ""
+if p.ok and plast:find("^ok:studio%-grapesjs%-page:") then
+    verdict.emit(v .. "+" .. plast:gsub("^ok:", ""), 0)
+end
+if plast:find("^refused:studio%-grapesjs%-page:") then
+    verdict.emit("violation:" .. plast:gsub("^refused:", ""), 1)
+end
+verdict.emit("could-not-run:studio-grapesjs-page:podman:" .. tostring(p.status or "?"), 2)

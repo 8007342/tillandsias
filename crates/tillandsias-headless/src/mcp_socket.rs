@@ -1888,12 +1888,29 @@ pub(crate) fn lane_server_build(socket: &std::path::Path) -> Result<String, Stri
 
 /// 2070-mtf9: the pid of the process listening on `socket`, from the
 /// kernel's peer credentials (captured at listen time). `None` when nothing
-/// accepts there.
+/// accepts there. Linux reads SO_PEERCRED; darwin reads LOCAL_PEERPID
+/// (2107-pcrd: PeerCredentials is Linux-only, so trunk did not compile here).
+/// Any other unix answers `None`: the lane is reported without a pid.
 pub(crate) fn lane_listener_pid(socket: &std::path::Path) -> Option<i32> {
     let stream = UnixStream::connect(socket).ok()?;
+    peer_pid(&stream)
+}
+
+#[cfg(target_os = "linux")]
+fn peer_pid(stream: &UnixStream) -> Option<i32> {
     let creds =
-        nix::sys::socket::getsockopt(&stream, nix::sys::socket::sockopt::PeerCredentials).ok()?;
+        nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::PeerCredentials).ok()?;
     Some(creds.pid())
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+fn peer_pid(stream: &UnixStream) -> Option<i32> {
+    nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::LocalPeerPid).ok()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+fn peer_pid(_stream: &UnixStream) -> Option<i32> {
+    None
 }
 
 /// `" (exe deleted)"` when a `/proc/<pid>/exe` link names a replaced binary.

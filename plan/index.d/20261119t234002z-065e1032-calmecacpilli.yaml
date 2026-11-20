@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-self-exe-unlinked-spawn-test-survives-a-sibling-fork-between-its-write-and-its-exec
+    field: next_action
+    value: 'Verify on next stable (live checks run on stable releases). Live check: ETXTBSY repro loop N times under load, with a red negative control.'
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-self-exe-unlinked-spawn-test-survives-a-sibling-fork-between-its-write-and-its-exec
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)
