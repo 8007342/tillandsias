@@ -17,22 +17,22 @@ preconditions:
 
 critical_path:
   - step: "run_opencode_mode calls ensure_router_running before its first run_container_observed"
-    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-run_opencode_mode-ordering"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-tray-network-bootstrap.lua -- check-run_opencode_mode-ordering"
     timeout_ms: 5000
     expected_behavior: "ok: ensure_router_running@"
 
   - step: "run_observatorium_mode calls ensure_router_running before its first run_container_observed"
-    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-run_observatorium_mode-ordering"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-tray-network-bootstrap.lua -- check-run_observatorium_mode-ordering"
     timeout_ms: 5000
     expected_behavior: "ok: observatorium ensure_router_running@"
 
   - step: "ensure_enclave_for_project calls ensure_router_running before its first run_container_observed"
-    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-ensure_enclave_for_project-ordering"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-tray-network-bootstrap.lua -- check-ensure_enclave_for_project-ordering"
     timeout_ms: 5000
     expected_behavior: "ok: ensure_enclave_for_project router@"
 
   - step: "ensure_enclave_network is called before any router/container setup in each spawn path"
-    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-ensure_enclave_network-present"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-tray-network-bootstrap.lua -- check-ensure_enclave_network-present"
     timeout_ms: 5000
     expected_behavior: "ensure_enclave_network present"
 
@@ -42,18 +42,18 @@ critical_path:
     expected_behavior: "spawn paths cite Step 15"
 
   - step: "Slice 4 exit-125 classifier is wired into format_observed_launch_failure"
-    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-format_observed_launch_failure-classifier"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-tray-network-bootstrap.lua -- check-format_observed_launch_failure-classifier"
     timeout_ms: 5000
     expected_behavior: "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"
     assert_output_contains: "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"
 
   - step: "the CDI launch-failure classification arms pass against the measured OCI-runtime stderr (665-zddn)"
-    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-cdi-classification-arms"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-tray-network-bootstrap.lua --timeout 3m -- check-cdi-classification-arms"
     timeout_ms: 180000
     expected_behavior: "ok: cdi-classification-arms:4 passed"
 
   - step: "the durable host launch-failure breadcrumb has a caller on the failure path (665-zddn EC4)"
-    command: "scripts/litmus-helper-tray-network-bootstrap.sh check-launch-breadcrumb-wired"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-tray-network-bootstrap.lua -- check-launch-breadcrumb-wired"
     timeout_ms: 5000
     expected_behavior: "ok: write_launch_breadcrumb called from format_observed_launch_failure"
     assert_output_contains: "ok: write_launch_breadcrumb called from format_observed_launch_failure"
