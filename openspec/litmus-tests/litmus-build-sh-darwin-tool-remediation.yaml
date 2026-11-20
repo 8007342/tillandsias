@@ -24,19 +24,21 @@ size: instant
 
 preconditions:
   - workspace contains build.sh
-  - workspace contains scripts/test-build-sh-darwin-tool-remediation.sh
+  - workspace contains scripts/lua/test-build-sh-darwin-tool-remediation.lua
   - shell utilities (bash, grep, awk, sed) are available in PATH
 
 critical_path:
   - step: "build.sh and the fixture parse and the fixture is executable"
-    command: "bash -n build.sh && bash -n scripts/test-build-sh-darwin-tool-remediation.sh && test -x scripts/test-build-sh-darwin-tool-remediation.sh && echo 'ok: parses'"
+    command: "bash -n build.sh && test -f scripts/lua/test-build-sh-darwin-tool-remediation.lua && echo 'ok: parses'"
     timeout_ms: 5000
     expected_behavior: "ok: parses"
 
   - step: "all fixture scenarios pass (both branches, both mutation controls, skill build-path pin)"
-    command: "bash scripts/test-build-sh-darwin-tool-remediation.sh 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-build-sh-darwin-tool-remediation.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:build-sh-darwin-tool-remediation-fixture:14"
+    assert_exit: 0
+    assert_output_matches: "ok:build-sh-darwin-tool-remediation-fixture:14"
 
   - step: "NEGATIVE CONTROL: the Fedora remediation still exists for Linux hosts"
     command: "grep -q 'Install the Fedora build dependencies, then rerun this command.' build.sh && echo 'ok: fedora-line-survives' || echo 'FAIL: the Linux remediation was lost'"
@@ -44,5 +46,5 @@ critical_path:
     expected_behavior: "ok: fedora-line-survives"
 
 evidence:
-  artifact: "build.sh + scripts/test-build-sh-darwin-tool-remediation.sh"
+  artifact: "build.sh + scripts/lua/test-build-sh-darwin-tool-remediation.lua"
   measured_on: "macOS Darwin 25.6.0 2026-08-22 — 14/14 fixture checks green via shim uname on the Mac itself"

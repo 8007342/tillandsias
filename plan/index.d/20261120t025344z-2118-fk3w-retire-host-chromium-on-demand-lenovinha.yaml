@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: retire-host-chromium-on-demand-delete-install-chromium-sh-rebind-browser-ephemeral
+    order: 2118-fk3w
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, openspec, browser]
+    estimated_hours: 2
+    owned_files:
+      - scripts/install-chromium.sh
+      - openspec/litmus-tests/litmus-host-chromium-on-demand-shape.yaml
+      - openspec/changes/retire-host-chromium-on-demand/
+    title: |
+      Slice 3: retire spec host-chromium-on-demand. The host-Chromium path was removed by 1649-xqet. Delete scripts/install-chromium.sh and litmus:host-chromium-on-demand-shape, tombstone the spec to host-browser-mcp + browser-window-modes, and rebind litmus:browser-ephemeral to host-browser-mcp.
+    context: |
+      Coordinator ruling (A), 2026-11-20. open-it-browser had no REMOVED delta for this spec, so this is its own change. No crate reads ~/.cache/tillandsias/chromium, and the cheatsheet's "tillandsias --install-chromium" subcommand does not exist in crates/. host-chromium (already a tombstone) is re-pointed to the same successors.
+    exit_criteria:
+      - 'scripts/install-chromium.sh and the shape litmus are gone; host-chromium-on-demand is obsolete with a tombstone in openspec/litmus-bindings.yaml'
+      - 'litmus:browser-ephemeral is bound under host-browser-mcp and still passes'
+      - './build.sh --preflight refused=0'
+    verifiable_closure: |
+      litmus:browser-ephemeral passes under spec host-browser-mcp (scripts/run-litmus-test.sh host-browser-mcp), and git grep for install-chromium.sh outside plan/ and openspec/changes/ is empty.
+    next_action: Preflight, push work/2118-fk3w, open PR; archive the change after landing.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T02:53:44Z"
+        host: lenovinha
+        summary: Retire host-chromium-on-demand; delete install-chromium.sh; rebind browser-ephemeral.

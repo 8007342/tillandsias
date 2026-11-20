@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction, from the class found while landing 2110-ghw2.
+packets:
+  - packet_id: a-script-run-from-a-scratch-repo-under-the-litmus-runner-resolves-the-scratch-repo-not-the-exported-project-root
+    order: 2120-a44w
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, lua-door, fixtures]
+    estimated_hours: 3
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: "A fixture that runs `tillandsias-plan script run` inside a scratch repo checks the scratch repo even under the litmus runner, which exports PROJECT_ROOT, so negative controls stop silently testing the real checkout instead"
+    context: |
+      MEASURED 2026-11-20 on yoga while landing 2110-ghw2: run-litmus-test.sh exports PROJECT_ROOT (line 84,
+      ORDER 1268-m2ir). Two fixtures that run a Lua guard inside a throwaway repo were red under every litmus run and
+      green by hand, because `script run` resolved the REAL checkout through the exported PROJECT_ROOT:
+        - scripts/test-fragment-status-loss-row-boundary.sh: 5 FAIL with PROJECT_ROOT exported, 0 without.
+        - scripts/test-litmus-diff-scope.sh section F: the dead-glob negative control "PASSED a dead glob 'crate/**'".
+      2110-ghw2 worked around each with `env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT` at the call site.
+      Coordinator ruling 2026-11-20: fix the class at the root, not per fixture. Two candidate roots; take whichever is
+      smaller: (a) the runner clears PROJECT_ROOT for fixture steps, or (b) `script run` resolves the root from the
+      cwd's git toplevel whenever PROJECT_ROOT points outside it.
+    exit_criteria:
+      - "A new scratch-repo fixture exports PROJECT_ROOT pointing at the real checkout, runs a Lua guard via script run from inside the scratch repo, and asserts the guard saw the scratch repo. Pre-fix: FAILS (the guard reads the real checkout)."
+      - "The two per-fixture workarounds 2110-ghw2 added (env -u PROJECT_ROOT in test-fragment-status-loss-row-boundary.sh and in test-litmus-diff-scope.sh's dead_inputs) are removed in the same change and both fixtures stay green under run-litmus-test.sh."
+      - "The PR lists every other fixture whose PROJECT_ROOT/TILLANDSIAS_REPO_ROOT workaround the fix makes removable (git grep 'env -u TILLANDSIAS_REPO_ROOT' and 'unset PROJECT_ROOT' under scripts/), each removed or kept with a reason."
+    unscoreable: "unpinnable-until-the-guard-exists: the scratch-repo fixture lands with the implementation (1136-n8sh)"
+    provenance: "yoga measurements 2026-11-20 (relay-preflight work/2110-ghw2 logs); coordinator ruling relayed by macuahuitl-fedora."
+    events:
+      - type: filed
+        ts: "2026-11-20T02:57:59Z"
+        host: yoga
+        summary: "filed at the coordinator's direction; take after the verify batch"
