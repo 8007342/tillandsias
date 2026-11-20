@@ -110,12 +110,12 @@ git commit -qm "merge origin/main (resolution drops the trunk's files)"
 git merge-base --is-ancestor origin/main HEAD \
     || { echo "blocked:fixture:arm2-is-not-a-fast-forward"; exit 2; }
 out="$(git push --no-verify origin stale:main 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'blocked:stale-base-revert:'; then
+if [ "$rc" -ne 0 ] && grep -q 'blocked:stale-base-revert:' <<<"$out"; then
     check ok "a FAST-FORWARD push whose merge discards the trunk is refused"
 else
     check FAIL "a fast-forward discard is refused" "rc=$rc out=[$(printf '%s' "$out" | tail -4)]"
 fi
-if printf '%s' "$out" | grep -q 'trunk_d' && printf '%s' "$out" | grep -q 'trunk_e'; then
+if grep -q 'trunk_d' <<<"$out" && grep -q 'trunk_e' <<<"$out"; then
     check ok "the refusal NAMES the reverted files, as the client hook does"
 else
     check FAIL "the refusal names the reverted files" "out=[$(printf '%s' "$out" | tail -6)]"

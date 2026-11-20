@@ -132,7 +132,7 @@ rm -rf "$d"
 # the deletion is unchanged.
 d="$(make_sandbox linux)"
 out="$(run_uninstall "$d" linux)"
-printf '%s' "$out" | grep -Fq "Cache preserved. Use --wipe to remove everything."
+grep -Fq "Cache preserved. Use --wipe to remove everything." <<<"$out"
 check "linux-non-root-keeps-the-original-cache-preserved-line" "$?"
 rm -rf "$d"
 

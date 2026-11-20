@@ -105,7 +105,7 @@ fi
 # The tillandsias-plan binary changes when its crate sources change.
 # Trigger a background, bounded rebuild so the next answer uses the
 # new code without waiting for the next forge launch.
-if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/'; then
+if grep -qE '^crates/tillandsias-plan/' <<<"$CHANGED"; then
     (
         BIN_DIR="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}"
         mkdir -p "$BIN_DIR" 2>/dev/null || true
@@ -170,7 +170,7 @@ fi
 #
 # Runs in the background, never blocks the commit.
 # IMMEDIATE tier: short query, fast timeout, no inference required.
-if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/(lua/|src/pipeline\.rs|src/lua_runtime\.rs|src/semantic_expert\.rs)'; then
+if grep -qE '^crates/tillandsias-plan/(lua/|src/pipeline\.rs|src/lua_runtime\.rs|src/semantic_expert\.rs)' <<<"$CHANGED"; then
     (
         _sentinel_bin="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}/tillandsias-plan"
         if [ -x "$_sentinel_bin" ]; then
