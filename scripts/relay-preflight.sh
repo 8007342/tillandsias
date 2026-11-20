@@ -254,16 +254,7 @@ for ref in ${refs[@]+"${refs[@]}"}; do
         exit 1
     fi
     _t="$(timing_now_ms)"
-    # ORDER 2110-ghw2: the scratch merge commit is never pushed, but git still
-    # needs a committer. Inside the builder toolbox the hostname is `toolbx`
-    # with no domain, so git's auto-detected address is `<user>@toolbx.(none)`
-    # and it REFUSES ("Committer identity unknown"), which this tool reported
-    # as merge-conflict (yoga, 2026-11-20). Only when git has no identity of
-    # its own; a configured one is used as before.
-    _ident=()
-    git var GIT_COMMITTER_IDENT >/dev/null 2>&1 \
-        || _ident=(-c user.name=relay-preflight -c user.email=relay-preflight@invalid)
-    if ! _cap git ${_ident[@]+"${_ident[@]}"} merge --no-ff --no-edit "$ref"; then
+    if ! _cap git merge --no-ff --no-edit "$ref"; then
         _item "merge:$ref" red "$_t"
         printf '%s\n' "$_CAP_OUT" | sed 's/^/  /' >&2
         _restore_clean
