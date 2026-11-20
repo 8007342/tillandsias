@@ -71,17 +71,6 @@ function T:scratch(tag)
     return d
 end
 
--- A scratch dir with the shortest name the kit can give, for a fixture whose
--- subject is path length (unix-socket SUN_LEN). Same {rel=, abs=} and cleanup.
-function T:short_scratch()
-    self.seq = self.seq + 1
-    local leaf = "s" .. tostring(time.now_ms() % 10000000) .. self.seq
-    scratch_root()
-    local d = { rel = SCRATCH .. "/" .. leaf, abs = scratch.mkdir(leaf), leaf = leaf }
-    self.dirs[#self.dirs + 1] = d
-    return d
-end
-
 -- proc.run with argv given positionally; named fields pass through.
 function T:run(spec)
     local argv = {}
@@ -98,20 +87,6 @@ function T:must(spec)
             .. " " .. tostring(r.stderr or r.why))
     end
     return r
-end
-
--- A scratch git repo with a fixed identity and one commit on `main`.
--- The identity is local to the repo, so no ambient identity leaks in.
-function T:git_repo(tag)
-    local d = self:scratch(tag or "repo")
-    self:must{ "git", "init", "-q", "-b", "main", d.abs }
-    self:must{ "git", "-C", d.abs, "config", "user.email", "fixture@example.invalid" }
-    self:must{ "git", "-C", d.abs, "config", "user.name", "fixture" }
-    self:must{ "git", "-C", d.abs, "config", "commit.gpgsign", "false" }
-    fs.write(d.rel .. "/README", "fixture\n")
-    self:must{ "git", "-C", d.abs, "add", "README" }
-    self:must{ "git", "-C", d.abs, "commit", "-q", "-m", "init" }
-    return d
 end
 
 function T:cleanup()
@@ -141,6 +116,30 @@ function T:finish(opts)
     end
     if opts.ok then V.emit(opts.ok(self.passed), 0) end
     V.ok(self.name, self.passed)
+end
+
+-- ORDER 2118-asur (operator 2026-11-20, landing-pipeline P4 row 3): helpers
+-- beyond this core live one per file in lib/lua/common/fixture/<name>.lua and
+-- are installed here in name order, so two branches that each add a helper
+-- add two files and never conflict. A helper that would replace a core method
+-- is refused, never silently swapped.
+do
+    local core = {}
+    for k, v in pairs(T) do core[k] = v end
+    local ok, files = pcall(fs.walk, "lib/lua/common/fixture", { suffix = ".lua" })
+    if ok and files then
+        table.sort(files)
+        local ctx = { scratch_root = scratch_root, SCRATCH = SCRATCH }
+        for _, f in ipairs(files) do
+            local name = f:match("^lib/lua/common/fixture/([a-z0-9_]+)%.lua$")
+            if name then
+                require("common.fixture." .. name)(T, ctx)
+                for k, v in pairs(core) do
+                    if T[k] ~= v then error("common.fixture." .. name .. " replaces the core method " .. k) end
+                end
+            end
+        end
+    end
 end
 
 return M
