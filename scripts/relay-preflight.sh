@@ -92,6 +92,17 @@ SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SELF_DIR/.." && pwd)"
 cd "$ROOT" || exit 2
 
+# ORDER 2110-ghw2: on an immutable host (Silverblue) run inside the
+# tillandsias-builder toolbox, exactly as build.sh does. The host is bare: its
+# cargo has no linker and it has no perl, so every cargo-backed decider,
+# crate test and litmus step failed for a HOST reason (yoga, trunk f3a546f74:
+# ci-release 8 red, 83x podman-cli rebuild-failed-before-test). Podman still
+# reaches the host through the wrapper's host-escape shim. Mutable Linux,
+# macOS, Windows and forges pass through with zero overhead. At the ENTRY
+# point, not inside run-litmus-test.sh: fixtures run the runner with injected
+# fake tools (a fake podman on PATH), and a re-exec there escaped them.
+[[ -f "$SELF_DIR/with-tillandsias-builder.sh" ]] && source "$SELF_DIR/with-tillandsias-builder.sh"
+
 # ORDER 1522-ey4h — RUN THE MERGED COPY OF THIS TOOL, NOT THE PRE-MERGE ONE.
 # The merge below rewrites scripts/relay-preflight.sh on disk, but git replaces
 # the file (a new inode), so this process keeps executing the PRE-merge text:
