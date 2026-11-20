@@ -880,6 +880,33 @@ errors=0
 tools="-"
 source_state="absent"
 
+# ORDER 2135-z6gh. A BOUNDED WINDOW, NAMED. This log only ever grows (93 MB on
+# macuahuitl, 2026-11-20), and every figure below was computed over all of it
+# on every cycle: yoga measured --experts-only at 28 s on a 162 MB log against
+# 0.3 s empty. Past TILLANDSIAS_EXPERT_USAGE_WINDOW_BYTES (default 8 MiB) the
+# figures cover the log's TAIL from its first whole line, and each line that
+# reports them says so with ` window=tail:<bytes>`. Under the cap nothing
+# changes, byte for byte. Rotating the file instead would move the cost to
+# every writer (Rust, two image shells) for a reader-side problem.
+USAGE_READ="$USAGE_LOG"
+USAGE_WINDOW_NOTE=""
+_uw_cap="${TILLANDSIAS_EXPERT_USAGE_WINDOW_BYTES:-8388608}"
+case "$_uw_cap" in ''|*[!0-9]*) _uw_cap=8388608 ;; esac
+if [ -r "$USAGE_LOG" ] && [ "$_uw_cap" -gt 0 ]; then
+    _uw_size="$(wc -c < "$USAGE_LOG" 2>/dev/null)" || _uw_size=0
+    _uw_size="${_uw_size//[!0-9]/}"
+    if [ "${_uw_size:-0}" -gt "$_uw_cap" ]; then
+        _uw_tmp="$(mktemp "${TMPDIR:-/tmp}/expert-usage-window.XXXXXX" 2>/dev/null)" || _uw_tmp=""
+        if [ -n "$_uw_tmp" ]; then
+            # tail -c lands mid-record; drop that first partial line.
+            tail -c "$_uw_cap" "$USAGE_LOG" 2>/dev/null | sed '1d' > "$_uw_tmp" 2>/dev/null
+            USAGE_READ="$_uw_tmp"
+            USAGE_WINDOW_NOTE=" window=tail:${_uw_cap}"
+            trap 'rm -f "$_uw_tmp"' EXIT
+        fi
+    fi
+fi
+
 if [ -r "$USAGE_LOG" ]; then
     source_state="$USAGE_LOG"
     # The `experts:` block measures the PLAN/METHODOLOGY EXPERT specifically —
@@ -890,7 +917,7 @@ if [ -r "$USAGE_LOG" ]; then
     # legacy rows (written before the field existed — all plan-expert) plus rows
     # explicitly tagged `server":"forge-plan`. On a legacy-only log this is the
     # whole file, so the reported numbers are byte-identical to before.
-    PLAN_STREAM="$( { grep -v '"server":"' "$USAGE_LOG"; grep '"server":"forge-plan"' "$USAGE_LOG"; grep '"server":"cli"' "$USAGE_LOG"; } 2>/dev/null )"
+    PLAN_STREAM="$( { grep -v '"server":"' "$USAGE_READ"; grep '"server":"forge-plan"' "$USAGE_READ"; grep '"server":"cli"' "$USAGE_READ"; } 2>/dev/null )"
     # jq is the only parser used anywhere in the expert path (no python —
     # methodology tlatoani_hard_no_python). A malformed line must not abort the
     # report, so every read tolerates failure.
@@ -920,8 +947,8 @@ if [ "$graded" -gt 0 ]; then
     answer_rate="$(( answered * 100 / graded ))%"
 fi
 
-printf 'experts: calls=%s answered=%s unsupported=%s degraded=%s errors=%s answer_rate=%s tools=%s source=%s\n' \
-    "$calls" "$answered" "$unsupported" "$degraded" "$errors" "$answer_rate" "$tools" "$source_state"
+printf 'experts: calls=%s answered=%s unsupported=%s degraded=%s errors=%s answer_rate=%s tools=%s source=%s%s\n' \
+    "$calls" "$answered" "$unsupported" "$degraded" "$errors" "$answer_rate" "$tools" "$source_state" "$USAGE_WINDOW_NOTE"
 printf 'experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)\n'
 
 # ── mcp usage (packets 682-ym68, 682-m8ek) ───────────────────────────────────
@@ -1021,19 +1048,19 @@ if [ "$mcp_health" = "ok" ]; then
     fi
 fi
 
-if grep -q '"server":"' "$USAGE_LOG" 2>/dev/null; then
+if grep -q '"server":"' "$USAGE_READ" 2>/dev/null; then
     # Real per-server counts. grep|sed|sort|uniq (no python); tolerant of
     # malformed lines. `legacy_untagged` counts any pre-682-m8ek rows still in
     # the same log so the total is not silently under-reported.
-    per_server="$(grep -o '"server":"[^"]*"' "$USAGE_LOG" 2>/dev/null \
+    per_server="$(grep -o '"server":"[^"]*"' "$USAGE_READ" 2>/dev/null \
         | sed 's/.*:"//; s/"$//' | sort | uniq -c \
         | awk '{printf "%s%s=%s", (NR>1?";":""), $2, $1}')"
     [ -n "$per_server" ] || per_server="-"
-    mcp_servers=$(grep -o '"server":"[^"]*"' "$USAGE_LOG" 2>/dev/null \
+    mcp_servers=$(grep -o '"server":"[^"]*"' "$USAGE_READ" 2>/dev/null \
         | sed 's/.*:"//; s/"$//' | sort -u | grep -c .) || mcp_servers=0
-    legacy_untagged=$(grep -vc '"server":"' "$USAGE_LOG" 2>/dev/null) || legacy_untagged=0
-    printf 'mcp: servers=%s per_server=%s legacy_untagged=%s health=%s source=%s\n' \
-        "$mcp_servers" "$per_server" "$legacy_untagged" "$mcp_health" "$source_state"
+    legacy_untagged=$(grep -vc '"server":"' "$USAGE_READ" 2>/dev/null) || legacy_untagged=0
+    printf 'mcp: servers=%s per_server=%s legacy_untagged=%s health=%s source=%s%s\n' \
+        "$mcp_servers" "$per_server" "$legacy_untagged" "$mcp_health" "$source_state" "$USAGE_WINDOW_NOTE"
 else
     mcp_servers=0
     if [ "$tools" != "-" ]; then
