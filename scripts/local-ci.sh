@@ -1473,8 +1473,11 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # allowlist inside the guard.
 
     log_section "No Tracked Binaries"
-    if [[ -f "scripts/check-no-tracked-binaries.sh" ]]; then
-        if bash scripts/check-no-tracked-binaries.sh 2>&1 | tee /tmp/no-tracked-binaries.log; then
+    # ORDER 2118-9mk4: the guard is scripts/lua/check-no-tracked-binaries.lua.
+    _ntb_bin="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ntb_bin=""
+    case "$_ntb_bin" in ./*) _ntb_bin="$REPO_ROOT/${_ntb_bin#./}" ;; esac
+    if [[ -f "scripts/lua/check-no-tracked-binaries.lua" && -n "$_ntb_bin" ]]; then
+        if "$_ntb_bin" script run scripts/lua/check-no-tracked-binaries.lua 2>&1 | tee /tmp/no-tracked-binaries.log; then
             log_pass "No tracked build artifacts outside the image-asset allowlist"
             archive_check_log "no-tracked-binaries" "pass" /tmp/no-tracked-binaries.log
         else
@@ -1483,7 +1486,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "no-tracked-binaries" "fail" /tmp/no-tracked-binaries.log
         fi
     else
-        log_fail_missing_guard "no-tracked-binaries" "scripts/check-no-tracked-binaries.sh"
+        log_fail_missing_guard "no-tracked-binaries" "scripts/lua/check-no-tracked-binaries.lua (or a plan binary to run it)"
         archive_check_log "no-tracked-binaries" "skipped"
     fi
 

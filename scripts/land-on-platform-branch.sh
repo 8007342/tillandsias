@@ -587,7 +587,14 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
     # above). An advisory inside the gate is silent on exactly those lands, and
     # adoption is the common case for a plan-only or re-attempted land. Before
     # the push is the one point every land passes through.
-    bash "$ROOT/scripts/check-unrunnable-platform-arms.sh" --base "origin/$BRANCH" || true
+    # ORDER 2118-9mk4: the advisory is scripts/lua/check-unrunnable-platform-arms.lua.
+    _ura_bin="$(cd "$ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _ura_bin=""
+    case "$_ura_bin" in ./*) _ura_bin="$ROOT/${_ura_bin#./}" ;; esac
+    if [ -n "$_ura_bin" ]; then
+        (cd "$ROOT" && "$_ura_bin" script run scripts/lua/check-unrunnable-platform-arms.lua -- --base "origin/$BRANCH") || true
+    else
+        echo "skipped:unrunnable-platform-arms:no-plan-binary" >&2
+    fi
 
     # ORDER 1201-9it2 — and this is the SIBLING of the block above, not a
     # duplicate of it. They answer different questions and a change can trip
