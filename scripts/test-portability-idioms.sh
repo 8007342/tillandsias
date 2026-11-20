@@ -234,9 +234,9 @@ printf '#!/usr/bin/env bash\ngrep -rl "token" scripts/ %s\n' "$_farm_dir" > "$_s
 _s_real="$(TILLANDSIAS_PORTABILITY_ROOT="$_sw/real" run_guard 2>&1)"
 _s_farm="$(TILLANDSIAS_PORTABILITY_ROOT="$_sw/farm" run_guard 2>&1)"
 rm -rf "$_sw"
-if printf '%s\n' "$_s_real" | grep -q 'scan-skills\.sh'; then
+if grep -q 'scan-skills\.sh' <<<"$_s_real"; then
     bad "NEGATIVE CONTROL: flagged grep -r over a canonical (real) skills/ tree (constructed)"
-elif ! printf '%s\n' "$_s_farm" | grep -q 'scan-skills\.sh'; then
+elif ! grep -q 'scan-skills\.sh' <<<"$_s_farm"; then
     bad "NEGATIVE CONTROL premise: grep -r over a skills/ symlink farm is NOT flagged either, so the real-tree pass proves nothing (constructed)"
 else
     ok "NEGATIVE CONTROL: grep -r over a real skills/ tree is not flagged, over a symlink farm it is (constructed)"
