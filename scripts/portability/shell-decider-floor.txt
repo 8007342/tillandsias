@@ -70,7 +70,6 @@ scripts/check-sigpipe-verdict-pipelines-added.sh
 scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
 scripts/check-spec-index-resolution-agreement.sh
-scripts/check-spec-script-paths.sh
 scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh

@@ -4,7 +4,7 @@
 # nothing checked it: project-summarizers required six summarizers under a
 # scripts/summarizers/ directory that never existed, two never committed, and
 # its litmus grepped a cheatsheet for ONE name that exists, so it rotted green.
-# check-spec-script-paths.sh refuses any NEW unresolved `scripts/...` path an
+# scripts/lua/check-spec-script-paths.lua (was the .sh, 2118-9awa) refuses any NEW unresolved `scripts/...` path an
 # active spec names; the ten that predate it are a named burndown baseline.
 # The fixture pins the pre-fix project-summarizers spec (at b6fe04b4f) as red.
 # Negative control: with resolution forced true, arms 2-4 fail (3/6).

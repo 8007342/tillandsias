@@ -32,7 +32,7 @@ observability:
   log_fields:
     spec: "ci-release"
     test: "spec-script-paths"
-    artifact: "scripts/check-spec-script-paths.sh"
+    artifact: "scripts/lua/check-spec-script-paths.lua"
 
 rollback:
   on_failure: >
