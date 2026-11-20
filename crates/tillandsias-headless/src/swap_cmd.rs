@@ -9,9 +9,10 @@
 //! THE BINARY IS THE SOURCE. The assets of the per-launch swap service
 //! (1376-8zdz; design plan/issues/forge-memory-swap-architecture-design-2026-09-26.md
 //! §9) are embedded from `scripts/forge-swap/` with `include_str!`, and `--swap on`
-//! writes exactly what `scripts/install-forge-swap-service.sh` writes, byte for
-//! byte (scripts/test-forge-swap-service.sh compares the two trees), so a host
-//! with no checkout installs the same service a checkout does.
+//! writes them with the two placeholders substituted (scripts/test-forge-swap-service.sh
+//! arm 8 pins every installed file to its source). It is the only installer:
+//! scripts/install-forge-swap-service.sh, which wrote the same tree, was deleted
+//! (2118-ihuh), so a host with or without a checkout installs one service.
 //!
 //! ROOT, ONCE. A live `on`/`off` (no `--prefix`) needs root. Run as a user, it
 //! re-executes itself ONCE through `pkexec` with the resolved `--user`; where
