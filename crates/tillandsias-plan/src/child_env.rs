@@ -891,6 +891,21 @@ impl ChildEnv {
         Self::build_with(runner, declared, call, fold())
     }
 
+    /// ORDER 2110-unst. The LAST step: remove `names` from the child, whatever
+    /// added them (the inherited base, a declared name, ENV_FIXED or a call
+    /// literal), so a door's `unset = {"HOME"}` means the child has no HOME.
+    /// Without it a fixture that merely OMITS a variable still passes it.
+    pub fn without(self, names: &[String]) -> ChildEnv {
+        self.without_with(names, fold())
+    }
+
+    /// `without` with the case rule explicit.
+    pub fn without_with(mut self, names: &[String], fold: bool) -> ChildEnv {
+        self.vars
+            .retain(|(k, _)| !names.iter().any(|n| eq_with(&k.to_string_lossy(), n, fold)));
+        self
+    }
+
     /// `build` with the case rule explicit (the Windows side on any host).
     pub fn build_with(
         runner: &[(OsString, OsString)],
