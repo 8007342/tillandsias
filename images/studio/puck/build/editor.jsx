@@ -34,6 +34,17 @@ function Studio({ initial, stored }) {
   const [dirty, setDirty] = useState(text(initial) !== saved.current);
   const [state, setState] = useState("");
   const draftTimer = useRef(0);
+  // 2120-sv7m: GitHub's compare page for the pushed studio branch; the
+  // operator opens the PR there, signed in as themselves (no token here).
+  const [prUrl, setPrUrl] = useState(null);
+  const refreshPr = async () => {
+    try {
+      const st = await (await fetch("/__studio/branch", { cache: "no-store" })).json();
+      setPrUrl(st && st.compare_url ? st.compare_url : null);
+    } catch (_) { setPrUrl(null); }
+  };
+  useEffect(() => { refreshPr(); }, []);
+  useEffect(() => { document.documentElement.setAttribute("data-studio-pr", prUrl ? "ready" : "none"); }, [prUrl]);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-studio-dirty", String(dirty));
@@ -70,6 +81,7 @@ function Studio({ initial, stored }) {
       draftStore.clear();
       setState("saved");
       document.documentElement.setAttribute("data-studio-save", "saved");
+      refreshPr();
     } catch (e) {
       setState("error");
       document.documentElement.setAttribute("data-studio-save", "error");
@@ -86,6 +98,19 @@ function Studio({ initial, stored }) {
         // Save replaces Publish: Publish committed on every click with no
         // dirty state. Only this click writes.
         headerActions: () => (
+          <>
+          {prUrl ? (
+            <a
+              href={prUrl}
+              target="_blank"
+              rel="noopener"
+              data-studio-pr-link=""
+              title="Open PR on GitHub (review your saves before they reach the site)"
+              style={{ padding: "6px 14px", borderRadius: 6, border: "1px solid #888", textDecoration: "none", color: "inherit" }}
+            >
+              Open PR
+            </a>
+          ) : null}
           <button
             type="button"
             data-studio-save-button=""
@@ -99,6 +124,7 @@ function Studio({ initial, stored }) {
           >
             {state === "saving" ? "Saving…" : dirty ? "Save" : "Saved"}
           </button>
+          </>
         ),
         // The site's own CSS reaches the canvas only, never the editor chrome.
         iframe: ({ children, document: doc }) => {
