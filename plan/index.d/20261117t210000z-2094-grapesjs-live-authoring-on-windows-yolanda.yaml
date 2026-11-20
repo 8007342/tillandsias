@@ -1,0 +1,177 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-17 at the coordinator's direction (macuahuitl-fedora relayed operator work:
+# "make GrapeJS live site authoring work on Windows"; the operator will try it with tlatoani.net).
+# Planning only: nothing here is implemented. Code is cited by symbol, never by line.
+#
+# WHAT EXISTS (measured on origin/linux-next f5d4bf188):
+#   - images/studio/grapesjs/ (editor.html, server.mjs, studio-grapesjs), Containerfile.grapesjs, and the
+#     registry row id=grapesjs port 4096 save_adapter=endpoint (images/studio/studios.json, packet 1861-nmpp).
+#   - tillandsias-headless `--cloud owner/repo --studio <id>` (1860-auhm) and webstudio.open over MCP.
+#   - 2067-774h (control socket + bare project name for owner/tlatoani.net.git) and 2067-uc3k
+#     (window_url on the preview TLS listener) are both READY: the Linux tray's studio window itself is open work.
+#   - crates/tillandsias-windows-tray: `--forge <project>` with agent flags (--opencode, ...), NO studio entry,
+#     no `--studio` passthrough, and no browser-open path for a forge-hosted URL (notify_icon's browser actions
+#     say "no URL until the VM + router are up").
+packets:
+  - packet_id: windows-tray-launches-a-web-studio-in-a-forge-and-opens-it-in-a-native-windows-browser-window
+    order: 2094-v5nn
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, windows-tray, wsl2, browser]
+    estimated_hours: 6
+    size: M
+    implementer_tier: sonnet
+    depends_on:
+      - grapesjs-and-silex-studio-lanes-for-static-html
+      - webstudio-open-hands-back-a-window-url-browser-open-admits-by-serving-the-studio-route-over-the-preview-tls-listener
+    owned_files:
+      - crates/tillandsias-windows-tray/src/main.rs
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+    title: "The Windows tray launches a registered web studio (grapesjs first) for a project in a WSL2 forge and opens its window_url in a native Windows browser window"
+    context: |
+      Today the Windows tray can only start an agent lane (`--forge <project> --opencode` etc.). The headless
+      side already takes `--cloud owner/repo --studio grapesjs` and webstudio.open returns a window_url, but the
+      Windows tray neither passes `--studio` through nor opens a guest-served URL on the host. The URL must reach
+      the Windows browser across the WSL2 boundary (the guest router's preview TLS port, 2067-uc3k), and the
+      browser must trust the enclave CA for that origin without the CA being installed host-wide
+      (check-enclave-ca-not-host-trusted).
+    exit_criteria:
+      - "`tillandsias-tray.exe --forge <owner/repo> --studio grapesjs` (and a Studios submenu entry) starts the lane and, within the bounded studio launch time (1945-sthg), opens a Windows browser window on the studio's window_url showing the GrapesJS editor. Pre-fix result: FAILS, the tray rejects --studio as an unknown flag."
+      - "An unauthenticated request to the same URL from another Windows process is refused, as on Linux."
+      - "The enclave CA is not added to the Windows user or machine root store (check-enclave-ca-not-host-trusted stays green)."
+    verifiable_closure: "A windows-tray unit test pins the --studio argv passthrough, and the 2094-7ssf smoke's step 1 records the window opening on yolanda."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-windows-tray-studio-window-opens.yaml lands in the same commit as the implementation (1136-n8sh)"
+    next_action: "Decide the browser question (operator decision 1 in the PR) before code."
+    provenance: "macuahuitl-fedora relay 2026-11-17; yolanda read of origin/linux-next f5d4bf188."
+    events:
+      - type: filed
+        ts: "2026-11-17T21:00:00Z"
+        host: yolanda
+        summary: "filed ready from the coordinator's GrapeJS-on-Windows direction (planning only)"
+  - packet_id: grapesjs-edits-on-windows-save-into-the-forge-checkout-and-the-preview-reloads-live
+    order: 2094-za6t
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, grapesjs, live-preview, wsl2]
+    estimated_hours: 4
+    size: M
+    implementer_tier: sonnet
+    depends_on:
+      - windows-tray-launches-a-web-studio-in-a-forge-and-opens-it-in-a-native-windows-browser-window
+    owned_files:
+      - images/studio/grapesjs/server.mjs
+      - images/studio/grapesjs/editor.html
+    title: "A GrapesJS save from the Windows browser writes the page into the project checkout inside the forge, and an open preview of that page reloads on its own"
+    context: |
+      1861-nmpp's fixture proves the save endpoint writes index.html on Linux. On Windows the editor runs in a
+      host browser and the checkout lives in the WSL2 guest, so the save crosses the router; nothing proves it
+      lands, respects write_allowlist (*.html, **/*.html), or that a second (preview) window reloads.
+    exit_criteria:
+      - "On yolanda, editing a heading in GrapesJS and saving changes index.html in the forge checkout (git -C <checkout> diff shows the edit) within 5s. Pre-fix result: FAILS, no Windows path reaches the studio."
+      - "A preview window open on the same page reloads and shows the edit without a manual refresh."
+      - "A save that targets a path outside write_allowlist is refused by name and changes nothing."
+    verifiable_closure: "The 2094-7ssf smoke's step 2, plus a server.mjs fixture for the reload event."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-grapesjs-save-reaches-checkout-and-reloads.yaml lands in the same commit as the implementation (1136-n8sh)"
+    events:
+      - type: filed
+        ts: "2026-11-17T21:00:00Z"
+        host: yolanda
+        summary: "filed ready from the coordinator's GrapeJS-on-Windows direction (planning only)"
+  - packet_id: the-windows-tray-opens-an-existing-static-site-repo-such-as-tlatoani-net-in-a-studio
+    order: 2094-pacf
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, windows-tray, cloud, project-picker]
+    estimated_hours: 3
+    size: S
+    implementer_tier: sonnet
+    depends_on:
+      - windows-tray-launches-a-web-studio-in-a-forge-and-opens-it-in-a-native-windows-browser-window
+      - the-web-session-handshake-dials-the-trays-current-control-socket-and-a-cloud-value-spelled-with-dot-git-names-the-bare-project
+    owned_files:
+      - crates/tillandsias-windows-tray/src/notify_icon.rs
+    title: "The Windows tray offers an existing GitHub static-site repo (owner/tlatoani.net) as a studio project and opens it in GrapesJS, cloned through the git service with no token in the forge"
+    context: |
+      The studio needs a project. On Windows the tray has no way to name an existing repo for a studio, and
+      the forge must clone through the host git service (the forge holds no GitHub token). 2067-774h fixes the
+      label for owner/tlatoani.net.git on the headless side; the Windows tray must use it.
+    exit_criteria:
+      - "Choosing owner/tlatoani.net in the Windows tray's studio picker opens its index.html in GrapesJS; the lane, git service and MCP socket are all labelled tlatoani.net (never tlatoani.net.git). Pre-fix result: FAILS, no studio picker exists."
+      - "No GitHub token or credential file is present in the forge (env, files under the forge home) during the session."
+      - "A repo whose pages come from a build step is refused by name, matching studios.json's not_for, rather than opened half-working."
+    verifiable_closure: "The 2094-7ssf smoke's step 3 against the operator's tlatoani.net."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-windows-tray-studio-opens-existing-repo.yaml lands in the same commit as the implementation (1136-n8sh)"
+    events:
+      - type: filed
+        ts: "2026-11-17T21:00:00Z"
+        host: yolanda
+        summary: "filed ready from the coordinator's GrapeJS-on-Windows direction (planning only)"
+  - packet_id: studio-edits-on-windows-commit-and-push-through-the-forges-work-ref-and-pr-flow-with-no-token-in-the-forge
+    order: 2094-s6xc
+    status: ready
+    kind: feature
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, git-service, pr-flow, credentials]
+    estimated_hours: 4
+    size: M
+    implementer_tier: sonnet
+    depends_on:
+      - grapesjs-edits-on-windows-save-into-the-forge-checkout-and-the-preview-reloads-live
+    title: "Studio edits made on Windows are committed on a work ref and pushed through the host git service, which opens or updates a PR, with no GitHub token ever in the forge"
+    context: |
+      Saving into the checkout is not publishing. The operator's flow is the forge's normal one: commit on a
+      work/<ref>, push through the host-side git service (which holds the credential), and land via PR. On
+      Windows the credential sits in the Windows vault behind the tray's GitHub sign-in (the same sign-in the
+      v56.11.17.2 smoke is blocked on), so this packet cannot be proved until that sign-in exists.
+    exit_criteria:
+      - "From the studio session, one action commits the saved pages on work/studio-<project>-<stamp> and pushes it; the remote branch exists and a PR is open against the repo's default branch. Pre-fix result: FAILS, no studio publish path on Windows."
+      - "During the push, no GitHub token is readable inside the forge (env, git config, credential helpers, files); the push is performed by the host git service."
+      - "With the tray signed out, the action refuses by name (needs the operator's GitHub sign-in) and pushes nothing; it never starts a login itself."
+    verifiable_closure: "The 2094-7ssf smoke's step 4 (requires the operator's tray sign-in)."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-studio-publish-pushes-with-no-token-in-forge.yaml lands in the same commit as the implementation (1136-n8sh)"
+    events:
+      - type: filed
+        ts: "2026-11-17T21:00:00Z"
+        host: yolanda
+        summary: "filed ready from the coordinator's GrapeJS-on-Windows direction (planning only)"
+  - packet_id: a-windows-smoke-proves-grapesjs-live-authoring-end-to-end-from-tray-to-pr
+    order: 2094-7ssf
+    status: ready
+    kind: test
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [smoke, studio, windows]
+    estimated_hours: 3
+    size: S
+    implementer_tier: sonnet
+    depends_on:
+      - windows-tray-launches-a-web-studio-in-a-forge-and-opens-it-in-a-native-windows-browser-window
+      - grapesjs-edits-on-windows-save-into-the-forge-checkout-and-the-preview-reloads-live
+      - the-windows-tray-opens-an-existing-static-site-repo-such-as-tlatoani-net-in-a-studio
+      - studio-edits-on-windows-commit-and-push-through-the-forges-work-ref-and-pr-flow-with-no-token-in-the-forge
+    title: "A Windows release-smoke section runs GrapesJS live authoring end to end on a published tray: open studio, edit and save, preview reloads, open an existing repo, commit and push to a PR"
+    context: |
+      The release smoke's Windows block covers install, provision and the forge lane; it has no studio
+      section. Without one, the four packets above can each pass alone and the flow still break between them.
+    exit_criteria:
+      - "The release-smoke Windows block gains a studio section with four steps (window opens; edit saved and preview reloaded; existing repo opened; work ref pushed and PR open), each writing evidence under target/smoke-e2e/. Run on today's build it FAILS at step 1."
+      - "The section reports BLOCKED, not FAIL, when the operator's GitHub sign-in is missing, and never signs in itself."
+    verifiable_closure: "A PASS of the section on yolanda against a published tray, evidence relayed to the coordinator."
+    unscoreable: "unpinnable-until-the-guard-exists: openspec/litmus-tests/litmus-windows-smoke-grapesjs-authoring.yaml lands in the same commit as the implementation (1136-n8sh)"
+    events:
+      - type: filed
+        ts: "2026-11-17T21:00:00Z"
+        host: yolanda
+        summary: "filed ready from the coordinator's GrapeJS-on-Windows direction (planning only)"

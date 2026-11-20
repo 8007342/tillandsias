@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: storage-isolation-tmp-clean-relaunch-distinguishes-entrypoint-files-from-carried-over-state
+    order: 2113-vn85
+    status: ready
+    kind: bug
+    priority: p3
+    pickup_role: linux
+    capability_tags: [litmus, podman, storage-isolation, tmpfs]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/litmus-helper-storage-isolation.lua
+    title: |
+      verify-tmp-clean-relaunch counts every entry in /tmp and WARNs at more than one; the forge entrypoint itself writes three, so the step warns on a correct tmpfs and asks nothing about the previous run's ephemeral.txt.
+    context: |
+      Measured on lenovinha 2026-11-19: WARNING: /tmp not empty, has 3 items, exit 0, no token. The property is that the previous container's /tmp/ephemeral.txt is gone after relaunch, not that /tmp is empty.
+    exit_criteria:
+      - 'verify-tmp-clean-relaunch asserts /tmp/ephemeral.txt is absent in the relaunched container and prints TMP_EPHEMERAL_CONFIRMED; it fails non-zero when the file is present'
+    verifiable_closure: |
+      litmus:podman-idiomatic-storage-isolation-runtime step verify-tmp-clean-relaunch prints TMP_EPHEMERAL_CONFIRMED and fails non-zero when /tmp/ephemeral.txt survives a relaunch.
+    next_action: Replace the item count with a test for the marker file; prove the failing arm with a non-tmpfs /tmp.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-19T23:10:42Z"
+        host: lenovinha
+        summary: tmp-clean-relaunch WARNs on entrypoint files; should test the marker instead.

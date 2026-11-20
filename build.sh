@@ -185,7 +185,14 @@ elif [[ "$(uname -s)" == "Darwin" ]]; then
     # unpacked (2026-10-29), so the edit loop keeps unpacked and every build
     # prunes the objects no linked binary can read (~0.1 s steady state).
     _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
-    "$SCRIPT_DIR/scripts/prune-darwin-stale-objects.sh" "$_deps_dir" >&2 || true
+    # Lua since 2106-scrt (scratch.* reaches a CARGO_TARGET_DIR outside the
+    # repo). With no runnable plan binary yet the prune waits for a later build.
+    _prune_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _prune_bin=""
+    if [[ -n "$_prune_bin" ]]; then
+        (cd "$SCRIPT_DIR" && "$_prune_bin" script run scripts/lua/prune-darwin-stale-objects.lua "$_deps_dir") >&2 || true
+    else
+        echo "skipped:darwin-stale-objects:no runnable plan binary yet" >&2
+    fi
     # Hold a SHARED lock for the rest of this run, so another build.sh's
     # prune skips while this one's cargo writes into the target. fd 7 stays
     # open in this shell and every cargo it spawns; the lock goes with it.
@@ -3892,6 +3899,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
 
+    if ! _run_lua_decider "scripts/lua/check-workspace-members-used.lua" 2>&1; then
+        _error "a workspace member has no dependent, no binary and no allowlist reason, or a crates/ directory has no Cargo.toml (2080-8i25)"
+        exit 1
+    fi
+
     if ! _run_lua_decider "scripts/lua/check-smoke-agent-prompt-is-minimal.lua" 2>&1; then
         _error "a smoke skill hands its forge agent the /meta-orchestration loop — a smoke spends one short turn on the shared hosted model (1941-smkp)"
         exit 1
@@ -5837,6 +5849,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Cheatsheet-reference fixture passed"
+
+    # Locale bundles and help scripts are complete and parse (2096-pq2g; the
+    # Lua port of the never-run scripts/test-locale-coverage.sh).
+    _step "Checking locale bundle coverage and help-script syntax (2096-pq2g)..."
+    if ! _run_lua_decider "scripts/lua/check-locale-coverage.lua" 2>&1; then
+        _error "a full locale bundle lacks an L_* name en.sh defines, or a bundle/help script does not parse (2096-pq2g)"
+        exit 1
+    fi
+    _info "Locale coverage check passed"
 
     # The forge browser-claim guard's own fixture (1746-2szd): this tree, the
     # pre-fix forge-quick-intro refused, negations, an image that ships a

@@ -62,3 +62,7 @@ tillandsias:
     I1/birefnet
   upscale_models: |
     I1/upscale_models
+  # 2090-ausx: SFZ instrument libraries (sfz-libraries.tsv), one subfolder per
+  # library; TillandsiasSFZRender lists the .sfz files under it.
+  sfz: |
+    I1/sfz

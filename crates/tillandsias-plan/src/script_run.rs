@@ -771,6 +771,7 @@ fn register(
         g.set("env", env)?;
     }
     install_require(lua)?;
+    crate::scratch_root::install(lua)?;
     Ok(())
 }
 

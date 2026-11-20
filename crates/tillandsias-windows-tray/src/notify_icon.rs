@@ -90,9 +90,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MF_DISABLED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage,
     RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow, SetTimer, TPM_BOTTOMALIGN,
     TPM_LEFTALIGN, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND,
-    WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_TOOLWINDOW,
+    WM_DESTROY, WM_ENDSESSION, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_TOOLWINDOW,
 };
 use windows::core::{PCWSTR, w};
+
+use crate::tray_lifecycle::{ExitReason, format_age, format_unix_utc};
 
 use crate::wsl_lifecycle::WslLifecycle;
 
@@ -827,6 +829,8 @@ pub fn run() -> ! {
     // Route tracing to a file before anything logs — a GUI tray has no console.
     init_tracing();
     tracing::info!(log = %log_file_path().display(), "tillandsias tray starting");
+    // 783-eeii: report how the previous instance ended, then start ours.
+    tray_lifecycle_begin();
 
     // 663-64xi: reconcile this build's NotifyIconSettings entry BEFORE the icon
     // is registered, so the Settings list reflects the running version rather
@@ -850,11 +854,15 @@ pub fn run() -> ! {
             Ok(hwnd) => hwnd,
             Err(err) => {
                 eprintln!("failed to create tray window: {err:?}");
+                tracing::error!(?err, "failed to create tray window");
+                tray_lifecycle_exit(ExitReason::StartupFailure);
                 return 1;
             }
         };
         if let Err(err) = unsafe { add_tray_icon(hwnd) } {
             eprintln!("failed to register notify icon: {err:?}");
+            tracing::error!(?err, "failed to register notify icon");
+            tray_lifecycle_exit(ExitReason::StartupFailure);
             return 1;
         }
         // 1450-23if: Windows has just created (or found) this tray's entry;
@@ -906,12 +914,29 @@ pub fn run() -> ! {
             SetTimer(hwnd, TOKIO_DRAIN_TIMER_ID, 100, None);
         }
 
-        // Pump messages until WM_QUIT.
+        // Pump messages until WM_QUIT. The 100ms drain timer guarantees this
+        // loop turns, so it is also where the 783-eeii heartbeat lives: a
+        // heartbeat that stops while the singleton is held IS a wedged loop.
         let mut msg = MSG::default();
+        let mut last_heartbeat = std::time::Instant::now();
         loop {
             let r = unsafe { GetMessageW(&mut msg, HWND::default(), 0, 0) };
-            if r.0 <= 0 {
+            if r.0 == -1 {
+                tracing::error!(
+                    err = ?windows::core::Error::from_win32(),
+                    "GetMessageW failed; the tray message loop cannot continue"
+                );
+                tray_lifecycle_exit(ExitReason::MessageLoopError);
                 break;
+            }
+            if r.0 == 0 {
+                break;
+            }
+            if last_heartbeat.elapsed()
+                >= std::time::Duration::from_secs(crate::tray_lifecycle::HEARTBEAT_INTERVAL_SECS)
+            {
+                tray_lifecycle_heartbeat();
+                last_heartbeat = std::time::Instant::now();
             }
             unsafe {
                 let _ = TranslateMessage(&msg);
@@ -934,6 +959,10 @@ pub fn run() -> ! {
             // Cooperative tokio drain.
             tokio::task::yield_now().await;
         }
+
+        // No-op when Quit / WM_ENDSESSION / the loop error already recorded a
+        // more specific route (first wins).
+        tray_lifecycle_exit(ExitReason::MessageLoopEnded);
 
         unsafe {
             let _ = KillTimer(hwnd, TOKIO_DRAIN_TIMER_ID);
@@ -2372,64 +2401,158 @@ fn guest_health_lines(state_path: &std::path::Path, now_unix: u64) -> String {
     )
 }
 
-/// `secs` as a coarse human age. Coarse deliberately: the question is "minutes
-/// or days", and a precise figure invites reading the number as freshness.
-fn format_age(secs: u64) -> String {
-    match secs {
-        s if s < 90 => format!("{s}s"),
-        s if s < 5400 => format!("{}m", s / 60),
-        s if s < 172_800 => format!("{}h", s / 3600),
-        s => format!("{}d", s / 86400),
-    }
-}
-
-/// Unix seconds as `YYYY-MM-DDTHH:MM:SSZ` without adding a date dependency.
-fn format_unix_utc(secs: u64) -> String {
-    let days = (secs / 86_400) as i64;
-    let tod = secs % 86_400;
-    let (mut y, mut d) = (1970i64, days);
-    loop {
-        let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
-        let len = if leap { 366 } else { 365 };
-        if d < len {
-            break;
-        }
-        d -= len;
-        y += 1;
-    }
-    let leap = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
-    let ml = [
-        31,
-        if leap { 29 } else { 28 },
-        31,
-        30,
-        31,
-        30,
-        31,
-        31,
-        30,
-        31,
-        30,
-        31,
-    ];
-    let mut m = 0usize;
-    while m < 12 && d >= ml[m] {
-        d -= ml[m];
-        m += 1;
-    }
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        y,
-        m + 1,
-        d + 1,
-        tod / 3600,
-        (tod % 3600) / 60,
-        tod % 60
-    )
-}
-
 fn crashloop_state_path() -> std::path::PathBuf {
     WslLifecycle::install_root().join("crashloop.state")
+}
+
+// ---------------------------------------------------------------------------
+// ORDER 783-eeii: the host tray's lifecycle record. The decisions (parse,
+// render, verdict) are portable and tested in tray_lifecycle.rs; this is the
+// IO and the call sites.
+// ---------------------------------------------------------------------------
+
+/// The record THIS process owns. Only the GUI tray begins one, so `--diagnose`,
+/// `--forge` and every other CLI mode read the file and never write it.
+static TRAY_LIFECYCLE: Mutex<Option<crate::tray_lifecycle::Record>> = Mutex::new(None);
+
+/// A failing write is warned about ONCE: the heartbeat runs every minute and
+/// the Event Log relays every WARN.
+static TRAY_LIFECYCLE_WRITE_WARNED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn write_tray_lifecycle(rec: &crate::tray_lifecycle::Record) {
+    let path = WslLifecycle::tray_lifecycle_record_path();
+    // Write-then-rename, so a reader (or the next start) never sees half a
+    // record; std's rename replaces the target on Windows.
+    let result = (|| -> std::io::Result<()> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        let tmp = path.with_extension("state.tmp");
+        std::fs::write(&tmp, rec.render())?;
+        std::fs::rename(&tmp, &path)
+    })();
+    if let Err(err) = result
+        && !TRAY_LIFECYCLE_WRITE_WARNED.swap(true, std::sync::atomic::Ordering::SeqCst)
+    {
+        tracing::warn!(path = %path.display(), %err, "tray lifecycle record could not be written");
+    }
+}
+
+fn read_tray_lifecycle() -> Result<Option<crate::tray_lifecycle::Record>, String> {
+    let path = WslLifecycle::tray_lifecycle_record_path();
+    match std::fs::read_to_string(&path) {
+        Ok(text) => crate::tray_lifecycle::Record::parse(&text).map(Some),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    }
+}
+
+/// Called once by the GUI tray, AFTER it holds the singleton — so whatever
+/// the file says about the previous instance, that instance is gone. An
+/// instance that never wrote an exit line is reported here, at WARN, which
+/// reaches the Event Log: the successor is the only process that can observe
+/// a death no exit route saw.
+fn tray_lifecycle_begin() {
+    match read_tray_lifecycle() {
+        Ok(Some(prev)) => match crate::tray_lifecycle::previous_instance_finding(&prev) {
+            Some(finding) => tracing::warn!(previous_pid = prev.pid, "{finding}"),
+            None => {
+                if let Some((reason, at)) = prev.exit {
+                    tracing::info!(
+                        previous_pid = prev.pid,
+                        exit = reason.slug(),
+                        at = %format_unix_utc(at),
+                        "previous tray instance exited on a recorded route"
+                    );
+                }
+            }
+        },
+        Ok(None) => tracing::info!("no previous tray lifecycle record"),
+        Err(err) => tracing::warn!(%err, "previous tray lifecycle record unreadable"),
+    }
+    let rec = crate::tray_lifecycle::Record::started(
+        std::process::id(),
+        env!("WORKSPACE_VERSION"),
+        unix_now_secs(),
+    );
+    write_tray_lifecycle(&rec);
+    if let Ok(mut guard) = TRAY_LIFECYCLE.lock() {
+        *guard = Some(rec);
+    }
+}
+
+fn tray_lifecycle_heartbeat() {
+    if let Ok(mut guard) = TRAY_LIFECYCLE.lock()
+        && let Some(rec) = guard.as_mut()
+        && rec.exit.is_none()
+    {
+        rec.heartbeat_unix = unix_now_secs();
+        write_tray_lifecycle(rec);
+    }
+}
+
+/// Record the exit route. FIRST WINS: WM_ENDSESSION followed by the loop
+/// ending stays `session-end`, and Quit followed by WM_QUIT stays `quit-menu`.
+/// `try_lock`, not `lock`: this runs on the panic path, where the holder may be
+/// this very thread mid-heartbeat — skipping the record beats deadlocking the
+/// exit. A poisoned lock still yields its data.
+pub(crate) fn tray_lifecycle_exit(reason: crate::tray_lifecycle::ExitReason) {
+    use crate::tray_lifecycle::ExitReason;
+    let mut guard = match TRAY_LIFECYCLE.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(p)) => p.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return,
+    };
+    let Some(rec) = guard.as_mut() else { return };
+    if rec.exit.is_some() {
+        return;
+    }
+    let now = unix_now_secs();
+    rec.exit = Some((reason, now));
+    rec.heartbeat_unix = now;
+    write_tray_lifecycle(rec);
+    match reason {
+        ExitReason::QuitMenu | ExitReason::MessageLoopEnded | ExitReason::SessionEnd => {
+            tracing::info!(
+                exit = reason.slug(),
+                pid = rec.pid,
+                "tray exiting: {}",
+                reason.meaning()
+            )
+        }
+        ExitReason::MessageLoopError | ExitReason::Panic | ExitReason::StartupFailure => {
+            tracing::error!(
+                exit = reason.slug(),
+                pid = rec.pid,
+                "tray exiting: {}",
+                reason.meaning()
+            )
+        }
+    }
+}
+
+/// The `Tray process:` verdict for a process that is NOT the tray. The
+/// singleton decides running-or-not, whatever version holds it; the record
+/// explains how the last one ended. `try_acquire` takes the lock only when it
+/// is free and this process drops it at once; a tray starting in that instant
+/// waits up to 5s for it (SingletonGuard::acquire), so the probe cannot refuse
+/// a real start.
+pub(crate) fn tray_process_verdict() -> crate::tray_lifecycle::TrayVerdict {
+    use crate::tray_lifecycle::Holder;
+    let holder = if std::env::var_os("TILLANDSIAS_NO_SINGLETON").is_some() {
+        Holder::Unknown("TILLANDSIAS_NO_SINGLETON is set, so the singleton proves nothing".into())
+    } else {
+        match tillandsias_core::singleton::SingletonGuard::try_acquire("tray-windows") {
+            Ok(Some(guard)) => {
+                drop(guard);
+                Holder::Free
+            }
+            Ok(None) => Holder::Held,
+            Err(e) => Holder::Unknown(e),
+        }
+    };
+    crate::tray_lifecycle::verdict(&holder, &read_tray_lifecycle(), unix_now_secs())
 }
 
 /// Process-global live crash-loop detector, seeded once from the persisted
@@ -3921,6 +4044,10 @@ fn print_human(r: &DiagnoseReport) {
         }
     }
 
+    // 783-eeii: the HOST tray, which the guest depends on for its VM pin.
+    println!("\n--- tray process (host supervision) ---");
+    println!("{}", tray_process_verdict().line);
+
     println!("\n--- guest health (crash-loop detection) ---");
     println!(
         "{}",
@@ -4581,6 +4708,15 @@ extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM)
                 PostQuitMessage(0);
                 LRESULT(0)
             }
+            // 783-eeii: log-off or shutdown. Windows terminates the process
+            // once this returns (wParam TRUE), so the record is written HERE,
+            // synchronously; nothing after the message loop will run.
+            WM_ENDSESSION => {
+                if wparam.0 != 0 {
+                    tray_lifecycle_exit(ExitReason::SessionEnd);
+                }
+                LRESULT(0)
+            }
             m if m == wm_taskbarcreated => {
                 // Explorer restarted; re-add the icon.
                 let _ = add_tray_icon(hwnd);
@@ -4742,6 +4878,10 @@ unsafe fn handle_menu_command(hwnd: HWND, cmd_id: u16) {
 fn dispatch_action(hwnd: HWND, action: MenuAction) {
     match &action {
         MenuAction::Quit => unsafe {
+            // 783-eeii: recorded before the drain, because the drain is what
+            // stops the guest and the enclave — the 2026-08-16 "death 2" was
+            // this route, logged as a menu click nobody read as an exit.
+            tray_lifecycle_exit(ExitReason::QuitMenu);
             let _ = PostMessageW(hwnd, WM_DESTROY, WPARAM(0), LPARAM(0));
         },
         // Agent selection is fully wired: update the shared menu state so the

@@ -48,9 +48,11 @@ critical_path:
   # routes that DRAIN its VM (quit Apple event by bundle id, then SIGTERM), and
   # SIGKILL cannot fire before the tray's drain bound has elapsed.
   - step: "the installer stops a running tray by its bundle id and never SIGKILLs it inside the VM drain bound"
-    command: "bash scripts/lua/test-install-macos-tray-stop.lua 2>&1 | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-install-macos-tray-stop.lua 2>&1"
     timeout_ms: 10000
     expected_behavior: "ok:install-macos-tray-stop:4"
+    assert_exit: 0
+    assert_output_matches: "ok:install-macos-tray-stop:4"
 
 observability:
   traces:

@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction (Start Of Day gate finding).
+packets:
+  - packet_id: yoga-rebuilds-the-tillandsias-inference-image-then-republishes-its-capability-row
+    order: 2124-fjce
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [inference, capability-matrix, yoga]
+    estimated_hours: 1
+    title: "yoga: probe finds no tillandsias inference image; rebuild when disk allows, then republish the capability row"
+    context: |
+      MEASURED 2026-11-20 on yoga (Start Of Day gate): scripts/check-capability-row.sh ->
+      stale:capability-row-drifted:yoga:row-only=cpu/container/ollama+gpu/container/ollama,probe-only=-.
+      No tillandsias inference image is present (only the operator's upstream docker.io/ollama/ollama container, up 47h).
+      Coordinator ruling: do NOT rebuild with 13G free and do NOT republish a row without ollama (it would route GPU
+      work away from a lane that only needs the image).
+    exit_criteria:
+      - "With the inference image rebuilt on yoga, scripts/check-capability-row.sh prints ok:capability-row-current:yoga. Pre-fix: FAILS (drifted)."
+    next_action: "probe finds no tillandsias inference image; rebuild when disk allows"
+    unscoreable: "a host-state chore; the capability-row checker is the measure"
+    provenance: "yoga Start Of Day gate 2026-11-20; coordinator ruling."
+    events:
+      - type: filed
+        ts: "2026-11-20T04:36:28Z"
+        host: yoga
+        summary: "filed at the coordinator's direction"
