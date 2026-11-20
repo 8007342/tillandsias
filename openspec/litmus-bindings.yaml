@@ -500,6 +500,7 @@ specs:
   - litmus:forge-experts-discoverability-shape
   - litmus:forge-experts-ephemerality-shape
   - litmus:plan-answer-envelope-citability
+  - litmus:plan-query-full-row
   - litmus:citation-frame-and-caller-relation
   - litmus:methodology-path-query-citability
   - litmus:groundtruth-no-mutable-status-pin-shape

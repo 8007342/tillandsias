@@ -1382,7 +1382,7 @@ while IFS= read -r line; do
                 {"name":"plan_ready","description":"List ready packets, optionally filtered by pickup role","inputSchema":{"type":"object","properties":{"role":{"type":"string"}}}},
                 {"name":"plan_blocked_by","description":"List packets directly blocked by a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_blocked_on","description":"List a packet's direct unsatisfied depends_on prerequisites. This is the upstream inverse of plan_blocked_by; completed, obsoleted, and archived prerequisites are omitted.","inputSchema":{"type":"object","properties":{"reference":{"type":"string","minLength":1}},"required":["reference"],"additionalProperties":false}},
-                {"name":"plan_query","description":"Query the folded plan ledger with exact status and desired_release constraints, pickup_role substring matching, all-match capability tags, and a structured JSON projection carrying desired_release and release_target. Unknown releases or arguments are protocol errors, never ignored constraints.","inputSchema":{"type":"object","properties":{"status":{"type":"string","minLength":1},"pickup_role":{"type":"string","minLength":1},"desired_release":{"type":"string","minLength":1},"capability_tags":{"type":"array","items":{"type":"string","minLength":1}},"limit":{"type":"integer","minimum":0}},"additionalProperties":false}},
+                {"name":"plan_query","description":"Query the folded plan ledger with exact status and desired_release constraints, pickup_role substring matching, all-match capability tags, and a structured JSON projection carrying desired_release and release_target. Unknown releases or arguments are protocol errors, never ignored constraints.","inputSchema":{"type":"object","properties":{"status":{"type":"string","minLength":1},"pickup_role":{"type":"string","minLength":1},"desired_release":{"type":"string","minLength":1},"capability_tags":{"type":"array","items":{"type":"string","minLength":1}},"limit":{"type":"integer","minimum":0},"full":{"type":"boolean","description":"Return the whole folded row: exit_criteria, next_action, owned_files, context (2111-dd2m)"}},"additionalProperties":false}},
                 {"name":"plan_closure","description":"List everything transitively downstream of a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_burndown","description":"List all children of a milestone/release-target with their statuses","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_answer","description":"Answer a plan question as the CITED envelope {answer, citations[], freshness, confidence}. Every citation carries a repo-relative path and a line range whose span contains the packet it is offered as evidence for; verify with `tillandsias-plan verify-answer`. An answer with zero citations is returned as confidence=unsupported — the expert refuses rather than guesses.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"what is blocked by 394b\", \"everything downstream of 394\", \"what is ready for linux\", \"status of 394a\""}},"required":["question"]}},
@@ -1468,7 +1468,9 @@ TOOLS_JSON
                             and . != "desired_release"
                             and . != "capability_tags"
                             and . != "limit"
+                            and . != "full"
                         )] | length == 0)
+                        and ((has("full") | not) or ((.full | type) == "boolean"))
                         and ((has("status") | not) or (
                             (.status | type) == "string" and (.status | length) > 0
                         ))
@@ -1489,7 +1491,7 @@ TOOLS_JSON
                         ))
                     ' >/dev/null 2>&1; then
                         invalid_params=1
-                        invalid_message="Invalid plan_query arguments: use only string status/pickup_role/desired_release, string-array capability_tags, and non-negative integer limit"
+                        invalid_message="Invalid plan_query arguments: use only string status/pickup_role/desired_release, string-array capability_tags, non-negative integer limit, and boolean full"
                     else
                         _pq_args=()
                         _pq_status=$(echo "$args" | jq -r '.status // empty')
@@ -1503,6 +1505,8 @@ TOOLS_JSON
                             [ -n "$_pq_tag" ] && _pq_args+=(--tag "$_pq_tag")
                         done < <(echo "$args" | jq -r '.capability_tags[]? // empty')
                         _pq_args+=(--limit "$_pq_limit" --json)
+                        # ORDER 2111-dd2m: full=true returns the whole FOLDED row.
+                        if [ "$(echo "$args" | jq -r '.full // false')" = "true" ]; then _pq_args+=(--full); fi
                         if result=$(plan_query_typed "query" "${_pq_args[@]}"); then
                             :
                         else
