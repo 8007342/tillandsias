@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-crate-tests-with-a-wall-clock-outer-timeout-go-red-only-under-release-gate-load-so-the-budget-must-come-from-a-measured-lower-bound
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:51Z"
+    host: macuahuitl
+
+events:
+  - packet_id: plan-crate-tests-with-a-wall-clock-outer-timeout-go-red-only-under-release-gate-load-so-the-budget-must-come-from-a-measured-lower-bound
+    event:
+      type: note
+      ts: "2026-11-17T22:18:51Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1799-5kvy commit fe84efa93860 (1799-5kvy in its subject) reached linux-next at 5b470f55f0d9. Status moves to implemented, not completed: the exit criteria were not re-run.

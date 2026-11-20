@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction (Family D rescue, item 3).
+packets:
+  - packet_id: test-claims-across-branches-verdicts-race-sigpipe-under-pipefail-and-evicted-1153
+    order: 2123-3tf3
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, gate]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-claims-across-branches.sh
+    title: "test-claims-across-branches.sh decides 7 verdicts with printf|grep -q under pipefail, so a rare SIGPIPE reds a correct check (it evicted #1153)"
+    context: |
+      #1153's gate failed at 1034-whsp: "FAIL the reader's own reflected claim must not be reported as a sibling's" with
+      rc=0 and an out=[...] that DID contain ^own-claim-reflected:SOME-PKT:. The fixture sets -uo pipefail (line 17) and
+      decides with printf '%s' "$out" | grep -q '^own-claim-reflected:SOME-PKT:'.
+      MEASURED on macuahuitl by the coordinator, 500 runs of that exact verdict on the exact 4-line out: host fails 2/500,
+      builder toolbox 0/500 (grep -q exits on line 1, printf takes EPIPE, the pipeline answers 141).
+      yoga: 15/15 on trunk, on #1153+trunk and on a detached HEAD (not reproducible on demand).
+    exit_criteria:
+      - "scripts/test-claims-across-branches.sh decides every verdict with a here-string (grep -q PATTERN <<<\"$out\"); census-sigpipe-verdict-pipelines.sh --list no longer lists it. Pre-fix: FAILS (listed)."
+      - "test-claims-across-branches.sh stays 15/15."
+    unscoreable: "the census tool is the measure; no new fixture"
+    provenance: "coordinator measurement on macuahuitl 2026-11-20; yoga census 2026-11-20."
+    events:
+      - type: filed
+        ts: "2026-11-20T04:21:42Z"
+        host: yoga
+        summary: "filed and claimed at the coordinator's direction"

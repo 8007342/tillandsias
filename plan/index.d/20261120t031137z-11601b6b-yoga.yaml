@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-litmus-podman-shim-forwards-a-bounded-podman-calls-stderr-as-real-podman-does
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:37Z"
+    host: yoga
+
+events:
+  - packet_id: the-litmus-podman-shim-forwards-a-bounded-podman-calls-stderr-as-real-podman-does
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:37Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: the-litmus-podman-shim-forwards-a-bounded-podman-calls-stderr-as-real-podman-does
+    event:
+      type: note
+      ts: "2026-11-20T03:11:37Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-podman-cli --test raw_stderr - 1 passed. Candidate landing commit - 39430cd41.

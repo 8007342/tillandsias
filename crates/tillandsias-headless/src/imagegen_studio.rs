@@ -307,9 +307,27 @@ pub fn stop(project: &str) {
         &container_name(project),
         false,
     );
+    // 2083-stnw: never force. `network rm -f` removes every container using
+    // the network, and this project's forges are on it, so a forced remove
+    // killed the calling forge and its siblings. A plain rm fails while a
+    // forge is attached; the network then stays, and the forge teardown's
+    // later call removes it once the last forge is gone.
+    for argv in stop_network_argvs(project) {
+        let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
+        let _ = podman_out(&argv);
+    }
+}
+
+/// 2083-stnw: the podman argvs `stop` runs to detach the router and remove
+/// the project's studio network, in order. None of them may force.
+pub fn stop_network_argvs(project: &str) -> Vec<Vec<String>> {
     let net = network_name(project);
-    let _ = podman_out(&["network", "disconnect", "-f", &net, "tillandsias-router"]);
-    let _ = podman_out(&["network", "rm", "-f", &net]);
+    vec![
+        ["network", "disconnect", &net, "tillandsias-router"]
+            .map(String::from)
+            .to_vec(),
+        ["network", "rm", &net].map(String::from).to_vec(),
+    ]
 }
 
 /// 1985-stdu: a studio already running still connects this project's forges
@@ -535,6 +553,26 @@ pub async fn start(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ORDER 2083-stnw: studio.restart killed every forge of the project
+    /// (2026-11-14 21:38:55Z) because `network rm -f` removes the containers
+    /// using the network, and the forges are attached to it. The studio's
+    /// teardown argv must never force. Pre-fix: FAILS (argv carries -f).
+    #[test]
+    fn studio_teardown_never_force_removes_the_network() {
+        for argv in stop_network_argvs("demon-attack") {
+            assert!(
+                !argv.iter().any(|a| a == "-f" || a == "--force"),
+                "studio teardown argv forces: {argv:?}"
+            );
+        }
+        let all = stop_network_argvs("demon-attack");
+        assert!(
+            all.iter()
+                .any(|a| a.first().map(String::as_str) == Some("network")
+                    && a.get(1).map(String::as_str) == Some("rm"))
+        );
+    }
 
     /// 1874-zry8 exit criterion. Pre-fix: FAILS, imagegen-studio is not a
     /// known image and the config has no switch.
