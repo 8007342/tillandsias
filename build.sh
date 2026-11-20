@@ -2767,7 +2767,7 @@ _run_gate_steps() {  # $1 = root
     for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
         [ -e "$_step_file" ] || continue
         STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
-        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""
+        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""; STEP_INPUTS=""
         # shellcheck disable=SC1090
         . "$_step_file"
         if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
@@ -2790,6 +2790,28 @@ _run_gate_steps() {  # $1 = root
             exit 1
         fi
         _step "$STEP_DESC..."
+        # ORDER 2118-tnut (operator 2026-11-20, P10 item a): a step may declare
+        # STEP_INPUTS — the class selector's grammar (765-xpct): gate-stamp
+        # classes and path:<glob> narrowings. When none of the changed paths
+        # intersect them (and the selector's own fail-closed rules allow it:
+        # recent FULL gate, readable class set, not on the keep-unconditional
+        # list), the step is SKIPPED and says so on its own line. Only over the
+        # real checkout: the fixture's scratch roots always run every step.
+        # A step without STEP_INPUTS runs, as before.
+        # IMPLICIT INPUTS, always added: the step's own .step file and script,
+        # and what decides what runs (build.sh, the selector, the classifier).
+        # A declaration cannot leave them out, so editing a step or the gate
+        # always runs it.
+        if [ -n "$STEP_INPUTS" ] && [ "$_gs_root" = "$SCRIPT_DIR" ]; then
+            _gs_id="gate-step:${_step_file##*/}"; _gs_id="${_gs_id%.step}"
+            _gs_inputs="$STEP_INPUTS path:scripts/gate-steps.d/${_step_file##*/} path:$_step_path path:build.sh path:scripts/change-class.sh path:scripts/gate-stamp.sh"
+            # shellcheck disable=SC2086 — the declared inputs are words by design.
+            if _class_may_skip "$_gs_id" $_gs_inputs; then
+                # shellcheck disable=SC2086
+                _class_skip_line "$_gs_id" $_gs_inputs
+                continue
+            fi
+        fi
         # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
         # code that means "this check could not run here", as distinct from
         # "this check ran and failed". Without it every non-zero exit printed
