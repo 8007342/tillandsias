@@ -2,7 +2,7 @@
 //!
 //! Operator ruling 2026-09-26: "a new swapfile every launch … thrown away and
 //! deleted on shutdown". The root half (scripts/forge-swap/, installed once by
-//! `sudo bash scripts/install-forge-swap-service.sh`) provides a
+//! `tillandsias --swap on`, 1448-kmyn) provides a
 //! `tillandsias-swap@<id>.service` template that a polkit rule lets this user
 //! start and stop without a password. This module brackets ONE attached forge
 //! launch with it:

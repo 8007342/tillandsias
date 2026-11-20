@@ -5,7 +5,7 @@
 # One swapfile PER FORGE LAUNCH, deleted when the launch ends (operator ruling
 # 2026-09-26: "a new swapfile every launch ... thrown away and deleted on
 # shutdown"). Installed to /usr/local/libexec/tillandsias-swap by
-# scripts/install-forge-swap-service.sh; systemd runs it as root.
+# `tillandsias --swap on` (1448-kmyn); systemd runs it as root.
 #
 #   start <id>   create /var/swap/tillandsias-<id>, label it, swapon -p 10
 #   stop <id>    swapoff + rm

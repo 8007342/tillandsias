@@ -16,6 +16,12 @@
 #   (action, subject) pairs; 6 gc stops exactly the instances whose lease is
 #   not held; 7 the §9.6 size policy.
 # Each needed tool is checked first; a missing one is a NAMED skip, never a pass.
+#
+# ORDER 2118-ihuh: scripts/install-forge-swap-service.sh is deleted. The
+# binary's `--swap on --prefix` (1448-kmyn) is the one installer, so every arm
+# installs through it; arm 8 now pins the embedded assets to their sources in
+# scripts/forge-swap/ (placeholders substituted, modes kept) instead of to the
+# script's output.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 W="$(mktemp -d "${TMPDIR:-/tmp}/forge-swap-test.XXXXXX")"
@@ -29,11 +35,45 @@ ok()   { pass=$((pass + 1)); echo "ok   $1"; }
 bad()  { fail=$((fail + 1)); echo "FAIL $1"; }
 skp()  { skip=$((skip + 1)); echo "skip $1"; }
 
+# ── the installer under test: the binary's own `--swap` (order 1448-kmyn) ─────────────────────
+# The binary embeds scripts/forge-swap/* and is the installer every arm uses. Resolved through the shared probe (721-nyev), never a
+# hardcoded target/ path; TILLANDSIAS_BIN overrides. Never run live here: on a
+# host with pkexec a live `--swap on` would prompt the operator.
+if [ -n "${TILLANDSIAS_BIN:-}" ]; then
+    BIN="$TILLANDSIAS_BIN"
+else
+    if [ -r scripts/plan-binary-probe.sh ]; then . scripts/plan-binary-probe.sh; else resolve_target_binary() { return 1; }; fi
+    BIN="$(resolve_target_binary tillandsias debug "$PWD" 2>/dev/null)"
+    [ -n "$BIN" ] || BIN="$PWD/target/debug/tillandsias"
+fi
+# `--swap` is LINUX-ONLY by design (swap_cmd.rs is #[cfg(target_os = "linux")];
+# macOS and Windows print what governs swap there). And on Windows
+# target/debug/tillandsias.exe is the TRAY, not tillandsias-headless, so the
+# arms resolved the wrong program and failed "Unsupported option: --swap"
+# (yolanda, 2026-09-28, 1462-trch). Name the skip rather than resolve harder:
+# there is no --swap to test on those platforms. On Linux a binary without
+# --swap stays a FAIL — the gate builds it fresh, so that is a regression.
+_os="$(uname -s 2>/dev/null || echo unknown)"
+if [ "$_os" != Linux ]; then
+    echo "skip swap-is-linux-only: no arm runs on $_os (the installer is the Linux binary's --swap)"
+    echo "ok:forge-swap-service:0 arms (skipped=1)"; exit 0
+elif [ ! -x "$BIN" ]; then
+    echo "FAIL no tillandsias binary at $BIN: the installer under test is its --swap (./build.sh builds it)"
+    echo "FAIL:forge-swap-service:0/1 (skipped=0)"; exit 1
+fi
+# The binary's VERDICTS are on stdout; its host warnings are on stderr. In a
+# forge it warns on every call that /run/user/1000 cannot be set to 0700,
+# which a `2>&1` capture folded into the verdict and 5 arms failed on it
+# (macuahuitl-forge, 2026-09-28). Read stdout only, keep stderr for the
+# failure message, and give the binary a runtime dir the test owns.
+mkdir -p -m 700 "$W/xdg"
+swapbin() { XDG_RUNTIME_DIR="$W/xdg" "$BIN" "$@" 2>>"$W/swap-stderr.log"; }
+
 P="$W/root"; H="$P/usr/local/libexec/tillandsias-swap"
 
 # ── 1, 2: install, then idempotence ───────────────────────────────────────
-out1="$(bash scripts/install-forge-swap-service.sh --prefix "$P" --user tester)"
-if [ "$out1" = "ok:install-swap:prefix=$P:user=tester:helper=$H" ] && [ -x "$H" ] \
+out1="$(swapbin --swap on --prefix "$P" --user tester)"
+if [ "$out1" = "ok:swap-on:prefix=$P:user=tester:helper=$H" ] && [ -x "$H" ] \
    && [ -f "$P/etc/systemd/system/tillandsias-swap@.service" ] \
    && [ -f "$P/etc/polkit-1/rules.d/50-tillandsias-swap.rules" ] \
    && ! grep -q '@HELPER@\|@INSTALL_USER@' "$P/etc/systemd/system/"* "$P/etc/polkit-1/rules.d/"*; then
@@ -44,15 +84,15 @@ else bad "install: $out1"; fi
 # six installed files before any comparison means anything.
 snap() { (cd "$P" && find . -type f -exec cksum {} + | sort); }
 snap1="$(snap)"
-out2="$(bash scripts/install-forge-swap-service.sh --prefix "$P" --user tester)"
+out2="$(swapbin --swap on --prefix "$P" --user tester)"
 snap2="$(snap)"
 if [ "$(printf '%s\n' "$snap1" | grep -c .)" != 6 ]; then
     bad "premise: the install snapshot does not list the 6 installed files ($(printf '%s\n' "$snap1" | grep -c .))"
 elif [ "$out1" = "$out2" ] && [ "$snap1" = "$snap2" ]; then
     ok "a second install is byte-identical with the same verdict"
 else bad "install is not idempotent"; fi
-out_bad="$(bash scripts/install-forge-swap-service.sh --prefix "$P" --user 'x; rm -rf /')"
-case "$out_bad" in refused:install-swap:user:*) ok "a hostile --user is refused" ;; *) bad "hostile user accepted: $out_bad" ;; esac
+out_bad="$(swapbin --swap on --prefix "$P" --user 'x; rm -rf /')"
+case "$out_bad" in refused:swap-on:user:*) ok "a hostile --user is refused" ;; *) bad "hostile user accepted: $out_bad" ;; esac
 
 # ── 3: systemd-analyze verify ─────────────────────────────────────────────
 if command -v systemd-analyze >/dev/null 2>&1; then
@@ -146,92 +186,75 @@ for pair in 250:24 210:24 150:16 105:16 60:8 30:8 28:8 27:refused 5:refused; do
     [ "$got" = "$want" ] && ok "size: free ${free} GB -> $want" || bad "size: free ${free} GB -> $got, want $want"
 done
 
-# ── 8-12: the binary's own `--swap` (order 1448-kmyn) ─────────────────────
-# The binary embeds scripts/forge-swap/* and must install exactly what the
-# script installs. Resolved through the shared probe (721-nyev), never a
-# hardcoded target/ path; TILLANDSIAS_BIN overrides. Never run live here: on a
-# host with pkexec a live `--swap on` would prompt the operator.
-if [ -n "${TILLANDSIAS_BIN:-}" ]; then
-    BIN="$TILLANDSIAS_BIN"
-else
-    if [ -r scripts/plan-binary-probe.sh ]; then . scripts/plan-binary-probe.sh; else resolve_target_binary() { return 1; }; fi
-    BIN="$(resolve_target_binary tillandsias debug "$PWD" 2>/dev/null)"
-    [ -n "$BIN" ] || BIN="$PWD/target/debug/tillandsias"
-fi
-# `--swap` is LINUX-ONLY by design (swap_cmd.rs is #[cfg(target_os = "linux")];
-# macOS and Windows print what governs swap there). And on Windows
-# target/debug/tillandsias.exe is the TRAY, not tillandsias-headless, so the
-# arms resolved the wrong program and failed "Unsupported option: --swap"
-# (yolanda, 2026-09-28, 1462-trch). Name the skip rather than resolve harder:
-# there is no --swap to test on those platforms. On Linux a binary without
-# --swap stays a FAIL — the gate builds it fresh, so that is a regression.
-_os="$(uname -s 2>/dev/null || echo unknown)"
-if [ "$_os" != Linux ]; then
-    skp "swap-is-linux-only: --swap arms not run on $_os"
-elif [ ! -x "$BIN" ]; then
-    skp "no tillandsias binary at $BIN: the --swap arms did not run (./build.sh builds it)"
-else
-    # The binary's VERDICTS are on stdout; its host warnings are on stderr. In a
-    # forge it warns on every call that /run/user/1000 cannot be set to 0700,
-    # which a `2>&1` capture folded into the verdict and 5 arms failed on it
-    # (macuahuitl-forge, 2026-09-28). Read stdout only, keep stderr for the
-    # failure message, and give the binary a runtime dir the test owns.
-    mkdir -p -m 700 "$W/xdg"
-    swapbin() { XDG_RUNTIME_DIR="$W/xdg" "$BIN" "$@" 2>>"$W/swap-stderr.log"; }
-    B="$W/bin-root"; S="$W/script-root"
-    bash scripts/install-forge-swap-service.sh --prefix "$S" --user tester >/dev/null
-    o8="$(swapbin --swap on --prefix "$B" --user tester)"; r8=$?
-    # The units name the helper by its absolute path, which is inside each
-    # scratch root: normalise the root before comparing, and compare modes too.
-    tree() { (cd "$1" && find . -type f | sort | while read -r f; do
-        printf '%s %s %s\n' "$f" "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")" \
-            "$(sed "s|$1|<ROOT>|g" "$f" | cksum)"; done); }
-    tb="$(tree "$B")"; ts="$(tree "$S")"
-    if [ "$r8" != 0 ] || [ "$o8" != "ok:swap-on:prefix=$B:user=tester:helper=$B/usr/local/libexec/tillandsias-swap" ]; then
-        bad "8 --swap on: rc=$r8 out=[$o8] (a binary without the verb is the pre-fix state)"
-    elif [ "$(printf '%s\n' "$tb" | grep -c .)" != 6 ]; then
-        bad "8 premise: --swap on did not write 6 files ($(printf '%s\n' "$tb" | grep -c .))"
-    elif [ "$tb" = "$ts" ]; then
-        ok "8 --swap on writes byte-identical files, with identical modes, to the installer's"
-    else bad "8 the embedded assets differ from scripts/forge-swap/: $(diff <(echo "$ts") <(echo "$tb") | head -3)"; fi
+# ── 8: the embedded assets ARE scripts/forge-swap/ ────────────────────────
+# Each installed file must equal its source with the two placeholders
+# substituted (@HELPER@ -> the scratch helper path, @INSTALL_USER@ -> tester),
+# at the mode the installer documents. A drift between the include_str!
+# assets and the sources fails here.
+B="$W/bin-root"; BH="$B/usr/local/libexec/tillandsias-swap"
+o8="$(swapbin --swap on --prefix "$B" --user tester)"; r8=$?
+SRC=scripts/forge-swap; drift=""; n8=0
+for pair in "tillandsias-swap:usr/local/libexec/tillandsias-swap:755" \
+            "tillandsias-swap@.service:etc/systemd/system/tillandsias-swap@.service:644" \
+            "tillandsias-swap-gc.service:etc/systemd/system/tillandsias-swap-gc.service:644" \
+            "tillandsias-swap-gc.timer:etc/systemd/system/tillandsias-swap-gc.timer:644" \
+            "50-tillandsias-swap.rules:etc/polkit-1/rules.d/50-tillandsias-swap.rules:644" \
+            "swap.conf:etc/tillandsias/swap.conf:644"; do
+    src="${pair%%:*}"; rest="${pair#*:}"; dst="${rest%%:*}"; mode="${rest##*:}"
+    want="$(sed -e "s|@HELPER@|$BH|g" -e "s|@INSTALL_USER@|tester|g" "$SRC/$src" | cksum)"
+    got="$(cksum < "$B/$dst" 2>/dev/null)"
+    gotmode="$(stat -c %a "$B/$dst" 2>/dev/null || stat -f %Lp "$B/$dst" 2>/dev/null)"
+    n8=$((n8 + 1))
+    [ "$want" = "$got" ] && [ "$gotmode" = "$mode" ] || drift="$drift $dst(mode=$gotmode)"
+done
+tree() { (cd "$1" && find . -type f | sort | while read -r f; do
+    printf '%s %s %s\n' "$f" "$(stat -c %a "$f" 2>/dev/null || stat -f %Lp "$f")" \
+        "$(sed "s|$1|<ROOT>|g" "$f" | cksum)"; done); }
+tb="$(tree "$B")"
+if [ "$r8" != 0 ] || [ "$o8" != "ok:swap-on:prefix=$B:user=tester:helper=$BH" ]; then
+    bad "8 --swap on: rc=$r8 out=[$o8]"
+elif [ "$n8" != 6 ] || [ "$(printf '%s\n' "$tb" | grep -c .)" != 6 ]; then
+    bad "8 premise: expected 6 installed files, compared $n8, found $(printf '%s\n' "$tb" | grep -c .)"
+elif [ -z "$drift" ]; then
+    ok "8 every file --swap on writes equals its scripts/forge-swap/ source, placeholders substituted, at its mode"
+else bad "8 the embedded assets differ from scripts/forge-swap/:$drift"; fi
 
-    o9="$(swapbin --swap on --prefix "$B" --user tester)"; t9="$(tree "$B")"
-    case "$o9" in ok:swap-on:*) v9=1 ;; *) v9=0 ;; esac
-    [ "$v9" = 1 ] && [ "$o9" = "$o8" ] && [ "$t9" = "$tb" ] && ok "9 a second --swap on changes nothing" || bad "9 second on: out=[$o9]"
+o9="$(swapbin --swap on --prefix "$B" --user tester)"; t9="$(tree "$B")"
+case "$o9" in ok:swap-on:*) v9=1 ;; *) v9=0 ;; esac
+[ "$v9" = 1 ] && [ "$o9" = "$o8" ] && [ "$t9" = "$tb" ] && ok "9 a second --swap on changes nothing" || bad "9 second on: out=[$o9]"
 
-    st_on="$(swapbin --swap status --prefix "$B")"
-    mkdir -p "$B/var/swap"; : > "$B/var/swap/tillandsias-launch-1"; : > "$B/var/swap/forge-live.swap"
-    o10="$(swapbin --swap off --prefix "$B")"; r10=$?
-    left=""
-    for p in usr/local/libexec/tillandsias-swap etc/systemd/system/tillandsias-swap@.service \
-             etc/systemd/system/tillandsias-swap-gc.service etc/systemd/system/tillandsias-swap-gc.timer \
-             etc/polkit-1/rules.d/50-tillandsias-swap.rules etc/tillandsias/swap.conf; do
-        [ -e "$B/$p" ] && left="$left $p"
-    done
-    if [ "$r10" = 0 ] && [ "$o10" = "ok:swap-off:prefix=$B:removed=6:swapfiles=1" ] && [ -z "$left" ] \
-       && [ ! -e "$B/var/swap/tillandsias-launch-1" ] && [ -e "$B/var/swap/forge-live.swap" ]; then
-        ok "10 --swap off removes every installed path and the per-launch swapfile, and keeps a file it did not create"
-    else bad "10 off: rc=$r10 out=[$o10] left=[$left]"; fi
+st_on="$(swapbin --swap status --prefix "$B")"
+mkdir -p "$B/var/swap"; : > "$B/var/swap/tillandsias-launch-1"; : > "$B/var/swap/forge-live.swap"
+o10="$(swapbin --swap off --prefix "$B")"; r10=$?
+left=""
+for p in usr/local/libexec/tillandsias-swap etc/systemd/system/tillandsias-swap@.service \
+         etc/systemd/system/tillandsias-swap-gc.service etc/systemd/system/tillandsias-swap-gc.timer \
+         etc/polkit-1/rules.d/50-tillandsias-swap.rules etc/tillandsias/swap.conf; do
+    [ -e "$B/$p" ] && left="$left $p"
+done
+if [ "$r10" = 0 ] && [ "$o10" = "ok:swap-off:prefix=$B:removed=6:swapfiles=1" ] && [ -z "$left" ] \
+   && [ ! -e "$B/var/swap/tillandsias-launch-1" ] && [ -e "$B/var/swap/forge-live.swap" ]; then
+    ok "10 --swap off removes every installed path and the per-launch swapfile, and keeps a file it did not create"
+else bad "10 off: rc=$r10 out=[$o10] left=[$left]"; fi
 
-    # 11: the removal is COMPLETE (the list --uninstall reuses, 1437-evzi):
-    # after on + off, the only file left in the root is the one we planted.
-    rest="$(cd "$B" && find . -type f | sort)"
-    st_off="$(swapbin --swap status --prefix "$B")"
-    if [ "$rest" = "./var/swap/forge-live.swap" ] && [ "$st_on" = "ok:swap-status:installed=yes:active=0" ] \
-       && [ "$st_off" = "ok:swap-status:installed=no:active=0" ]; then
-        ok "11 the removal list covers every file --swap on installs (status yes -> no)"
-    else bad "11 left after off: [$rest] status on=[$st_on] off=[$st_off]"; fi
+# 11: the removal is COMPLETE (the list --uninstall reuses, 1437-evzi):
+# after on + off, the only file left in the root is the one we planted.
+rest="$(cd "$B" && find . -type f | sort)"
+st_off="$(swapbin --swap status --prefix "$B")"
+if [ "$rest" = "./var/swap/forge-live.swap" ] && [ "$st_on" = "ok:swap-status:installed=yes:active=0" ] \
+   && [ "$st_off" = "ok:swap-status:installed=no:active=0" ]; then
+    ok "11 the removal list covers every file --swap on installs (status yes -> no)"
+else bad "11 left after off: [$rest] status on=[$st_on] off=[$st_off]"; fi
 
-    # 12: NEGATIVE CONTROL — off on a root with nothing installed exits 0 and
-    # removes nothing else.
-    N="$W/empty-root"; mkdir -p "$N/etc/polkit-1/rules.d" "$N/var/swap"
-    echo keep > "$N/etc/polkit-1/rules.d/10-other.rules"; echo keep > "$N/var/swap/other.swap"
-    o12="$(swapbin --swap off --prefix "$N")"; r12=$?
-    if [ "$r12" = 0 ] && [ "$o12" = "ok:swap-off:prefix=$N:removed=0:swapfiles=0" ] \
-       && [ -f "$N/etc/polkit-1/rules.d/10-other.rules" ] && [ -f "$N/var/swap/other.swap" ]; then
-        ok "12 negative control: off with nothing installed exits 0 and removes nothing"
-    else bad "12 off on empty root: rc=$r12 out=[$o12]"; fi
-fi
+# 12: NEGATIVE CONTROL — off on a root with nothing installed exits 0 and
+# removes nothing else.
+N="$W/empty-root"; mkdir -p "$N/etc/polkit-1/rules.d" "$N/var/swap"
+echo keep > "$N/etc/polkit-1/rules.d/10-other.rules"; echo keep > "$N/var/swap/other.swap"
+o12="$(swapbin --swap off --prefix "$N")"; r12=$?
+if [ "$r12" = 0 ] && [ "$o12" = "ok:swap-off:prefix=$N:removed=0:swapfiles=0" ] \
+   && [ -f "$N/etc/polkit-1/rules.d/10-other.rules" ] && [ -f "$N/var/swap/other.swap" ]; then
+    ok "12 negative control: off with nothing installed exits 0 and removes nothing"
+else bad "12 off on empty root: rc=$r12 out=[$o12]"; fi
 
 total=$((pass + fail))
 if [ "$fail" = 0 ]; then echo "ok:forge-swap-service:$pass arms (skipped=$skip)"; exit 0; fi
