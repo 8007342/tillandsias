@@ -32,7 +32,7 @@ committed_for_project: false
 
 CDP is a JSON-RPC 2.0 protocol over WebSocket. Each browser process exposes an HTTP discovery endpoint (`GET /json`) that lists available targets (pages, service workers, etc.), each with a `webSocketDebuggerUrl` for CDP connection.
 
-@trace spec:host-browser-mcp, spec:host-chromium-on-demand
+@trace spec:host-browser-mcp
 
 ## Tillandsias browser windows: the pipe transport (order 1655-urz9)
 

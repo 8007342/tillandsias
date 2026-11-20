@@ -317,7 +317,7 @@ fn allocate_single_port_with_probe(
     None
 }
 
-// @trace spec:browser-isolation-tray-integration, spec:host-chromium-on-demand
+// @trace spec:browser-isolation-tray-integration, spec:host-browser-mcp
 pub fn allocate_single_port(range_start: u16, range_end: u16, occupied: &[u16]) -> Option<u16> {
     allocate_single_port_with_probe(range_start, range_end, occupied, |port| {
         // Short-lived TCP bind probe — dropped immediately on scope exit.

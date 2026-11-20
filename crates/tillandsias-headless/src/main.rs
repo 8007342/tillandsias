@@ -20282,7 +20282,7 @@ fn launch_opencode_web_browser(
     if result.is_ok() {
         emit_opencode_web_event(project_name, "browser", "launched", Some("gui"))?;
 
-        // @trace spec:browser-isolation-core, spec:host-chromium-on-demand
+        // @trace spec:browser-isolation-core, spec:host-browser-mcp
         // Spawn background task to monitor container exit and cleanup.
         // The browser is now running detached; this task waits for it to exit,
         // then removes the container and the host-side profile dir.
@@ -20329,7 +20329,7 @@ fn rt_block_on_podman_run(
     })
 }
 
-/// @trace spec:browser-isolation-core, spec:host-chromium-on-demand
+/// @trace spec:browser-isolation-core, spec:host-browser-mcp
 /// Monitor a detached browser container for exit and clean up resources.
 /// Launches the container, waits for it to exit, then removes it.
 async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Result<(), String> {

@@ -651,6 +651,7 @@ specs:
 - spec_id: host-browser-mcp
   status: active
   litmus_tests:
+  - litmus:browser-ephemeral
   - litmus:host-browser-mcp-shape
   - litmus:host-browser-mcp-lane-socket-shape
   - litmus:browser-open-container-shape
@@ -664,12 +665,11 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-12'
 - spec_id: host-chromium-on-demand
-  status: active
-  litmus_tests:
-  - litmus:browser-ephemeral
-  - litmus:host-chromium-on-demand-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-30'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-11-20'
+  tombstone: superseded:host-browser-mcp+browser-window-modes
 - spec_id: host-state-lifecycle
   status: active
   litmus_tests:

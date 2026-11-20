@@ -33,7 +33,6 @@ scripts/generate-evidence-bundle.sh 1
 scripts/generate-repo-key.sh 1
 scripts/hardware-fingerprint.sh 1
 scripts/hooks/pre-push-local-gate.sh 2
-scripts/install-chromium.sh 1
 scripts/install-macos.sh 1
 scripts/install.sh 1
 scripts/land-queue.sh 4
