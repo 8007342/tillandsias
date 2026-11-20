@@ -74,6 +74,14 @@ run_without_toolbox() {
         [ "${_t##*/}" = toolbox ] && continue
         [ -e "$d/bin/${_t##*/}" ] || ln -s "$_t" "$d/bin/${_t##*/}" 2>/dev/null
     done
+    # PREMISE (yoga, #1199): the mask must actually hide toolbox. If a future
+    # host layout lets it resolve anyway, refuse instead of running an arm that
+    # would be testing the wrong branch.
+    if PATH="$d/bin" command -v toolbox >/dev/null 2>&1; then
+        echo "FAIL: premise: toolbox still resolves on the masked PATH ($(PATH="$d/bin" command -v toolbox)); the arm would not test a toolbox-less host" >&2
+        rm -rf "$d"
+        return 125
+    fi
     PATH="$d/bin"     TILLANDSIAS_SKIP_TOOLBOX=     TOOLBOX_PATH=     container=         bash "$d/under-test.sh" true >"$d/out" 2>&1
     local rc=$?
     cat "$d/out"
