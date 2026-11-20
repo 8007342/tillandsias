@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: ensure-enclave-for-project-calls-ensure-enclave-network-before-it-starts-router-or-containers
+    order: 2112-3bub
+    status: ready
+    kind: bug
+    priority: p1
+    pickup_role: linux
+    capability_tags: [tray, enclave, network, podman]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: |
+      ensure_enclave_for_project never calls ensure_enclave_network, so a spawn through that path can start the router and the mirror container without the enclave network existing. run_opencode_mode and run_observatorium_mode both call it.
+    context: |
+      Found while porting litmus-helper-tray-network-bootstrap to lua (2111-y8ch). On linux-next f3a546f74, mode check-ensure_enclave_network-present prints ok for run_opencode_mode and run_observatorium_mode and then FAIL: ensure_enclave_for_project missing ensure_enclave_network, exit 1, the same under the .sh and the lua port. Coordinator ruling: a tray behaviour gap, not only a check.
+    exit_criteria:
+      - 'litmus:tray-network-bootstrap step check-ensure_enclave_network-present prints ok for all three spawn paths and exits 0; red today'
+      - 'a launch through ensure_enclave_for_project on a host with the enclave network removed recreates it before the router starts'
+    verifiable_closure: |
+      litmus:tray-network-bootstrap step check-ensure_enclave_network-present prints ok for all three spawn paths and exits 0; red on linux-next today.
+    next_action: Read ensure_enclave_for_project and the two spawn paths that already call ensure_enclave_network; add the call in the same position; run the litmus step red then green.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-19T23:01:26Z"
+        host: lenovinha
+        summary: ensure_enclave_for_project lacks ensure_enclave_network (tray gap, litmus red on trunk).

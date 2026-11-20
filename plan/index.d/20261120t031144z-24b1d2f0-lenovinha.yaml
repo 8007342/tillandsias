@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: shell-debt-batch-2-port-the-top-level-litmus-helper-scripts-to-lua
+    field: status
+    value: blocked
+    ts: "2026-11-20T03:11:44Z"
+    host: lenovinha
+
+events:
+  - packet_id: shell-debt-batch-2-port-the-top-level-litmus-helper-scripts-to-lua
+    event:
+      type: falsified
+      ts: "2026-11-20T03:11:44Z"
+      host: lenovinha
+      summary: |-
+        falsified 'in_progress' claim; evidence: queued as PR #1173; flips on land — status set to 'blocked', new attempt epoch
+  - packet_id: shell-debt-batch-2-port-the-top-level-litmus-helper-scripts-to-lua
+    event:
+      type: note
+      ts: "2026-11-20T03:11:44Z"
+      host: lenovinha
+      summary: |-
+        queued as PR #1173; flips on land (coordinator ruling 2026-11-20)

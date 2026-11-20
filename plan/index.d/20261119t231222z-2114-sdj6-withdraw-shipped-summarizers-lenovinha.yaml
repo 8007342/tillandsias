@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: withdraw-the-never-wired-shipped-project-summarizers-and-their-spec-requirement
+    order: 2114-sdj6
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, openspec, summarizers]
+    estimated_hours: 2
+    owned_files:
+      - scripts/summarize-cargo.sh
+      - scripts/summarize-go-mod.sh
+      - scripts/summarize-nix.sh
+      - scripts/summarize-package-json.sh
+      - scripts/summarize-pubspec.sh
+      - scripts/summarize-pyproject.sh
+      - scripts/test-summarize-pubspec.sh
+      - openspec/litmus-tests/litmus-project-summarizers-shape.yaml
+      - openspec/changes/withdraw-shipped-project-summarizers/
+    title: |
+      Delete the six scripts/summarize-*.sh that nothing embeds or calls, retire litmus:project-summarizers-shape, and withdraw the shipped-summarizer requirements through openspec change withdraw-shipped-project-summarizers. This is its own PR, so it can be reverted alone.
+    context: |
+      Coordinator ruling (a), 2026-11-19. Evidence: no include_str!, no Containerfile COPY and no call site in crates/ or images/. /opt/summarizers/ is populated by no image, and regenerate-readme.sh is shipped in none. A forge summarizer, if ever wanted, is a new packet in Rust.
+    exit_criteria:
+      - 'no scripts/summarize-*.sh or scripts/test-summarize-pubspec.sh remains; git grep for them outside plan/ and openspec/changes/ is empty except the spec-script-paths baseline rows for the still-unarchived spec'
+      - 'openspec change withdraw-shipped-project-summarizers carries REMOVED (3 requirements) and MODIFIED (bootstrap-readme scenario) deltas'
+      - 'litmus for project-bootstrap-readme stays green; ./build.sh --preflight shows no new refused: line'
+    verifiable_closure: |
+      litmus:project-bootstrap-readme-shape stays green with the summarizers deleted, and git grep for scripts/summarize- outside plan/ and openspec/changes/ is empty.
+    next_action: Preflight, push work/2114-sdj6, open the PR; archive the change after it lands.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-19T23:12:22Z"
+        host: lenovinha
+        summary: Withdraw the never-wired shipped summarizers (own PR).

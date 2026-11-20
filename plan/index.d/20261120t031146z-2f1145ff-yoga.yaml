@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: github-token-rotation-reads-a-vault-that-is-not-up-yet-as-no-token-and-waits-fifteen-minutes-while-cloud-projects-fail-silently
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:46Z"
+    host: yoga
+
+events:
+  - packet_id: github-token-rotation-reads-a-vault-that-is-not-up-yet-as-no-token-and-waits-fifteen-minutes-while-cloud-projects-fail-silently
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:46Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: github-token-rotation-reads-a-vault-that-is-not-up-yet-as-no-token-and-waits-fifteen-minutes-while-cloud-projects-fail-silently
+    event:
+      type: note
+      ts: "2026-11-20T03:11:46Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock github_rotation_ - 2 passed. Candidate landing commit - 57280bd9d.

@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-record-another-host-process-writes-into-the-shared-timing-fallback-never-evicts-the-gate-step-running-beside-it
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:19:22Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-record-another-host-process-writes-into-the-shared-timing-fallback-never-evicts-the-gate-step-running-beside-it
+    event:
+      type: note
+      ts: "2026-11-17T22:19:22Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1966-ubsw commit 7d9084f6fe2b (1966-ubsw in its subject) reached linux-next at 21490379dbd2. Status moves to implemented, not completed: the exit criteria were not re-run.

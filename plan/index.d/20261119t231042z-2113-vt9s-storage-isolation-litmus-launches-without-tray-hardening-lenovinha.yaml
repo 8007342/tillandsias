@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: storage-isolation-litmus-launches-its-containers-with-the-tray-mandatory-hardening-flags
+    order: 2113-vt9s
+    status: ready
+    kind: bug
+    priority: p2
+    pickup_role: linux
+    capability_tags: [litmus, podman, storage-isolation, userns]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/litmus-helper-storage-isolation.lua
+    title: |
+      litmus:podman-idiomatic-storage-isolation-runtime launches its project containers without --userns=keep-id (and label=disable), unlike every tray launch, so the forge user cannot write the host /workspace and verify-workspace-rw never emits its token.
+    context: |
+      Measured on lenovinha 2026-11-19 (after the 2111-y8ch port): podman run -v <host dir>:/workspace:rw localhost/tillandsias-forge:latest → bash: /workspace/t: Permission denied as user forge. The tray mandates --userns=keep-id, --cap-drop=ALL, --security-opt=no-new-privileges and --security-opt=label=disable on every launch (crates/tillandsias-podman/src/policy.rs MANDATORY_HARDENING_FLAGS), so the defect is in the litmus, not the tray. verify-workspace-rw and verify-workspace-persistence exit 0 with no token today, which passes nothing and fails nothing.
+    exit_criteria:
+      - 'the helper launches project containers with MANDATORY_HARDENING_FLAGS; verify-workspace-rw prints WORKSPACE_RW_VERIFIED and verify-workspace-persistence prints WORKSPACE_PERSISTENCE_VERIFIED on a real run; red today'
+      - 'verify-src-readonly still prints SRC_READONLY_VERIFIED under the new flags'
+    verifiable_closure: |
+      litmus:podman-idiomatic-storage-isolation-runtime steps verify-workspace-rw and verify-workspace-persistence print their tokens on a real run; today they exit 0 with no token.
+    next_action: Add the four flags to launch() in the lua helper; rerun the eleven-step sequence on real podman.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-19T23:10:42Z"
+        host: lenovinha
+        summary: storage-isolation litmus lacks the tray's keep-id hardening; workspace-rw never verifies.

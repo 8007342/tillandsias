@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: yoga's check-[a-m] half of the coordinator's port split, batch 1.
+packets:
+  - packet_id: yoga-ports-five-check-a-m-shell-deciders-to-lua-batch-1
+    order: 2124-mwzr
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, deciders]
+    estimated_hours: 8
+    owned_files:
+      - scripts/check-gate-step-regimes.sh
+      - scripts/check-fragment-ts-skew.sh
+      - scripts/check-claim-confirmed.sh
+      - scripts/check-gate-memory-floor.sh
+      - scripts/check-enclave-ca-consistency.sh
+    title: "Port five check-[a-m] shell deciders to Lua on script run, delete each .sh, repoint every caller, lower the floors"
+    context: |
+      Coordinator split 2026-11-20: yoga takes check-[a-m]*.sh, lenovinha check-[n-z]*.sh; excluded: windows check pairs
+      (yolanda), Family D #1149-#1157, test-forge-swap-service.sh. None of the five is taken by an open work ref (measured
+      2026-11-20) or on scripts/portability/bootstrap-shell-allowlist.txt. Skipped: check-macos-only-sources-verified.sh
+      (darwin wrapper; the Mac's), check-decider-retirement.sh (bootstrap allowlist), check-cheatsheet-tiers.sh (#1109).
+    exit_criteria:
+      - "Each of the five exists as scripts/lua/<name>.lua printing the same verdict grammar, its .sh is deleted, and git grep finds no caller of the .sh outside plan/ history."
+      - "check-shell-ratchet.lua and the shell-decider floor go down by five; the ported scripts' existing fixtures and litmus steps stay green."
+    unscoreable: "the shell ratchet floor is the measure"
+    provenance: "coordinator split relayed 2026-11-20."
+    events:
+      - type: filed
+        ts: "2026-11-20T04:36:28Z"
+        host: yoga
+        summary: "filed and claimed"

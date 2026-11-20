@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-19 during macuahuitl-fedora's Silverblue audit (queue item 2): relay-preflight on yoga is red
+# on trunk itself, so every evictee preflight from this host reports a host fault as a code fault.
+packets:
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    order: 2110-ghw2
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [litmus, silverblue, toolbox, portability]
+    estimated_hours: 4
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: "On an immutable Linux host the litmus runner's podman-cli refresh and the fixtures that compile or call podman reach cargo and podman through the builder toolbox, so relay-preflight on trunk is green there instead of red for host reasons"
+    context: |
+      MEASURED 2026-11-19 on yoga (Silverblue): `scripts/run-litmus-test.sh ci-release --phase pre-build --size quick
+      --compact` on origin/linux-next f3a546f74 exits 1 with 8 red tests (cloudflare-oauth-core, fake-cloudflare,
+      gate-step-private-metrics-fallback, installer-ascii-expansion-safety, preflight-front-door, script-run-verb,
+      source-agreement-lua-cutover, unreferenced-guard-fixtures-run) and 83 lines
+      `podman-cli: rebuild-failed-before-test`. Same red on relay-preflight of PR #1134.
+      Causes seen: (1) run-litmus-test.sh:1094 litmus_refresh_stale_podman_cli runs bare host `cargo build`; on yoga host
+      cargo is a rustup proxy with no `cc`, so it fails (`could not compile tillandsias-core (build script)`) every
+      time; relay-preflight's branch switch rewrites the crate sources, so the shim is always "stale" afterwards.
+      (2) fixtures with a scratch HOME print "[tillandsias-builder] Creating 'tillandsias-builder' toolbox (first
+      run)... Error: failed to get the Podman version" (script-run-verb ARM 5, gate-step-private-metrics-fallback).
+      Methodology toolbox_first_scripts: host is bare; no rpm-ostree, no sudo.
+    exit_criteria:
+      - "On yoga, relay-preflight of an unchanged origin/linux-next prints no `podman-cli: rebuild-failed-before-test` line. Pre-fix: FAILS (83 lines)."
+      - "On yoga, `scripts/run-litmus-test.sh ci-release --phase pre-build --size quick --compact` on trunk shows none of the eight tests above red for an environment reason (no `failed to get the Podman version`, no linker error). Pre-fix: FAILS."
+      - "A mutable Linux host and a forge produce the same verdicts as before (second regime)."
+    unscoreable: "unpinnable-until-the-guard-exists: the litmus pinning the toolbox route lands with the implementation (1136-n8sh)"
+    provenance: "yoga measurement 2026-11-19; scratch logs of relay-preflight work/2098-i5fr and the trunk control run."
+    events:
+      - type: filed
+        ts: "2026-11-19T22:56:56Z"
+        host: yoga
+        summary: "filed from the Silverblue audit at the coordinator's direction"

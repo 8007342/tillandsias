@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    field: status
+    value: completed
+    ts: "2026-11-20T03:14:09Z"
+    host: yoga
+
+events:
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    event:
+      type: completed
+      ts: "2026-11-20T03:14:09Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 4c7b215e2
+  - packet_id: incident-a-consent-gates-trust-anchor-arrived-by-clipboard-paste-so-allowed-signers-must-be-host-written-only
+    event:
+      type: note
+      ts: "2026-11-20T03:14:09Z"
+      host: yoga
+      summary: |-
+        landed via PR #1122 as 4c7b215e2 on linux-next; licence_consent tests 27/27 in the builder toolbox before landing
