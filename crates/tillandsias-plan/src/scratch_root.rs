@@ -437,7 +437,7 @@ pub(crate) fn install(lua: &Lua) -> LuaResult<()> {
             #[cfg(not(unix))]
             {
                 let _ = (path, mode);
-                err("chmod", "unix-only")
+                err::<bool>("chmod", "unix-only")
             }
         })?,
     )?;
