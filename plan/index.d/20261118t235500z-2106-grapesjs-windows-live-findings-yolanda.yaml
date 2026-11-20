@@ -1,0 +1,135 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-18 from the first live GrapesJS-on-Windows attempt (tlatoani.net-forge on yolanda,
+# local tray 56.11.18.1 067696fb4), at macuahuitl-fedora's direction. Neighbours of 2094-v5nn.
+packets:
+  - packet_id: webstudio-open-refuses-or-brings-up-the-tls-listener-instead-of-a-null-window-url-and-never-claims-a-window-that-is-not-open
+    order: 2106-gj2w
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [studio, router, tls, tray-status]
+    estimated_hours: 3
+    depends_on:
+      - windows-tray-launches-a-web-studio-in-a-forge-and-opens-it-in-a-native-windows-browser-window
+    title: "webstudio.open with no preview TLS listener refuses with router_not_ready (or starts it) instead of answering window_url null, and says the operator's window is open only when one is"
+    context: |
+      MEASURED 2026-11-18: webstudio.open grapesjs answered started:true, window_url:null, preview_url:null (no
+      /run/user/0/tillandsias/router/preview-tls-port yet, so tls_port() was router_not_ready); a second call answered
+      "already running: the operator's window is open" with url null while browser.list_windows was empty and no
+      window existed on the desktop. The claim comes from the launcher's running map, not from a window.
+      Also: preview.status tls.host_trust "untrusted" is misleading on the studio path; studios open in the
+      containerised chromium dev-browser, which carries the enclave CA (operator ruling), so report the trust of the
+      window that will actually open.
+    exit_criteria:
+      - "With no preview TLS port, webstudio.open answers a refusal naming router_not_ready (or brings the listener up and answers the https URL); never window_url null. Pre-fix: FAILS (null)."
+      - "The window-is-open text appears only when a window for that studio exists (browser.list_windows or the tray registry); otherwise the reply says the window is pending or failed. Pre-fix: FAILS."
+      - "On the studio path, the trust field names the dev-browser window's trust, not the host store."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer adds the failing pin in the same commit as the fix (1136-n8sh)"
+    provenance: "tlatoani.net-forge relay and yolanda guest reads 2026-11-18; macuahuitl-fedora direction."
+    events:
+      - type: filed
+        ts: "2026-11-18T23:55:00Z"
+        host: yolanda
+        summary: "filed from the first live GrapesJS-on-Windows attempt"
+  - packet_id: webstudio-options-detects-a-public-dir-static-site-that-also-has-a-package-json
+    order: 2106-76pe
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [studio, framework-detection]
+    estimated_hours: 2
+    depends_on:
+      - the-windows-tray-opens-an-existing-static-site-repo-such-as-tlatoani-net-in-a-studio
+    owned_files:
+      - crates/tillandsias-headless/src/studio.rs
+    title: "webstudio.options names tlatoani.net (public/index.html + package.json + wrangler.jsonc) a static site and marks grapesjs Recommended"
+    context: |
+      MEASURED 2026-11-18: webstudio.options on tlatoani.net returned framework=null and nothing Recommended.
+      The site is static HTML in public/index.html with wrangler.jsonc and package.json; detect_framework misses
+      a public/ static site once a package.json exists.
+    exit_criteria:
+      - "A fixture tree of public/index.html + package.json (no framework deps) + wrangler.jsonc detects as static and recommends grapesjs. Pre-fix: FAILS (framework null)."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer adds the failing pin in the same commit as the fix (1136-n8sh)"
+    provenance: "tlatoani.net-forge webstudio.options 2026-11-18; macuahuitl-fedora direction."
+    events:
+      - type: filed
+        ts: "2026-11-18T23:55:00Z"
+        host: yolanda
+        summary: "filed against 2094-pacf"
+  - packet_id: a-preview-image-build-waits-in-the-queue-behind-a-studio-image-build-instead-of-timing-out
+    order: 2106-vw76
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [job-queue, images, preview]
+    estimated_hours: 3
+    title: "preview.publish while another image build holds podman is admitted to the job queue with a retry_after, not failed as runtime_unavailable timeout"
+    context: |
+      MEASURED 2026-11-18: preview.publish {category:WEB, runtime:auto} failed at 22:58:40Z with step image,
+      class timeout, "runtime_unavailable: podman failed at step image (timeout)", remedy host-retry, while the
+      chromium-core first-use build (studio instance 2) held podman; the web-wrangler image actually finished at
+      22:58:39Z, one second before the deadline.
+    exit_criteria:
+      - "With a long image build running, a second image-needing call is queued with retry_after and later runs; no timeout refusal. Pre-fix: FAILS."
+    next_action: "HOLD: belongs with the 2094-ay52 job-admission rules (#1131); add the depends_on when that row is on trunk."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer adds the failing pin in the same commit as the fix (1136-n8sh)"
+    provenance: "tlatoani.net-forge babysitter finding relayed by macuahuitl-fedora 2026-11-18."
+    events:
+      - type: filed
+        ts: "2026-11-18T23:55:00Z"
+        host: yolanda
+        summary: "babysitter finding filed"
+  - packet_id: a-forge-agent-can-probe-its-tls-preview-route-read-only-without-opening-a-window
+    order: 2106-9w99
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [preview, tls, mcp]
+    estimated_hours: 3
+    title: "A read-only preview.probe tool fetches https://www.<project>.localhost:<tls port> on the agent's behalf and returns status, byte count and the certificate subject"
+    context: |
+      The https route reaching only the host and its windows is by design (2067-uc3k), so today a forge agent can
+      verify it only by opening a browser window (tlatoani.net-forge 2026-11-18: :8080 served, :18443 refused from
+      the forge). Coordinator direction.
+    exit_criteria:
+      - "preview.probe on a serving project returns status 200, bytes equal to the served file, and the leaf's subject; it writes nothing. Pre-fix: FAILS (no such tool)."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer adds the failing pin in the same commit as the fix (1136-n8sh)"
+    provenance: "macuahuitl-fedora relay via tlatoani.net-forge 2026-11-18."
+    events:
+      - type: filed
+        ts: "2026-11-18T23:55:00Z"
+        host: yolanda
+        summary: "filed at the coordinator's direction"
+  - packet_id: a-studio-image-that-failed-on-a-transient-network-error-retries-at-the-next-launch-on-windows-without-a-tray-update
+    order: 2106-xvqu
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [images, studio, tray]
+    estimated_hours: 2
+    title: "An image build that failed on DNS (Could not resolve host) is not latched as refuse-fast; the next studio launch retries it, and the Windows remedy does not require updating Tillandsias"
+    context: |
+      MEASURED 2026-11-18: during an operator network blip the grapesjs studio image failed at its microdnf step
+      ("Could not resolve host: mirrors.fedoraproject.org"); the one automatic retry also failed and the inputs now
+      refuse fast. The remedy text tells a Windows user to update Tillandsias and launch the forge again, which
+      is not possible on an unchanged version; only the in-guest --retry-image works.
+    exit_criteria:
+      - "A build failure classified as a resolver/network error is not latched; the next launch retries. Pre-fix: FAILS (latched)."
+      - "The Windows remedy names an action the tray offers (a retry), not an update."
+    unscoreable: "unpinnable-until-the-guard-exists: the implementer adds the failing pin in the same commit as the fix (1136-n8sh)"
+    provenance: "yolanda guest image-build log 2026-11-18."
+    events:
+      - type: filed
+        ts: "2026-11-18T23:55:00Z"
+        host: yolanda
+        summary: "filed from the live attempt"

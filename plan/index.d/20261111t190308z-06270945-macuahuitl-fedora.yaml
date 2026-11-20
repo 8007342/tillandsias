@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-tray-reads-a-projects-licence-acknowledgements-from-its-checkout-not-a-state-dir-copy
+    field: next_action
+    value: |-
+      Reuse mcp_socket::validate_family_in_lane's podman-exec checkout read.
+
+      [2026-11-11T19:03:08Z macuahuitl-fedora] blind-design triage 2026-11-11 (2080-294s): operator ruled licence acceptances are committed in the project repo and a vault wipe must never lose them; the state-dir copy is superseded by openspec/changes/licence-acknowledgements-in-repo and 2080-qqsm, 2081-qndc, 2080-ryc8.
+    ts: "2026-11-11T19:03:08Z"
+    host: macuahuitl-fedora

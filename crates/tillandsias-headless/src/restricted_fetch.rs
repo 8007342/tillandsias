@@ -143,7 +143,9 @@ pub fn fetch_restricted(
     on_event: &mut dyn FnMut(FetchEvent),
 ) -> Result<Fetch, String> {
     let ack_dir = licence_consent::project_acknowledgement_dir(ask.project);
-    let verifier = Verifier::for_host();
+    let verifier = Verifier::for_project_host(ask.project).map_err(|e| {
+        format!("licence_acknowledgement_required: the licence gate cannot read its repo: {e}")
+    })?;
     fetch_restricted_in(
         &Gate {
             register: licence_consent::restricted_register_tsv(),
