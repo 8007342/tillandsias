@@ -92,6 +92,7 @@ pub mod msg_store;
 pub mod child_env;
 pub mod run_verb;
 // ORDER 1384-bqhy: `script run` (the Lua decider runner) and the one classify.
+pub mod scratch_root;
 pub mod script_run;
 
 /// Order 977-56fd — the seven-state obligation lattice, the product order over
