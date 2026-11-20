@@ -84,7 +84,7 @@ while [ $# -gt 0 ]; do
 done
 
 # A tag is well-formed or it is not; both paths need the same answer.
-_valid_tag() { printf '%s' "${1:-}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'; }
+_valid_tag() { grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' <<<"${1:-}"; }
 
 # owner/repo for the endpoints `gh release` does not cover. Derived, never
 # hardcoded: this script is read by other forks of the runbook.

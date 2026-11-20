@@ -67,7 +67,7 @@ else
     exit 2
 fi
 
-has() { printf '%s\n' "$names" | grep -qxF "$1"; }
+has() { grep -qxF "$1" <<<"$names"; }
 
 # Entries named by a manifest, read from the manifest file when present.
 manifest_entries() {

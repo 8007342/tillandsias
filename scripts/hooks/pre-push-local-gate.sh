@@ -1544,7 +1544,7 @@ attempt_plan_only_lane() {
         # implement would REMOVE this gate on exactly the hosts it was written
         # for. A current binary can never reach this line with a skipped
         # fragment, so this only ever catches an old one.
-        if printf '%s' "$out" | grep -q 'does not parse and was SKIPPED'; then
+        if grep -q 'does not parse and was SKIPPED' <<<"$out"; then
             echo "plan-only lane: validation FAILED — tillandsias-plan check could not PARSE a pushed fragment and skipped it, and this binary predates --strict-fragments (full gate required):" >&2
             printf '%s' "$out" | grep 'does not parse and was SKIPPED' | head -6 | sed 's/^/  /' >&2
             return 1

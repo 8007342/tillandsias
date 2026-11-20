@@ -395,7 +395,7 @@ scripts scripts/check-plan-binary-probe-usage.sh 8
 scripts scripts/check-plan-schema-divergence.sh 2
 scripts scripts/check-purge-clears-vault-credentials.sh 1
 scripts scripts/check-refusal-affordance-added.sh 3
-scripts scripts/check-release-asset-integrity.sh 12
+scripts scripts/check-release-asset-integrity.sh 11
 scripts scripts/check-release-tier-freshness.sh 7
 scripts scripts/check-resumable-claim-dirt.sh 1
 scripts scripts/check-running-image-freshness.sh 6
@@ -497,7 +497,7 @@ scripts scripts/preflight-fixtures-default-target.sh 3
 scripts scripts/probe-complement-selfcheck.sh 5
 scripts scripts/probe-credential-cold-state.sh 4
 scripts scripts/probe-silverblue-update-skew.sh 4
-scripts scripts/promote-stable.sh 12
+scripts scripts/promote-stable.sh 11
 scripts scripts/push-plan-fragments-to-trunk.sh 19
 scripts scripts/rank-refusal-hits.sh 9
 scripts scripts/reclaim-stranded-claims.sh 6
@@ -514,7 +514,7 @@ scripts scripts/release-freeze.sh 8
 scripts scripts/release-preflight-local.sh 1
 scripts scripts/release-preflight.sh 9
 scripts scripts/report-held-claims.sh 2
-scripts scripts/resolve-smoke-release.sh 4
+scripts scripts/resolve-smoke-release.sh 3
 scripts scripts/run-forge-project.sh 4
 scripts scripts/run-litmus-test.sh 57
 scripts scripts/run-observatorium.sh 3
