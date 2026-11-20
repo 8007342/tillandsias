@@ -73,7 +73,7 @@ critical_path:
     success_pattern: "^[A-Za-z0-9_-]{40,}$"
 
   - step: "create mock OpenCode service inside forge (simple HTTP server)"
-    command: "scripts/litmus-helper-browser-isolation.sh start-mock-opencode"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; \"$P\" script run scripts/lua/litmus-helper-browser-isolation.lua -- start-mock-opencode"
     timeout_ms: 10000
     expected_behavior: "MOCK_STARTED"
 

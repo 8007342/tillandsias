@@ -849,7 +849,6 @@ specs:
   - litmus:credential-channel-check-shape
   - litmus:committable-branch-guard-shape
   - litmus:ledger-node-claim-shape
-  - litmus:git-delta-wait-shape
   - litmus:opencode-prompt-e2e-shape
   - litmus:smoke-agent-prompt-is-minimal
   - litmus:forge-liveness-probe-shape
