@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: tillandsias-plan-lock-run-replaces-with-smoke-lock-sh
+    order: 2115-jkdv
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-rust, debt, scripts, smoke-lock]
+    estimated_hours: 4
+    owned_files:
+      - crates/tillandsias-plan/src/lock_run.rs
+      - scripts/with-smoke-lock.sh
+      - openspec/litmus-tests/litmus-smoke-lock-fd-isolation-shape.yaml
+      - run_smoke.sh
+      - scripts/e2e-step2-linux.sh
+    title: |
+      Batch 3 of the lenovinha shell slice: tillandsias-plan lock run (Rust) replaces scripts/with-smoke-lock.sh. The child inherits the TTY and stdio, the lock fd is CLOEXEC, and the wait timeout is optional and uncapped. Callers are repointed, the litmus asserts behaviour, and the .sh is deleted.
+    context: |
+      Coordinator ruling 2026-11-19, option (1). Lua was refused for this wrapper because the Lua runtime cannot give a payload a TTY or stdin. The litmus now reads the payload's /proc/self/fd and fails if any fd points at the lock file. Measured: a mutant wrapper that leaks fd 9 fails step 1 (rc=1, /proc/self/fd/9); the real binary passes all four steps.
+      STANDING EXCEPTION (coordinator ruling 2026-11-19): with-tillandsias-builder.sh, with-wsl2-builder.sh, with-nix-builder.sh, nix-toolbox.sh and nix-cache-service.sh stay sh. They bootstrap the toolbox before any binary exists, so no shell-to-lua/rust batch should port them. The remaining nix-* leaves (nix-deps-drv-paths.sh, nix-build-container.sh, nix-push-cache.sh) are routed by the coordinator to a host with working nix.
+    exit_criteria:
+      - 'scripts/with-smoke-lock.sh is gone; run_smoke.sh, scripts/e2e-step2-linux.sh and the e2e skills call tillandsias-plan lock run'
+      - 'litmus:smoke-lock-fd-isolation-shape passes (fd-not-inherited, orphan-does-not-hold, still-serializes, timeout-and-exit-code) and its step 1 fails against an fd-leaking wrapper'
+      - 'cargo test -p tillandsias-plan --lib lock_run passes; clippy -D warnings clean'
+    verifiable_closure: |
+      litmus:smoke-lock-fd-isolation-shape: step 1 reads the payload /proc/self/fd and fails on an fd-leaking wrapper (measured with an fd-9 mutant), passes on lock run.
+    next_action: Preflight, push work/2115-jkdv, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-19T23:32:58Z"
+        host: lenovinha
+        summary: lock run (Rust) replaces with-smoke-lock.sh; toolbox entry points recorded as a standing sh exception.

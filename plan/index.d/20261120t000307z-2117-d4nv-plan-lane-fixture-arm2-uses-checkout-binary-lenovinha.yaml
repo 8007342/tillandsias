@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: plan-lane-fails-closed-fixture-arm2-drives-the-checkout-plan-binary-not-the-path-copy
+    order: 2117-d4nv
+    status: ready
+    kind: bug
+    priority: p3
+    pickup_role: linux
+    capability_tags: [fixture, plan-binary, pre-push, host-state]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh
+    title: |
+      test-pre-push-plan-lane-fails-closed-without-binary arm2 (the negative control) goes red whenever ~/.local/bin/tillandsias-plan was built from another branch's validator surface: its push resolves the PATH copy and the lane refuses it as stale. The fixture should drive the checkout's own binary.
+    context: |
+      Measured on lenovinha 2026-11-19: on work/2116-x9ph, after check-plan-binary-current had copied a 2115-jkdv build into ~/.local/bin, arm2 printed "plan-only lane: REFUSED — the resolved plan binary is STALE ... resolved: ~/.local/bin/tillandsias-plan ... built-from=30894816e80153a0 checkout=a7cd6de11de03bf5" and preflight refused. After copying this checkout's build over the PATH copy the fixture passed 6/6. The verdict depends on host state, not on the tree.
+    exit_criteria:
+      - 'arm2 passes with a ~/.local/bin/tillandsias-plan built from a different validator surface than the checkout (pin it with a planted stale copy); red today'
+    verifiable_closure: |
+      scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh arm2 passes with a planted stale ~/.local/bin copy; red today.
+    next_action: Point arm2's push at the checkout's resolved binary (TILLANDSIAS_PLAN_BIN per command), plant a stale PATH copy in the fixture, run red then green.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T00:03:07Z"
+        host: lenovinha
+        summary: plan-lane fixture arm2 depends on the PATH plan binary's surface; should use the checkout's.
