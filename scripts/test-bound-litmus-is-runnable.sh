@@ -77,7 +77,7 @@ sed 's/^critical_path:$/steps:/' "$good" > "$bad"
 
 # 1. The runner accepts an extractable file and reports its step count.
 out="$("$RUNNER" --parse-only "$good" 2>&1)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q 'ok:litmus-parseable:.*1 step'; then
+if [ "$rc" -eq 0 ] && grep -q 'ok:litmus-parseable:.*1 step' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}good-file-not-accepted(rc=$rc) "
@@ -86,7 +86,7 @@ fi
 # 2. NEGATIVE: the runner refuses the mis-keyed file. Without this the mode is
 #    satisfied by one that accepts everything.
 out="$("$RUNNER" --parse-only "$bad" 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'no parseable critical_path steps'; then
+if [ "$rc" -ne 0 ] && grep -q 'no parseable critical_path steps' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}bad-file-not-refused(rc=$rc) "
@@ -117,7 +117,7 @@ fi
 
 # 4. A missing file is its own named state, not a silent pass.
 out="$("$RUNNER" --parse-only "$D/definitely-absent.yaml" 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'blocked:parse-only:missing'; then
+if [ "$rc" -ne 0 ] && grep -q 'blocked:parse-only:missing' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}missing-file-not-named(rc=$rc) "
@@ -126,7 +126,7 @@ fi
 # 5. Naming no file at all refuses rather than passing vacuously — a check
 #    invoked with an empty list must not report success over nothing.
 out="$("$RUNNER" --parse-only 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'blocked:parse-only:no files named'; then
+if [ "$rc" -ne 0 ] && grep -q 'blocked:parse-only:no files named' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}empty-invocation-not-refused(rc=$rc) "
@@ -178,7 +178,7 @@ sed "s|name: $GOOD_NAME|name: $BAD_NAME|" "$g/openspec/litmus-tests/litmus-fixtu
 # `sed: invalid command code` (851-gpb5).
 printf 'version: "1.0"\nspecs:\n- spec_id: ci-release\n  status: active\n  litmus_tests:\n  - %s\n' "$BAD_NAME" > "$g/openspec/litmus-bindings.yaml"
 out="$(cd "$g" && LITMUS_BINDINGS_ROOT="$g" TILLANDSIAS_LITMUS_BIND_BASE=base-ref "$GATE_PLAN" script run "$ROOT/scripts/lua/check-litmus-bindings.lua" 2>&1)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'violation:bound-but-unrunnable'; then
+if [ "$rc" -ne 0 ] && grep -q 'violation:bound-but-unrunnable' <<<"$out"; then
     pass=$((pass + 1))
 else
     fail="${fail}gate-did-not-refuse-newly-bound-unrunnable(rc=$rc:$out) "
