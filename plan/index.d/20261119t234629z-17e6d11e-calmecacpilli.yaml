@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forgotten-diligence-prints-the-six-follow-up-triggers-and-the-stale-rows-carried-backlog-counter
+    field: next_action
+    value: |-
+      Extend forgotten_sort's row type with a trigger; read drafts and refs through gh and git the way scripts/check-landed-but-open.sh does; register the counter in the carried backlog table; add the coordinator step.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-landed-but-open.sh is now scripts/lua/check-landed-but-open.lua (ba7e6b3c1). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: forgotten-diligence-prints-the-six-follow-up-triggers-and-the-stale-rows-carried-backlog-counter
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

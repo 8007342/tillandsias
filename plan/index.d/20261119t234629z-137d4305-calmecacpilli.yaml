@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: run-litmus-test-parse-only-fails-for-any-absolute-path-on-a-windows-host-so-the-bound-but-unrunnable-guard-refuses-every-newly-bound-litmus-there
+    field: next_action
+    value: |-
+      Smallest correct fix is at the caller: have check-litmus-bindings.sh pass a path relative to ROOT. The better fix is at the runner — make --parse-only normalise its target, and stop line 279 from clobbering an exported LITMUS_PLAN_BIN, which is a real override a debugging operator would reasonably expect to work. Whichever is chosen, the fixture is the same: parse one file twice, by relative and absolute path, and require the same verdict. Measure on a Linux host FIRST to establish whether the defect is Windows-only, because that decides whether this gates the fleet or one host class.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-litmus-bindings.sh is now scripts/lua/check-litmus-bindings.lua (d1cf913a4, 1570-qutp). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: run-litmus-test-parse-only-fails-for-any-absolute-path-on-a-windows-host-so-the-bound-but-unrunnable-guard-refuses-every-newly-bound-litmus-there
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk
