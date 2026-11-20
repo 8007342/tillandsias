@@ -496,7 +496,7 @@ scripts scripts/plan-binary-probe.sh 7
 scripts scripts/preflight-fixtures-default-target.sh 3
 scripts scripts/probe-complement-selfcheck.sh 5
 scripts scripts/probe-credential-cold-state.sh 4
-scripts scripts/probe-silverblue-update-skew.sh 4
+scripts scripts/probe-silverblue-update-skew.sh 2
 scripts scripts/promote-stable.sh 12
 scripts scripts/push-plan-fragments-to-trunk.sh 19
 scripts scripts/rank-refusal-hits.sh 9
@@ -523,7 +523,7 @@ scripts scripts/salvage-audit.sh 1
 scripts scripts/salvage-dirty-worktree.sh 8
 scripts scripts/scan-litmus-expression-pinning.sh 4
 scripts scripts/scan-litmus-false-pass.sh 30
-scripts scripts/select-work-batch.sh 43
+scripts scripts/select-work-batch.sh 41
 scripts scripts/selective-tillandsias-reset.sh 1
 scripts scripts/session-tokens.sh 1
 scripts scripts/smoke-consecutive-lanes.sh 4
@@ -730,10 +730,9 @@ scripts scripts/test-nix-cache-service.sh 1
 scripts scripts/test-nix-toolbox.sh 9
 scripts scripts/test-no-competing-gate.sh 2
 scripts scripts/test-no-fixture-writes-live-ledger.sh 3
-scripts scripts/test-no-stale-base-revert-pre-receive.sh 3
 scripts scripts/test-no-stale-base-revert.sh 4
 scripts scripts/test-nvidia-cdi-stale-hostpath.sh 1
-scripts scripts/test-opencode-vault-auth-content.sh 3
+scripts scripts/test-opencode-vault-auth-content.sh 1
 scripts scripts/test-openspec-pin.sh 2
 scripts scripts/test-orchestrate-enclave.sh 1
 scripts scripts/test-order-citations-resolve.sh 7
@@ -754,7 +753,7 @@ scripts scripts/test-podman-mock-refusal.sh 4
 scripts scripts/test-podman-mock-secret-lifecycle.sh 4
 scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-deletion-only.sh 1
-scripts scripts/test-pre-push-empty-ref-list.sh 6
+scripts scripts/test-pre-push-empty-ref-list.sh 4
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
 scripts scripts/test-pre-push-issue-capture-lane.sh 2
 scripts scripts/test-pre-push-linux-next-merged.sh 3
@@ -764,7 +763,6 @@ scripts scripts/test-pre-push-trailer-states-what-it-saw.sh 2
 scripts scripts/test-pre-push-version-guard-sigpipe.sh 3
 scripts scripts/test-pre-push-version-guard.sh 1
 scripts scripts/test-pre-push-work-ref-lane.sh 12
-scripts scripts/test-pre-receive-yaml-gate.sh 2
 scripts scripts/test-precommit-zero-trace-scan-scope.sh 6
 scripts scripts/test-preflight-front-door.sh 8
 scripts scripts/test-preflight-verdict-categories.sh 3
@@ -823,14 +821,12 @@ scripts scripts/test-timing-record-carries-root.sh 3
 scripts scripts/test-timing-supervisor-lost.sh 2
 scripts scripts/test-token-instrument.sh 2
 scripts scripts/test-tool-dispatch-lib.sh 18
-scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 3
+scripts scripts/test-tool-materialize-litmus-surfaces-arm.sh 2
 scripts scripts/test-tool-materialize.sh 5
 scripts scripts/test-toolbox-refusal-wsl-exception.sh 3
 scripts scripts/test-trace-coverage.sh 4
 scripts scripts/test-tracked-files-unwritten-guard.sh 2
 scripts scripts/test-tray-asset-placeholder-refused.sh 1
-scripts scripts/test-tray-surface-parity-gate.sh 1
-scripts scripts/test-uninstall-preserves-vm.sh 1
 scripts scripts/test-uninstall-sweeps-both-app-dirs.sh 7
 scripts scripts/test-unrunnable-platform-arms.sh 9
 scripts scripts/test-unstable-installer-defaults-to-unstable.sh 1

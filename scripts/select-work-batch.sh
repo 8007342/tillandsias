@@ -911,7 +911,7 @@ scored="$(_score_epics "$rows")"
 # while hiding the gap behind a plausible-looking selection. Demote it whenever
 # any real epic is available; the triage line still reports it loudly, so the
 # coverage gap stays visible and gets fixed instead of absorbed.
-if printf '%s\n' "$scored" | grep -qv '	UNGROUPED	'; then
+if grep -qv '	UNGROUPED	' <<<"$scored"; then
     scored="$(printf '%s\n' "$scored" | awk -F'\t' '$2!="UNGROUPED"')"
 fi
 
@@ -951,7 +951,7 @@ if [ -n "$MY_CAP_LINE" ] && [ "$HOST_TIER" != "low-end" ]; then
         # is what makes "distinct ranks give disjoint epics" a mechanism rather
         # than the coincidence it had been.
         routing_scored="$(_score_epics "$ROUTING_ROWS")"
-        if printf '%s\n' "$routing_scored" | grep -qv '	UNGROUPED	'; then
+        if grep -qv '	UNGROUPED	' <<<"$routing_scored"; then
             routing_scored="$(printf '%s\n' "$routing_scored" | awk -F'\t' '$2!="UNGROUPED"')"
         fi
         routing_count="$(printf '%s\n' "$routing_scored" | grep -c .)"

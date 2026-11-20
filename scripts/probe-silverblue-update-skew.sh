@@ -113,8 +113,8 @@ if [ -z "$_journal" ]; then
     echo "could-not-run:silverblue-update-skew:no-journal (the rpm-ostreed journal could not be read; an offered update alone does not establish skew)"
     exit 3
 fi
-if printf '%s\n' "$_journal" | grep -q 'kernel-devel-matched' \
-   && printf '%s\n' "$_journal" | grep -qi 'depsolve'; then
+if grep -q 'kernel-devel-matched' <<<"$_journal" \
+   && grep -qi 'depsolve' <<<"$_journal"; then
     echo "skew:akmods-kernel-devel-matched:${_offered:-unknown} — akmods is layered, an update is offered, and the rpm-ostreed journal shows a depsolve failure naming kernel-devel-matched. NOTHING IS STAGED and no restart will apply it; the remedies (wait for the repo, temporarily unlayer the NVIDIA stack, or pin) are the OPERATOR'S decision. See cheatsheets/runtime/silverblue-updates.md (1165-g6wx)."
     exit 1
 fi

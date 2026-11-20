@@ -263,7 +263,7 @@ if ! command -v sysctl >/dev/null 2>&1; then
 # here: rc=141 with pipefail, rc=0 without. Capture first, then test the
 # capture, so no early-exiting reader can fabricate a failure.
 elif _a4_locales="$(locale -a 2>/dev/null || true)"; \
-     ! printf '%s\n' "$_a4_locales" | grep -Fqx "fr_CH.UTF-8"; then
+     ! grep -Fqx "fr_CH.UTF-8" <<<"$_a4_locales"; then
     skiparm "ARM 4: no comma-decimal locale installed, so the defect cannot be induced here" "no comma-decimal locale"
 else
     _a4_raw="$(LC_ALL=fr_CH.UTF-8 sysctl -n vm.loadavg 2>/dev/null | awk '{print $2}')"

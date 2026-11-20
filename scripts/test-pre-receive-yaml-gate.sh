@@ -180,7 +180,7 @@ if ! OUT5A="$(git -C "$WORK" push origin HEAD:refs/heads/wip-freeform-noenv 2>&1
     printf '%s\n' "$OUT5A"
     exit 1
 fi
-if printf '%s\n' "$OUT5A" | grep -q 'WARNING: new branch'; then
+if grep -q 'WARNING: new branch' <<<"$OUT5A"; then
     echo "FAIL: grammar warning printed although no grammar env was configured (neutrality broken)"
     printf '%s\n' "$OUT5A"
     exit 1
@@ -214,7 +214,7 @@ if ! OUT5C="$(TILLANDSIAS_BRANCH_CREATION_REGEX="$CREATION_REGEX" \
     printf '%s\n' "$OUT5C"
     exit 1
 fi
-if printf '%s\n' "$OUT5C" | grep -q 'WARNING: new branch'; then
+if grep -q 'WARNING: new branch' <<<"$OUT5C"; then
     echo "FAIL: in-grammar new branch triggered a grammar warning"
     printf '%s\n' "$OUT5C"
     exit 1

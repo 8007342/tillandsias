@@ -85,9 +85,9 @@ done
 # Secret-construction shape: the Gemini value must flow to jq over stdin,
 # never through `--arg` (which would expose it in jq's process argv).
 PREPARE_SOURCE="$(sed -n '/^prepare_opencode_vault_auth()/,/^}/p' "$LIB")"
-printf '%s' "$PREPARE_SOURCE" | grep -qF "jq -Rsc" \
+grep -qF "jq -Rsc" <<<"$PREPARE_SOURCE" \
     || fail "Gemini auth JSON is not assembled from stdin"
-if printf '%s' "$PREPARE_SOURCE" | grep -Eq 'jq .*--arg .*gemini'; then
+if grep -Eq 'jq .*--arg .*gemini' <<<"$PREPARE_SOURCE"; then
     fail "Gemini credential is exposed through jq argv"
 fi
 
