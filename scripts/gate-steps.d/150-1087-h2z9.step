@@ -8,7 +8,7 @@
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf): a binding assembled
 # from a variable is invisible to every name-based scan.
 STEP_DESC="Checking no unallowlisted binary is tracked"
-STEP_SCRIPT="scripts/check-no-tracked-binaries.sh"
+STEP_LUA="scripts/lua/check-no-tracked-binaries.lua"
 STEP_ERROR="a tracked binary is not allowlisted (1087-h2z9)"
 STEP_OK="Tracked-binary check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:no-tracked-binaries:38"
