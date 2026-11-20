@@ -1135,17 +1135,11 @@ impl Verifier {
         }
     }
 
-    /// The host's enrolled signers: `TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS`, or
-    /// `<state dir>/approvals/allowed_signers`.
+    /// The host's enrolled signers: `<approval state dir>/allowed_signers`.
+    /// No variable overrides this file (2083-nfne): an override let any
+    /// caller point the gate at signers it wrote itself.
     pub fn for_host() -> Self {
-        let p = std::env::var_os("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| {
-                tillandsias_core::config::state_dir()
-                    .join("approvals")
-                    .join("allowed_signers")
-            });
-        Self::new(&p)
+        Self::new(&crate::approval::state_dir().join("allowed_signers"))
     }
 
     pub fn verify(&self, statement: &str, armored: &str, principal: &str) -> Result<(), String> {
@@ -3069,7 +3063,7 @@ pub(crate) mod tests {
         fs::write(&signers, "").unwrap();
         // SAFETY: tests in this module run in one process; the variable is
         // read back immediately and only names a path inside the scratch dir.
-        unsafe { std::env::set_var("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS", &signers) };
+        unsafe { std::env::set_var("TILLANDSIAS_APPROVAL_STATE_DIR", &dir) };
         let verifier = Verifier::for_host();
         assert_eq!(verifier.allowed_signers, signers);
         let permissive = ModelFile {
@@ -3353,5 +3347,96 @@ pub(crate) mod tests {
         unsafe { std::env::set_var("TILLANDSIAS_LICENCE_ACK_DIR", &acks) };
         assert_eq!(project_acknowledgement_dir("demon_attack"), acks);
         let _ = admits_restricted("demon_attack", &ck);
+    }
+    /// The words that would walk a user through a manual approval flow
+    /// (incident 2026-11-14, 2083-nfne).
+    const MANUAL_FLOW: &[&str] = &[
+        "ssh-keygen",
+        "--approval-enrol",
+        "--approval-sign",
+        "heredoc",
+        "<<",
+        "paste",
+        "clipboard",
+        "copying",
+        "copy the",
+    ];
+
+    /// Every bullet item of `skill` that names a manual-flow word without
+    /// being a prohibition, and how many prohibition items name one. An
+    /// item is a prohibition when it opens with "Do NOT" or "NEVER".
+    fn manual_flow_instructions(skill: &str) -> (Vec<String>, usize) {
+        let mut items: Vec<String> = Vec::new();
+        for line in skill.lines() {
+            let t = line.trim_start();
+            if let Some(rest) = t.strip_prefix("- ").or_else(|| {
+                t.split_once(". ")
+                    .filter(|(n, _)| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+                    .map(|(_, r)| r)
+            }) {
+                items.push(rest.to_string());
+            } else if t.is_empty() || t.starts_with('#') {
+                items.push(String::new());
+            } else if let Some(last) = items.last_mut() {
+                last.push(' ');
+                last.push_str(t);
+            } else {
+                items.push(t.to_string());
+            }
+        }
+        let mut offending = Vec::new();
+        let mut prohibitions = 0;
+        for item in items {
+            let lower = item.to_lowercase();
+            if !MANUAL_FLOW.iter().any(|w| lower.contains(w)) {
+                continue;
+            }
+            if item.starts_with("Do NOT") || item.starts_with("NEVER") {
+                prohibitions += 1;
+            } else {
+                offending.push(item);
+            }
+        }
+        (offending, prohibitions)
+    }
+
+    /// 2083-nfne: the accept-licence skill can never instruct a manual or
+    /// terminal flow. Every mention of ssh-keygen, the tray's enrol/sign
+    /// flags, a heredoc or a paste sits inside a prohibition, and the
+    /// prohibition itself is present (so a skill that drops the section is
+    /// not green by having nothing to check).
+    #[test]
+    fn the_accept_licence_skill_never_instructs_a_manual_flow() {
+        let skill = include_str!("../../../skills/accept-licence/SKILL.md");
+        let (offending, prohibitions) = manual_flow_instructions(skill);
+        assert!(
+            prohibitions >= 1,
+            "the skill lost its prohibition of the manual flow"
+        );
+        assert!(
+            offending.is_empty(),
+            "the skill instructs a manual flow: {offending:#?}"
+        );
+    }
+
+    /// 2083-nfne: a variable naming an allowed_signers file does not move
+    /// the gate. The signers the gate reads are the ones under the approval
+    /// state dir, whatever `TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS` says.
+    #[test]
+    fn an_allowed_signers_variable_does_not_redirect_the_gate() {
+        let dir = disk_scratch("signers-override");
+        let elsewhere = dir.join("agent-written-signers");
+        // SAFETY: tests in this module run in one process; the variable
+        // names a path inside the scratch dir and nothing else reads it.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS", &elsewhere);
+        }
+        let read = Verifier::for_host().allowed_signers;
+        unsafe { std::env::remove_var("TILLANDSIAS_APPROVAL_ALLOWED_SIGNERS") };
+        assert_ne!(read, elsewhere, "the variable redirected the gate");
+        assert_eq!(
+            read.file_name().and_then(|n| n.to_str()),
+            Some("allowed_signers")
+        );
     }
 }
