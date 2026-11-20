@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: yoga's check-[a-m] Lua batch 2 (coordinator queue item 1).
+packets:
+  - packet_id: check-enclave-ca-consistency-is-lua-on-script-run-and-its-four-callers-follow
+    order: 2140-vvvw
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, enclave, proxy]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-enclave-ca-consistency.sh
+      - scripts/cycle-preflight.sh
+      - scripts/check-enclave-service-health.sh
+      - openspec/litmus-tests/litmus-ca-ephemeral.yaml
+    title: "check-enclave-ca-consistency is Lua on script run, piping the secret to openssl on stdin, and its four callers follow"
+    context: |
+      Deferred from 2124-mwzr: its callers are scripts/cycle-preflight.sh (advisory +ca-<state>),
+      scripts/check-enclave-service-health.sh (with the TILLANDSIAS_CA_CONSISTENCY_CHECK stub seam its fixture injects),
+      litmus:ca-ephemeral, and scripts/test-enclave-service-health.sh's stub. proc.run takes stdin, so the secret's key
+      reaches openssl without a temp file (lua_predicate.rs ~416).
+    exit_criteria:
+      - "scripts/lua/check-enclave-ca-consistency.lua decides ok / absent / desync / skip exactly as the .sh did: parity in three constructed states (matching pair, cert from another key, bundle absent) with a temporary tillandsias-ca-key secret."
+      - "cycle-preflight still reports +ca-ok / +ca-desync / +ca-absent / +ca-skip; the service-health stub seam still drives its refusal branch (test-enclave-service-health 23/23); the .sh is deleted and its floor lines lowered."
+    unscoreable: "parity runs are the measure"
+    provenance: "yoga parity run 2026-11-20; coordinator queue."
+    events:
+      - type: filed
+        ts: "2026-11-20T15:18:13Z"
+        host: yoga
+        summary: "filed and claimed"

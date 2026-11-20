@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction (found preflighting #1195 from #1181's code).
+packets:
+  - packet_id: fixtures-skip-by-name-not-fail-when-their-platform-or-substrate-is-absent
+    order: 2129-v8bs
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, portability, regimes]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-macos-signing-seam.sh
+      - scripts/test-forge-standard-gitconfig-path.sh
+    title: "Fixtures must skip by name, not fail, when their platform or substrate is absent"
+    context: |
+      MEASURED 2026-11-20 on yoga (Silverblue), both red on trunk there:
+      - scripts/test-macos-signing-seam.sh shells out to /usr/libexec/PlistBuddy and BSD mktemp -t; on Linux it prints
+        "mktemp: too few X's" and FAIL: virtualization entitlement was lost (1 FAIL), a verdict about a tool that is absent.
+      - scripts/test-forge-standard-gitconfig-path.sh, under set -euo pipefail, resolves the newest
+        localhost/tillandsias-forge:v* image; with 0 forge images it exits 1 printing nothing, which ends
+        scripts/test-forge-config-trust-cross-platform-parity.sh silently (rc=1, no verdict).
+      Each turned a relay-preflight red for a PR that only touched a file they cover (#1195).
+    exit_criteria:
+      - "On Linux, test-macos-signing-seam.sh prints skip:macos-signing-seam:darwin-only and exits 0. Pre-fix: FAILS (prints FAIL)."
+      - "With no localhost/tillandsias-forge:v* image, test-forge-standard-gitconfig-path.sh prints a named skip (skip:forge-standard-gitconfig-path:no-forge-image) and exits 0, and test-forge-config-trust-cross-platform-parity.sh reaches its own verdict. Pre-fix: FAILS (silent rc=1)."
+      - "Each still FAILS when its substrate is present and the property is broken: on darwin with the virtualization entitlement removed, the seam test FAILS; with a forge image whose gitconfig path is wrong, the gitconfig test FAILS."
+    unscoreable: "the skip/fail arms land with the change (1136-n8sh)"
+    provenance: "yoga relay-preflight of work/2127-br92 from work/2110-ghw2@9ebf65195, 2026-11-20; coordinator ruling."
+    events:
+      - type: filed
+        ts: "2026-11-20T09:04:20Z"
+        host: yoga
+        summary: "filed at the coordinator's direction"

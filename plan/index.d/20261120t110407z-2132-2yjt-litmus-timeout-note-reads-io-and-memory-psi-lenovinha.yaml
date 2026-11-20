@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (2026-11-20).
+packets:
+  - packet_id: litmus-runner-timeout-note-reads-io-and-memory-pressure-not-only-cpu
+    order: 2132-2yjt
+    status: ready
+    kind: improvement
+    priority: p3
+    pickup_role: linux
+    capability_tags: [litmus, timeout, psi, diagnostics]
+    estimated_hours: 2
+    owned_files:
+      - scripts/run-litmus-test.sh
+    title: |
+      A litmus step TIMEOUT is classified from CPU pressure only ("cpu some-stall 2%, CPU starvation excluded, cause unclassified"). The runner should also sample /proc/pressure/io and /proc/pressure/memory, so a swap- or I/O-bound host names its cause.
+    context: |
+      v56.11.20.1 ci-full on macuahuitl: 3 of 7 litmus reds were TIMEOUTs, all labelled cause-unclassified at 2% CPU stall. The host had about 29 GB swapped out (zram full plus 20.9 GB RAID swap). On lenovinha (2026-11-20, linux-next eb484494c), the same steps took 4-5% of their budget: cycle-metrics-answer-rate-shape step 3 ran 423-426 ms against 10 s, and build-test-timing-telemetry-shape step 11 ran 1364-1377 ms against 30 s. So the timeouts were host paging, which the CPU-only note cannot see.
+    exit_criteria:
+      - 'a timed-out step reports cpu, io and memory pressure deltas over the step, and names io or memory as the cause when either exceeds a stated threshold; a fixture with a planted pressure file drives each classification'
+    unscoreable: "unpinnable-until-the-guard-exists: the classification fixture is this packet's own deliverable"
+    next_action: Find where run-litmus-test.sh samples /proc/pressure/cpu for the timeout note; sample io and memory the same way; add a fixture with fake pressure files.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T11:04:07Z"
+        host: lenovinha
+        summary: litmus timeout note should read io and memory PSI, not only CPU.

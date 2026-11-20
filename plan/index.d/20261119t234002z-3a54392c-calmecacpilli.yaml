@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-output-only-pulse-server-exposes-no-source-to-a-browser-window-so-enumeratedevices-lists-no-audioinput
+    field: next_action
+    value: |-
+      INTERIM RESIDUAL (C), coordinator 2026-10-17: what leaks today to a client of the output-only server is the names of both host microphones (Mic1 and Mic2), the speaker sink monitor, and a LAN AirPlay sink (raop, carrying a peer host name). Metadata only; capture stays refused. PROPOSED FIX, pending an operator ruling on the host-config stance: (A) a WirePlumber access drop-in whose permission manager hides Audio/Source from this server's clients, plus a virtual sink so no host monitor enumerates.
+
+      [2026-11-19T23:40:02Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless host_audio. Close on green with the merge sha.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-output-only-pulse-server-exposes-no-source-to-a-browser-window-so-enumeratedevices-lists-no-audioinput
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

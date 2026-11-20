@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: check-n-z-lua-port-batch-2-stranded-plan-writes-purge-vault-tracked-files-unwritten
+    order: 2118-9mk4
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, scripts, check]
+    estimated_hours: 6
+    owned_files:
+      - scripts/check-stranded-plan-writes.sh
+      - scripts/check-purge-clears-vault-credentials.sh
+      - scripts/check-tracked-files-unwritten.sh
+      - scripts/portability/bootstrap-shell-allowlist.txt
+    title: |
+      check-[n-z] Lua port batch 2. Port check-stranded-plan-writes, check-purge-clears-vault-credentials and check-tracked-files-unwritten to scripts/lua/, repoint their callers and delete each .sh. Also record check-yaml-reader-availability.sh in the bootstrap shell allowlist (coordinator ruling).
+    context: |
+      Continues 2118-9awa (PR #1190). Runtime facts from batch 1:
+      - lua fs is checkout-confined, so fixtures go under target/;
+      - text.lines raises on non-UTF-8, so use gmatch for byte scans;
+      - verdict.emit accepts only house prefixes.
+    exit_criteria:
+      - 'each ported script matches its .sh on the tree and on its own test; every caller names the lua; ./build.sh --preflight refused=0'
+    unscoreable: "a port, scored by each script's own existing test and litmus passing against the lua; the batch adds no new pin"
+    next_action: Port check-stranded-plan-writes (git archive/show via proc.run), then the other two.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T05:21:52Z"
+        host: lenovinha
+        summary: check-[n-z] lua port batch 2 (three scripts + allowlist entry).

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: check-opsx-generated-dirt-callers-branch-on-verdict-token-not-exit-4-5-then-port-to-lua
+    order: 2125-adb5
+    status: ready
+    kind: debt
+    priority: p3
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, opsx, contract, post-stable]
+    estimated_hours: 4
+    owned_files:
+      - scripts/check-opsx-generated-dirt.sh
+      - skills/meta-orchestration/SKILL.md
+    title: |
+      POST-STABLE. check-opsx-generated-dirt's contract is exit 4 = clean tree and exit 5 = opsx-only dirt, and the lua runtime allows only 0-3. Callers must branch on the verdict TOKEN (ok:opsx-dirt:clean vs ok:opsx-dirt:opsx-only), not on 4/5. Then port it to lua. The script, every caller and the meta-orchestration skill change in one PR.
+    context: |
+      Found 2026-11-20 in the check-[n-z] lua batch 2 (2118-9mk4, PR #1191). Coordinator ruling: option (b) remap-and-repoint, parked until after the stable promotion, because the token and exit contract is run hourly by agents and changing it is release risk. Callers today include the meta-orchestration skill step, scripts/test-check-opsx-generated-dirt.sh and scripts/test-meta-orchestration-opsx-sync-merge.sh.
+    exit_criteria:
+      - 'every caller branches on the verdict token; a fixture greps the tree and FAILS if any caller still tests the checker exit status against 4 or 5'
+      - 'scripts/lua/check-opsx-generated-dirt.lua replaces the .sh with exit codes in 0-3, and test-check-opsx-generated-dirt passes against it'
+    unscoreable: "unpinnable-until-the-guard-exists: the no-exit-4-5 caller fixture is this packet's own deliverable"
+    next_action: After the stable promotion, enumerate callers (git grep check-opsx-generated-dirt), switch each to token matching, write the fixture red first, then port.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T05:41:46Z"
+        host: lenovinha
+        summary: opsx-dirt callers move from exit 4/5 to verdict tokens, then lua port (post-stable).

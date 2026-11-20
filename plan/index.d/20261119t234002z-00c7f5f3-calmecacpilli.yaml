@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    field: next_action
+    value: |-
+      In a macOS forge, call publish_local and capture service_logs. Over --exec-guest, curl the probe's hostname with --cacert <the preview CA> to see which half fails, the CA or the route. Then diff the probe against v56.10.17.1 (before 1761-bvyn).
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: macOS smoke: rootful guest preview publish reaches the router.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: on-macos-v56-10-18-1-publish-local-refuses-every-static-preview-with-router-not-ready-because-the-exact-hostname-ca-verified-https-probe-fails
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

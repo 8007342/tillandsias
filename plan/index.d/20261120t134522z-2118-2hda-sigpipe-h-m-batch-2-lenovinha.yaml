@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-h-m-batch-2-including-the-litmus-stdlib-mf-holds-primitives
+    order: 2118-2hda
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet, litmus]
+    estimated_hours: 2
+    related: [2123-ivi5, 2118-jdcy]
+    owned_files:
+      - scripts/litmus-stdlib.sh
+      - scripts/check-host-tools.sh
+      - scripts/mo-full-attest.sh
+    title: |
+      h-m batch 2 of 2123-ivi5: 47 sites in 11 files. Includes the six litmus-stdlib mf_holds* verdict primitives, which every litmus step that uses them inherits; they become grep <flags> -- "$2" <<<"${!1}".
+    context: |
+      litmus-stdlib's mf_holds* used eval "printf '%s\\n' \"\$$1\"" | grep, a SIGPIPE verdict at the root of many litmus steps. The replacement uses indirect expansion with each flag kept; bash 3.2 supports both it and here-strings.
+      Named exceptions (subjects or comments): test-if-not-pipeline-guard, test-litmus-step-model, test-json-get-help-names-its-subset.
+      litmus-helper-storage-isolation.sh is deleted by #1173.
+    exit_criteria:
+      - 'the ten mf_holds* checks (positive, negative, empty) pass; nine fixtures pass; litmus specs run green through the converted stdlib; the pipe floors drop by 47'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-2hda, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T13:45:22Z"
+        host: lenovinha
+        summary: sigpipe h-m batch 2 incl. litmus-stdlib mf_holds primitives.

@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macuahuitl (family-d agent) 2026-11-18: shell-to-lua family D, batch 1.
+packets:
+  - packet_id: lua-tests-share-a-fixture-kit-through-require-and-the-first-six-shell-tests-move-onto-it
+    order: 2105-bb2e
+    status: in_progress
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, shell-to-lua, fixture-hygiene, library]
+    estimated_hours: 4
+    size: M
+    implementer_tier: sonnet
+    title: "The Lua runner resolves require against lib/lua, lib/lua/common gives tests one fixture kit (arm, verdict, scratch dirs, scratch git repo, repo_root), and six scripts/test-*.sh move onto it and are deleted"
+    context: |
+      Family D of the halve-the-shell-scripts objective. Delivers the 2080-zcur loader and modules
+      (require "common.fixture" / "common.verdict") and the 2084-senw repo_root() helper (git
+      rev-parse --show-toplevel), then ports six shell fixtures onto the kit, each wired where the
+      .sh was called (build.sh, gate-steps.d, litmus yaml) and deleted in the same commit:
+      test-plan-binary-survives-wrapper, test-lane-adoption-pattern-floor, test-archiver-check-memo,
+      test-builder-toolbox-exists, test-sccache-long-tmpdir, test-ipv6-probe.
+    exit_criteria:
+      - "tillandsias-plan script run scripts/lua/test-common-fixture.lua prints ok:common-fixture:5 arms. Pre-fix result: FAILS, refused:script-error (attempt to call a nil value (global 'require'))."
+      - "Each ported scripts/lua/test-*.lua is green, and red when the code it guards is broken (recorded per port in the PR)."
+    verifiable_closure: "script run scripts/lua/test-common-fixture.lua exits 0. Pre-fix result: FAILS (no require global)."
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture scripts/lua/test-common-fixture.lua is this row's first deliverable and lands in the same commit as the loader it tests (1136-n8sh)"
+    next_action: "Land the PR for work/2105-bb2e; later batches port more scripts/test-*.sh onto lib/lua/common/fixture.lua under their own rows."
+    provenance: "macuahuitl family-d agent session 2026-11-18; packets 2080-zcur and 2084-senw read first."
+    events:
+      - type: filed
+        ts: "2026-11-18T07:10:00Z"
+        host: macuahuitl
+        summary: "filed and claimed by the family-d agent for batch 1"

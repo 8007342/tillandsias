@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction: the census behind 2123-3tf3.
+packets:
+  - packet_id: the-standing-459-sigpipe-verdict-pipelines-get-a-descending-floor-and-are-converted-to-here-strings
+    order: 2123-ivi5
+    status: ready
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 8
+    owned_files:
+      - scripts/census-sigpipe-verdict-pipelines.sh
+    title: "The standing corpus carries 459 printf|grep -q verdict pipelines under pipefail in 139 files; each can red a correct check about 1 in 250 runs on a loaded host"
+    context: |
+      MEASURED 2026-11-20 on yoga at linux-next: scripts/census-sigpipe-verdict-pipelines.sh ->
+      ok:sigpipe-verdict-standing:459 sites in 139 files (--list: top files test-host-tools.sh 16,
+      check-dead-env-branches.sh 16, test-ledger-write-reaches-its-reader.sh 14). The added-only decider
+      (check-sigpipe-verdict-pipelines-added.sh) keeps new ones out but nothing lowers the standing set.
+      Rate measured by the coordinator on one such site: 2/500 on the macuahuitl host, 0/500 in the toolbox (2123-3tf3).
+    exit_criteria:
+      - "A floor file records the standing count and a gate step refuses a rise; the census number only descends. Pre-fix: FAILS (no floor)."
+      - "Batches of 5-10 files convert to here-strings (grep -q PATTERN <<<\"$var\"); each batch lowers the floor."
+    unscoreable: "the census tool is the measure"
+    provenance: "yoga census 2026-11-20; coordinator ruling: a census is better than 7."
+    events:
+      - type: filed
+        ts: "2026-11-20T04:21:42Z"
+        host: yoga
+        summary: "filed at the coordinator's direction"

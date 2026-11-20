@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: test-toolbox-refusal-wsl-exception-masks-the-host-toolbox-instead-of-assuming-it-absent
+    order: 2118-9rn9
+    status: in_progress
+    kind: bug
+    priority: p2
+    pickup_role: linux
+    capability_tags: [fixture, host-state, toolbox]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-toolbox-refusal-wsl-exception.sh
+    title: |
+      test-toolbox-refusal-wsl-exception arm 2 assumes toolbox is absent. It runs with PATH=/usr/bin:/bin, but on a Silverblue host /usr/bin/toolbox exists, so the script passes the refusal, fails to source a sibling the test never copied (podman-neutralize-proxy.sh) and exits 1 without the FATAL message: 5 passed, 1 failed on linux-next.
+    context: |
+      Measured on lenovinha 2026-11-20 at linux-next. No build.sh, gate step, litmus or local-ci call runs this test, so it is p2 (coordinator).
+    exit_criteria:
+      - 'the test passes 6/6 on a host whose /usr/bin carries toolbox, because the fixture builds a PATH that masks toolbox; red today'
+    verifiable_closure: |
+      scripts/test-toolbox-refusal-wsl-exception.sh prints 6 passed, 0 failed on lenovinha (Silverblue, /usr/bin/toolbox present).
+    next_action: Build a scratch bin of symlinks to /usr/bin and /bin without toolbox and run each arm with that PATH.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T09:44:37Z"
+        host: lenovinha
+        summary: toolbox-refusal fixture assumed toolbox absent; fails on Silverblue.

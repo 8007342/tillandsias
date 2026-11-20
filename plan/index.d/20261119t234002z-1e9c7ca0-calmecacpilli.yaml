@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-keep-id-warm-live-test-skips-with-its-reason-when-podman-returns-no-graph-root-under-load
+    field: next_action
+    value: 'Verify on next stable (live checks run on stable releases). Live check: GraphRoot-under-load repro with podman.'
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-keep-id-warm-live-test-skips-with-its-reason-when-podman-returns-no-graph-root-under-load
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)
