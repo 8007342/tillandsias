@@ -62,7 +62,7 @@ run_check_in_container() { # <procroot> <marker-var> <value>
 }
 
 check() { # <label> <expected-rc> <expected-token> <rc> <out>
-    if [ "$4" -eq "$2" ] && printf '%s' "$5" | grep -q "$3"; then
+    if [ "$4" -eq "$2" ] && grep -q "$3" <<<"$5"; then
         pass=$((pass+1))
     else
         fail=$((fail+1)); echo "FAIL: $1 — wanted rc=$2 and '$3', got rc=$4"

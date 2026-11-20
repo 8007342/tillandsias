@@ -37,7 +37,7 @@ run() {
     local name="$1" want_rc="$2" want="$3" dir="$4"
     local rc=0 out
     out="$("$CHECK" "$dir" 2>&1)" || rc=$?
-    if [ "$rc" = "$want_rc" ] && printf '%s' "$out" | grep -q "$want"; then
+    if [ "$rc" = "$want_rc" ] && grep -q "$want" <<<"$out"; then
         echo "PASS  $name"
     else
         echo "FAIL  $name: want rc=$want_rc matching [$want], got rc=$rc [$out]"

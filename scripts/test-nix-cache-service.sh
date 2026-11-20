@@ -166,7 +166,7 @@ enc="$(_podman run --rm --network "$ENCLAVE_NET" \
         -e NO_PROXY=nix-cache -e no_proxy=nix-cache \
         "$BASE_IMAGE" \
         /bin/sh -c 'curl -sS -m 15 --cacert /ca.crt https://nix-cache:5000/nix-cache-info' 2>/dev/null)"
-printf '%s' "$enc" | grep -q '^StoreDir: /nix/store'
+grep -q '^StoreDir: /nix/store' <<<"$enc"
 check 5 "an enclave container reaches https://nix-cache:5000 by DNS with no host mount" "$?"
 
 # Pick a target that is definitely in the served store: the pinned harmonia.

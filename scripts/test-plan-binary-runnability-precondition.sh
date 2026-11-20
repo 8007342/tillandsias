@@ -131,7 +131,7 @@ if [ -z "$ctl_bin" ]; then
     echo "skip: no runnable plan binary on this host, control arm not attempted" >&2
 else
     ctl="$(cd "$ROOT" && bash "$FIXTURE" 2>&1)"; ctl_rc=$?
-    if [ "$ctl_rc" -eq 0 ] && printf '%s' "$ctl" | grep -q 'PRECONDITION: the scratch base ledger folds'; then
+    if [ "$ctl_rc" -eq 0 ] && grep -q 'PRECONDITION: the scratch base ledger folds' <<<"$ctl"; then
         ok "CONTROL: a runnable binary still folds the base and runs the ledger arms"
     else
         bad "CONTROL: a runnable binary no longer exercises the ledger arms (rc=$ctl_rc)"
