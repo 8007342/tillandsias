@@ -1,7 +1,7 @@
 -- @trace spec:project-bootstrap-readme, order:2031-z4rm
 --
 -- check-readme-discipline.lua [project-dir] — validate a project README's
--- FOR HUMANS / FOR ROBOTS structure. Ported from check-readme-discipline.sh
+-- FOR HUMANS / FOR ROBOTS structure. Ported from the shell validator
 -- (paid as 2031-z4rm's shell-to-lua carried obligation).
 --
 -- Same checks, same ERROR:/WARN: lines, same exit codes as the .sh:
