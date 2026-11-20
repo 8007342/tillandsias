@@ -67,7 +67,40 @@ if [ "${1:-}" = "--list" ]; then
 fi
 
 base="${TILLANDSIAS_NATIVE_LINT_BASE:-${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}}"
-if [ "${1:-}" = "--base" ]; then base="${2:?--base needs a ref}"; fi
+# ORDER 2112-nlrf. --hold: when the CANDIDATE's own crate content was attested
+# but the content being landed (the merge onto a newer base that also changed
+# the crate) was not, answer HOLD instead of refusing:
+#   hold:native-lint:<pkg>:<merged-subtree-sha>      (rc 3)
+# The land queue keeps the PR (label needs:native-lint), a darwin host lints
+# exactly that subtree with `attest-native-lint.sh --ref --push --at <merge>`,
+# and the same candidate passes once refs/attest/native-lint/<sha> exists. An
+# unlinted combination never lands, and nobody is evicted for another PR's
+# change. --candidate <ref> names the candidate tip (default: HEAD^2 when HEAD
+# is a merge, else HEAD, which can never hold).
+HOLD=0; CANDIDATE=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --base) base="${2:?--base needs a ref}"; shift ;;
+        --hold) HOLD=1 ;;
+        --candidate) CANDIDATE="${2:?--candidate needs a ref}"; shift ;;
+        *) echo "refused:native-lint:unknown-arg:$1"; exit 2 ;;
+    esac
+    shift
+done
+if [ -z "$CANDIDATE" ]; then
+    if git rev-parse --verify --quiet "HEAD^2" >/dev/null 2>&1; then CANDIDATE="HEAD^2"; else CANDIDATE="HEAD"; fi
+fi
+
+# ORDER 2112-nlrf. An attestation REF: refs/attest/native-lint/<tree> names a
+# parentless commit whose tree IS that subtree and whose message carries the
+# Native-Lint line. Prints the attesting host, or nothing.
+ref_host() { # ref_host <platform> <path> <tree>
+    local r="refs/attest/native-lint/$3" l
+    [ "$(git rev-parse --verify --quiet "$r^{tree}" 2>/dev/null)" = "$3" ] || return 1
+    l="$(git log -1 --format=%B "$r" 2>/dev/null | grep -m1 "^Native-Lint: [^ ]* $1 $2=$3 ")" || return 1
+    set -- $l
+    printf '%s' "$2"
+}
 
 if ! git rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1; then
     echo "ok:native-lint:base-unavailable"
@@ -77,7 +110,7 @@ fi
 
 trailers="$(git log --format='%(trailers:key=Native-Lint,valueonly)' "$base..HEAD" 2>/dev/null)"
 
-attested=""; refused=0; in_scope=0
+attested=""; refused=0; in_scope=0; holds=""
 for entry in $GATED_CRATES; do
     path="${entry%%:*}"; rest="${entry#*:}"; pkg="${rest%%:*}"; platform="${rest#*:}"
     head_tree="$(git rev-parse --verify --quiet "HEAD:$path" 2>/dev/null)" || continue
@@ -86,7 +119,8 @@ for entry in $GATED_CRATES; do
     in_scope=$((in_scope + 1))
 
     match=""; seen=""
-    while IFS= read -r t; do
+    match="$(ref_host "$platform" "$path" "$head_tree")" || match=""
+    [ -z "$match" ] && while IFS= read -r t; do
         [ -n "$t" ] || continue
         # <host> <platform> <path>=<tree> <what>
         set -- $t
@@ -99,8 +133,24 @@ for entry in $GATED_CRATES; do
 $trailers
 EOF
 
+    # --hold: the candidate's OWN crate content attested (a trailer in range,
+    # or a ref), the merged content not. That is another PR's change meeting
+    # this one, not an unlinted edit by this author.
+    held=""
+    if [ -z "$match" ] && [ "$HOLD" -eq 1 ]; then
+        cand_tree="$(git rev-parse --verify --quiet "$CANDIDATE:$path" 2>/dev/null)" || cand_tree=""
+        if [ -n "$cand_tree" ] && [ "$cand_tree" != "$head_tree" ]; then
+            if ref_host "$platform" "$path" "$cand_tree" >/dev/null \
+               || printf '%s\n' "$trailers" | grep -q "^[^ ]* $platform $path=$cand_tree "; then
+                held="$head_tree"
+            fi
+        fi
+    fi
+
     if [ -n "$match" ]; then
         attested="${attested:+$attested,}$pkg@$match"
+    elif [ -n "$held" ]; then
+        holds="${holds:+$holds }$pkg:$held"
     elif [ -n "$seen" ]; then
         refused=1
         echo "refused:native-lint:stale:$pkg"
@@ -147,6 +197,17 @@ if [ "$refused" -ne 0 ]; then
         exit 0
     fi
     exit 1
+fi
+if [ -n "$holds" ]; then
+    for h in $holds; do echo "hold:native-lint:$h"; done
+    {
+        echo "  why: the candidate's own crate content was natively linted, but the content being landed"
+        echo "  (its merge onto a base that also changed the crate) was not. An unlinted combination does"
+        echo "  not land, and this PR is not at fault, so it is HELD, not evicted."
+        echo "  remedy: on a darwin host, scripts/attest-native-lint.sh --ref --push --at <the merge commit>;"
+        echo "  the same candidate passes once refs/attest/native-lint/<sha> exists."
+    } >&2
+    exit 3
 fi
 if [ "$in_scope" -eq 0 ]; then
     echo "ok:native-lint:not-in-scope"

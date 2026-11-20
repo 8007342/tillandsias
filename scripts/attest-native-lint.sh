@@ -21,10 +21,39 @@
 #   failed:attest-native-lint:<pkg>:rc=<n>             (rc 1) clippy failed; NO commit
 #
 # CARGO overrides the cargo binary (the fixture stubs it).
+#
+# REF MODE (order 2112-nlrf). `--ref` writes the attestation as a ref instead of
+# a commit on the branch:
+#     refs/attest/native-lint/<tree-sha>
+# pointing at a parentless commit WHOSE TREE IS the linted crate subtree, with
+# the same `Native-Lint:` line in its message. So the ref verifies itself
+# (`<ref>^{tree}` must equal its name), survives a rebase or squash of the
+# branch, and needs no new commit on a PR. `--push` also pushes the ref(s) to
+# origin. `--at <commit>` lints THAT commit's content (single checkout: switch
+# --detach, lint, switch back), which is how a darwin host services a land-queue
+# HOLD naming a merged subtree (check-native-lint-attested.sh --hold).
+#   ok:attest-native-lint:ref:<pkg>=<tree>[ ...]        ref(s) written (and pushed)
+#   ok:attest-native-lint:ref-exists:<pkg>=<tree>       already attested; no clippy run
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 CARGO="${CARGO:-cargo}"
+
+MODE=commit; PUSH=0; AT=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --ref) MODE=ref ;;
+        --push) PUSH=1 ;;
+        --at) AT="${2:?--at needs a commit}"; shift ;;
+        *) echo "refused:attest-native-lint:unknown-arg:$1"; exit 2 ;;
+    esac
+    shift
+done
+if [ -n "$AT" ] && [ "$MODE" != ref ]; then
+    echo "refused:attest-native-lint:at-needs-ref"
+    echo "  why: --at lints another commit's content; only a ref can record that without a commit on this branch" >&2
+    exit 2
+fi
 
 case "$(uname -s)" in
     Darwin) platform=darwin ;;
@@ -56,11 +85,32 @@ case "$host" in
         ;;
 esac
 
-trailers=(); done_list=""
+# --at: lint another commit's content in THIS checkout, and always come back.
+if [ -n "$AT" ]; then
+    git rev-parse --verify --quiet "$AT^{commit}" >/dev/null || { echo "refused:attest-native-lint:at-unknown:$AT"; exit 2; }
+    _back="$(git symbolic-ref -q --short HEAD || git rev-parse HEAD)"
+    git switch -q --detach "$AT" || { echo "refused:attest-native-lint:at-switch-failed:$AT"; exit 2; }
+    trap 'git switch -q "$_back" 2>/dev/null || git switch -q --detach "$_back"' EXIT
+fi
+
+# A ref is valid only if its commit's tree IS the subtree it is named for and
+# its message carries this platform's Native-Lint line for this path.
+ref_valid() { # ref_valid <path> <tree>
+    local r="refs/attest/native-lint/$2"
+    [ "$(git rev-parse --verify --quiet "$r^{tree}" 2>/dev/null)" = "$2" ] || return 1
+    git log -1 --format=%B "$r" 2>/dev/null | grep -q "^Native-Lint: [^ ]* $platform $1=$2 "
+}
+
+trailers=(); done_list=""; refs=(); exists_list=""
 for entry in $(bash scripts/check-native-lint-attested.sh --list); do
     path="${entry%%:*}"; rest="${entry#*:}"; pkg="${rest%%:*}"; want="${rest#*:}"
     [ "$want" = "$platform" ] || continue
     tree="$(git rev-parse --verify --quiet "HEAD:$path")" || continue
+    if [ "$MODE" = ref ] && ref_valid "$path" "$tree"; then
+        refs+=("refs/attest/native-lint/$tree")
+        exists_list="${exists_list:+$exists_list }$pkg=$tree"
+        continue
+    fi
     echo "attest-native-lint: $CARGO clippy -p $pkg --all-targets -- -D warnings" >&2
     "$CARGO" clippy -p "$pkg" --all-targets -- -D warnings
     rc=$?
@@ -68,10 +118,29 @@ for entry in $(bash scripts/check-native-lint-attested.sh --list); do
         echo "failed:attest-native-lint:$pkg:rc=$rc"
         exit 1
     fi
-    trailers+=(--trailer "Native-Lint: $host $platform $path=$tree clippy-all-targets-D-warnings")
+    line="Native-Lint: $host $platform $path=$tree clippy-all-targets-D-warnings"
+    if [ "$MODE" = ref ]; then
+        c="$(printf 'native-lint: %s clippy --all-targets -D warnings ok (%s)\n\n%s\n' "$platform" "$host" "$line" \
+             | git commit-tree "$tree")" || { echo "failed:attest-native-lint:commit-tree"; exit 1; }
+        git update-ref "refs/attest/native-lint/$tree" "$c" || { echo "failed:attest-native-lint:update-ref"; exit 1; }
+        refs+=("refs/attest/native-lint/$tree")
+    else
+        trailers+=(--trailer "$line")
+    fi
     done_list="${done_list:+$done_list }$pkg=$tree"
 done
 
+if [ "$MODE" = ref ]; then
+    if [ "$PUSH" -eq 1 ] && [ "${#refs[@]}" -gt 0 ]; then
+        _pspecs=()
+        for r in "${refs[@]}"; do _pspecs+=("$r:$r"); done
+        git push -q origin "${_pspecs[@]}" || { echo "failed:attest-native-lint:push"; exit 1; }
+    fi
+    [ -n "$done_list" ] && echo "ok:attest-native-lint:ref:$done_list"
+    [ -n "$exists_list" ] && echo "ok:attest-native-lint:ref-exists:$exists_list"
+    [ -z "$done_list$exists_list" ] && echo "ok:attest-native-lint:nothing-to-attest"
+    exit 0
+fi
 if [ -z "$done_list" ]; then
     echo "ok:attest-native-lint:nothing-to-attest"
     exit 0
