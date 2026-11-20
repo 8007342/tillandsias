@@ -193,7 +193,6 @@ scripts/test-set-field-refuses-unknown-flags.sh 1
 scripts/test-sidecar-staleness-stamp.sh 1
 scripts/test-sigpipe-verdict-pipelines.sh 1
 scripts/test-silverblue-update-skew-probe.sh 1
-scripts/test-skill-canonicalization-remedy.sh 1
 scripts/test-skills-single-source.sh 1
 scripts/test-smoke-verifies-a-signature.sh 1
 scripts/test-spec-index-durable-tier-demotion.sh 1

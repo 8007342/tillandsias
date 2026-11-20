@@ -13,17 +13,17 @@ size: instant
 # skill went on to name whole 31k-line ledgers to read).
 
 preconditions:
-  - workspace contains scripts/check-skill-canonicalization.sh
+  - workspace contains scripts/lua/check-skill-canonicalization.lua (ported from the .sh, 2118-98dq)
   - workspace contains skills/
 
 critical_path:
   - step: "every non-generated skill is a symlink into canonical skills/"
-    command: "mf_stage prod 0 OUT -- scripts/check-skill-canonicalization.sh && mf_holds_ere OUT '^ok:skills-canonical:[0-9]+ entries checked across [0-9]+ harnesses$' && echo 'ok: canonical'"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; mf_stage prod 0 OUT -- \"$P\" script run scripts/lua/check-skill-canonicalization.lua && mf_holds_ere OUT '^ok:skills-canonical:[0-9]+ entries checked across [0-9]+ harnesses$' && echo 'ok: canonical'"
     timeout_ms: 10000
     expected_behavior: "ok: canonical"
 
   - step: "NEGATIVE CONTROL: a hand-written harness-exclusive skill is caught"
-    command: "d=.claude/skills/litmus-probe-exclusive; mkdir -p \"$d\"; printf -- '---\\nname: probe\\n---\\n' > \"$d/SKILL.md\"; out=$(scripts/check-skill-canonicalization.sh 2>&1); rc=$?; rm -rf \"$d\"; if [ $rc -eq 0 ]; then echo 'FAIL: exclusive skill accepted'; exit 1; fi; printf '%s' \"$out\" | grep -q '^violation:harness-exclusive-skill:' && echo 'ok: exclusive refused'"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; d=.claude/skills/litmus-probe-exclusive; mkdir -p \"$d\"; printf -- '---\\nname: probe\\n---\\n' > \"$d/SKILL.md\"; out=$(\"$P\" script run scripts/lua/check-skill-canonicalization.lua 2>&1); rc=$?; rm -rf \"$d\"; if [ $rc -eq 0 ]; then echo 'FAIL: exclusive skill accepted'; exit 1; fi; printf '%s' \"$out\" | grep -q '^violation:harness-exclusive-skill:' && echo 'ok: exclusive refused'"
     timeout_ms: 15000
     expected_behavior: "ok: exclusive refused"
 
@@ -31,7 +31,7 @@ critical_path:
     # The exemption requires BOTH the openspec- prefix AND the generator's own
     # marker. Prefix alone must not buy an exemption, or the carve-out becomes a
     # way to smuggle any harness-exclusive skill past the guard.
-    command: "d=.claude/skills/openspec-litmus-probe; mkdir -p \"$d\"; printf -- '---\\nname: probe\\n---\\n' > \"$d/SKILL.md\"; out=$(scripts/check-skill-canonicalization.sh 2>&1); rc=$?; rm -rf \"$d\"; if [ $rc -eq 0 ]; then echo 'FAIL: prefix alone bought an exemption'; exit 1; fi; echo 'ok: prefix without marker refused'"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; d=.claude/skills/openspec-litmus-probe; mkdir -p \"$d\"; printf -- '---\\nname: probe\\n---\\n' > \"$d/SKILL.md\"; out=$(\"$P\" script run scripts/lua/check-skill-canonicalization.lua 2>&1); rc=$?; rm -rf \"$d\"; if [ $rc -eq 0 ]; then echo 'FAIL: prefix alone bought an exemption'; exit 1; fi; echo 'ok: prefix without marker refused'"
     timeout_ms: 15000
     expected_behavior: "ok: prefix without marker refused"
 
@@ -85,4 +85,4 @@ observability:
     test: "skills-canonical-and-mcp-first-shape"
 
 rollback:
-  on_failure: "restore scripts/check-skill-canonicalization.sh, the skills/ moves, and methodology/distributed-work.yaml -> mcp_first_read_path from git history"
+  on_failure: "restore scripts/lua/check-skill-canonicalization.lua, the skills/ moves, and methodology/distributed-work.yaml -> mcp_first_read_path from git history"

@@ -15,7 +15,7 @@ phase: pre-build
 description: >
   Pin 851-28b5: macOS-plausible scripts digest only through the
   PORTABLE_SHA256 dispatch; uninstall.sh carries no GNU-only `xargs -r`;
-  check-pickup-role-grammar.sh splits records with awk (BSD sed emits a
+  check-pickup-role-grammar (now scripts/lua/check-pickup-role-grammar.lua, 2118-98dq) splits records with awk (BSD sed emits a
   literal 'n' for \n in a replacement and silently undercounted);
   "pre-push gate" no longer means ./build.sh --check anywhere the 851-gpb5
   vocabulary reservation reaches; and methodology's lane_exclusion states
@@ -39,7 +39,7 @@ critical_path:
     expected_behavior: "ok: guarded-xargs"
 
   - step: "pickup-role extraction actually splits the record stream (behavioral: an unsplit stream — the BSD-sed failure shape — extracts at most one role per line and cannot reach a double-digit total)"
-    command: "out=$(scripts/check-pickup-role-grammar.sh 2>/dev/null); n=$(printf '%s' \"$out\" | sed -n 's/.*total=\\([0-9][0-9]*\\).*/\\1/p'); if [ -n \"$n\" ] && [ \"$n\" -ge 10 ]; then echo 'ok: stream-splits'; else echo \"FAIL: total=${n:-unparsed} — the record split is not working [$out]\"; fi"
+    command: "P=\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\"; out=$(TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/check-pickup-role-grammar.lua 2>/dev/null); n=$(printf '%s' \"$out\" | sed -n 's/.*total=\\([0-9][0-9]*\\).*/\\1/p'); if [ -n \"$n\" ] && [ \"$n\" -ge 10 ]; then echo 'ok: stream-splits'; else echo \"FAIL: total=${n:-unparsed} — the record split is not working [$out]\"; fi"
     timeout_ms: 30000
     expected_behavior: "ok: stream-splits"
 
@@ -54,5 +54,5 @@ critical_path:
     expected_behavior: "ok: honest-forward-reference"
 
 evidence:
-  artifact: "the nine dispatch-converted scripts + uninstall.sh + check-pickup-role-grammar.sh + methodology/multi-host-development.yaml lane_exclusion"
+  artifact: "the nine dispatch-converted scripts + uninstall.sh + scripts/lua/check-pickup-role-grammar.lua + methodology/multi-host-development.yaml lane_exclusion"
   measured_on: "macOS Darwin 25.6.0 2026-08-23 — all five pins green after the 851-28b5 drain; sweep evidence in the packet's closing event"

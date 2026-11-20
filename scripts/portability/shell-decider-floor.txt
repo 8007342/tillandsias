@@ -51,7 +51,6 @@ scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-opsx-generated-dirt.sh
-scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
@@ -67,7 +66,6 @@ scripts/check-salvage-refs-ledger.sh
 scripts/check-scorable-obligation-added.sh
 scripts/check-script-exec-bits.sh
 scripts/check-sigpipe-verdict-pipelines-added.sh
-scripts/check-skill-canonicalization.sh
 scripts/check-skills-single-source.sh
 scripts/check-spec-index-resolution-agreement.sh
 scripts/check-spec-script-paths.sh
