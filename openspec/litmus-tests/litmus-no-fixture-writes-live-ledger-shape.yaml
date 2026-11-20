@@ -7,7 +7,7 @@ description: >
   plan/index.d or plan/loop_status.d: a probe there survives the fixture's
   death (the preflight door SIGKILLs its group at the deadline) and the fold
   reads it as real, as the v56.9.20.1 release gate did twice
-  (blocked:plan-ledger-incomplete). scripts/check-no-fixture-writes-live-ledger.sh
+  (blocked:plan-ledger-incomplete). scripts/lua/check-no-fixture-writes-live-ledger.lua
   scans every scripts/test-*.sh, cwd-aware; fixtures plant probes in scaffolds
   (a scratch repo or a partial worktree) and assert the live plan/ unchanged.
   The pending-capability fixture proves a TERM mid-run exits 143 with no debris
@@ -41,7 +41,7 @@ observability:
   log_fields:
     spec: "spec-traceability"
     test: "no-fixture-writes-live-ledger-shape"
-    artifact: "scripts/check-no-fixture-writes-live-ledger.sh"
+    artifact: "scripts/lua/check-no-fixture-writes-live-ledger.lua"
 
 rollback:
   on_failure: >
