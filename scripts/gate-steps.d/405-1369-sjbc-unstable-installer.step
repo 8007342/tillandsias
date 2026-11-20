@@ -1,0 +1,11 @@
+# Gate step 1369-sjbc — data, not code (order 1072-b7eq).
+#
+# An installer fetched from the UNSTABLE release installs unstable with the
+# channel unset; the stable copy does not. Moved here from an inline build.sh
+# step by 2111-inst with the Lua port. STEP_LUA is a LITERAL path on purpose
+# (1063-nraf).
+STEP_DESC="Checking the unstable-channel installer default (1369-sjbc)..."
+STEP_LUA="scripts/lua/test-unstable-installer-defaults-to-unstable.lua"
+STEP_ERROR="an installer fetched from the unstable release can again install stable"
+STEP_OK="unstable-channel installer default fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:unstable-installer-fixture:ran=17 skipped=1"

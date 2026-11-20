@@ -1,0 +1,11 @@
+# Gate step 1380-zmpi — data, not code (order 1072-b7eq).
+#
+# Every installer ends with a PENDING ACTIONS banner; the fixture cuts each
+# banner between its markers and RUNS it against stubbed inputs. Moved here from
+# an inline build.sh step by 2111-inst with the Lua port. STEP_LUA is a LITERAL
+# path on purpose (1063-nraf).
+STEP_DESC="Checking the installers' PENDING ACTIONS banner (1380-zmpi)..."
+STEP_LUA="scripts/lua/test-installers-print-pending-banner.lua"
+STEP_ERROR="an installer can again finish without telling the user what is still pending"
+STEP_OK="pending-actions banner fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:pending-banner-fixture:ran=9 skipped=2"

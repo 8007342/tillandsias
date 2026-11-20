@@ -1765,32 +1765,37 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Order 1369-sjbc: the copy the release jobs upload to `unstable` defaults
     # its installers to unstable; the versioned (later stable) copy does not.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-unstable-installer-defaults-to-unstable.sh" ]]; then
-        if bash scripts/test-unstable-installer-defaults-to-unstable.sh 2>&1 | tee /tmp/unstable-installer-default.log; then
+    # Gate step 405 as well; hermetic, a few seconds. Lua since 2111-inst.
+    _ui_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _ui_plan=""
+    if [[ -f "scripts/lua/test-unstable-installer-defaults-to-unstable.lua" && -n "$_ui_plan" ]]; then
+        if "$_ui_plan" script run scripts/lua/test-unstable-installer-defaults-to-unstable.lua > /tmp/unstable-installer-default.log 2>&1; then
+            cat /tmp/unstable-installer-default.log
             log_pass "Unstable-channel installers default to unstable; stable copies do not"
             archive_check_log "unstable-installer-default" "pass" /tmp/unstable-installer-default.log
         else
+            cat /tmp/unstable-installer-default.log
             log_fail_tracked "unstable-installer-default" "Unstable installer default regression (see /tmp/unstable-installer-default.log)"
             archive_check_log "unstable-installer-default" "fail" /tmp/unstable-installer-default.log
         fi
     else
-        log_fail_missing_guard "unstable-installer-default" "scripts/test-unstable-installer-defaults-to-unstable.sh"
+        log_fail_missing_guard "unstable-installer-default" "scripts/lua/test-unstable-installer-defaults-to-unstable.lua (or no plan binary)"
         archive_check_log "unstable-installer-default" "skipped"
     fi
 
     # Order 1380-zmpi: every installer ends with a PENDING ACTIONS banner.
-    # Wired in build.sh --check as well; hermetic, a few seconds.
-    if [[ -f "scripts/test-installers-print-pending-banner.sh" ]]; then
-        if bash scripts/test-installers-print-pending-banner.sh 2>&1 | tee /tmp/pending-banner.log; then
+    # Gate step 404 as well; hermetic, a few seconds. Lua since 2111-inst.
+    if [[ -f "scripts/lua/test-installers-print-pending-banner.lua" && -n "$_ui_plan" ]]; then
+        if "$_ui_plan" script run scripts/lua/test-installers-print-pending-banner.lua > /tmp/pending-banner.log 2>&1; then
+            cat /tmp/pending-banner.log
             log_pass "Installers end with a PENDING ACTIONS banner"
             archive_check_log "pending-banner" "pass" /tmp/pending-banner.log
         else
+            cat /tmp/pending-banner.log
             log_fail_tracked "pending-banner" "Pending-actions banner regression (see /tmp/pending-banner.log)"
             archive_check_log "pending-banner" "fail" /tmp/pending-banner.log
         fi
     else
-        log_fail_missing_guard "pending-banner" "scripts/test-installers-print-pending-banner.sh"
+        log_fail_missing_guard "pending-banner" "scripts/lua/test-installers-print-pending-banner.lua (or no plan binary)"
         archive_check_log "pending-banner" "skipped"
     fi
 
