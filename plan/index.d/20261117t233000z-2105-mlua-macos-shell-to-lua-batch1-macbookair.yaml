@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-17, for the coordinator's shell-halving drive (macOS-specific shell first).
+packets:
+- packet_id: port-the-macos-specific-shell-fixtures-to-lua-batch-1
+  order: 2105-mlua
+  status: in_progress
+  kind: cleanup
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua, shell-burn-down, macos, litmus]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: Port three macOS-specific shell fixtures to Lua (installer tray stop, build.sh darwin install refusal, build.sh darwin tool remediation)
+  context: >-
+    The coordinator asked to halve linux-next's .sh count, starting with macOS-specific shell, and to port
+    each script to Lua with the same behaviour and exit codes, or delete it if nothing references it. This
+    batch ports three fixtures. Each check and verdict token is the same as before. The FAIL tail lines are
+    replaced by the runner's refused: verdict at exit 1. test-install-macos-tray-stop and
+    test-build-sh-darwin-tool-remediation were mutation-checked: waits of 50 s against the 60 s drain bound
+    give refused, rc 1; a neutered Darwin branch turns the Darwin arm red. Both still run on every host.
+    The darwin-install-refusal behavioural arm still runs only on Darwin. Measured here on tlatoanis-macbook-air
+    (13/13 ok). Litmus dev-build shows both darwin fixtures ok; its two failures are host environment and
+    unrelated (no forge image, no installed binary).
+    Not ported in this batch, with the reason: prune-darwin-stale-objects.sh holds a BSD flock on a shared
+    CARGO_TARGET_DIR, which can live outside the repo, and fs.list is repo-rooted. That needs Rust or a
+    runtime primitive. Most remaining macOS fixtures build sandboxes under $HOME or /Applications seams,
+    which the repo-rooted Lua fs cannot host without proc.run of shell tools.
+  exit_criteria:
+  - 'scripts/test-install-macos-tray-stop.sh, scripts/test-build-sh-darwin-install-refusal.sh and scripts/test-build-sh-darwin-tool-remediation.sh are deleted, their Lua twins live under scripts/lua/, and the litmus steps that ran them now run the Lua twins with assert_exit 0.'
+  verifiable_closure: 'tillandsias-plan script run on each of the three scripts/lua/test-*.lua files prints its ok: verdict at rc 0 on darwin; scripts/run-litmus-test.sh dev-build shows litmus:build-sh-darwin-install-refusal and litmus:build-sh-darwin-tool-remediation ok.'
+  unscoreable: 'none.'
+  next_action: 'Land the batch-1 PR; batch 2 continues with the remaining macOS fixtures.'
+  provenance: macbookair-macos 2026-11-17, coordinator request (macuahuitl-fedora).
+  events:
+  - {type: filed, ts: '2026-11-17T23:30:00Z', host: macbookair, summary: filed with batch-1 PR}
