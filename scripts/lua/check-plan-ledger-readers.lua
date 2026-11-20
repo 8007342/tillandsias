@@ -65,7 +65,11 @@ local violations = 0
 for _, fb in ipairs(files) do
     local file, body = fb[1], fb[2]
     if not ALLOWLIST[file] or STRICT then
-        for n, line in ipairs(text.lines(body)) do
+        -- Plain byte splitting, like grep: text.lines refuses invalid UTF-8,
+        -- and a binary file that contains the token is still scanned.
+        local n = 0
+        for line in (body .. "\n"):gmatch("([^\n]*)\n") do
+            n = n + 1
             if line:find(TOKEN, 1, true) and is_content_read(line) then
                 out.line("violation: content read of plan/index.yaml in " .. file .. ":")
                 out.line("  " .. n .. ":" .. line)
