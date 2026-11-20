@@ -126,10 +126,10 @@ run_mock absurd_b beta-not-a-podman-verb
 b_rc=$rc
 b_line="$(refused_line "$err_file")"
 if [ "$a_rc" -eq "$REFUSAL_EXIT" ] && [ "$b_rc" -eq "$REFUSAL_EXIT" ] \
-   && printf '%s' "$a_line" | grep -q 'alpha-not-a-podman-verb' \
-   && ! printf '%s' "$a_line" | grep -q 'beta-not-a-podman-verb' \
-   && printf '%s' "$b_line" | grep -q 'beta-not-a-podman-verb' \
-   && ! printf '%s' "$b_line" | grep -q 'alpha-not-a-podman-verb'; then
+   && grep -q 'alpha-not-a-podman-verb' <<<"$a_line" \
+   && ! grep -q 'beta-not-a-podman-verb' <<<"$a_line" \
+   && grep -q 'beta-not-a-podman-verb' <<<"$b_line" \
+   && ! grep -q 'alpha-not-a-podman-verb' <<<"$b_line"; then
     pass "diagnostic-subject-is-interpolated-not-canned"
 else
     bad "the REFUSED line does not distinguish two different subcommands" \

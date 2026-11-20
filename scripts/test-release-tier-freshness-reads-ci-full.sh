@@ -67,7 +67,7 @@ record "$IDX" pre-build pass
 record "$IDX" post-build pass
 record "$IDX" runtime pass
 run_guard "$IDX"
-if [ "$GUARD_RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "^ok:release-tier-fresh:$RUN_ID:"; then
+if [ "$GUARD_RC" -eq 0 ] && grep -q "^ok:release-tier-fresh:$RUN_ID:" <<<"$OUT"; then
     ok "ok:release-tier-fresh names the run ($RUN_ID), rc=0"
 else
     bad "expected ok:release-tier-fresh:$RUN_ID at rc=0, got rc=$GUARD_RC: $OUT"
@@ -77,7 +77,7 @@ echo "arm 2 — NEGATIVE CONTROL: a phase-only pre-build run still reads NOT-a-r
 IDX="$TMP/phase-only.jsonl"
 record "$IDX" pre-build pass
 run_guard "$IDX"
-if [ "$GUARD_RC" -ne 0 ] && printf '%s' "$OUT" | grep -q '^never:release-tier:'; then
+if [ "$GUARD_RC" -ne 0 ] && grep -q '^never:release-tier:' <<<"$OUT"; then
     ok "never:release-tier at rc=$GUARD_RC — 1174-6r4k's narrowing is intact"
 else
     bad "a pre-build-only run must NOT satisfy the guard; got rc=$GUARD_RC: $OUT"
@@ -89,7 +89,7 @@ record "$IDX" pre-build pass
 record "$IDX" post-build pass
 record "$IDX" runtime skipped
 run_guard "$IDX"
-if [ "$GUARD_RC" -eq 0 ] && printf '%s' "$OUT" | grep -q '1 skip'; then
+if [ "$GUARD_RC" -eq 0 ] && grep -q '1 skip' <<<"$OUT"; then
     ok "covered and reported as skip, not silently dropped"
 else
     bad "expected rc=0 with the skip visible in the verdict line, got rc=$GUARD_RC: $OUT"
@@ -101,7 +101,7 @@ record "$IDX" pre-build pass
 record "$IDX" post-build fail
 record "$IDX" runtime pass
 run_guard "$IDX"
-if [ "$GUARD_RC" -ne 0 ] && printf '%s' "$OUT" | grep -q '^red:release-tier:'; then
+if [ "$GUARD_RC" -ne 0 ] && grep -q '^red:release-tier:' <<<"$OUT"; then
     ok "red:release-tier — the red channel can fire, which needs the failing phase to record"
 else
     bad "expected red:release-tier, got rc=$GUARD_RC: $OUT"
