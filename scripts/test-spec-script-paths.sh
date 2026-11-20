@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:815-yace, spec:ci-release
 #
-# test-spec-script-paths.sh — check-spec-script-paths.sh refuses a spec that
+# test-spec-script-paths.sh — check-spec-script-paths.lua refuses a spec that
 # names a script the tree does not have, and says so by name.
 #   1 LIVE: the real specs against the real baseline -> ok
 #   2 a seeded spec naming a missing script -> blocked, named
@@ -13,8 +13,15 @@
 #   6 no spec names any script -> unavailable (exit 2), never ok
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECK="$ROOT/scripts/check-spec-script-paths.sh"
-W="$(mktemp -d "${TMPDIR:-/tmp}/spec-script-paths.XXXXXX")"
+# ORDER 2118-9awa: the check is scripts/lua/check-spec-script-paths.lua, run by
+# the plan binary (the .sh is deleted). check_run is the one way to invoke it.
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+[ -n "$PLAN" ] || { echo "FAIL: no plan binary resolves; the check under test is a lua decider" >&2; exit 1; }
+check_run() { (cd "$ROOT" && "$PLAN" script run scripts/lua/check-spec-script-paths.lua); }
+# Under target/: the lua runtime's fs refuses paths outside the repository.
+mkdir -p "$ROOT/target"
+W="$(mktemp -d "$ROOT/target/spec-script-paths.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 pass=0; fail=0
 ok() { echo "ok:   $1"; pass=$((pass + 1)); }
@@ -27,11 +34,11 @@ world() { # world <name>
 }
 run() { # run <name> -> stdout+stderr in $W/<name>.out, rc in $W/<name>.rc
     TILLANDSIAS_SPEC_PATHS_SPECS="$W/$1/specs" TILLANDSIAS_SPEC_PATHS_ROOT="$W/$1/root" \
-        TILLANDSIAS_SPEC_PATHS_BASELINE="$W/$1/baseline.txt" bash "$CHECK" > "$W/$1.out" 2>&1
+        TILLANDSIAS_SPEC_PATHS_BASELINE="$W/$1/baseline.txt" check_run > "$W/$1.out" 2>&1
     echo $? > "$W/$1.rc"
 }
 
-out="$(bash "$CHECK" 2>&1)"; rc=$?
+out="$(check_run 2>&1)"; rc=$?
 case "$out" in *ok:spec-script-paths:*) [ "$rc" = 0 ] && ok "1: LIVE tree is ok ($(tail -n 1 <<< "$out"))" || bad "1: rc=$rc" ;;
     *) bad "1: live tree answered [$(tail -n 1 <<< "$out")] rc=$rc" ;; esac
 

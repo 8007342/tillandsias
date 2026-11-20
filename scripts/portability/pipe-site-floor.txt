@@ -386,7 +386,6 @@ scripts scripts/check-must-ship-rows.sh 5
 scripts scripts/check-nix-builder-e2e.sh 7
 scripts scripts/check-nix-deps-stability.sh 6
 scripts scripts/check-no-competing-gate.sh 6
-scripts scripts/check-no-fixture-writes-live-ledger.sh 16
 scripts scripts/check-no-tracked-binaries.sh 7
 scripts scripts/check-opsx-generated-dirt.sh 1
 scripts scripts/check-pickup-role-grammar.sh 3
@@ -407,7 +406,6 @@ scripts scripts/check-sigpipe-verdict-pipelines-added.sh 15
 scripts scripts/check-skill-canonicalization.sh 4
 scripts scripts/check-skills-single-source.sh 8
 scripts scripts/check-spec-index-resolution-agreement.sh 4
-scripts scripts/check-spec-script-paths.sh 7
 scripts scripts/check-stranded-in-progress.sh 5
 scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8

@@ -18,20 +18,27 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-C="$ROOT/scripts/check-no-fixture-writes-live-ledger.sh"
-W="$(mktemp -d "${TMPDIR:-/tmp}/no-fixture-live-ledger.XXXXXX")"
+# ORDER 2118-9awa: the checker is scripts/lua/check-no-fixture-writes-live-ledger.lua,
+# run by the plan binary (the .sh is deleted). Samples live under target/: the
+# lua runtime's fs refuses paths outside the repository.
+C="$ROOT/scripts/lua/check-no-fixture-writes-live-ledger.lua"
+PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+check_run() { (cd "$ROOT" && "$PLAN" script run scripts/lua/check-no-fixture-writes-live-ledger.lua ${1+-- "$@"}); }
+mkdir -p "$ROOT/target"
+W="$(mktemp -d "$ROOT/target/no-fixture-live-ledger.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 pass=0
 fail=0
 ok() { echo "ok:   $1"; pass=$((pass + 1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail + 1)); }
-[ -x "$C" ] || { bad "arm 1: $C does not exist"; echo "FAIL: no-fixture-writes-live-ledger 0/1 (1320-44rs)"; exit 1; }
+[ -f "$C" ] && [ -n "$PLAN" ] || { bad "arm 1: $C or a plan binary to run it does not exist"; echo "FAIL: no-fixture-writes-live-ledger 0/1 (1320-44rs)"; exit 1; }
 
 flags() { # flags <name> <body> -> 0 when the checker flags it
     # The samples spell the ledger dirs as __LED__ / __LSD__ so THIS file is not
     # itself a live write in the corpus scan (arm 3); they are expanded here.
     printf '%s\n' "$2" | sed -e 's#__LED__#plan/index.d#g' -e 's#__LSD__#plan/loop_status.d#g' >"$W/$1.sh"
-    bash "$C" "$W/$1.sh" >"$W/$1.out" 2>&1
+    check_run "$W/$1.sh" >"$W/$1.out" 2>&1
     [ $? -ne 0 ] && grep -q "violation:fixture-writes-live-ledger:$W/$1.sh:" "$W/$1.out"
 }
 
@@ -71,7 +78,7 @@ echo x > __LED__/probe.yaml' && wrongly="$wrongly worktree"
 [ -z "$wrongly" ] && ok "arm 2: the scaffold idioms and a read are accepted" || bad "arm 2: wrongly flagged:$wrongly"
 
 # ── 3 ───────────────────────────────────────────────────────────────────────
-out="$(bash "$C" 2>&1)"; rc=$?
+out="$(check_run 2>&1)"; rc=$?
 if [ "$rc" = 0 ] && grep -qE '^ok:fixtures-write-scaffolds-only:[0-9]+ checked$' <<<"$out"; then
     ok "arm 3: the real corpus is clean ($(tail -n 1 <<<"$out"))"
 else
