@@ -87,6 +87,7 @@
 #       2 the working tree is dirty — this script rewrites HEAD and refuses to
 #         do that over uncommitted work
 #       3 another landing is in flight (the lock is held)
+#       4 held on a trunk red: hold:trunk-red:<test> (2118-tpmy); nobody evicted
 set -uo pipefail
 
 # THE REPOSITORY IS THE ONE YOU ARE STANDING IN, NOT THE ONE THIS SCRIPT LIVES
@@ -148,6 +149,26 @@ PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
 # rebuild. A refresh that fails stops the run with no eviction. Set to the
 # empty string to disable (the fixture's default).
 PLAN_REFRESH="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH-cargo build -q --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh}"
+# ORDER 2143-z5uj, operator ruling 2026-11-20: a plan-ledger-only candidate
+# lands on the plan-lane checks with no build-check. 1 (default) is on; 0 sends
+# every candidate through the full gate. PLAN_LANE_CHECK is what the plan lane
+# runs instead of GATE: the binary's own check parses every fragment and
+# validates the ledger, exactly as the plan-only push lane does.
+PLAN_ONLY_LANE="${TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE:-1}"
+PLAN_LANE_CHECK="${TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK-\"\$PLAN\" check}"
+# ORDER 2118-tpmy (operator 2026-11-20, P11): THE HOST DOOR, asked before every
+# candidate. could-not-run:host:<cause> is about THIS host, so nobody is evicted
+# and the run goes on. A missing router sidecar is staged first (the gate's own
+# preamble stages it, so a fresh queue checkout would otherwise never pass).
+# Set either to the empty string to disable (the fixture's default).
+HOST_DOOR="${TILLANDSIAS_LAND_QUEUE_HOST_DOOR-\"\$PLAN\" script run scripts/lua/land-queue-host-door.lua}"
+SIDECAR_STAGE="${TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE-[ -e images/router/tillandsias-router-sidecar ] || bash scripts/build-sidecar.sh}"
+# ORDER 2118-tpmy: before an evicted:<test> red evicts, the bare trunk is gated
+# once; the same failing test there is hold:trunk-red:<test>: the queue holds
+# and reports, nobody is evicted. Remembered per trunk base (bounded: one trunk
+# gate per base). 0 disables.
+TRUNK_RED_CHECK="${TILLANDSIAS_LAND_QUEUE_TRUNK_RED_CHECK:-1}"
+TRUNK_RED_MEMO="${TILLANDSIAS_LAND_QUEUE_TRUNK_RED_MEMO:-$ROOT/.git/tillandsias-land-queue-trunk-red}"
 REMOTE="${TILLANDSIAS_LAND_QUEUE_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 LOCKDIR="${TILLANDSIAS_LAND_QUEUE_LOCK:-$ROOT/.git/tillandsias-land-queue.lock}"
@@ -168,7 +189,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-landed=0; evicted=0; requeued=0; skipped=0
+landed=0; evicted=0; requeued=0; skipped=0; _held=0
 
 say() { printf '%s\n' "$*"; }
 
@@ -333,41 +354,70 @@ mkdir -p "$_RUNDIR" 2>/dev/null || _RUNDIR="$(mktemp -d "${TMPDIR:-/tmp}/land-qu
 # as possibly truncated rather than landed from — a bigger constant is cheap;
 # a silently partial queue is the bug this script exists to remove.
 GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
-_qjson="$(mktemp)"
-"$GH" pr list --base "$TRUNK" --state open --limit "$GH_LIST_LIMIT" \
-      --json number,headRefName,isDraft > "$_qjson" 2>/dev/null
-_qrc=$?
-if [ "$_qrc" -ne 0 ]; then
-    say "fail:land-queue:cannot-read-queue:gh-exit-$_qrc — this is NOT an empty queue"
+# ORDER 2143-z5uj: THE QUEUE IS RE-READ BEFORE EVERY CANDIDATE, not once per
+# run. A run gates for ~20 min per candidate, so a list read at the start is
+# stale by the second: a PR labelled `land:priority` mid-run waited behind
+# every lower number, and a PR closed mid-run was still gated. read_queue
+# answers 0 with _cands set, or 1 after naming why (a failed READ is never an
+# empty queue). <first> = 1 also names drafts and holds, once per run.
+#
+# ORDER, operator 2026-11-20: `land:priority` first, then PR number. A
+# `land:hold` PR is never a candidate and is named every run; it replaces
+# draft-as-hold, so a draft is still skipped but the advisory names the label.
+read_queue() { # <first>
+    local _qjson _qrc _qlen _all _prio _hold _drafts n h
+    _qjson="$(mktemp)"
+    "$GH" pr list --base "$TRUNK" --state open --limit "$GH_LIST_LIMIT" \
+          --json number,headRefName,isDraft,labels > "$_qjson" 2>/dev/null
+    _qrc=$?
+    if [ "$_qrc" -ne 0 ]; then
+        say "fail:land-queue:cannot-read-queue:gh-exit-$_qrc — this is NOT an empty queue"
+        rm -f "$_qjson"; return 1
+    fi
+    if ! "$PLAN" json get -e 'type == "array"' < "$_qjson" >/dev/null 2>&1; then
+        say "fail:land-queue:queue-not-an-array — gh exited 0 with output that is not a PR list"
+        rm -f "$_qjson"; return 1
+    fi
+    _qlen="$("$PLAN" json get -r 'length' < "$_qjson" 2>/dev/null)"
+    if [ -n "$_qlen" ] && [ "$_qlen" -ge "$GH_LIST_LIMIT" ] 2>/dev/null; then
+        say "fail:land-queue:queue-may-be-truncated:$_qlen-of-limit-$GH_LIST_LIMIT — gh returned as many PRs as asked for, so the oldest may be missing; raise TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT or close PRs (1959-tdn5)"
+        rm -f "$_qjson"; return 1
+    fi
+    # Two values per ready PR on alternating lines, paired by `paste - -` and
+    # ordered by number: the subset has no sort_by or string interpolation.
+    _all="$("$PLAN" json get -r '.[] | select(.isDraft | not) | .number, .headRefName' < "$_qjson" | paste - - | sort -n)"
+    _prio=" $("$PLAN" json get -r '.[] | select(.labels[]?.name == "land:priority") | .number' < "$_qjson" | sort -u | tr '\n' ' ')"
+    _hold=" $("$PLAN" json get -r '.[] | select(.labels[]?.name == "land:hold") | .number' < "$_qjson" | sort -u | tr '\n' ' ')"
+    if [ "$1" -eq 1 ]; then
+        # ORDER 2100-vkpg: A DRAFT IS SKIPPED, AND SKIPPING IT SILENTLY IS HOW 18
+        # DRAFTS SAT FOR WEEKS. Name every draft and every hold, every run.
+        _drafts="$("$PLAN" json get -r '.[] | select(.isDraft) | .number, .headRefName' < "$_qjson" | paste - - | sort -n)"
+        if [ -n "$_drafts" ]; then
+            while read -r n h; do
+                say "advisory:land-queue:ignored-draft:#$n:$h — drafts never land; un-draft (gh pr ready $n), or to hold it label it land:hold (2143-z5uj), or close it with a tombstone (2100-vkpg)"
+            done <<< "$_drafts"
+        fi
+        while IFS=$'\t' read -r n h; do
+            [ -n "$n" ] || continue
+            case "$_hold" in *" $n "*) say "hold:land-queue:#$n:$h — labelled land:hold; remove the label to queue it" ;; esac
+        done <<< "$_all"
+    fi
     rm -f "$_qjson"
-    exit 1
-fi
-if ! "$PLAN" json get -e 'type == "array"' < "$_qjson" >/dev/null 2>&1; then
-    say "fail:land-queue:queue-not-an-array — gh exited 0 with output that is not a PR list"
-    rm -f "$_qjson"
-    exit 1
-fi
-_qlen="$("$PLAN" json get -r 'length' < "$_qjson" 2>/dev/null)"
-if [ -n "$_qlen" ] && [ "$_qlen" -ge "$GH_LIST_LIMIT" ] 2>/dev/null; then
-    say "fail:land-queue:queue-may-be-truncated:$_qlen-of-limit-$GH_LIST_LIMIT — gh returned as many PRs as asked for, so the oldest may be missing; raise TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT or close PRs (1959-tdn5)"
-    rm -f "$_qjson"
-    exit 1
-fi
-
-# Two values per ready PR on alternating lines, paired by `paste - -` and
-# ordered by number: the subset has no sort_by or string interpolation.
-_cands="$("$PLAN" json get -r '.[] | select(.isDraft | not) | .number, .headRefName' < "$_qjson" | paste - - | sort -n)"
-# ORDER 2100-vkpg: A DRAFT IS SKIPPED, AND SKIPPING IT SILENTLY IS HOW 18 DRAFTS
-# (#196..#1064, 220 to 4900 commits behind) SAT FOR WEEKS WITHOUT ANYONE NOTICING.
-# Name every draft the queue passes over, every run, so the skip is visible in
-# the one log the coordinator always reads. Advisory: a draft can be a held PR.
-_drafts="$("$PLAN" json get -r '.[] | select(.isDraft) | .number, .headRefName' < "$_qjson" | paste - - | sort -n)"
-if [ -n "$_drafts" ]; then
-    while read -r _dn _dh; do
-        say "advisory:land-queue:ignored-draft:#$_dn:$_dh — drafts never land; un-draft (gh pr ready $_dn) or close it with a tombstone (2100-vkpg)"
-    done <<< "$_drafts"
-fi
-rm -f "$_qjson"
+    _cands=""
+    while IFS=$'\t' read -r n h; do
+        [ -n "$n" ] || continue
+        case "$_hold" in *" $n "*) continue ;; esac
+        case "$_prio" in *" $n "*) _cands="${_cands}${n}	${h}"$'\n' ;; esac
+    done <<< "$_all"
+    while IFS=$'\t' read -r n h; do
+        [ -n "$n" ] || continue
+        case "$_hold" in *" $n "*) continue ;; esac
+        case "$_prio" in *" $n "*) continue ;; esac
+        _cands="${_cands}${n}	${h}"$'\n'
+    done <<< "$_all"
+    return 0
+}
+read_queue 1 || exit 1
 
 if [ -z "$_cands" ]; then
     say "ok:land-queue:0 landed=0 evicted=0 requeued=0 skipped=0 — the queue is empty"
@@ -397,12 +447,42 @@ _deferred=""
 # ORDER 1765-q7rg: TWO PASSES. Pass 1 is the queue; pass 2 re-gates, once, the
 # candidates pass 1 deferred for a flaky: verdict, at the back of the run. A
 # second flaky: in pass 2 evicts. --limit counts pass-1 candidates only.
+# next_candidate — sets num/head to the next candidate, or answers 1. Pass 1
+# RE-READS the queue (2143-z5uj) and takes the first entry not yet seen this
+# run, so a mid-run land:priority label or close takes effect at the next
+# candidate. A re-read that fails keeps the list already held: a transient gh
+# error must not end a run that is mid-way through landing. Pass 2 walks the
+# deferred list as recorded.
+_seen=" "
+_first_pick=1
+next_candidate() {
+    local n h
+    if [ "$_pass" -eq 1 ]; then
+        if [ "$_first_pick" -eq 0 ]; then
+            read_queue 0 || say "advisory:land-queue:re-read-failed — continuing on the list read before"
+        fi
+        _first_pick=0
+        while IFS=$'\t' read -r n h; do
+            [ -n "$n" ] || continue
+            case "$_seen" in *" $n "*) continue ;; esac
+            _seen="$_seen$n "
+            num="$n"; head="$h"; return 0
+        done <<< "$_cands"
+        return 1
+    fi
+    while IFS=$'\t' read -r n h; do
+        [ -n "$n" ] || continue
+        _p2="${_p2#*$'\n'}"
+        num="$n"; head="$h"; return 0
+    done <<< "$_p2"
+    return 1
+}
 for _pass in 1 2; do
 if [ "$_pass" -eq 2 ]; then
     [ -n "$_deferred" ] || break
-    _cands="$_deferred"; _deferred=""
+    _p2="$_deferred"; _deferred=""
 fi
-while IFS=$'\t' read -r num head <&3; do
+while next_candidate; do
     [ -n "$num" ] || continue
     if [ "$_pass" -eq 1 ]; then
         if [ "$LIMIT" -gt 0 ] && [ "$_n" -ge "$LIMIT" ]; then break; fi
@@ -660,17 +740,50 @@ $_nlwhy
         say "dry-run: would gate ${merge_sha:0:9} then push to $TRUNK"
         continue
     fi
+    # ── ORDER 2143-z5uj: A PLAN-LEDGER-ONLY CANDIDATE TAKES THE PLAN LANE ────
+    # Operator ruling 2026-11-20: a PR whose whole merge delta classifies as
+    # plan-ledger lands through the plan-lane checks (fragment parse and
+    # `tillandsias-plan check`) with NO build-check. #1166 took 53 min of full
+    # gate for ledger fragments. The classifier is the same one the adopt path
+    # trusts (delta_plan_only); an unreadable answer is NOT plan-only.
+    _lane=full
+    if [ "$PLAN_ONLY_LANE" = 1 ] && delta_plan_only "$base_sha" "$merge_sha"; then
+        _lane=plan-only
+        say "land-queue: #$num lane=plan-only — every changed path is plan-ledger; plan-lane checks only, no build-check"
+    fi
+    # ── ORDER 2118-tpmy: THE HOST DOOR ──────────────────────────────────────
+    if [ -n "$HOST_DOOR" ] && [ "$_lane" = full ]; then
+        if [ -n "$SIDECAR_STAGE" ]; then
+            ( eval "$SIDECAR_STAGE" ) < /dev/null > "$_RUNDIR/pr-$num-sidecar.log" 2>&1 || true
+        fi
+        _hd="$( ( eval "$HOST_DOOR" ) < /dev/null 2>/dev/null | grep -m 1 -E '^(ok:host-door|could-not-run:host:)' )"
+        case "$_hd" in
+            ok:host-door*) ;;
+            could-not-run:host:*)
+                say "$_hd — #$num is not evicted for this host's state; next candidate"
+                skipped=$((skipped + 1))
+                continue ;;
+            *)
+                say "could-not-run:host:door-did-not-answer — #$num is not evicted; next candidate"
+                skipped=$((skipped + 1))
+                continue ;;
+        esac
+    fi
     # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
     # The binary's state is this HOST's, never the candidate's: a refresh that
     # cannot make it current stops the run and evicts nobody.
-    if [ -n "$PLAN_REFRESH" ]; then
+    if [ -n "$PLAN_REFRESH" ] && [ "$_lane" = full ]; then
         _rlog="$_RUNDIR/pr-$num-plan-refresh.log"
         ( eval "$PLAN_REFRESH" ) < /dev/null > "$_rlog" 2>&1
         _rrc=$?
         if [ "$_rrc" -ne 0 ]; then
-            say "could-not-run:land-queue:stale-plan-binary:rc=$_rrc — the plan binary could not be refreshed from the merge of #$num; no candidate is evicted for this host's state (log: $_rlog)"
+            # ORDER 2143-z5uj: SKIP THIS CANDIDATE, DO NOT END THE RUN. The refresh
+            # builds from the merge of THIS candidate, so another candidate's merge
+            # may refresh cleanly; ending the run stalled the whole queue on one.
+            say "could-not-run:host:plan-binary-stale:#$num:rc=$_rrc — the plan binary could not be refreshed from the merge of #$num; nothing is evicted for this host's state; next candidate (log: $_rlog)"
             say "remedy: cargo build --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh, then run the queue again"
-            exit 3
+            skipped=$((skipped + 1))
+            continue
         fi
         rm -f "$_rlog"
     fi
@@ -680,7 +793,7 @@ $_nlwhy
     # A stale plan binary on THIS host also exits 1 but says nothing about the
     # candidate, and any other code is the door failing to run: both go on to
     # the full gate, which decides as it always did.
-    if [ -n "$PREFLIGHT" ]; then
+    if [ -n "$PREFLIGHT" ] && [ "$_lane" = full ]; then
         _plog="$_RUNDIR/pr-$num-preflight.log"
         ( eval "$PREFLIGHT" ) < /dev/null > "$_plog" 2>&1
         _prc_pf=$?
@@ -700,8 +813,80 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     _glog="$_RUNDIR/pr-$num-gate.log"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
-    ( eval "$GATE" ) < /dev/null > "$_glog" 2>&1
+    _gcmd="$GATE"
+    [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
+    ( eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
+    # ── ORDER 2143-z5uj: A RED IN A TEST THE CANDIDATE DID NOT TOUCH IS RE-RUN
+    # ONCE, ON THE IDENTICAL TREE, BEFORE IT EVICTS ANYONE. Measured 2026-11-20:
+    # eight evictions in one day were one SIGPIPE flake class in fixtures the
+    # evicted PRs never touched, each a ~20-min gate plus a requeue. The failing
+    # tests are named from the gate's verdict lines (a scripts/ path, or
+    # litmus:<name>); a candidate whose diff touches one of them, or a red that
+    # names no test at all, is judged on the first run as before, so an
+    # unknown red is never waved through. Green on the re-run prints
+    # flaky:<test> and lands; red prints evicted:<test> (fleet vocabulary,
+    # 2026-11-20).
+    _flaky_test=""
+    if [ "$_grc" -eq 1 ] && [ "$_lane" = full ] && ! grep -q '^flaky:' "$_glog" 2>/dev/null; then
+        _ftests="$(grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog" 2>/dev/null \
+                   | grep -oE 'scripts/[A-Za-z0-9_./-]+\.(sh|lua)|litmus:[A-Za-z0-9_-]+' | sort -u)"
+        _fdiff="$(git diff --name-only "$base_sha" "$merge_sha" 2>/dev/null)"
+        _touched=0
+        if [ -n "$_ftests" ]; then
+            while IFS= read -r _t; do
+                case "$_t" in
+                    litmus:*) _tp="openspec/litmus-tests/litmus-${_t#litmus:}.yaml" ;;
+                    *) _tp="$_t" ;;
+                esac
+                grep -qxF "$_tp" <<<"$_fdiff" && { _touched=1; break; }
+            done <<< "$_ftests"
+            if [ "$_touched" -eq 0 ]; then
+                _flaky_test="$(head -n 1 <<<"$_ftests")"
+                say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
+                ( eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
+                _grc=$?
+                if [ "$_grc" -eq 0 ]; then
+                    say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
+                    mv -f "$_glog" "$_glog.first-red"
+                else
+                    mv -f "$_glog.rerun" "$_glog"
+                    # ORDER 2118-tpmy: RED TWICE. Is it the trunk's red? The bare
+                    # trunk is gated once per base; the same failing test there
+                    # holds the queue instead of evicting a candidate for it.
+                    _trunk_red=""
+                    if [ "$TRUNK_RED_CHECK" = 1 ]; then
+                        _memo="$(cat "$TRUNK_RED_MEMO" 2>/dev/null)"
+                        if [ "${_memo%% *}" = "$base_sha" ]; then
+                            _tr_verdict="${_memo#* }"
+                        else
+                            git checkout -q --detach "$base_sha" 2>/dev/null
+                            ( eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
+                            _trc=$?
+                            git checkout -q --detach "$merge_sha" 2>/dev/null
+                            _tr_verdict="green"
+                            if [ "$_trc" -ne 0 ] \
+                               && grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog.trunk" 2>/dev/null \
+                                  | grep -qF -- "$_flaky_test"; then
+                                _tr_verdict="red $_flaky_test"
+                            fi
+                            printf '%s %s\n' "$base_sha" "$_tr_verdict" > "$TRUNK_RED_MEMO" 2>/dev/null || true
+                            rm -f "$_glog.trunk"
+                        fi
+                        [ "$_tr_verdict" = "red $_flaky_test" ] && _trunk_red="$_flaky_test"
+                    fi
+                    if [ -n "$_trunk_red" ]; then
+                        say "hold:trunk-red:$_trunk_red — trunk ${base_sha:0:9} fails it too; #$num is not evicted; the queue holds until trunk is fixed (full log: $_glog)"
+                        rm -f "$_glog.rerun"
+                        _held=1
+                        break 2
+                    fi
+                    say "evicted:$_flaky_test — #$num red twice on the identical tree ${merge_sha:0:9}"
+                fi
+                rm -f "$_glog.rerun"
+            fi
+        fi
+    fi
     if [ "$_grc" -ne 0 ]; then
         # ORDER 1765-q7rg: A flaky:<step>:<verdicts> line is the step runner's
         # word that a host-state step disagreed with itself twice on this host
@@ -839,8 +1024,12 @@ $(printf '%s\n' "$_pout" | tail -n 20)
 
 The queue will re-gate on its next pass."
     requeued=$((requeued + 1))
-done 3<<< "$_cands"
+done
 done
 
+if [ "$_held" -eq 1 ]; then
+    say "hold:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped — held on a trunk red (2118-tpmy)"
+    exit 4
+fi
 say "ok:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped"
 exit 0
