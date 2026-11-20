@@ -222,8 +222,19 @@ there.
      hundred. Treat that warning as a STOP, not noise: merge trunk, re-run,
      and only when the two-dot and three-dot diffs agree does the check mean
      what it says.
-     THEN, still before `gh pr ready`, run the gate's own deciders on
-     the MERGED work ref: `./build.sh --preflight` (order 1305-udgs;
+     THEN, still before `gh pr ready`, run the REQUIRED local check on the
+     MERGED work ref: `./build.sh --floor` (order 2130-fl0r; operator
+     2026-11-20: it REPLACES the worker-side `--preflight` requirement for
+     work/* refs, because the landing queue runs the full preflight and
+     gate on arrival and evicts with the log). Under two minutes, no build,
+     native on Windows: `cargo fmt --check` when a .rs changed, every
+     changed .lua parses, and the packet's own litmus (`litmus:<name>` in
+     its row) plus every litmus file the diff touches; a size:long one is
+     skipped BY NAME for the queue. It prints `ok:floor:…` or
+     `violation:floor:<what>`; push only on `ok:floor`.
+     The full preflight below remains available and is still the right
+     tool where memory allows, to catch a red before the queue does:
+     `./build.sh --preflight` (order 1305-udgs;
      every guard that can refuse a push, in seconds, no build; `--full`
      for the whole roster). Read BOTH its exit status and its verdict
      line: a non-zero exit beside `refused=0` is the door itself failing,
@@ -479,7 +490,8 @@ there.
 ```bash
 scripts/check-fleet-membership.sh            # the verdict, with counts
 scripts/test-join-the-fleet-idempotent.sh    # ok:join-the-fleet-idempotent:6/6
-./build.sh --preflight                       # the front door (1305-udgs): every guard roster, ≤150 s
+./build.sh --floor                           # REQUIRED before a work/* push (2130-fl0r, operator 2026-11-20): fmt, Lua parse, packet litmus, <120 s
+./build.sh --preflight                       # optional where memory allows (1305-udgs): every guard roster, ≤150 s
 ```
 
 The fixture pins: two runs print the same verdict and leave `git status`
