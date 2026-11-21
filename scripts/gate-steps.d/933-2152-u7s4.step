@@ -5,5 +5,6 @@
 # STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking next-order mints above trunk's highest fragment prefix (2152-u7s4)"
 STEP_LUA="scripts/lua/test-next-order-skips-trunk.lua"
+STEP_SECOND_REGIME="yolanda 2026-11-21 msys ok:next-order-skips-trunk:4 arms"
 STEP_ERROR="next-order minted a prefix trunk already carries, or read an event fragment's hash as an order (2152-u7s4) — see the FAIL lines above"
 STEP_OK="next-order trunk-skip fixture passed"
