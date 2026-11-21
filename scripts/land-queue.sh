@@ -140,7 +140,15 @@ GATE="${TILLANDSIAS_LAND_QUEUE_GATE:-./build.sh --check}"
 export TILLANDSIAS_CARGO_INCREMENTAL="${TILLANDSIAS_CARGO_INCREMENTAL:-0}"
 # ORDER 1765-q7rg: the ~1-min decider door run on the merge result BEFORE the
 # ~21-min gate. Set to the empty string to disable (the fixture's default).
-PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
+#
+# ORDER 2152-lqrf (build speed, operator ruling 2026-11-21: a land takes
+# minutes): OFF BY DEFAULT. The door's roster is built FROM the gate's own steps
+# and deciders (build.sh _preflight_roster), so on every candidate the gate
+# passes it re-ran work the gate runs anyway — the duplicate preflight the
+# build-speed investigation measured. Its only gain was evicting a red ~20 min
+# earlier; admission (land-admit.sh, P6) is where a cheap early refusal now
+# lives. Set TILLANDSIAS_LAND_QUEUE_PREFLIGHT='./build.sh --preflight' to restore.
+PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-}"
 # ORDER 1992-lqpb: rebuild tillandsias-plan from the MERGE RESULT and let
 # check-plan-binary-current.sh install it, before the preflight and the gate.
 # A stale ~/.local/bin/tillandsias-plan otherwise failed fixtures inside the
@@ -149,6 +157,17 @@ PREFLIGHT="${TILLANDSIAS_LAND_QUEUE_PREFLIGHT-./build.sh --preflight}"
 # rebuild. A refresh that fails stops the run with no eviction. Set to the
 # empty string to disable (the fixture's default).
 PLAN_REFRESH="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH-cargo build -q --release -p tillandsias-plan && bash scripts/check-plan-binary-current.sh}"
+# ORDER 2152-lqrf (build speed): THE REFRESH IS SKIPPED WHEN ITS INPUTS DID NOT
+# CHANGE. The inputs are what CARGO says they are: the dep-info file it writes
+# beside the binary lists every source the build read, out-of-crate
+# include_str! files included, so the key cannot drift from the build the way a
+# hand-kept path list would. Key = git blob ids of those files + Cargo.lock +
+# rust-toolchain.toml + the binary itself, stamped after each successful
+# refresh. A missing dep-info, binary or listed file means no key, and the
+# refresh runs as before. Not covered: RUSTFLAGS or toolchain installs changing
+# under an unchanged rust-toolchain.toml.
+PLAN_DEPINFO="${TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO:-${CARGO_TARGET_DIR:-target}/release/tillandsias-plan.d}"
+PLAN_REFRESH_STAMP="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP:-${CARGO_TARGET_DIR:-target}/land-queue-plan-refresh.key}"
 # ORDER 2143-z5uj, operator ruling 2026-11-20: a plan-ledger-only candidate
 # lands on the plan-lane checks with no build-check. 1 (default) is on; 0 sends
 # every candidate through the full gate. PLAN_LANE_CHECK is what the plan lane
@@ -189,7 +208,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-landed=0; evicted=0; requeued=0; skipped=0; _held=0
+landed=0; evicted=0; requeued=0; skipped=0; _held=0  # the 2118-tpmy trunk-red FLAG (0|1); the freeze check's path list is _frz_paths (2152-lqrf: one name for both erased a hold)
 
 say() { printf '%s\n' "$*"; }
 
@@ -273,6 +292,34 @@ gate_failed_comment() {
 # classifies as plan-ledger (a move that cannot invalidate a gate verdict). Sets
 # _delta_classes. An empty or unreadable answer is NOT plan-only (re-queue).
 # Shared by the first adopt and the post-refusal push retry (1839-fuvg).
+# plan_refresh_key — the content key of the plan binary's build inputs, or
+# nothing (rc 1) when it cannot be formed. See PLAN_DEPINFO above (2152-lqrf).
+plan_refresh_key() {
+    local d="$PLAN_DEPINFO" bin deps f
+    bin="${d%.d}"
+    [ -f "$d" ] && [ -f "$bin" ] || return 1
+    # Make syntax: "<target>: dep dep \<newline> dep"; a space inside a path is
+    # "\ ". Join continuations, drop the target, split on unescaped spaces.
+    # One awk for BSD and GNU alike (no sed \n or \x escapes).
+    deps="$(awk '{ l = l $0; if (sub(/\\$/, "", l)) { l = l " "; next }; exit }
+        END { sub(/^[^:]*: */, "", l); gsub(/\\ /, "\037", l); n = split(l, a, " ")
+              for (i = 1; i <= n; i++) { gsub("\037", " ", a[i]); print a[i] } }' "$d")"
+    [ -n "$deps" ] || return 1
+    {
+        while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            # A build script's rerun-if-changed DIRECTORY is listed as the dir:
+            # key every file under it (sorted, so the order is stable).
+            if [ -d "$f" ]; then find "$f" -type f 2>/dev/null | LC_ALL=C sort; continue; fi
+            [ -f "$f" ] || return 1
+            printf '%s\n' "$f"
+        done <<< "$deps"
+        for f in Cargo.lock rust-toolchain.toml "$bin"; do [ -f "$f" ] && printf '%s\n' "$f"; done
+    } > "$_RUNDIR/plan-refresh-inputs" || return 1
+    git hash-object --stdin-paths < "$_RUNDIR/plan-refresh-inputs" 2>/dev/null \
+        | git hash-object --stdin 2>/dev/null
+}
+
 delta_plan_only() {
     local _c
     _delta_classes="$(git diff --name-only "$1" "$2" 2>/dev/null \
@@ -605,16 +652,16 @@ This is the second identical conflict at this unchanged head (\`${head_sha:0:9}\
     # paths the freeze exempts (ledger, docs, skills, cheatsheets) still lands —
     # that is how coordination keeps moving during a cut. HOLD is not EVICT: the
     # candidate is fine, the branch is closed; it lands after the freeze clears.
-    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
-    if [ -n "$_held" ]; then
+    _frz_paths="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_frz_paths" ]; then
         _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
         if [ "$_frc" -ne 0 ]; then
-            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_held); not gating into a branch whose freeze state is unknown"
+            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_frz_paths); not gating into a branch whose freeze state is unknown"
             skipped=$((skipped + 1))
             continue
         fi
         if [ -n "$_fm" ]; then
-            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_held); it lands after the freeze clears"
+            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_frz_paths); it lands after the freeze clears"
             skipped=$((skipped + 1))
             continue
         fi
@@ -772,10 +819,25 @@ $_nlwhy
     # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
     # The binary's state is this HOST's, never the candidate's: a refresh that
     # cannot make it current stops the run and evicts nobody.
+    # ORDER 2152-lqrf: and it is skipped when cargo's own input list hashes the
+    # same as at the last successful refresh (see PLAN_DEPINFO).
+    _rkey=""
     if [ -n "$PLAN_REFRESH" ] && [ "$_lane" = full ]; then
+        _rkey="$(plan_refresh_key)" || _rkey=""
+    fi
+    if [ -n "$PLAN_REFRESH" ] && [ "$_lane" = full ] && [ -n "$_rkey" ] \
+        && [ "$_rkey" = "$(cat "$PLAN_REFRESH_STAMP" 2>/dev/null)" ]; then
+        say "plan-refresh:skipped:inputs-unchanged:#$num:${_rkey:0:12}"
+    elif [ -n "$PLAN_REFRESH" ] && [ "$_lane" = full ]; then
         _rlog="$_RUNDIR/pr-$num-plan-refresh.log"
         ( eval "$PLAN_REFRESH" ) < /dev/null > "$_rlog" 2>&1
         _rrc=$?
+        # Stamp only a SUCCESSFUL refresh, keyed AFTER it (the build rewrote the
+        # dep-info and the binary). A failed stamp write only costs a rebuild.
+        if [ "$_rrc" -eq 0 ] && _rkey="$(plan_refresh_key)"; then
+            mkdir -p "$(dirname "$PLAN_REFRESH_STAMP")" 2>/dev/null
+            printf '%s\n' "$_rkey" > "$PLAN_REFRESH_STAMP" 2>/dev/null || true
+        fi
         if [ "$_rrc" -ne 0 ]; then
             # ORDER 2143-z5uj: SKIP THIS CANDIDATE, DO NOT END THE RUN. The refresh
             # builds from the merge of THIS candidate, so another candidate's merge
@@ -974,11 +1036,11 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     # window. The hook re-asks at push on a hooked host; the tool re-asks here
     # so the answer does not depend on which host runs the queue. Recomputed
     # from the CURRENT base, because an adopt above may have moved it.
-    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
-    if [ -n "$_held" ]; then
+    _frz_paths="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_frz_paths" ]; then
         _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
         if [ "$_frc" -ne 0 ] || [ -n "$_fm" ]; then
-            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_held); nothing was pushed"
+            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_frz_paths); nothing was pushed"
             requeued=$((requeued + 1))
             continue
         fi
