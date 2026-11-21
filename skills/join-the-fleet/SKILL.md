@@ -165,7 +165,7 @@ there.
   the answer.
 - **Claims are by order, through the plan lane**: `tillandsias-plan set-field
   <order> status in_progress --host <host> --reason …`, pushed, then, after
-  `git pull`, `scripts/check-claim-confirmed.sh <order> --host <host>` →
+  `git pull`, `tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <host>` →
   `ok:claim-confirmed`. On `refused:claim-lost:…:earlier=<host>@<ts>` you LOST
   a race: yield and take the next item. The earliest claim-event `ts` wins,
   never push or commit order, because a claim can sit unpushed for minutes

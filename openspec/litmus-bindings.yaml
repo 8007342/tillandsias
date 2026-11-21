@@ -169,7 +169,10 @@ specs:
 - spec_id: ci-release
   status: active
   litmus_tests:
+  - litmus:land-queue-host-door-names-its-cause
+  - litmus:gate-step-declared-inputs-are-mutation-proven
   - litmus:release-is-one-cloud-build
+  - litmus:common-fixture
   - litmus:gate-step-private-metrics-fallback
   - litmus:prebuilt-resolver-refuses-stale
   - litmus:promote-stable-refusals-carry-affordance
@@ -200,6 +203,8 @@ specs:
   - litmus:litmus-binding-truth
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
+  - litmus:cycle-metrics-fixtures-pin-logs-shape
+  - litmus:runner-scratch-skips-sidecar-shape
   - litmus:seam-writer-canonical-lock-shape
   - litmus:bash-composition-hazards-advisory-shape
   # 1137-da83. scripts/test-*.sh is not globbed by build.sh, so a fixture runs
@@ -1098,6 +1103,7 @@ specs:
 - spec_id: spec-traceability
   status: active
   litmus_tests:
+  - litmus:litmus-timeout-retry-shape
   - litmus:plan-next-names-a-stale-ledger-and-hides-rows-siblings-hold
   - litmus:no-fixture-writes-live-ledger-shape
   - litmus:spec-traceability-shape

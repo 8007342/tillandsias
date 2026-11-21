@@ -25,7 +25,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CHECK="$ROOT/scripts/check-fragment-closure-evidence-added.sh"
+CHECK="$ROOT/scripts/lua/check-fragment-closure-evidence-added.lua"   # ported (2166-ypfh); runs on `script run`
 fail=0; pass=0
 ok()  { echo "ok:   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL: $1" >&2; fail=$((fail+1)); }
@@ -41,8 +41,8 @@ cd "$W/wc" || exit 2
 git remote add origin "$W/bare.git"
 git config core.hooksPath .git/hooks
 git config core.autocrlf false
-mkdir -p scripts plan/index.d
-cp "$CHECK" scripts/
+mkdir -p scripts/lua plan/index.d
+cp "$CHECK" scripts/lua/
 for f in plan-binary-probe.sh; do cp "$ROOT/scripts/$f" "scripts/" 2>/dev/null || true; done
 chmod +x scripts/*.sh 2>/dev/null || true
 printf 'base\n' > README.md
@@ -98,7 +98,7 @@ export TILLANDSIAS_PLAN_BIN="$_validator"
 
 _run() { ( cd "$W/wc" && TILLANDSIAS_CLOSURE_EVIDENCE_BASE=origin/linux-next \
     TILLANDSIAS_PLAN_BIN="$_validator" \
-    bash scripts/check-fragment-closure-evidence-added.sh ) 2>&1; }
+    "$_validator" script run scripts/lua/check-fragment-closure-evidence-added.lua ) 2>&1; }
 
 # ── Reproduce the landing rewrite ──────────────────────────────────────────
 # Trunk moves, so integrating rewrites the local commit and changes its SHA —

@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-build-network-isolation-fixture-is-lua-and-the-findings-wrapper-is-gone
+    order: 2166-dbpx
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    title: |
+      Port scripts/test-build-image-network-isolation.sh (46 lines) to scripts/lua/ and repoint its litmus test; retire the two-line wrapper scripts/test-forge-findings-persisted.sh by having build.sh call check-forge-findings-persisted.sh fixture directly. Delete both .sh files.
+    context: |
+      Next small shell-to-lua candidates after 2165-uu9j.
+    exit_criteria:
+      - 'the Lua fixture gives the same three arm results as the .sh on this tree, and a mutation (an unconditional --network) fails it; the litmus test runs the Lua; build.sh runs the findings fixture without the wrapper; both .sh files and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1354-uv4e, 1955-chrn, 741-3y48]
+    events:
+      - {type: filed, ts: '2026-11-21T15:37:57Z', host: lenovinha, summary: filed the network-isolation port}

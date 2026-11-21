@@ -2766,7 +2766,7 @@ _gs_one() {
     local _step_file="$1"
     [ -e "$_step_file" ] || return 0
     STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
-    STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""
+    STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""; STEP_INPUTS=""
     # shellcheck disable=SC1090
     . "$_step_file"
     if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
@@ -2789,6 +2789,31 @@ _gs_one() {
         return 1
     fi
     _step "$STEP_DESC..."
+    # ORDER 2118-tnut (operator 2026-11-20, P10 item a): a step may declare
+    # STEP_INPUTS — the class selector's grammar (765-xpct): gate-stamp
+    # classes and path:<glob> narrowings. When none of the changed paths
+    # intersect them (and the selector's own fail-closed rules allow it:
+    # recent FULL gate, readable class set, not on the keep-unconditional
+    # list), the step is SKIPPED and says so on its own line. Only over the
+    # real checkout: the fixture's scratch roots always run every step.
+    # A step without STEP_INPUTS runs, as before.
+    # IMPLICIT INPUTS, always added: the step's own .step file and script,
+    # and what decides what runs (build.sh, the selector, the classifier).
+    # A declaration cannot leave them out, so editing a step or the gate
+    # always runs it.
+    # 2155-gpar: in a pool or lane WORKER _class_skip_line's _CLASS_SKIPPED
+    # increment is lost with the subshell, so the replay counts the
+    # `skip:class-selector:gate-step:` lines instead (_gs_count_skips).
+    if [ -n "$STEP_INPUTS" ] && [ "$_gs_root" = "$SCRIPT_DIR" ]; then
+        _gs_id="gate-step:${_step_file##*/}"; _gs_id="${_gs_id%.step}"
+        _gs_inputs="$STEP_INPUTS path:scripts/gate-steps.d/${_step_file##*/} path:$_step_path path:build.sh path:scripts/change-class.sh path:scripts/gate-stamp.sh"
+        # shellcheck disable=SC2086 — the declared inputs are words by design.
+        if _class_may_skip "$_gs_id" $_gs_inputs; then
+            # shellcheck disable=SC2086
+            _class_skip_line "$_gs_id" $_gs_inputs
+            return 0
+        fi
+    fi
     # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
     # code that means "this check could not run here", as distinct from
     # "this check ran and failed". Without it every non-zero exit printed
@@ -2948,7 +2973,19 @@ _run_gate_steps() {  # $1 = root
         done
         return 0
     fi
+    # The class set is computed ONCE here, so workers inherit the memo rather
+    # than each recomputing it (and so it is the same answer for every step).
+    if [ "$_gs_root" = "$SCRIPT_DIR" ] && declare -F _class_set_once >/dev/null; then _class_set_once; fi
     _gs_pool "$_gs_jobs"
+}
+
+# _gs_count_skips <worker output> — 2155-gpar: a worker's class-selector skips
+# reach the gate stamp's scope through this, not through the lost subshell
+# counter, so a pooled gate that skipped a step never stamps scope=full.
+_gs_count_skips() {
+    local _c
+    _c="$(grep -c '^.*skip:class-selector:gate-step:' "$1" 2>/dev/null)" || _c=0
+    _CLASS_SKIPPED=$(( ${_CLASS_SKIPPED:-0} + ${_c:-0} ))
 }
 
 # _gs_pool <jobs> — ORDER 2155-gpar. Every step WITHOUT a `STEP_SERIAL="<why>"`
@@ -2989,6 +3026,7 @@ _gs_pool() {
     while [ "$_i" -lt "$_n" ]; do
         _i=$((_i + 1))
         cat "$_d/$_i.out" 2>/dev/null
+        _gs_count_skips "$_d/$_i.out"
         _rc="$(cat "$_d/$_i.rc" 2>/dev/null)"
         if [ "$_rc" != 0 ]; then
             _error "gate-steps pool: $(basename "$(cat "$_d/$_i.name")") refused (rc=${_rc:-none}); a step that passes alone and reds here is a missing STEP_SERIAL (2155-gpar)"
@@ -5250,9 +5288,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the tree, and merely ADDING a test can red a different one. A gate whose
     # red set moves when you add an unrelated test teaches people to re-run it
     # until it passes.
+    # ORDER 2161-ctdd (build speed, report packet 8): DO NOT RE-RUN THE DEFAULT
+    # TESTS HERE. The --workspace pass above already ran every test the default
+    # build of this binary has (1091 on 2026-11-21); this build adds the ones
+    # that only compile under tray,listen-vsock (533). Both lists come from
+    # libtest's own --list (the default build is already compiled, so it costs
+    # seconds), and this pass runs exactly the difference with --exact. Kept
+    # serial (above). A list that cannot be produced, or an empty difference,
+    # falls back to the whole set and says so: a filter must never silently
+    # run less than it claims.
+    # KNOWN LIMIT: a default test whose body has a cfg(feature = "tray") or
+    # "listen-vsock" branch is run only in its default form.
+    _fg_filter=()
+    _fg_def="$(cargo test -q -p tillandsias-headless --bin tillandsias \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_all="$(cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_new="$(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all") | grep -c .)"
+    if [[ -n "$_fg_def" && -n "$_fg_all" && "$_fg_new" -gt 0 ]]; then
+        while IFS= read -r _fg_t; do
+            [[ -n "$_fg_t" ]] && _fg_filter+=("$_fg_t")
+        done < <(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all"))
+        _info "feature-gated: $_fg_new test(s) only this build has; the $(printf '%s\n' "$_fg_def" | grep -c .) default ones ran in the --workspace pass (2161-ctdd)"
+        _fg_filter=(--exact "${_fg_filter[@]}")
+    else
+        _warn "feature-gated: could not form the default/feature test lists (default=$(printf '%s\n' "$_fg_def" | grep -c .), all=$(printf '%s\n' "$_fg_all" | grep -c .), new=$_fg_new); running the WHOLE set (2161-ctdd)"
+    fi
     _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 |
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
@@ -5729,7 +5793,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # catching hand-authored fragments that bypass set-field. Diff-scoped, so
     # the base ledger's historical closures are never re-judged.
     _step "Checking that added fragment closures carry evidence (686-7qcm)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-closure-evidence-added.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-fragment-closure-evidence-added.lua" 2>&1; then
         _error "this change adds a fragment recording a closure (completed/verified/done) with no evidence-bearing event (686-7qcm)"
         exit 1
     fi
@@ -6418,7 +6482,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Terminology gate passed"
 
     _step "Checking plan/schema status-vocab divergence (440)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-plan-schema-divergence.lua" 2>&1; then
         # Do NOT restate the cause here: the script emits one of three verdicts
         # (diverges / index-load-failed / unreadable) and this wrapper used to
         # assert "vocabularies diverge" for all of them, which sent a reader to
@@ -6438,7 +6502,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
     # (VERSION + Cargo files only) still passes.
     _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-version-bump-isolation.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-version-bump-isolation.lua" 2>&1; then
         _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
         exit 1
     fi
@@ -6763,7 +6827,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # unrelated routes before this was mechanised. Sub-second; the fixture
     # carries the real pre-fix arm from git history as its positive control.
     _step "Checking litmus steps named MUTATION/SABOTAGE actually mutate (1059-pb2j)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-mutation-arms-mutate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-litmus-mutation-arms-mutate.lua" 2>&1; then
         _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
         exit 1
     fi

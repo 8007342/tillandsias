@@ -338,7 +338,6 @@ scripts scripts/capture.sh 3
 scripts scripts/census-admitted-missing-evidence.sh 9
 scripts scripts/census-litmus-layer-classification.sh 5
 scripts scripts/census-litmus-step-enforcement.sh 4
-scripts scripts/census-sigpipe-verdict-pipelines.sh 6
 scripts scripts/centicolon-grade.sh 2
 scripts scripts/change-class.sh 3
 scripts scripts/check-added-fragments-parse.sh 3
@@ -352,7 +351,6 @@ scripts scripts/check-base-ledger-status-loss.sh 7
 scripts scripts/check-build-cache-sweep.sh 3
 scripts scripts/check-capability-row.sh 17
 scripts scripts/check-carry-forward.sh 6
-scripts scripts/check-claim-confirmed.sh 6
 scripts scripts/check-claims-across-branches.sh 5
 scripts scripts/check-containers-conf-proxy-env.sh 4
 scripts scripts/check-credential-channel.sh 15
@@ -367,7 +365,6 @@ scripts scripts/check-enclave-service-health.sh 16
 scripts scripts/check-engine-cpu-dispatch.sh 6
 scripts scripts/check-fleet-membership.sh 8
 scripts scripts/check-forge-findings-persisted.sh 3
-scripts scripts/check-fragment-closure-evidence-added.sh 5
 scripts scripts/check-fragment-ts-skew.sh 4
 scripts scripts/check-gate-memory-floor.sh 3
 scripts scripts/check-gate-step-regimes.sh 1
@@ -375,7 +372,6 @@ scripts scripts/check-groundtruth-regime-invariance.sh 3
 scripts scripts/check-host-tools.sh 105
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
-scripts scripts/check-litmus-mutation-arms-mutate.sh 3
 scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-long-running-view.sh 21
 scripts scripts/check-mcp-expert-health.sh 46
@@ -392,7 +388,6 @@ scripts scripts/check-opsx-generated-dirt.sh 1
 scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
-scripts scripts/check-plan-schema-divergence.sh 2
 scripts scripts/check-purge-clears-vault-credentials.sh 1
 scripts scripts/check-refusal-affordance-added.sh 3
 scripts scripts/check-release-asset-integrity.sh 12
@@ -413,7 +408,6 @@ scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-unrunnable-platform-arms.sh 5
-scripts scripts/check-version-bump-isolation.sh 2
 scripts scripts/check-windows-only-sources-verified.sh 12
 scripts scripts/check-windows-tray-clippy.sh 6
 scripts scripts/check-windows-tray-diagnose-surface.sh 2
@@ -560,7 +554,6 @@ scripts scripts/test-build-step-timing-attribution.sh 1
 scripts scripts/test-capabilities-envelope-names-its-source.sh 4
 scripts scripts/test-capability-routing.sh 24
 scripts scripts/test-capture-helper.sh 4
-scripts scripts/test-census-sigpipe-verdict-pipelines.sh 3
 scripts scripts/test-centicolon-extract.sh 3
 scripts scripts/test-centicolon-grade.sh 3
 scripts scripts/test-check-bash-dialect.sh 2
@@ -568,7 +561,6 @@ scripts scripts/test-check-credential-channel.sh 12
 scripts scripts/test-check-engine-cpu-dispatch.sh 1
 scripts scripts/test-check-jq-callsite-ratchet.sh 1
 scripts scripts/test-check-stranded-in-progress.sh 7
-scripts scripts/test-claim-confirmation-names-the-earliest-claimant.sh 1
 scripts scripts/test-claim-wip-limit.sh 2
 scripts scripts/test-claims-across-branches.sh 7
 scripts scripts/test-claims-affordance.sh 2

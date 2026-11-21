@@ -322,3 +322,17 @@ change_class_may_skip() {
     done
     return 0
 }
+
+# ORDER 2118-tnut: executed rather than sourced, ask the real rule one question.
+#   scripts/change-class.sh may-skip <guard> <declared-inputs...>  -> prints skip | run
+# The keep-unconditional list is build.sh's data and is not consulted here;
+# the fixture (scripts/lua/test-gate-step-inputs.lua) drives the rule itself.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    case "${1:-}" in
+        may-skip)
+            shift; _g="$1"; shift
+            if change_class_may_skip "$_g" "" "$@"; then echo skip; else echo run; fi
+            exit 0 ;;
+        *) echo "usage: scripts/change-class.sh may-skip <guard> <inputs...>  (or source it)" >&2; exit 2 ;;
+    esac
+fi
