@@ -1,4 +1,4 @@
--- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @env TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN CARGO_TARGET_DIR
 -- @trace order:2166-zvst
 --
 -- test-lua-deciders-judge-caller-repo.lua — a Lua decider whose contract is
@@ -21,12 +21,37 @@
 local fixture = require "common.fixture"
 local T = fixture.new("lua-deciders-judge-caller-repo")
 
-local BIN = env.get("TILLANDSIAS_PLAN_BIN")
-if BIN == nil or BIN == "" then BIN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") end
-if BIN == nil or BIN == "" then verdict.emit("skip:lua-deciders-judge-caller-repo:no-plan-binary (set TILLANDSIAS_PLAN_BIN)", 0) end
-
 local top = proc.run({ argv = { "git", "rev-parse", "--show-toplevel" }, timeout_ms = 30000 })
 local ROOT = text.trim(top.stdout or "")
+
+-- The plan binary that runs each decider: TILLANDSIAS_PLAN_BIN, then the gate's
+-- TILLANDSIAS_SCRIPT_RUNNER_BIN, then a built one (CARGO_TARGET_DIR, then
+-- <root>/target, release before debug, .exe for Windows). A candidate counts
+-- only if it RUNS. None is a REFUSAL, exit 1, never a skip: as a gate step a
+-- skip here was a permanent green that proved nothing (found on macneo).
+local function runs(p)
+    if p == nil or p == "" then return false end
+    local r = proc.run({ argv = { p, "capabilities" }, timeout_ms = 30000 })
+    return r.status == "exited" and r.code == 0
+end
+local BIN = nil
+local cands = { env.get("TILLANDSIAS_PLAN_BIN"), env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN") }
+for _, base in ipairs{ env.get("CARGO_TARGET_DIR") or "", ROOT .. "/target" } do
+    if base ~= "" then
+        for _, prof in ipairs{ "release", "debug" } do
+            cands[#cands + 1] = base .. "/" .. prof .. "/tillandsias-plan"
+            cands[#cands + 1] = base .. "/" .. prof .. "/tillandsias-plan.exe"
+        end
+    end
+end
+for i = 1, #cands do
+    if runs(cands[i]) then BIN = cands[i]; break end
+end
+if not BIN then
+    verdict.emit("refused:lua-deciders-judge-caller-repo:no-plan-binary", 1,
+        "  why: no runnable tillandsias-plan (TILLANDSIAS_PLAN_BIN, TILLANDSIAS_SCRIPT_RUNNER_BIN, CARGO_TARGET_DIR or target/), so no arm could run\n" ..
+        "  remedy: cargo build --release -p tillandsias-plan, then re-run")
+end
 
 local S = T:scratch("caller")
 local GIT = { "git", "-C", S.abs, "-c", "user.name=t", "-c", "user.email=t@t" }
