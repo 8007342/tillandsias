@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace order:1232-av4p
 #
-# Fixture for scripts/check-stranded-plan-writes.sh. A scratch repository whose
+# Fixture for scripts/lua/check-stranded-plan-writes.lua. A scratch repository whose
 # origin/linux-next ledger holds three packets, and a salvage ref carrying three
 # status writes the audit calls relay candidates:
 #   alpha  ready on trunk; the ref says implemented, NEWER   -> would-change
@@ -22,7 +22,8 @@ ok()  { pass=$((pass + 1)); echo "ok   $1"; }
 bad() { fail=$((fail + 1)); echo "FAIL $1"; }
 
 R="$work/repo"; mkdir -p "$R/scripts" "$R/plan/index.d"
-cp "$ROOT/scripts/check-stranded-plan-writes.sh" "$ROOT/scripts/plan-binary-probe.sh" "$R/scripts/"
+mkdir -p "$R/scripts/lua"
+cp "$ROOT/scripts/lua/check-stranded-plan-writes.lua" "$R/scripts/lua/"
 cat > "$R/plan/index.yaml" <<'Y'
 plan_index:
   packets:
@@ -82,7 +83,7 @@ salvage-audit: branch=origin/linux-next patterns=refs/heads/salvage/*
     plan/index.d/20260901t000000z-forge-claim.yaml  ref-may-be-AHEAD (predates no branch edit)
 ok:salvage-audit:1r:1w:2f:branch=origin/linux-next
 A
-out="$(TILLANDSIAS_PLAN_BIN="$PB" bash "$R/scripts/check-stranded-plan-writes.sh" --from "$work/audit" 2>&1)"
+out="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_PLAN_BIN="$PB" "$PB" script run scripts/lua/check-stranded-plan-writes.lua -- --from "$work/audit" 2>&1)"
 
 case "$out" in
     *"stranded:would-change:101-aaaa:alpha:ref=implemented:trunk=ready:folded=implemented:"*) ok "a newer ref write trunk lacks is would-change, named by order and id" ;;
@@ -103,7 +104,7 @@ esac
 # NEGATIVE CONTROL: an audit that marks the fragments as a STALE snapshot
 # (branch ahead) yields no candidates, so nothing is reported.
 sed 's/ref-may-be-AHEAD (predates no branch edit)/linux-next-is-AHEAD (stale snapshot)/' "$work/audit" > "$work/audit-stale"
-out2="$(TILLANDSIAS_PLAN_BIN="$PB" bash "$R/scripts/check-stranded-plan-writes.sh" --from "$work/audit-stale" 2>&1)"
+out2="$(cd "$R" && TILLANDSIAS_REPO_ROOT="$R" TILLANDSIAS_PLAN_BIN="$PB" "$PB" script run scripts/lua/check-stranded-plan-writes.lua -- --from "$work/audit-stale" 2>&1)"
 [ "$(tail -n 1 <<<"$out2")" = "ok:stranded-plan-writes:0 would-change, 0 superseded, on 0 ref(s)" ] \
     && ok "a stale snapshot is not a candidate" || bad "stale snapshot reported: $out2"
 
