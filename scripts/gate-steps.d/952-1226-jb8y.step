@@ -1,0 +1,10 @@
+# Gate step 1226-jb8y — data, not code (order 1072-b7eq). Moved out of inline build.sh
+# by 2173-inst so the pool and lanes can run it (build speed).
+STEP_DESC="Checking the salvage audit (1226-jb8y)"
+STEP_SCRIPT="scripts/test-salvage-audit.sh"
+STEP_ERROR="the salvage audit regressed — stranded work can again read as landed, or a stale snapshot as outstanding"
+STEP_OK="salvage audit fixture passed"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/salvage-audit.sh scripts/test-salvage-audit.sh"

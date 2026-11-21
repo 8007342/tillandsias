@@ -1,0 +1,10 @@
+# Gate step 1218-25z3 — data, not code (order 1072-b7eq). Moved out of inline build.sh
+# by 2173-inst so the pool and lanes can run it (build speed).
+STEP_DESC="Checking the must-ship-next release advisory (1218-25z3)"
+STEP_SCRIPT="scripts/test-must-ship-rows.sh"
+STEP_ERROR="the must-ship advisory regressed — a row required in the next cut can again be missed with nothing reporting it"
+STEP_OK="must-ship-next release advisory fixture passed"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-must-ship-rows.sh scripts/release-preflight.sh scripts/test-must-ship-rows.sh"
