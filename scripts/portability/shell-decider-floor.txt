@@ -111,7 +111,6 @@ scripts/test-capability-routing.sh
 scripts/test-capability-row-check.sh
 scripts/test-capture-helper.sh
 scripts/test-census-admitted-missing-evidence.sh
-scripts/test-census-sigpipe-verdict-pipelines.sh
 scripts/test-centicolon-extract.sh
 scripts/test-centicolon-grade.sh
 scripts/test-centicolon-ratchet.sh
