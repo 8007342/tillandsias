@@ -1,0 +1,37 @@
+# @trace spec:ci-release
+# @trace order:2146-4svj
+#
+# Measured 2026-11-20 on lenovinha: on the shared CARGO_TARGET_DIR, a gate in
+# wt-2118-77ew ran with tillandsias-embed's assets embedded from wt-2118-tnut's
+# images/ (651 vs 653), because a build script that emits rerun-if-changed is
+# rerun only when THOSE absolute paths (into the previous owner's checkout)
+# change. shared_target_enter now forgets every build script whose output
+# names the previous root. Reproduced and fixed end to end with two worktrees
+# and an extra images/ file: old 653 vs 654 red, new green.
+name: litmus:shared-target-owner-change-reruns-build-scripts
+spec: ci-release
+phase: pre-build
+description: On a shared-target owner change, every build script whose recorded rerun-if-changed paths belong to a checkout other than the current one (longest worktree root wins) is forgotten so cargo reruns it here; registry and OUT_DIR paths never cause a forget
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash; a fake target dir under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "forgets the build scripts that read the previous checkout in both profiles, keeps this checkout's and a prefix lookalike's, and shared_target_enter calls it"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-shared-target-forgets-build-scripts.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:shared-target-forgets-build-scripts:12 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "twelve arms: other worktrees, a third worktree, the main checkout and a deleted worktree forgotten; own, registry and OUT_DIR kept; wt-1 vs wt-10 boundary; main as owner; wiring"
+  log_fields:
+    spec: "ci-release"
+    test: "shared-target-owner-change-reruns-build-scripts"
+
+rollback:
+  on_failure: "read the FAIL lines; the function is shared_target_forget_build_scripts in scripts/shared-target.sh"
+  command: "grep -n forget_build_scripts scripts/shared-target.sh"

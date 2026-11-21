@@ -54,6 +54,13 @@ git -C "$ROOT" worktree add -q --detach "$wt" HEAD 2>/dev/null || { bad "could n
 mkdir -p "$wt/crates/tillandsias-embed/src"; cp "$ROOT/crates/tillandsias-embed/build.rs" "$wt/crates/tillandsias-embed/build.rs"; cp "$ROOT/crates/tillandsias-embed/src/collect.rs" "$wt/crates/tillandsias-embed/src/collect.rs"
 [ ! -e "$wt/images/router/tillandsias-router-sidecar" ] || { bad "scratch worktree unexpectedly has a sidecar"; exit 1; }
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
+# ORDER 2146-4svj: the scratch worktree builds on the SHARED target, where the
+# embed build script's last run recorded rerun-if-changed paths into ANOTHER
+# checkout; cargo would reuse that run and never see this tree's missing
+# sidecar, so ARM2 passed or failed by accident of who built last. Forget the
+# build scripts other checkouts own, as shared_target_enter does on an owner
+# change, so both arms judge THIS tree.
+bash "$ROOT/scripts/shared-target.sh" forget-build-scripts "$CARGO_TARGET_DIR" "$wt" >/dev/null 2>&1 || true
 
 # ── ARM 1 ────────────────────────────────────────────────────────────────
 # "Target installed" is not "target buildable" (yolanda 2026-09-29): ring's
