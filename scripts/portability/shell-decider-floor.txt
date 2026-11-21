@@ -207,7 +207,6 @@ scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
 scripts/test-forge-packed-refs-split-brain.sh
-scripts/test-forge-policy-binary-discoverability.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
