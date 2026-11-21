@@ -1,4 +1,4 @@
-// @trace order:1584-ik5v
+// @trace order:1584-ik5v, order:2169-tdop
 //! verdict.emit's legacy grammar: degraded: and down: (check-local-expert-health's
 //! established lines) are emitted verbatim with their own exit codes, and a
 //! prefix outside the grammar is still refused.
@@ -52,6 +52,24 @@ fn down_is_emitted_verbatim_with_exit_one() {
     assert_eq!(
         String::from_utf8_lossy(&o.stdout),
         "down:local-experts-ollama-unreachable\n"
+    );
+}
+
+/// Order 2169-tdop: the fleet's todo-shaped deciders (check-bare-metal-host-
+/// initialized.sh prints `todo:initialize-bare-metal-host:<component>:<cmd>`
+/// with rc 1, read by check-fleet-membership.sh) port with byte-identical
+/// output: one line, verbatim, rc 1.
+#[test]
+fn todo_is_emitted_verbatim_with_exit_one() {
+    let d = root();
+    let o = run(
+        d.path(),
+        "verdict.emit('todo:initialize-bare-metal-host:vault:tillandsias --ensure-enclave', 1)\n",
+    );
+    assert_eq!(o.status.code(), Some(1), "{o:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&o.stdout),
+        "todo:initialize-bare-metal-host:vault:tillandsias --ensure-enclave\n"
     );
 }
 
