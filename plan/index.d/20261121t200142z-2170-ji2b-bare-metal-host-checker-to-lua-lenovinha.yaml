@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator assignment, 2026-11-21).
+packets:
+  - packet_id: the-bare-metal-host-checker-is-lua-and-its-sh-is-deleted
+    order: 2170-ji2b
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 3
+    title: |
+      Port scripts/check-bare-metal-host-initialized.sh (135 lines) to scripts/lua/ with byte-identical verdicts (needs 2169-tdop's todo: prefix), repoint check-fleet-membership, the two fixtures, the litmus tests and the skills, and delete the .sh.
+    context: |
+      Assigned by macuahuitl-fedora after 2169-tdop; stacked on 2169-tdop and 2168-dqph (whose lane-command fixture drives this checker).
+    exit_criteria:
+      - 'the Lua checker prints the same line and exit code as the .sh on this host, and on planted container states for every branch (no podman, vault, proxy, mirror, router, inference, ok); every caller names the Lua path; the .sh and its floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port on top of 2169-tdop, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: [lua-verdict-emit-accepts-a-todo-prefix-so-fleet-deciders-can-port]
+    related: [1354-uv4e, 1312-i6da, 2169-tdop, 2168-dqph]
+    events:
+      - {type: filed, ts: '2026-11-21T20:01:42Z', host: lenovinha, summary: filed the bare-metal-host checker port}

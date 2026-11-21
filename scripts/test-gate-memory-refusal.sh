@@ -26,8 +26,11 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
-FLOOR="$ROOT/scripts/check-gate-memory-floor.sh"
-[ -x "$FLOOR" ] || { echo "could-not-run:gate-memory-refusal:missing:$FLOOR"; exit 3; }
+# 2167-gmfl: the decider is the Lua; scripts/check-gate-memory-floor.sh is only
+# its bootstrap, so the judged arms run the Lua itself (arm 8 still pins the
+# bootstrap path build.sh calls).
+FLOOR="$ROOT/scripts/lua/check-gate-memory-floor.lua"
+[ -f "$FLOOR" ] || { echo "could-not-run:gate-memory-refusal:missing:$FLOOR"; exit 3; }
 
 OOM_LUA="$ROOT/scripts/lua/check-oom-postmortem.lua"
 [ -f "$OOM_LUA" ] || { echo "could-not-run:gate-memory-refusal:missing:$OOM_LUA"; exit 3; }
@@ -38,6 +41,7 @@ if [ -z "$PLAN_BIN" ] || ! grep -qx script <<<"$("$PLAN_BIN" capabilities 2>/dev
     exit 0
 fi
 OOM() { "$PLAN_BIN" script run "$OOM_LUA" -- "$@"; }
+FLOOR_RUN() { "$PLAN_BIN" script run "$FLOOR" -- "$@"; }
 
 # 1611-imnj: scratch goes under .tillandsias/fixture-scratch/, which is inside
 # the repo (the Lua runner's fs is repo-rooted, and target/ can be a symlink out
@@ -60,7 +64,7 @@ printf 'sep 14 01:02:03 h kernel: Out of memory: Killed process 4123 (rustc) tot
 printf 'sep 14 01:02:03 h kernel: usb 1-2: new high-speed USB device\n' > "$W/journal-quiet"
 
 # ── 1. below the floor: refuse BY NAME, naming the floor and the reading ────
-out="$("$FLOOR" --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
+out="$(FLOOR_RUN --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
 if [ "$rc" = "1" ] && case "$out" in *refused:gate:insufficient-memory*) true ;; *) false ;; esac; then
     case "$out" in
         *128MB*|*"floor 1024MB"*) ok "a host below the floor refuses by name, naming the floor and the reading" ;;
@@ -73,7 +77,7 @@ fi
 # ── 2. NEGATIVE CONTROL 1: a host ABOVE the floor sees no new refusal ───────
 #    The floor must not become a second cliff. This is the arm that fails if
 #    someone "tightens" the default into refusing hosts that would have finished.
-out="$("$FLOOR" --meminfo-from "$W/healthy" 2>/dev/null)"; rc=$?
+out="$(FLOOR_RUN --meminfo-from "$W/healthy" 2>/dev/null)"; rc=$?
 if [ "$rc" = "0" ] && case "$out" in ok:gate-memory:*) true ;; *) false ;; esac; then
     ok "NC1: a host above the floor is unaffected — no new refusal appears"
 else
@@ -85,7 +89,7 @@ fi
 #    completes with 11-12 GiB available, so a default anywhere near that would
 #    refuse a working host. Measured against the shipped default, not a literal.
 avail_mb=$(( $(sed -n 's/^MemAvailable:[[:space:]]*\([0-9]*\).*/\1/p' "$W/healthy") / 1024 ))
-default_floor="$(TILLANDSIAS_GATE_MEMORY_FLOOR_MB= "$FLOOR" --meminfo-from "$W/healthy" 2>/dev/null | sed -n 's/.*floor \([0-9]*\)MB.*/\1/p')"
+default_floor="$(TILLANDSIAS_GATE_MEMORY_FLOOR_MB= FLOOR_RUN --meminfo-from "$W/healthy" 2>/dev/null | sed -n 's/.*floor \([0-9]*\)MB.*/\1/p')"
 if [ -n "$default_floor" ] && [ "$default_floor" -le $(( avail_mb / 4 )) ]; then
     ok "the default floor (${default_floor}MB) is well under a completing host's headroom (${avail_mb}MB)"
 else
@@ -102,7 +106,7 @@ fi
 # (1273-4mak), run-litmus-test.sh reads the LAST non-empty line. Without it this
 # decider's honest inability was scored `refused:preflight:check-gate-memory-
 # floor` and --preflight could not exit 0 on any host with no /proc/meminfo.
-out="$("$FLOOR" --meminfo-from "$W/no-memavailable" 2>/dev/null)"; rc=$?
+out="$(FLOOR_RUN --meminfo-from "$W/no-memavailable" 2>/dev/null)"; rc=$?
 if [ "$rc" = "3" ] && case "$out" in *could-not-run:gate-memory:no-memavailable*) true ;; *) false ;; esac; then
     ok "a meminfo without MemAvailable is could-not-run, not a verdict (MemFree would under-report)"
 else
@@ -119,7 +123,7 @@ fi
 # must still exit non-zero. Widening what counts as a non-failure is the one
 # change that can quietly dissolve a red, so it is pinned here rather than
 # assumed.
-out="$("$FLOOR" --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
+out="$(FLOOR_RUN --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
 if [ "$rc" != "0" ] && case "$out" in *refused:gate:insufficient-memory*) true ;; *) false ;; esac \
    && ! case "$out" in *"skip:"*) true ;; *) false ;; esac; then
     ok "a real below-floor refusal stays a refusal, carries no skip line, and exits non-zero (1354-apns)"
@@ -199,6 +203,39 @@ elif [ "$_oom_line" -gt "$_else_line" ]; then
     ok "NC2 structurally: the driver consults the OOM record only on the no-failing-line path"
 else
     bad "the OOM consult is not inside the no-match branch — it could fire on an ordinary gate failure"
+fi
+
+# ── 10. THE BOOTSTRAP, with no plan binary (2167-gmfl) ─────────────────────
+#    build.sh asks scripts/check-gate-memory-floor.sh at gate start, before
+#    anything is built. With no runnable plan binary it must NAME that it could
+#    not run and end on skip:, exit 3 (build.sh warns and proceeds) — never ok:,
+#    which would be a capacity claim from an instrument that read nothing.
+mkdir -p "$W/boot/scripts"
+cp "$ROOT/scripts/check-gate-memory-floor.sh" "$ROOT/scripts/plan-binary-probe.sh" "$W/boot/scripts/"
+_np=""; _ifs="$IFS"; IFS=:
+for d in $PATH; do
+    [ -n "$d" ] || continue
+    [ -e "$d/tillandsias-plan" ] || [ -e "$d/tillandsias-plan.exe" ] || _np="${_np:+$_np:}$d"
+done
+IFS="$_ifs"
+out="$(cd "$W/boot" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR -u TILLANDSIAS_SCRIPT_RUNNER_BIN \
+    PATH="$_np" bash scripts/check-gate-memory-floor.sh --meminfo-from "$W/healthy" 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 3 ] && grep -q '^could-not-run:gate-memory:no-plan-binary' <<<"$out" \
+    && [ "$(printf '%s\n' "$out" | tail -1)" = "skip:gate-memory:no-plan-binary" ]; then
+    ok "with no plan binary the bootstrap names could-not-run and ends on skip:, exit 3"
+else
+    bad "the bootstrap with no plan binary did not name its could-not-run (rc=$rc): $out"
+fi
+
+# ── 11. ...AND STILL REFUSES A STARVED HOST without the binary (2167-gmfl) ──
+#    A fresh checkout on a low-memory host is where the floor matters most, and
+#    build.sh only warns on rc 3: a skip there would start the gate unguarded.
+out="$(cd "$W/boot" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR -u TILLANDSIAS_SCRIPT_RUNNER_BIN \
+    PATH="$_np" bash scripts/check-gate-memory-floor.sh --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q "^refused:gate:insufficient-memory" <<<"$out"; then
+    ok "with no plan binary the bootstrap still refuses a host below the floor, exit 1"
+else
+    bad "the bootstrap with no plan binary let a starved host through (rc=$rc): $out"
 fi
 
 total=$((pass+fail))
