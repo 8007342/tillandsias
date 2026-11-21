@@ -4579,12 +4579,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # with the number in hand it is not a close call. Note the second one pins
     # the gate STAMP scope (887-bz88) — the guard whose weakening was refused
     # hours earlier the same day, sitting unwired and broken the whole time.
-    _step "Checking the credential-channel fixture (860-g798)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-check-credential-channel.sh" 2>&1; then
-        _error "the credential-channel fixture regressed — the push-path guard every cycle depends on is unproven"
-        exit 1
-    fi
-    _info "credential-channel fixture passed"
+    # ORDER 2118-9kqp: test-check-credential-channel.sh (860-g798) runs ONCE, in
+    # gate step 350-1903-djsq, under the sentinel session bus.
 
     # ORDER 1903-djsq — gnome-keyring-daemon aborted DURING full gates
     # (macuahuitl 2026-10-25 20:36, 20:51, 2026-10-26 02:01 PDT; lenovinha
@@ -4592,17 +4588,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # inherited the operator's session bus. This runs each against a sentinel
     # dbus-daemon and fails on any bus event. Exit 3 = no dbus-daemon here
     # (macOS); its static arm still fails with 1.
-    _step "Checking no keyring fixture reaches the session bus it inherited (1903-djsq)..."
-    _kfpb_rc=0
-    _run bash "$SCRIPT_DIR/scripts/test-keyring-fixtures-use-a-private-bus.sh" 2>&1 || _kfpb_rc=$?
-    if [ "$_kfpb_rc" -eq 3 ]; then
-        _info "skip: no dbus-daemon on this host; the static private-bus arm passed"
-    elif [ "$_kfpb_rc" -ne 0 ]; then
-        _error "a keyring fixture reached the session bus it inherited (1903-djsq) — on an operator host that is gnome-keyring-daemon, which aborts and restarts LOCKED (1265-8qr6); source scripts/test-support/private-session-bus.sh in the fixture named above and stub what it fell through to"
-        exit 1
-    else
-        _info "keyring fixtures stay off the inherited session bus"
-    fi
+    # ORDER 2118-9kqp: this check is gate step 350-1903-djsq now, and it runs
+    # the eight credential fixtures once each (their verdicts and their bus).
 
     _step "Checking the gate-stamp scope fixture (887-bz88)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-gate-stamp-scope.sh" 2>&1; then
@@ -6993,12 +6980,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Requirement-id fixture passed"
 
-    _step "Checking the credential verdict tells invalid from unreachable (995-srbf)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-credential-verdict-script.sh" 2>&1; then
-        _error "the credential verdict script stopped distinguishing a refused token from an unanswered probe (995-srbf) — a false demotion logs the operator out, a missed one holds LoggedIn against a dead token"
-        exit 1
-    fi
-    _info "Credential verdict fixture passed"
+    # ORDER 2118-9kqp: test-credential-verdict-script.sh (995-srbf) runs ONCE, in
+    # gate step 350-1903-djsq, under the sentinel session bus.
 
     _step "Checking the freshness budget is regime-named and still catches a regression (1038-d7vw)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-freshness-regime-budget.sh" 2>&1; then
