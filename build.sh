@@ -2967,6 +2967,8 @@ _run_gate_steps() {  # $1 = root
 # shared log around each step, so in the pool a leak is still REFUSED but may
 # be named against a neighbouring step.
 # No `wait -n` (bash 4.3+): darwin's /bin/bash 3.2 runs this gate too.
+# SECOND REGIME (2155-gpar): tlatoanis-macbook-air 2026-11-20 darwin ok:gate-step-pool:jobs6:209
+# (bash 3.2 + BSD; darwin serial 944 s, pool 730 s). Linux yoga: 844.8 s -> 480.8 s.
 _gs_pool() {
     local _jobs="$1" _d _f _i=0 _n _rc _t0=$SECONDS _total=0 _ran=0
     local -a _ser=()
