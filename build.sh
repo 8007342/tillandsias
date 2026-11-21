@@ -1604,10 +1604,57 @@ fi
 # and would never write the marker, which is exactly the exposure.
 # --preflight never builds and is not touched; a plain dev build is not a gate.
 # BEGIN-GATE-TOUCH
+#
+# ORDER 2162-bpqz (build speed): TOUCH ONLY WHAT DIFFERS FROM THE LAST GATED
+# TREE, WHEN THAT IS PROVABLY THE TREE THE TARGET HOLDS. Touching every file
+# made cargo recompile all 28 workspace crates on every gate, a PR touching no
+# Rust included (macuahuitl #1237: 69 Compiling lines, ~105 s of build for 22 s
+# of tests). A green gate now records the tree it built
+# (<target>/.gate-tree-snapshot: the checkout, then "<blob> <path>" per tracked
+# file, dirty files by their working-tree content). The next gate touches ONLY
+# the paths whose blob changed, and only when all of these hold:
+#   - the snapshot names THIS checkout (another checkout's build bakes its own
+#     CARGO_MANIFEST_DIR; that is shared-target.sh's full touch);
+#   - nothing under the target's .fingerprint dirs is newer than the snapshot,
+#     so no cargo built here since it was written: a bare `cargo` in the main
+#     checkout (which shares this target) or a gate that went red falls back;
+#   - the snapshot is readable and well-formed.
+# Otherwise every tracked file is touched, exactly as before.
+_gate_tree_snapshot() { # -> "<checkout>" then "<blob> <path>" lines, sorted
+    printf 'checkout %s\n' "$SCRIPT_DIR"
+    {
+        git -C "$SCRIPT_DIR" ls-files -s --full-name -- ":/" | awk '{ sub(/^[0-9]+ /, ""); sub(/ [0-9]+\t/, " "); print }'
+        # dirty tracked files are built from their working-tree bytes
+        git -C "$SCRIPT_DIR" diff --name-only 2>/dev/null | while IFS= read -r _p; do
+            [ -f "$SCRIPT_DIR/$_p" ] && printf '%s %s\n' "$(git -C "$SCRIPT_DIR" hash-object -- "$SCRIPT_DIR/$_p")" "$_p"
+        done
+    } | awk '{ p = substr($0, index($0, " ") + 1); b[p] = $1 } END { for (p in b) print b[p] " " p }' | LC_ALL=C sort
+}
 _touch_gating_checkout() {
-    local _t0="$SECONDS"
-    xargs -0 touch -c < <(git -C "$SCRIPT_DIR" ls-files -z --full-name -- ":/") 2>/dev/null || true
-    echo "note:gate-touch:tracked files of $SCRIPT_DIR touched in $(( SECONDS - _t0 ))s, so cargo rebuilds this checkout's units (1599-egzz)" >&2
+    local _t0="$SECONDS" _snap _tgt _prev _now _n
+    _tgt="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}"
+    _snap="$_tgt/.gate-tree-snapshot"
+    _now="$(_gate_tree_snapshot)"
+    if [ -s "$_snap" ] && [ "$(head -n 1 "$_snap")" = "checkout $SCRIPT_DIR" ] \
+       && [ -z "$(find "$_tgt" -maxdepth 4 -path '*/.fingerprint/*' -newer "$_snap" -print -quit 2>/dev/null)" ]; then
+        _prev="$(tail -n +2 "$_snap")"
+        _n=0
+        while IFS= read -r _p; do
+            [ -n "$_p" ] || continue
+            touch -c "$SCRIPT_DIR/$_p" 2>/dev/null && _n=$((_n + 1))
+        done < <(LC_ALL=C comm -13 <(printf '%s\n' "$_prev") <(printf '%s\n' "$_now" | tail -n +2) | cut -d' ' -f2-)
+        echo "note:gate-touch:precise:$_n path(s) differ from the last gated tree of $SCRIPT_DIR; only they were touched in $(( SECONDS - _t0 ))s (2162-bpqz)" >&2
+    else
+        xargs -0 touch -c < <(git -C "$SCRIPT_DIR" ls-files -z --full-name -- ":/") 2>/dev/null || true
+        echo "note:gate-touch:tracked files of $SCRIPT_DIR touched in $(( SECONDS - _t0 ))s, so cargo rebuilds this checkout's units (1599-egzz; no current snapshot of this checkout's last gated tree, 2162-bpqz)" >&2
+    fi
+}
+# Called by _write_gate_stamp, i.e. only after a GREEN gate.
+_record_gate_tree_snapshot() {
+    local _tgt="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}"
+    [ -d "$_tgt" ] || return 0
+    _gate_tree_snapshot > "$_tgt/.gate-tree-snapshot.tmp" 2>/dev/null \
+        && mv -f "$_tgt/.gate-tree-snapshot.tmp" "$_tgt/.gate-tree-snapshot" 2>/dev/null || true
 }
 if [[ "$FLAG_CHECK$FLAG_TEST$FLAG_CI$FLAG_CI_FULL$FLAG_RELEASE$FLAG_INSTALL" == *true* ]]; then
     (cd "$SCRIPT_DIR" && _touch_gating_checkout)
@@ -3185,6 +3232,8 @@ _write_gate_stamp() {
         _warn "class selector skipped ${_CLASS_SKIPPED} guard(s); stamping scope=$_stamp_scope, NOT full"
     fi
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope "$_stamp_scope" --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
+        # 2162-bpqz: the tree this green gate built, for the next gate's touch.
+        _record_gate_tree_snapshot
         if [ "${_CLASS_SKIPPED:-0}" -eq 0 ]; then
             change_class_record_full_run
             _info "Gate stamp recorded, scope=full (pre-push will accept this tree)"
