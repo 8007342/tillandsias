@@ -33,18 +33,23 @@ ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || { echo "miss:not-a-git-re
 GIT_COMMON="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || { echo "miss:no-git-dir"; exit 1; }
 MEMO="${TILLANDSIAS_ARCHIVER_MEMO:-$GIT_COMMON/tillandsias-archiver-check.memo}"
 MEMO_KEEP=64   # digests kept; the oldest drop first
+export LC_ALL=C   # glob order is part of the digest
 cd "$ROOT" || exit 1
 . scripts/plan-binary-probe.sh
 if command -v sha256sum >/dev/null 2>&1; then SHA=(sha256sum); else SHA=(shasum -a 256); fi
 
 _digest() {
     {
-        # Ledger inputs, by name and content. `cat` over a sorted list so the
-        # digest is stable across shells; a missing archive dir is fine.
+        # Ledger inputs, by name and content: ONE hashing process over the
+        # whole list ("<hash>  <path>" per file, so names stay in the key).
+        # Forking one hasher per fragment cost 12 s per memo HIT at 6,819
+        # fragments (calmecacpilli, 2026-11-21); one process takes 0.3 s.
+        # LC_ALL=C (top of file) pins the glob order, which is part of the key.
+        local _ledger=() f
         for f in plan/index.yaml plan/archive/*.yaml plan/index.d/*.yaml; do
-            [ -f "$f" ] || continue
-            printf '%s\n' "$f"; "${SHA[@]}" < "$f"
+            [ -f "$f" ] && _ledger+=("$f")
         done
+        [ "${#_ledger[@]}" -gt 0 ] && "${SHA[@]}" -- "${_ledger[@]}"
         # The instrument: a changed checker must re-run.
         # 964-9yyp adds native-scratch-dir.sh: it decides WHERE the check's
         # tree churn happens, so a change to it is a change to the instrument
