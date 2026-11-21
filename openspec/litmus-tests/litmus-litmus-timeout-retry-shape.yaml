@@ -1,0 +1,41 @@
+# @trace spec:spec-traceability
+name: litmus:litmus-timeout-retry-shape
+spec: spec-traceability
+phase: pre-build
+description: >
+  Order 2150-3j97 (priority:build-speed). A litmus step killed by its own
+  timeout (rc 124 or 137) with no output is re-run once and announced as
+  flaky:<test>#<step>. An assertion red, a step that printed output, and a
+  second timeout are never re-run. RC attempt 4 failed only on two silent
+  step timeouts on a loaded host.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-litmus-timeout-retry.sh
+
+critical_path:
+  - step: "fixture parses and is executable"
+    command: "bash -n scripts/test-litmus-timeout-retry.sh && test -x scripts/test-litmus-timeout-retry.sh && echo 'ok: parse'"
+    timeout_ms: 2000
+    expected_behavior: "ok: parse"
+
+  - step: "silent timeout re-run once and named flaky; negative control: an assertion red is never re-run; output-then-timeout and a double timeout stay red"
+    command: "out=$(bash scripts/test-litmus-timeout-retry.sh 2>&1); rc=$?; printf '%s\\n' \"$out\"; exit $rc"
+    timeout_ms: 180000
+    expected_behavior: "PASS: litmus-timeout-retry 5/5"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "PASS: litmus-timeout-retry"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-timeout-retry-shape"
+    artifact: "scripts/run-litmus-test.sh step loop (2150-3j97)"
+
+rollback:
+  on_failure: >
+    The re-run must stay limited to an empty-stdout rc 124/137 kill, once.
+    Restore that condition in run-litmus-test.sh's step loop before anything else.
+  command: "bash scripts/test-litmus-timeout-retry.sh"

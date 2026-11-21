@@ -8,7 +8,7 @@ STEP_LUA="scripts/lua/test-check-ghost-traces.lua"
 STEP_ERROR="the ghost-trace gate no longer refuses a new reference to a missing spec, or lost its build.sh binding (1842-2q4g) — see the arm lines above"
 STEP_OK="Ghost-trace gate fixture passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:ghost-traces-fixture:4 arms"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="openspec/ghost-trace-baseline.txt openspec/specs/ci-release/** openspec/specs/ci-release/spec.md scripts/lua/check-ghost-traces.lua scripts/lua/test-check-ghost-traces.lua scripts/trace-coverage.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/ghost-trace-baseline.txt openspec/specs/ci-release/** openspec/specs/ci-release/spec.md scripts/lua/check-ghost-traces.lua scripts/lua/test-check-ghost-traces.lua scripts/trace-coverage.sh"

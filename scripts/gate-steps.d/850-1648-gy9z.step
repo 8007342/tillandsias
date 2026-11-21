@@ -22,7 +22,7 @@ STEP_SECOND_REGIME="yolanda-windows 2026-10-12 msys ok:gpu-stall-watchdog-fixtur
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
 STEP_LANES="port"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="images/inference/decode-floor-pin.sh images/inference/gpu-stall-watchdog.sh scripts/lua/test-gpu-stall-watchdog.lua"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/inference/decode-floor-pin.sh images/inference/gpu-stall-watchdog.sh scripts/lua/test-gpu-stall-watchdog.lua"

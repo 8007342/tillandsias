@@ -10,7 +10,7 @@ STEP_LUA="scripts/lua/test-prune-darwin-stale-objects.lua"
 STEP_ERROR="the darwin stale-object prune removed a linked executable's objects, kept a stale group, or touched a non-object file (1924-dobj) — see the FAIL lines above"
 STEP_OK="Darwin stale-object prune fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-29 darwin ok:prune-darwin-stale-objects:7"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/lua/prune-darwin-stale-objects.lua scripts/lua/test-prune-darwin-stale-objects.lua"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/prune-darwin-stale-objects.lua scripts/lua/test-prune-darwin-stale-objects.lua"

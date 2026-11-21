@@ -450,7 +450,11 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
    delete the whole persistent cache rather than prune it
    (`build_cache_hygiene.nix_store_policy`) — `podman image prune` of
    superseded versioned images,
-   the nix-lane guards on hosts with nix (`scripts/test-nix-toolbox.sh`,
+   the nix-lane guards on hosts with nix — "has nix" means
+   `bash scripts/nix-toolbox.sh capability` answers `ok:nix-capability:*`
+   (host OR toolbox), never `command -v nix`: on Silverblue hosts nix lives
+   only in the toolbox, and a `command -v` read skipped all of these steps on
+   lenovinha and macuahuitl (order 2162-evv5) — (`scripts/test-nix-toolbox.sh`,
    `scripts/check-nix-deps-stability.sh` — daily, not per-commit: each is a
    flake evaluation), the enclave nix binary cache on Linux hosts with a
    running enclave (`scripts/nix-cache-service.sh ensure` then
@@ -1905,9 +1909,9 @@ another host had claimed that morning. Then claim:
 tillandsias-plan set-field <order> status in_progress \
     --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
 git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
-scripts/check-claim-confirmed.sh <order>
+tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host "$(hostname -s)"
 # -> ok:claim-confirmed:<order> | refused:claim-not-on-origin | refused:claim-lost:<order>
-#    | unknown:claim-origin-unreachable (never a pass)
+#    | could-not-run:claim-origin-unreachable (never a pass)
 ```
 
 Push the claim BEFORE the work, not with it — an unpushed claim separates

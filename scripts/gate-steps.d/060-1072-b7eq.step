@@ -11,7 +11,7 @@ STEP_SCRIPT="scripts/test-gate-step-append-no-conflict.sh"
 STEP_ERROR="adding a gate step conflicts again, or a .step names a non-literal or missing script (1072-b7eq) — see the verdict line above"
 STEP_OK="Gate-step append check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: no two .step files share a numeric prefix — the ordering gap survives"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/gate-steps.d/** scripts/test-gate-step-append-no-conflict.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-steps.d/** scripts/test-gate-step-append-no-conflict.sh"

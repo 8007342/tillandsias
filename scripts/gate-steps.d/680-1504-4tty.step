@@ -13,7 +13,7 @@ STEP_SCRIPT="scripts/test-finalize-cycle-affordances.sh"
 STEP_ERROR="a finalize-cycle refusal lost its why/remedy, changed its token or exit code, or its remedy no longer clears it (1504-4tty)"
 STEP_OK="finalize-cycle refusals carry working affordances"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: finalize-cycle-affordances (1504-4tty) at dc2466f74, 3 arms, bash 3.2, ~/.gitconfig unchanged"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="plan/mo-full-attestations.d/** scripts/check-refusal-affordance-added.sh scripts/finalize-cycle.sh scripts/land-on-platform-branch.sh scripts/meta-orchestration-worktree-guard.sh scripts/mo-full-attest.sh scripts/report-held-claims.sh scripts/test-finalize-cycle-affordances.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/mo-full-attestations.d/** scripts/check-refusal-affordance-added.sh scripts/finalize-cycle.sh scripts/land-on-platform-branch.sh scripts/meta-orchestration-worktree-guard.sh scripts/mo-full-attest.sh scripts/report-held-claims.sh scripts/test-finalize-cycle-affordances.sh"

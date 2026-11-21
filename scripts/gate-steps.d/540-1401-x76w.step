@@ -17,7 +17,7 @@ STEP_SCRIPT="scripts/test-preflight-fixtures-default-target.sh"
 STEP_ERROR="the decider no longer catches a fixture that passes only under a masking plan-binary regime (1401-x76w); see which arm failed above"
 STEP_OK="default-target fixture decider refuses masked fixtures and admits absolutising ones"
 STEP_SECOND_REGIME="yolanda 2026-09-26 msys ok:fixture-default-target-fixture:8"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/plan-binary-probe.sh scripts/preflight-fixtures-default-target.sh scripts/test-preflight-fixtures-default-target.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/plan-binary-probe.sh scripts/preflight-fixtures-default-target.sh scripts/test-preflight-fixtures-default-target.sh"

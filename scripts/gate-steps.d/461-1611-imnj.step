@@ -12,7 +12,7 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:checkout-writers-
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/lua/check-checkout-writers.lua scripts/lua/test-checkout-writers.lua scripts/test-litmus-step-pipefail.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/check-checkout-writers.lua scripts/lua/test-checkout-writers.lua scripts/test-litmus-step-pipefail.sh"

@@ -1,10 +1,10 @@
 -- @trace order:2157-ginp
 --
--- check-gate-step-inputs.lua — every gate step's recorded STEP_INPUTS still
+-- check-gate-step-inputs.lua — every gate step's recorded STEP_READS still
 -- names paths that exist.
 --
 -- ORDER 2157-ginp (build speed): each scripts/gate-steps.d/*.step records the
--- paths it reads in STEP_INPUTS. They are RECORDED ONLY: nothing skips a step on
+-- paths it reads in STEP_READS. They are RECORDED ONLY: nothing skips a step on
 -- them yet, because skipping a check whose inputs did not change is a scope
 -- reduction the operator rules on. A record that is never read rots without a
 -- sound, and the day the skip is ruled in, a rotted record would skip a step
@@ -38,24 +38,24 @@ local function bad(msg) problems = problems + 1; log.raw("  " .. msg) end
 
 for _, n in ipairs(names) do
     local body = fs.read(DIR .. "/" .. n) or ""
-    local rec = body:match('\nSTEP_INPUTS="([^"]*)"') or body:match('^STEP_INPUTS="([^"]*)"')
+    local rec = body:match('\nSTEP_READS="([^"]*)"') or body:match('^STEP_READS="([^"]*)"')
     if not rec then
-        bad(n .. ": no STEP_INPUTS record")
+        bad(n .. ": no STEP_READS record")
     elseif not rec:match("%S") then
-        bad(n .. ": STEP_INPUTS is empty")
+        bad(n .. ": STEP_READS is empty")
     else
         for p in rec:gmatch("%S+") do
             paths = paths + 1
             local want = p:gsub("/%*%*$", "")
             if not fs.exists(root .. "/" .. want) then
-                bad(n .. ": STEP_INPUTS names " .. p .. ", which does not exist")
+                bad(n .. ": STEP_READS names " .. p .. ", which does not exist")
             end
         end
     end
 end
 
 if problems > 0 then
-    log.raw("  remedy: correct the STEP_INPUTS line of each step named above to the paths it reads now")
+    log.raw("  remedy: correct the STEP_READS line of each step named above to the paths it reads now")
     verdict.emit("violation:gate-step-inputs:" .. problems .. "-problem(s)", 1)
 end
 verdict.emit("ok:gate-step-inputs:" .. #names .. ":" .. paths, 0)

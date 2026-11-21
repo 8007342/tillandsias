@@ -13,7 +13,7 @@ STEP_SCRIPT="scripts/test-credential-channel-affordances.sh"
 STEP_ERROR="a credential-channel refusal lost its why/remedy, a remedy again instructs gh auth login/refresh, or the printed remedy no longer clears its refusal (1497-ahmd)"
 STEP_OK="credential-channel refusals carry working affordances"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-29 darwin PASS: credential-channel-affordances (1497-ahmd) at 389c7866c, 3 arms, bash 3.2; HOME pinned to the scratch dir afterwards at their suggestion"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/check-credential-channel.sh scripts/check-refusal-affordance-added.sh scripts/test-credential-channel-affordances.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-credential-channel.sh scripts/check-refusal-affordance-added.sh scripts/test-credential-channel-affordances.sh"

@@ -55,7 +55,7 @@ STEP_OK="A killed or hanging credential probe still yields exactly one bounded v
 # than as a measurement of one, and it is recorded here the same way. If
 # macbookair is stock, their run is the real evidence for that path.
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:credential-channel-survives-a-killed-probe:11"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/check-credential-channel.sh scripts/test-credential-channel-survives-a-killed-probe.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-credential-channel.sh scripts/test-credential-channel-survives-a-killed-probe.sh"

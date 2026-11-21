@@ -25,7 +25,7 @@ STEP_OK="selector host-scoped criteria annotation check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no runnable tillandsias-plan resolved, so the selector could not be driven"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:host-scoped-criteria:6"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/select-work-batch.sh scripts/test-selector-flags-host-scoped-criteria.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/plan-binary-probe.sh scripts/select-work-batch.sh scripts/test-selector-flags-host-scoped-criteria.sh"

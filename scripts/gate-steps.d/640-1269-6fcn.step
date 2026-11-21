@@ -14,7 +14,7 @@ STEP_SCRIPT="scripts/test-headless-sidecar-target-gate.sh"
 STEP_ERROR="a non-Linux target build of tillandsias-headless again refuses without the Linux-only router sidecar, or a Linux build stopped refusing (1269-6fcn)"
 STEP_OK="router sidecar required only for Linux targets; release job selects it by runner.arch"
 STEP_SECOND_REGIME="yolanda 2026-09-29 msys PASS: headless-sidecar-target-gate (1269-6fcn) at 89e5f2999; ARM3 ok, ARM1 and ARM2 named skips (no mingw, msvc host)"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="crates/tillandsias-embed/build.rs crates/tillandsias-embed/src/** crates/tillandsias-embed/src/collect.rs scripts/test-headless-sidecar-target-gate.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-embed/build.rs crates/tillandsias-embed/src/** crates/tillandsias-embed/src/collect.rs scripts/test-headless-sidecar-target-gate.sh"

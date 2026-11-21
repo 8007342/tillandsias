@@ -15,7 +15,7 @@ STEP_SCRIPT="scripts/test-gate-memory-wsl2-guest.sh"
 STEP_ERROR="the gate memory floor again asserts ok from a WSL2 guest's own meminfo, a machine that is not the one that reaps the gate (1337-7jr5); see which arm failed above"
 STEP_OK="gate memory floor refuses to assert from a WSL2 guest, judges a passed-in host figure"
 STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:gate-memory-wsl2-guest:4/4; wsl2 guest (6.18.33.2-microsoft-standard-WSL2) ok:4/4"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/check-gate-memory-floor.sh scripts/test-gate-memory-wsl2-guest.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-gate-memory-floor.sh scripts/test-gate-memory-wsl2-guest.sh"

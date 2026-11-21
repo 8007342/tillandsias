@@ -34,7 +34,7 @@ fi
 #   * unrelated config keys and an unrelated MCP server survive registration
 #
 # The Codex CLI is INJECTABLE via CODEX_BIN: when set, the real binary is
-# used; otherwise a real `codex` on PATH is preferred; otherwise the committed
+# used; otherwise the committed
 # stub (scripts/fixtures/codex-mcp-stub.sh) pins the same contract hermetically
 # so the test stays deterministic on hosts without Codex.
 
@@ -62,11 +62,16 @@ fail() {
     exit 1
 }
 
+# ORDER 2154-cdxs (build speed, coordinator 2026-11-21): THE STUB BY DEFAULT.
+# This used to prefer a real `codex` on PATH. Inside the builder toolbox that is
+# ~/.local/bin/codex (a standalone 0.140 install), and each call there costs
+# 2-3 s against 7 ms on the host, so the fixture's dozen calls ran past the
+# litmus step's 30 s budget: every forge-experts-discoverability step-10 red on
+# yoga. A fixture must not depend on a slow real binary, and a longer timeout
+# would only hide it. The real CLI is still exercised on demand: set CODEX_BIN.
 if [ -n "${CODEX_BIN:-}" ]; then
     [ -x "$CODEX_BIN" ] || fail "CODEX_BIN=$CODEX_BIN is not executable"
     BIN="$CODEX_BIN"
-elif command -v codex >/dev/null 2>&1; then
-    BIN="$(command -v codex)"
 else
     BIN="$STUB"
 fi

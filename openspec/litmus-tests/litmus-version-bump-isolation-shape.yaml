@@ -2,7 +2,7 @@
 name: litmus:version-bump-isolation-shape
 spec: methodology-accountability
 phase: pre-build
-description: check-version-bump-isolation.sh refuses a non-merge commit that changes VERSION alongside unrelated files, and passes a clean VERSION+Cargo-only release bump
+description: scripts/lua/check-version-bump-isolation.lua refuses a non-merge commit that changes VERSION alongside unrelated files, and passes a clean VERSION+Cargo-only release bump
 severity: high
 size: instant
 
@@ -14,21 +14,21 @@ size: instant
 # a hermetic temp repo so it depends on no specific real commit.
 
 preconditions:
-  - scripts/check-version-bump-isolation.sh is present
+  - scripts/lua/check-version-bump-isolation.lua is present
 
 critical_path:
   - step: "SWEEP is refused: a commit changing VERSION + an unrelated source file exits non-zero"
-    command: "G=\"$PWD/scripts/check-version-bump-isolation.sh\"; T=$(mktemp -d); ( cd \"$T\" && git init -q && git config user.email t@t && git config user.name t && printf 'v1\\n' > VERSION && printf 'x\\n' > Cargo.toml && git add -A && git commit -qm base && printf 'v2\\n' > VERSION && mkdir -p src && printf 'code\\n' > src/main.rs && git add -A && git commit -qm sweep ); S=$(cd \"$T\" && git rev-parse HEAD); if ( cd \"$T\" && bash \"$G\" --commit \"$S\" >/dev/null 2>&1 ); then echo \"FAIL: sweep not refused\"; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: sweep refused'"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; G=\"$PWD/scripts/lua/check-version-bump-isolation.lua\"; T=$(mktemp -d); ( cd \"$T\" && git init -q && git config user.email t@t && git config user.name t && printf 'v1\\n' > VERSION && printf 'x\\n' > Cargo.toml && git add -A && git commit -qm base && printf 'v2\\n' > VERSION && mkdir -p src && printf 'code\\n' > src/main.rs && git add -A && git commit -qm sweep ); S=$(cd \"$T\" && git rev-parse HEAD); if ( cd \"$T\" && \"$PB\" script run \"$G\" -- --commit \"$S\" >/dev/null 2>&1 ); then echo \"FAIL: sweep not refused\"; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: sweep refused'"
     timeout_ms: 15000
     expected_behavior: "ok: sweep refused"
 
   - step: "CLEAN release bump passes: a commit changing VERSION + Cargo.toml only exits zero"
-    command: "G=\"$PWD/scripts/check-version-bump-isolation.sh\"; T=$(mktemp -d); ( cd \"$T\" && git init -q && git config user.email t@t && git config user.name t && printf 'v1\\n' > VERSION && printf 'x\\n' > Cargo.toml && git add -A && git commit -qm base && printf 'v2\\n' > VERSION && printf 'y\\n' > Cargo.toml && git add -A && git commit -qm bump ); C=$(cd \"$T\" && git rev-parse HEAD); if ( cd \"$T\" && bash \"$G\" --commit \"$C\" >/dev/null 2>&1 ); then rm -rf \"$T\"; echo 'ok: clean bump passed'; else echo \"FAIL: clean bump refused\"; rm -rf \"$T\"; exit 1; fi"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; G=\"$PWD/scripts/lua/check-version-bump-isolation.lua\"; T=$(mktemp -d); ( cd \"$T\" && git init -q && git config user.email t@t && git config user.name t && printf 'v1\\n' > VERSION && printf 'x\\n' > Cargo.toml && git add -A && git commit -qm base && printf 'v2\\n' > VERSION && printf 'y\\n' > Cargo.toml && git add -A && git commit -qm bump ); C=$(cd \"$T\" && git rev-parse HEAD); if ( cd \"$T\" && \"$PB\" script run \"$G\" -- --commit \"$C\" >/dev/null 2>&1 ); then rm -rf \"$T\"; echo 'ok: clean bump passed'; else echo \"FAIL: clean bump refused\"; rm -rf \"$T\"; exit 1; fi"
     timeout_ms: 15000
     expected_behavior: "ok: clean bump passed"
 
   - step: "MERGE is exempt: a merge commit that inherits a VERSION change is not flagged"
-    command: "G=\"$PWD/scripts/check-version-bump-isolation.sh\"; T=$(mktemp -d); ( cd \"$T\" && git init -q && git config user.email t@t && git config user.name t && printf 'v1\\n' > VERSION && git add -A && git commit -qm base && git checkout -q -b feat && printf 'v2\\n' > VERSION && printf 'z\\n' > Cargo.toml && git add -A && git commit -qm bump && git checkout -q master 2>/dev/null || git checkout -q main; printf 'other\\n' > other.txt && git add -A && git commit -qm other && git merge -q --no-ff feat -m merge ); M=$(cd \"$T\" && git rev-parse HEAD); if ( cd \"$T\" && bash \"$G\" --commit \"$M\" >/dev/null 2>&1 ); then rm -rf \"$T\"; echo 'ok: merge exempt'; else echo \"FAIL: merge wrongly refused\"; rm -rf \"$T\"; exit 1; fi"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; G=\"$PWD/scripts/lua/check-version-bump-isolation.lua\"; T=$(mktemp -d); ( cd \"$T\" && git init -q && git config user.email t@t && git config user.name t && printf 'v1\\n' > VERSION && git add -A && git commit -qm base && git checkout -q -b feat && printf 'v2\\n' > VERSION && printf 'z\\n' > Cargo.toml && git add -A && git commit -qm bump && git checkout -q master 2>/dev/null || git checkout -q main; printf 'other\\n' > other.txt && git add -A && git commit -qm other && git merge -q --no-ff feat -m merge ); M=$(cd \"$T\" && git rev-parse HEAD); if ( cd \"$T\" && \"$PB\" script run \"$G\" -- --commit \"$M\" >/dev/null 2>&1 ); then rm -rf \"$T\"; echo 'ok: merge exempt'; else echo \"FAIL: merge wrongly refused\"; rm -rf \"$T\"; exit 1; fi"
     timeout_ms: 15000
     expected_behavior: "ok: merge exempt"
 
@@ -58,4 +58,4 @@ observability:
     test: "version-bump-isolation-shape"
 
 rollback:
-  on_failure: "restore scripts/check-version-bump-isolation.sh (companion-set matcher + --no-merges exemption) from git history"
+  on_failure: "restore scripts/lua/check-version-bump-isolation.lua (companion-set matcher + --no-merges exemption) from git history"

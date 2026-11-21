@@ -1,11 +1,11 @@
 # Gate step 2157-ginp — data, not code (order 1072-b7eq).
 #
-# Every gate step's STEP_INPUTS record still names paths that exist. The
+# Every gate step's STEP_READS record still names paths that exist. The
 # records are recorded only (no step is skipped on them; that waits on an
 # operator ruling), so this is what keeps them true until they are used.
-STEP_DESC="Checking every gate step's STEP_INPUTS record names paths that exist (2157-ginp)"
+STEP_DESC="Checking every gate step's STEP_READS record names paths that exist (2157-ginp)"
 STEP_LUA="scripts/lua/check-gate-step-inputs.lua"
-STEP_ERROR="a gate step's STEP_INPUTS names a path that no longer exists, or a step has no record (2157-ginp) — correct the named STEP_INPUTS lines"
+STEP_ERROR="a gate step's STEP_READS names a path that no longer exists, or a step has no record (2157-ginp) — correct the named STEP_READS lines"
 STEP_OK="gate step input records resolve"
-STEP_INPUTS="scripts/lua/check-gate-step-inputs.lua scripts/gate-steps.d/**"
+STEP_READS="scripts/lua/check-gate-step-inputs.lua scripts/gate-steps.d/**"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:gate-step-inputs:211:782"

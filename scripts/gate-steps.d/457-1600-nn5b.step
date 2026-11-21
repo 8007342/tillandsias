@@ -10,7 +10,7 @@ STEP_LUA="scripts/lua/test-worktree-add-cleanup.lua"
 STEP_ERROR="the worktree-cleanup scan or the door's sweep no longer does what its fixture constructs (1600-nn5b) — see the FAIL lines above"
 STEP_OK="Worktree-cleanup scan and door sweep fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:worktree-add-cleanup-fixture:10 arms"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/lua/check-worktree-add-cleanup.lua scripts/lua/test-worktree-add-cleanup.lua scripts/portability/** scripts/portability/worktree-add-scan-exempt.txt"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/check-worktree-add-cleanup.lua scripts/lua/test-worktree-add-cleanup.lua scripts/portability/** scripts/portability/worktree-add-scan-exempt.txt"

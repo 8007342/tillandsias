@@ -18,7 +18,7 @@ STEP_SCRIPT="scripts/test-sigpipe-verdict-measured.sh"
 STEP_ERROR="the measuring check cannot detect a SIGPIPE-decided verdict, or its calibration case stopped being known-bad (1076-kft9) — see the verdict line above"
 STEP_OK="SIGPIPE verdict measurement check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: CONTROL: an evaled pipeline yields a 1-element PIPESTATUS, so the naive form measures nothing"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/lib-sigpipe-verdict.sh scripts/litmus-covering-specs.sh scripts/test-sigpipe-verdict-measured.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lib-sigpipe-verdict.sh scripts/litmus-covering-specs.sh scripts/test-sigpipe-verdict-measured.sh"

@@ -11,7 +11,7 @@ STEP_LUA="scripts/lua/test-provider-usage-limit.lua"
 STEP_ERROR="a provider usage limit is no longer reported as itself, or a launch before its deadline calls the provider again (1941-rlim) — see the FAIL lines above"
 STEP_OK="provider usage-limit fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:provider-usage-limit:static + record + default + control + refuse + supervise arms"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="images/default/Containerfile images/default/entrypoint-forge-opencode.sh images/default/harness-supervisor.sh images/default/lib-provider-limit.sh images/default/opencode-tool-start-follower.sh scripts/lua/test-provider-usage-limit.lua"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/default/Containerfile images/default/entrypoint-forge-opencode.sh images/default/harness-supervisor.sh images/default/lib-provider-limit.sh images/default/opencode-tool-start-follower.sh scripts/lua/test-provider-usage-limit.lua"
