@@ -1,0 +1,9 @@
+# Gate step 2166-zvst — Lua deciders that judge "the checkout I am run from"
+# run git in the caller's PWD, even when TILLANDSIAS_REPO_ROOT / PROJECT_ROOT
+# name another repository (the runner's default cwd). Offline; one scratch repo.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking Lua deciders judge the caller's repository, not the runner's root (2166-zvst)"
+STEP_LUA="scripts/lua/test-lua-deciders-judge-caller-repo.lua"
+STEP_ERROR="a Lua decider judged the runner's repository root instead of the checkout it was run from (2166-zvst) — see the FAIL lines above"
+STEP_OK="Lua deciders judge the caller's repository"
