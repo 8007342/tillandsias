@@ -26,6 +26,30 @@ if command -v resolve_plan_binary >/dev/null 2>&1 \
         "$_gmf_root/scripts/lua/check-gate-memory-floor.lua" -- "$@"
 fi
 
-echo "could-not-run:gate-memory:no-plan-binary (no runnable tillandsias-plan yet, so scripts/lua/check-gate-memory-floor.lua cannot run; nothing is asserted about this host's memory)"
+# THE REFUSE PATH SURVIVES WITHOUT THE BINARY. A fresh checkout on a low-memory
+# host is exactly where the floor matters most, and build.sh only warns on rc 3,
+# so a skip here would start that host's first gate unguarded. This fallback
+# keeps the one verdict that protects it: MemAvailable plainly below the floor
+# refuses, exit 1. Everything subtler (WSL2 guest, bad floor, absent or odd
+# meminfo) is the Lua's to judge, and without it nothing else is asserted.
+_gmf_floor="${TILLANDSIAS_GATE_MEMORY_FLOOR_MB:-1024}"
+_gmf_meminfo=/proc/meminfo
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --meminfo-from) _gmf_meminfo="${2:-}"; shift 2 ;;
+        --floor-mb)     _gmf_floor="${2:-}"; shift 2 ;;
+        *) shift ;;
+    esac
+done
+_gmf_kb="$(sed -n 's/^MemAvailable:[[:space:]]*\([0-9][0-9]*\)[[:space:]]*kB.*/\1/p' "$_gmf_meminfo" 2>/dev/null | head -1)"
+case "$_gmf_floor" in ''|*[!0-9]*) _gmf_kb="" ;; esac
+if [ -n "$_gmf_kb" ] && [ $(( _gmf_kb / 1024 )) -lt "$_gmf_floor" ]; then
+    echo "refused:gate:insufficient-memory ($(( _gmf_kb / 1024 ))MB available, floor ${_gmf_floor}MB — read from $_gmf_meminfo; no plan binary yet, judged by the bootstrap)"
+    echo "  why: $(( _gmf_kb / 1024 ))MB is available against a ${_gmf_floor}MB floor, so the gate would likely be killed without a verdict" >&2
+    echo "  remedy: free memory (stop other gates, VMs or browsers on this host) and re-run; change TILLANDSIAS_GATE_MEMORY_FLOOR_MB only deliberately" >&2
+    exit 1
+fi
+
+echo "could-not-run:gate-memory:no-plan-binary (no runnable tillandsias-plan yet, so scripts/lua/check-gate-memory-floor.lua cannot run; MemAvailable is not below the floor, and nothing else is asserted about this host's memory)"
 echo "skip:gate-memory:no-plan-binary"
 exit 3

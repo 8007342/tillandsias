@@ -219,12 +219,23 @@ for d in $PATH; do
 done
 IFS="$_ifs"
 out="$(cd "$W/boot" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR -u TILLANDSIAS_SCRIPT_RUNNER_BIN \
-    PATH="$_np" bash scripts/check-gate-memory-floor.sh 2>/dev/null)"; rc=$?
+    PATH="$_np" bash scripts/check-gate-memory-floor.sh --meminfo-from "$W/healthy" 2>/dev/null)"; rc=$?
 if [ "$rc" -eq 3 ] && grep -q '^could-not-run:gate-memory:no-plan-binary' <<<"$out" \
     && [ "$(printf '%s\n' "$out" | tail -1)" = "skip:gate-memory:no-plan-binary" ]; then
     ok "with no plan binary the bootstrap names could-not-run and ends on skip:, exit 3"
 else
     bad "the bootstrap with no plan binary did not name its could-not-run (rc=$rc): $out"
+fi
+
+# ── 11. ...AND STILL REFUSES A STARVED HOST without the binary (2167-gmfl) ──
+#    A fresh checkout on a low-memory host is where the floor matters most, and
+#    build.sh only warns on rc 3: a skip there would start the gate unguarded.
+out="$(cd "$W/boot" && env -u TILLANDSIAS_PLAN_BIN -u CARGO_TARGET_DIR -u TILLANDSIAS_SCRIPT_RUNNER_BIN \
+    PATH="$_np" bash scripts/check-gate-memory-floor.sh --meminfo-from "$W/starved" 2>/dev/null)"; rc=$?
+if [ "$rc" -eq 1 ] && grep -q "^refused:gate:insufficient-memory" <<<"$out"; then
+    ok "with no plan binary the bootstrap still refuses a host below the floor, exit 1"
+else
+    bad "the bootstrap with no plan binary let a starved host through (rc=$rc): $out"
 fi
 
 total=$((pass+fail))
