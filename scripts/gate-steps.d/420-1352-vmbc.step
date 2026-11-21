@@ -61,3 +61,5 @@ STEP_DESC="Checking the preflight probes for setsid and names its isolation mode
 STEP_SCRIPT="scripts/test-preflight-setsid-probe.sh"
 STEP_ERROR="the preflight's setsid probe or its isolation-mode verdict was removed (1352-vmbc) — without the probe, every guard on a host with no setsid dies in its exec and the step reports ran=0; without the verdict token, a degraded run reads as an isolated one. Do NOT 'fix' by deleting setsid: build.sh's own comment records nine survivors and broken 124 detection from the run that tried"
 STEP_OK="The preflight runs its guards on a host without setsid, and says so"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"

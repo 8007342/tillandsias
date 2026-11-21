@@ -30,3 +30,5 @@ STEP_OK="enclave remedy coverage check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-enclave-service-health.sh is absent, so the remedy could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:enclave-remedy:5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"

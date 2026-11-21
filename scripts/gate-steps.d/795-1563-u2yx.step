@@ -14,3 +14,5 @@ STEP_SCRIPT="scripts/test-preflight-refused-name-lines-whole.sh"
 STEP_ERROR="a Windows '> log 2>&1' capture of the builder hop can again overwrite refusal lines, or the hop lost exec/exit-code/signal behaviour (1563-u2yx); see which arm failed above"
 STEP_OK="the builder hop keeps every refusal line in a same-file capture, and still execs for terminals and pipes"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:wsl-capture-fixture:7/7"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"

@@ -12,3 +12,5 @@ STEP_SCRIPT="scripts/test-spec-index-repo-relative-rung.sh"
 STEP_ERROR="an explicit spec-index root lost to the repo rung (1087-h2z9)"
 STEP_OK="Spec-index repo rung passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:spec-index-repo-relative-rung:6"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"

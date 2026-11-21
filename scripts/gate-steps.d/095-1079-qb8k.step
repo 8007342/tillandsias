@@ -27,3 +27,5 @@ STEP_SCRIPT="scripts/check-plan-binary-current.sh"
 STEP_ERROR="this host's plan binary WRITES on a read-only invocation — see the remedy above (1079-qb8k)"
 STEP_OK="Plan-binary write-is-opt-in check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:plan-binary-write-is-opt-in+role-satisfies (the probe resolved to the release-dir plan binary)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target; drives podman"

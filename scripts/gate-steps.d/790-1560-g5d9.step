@@ -21,3 +21,5 @@ STEP_SCRIPT="scripts/test-check-installer-prompts.sh"
 STEP_ERROR="an end-user installer gained an interactive prompt, or the prompt ratchet broke (1560-g5d9); see the file:line above"
 STEP_OK="the end-user installers are at or below the prompt floor"
 STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:installer-prompts-fixture:6 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"

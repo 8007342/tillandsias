@@ -17,3 +17,5 @@ STEP_SCRIPT="scripts/test-plan-fragments-lane-carries-status.sh"
 STEP_ERROR="the plan-only lane can again push a claim's events without its status fragment, so trunk keeps offering a claimed row (1266-dh2d); see which arm failed above"
 STEP_OK="the plan-only lane carries or refuses a claim's status fragment, never drops it"
 STEP_SECOND_REGIME="yolanda 2026-09-29 msys ok:plan-fragments-lane-carries-status:4/4"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"

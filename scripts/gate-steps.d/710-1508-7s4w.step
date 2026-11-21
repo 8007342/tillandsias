@@ -15,3 +15,5 @@ STEP_SCRIPT="scripts/test-plan-binary-probe-release-over-debug.sh"
 STEP_ERROR="the plan-binary probe again answers a debug build ahead of the release .exe on MSYS, or its Linux order changed (1508-7s4w); see which arm failed above"
 STEP_OK="plan-binary probe answers the release .exe on MSYS and keeps its Linux order"
 STEP_SECOND_REGIME="yolanda 2026-09-29 msys ok:1/1 (MSYS arm); tillandsias-build linux ok:1/1 (negative control)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"

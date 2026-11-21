@@ -23,3 +23,5 @@ STEP_SCRIPT="scripts/test-wsl-builder-kill-reaches-guest.sh"
 STEP_ERROR="killing the host side of the WSL2 builder hop again leaves guest processes running in the build distro (1567-9fgi); see which arm failed above"
 STEP_OK="a killed host side ends the whole guest run"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-11 msys ok:wsl-builder-kill-fixture:11"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
