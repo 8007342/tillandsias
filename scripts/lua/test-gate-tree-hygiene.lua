@@ -50,7 +50,9 @@ T:arm("ignored paths are not scratch", out:find("ignored/", 1, true) == nil, out
 env.TILLANDSIAS_GATE_SCRATCH_REFUSE = "1"
 out, r = run({ "scratch" }, env)
 T:arm("opt-in refuse -> exit 1, refused:tree-scratch", r.code == 1 and text.starts_with(out, "refused:tree-scratch:2MB>1MB"), out)
-T:must{ "rm", "-rf", SC.abs .. "/junk" }
+-- Workspace-RELATIVE on purpose: on msys SC.abs is a \\?\ verbatim path the
+-- runner policy cannot place inside the workspace, so it refuses the rm (yolanda).
+T:must{ "rm", "-rf", SC.rel .. "/junk" }
 out, r = run({ "scratch" }, env)
 T:arm("scratch removed -> ok again even with refuse on", r.code == 0 and text.starts_with(out, "ok:tree-scratch:"), out)
 
