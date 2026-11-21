@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story build-speed-lenovinha (coordinator, 2026-11-21).
+packets:
+  - packet_id: the-missing-ruby-fixture-positive-control-runs-the-ruby-lane-on-a-one-row-ledger-not-the-whole-archiver-check
+    order: 2160-suep
+    status: ready
+    kind: chore
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, archiver, ruby]
+    estimated_hours: 1
+    title: |
+      test-archiver-ruby-could-not-run's positive control re-ran the full default (Lua) archiver --check over the live ledger, about 117 s, and never exercised ruby. Report: 53.5 s on macuahuitl.
+    context: |
+      Profiled on lenovinha 2026-11-21. Of a ruby-backend --check on a one-row scratch ledger (30 s), 26.4 s was the answerability harness's cargo test, and the ruby sweep itself was 0.4 s.
+    exit_criteria:
+      - 'the positive control runs the ruby backend on a scratch one-row ledger, and the fixture takes under 10 s'
+      - 'skipping answerability is a fixture-only knob that prints a named skip and a partial-check closing line'
+    unscoreable: 'unpinnable-until-the-guard-exists: the fixture itself is the pin.'
+    next_action: 'Land the PR.'
+    provenance: coordinator build-speed round 3, 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [965-sxec, 2159-n9sa]
+    events:
+      - {type: filed, ts: '2026-11-21T08:12:16Z', host: lenovinha, summary: filed p0 under build-speed-lenovinha}

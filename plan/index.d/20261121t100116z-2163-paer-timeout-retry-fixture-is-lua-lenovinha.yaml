@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-timeout-retry-fixture-is-lua-and-its-sh-is-deleted
+    order: 2163-paer
+    status: ready
+    kind: chore
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [shell-to-lua, litmus]
+    estimated_hours: 1
+    title: |
+      #1251 (2150-3j97) added scripts/test-litmus-timeout-retry.sh, so the shell count went 981 to 982. New fixtures are Lua: port it to scripts/lua/ and delete the .sh.
+    context: |
+      Coordinator, 2026-11-21.
+    exit_criteria:
+      - 'scripts/lua/test-litmus-timeout-retry.lua keeps the five arms with the assertion-red negative control; the .sh is deleted; litmus litmus-timeout-retry-shape runs the .lua and passes'
+    unscoreable: 'unpinnable-until-the-guard-exists: the litmus is the pin.'
+    next_action: 'Land the PR.'
+    provenance: coordinator 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [2150-3j97]
+    events:
+      - {type: filed, ts: '2026-11-21T10:01:16Z', host: lenovinha, summary: filed the shell-to-lua follow-up to 2150-3j97}

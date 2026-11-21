@@ -558,6 +558,12 @@ for _, b in ipairs(backlogs) do
             log.raw("  " .. removed .. " is already deleted by another open work ref (" .. paid_by .. ", snapshot=" .. snapshot() ..
                 "): two changes paid with the same item. Land one; on this one write `Carried-Waiver: " .. name ..
                 " conflict:" .. removed .. " (#<pr>)` in the message's last paragraph.")
+            -- 2152-t5p9: the waiver as its OWN line, at column 0, keyed by the
+            -- BACKLOG name. land-queue copies the first such line into its
+            -- eviction hint; without it the queue fell back to the verdict's
+            -- third field and told people to write `Carried-Waiver:
+            -- paid-but-taken-by <reason>`, which no backlog answers to.
+            log.raw("Carried-Waiver: " .. name .. " conflict:" .. removed .. " (#<pr>)")
         elseif #head_pop < #base_pop and removed and not paid_by then
             out.line("carried:" .. name .. ":paid:" .. removed)
         elseif waivers[name] then

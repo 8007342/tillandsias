@@ -88,6 +88,22 @@ for _p in plan scripts .github VERSION; do
     cp -Rl "$ROOT/$_p" "$S/" 2>/dev/null || cp -R "$ROOT/$_p" "$S/"
 done
 git -C "$S" init -q . || { echo "FAIL: scaffold git init"; exit 2; }
+# ORDER 2161-jtam (priority:build-speed, coordinator 2026-11-21): ONE arm, the
+# closure (arm 1), folds this copy of the REAL ledger, so "a pending row does
+# not wedge the real ledger" is still asserted once per gate. Every other arm
+# folds a TRIMMED scaffold, a one-row ledger, because each release-preflight
+# over the real ledger is a full fold (~3.5 s here, ~12 s on a large tree) and
+# those arms judge the allowance's SHAPE, not the real ledger. T lives inside
+# REAL, so every trap and the scaffold sweep still remove both.
+REAL="$S"
+T="$REAL/trimmed"
+mkdir -p "$T/plan/index.d" "$T/plan/archive"
+for _p in scripts .github VERSION; do
+    [ -e "$ROOT/$_p" ] || continue
+    cp -Rl "$ROOT/$_p" "$T/" 2>/dev/null || cp -R "$ROOT/$_p" "$T/"
+done
+printf 'packets:\n  - packet_id: a-one-row-fixture-ledger\n    order: 9999-aaaa\n    status: ready\n    title: one row\n' > "$T/plan/index.yaml"
+git -C "$T" init -q . || { echo "FAIL: trimmed scaffold git init"; exit 2; }
 live_state() { git -C "$ROOT" status --porcelain --untracked-files=all -- plan/; ls "$ROOT/plan/index.d"; }
 LIVE_BEFORE="$(live_state)"
 
@@ -99,9 +115,9 @@ cleanup() { rm -f "$S/$PEND" "$S/$BAD" "$S/$NOID"; }
 # kills it, so a TERMed child does not leave it on the gate step's pipe
 # (1924-dcoy).
 hold_pid=""
-trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$S"' EXIT
-trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$S"; exit 143' TERM
-trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$S"; exit 130' INT
+trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$REAL"' EXIT
+trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$REAL"; exit 143' TERM
+trap '[ -n "$hold_pid" ] && kill "$hold_pid" 2>/dev/null; rm -rf "$REAL"; exit 130' INT
 cleanup
 
 # A WELL-FORMED row for a host+locus the base cannot carry. The host name is
@@ -124,6 +140,7 @@ Y
 }
 verdict() { ( cd "$S" && TILLANDSIAS_PLAN_BIN="$PLAN_BIN" bash scripts/release-preflight.sh 2>&1 | tail -1 ); }
 
+S="$T"   # arms 0 and 2-5 fold the trimmed scaffold (see REAL above)
 # ── 0. PRECONDITION. If the tree does not start clean, every arm below is about
 #      somebody else's fragment and proves nothing.
 v="$(verdict)"
@@ -134,6 +151,10 @@ case "$v" in
 esac
 
 # ── 1. THE CLOSURE: a pending capability row must NOT wedge the host. ─────
+# The one arm that folds the REAL ledger copy.
+# (No separate real-ledger precondition: a red real ledger fails this arm
+# with the verdict it produced, and a second real fold would double its cost.)
+S="$REAL"
 write_pending
 # ARMS 7-8 kill a child run HERE, with a probe planted: announce, then wait in
 # the background so a TERM runs its trap at once (a foreground sleep defers it).
@@ -144,8 +165,9 @@ if [ -n "${TILLANDSIAS_1320_HOLD_FILE:-}" ] && [ ! -e "$TILLANDSIAS_1320_HOLD_FI
     wait "$hold_pid"
 fi
 v="$(verdict)"; cleanup
+S="$T"
 case "$v" in
-    ok:release-preflight) ok "a pending capability row leaves preflight green (the host can still push)" ;;
+    ok:release-preflight) ok "a pending capability row leaves preflight green on the REAL ledger (the host can still push)" ;;
     blocked:plan-ledger-incomplete) bad "the deadlock is back: publishing the row the guard ASKS FOR wedges every push from that host" ;;
     *) bad "a pending capability row produced '$v'" ;;
 esac
