@@ -87,6 +87,7 @@
 #       2 the working tree is dirty — this script rewrites HEAD and refuses to
 #         do that over uncommitted work
 #       3 another landing is in flight (the lock is held)
+#       4 held on a trunk red: hold:trunk-red:<test> (2118-tpmy); nobody evicted
 set -uo pipefail
 
 # THE REPOSITORY IS THE ONE YOU ARE STANDING IN, NOT THE ONE THIS SCRIPT LIVES
@@ -155,6 +156,19 @@ PLAN_REFRESH="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH-cargo build -q --release -p 
 # validates the ledger, exactly as the plan-only push lane does.
 PLAN_ONLY_LANE="${TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE:-1}"
 PLAN_LANE_CHECK="${TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK-\"\$PLAN\" check}"
+# ORDER 2118-tpmy (operator 2026-11-20, P11): THE HOST DOOR, asked before every
+# candidate. could-not-run:host:<cause> is about THIS host, so nobody is evicted
+# and the run goes on. A missing router sidecar is staged first (the gate's own
+# preamble stages it, so a fresh queue checkout would otherwise never pass).
+# Set either to the empty string to disable (the fixture's default).
+HOST_DOOR="${TILLANDSIAS_LAND_QUEUE_HOST_DOOR-\"\$PLAN\" script run scripts/lua/land-queue-host-door.lua}"
+SIDECAR_STAGE="${TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE-[ -e images/router/tillandsias-router-sidecar ] || bash scripts/build-sidecar.sh}"
+# ORDER 2118-tpmy: before an evicted:<test> red evicts, the bare trunk is gated
+# once; the same failing test there is hold:trunk-red:<test>: the queue holds
+# and reports, nobody is evicted. Remembered per trunk base (bounded: one trunk
+# gate per base). 0 disables.
+TRUNK_RED_CHECK="${TILLANDSIAS_LAND_QUEUE_TRUNK_RED_CHECK:-1}"
+TRUNK_RED_MEMO="${TILLANDSIAS_LAND_QUEUE_TRUNK_RED_MEMO:-$ROOT/.git/tillandsias-land-queue-trunk-red}"
 REMOTE="${TILLANDSIAS_LAND_QUEUE_REMOTE:-origin}"
 TRUNK="${TILLANDSIAS_TRUNK_BRANCH:-linux-next}"
 LOCKDIR="${TILLANDSIAS_LAND_QUEUE_LOCK:-$ROOT/.git/tillandsias-land-queue.lock}"
@@ -175,7 +189,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-landed=0; evicted=0; requeued=0; skipped=0
+landed=0; evicted=0; requeued=0; skipped=0; _held=0
 
 say() { printf '%s\n' "$*"; }
 
@@ -737,6 +751,24 @@ $_nlwhy
         _lane=plan-only
         say "land-queue: #$num lane=plan-only — every changed path is plan-ledger; plan-lane checks only, no build-check"
     fi
+    # ── ORDER 2118-tpmy: THE HOST DOOR ──────────────────────────────────────
+    if [ -n "$HOST_DOOR" ] && [ "$_lane" = full ]; then
+        if [ -n "$SIDECAR_STAGE" ]; then
+            ( eval "$SIDECAR_STAGE" ) < /dev/null > "$_RUNDIR/pr-$num-sidecar.log" 2>&1 || true
+        fi
+        _hd="$( ( eval "$HOST_DOOR" ) < /dev/null 2>/dev/null | grep -m 1 -E '^(ok:host-door|could-not-run:host:)' )"
+        case "$_hd" in
+            ok:host-door*) ;;
+            could-not-run:host:*)
+                say "$_hd — #$num is not evicted for this host's state; next candidate"
+                skipped=$((skipped + 1))
+                continue ;;
+            *)
+                say "could-not-run:host:door-did-not-answer — #$num is not evicted; next candidate"
+                skipped=$((skipped + 1))
+                continue ;;
+        esac
+    fi
     # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
     # The binary's state is this HOST's, never the candidate's: a refresh that
     # cannot make it current stops the run and evicts nobody.
@@ -818,8 +850,38 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                     say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
                     mv -f "$_glog" "$_glog.first-red"
                 else
-                    say "evicted:$_flaky_test — #$num red twice on the identical tree ${merge_sha:0:9}"
                     mv -f "$_glog.rerun" "$_glog"
+                    # ORDER 2118-tpmy: RED TWICE. Is it the trunk's red? The bare
+                    # trunk is gated once per base; the same failing test there
+                    # holds the queue instead of evicting a candidate for it.
+                    _trunk_red=""
+                    if [ "$TRUNK_RED_CHECK" = 1 ]; then
+                        _memo="$(cat "$TRUNK_RED_MEMO" 2>/dev/null)"
+                        if [ "${_memo%% *}" = "$base_sha" ]; then
+                            _tr_verdict="${_memo#* }"
+                        else
+                            git checkout -q --detach "$base_sha" 2>/dev/null
+                            ( eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
+                            _trc=$?
+                            git checkout -q --detach "$merge_sha" 2>/dev/null
+                            _tr_verdict="green"
+                            if [ "$_trc" -ne 0 ] \
+                               && grep -E '^[[:space:]]*(FAIL|\[FAIL\]|refused:|violation:|blocked:)' "$_glog.trunk" 2>/dev/null \
+                                  | grep -qF -- "$_flaky_test"; then
+                                _tr_verdict="red $_flaky_test"
+                            fi
+                            printf '%s %s\n' "$base_sha" "$_tr_verdict" > "$TRUNK_RED_MEMO" 2>/dev/null || true
+                            rm -f "$_glog.trunk"
+                        fi
+                        [ "$_tr_verdict" = "red $_flaky_test" ] && _trunk_red="$_flaky_test"
+                    fi
+                    if [ -n "$_trunk_red" ]; then
+                        say "hold:trunk-red:$_trunk_red — trunk ${base_sha:0:9} fails it too; #$num is not evicted; the queue holds until trunk is fixed (full log: $_glog)"
+                        rm -f "$_glog.rerun"
+                        _held=1
+                        break 2
+                    fi
+                    say "evicted:$_flaky_test — #$num red twice on the identical tree ${merge_sha:0:9}"
                 fi
                 rm -f "$_glog.rerun"
             fi
@@ -965,5 +1027,9 @@ The queue will re-gate on its next pass."
 done
 done
 
+if [ "$_held" -eq 1 ]; then
+    say "hold:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped — held on a trunk red (2118-tpmy)"
+    exit 4
+fi
 say "ok:land-queue:$_n landed=$landed evicted=$evicted requeued=$requeued skipped=$skipped"
 exit 0
