@@ -7,3 +7,4 @@ STEP_DESC="Checking the gate tree-hygiene probe (PSI + untracked scratch) (2150-
 STEP_LUA="scripts/lua/test-gate-tree-hygiene.lua"
 STEP_ERROR="the gate tree-hygiene probe regressed (2150-qd38) — a slow gate can no longer say whether the host or the tree was the cause; see the FAIL lines above"
 STEP_OK="gate tree-hygiene fixture passed"
+STEP_SECOND_REGIME="yolanda 2026-11-20 msys ok:gate-tree-hygiene:7 arms"
