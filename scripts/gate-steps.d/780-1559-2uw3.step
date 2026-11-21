@@ -1,6 +1,6 @@
 # Gate step 1559-2uw3 — data, not code (order 1072-b7eq).
 #
-# WHAT IT GUARDS. check-purge-clears-vault-credentials.sh's NEGATIVE arm
+# WHAT IT GUARDS. check-purge-clears-vault-credentials.lua's NEGATIVE arm
 # (1437-3iux S4): the Windows SOFT reset body (`reset_state_once`) calls no
 # credential clearer and does not unregister the distro, because SOFT keeps the
 # Vault store (host-state-lifecycle). The fixture runs the REAL guard against

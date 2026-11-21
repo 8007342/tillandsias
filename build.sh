@@ -7115,7 +7115,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # guard is here rather than a third careful edit because "one copy fixed, one
     # copy missed" is the defect this project repeats most.
     _step "Checking every guest-destroying purge clears the host vault credentials (803-49re)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-purge-clears-vault-credentials.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-purge-clears-vault-credentials.lua" 2>&1; then
         _error "a script unregisters the tillandsias distro without clearing the host's copy of that guest's Vault identity (803-49re) — call Clear-TillandsiasVaultHostCredentials from scripts/clear-vault-host-credentials.ps1"
         exit 1
     fi
