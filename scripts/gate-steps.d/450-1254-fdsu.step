@@ -9,3 +9,5 @@ STEP_SCRIPT="scripts/test-awk-float-lc-numeric.sh"
 STEP_ERROR="a measurement producer emits a comma decimal under a comma locale, or a mutation arm went vacuous (1254-fdsu) — see the verdict line above"
 STEP_OK="Measurement producers emit dot decimals under a comma locale"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:awk-float-lc-numeric:7"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"

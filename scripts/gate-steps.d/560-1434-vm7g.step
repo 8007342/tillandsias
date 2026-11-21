@@ -27,3 +27,5 @@ STEP_SCRIPT="scripts/test-windows-tray-clippy.sh"
 STEP_ERROR="the Windows tray clippy decider no longer refuses a clippy warning, or runs off Windows (1434-vm7g); see which arm failed above"
 STEP_OK="Windows tray clippy decider refuses warnings and skips off Windows"
 STEP_SECOND_REGIME="yolanda 2026-09-27 msys ok:windows-tray-clippy-fixture:5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"

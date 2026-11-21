@@ -18,3 +18,5 @@ STEP_SCRIPT="scripts/test-pre-push-honours-a-live-freeze.sh"
 STEP_ERROR="the release-freeze mechanism regressed — a freeze would again be announced in prose and enforced by nothing (1176-9vqn)"
 STEP_OK="release freeze holds code and admits plan-only"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:pre-push-refuses-code-under-a-live-freeze"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"

@@ -12,3 +12,5 @@ STEP_SCRIPT="scripts/test-gate-fast-refusals.sh"
 STEP_ERROR="a fast refusal was hoisted behind a build step (1087-h2z9)"
 STEP_OK="Fast-refusal ordering passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:test-gate-fast-refusals:4"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"

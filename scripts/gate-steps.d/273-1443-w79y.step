@@ -11,3 +11,5 @@ STEP_SCRIPT="scripts/test-branch-discipline-verb.sh"
 STEP_ERROR="the discipline verb stopped answering from the seed, refused a level-0 project, lost the seeded message or digest, accepted a bad seed, or the MCP tool diverged (1443-w79y) — see the verdict line above"
 STEP_OK="Branch discipline verb passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:branch-discipline-verb:6/6"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"

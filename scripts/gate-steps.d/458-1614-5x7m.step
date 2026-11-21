@@ -10,3 +10,5 @@ STEP_LUA="scripts/lua/test-preflight-wall-clock-deadline.lua"
 STEP_ERROR="the preflight door's deadline no longer holds by wall clock (1614-5x7m) — see the FAIL lines above"
 STEP_OK="Preflight wall-clock deadline fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:preflight-wall-clock-deadline:6 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
