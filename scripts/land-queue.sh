@@ -654,6 +654,15 @@ This is the second identical conflict at this unchanged head (\`${head_sha:0:9}\
         # violation:carried:<backlog>:<silent|waiver-not-a-trailer>
         _cb="$(printf '%s' "$_cverdict" | cut -d: -f3)"
         _ck="$(printf '%s' "$_cverdict" | cut -d: -f4)"
+        # ORDER 2152-t5p9: refused:carried:paid-but-taken-by:<ref>:<item> has no
+        # backlog in field 3 — the guard keys waivers by BACKLOG name, so take it
+        # from the guard's own waiver line, never from the verdict.
+        if [ "$_cb" = paid-but-taken-by ]; then
+            _ck=paid-but-taken
+            _cb="$(printf '%s\n' "$_cwaiver" | awk '{print $2}')"
+            [ -n "$_cb" ] || _cb='<backlog>'
+            [ -n "$_cwaiver" ] || _cwaiver="Carried-Waiver: <backlog> conflict:<item> (#<pr>)"
+        fi
         _cdue="$(printf '%s\n' "$_carried" | grep "^Carried: $_cb due " | head -n 1 | sed "s/^Carried: $_cb due //")"
         say "evict:land-queue:$num:carried-$_ck:$_cb"
         say "  add to the LAST paragraph of a commit on $head: ${_cwaiver:-Carried-Waiver: $_cb <reason>}  (or port ${_cdue:-one item})"
