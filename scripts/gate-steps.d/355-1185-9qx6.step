@@ -21,3 +21,7 @@ STEP_OK="release-tier freshness writer/reader contract check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-release-tier-freshness.sh, scripts/record-ci-phase-result.sh or jq is absent, so the contract could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:release-tier-ci-full:8"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-release-tier-freshness.sh scripts/convergence-log-path.sh scripts/local-ci.sh scripts/record-ci-phase-result.sh scripts/test-release-tier-freshness-reads-ci-full.sh"

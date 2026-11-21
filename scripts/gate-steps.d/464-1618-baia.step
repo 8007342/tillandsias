@@ -11,3 +11,7 @@ STEP_LUA="scripts/lua/test-door-fixture-scratch-sweep.lua"
 STEP_ERROR="the preflight door no longer removes a killed guard's .tillandsias/fixture-scratch/<guard>.<pid> (1618-baia) — see the FAIL lines above"
 STEP_OK="Door fixture-scratch sweep fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:door-fixture-scratch-sweep:4 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-door-fixture-scratch-sweep.lua"
