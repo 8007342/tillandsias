@@ -2,8 +2,8 @@
 -- @trace spec:meta-orchestration, order:476, order:1247-cbg7, order:1005-m6rz, order:1781-wves
 --
 -- check-committable-branch.lua — the executable Committable Branch Guard.
--- (Ported from scripts/check-committable-branch.sh, the shell-to-lua item
--- order 2100-vkpg carried; history in `git log -- scripts/check-committable-branch.sh`.)
+-- (Ported from the shell checker of the same name, the shell-to-lua item
+-- order 2100-vkpg carried; history in `git log -- scripts/` for that file.)
 --
 -- Makes the "Release: `main` through PR only" rule a verifiable check instead
 -- of advisory prose. Breach record: commit 34e60965 — a forge cycle running ON
