@@ -5194,9 +5194,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the tree, and merely ADDING a test can red a different one. A gate whose
     # red set moves when you add an unrelated test teaches people to re-run it
     # until it passes.
+    # ORDER 2161-ctdd (build speed, report packet 8): DO NOT RE-RUN THE DEFAULT
+    # TESTS HERE. The --workspace pass above already ran every test the default
+    # build of this binary has (1091 on 2026-11-21); this build adds the ones
+    # that only compile under tray,listen-vsock (533). Both lists come from
+    # libtest's own --list (the default build is already compiled, so it costs
+    # seconds), and this pass runs exactly the difference with --exact. Kept
+    # serial (above). A list that cannot be produced, or an empty difference,
+    # falls back to the whole set and says so: a filter must never silently
+    # run less than it claims.
+    # KNOWN LIMIT: a default test whose body has a cfg(feature = "tray") or
+    # "listen-vsock" branch is run only in its default form.
+    _fg_filter=()
+    _fg_def="$(cargo test -q -p tillandsias-headless --bin tillandsias \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_all="$(cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_new="$(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all") | grep -c .)"
+    if [[ -n "$_fg_def" && -n "$_fg_all" && "$_fg_new" -gt 0 ]]; then
+        while IFS= read -r _fg_t; do
+            [[ -n "$_fg_t" ]] && _fg_filter+=("$_fg_t")
+        done < <(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all"))
+        _info "feature-gated: $_fg_new test(s) only this build has; the $(printf '%s\n' "$_fg_def" | grep -c .) default ones ran in the --workspace pass (2161-ctdd)"
+        _fg_filter=(--exact "${_fg_filter[@]}")
+    else
+        _warn "feature-gated: could not form the default/feature test lists (default=$(printf '%s\n' "$_fg_def" | grep -c .), all=$(printf '%s\n' "$_fg_all" | grep -c .), new=$_fg_new); running the WHOLE set (2161-ctdd)"
+    fi
     _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 |
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"

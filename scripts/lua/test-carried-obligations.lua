@@ -439,11 +439,21 @@ local rl = run({ PLAN, "script", "run", GUARD, "--", "--landing" }, { cwd = R, e
 check("PAID-BUT-TAKEN at landing: refused, exit 1",
     rl.status == "exited" and rl.code == 1 and text.contains(rl.stdout or "", "paid-but-taken-by:work/9996-dup:scripts/check-w.sh"),
     "rc=" .. tostring(rl.code) .. " out=[" .. (rl.stdout or "") .. "]")
--- The remedy: a conflict: waiver trailer turns the refusal into waived, exit 0.
-G({ "commit", "-q", "--allow-empty", "-m", "duplicate of 9996-dup", "-m", "Carried-Waiver: shell-to-lua conflict:scripts/check-w.sh (#9996)" })
+-- The remedy, COPIED (2152-t5p9): land-queue's eviction hint is the guard's first
+-- column-0 `Carried-Waiver:` line. It must name the BACKLOG, and pasting it
+-- verbatim as a trailer must be admitted. Before 2152-t5p9 there was no such line,
+-- and the queue told people to write `Carried-Waiver: paid-but-taken-by ...`.
+local hint = nil
+for l in (rl.stderr or ""):gmatch("[^\n]+") do
+    if l:match("^Carried%-Waiver: ") then hint = l; break end
+end
+check("PAID-BUT-TAKEN hint: the guard prints a column-0 waiver line keyed by the backlog",
+    hint ~= nil and text.starts_with(hint, "Carried-Waiver: shell-to-lua conflict:scripts/check-w.sh"),
+    "hint=[" .. tostring(hint) .. "] err=[" .. (rl.stderr or "") .. "]")
+G({ "commit", "-q", "--allow-empty", "-m", "duplicate of 9996-dup", "-m", hint or "Carried-Waiver: paid-but-taken-by <reason>" })
 rc, o, e = judge_with(GUARD)
-check("PAID-BUT-TAKEN remedy: a Carried-Waiver conflict: trailer clears the refusal (waived, exit 0)",
-    rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#9996)"),
+check("PAID-BUT-TAKEN remedy: the copied hint, pasted verbatim as a trailer, is admitted (waived, exit 0)",
+    rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#<pr>)"),
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
 
 -- 18. STACKED (2044-kx7e, measured: #1002 evicted 2026-11-08). A change ports
