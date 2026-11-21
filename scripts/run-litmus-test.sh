@@ -3303,7 +3303,12 @@ main() {
     # then fail with build.rs's own diagnostic, which already tells the reader
     # exactly what to do. Refusing the whole run here would trade 29 confusing
     # failures for a total outage on hosts that have no stake in them.
-    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" ]]; then
+    # ORDER 2118-ywk7 (priority:build-speed): ONLY A TREE THAT CAN COMPILE IT.
+    # A fixture's scratch project (a copy of scripts/, no crates/) has nothing
+    # that compiles tillandsias-headless and nothing to build the sidecar from;
+    # staging there cost ~20 s per runner start under target/plan-scratch.
+    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" \
+          && -f "$PROJECT_ROOT/crates/tillandsias-router-sidecar/Cargo.toml" ]]; then
         if [[ -f "$PROJECT_ROOT/scripts/build-sidecar.sh" ]]; then
             log_info "Staging router sidecar (build artifact, absent — 871-wrmv)..."
             if bash "$PROJECT_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1; then
