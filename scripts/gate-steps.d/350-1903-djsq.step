@@ -12,8 +12,14 @@ STEP_OK="credential fixtures pass and stay off the inherited session bus"
 # Carried from 240-900-z3kv (the cold-state fixture): a keyring cold state can
 # disagree with itself on a healthy tree, so the step gets ONE settled retry.
 STEP_HOST_STATE="keyring"
-STEP_SERIAL="drives podman; reads host keyring state; owns a sentinel dbus-daemon"
-STEP_LANES="podman host"
+STEP_SERIAL="reads host keyring state; owns a sentinel dbus-daemon"
+# ORDER 2171-addv (priority:build-speed). ONE lane, host. "podman host" made
+# this step EXCLUSIVE (it ran alone after the lanes, ~23 s). Measured: with a
+# logging podman shim first on PATH the full 26-arm run made 0 real podman calls
+# (the only podman is a PATH stub inside the partial-is-nonzero fixture), and no
+# fixture names an absolute podman path. A fixture that starts driving the real
+# store must add the podman lane back, which makes the step exclusive again.
+STEP_LANES="host"
 # Measured on darwin for the merged step (2118-9kqp): 8/8 credential verdicts
 # ok; the bus arm is a named skip there (no dbus-daemon on macOS).
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin skip:keyring-fixtures-use-a-private-bus:bus-arm:no-dbus-daemon(8/8-verdicts-ok)"
