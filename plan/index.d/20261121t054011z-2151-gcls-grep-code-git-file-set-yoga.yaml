@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed queue item 1 (operator ruling: lands in minutes).
+packets:
+  - packet_id: grep-code-and-its-recall-fixture-search-git-file-set-not-target-or-cache
+    order: "2151-gcls"
+    status: in_progress
+    kind: perf
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, mcp, project-info]
+    estimated_hours: 2
+    owned_files:
+      - images/default/config-overlay/mcp/project-info.sh
+      - scripts/test-project-info-grep-code-recall.sh
+    title: "grep_code and its recall fixture search git's file set, not target/ or .cache/"
+    context: |
+      Gate step 460-1388-pfys walked every file under the checkout with find, target/ (106 GB on yoga) and
+      .cache/ included, in both the server and the fixture's truth oracle: 6.7 min per gate on the coordinator
+      host, 47.8 s on yoga. Inside a git work tree the file set is now tracked + untracked-not-ignored; outside
+      one it is find as before. The oracle is git grep --untracked, a different tool. Also fixed: a one-file
+      file set printed hits without the path (grep without -H).
+    exit_criteria:
+      - "The gate step's wall time is under 30 s on a host with a large target/."
+      - "Fixture arm H6 proves tracked and untracked files are searched and an ignored target/ file is not; mutations dropping untracked or including ignored files each red H6."
+    unscoreable: "the step's wall time on the coordinator host is the measure"
+    provenance: "coordinator build-speed queue item 1, 2026-11-21 (operator ruling)."
+    events:
+      - type: filed
+        ts: "2026-11-21T05:40:11Z"
+        host: yoga
+        summary: "filed and claimed"

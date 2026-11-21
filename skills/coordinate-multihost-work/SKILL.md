@@ -292,7 +292,8 @@ git cherry origin/linux-next origin/<ref>   # '+' lines are unlanded
 Until the guard from 2101-b4pf exists, run the commands above. The queue's own
 `advisory:land-queue:ignored-draft:#N:<ref>` lines are the same list. Act on
 each item in the same pass:
-- A draft with an unexpired reason and expiry is held, so leave it.
+- A draft with an unexpired reason and expiry is held: move the hold to the
+  `land:hold` label (2143-z5uj) and un-draft it, so the hold is named every run.
 - A draft with no reason or a past expiry gets un-drafted (`gh pr ready N`),
   or closed with a tombstone naming its replacement.
 - A landing-ready ref with no PR gets a PR you open yourself.
@@ -300,6 +301,15 @@ each item in the same pass:
   its SHA goes in the pass record.
 - A ref more than ~200 commits behind is not rebased. Re-implement it fresh
   on a new `work/<order>`, or file a packet that cites `refs/pull/N/head`.
+
+**Holding and prioritising (operator 2026-11-20, order 2143-z5uj).** Hold a PR
+with the `land:hold` label, not by drafting it: the queue names every held PR
+each run (`hold:land-queue:#N:<ref>`) and never gates it. Label `land:priority`
+to have a PR gated next; the queue re-reads the list before every candidate,
+so a label set mid-run takes effect at the next candidate. A plan-ledger-only
+PR lands on the plan-lane checks with no build-check. The verdict vocabulary
+(`could-not-run:host:` > `hold:` > `evicted:` > `flaky:`) is
+`methodology/multi-host-development.yaml` → `landing_queue`.
 Report the count as `stale-work:<drafts>/<prless>` in the status line (2102-9gyk).
 Why: 2026-11-17, 84 refs held about 80 agent-hours that never landed
 (plan/issues/abandoned-work-audit-2026-11-17.md).
