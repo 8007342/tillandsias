@@ -105,6 +105,7 @@ run_queue() {
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK="${PLAN_LANE_CMD:-echo plan-lane >> $GATE_LOG.plan-lane}" \
         TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
         TILLANDSIAS_LAND_QUEUE_LOGDIR="${LOGDIR_OVERRIDE:-$TMP/logs-$$}" \
         TILLANDSIAS_TRUNK_BRANCH=linux-next \
@@ -1254,27 +1255,31 @@ $out21b" ;;
 esac
 
 # ──────────────────────────────────────────────────────────── ARM 22
-# ORDER 1992-lqpb: A STALE PLAN BINARY IS THIS HOST'S STATE, NOT THE
-# CANDIDATE'S. When the refresh cannot make it current, the run stops
-# (could-not-run) and evicts NOBODY; before, the gate's plan-lane fixture failed
-# on the stale binary and the innocent candidate was evicted.
+# ORDER 1992-lqpb, amended by 2143-z5uj: A STALE PLAN BINARY IS THIS HOST'S
+# STATE, NOT THE CANDIDATE'S. When the refresh from one candidate's merge cannot
+# make it current, THAT candidate is skipped (could-not-run:host:...) and evicts
+# nobody, and the run CONTINUES: ending it stalled the whole queue on one merge.
+# The refresh stub fails for the first candidate only (a marker file).
 scaffold arm22
 candidate arm22 1022-aaaa a22.txt A
+candidate arm22 1024-cccc c22.txt C
 cat > "$GH_PRS" <<JSON
-[{"number":22,"headRefName":"work/1022-aaaa","isDraft":false}]
+[{"number":22,"headRefName":"work/1022-aaaa","isDraft":false},
+ {"number":24,"headRefName":"work/1024-cccc","isDraft":false}]
 JSON
 cat > "$GATE_BIN" <<GATE
 #!/usr/bin/env bash
 echo "gated" >> "$GATE_LOG"
 exit 0
 GATE
-out22="$(PLAN_REFRESH_CMD='echo stale-plan-binary >&2; exit 1' run_queue)"; rc22=$?
-if grep -q '^could-not-run:land-queue:stale-plan-binary' <<<"$out22" \
-    && ! grep -q '^evict:' <<<"$out22" && ! grep -q '^land:' <<<"$out22" \
-    && [ "$rc22" -eq 3 ] && [ ! -s "$GATE_LOG" ] && [ ! -s "$GH_COMMENTS" ]; then
-    ok "ARM 22: a plan binary that cannot be refreshed stops the run (rc=3) with no eviction, no gate and no PR comment"
+_m22="$TMP/arm22/refresh-failed-once"
+out22="$(PLAN_REFRESH_CMD="if [ -e '$_m22' ]; then exit 0; fi; : > '$_m22'; echo stale-plan-binary >&2; exit 1" run_queue)"; rc22=$?
+if grep -q '^could-not-run:host:plan-binary-stale:#22:' <<<"$out22" \
+    && ! grep -q '^evict:' <<<"$out22" && grep -q '^land:24 ' <<<"$out22" && ! grep -q '^land:22 ' <<<"$out22" \
+    && [ "$rc22" -eq 0 ] && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && [ ! -s "$GH_COMMENTS" ]; then
+    ok "ARM 22: a plan binary that cannot be refreshed skips THAT candidate (could-not-run:host:plan-binary-stale), evicts nobody, comments nothing, and the run lands the next (2143-z5uj)"
 else
-    bad "ARM 22: wanted could-not-run, rc=3, no eviction, no gate, no comment; got rc=$rc22 gates=$(grep -c . "$GATE_LOG") comments=$(grep -c . "$GH_COMMENTS")
+    bad "ARM 22: wanted #22 skipped as could-not-run:host, #24 landed, rc=0, 1 gate, no comment; got rc=$rc22 gates=$(grep -c . "$GATE_LOG") comments=$(grep -c . "$GH_COMMENTS")
 $out22"
 fi
 # ...and a refresh that succeeds lets the candidate land as before.
@@ -1295,6 +1300,221 @@ else
 $out22b"
 fi
 
+
+# ──────────────────────────────────────────────────────────── ARM 30
+# ORDER 2143-z5uj: THE QUEUE IS RE-READ BEFORE EVERY CANDIDATE. #3 is labelled
+# land:priority WHILE #1 GATES (the gate stub rewrites the list on its first
+# call), so #3 is gated next, before #2. On trunk the list is read once, the
+# label is never seen, and the order is 1,2,3.
+scaffold arm30
+candidate arm30 1301-aaaa a30.txt A
+candidate arm30 1302-bbbb b30.txt B
+candidate arm30 1303-cccc c30.txt C
+cat > "$GH_PRS" <<JSON
+[{"number":1,"headRefName":"work/1301-aaaa","isDraft":false,"labels":[]},
+ {"number":2,"headRefName":"work/1302-bbbb","isDraft":false,"labels":[]},
+ {"number":3,"headRefName":"work/1303-cccc","isDraft":false,"labels":[]}]
+JSON
+cat > "$TMP/arm30/prs-relabelled.json" <<JSON
+[{"number":2,"headRefName":"work/1302-bbbb","isDraft":false,"labels":[]},
+ {"number":3,"headRefName":"work/1303-cccc","isDraft":false,"labels":[{"name":"land:priority"}]}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+[ -s "$GATE_LOG" ] || cp "$TMP/arm30/prs-relabelled.json" "$GH_PRS"
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out30="$(run_queue)"
+seen30="$(sed -n 's/^land:\([0-9]*\) .*/\1/p' <<<"$out30" | tr '\n' ',')"
+if [ "$seen30" = "1,3,2," ]; then
+    ok "ARM 30: a PR labelled land:priority while candidate 1 gated is gated next (1,3,2) — the queue is re-read per candidate (2143-z5uj)"
+else
+    bad "ARM 30: wanted landings 1,3,2; got '$seen30'
+$out30"
+fi
+
+# ARM 30b: land:priority from the START jumps the number order.
+scaffold arm30b
+candidate arm30b 1304-aaaa a30b.txt A
+candidate arm30b 1305-bbbb b30b.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":4,"headRefName":"work/1304-aaaa","isDraft":false},
+ {"number":5,"headRefName":"work/1305-bbbb","isDraft":false,"labels":[{"name":"land:priority"}]}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+exit 0
+GATE
+out30b="$(run_queue)"
+seen30b="$(sed -n 's/^land:\([0-9]*\) .*/\1/p' <<<"$out30b" | tr '\n' ',')"
+if [ "$seen30b" = "5,4," ]; then
+    ok "ARM 30b: land:priority lands before a lower PR number"
+else
+    bad "ARM 30b: wanted 5,4; got '$seen30b'
+$out30b"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 31
+# land:hold replaces draft-as-hold: the held PR is never gated, and is NAMED.
+scaffold arm31
+candidate arm31 1311-aaaa a31.txt A
+candidate arm31 1312-bbbb b31.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":11,"headRefName":"work/1311-aaaa","isDraft":false,"labels":[{"name":"land:hold"}]},
+ {"number":12,"headRefName":"work/1312-bbbb","isDraft":false,"labels":[]}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out31="$(run_queue)"
+if grep -q '^hold:land-queue:#11:' <<<"$out31" && ! grep -q '^land:11 ' <<<"$out31" \
+    && grep -q '^land:12 ' <<<"$out31" && [ "$(grep -c . "$GATE_LOG")" -eq 1 ]; then
+    ok "ARM 31: a land:hold PR is named and never gated; the next PR lands"
+else
+    bad "ARM 31: wanted #11 held+named, #12 landed, 1 gate; got gates=$(grep -c . "$GATE_LOG")
+$out31"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 32
+# A RED IN A TEST THE CANDIDATE DID NOT TOUCH IS RE-RUN ONCE. The gate stub
+# fails its first call naming scripts/test-other.sh, then passes.
+scaffold arm32
+candidate arm32 1321-aaaa a32.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":21,"headRefName":"work/1321-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ "\$(grep -c . "$GATE_LOG")" -eq 1 ]; then echo "FAIL scripts/test-other.sh: flaked"; exit 1; fi
+exit 0
+GATE
+out32="$(run_queue)"
+if grep -q '^flaky:scripts/test-other.sh ' <<<"$out32" && grep -q '^land:21 ' <<<"$out32" \
+    && ! grep -q '^evict' <<<"$out32" && [ "$(grep -c . "$GATE_LOG")" -eq 2 ]; then
+    ok "ARM 32: an untouched test red then green on the identical tree prints flaky:<test> and lands (2 gates)"
+else
+    bad "ARM 32: wanted flaky:scripts/test-other.sh, landed, 2 gates; got gates=$(grep -c . "$GATE_LOG")
+$out32"
+fi
+
+# ARM 32b: red TWICE in the untouched test evicts, naming evicted:<test>.
+scaffold arm32b
+candidate arm32b 1322-aaaa a32b.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":22,"headRefName":"work/1322-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+echo "FAIL scripts/test-other.sh: real"; exit 1
+GATE
+out32b="$(run_queue)"
+if grep -q '^evicted:scripts/test-other.sh ' <<<"$out32b" && grep -q '^evict:land-queue:22:gate-failed' <<<"$out32b" \
+    && ! grep -q '^land:22 ' <<<"$out32b" && [ "$(grep -c . "$GATE_LOG")" -eq 2 ]; then
+    ok "ARM 32b: an untouched test red twice prints evicted:<test> and evicts (2 gates)"
+else
+    bad "ARM 32b: wanted evicted:scripts/test-other.sh, evicted, 2 gates; got gates=$(grep -c . "$GATE_LOG")
+$out32b"
+fi
+
+# ARM 32c, NEGATIVE CONTROL: a red in a test the candidate's diff TOUCHES is
+# judged on the first run — no re-run, so a PR cannot re-roll its own red.
+scaffold arm32c
+candidate arm32c 1323-aaaa scripts-test-mine.txt A
+git -C "$WORK_DIR" checkout -q work/1323-aaaa
+mkdir -p "$WORK_DIR/scripts"; printf 'x\n' > "$WORK_DIR/scripts/test-mine.sh"
+git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m mine; git -C "$WORK_DIR" push -q origin work/1323-aaaa
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<JSON
+[{"number":23,"headRefName":"work/1323-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ "\$(grep -c . "$GATE_LOG")" -eq 1 ]; then echo "FAIL scripts/test-mine.sh: mine"; exit 1; fi
+exit 0
+GATE
+out32c="$(run_queue)"
+if grep -q '^evict:land-queue:23:gate-failed' <<<"$out32c" && ! grep -q '^flaky:' <<<"$out32c" \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 1 ]; then
+    ok "ARM 32c (control): a red in a test the diff touches evicts on the first run, no re-run"
+else
+    bad "ARM 32c: wanted one gate and an eviction; got gates=$(grep -c . "$GATE_LOG")
+$out32c"
+fi
+
+# ARM 32d, NEGATIVE CONTROL: a red that names NO test is never re-rolled.
+scaffold arm32d
+candidate arm32d 1324-aaaa a32d.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":24,"headRefName":"work/1324-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ "\$(grep -c . "$GATE_LOG")" -eq 1 ]; then echo "error: something broke"; exit 1; fi
+exit 0
+GATE
+out32d="$(run_queue)"
+if grep -q '^evict:land-queue:24:gate-failed' <<<"$out32d" && [ "$(grep -c . "$GATE_LOG")" -eq 1 ]; then
+    ok "ARM 32d (control): a red naming no test evicts on the first run"
+else
+    bad "ARM 32d: wanted one gate and an eviction; got gates=$(grep -c . "$GATE_LOG")
+$out32d"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 33
+# Operator ruling 2026-11-20: A PLAN-LEDGER-ONLY PR LANDS ON THE PLAN-LANE
+# CHECKS WITH ZERO BUILD-CHECK INVOCATIONS. #1166 took 53 min of full gate.
+scaffold arm33
+git -C "$WORK_DIR" checkout -q -B work/1331-aaaa origin/linux-next
+mkdir -p "$WORK_DIR/plan/index.d"
+printf 'packets: []\n' > "$WORK_DIR/plan/index.d/20261120t000000z-arm33-yoga.yaml"
+git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m "plan(arm33)"; git -C "$WORK_DIR" push -q origin work/1331-aaaa
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<JSON
+[{"number":31,"headRefName":"work/1331-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out33="$(run_queue)"
+if grep -q '^land:31 ' <<<"$out33" && grep -q 'lane=plan-only' <<<"$out33" \
+    && [ ! -s "$GATE_LOG" ] && [ "$(grep -c . "$GATE_LOG.plan-lane" 2>/dev/null)" = 1 ]; then
+    ok "ARM 33: a plan-ledger-only PR lands with zero build-check invocations and one plan-lane check"
+else
+    bad "ARM 33: wanted landed, lane=plan-only, 0 gates, 1 plan-lane check; got gates=$(grep -c . "$GATE_LOG") plan-lane=$(grep -c . "$GATE_LOG.plan-lane" 2>/dev/null)
+$out33"
+fi
+
+# ARM 33b: with the lane switched OFF the same PR takes the full gate.
+scaffold arm33b
+git -C "$WORK_DIR" checkout -q -B work/1332-aaaa origin/linux-next
+mkdir -p "$WORK_DIR/plan/index.d"
+printf 'packets: []\n' > "$WORK_DIR/plan/index.d/20261120t000000z-arm33b-yoga.yaml"
+git -C "$WORK_DIR" add -A; git -C "$WORK_DIR" commit -q -m "plan(arm33b)"; git -C "$WORK_DIR" push -q origin work/1332-aaaa
+git -C "$WORK_DIR" checkout -q linux-next
+cat > "$GH_PRS" <<JSON
+[{"number":32,"headRefName":"work/1332-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out33b="$(TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE=0 run_queue)"
+if grep -q '^land:32 ' <<<"$out33b" && [ "$(grep -c . "$GATE_LOG")" -eq 1 ]; then
+    ok "ARM 33b (control): TILLANDSIAS_LAND_QUEUE_PLAN_ONLY_LANE=0 sends the same PR through the full gate"
+else
+    bad "ARM 33b: wanted landed on 1 full gate; got gates=$(grep -c . "$GATE_LOG")
+$out33b"
+fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
