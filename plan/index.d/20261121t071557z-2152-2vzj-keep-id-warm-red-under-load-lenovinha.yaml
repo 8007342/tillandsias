@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: the-keep-id-warm-live-test-reads-zero-mapped-copies-when-the-workspace-suite-runs-beside-it-and-passes-alone
+    order: 2152-2vzj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [flake, podman, keep-id, rust-test]
+    estimated_hours: 2
+    title: |
+      keep_id_warm_tests::a_built_image_is_keep_id_warm_before_its_first_start failed once in a full ./build.sh --check at bare trunk be00ba206 on lenovinha (podman 6.2.0, Fedora Silverblue, 2026-11-21). It passes alone.
+    context: |
+      Assertion: crates/tillandsias-headless/src/main.rs:41600, assert_eq!(after_warm, 1, "the warm made the mapped copy"), left 0, right 1. The gate counted new-red=1 (test-baseline ran=3592) and stopped before the gate steps. The same test alone with cargo test -p tillandsias-headless --bin tillandsias passed in 1.13 s. It did not red in RC attempts 3 or 4 on macuahuitl (coordinator). Likely cause: the mapped() count reads the shared host podman store while sibling tests (or the gate's own image staging) change it concurrently. Prior fixes on this test: 1785-655p, 1960-kidw, 2054-kiwm (empty GraphRoot under load is a named skip).
+    exit_criteria:
+      - 'the test reads only state it created (a store or image unique to the test), or under contention it names a skip like 2054-kiwm does; 20 workspace-suite runs on a loaded host show no left 0 right 1'
+    unscoreable: 'unpinnable-until-the-guard-exists: needs a contention repro first.'
+    next_action: 'Reproduce under load: run the test in a loop beside a concurrent podman build; read what mapped() counts.'
+    provenance: filed by lenovinha at the coordinator's request, 2026-11-21.
+    depends_on: []
+    related: [1785-655p, 1960-kidw, 2054-kiwm]
+    events:
+      - {type: filed, ts: '2026-11-21T07:15:57Z', host: lenovinha, summary: one red in a full --check at trunk; passes alone}

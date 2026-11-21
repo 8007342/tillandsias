@@ -1301,7 +1301,32 @@ _lt_verdict_of() { # <output> <exit_code>
 
 # ORDER 1268-fx87: the [FAIL] detail for a step's output, plus the stderr log
 # when the step wrote one. The verdict was read from stdout only.
+# ORDER 2146-tmpx: A FAILED OR TIMED-OUT STEP'S STDERR IS KEPT WHERE NOTHING
+# DELETES IT. step-stderr/ is wiped at the start of every runner invocation and
+# the gate runs one invocation per spec, so by the end of a gate the stderr of
+# an early failing step was gone: RC attempt 2 (2026-11-20) reported
+# image-build-convergence step 1 with empty output and no recoverable stderr,
+# and two hosts could not reproduce it. The copy is per test and step, written
+# even when stderr was EMPTY (the file then says so, with the exit code), so
+# "it printed nothing" is evidence rather than an absence; the path is printed
+# in the FAIL block.
+LITMUS_FAILED_STDERR_DIR="$LITMUS_RUNTIME_DIR/failed-stderr"
+_lt_keep_failed_stderr() { # <exit code>
+    local kept
+    mkdir -p "$LITMUS_FAILED_STDERR_DIR" 2>/dev/null || return 0
+    kept="$LITMUS_FAILED_STDERR_DIR/$(basename "${test_file%.yaml}")-step${step_index}.stderr"
+    {
+        printf '# %s rc=%s step=%s at %s\n' "$(basename "$test_file")" "$1" "${step_name:-step-${step_index}}" "$(date -u +%FT%TZ)"
+        if [[ -n "${step_stderr_log:-}" && -s "$step_stderr_log" ]]; then
+            cat "$step_stderr_log"
+        else
+            printf '# (stderr was empty)\n'
+        fi
+    } > "$kept" 2>/dev/null || return 0
+    printf '%s\n' "         kept-stderr=${kept}" >&2
+}
 _lt_print_output() {
+    _lt_keep_failed_stderr "${exit_code:-?}"
     printf '%s\n' "         output=${step_output}" >&2
     if [[ -n "${step_stderr_log:-}" ]]; then
         printf '%s\n' "         stderr=${step_stderr_log} ($(grep -c '' "$step_stderr_log" 2>/dev/null || echo 0) lines; not read for the verdict, 1268-fx87)" >&2
@@ -2135,6 +2160,7 @@ run_litmus_test_file() {
 
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
+            _lt_keep_failed_stderr 124
             LITMUS_LAST_TEST_TIMED_OUT=1
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
             # ORDER 820-c8q8. A TIMEOUT has two causes that read identically,

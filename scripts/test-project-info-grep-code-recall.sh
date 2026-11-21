@@ -81,6 +81,23 @@ if grep -q 'invalid extended regex' <<<"$out"; then ok "H4 invalid pattern named
 else bad "H4 invalid pattern: got: $(printf '%s' "$out" | head -1)"; fi
 
 # H5: control — a genuinely absent string still says No matches found.
+# H6 (2151-gcls) inside a git work tree the file set is git's: a TRACKED and an
+# UNTRACKED-not-ignored file are searched, an IGNORED one (target/) is not, and
+# a path glob still filters. Premise first: the repo really ignores target/.
+G="$WORK/gtree"; mkdir -p "$G/src" "$G/target"
+git -C "$G" init -q && printf 'target/\n' >"$G/.gitignore"
+printf 'probe-h6 tracked\n' >"$G/src/a.txt"; git -C "$G" add -A; git -C "$G" -c user.email=t@t -c user.name=t commit -qm a
+printf 'probe-h6 untracked\n' >"$G/src/b.txt"; printf 'probe-h6 ignored\n' >"$G/target/c.txt"
+if ! git -C "$G" check-ignore -q target/c.txt; then bad "H6 premise: target/c.txt is not ignored"
+else
+    out="$(gc "$G" "$(args 'probe-h6' '*.txt' '.')")"
+    if grep -q '^\./src/a\.txt:1:' <<<"$out" && grep -q '^\./src/b\.txt:1:' <<<"$out" && ! grep -q 'target/c\.txt' <<<"$out"; then
+        out2="$(gc "$G" "$(args 'probe-h6' 'src/*.txt' '.')")"
+        if [ "$(grep -c '^\./src/' <<<"$out2")" -eq 2 ]; then ok "H6 git tree: tracked+untracked searched, ignored target/ not, path glob filters"
+        else bad "H6 path glob: got: $(printf '%s' "$out2" | head -2 | tr '\n' ' ')"; fi
+    else bad "H6 git file set: got: $(printf '%s' "$out" | tr '\n' ' ' | cut -c1-160)"; fi
+fi
+
 out="$(gc "$T" "$(args 'zzz-absent-zzz' '*.txt' '.')")"
 if grep -q '^No matches found' <<<"$out"; then ok "H5 absent string -> No matches found"
 else bad "H5 control: got: $(printf '%s' "$out" | head -1)"; fi
@@ -93,10 +110,17 @@ else bad "H5 control: got: $(printf '%s' "$out" | head -1)"; fi
 # with fourteen of them the truth counted 98 of its 108 lines in copies and L6
 # went red on the land94 gate. `-path '*/.git'` prunes a linked worktree's
 # .git FILE, never the directory beside it.
+# ORDER 2151-gcls: the truth is git's file set (tracked + untracked-not-ignored),
+# the set grep_code searches inside a work tree, read by a DIFFERENT tool
+# (git grep) so the oracle is not the subject. Walking target/ with find cost
+# 6.7 min per gate on the coordinator host and answered about build output.
+# Spelled as find would print it ("./x" under ".") so the file names compare.
 truth() {
-    (cd "$ROOT" && find "$3" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune \
-        -o -type f -name "$2" -print0 2>/dev/null \
-        | xargs -0 grep -InE -e "$1" -- 2>/dev/null) || true
+    local ps pfx=""
+    if [ "$3" = "." ]; then pfx="./"; ps=":(glob)**/$2"; else ps=":(glob)$3/**/$2"; fi
+    [ "$2" = '*' ] && ps="$3"
+    (cd "$ROOT" && git grep -InE --untracked -e "$1" -- "$ps" 2>/dev/null \
+        | sed "s|^|$pfx|" | grep -v '^\(\./\)\?\.claude/worktrees/') || true
 }
 live() { # <label> <pattern> <include> <path>
     local label="$1" want got nwant f bad_f="" want_files
