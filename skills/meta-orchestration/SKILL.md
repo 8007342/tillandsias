@@ -1909,9 +1909,9 @@ another host had claimed that morning. Then claim:
 tillandsias-plan set-field <order> status in_progress \
     --host "$(hostname -s)" --reason "claimed for cycle <UTC ts>"
 git add plan/index.d && git commit -m "claim(<order>): <host>" && git push
-scripts/check-claim-confirmed.sh <order>
+tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host "$(hostname -s)"
 # -> ok:claim-confirmed:<order> | refused:claim-not-on-origin | refused:claim-lost:<order>
-#    | unknown:claim-origin-unreachable (never a pass)
+#    | could-not-run:claim-origin-unreachable (never a pass)
 ```
 
 Push the claim BEFORE the work, not with it — an unpushed claim separates
