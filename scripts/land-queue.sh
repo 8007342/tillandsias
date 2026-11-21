@@ -208,7 +208,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-landed=0; evicted=0; requeued=0; skipped=0; _held=0
+landed=0; evicted=0; requeued=0; skipped=0; _held=0  # the 2118-tpmy trunk-red FLAG (0|1); the freeze check's path list is _frz_paths (2152-lqrf: one name for both erased a hold)
 
 say() { printf '%s\n' "$*"; }
 
@@ -799,16 +799,16 @@ This is the second identical conflict at this unchanged head (\`${head_sha:0:9}\
     # paths the freeze exempts (ledger, docs, skills, cheatsheets) still lands —
     # that is how coordination keeps moving during a cut. HOLD is not EVICT: the
     # candidate is fine, the branch is closed; it lands after the freeze clears.
-    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
-    if [ -n "$_held" ]; then
+    _frz_paths="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_frz_paths" ]; then
         _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
         if [ "$_frc" -ne 0 ]; then
-            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_held); not gating into a branch whose freeze state is unknown"
+            say "hold:land-queue:$num:freeze-unknown — git ls-remote $REMOTE failed, and this candidate carries held code ($_frz_paths); not gating into a branch whose freeze state is unknown"
             skipped=$((skipped + 1))
             continue
         fi
         if [ -n "$_fm" ]; then
-            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_held); it lands after the freeze clears"
+            say "hold:land-queue:$num:frozen:$(printf '%s\n' "$_fm" | head -n 1 | cut -f2) — carries held code ($_frz_paths); it lands after the freeze clears"
             skipped=$((skipped + 1))
             continue
         fi
@@ -1183,11 +1183,11 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     # window. The hook re-asks at push on a hooked host; the tool re-asks here
     # so the answer does not depend on which host runs the queue. Recomputed
     # from the CURRENT base, because an adopt above may have moved it.
-    _held="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
-    if [ -n "$_held" ]; then
+    _frz_paths="$(freeze_held_paths "$base_sha" "$merge_sha" | head -n 1)"
+    if [ -n "$_frz_paths" ]; then
         _frc=0; _fm="$(freeze_markers "$REMOTE" "$TRUNK")" || _frc=$?
         if [ "$_frc" -ne 0 ] || [ -n "$_fm" ]; then
-            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_held); nothing was pushed"
+            say "requeue:land-queue:$num:frozen-mid-gate:$( [ "$_frc" -ne 0 ] && echo "freeze-unknown" || printf '%s\n' "$_fm" | head -n 1 | cut -f2) — the gate was green but $TRUNK froze while it ran and this carries held code ($_frz_paths); nothing was pushed"
             requeued=$((requeued + 1))
             continue
         fi
