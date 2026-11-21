@@ -6,7 +6,7 @@
 #
 #   1  each bash decider prints `population=<n> bootstrap=<b>` on STDERR while
 #      its stdout stays exactly one verdict line (the interface is unchanged)
-#   2  scripts/check-decider-retirement.sh says retire:<decider> for all three
+#   2  scripts/lua/check-decider-retirement.lua says retire:<decider> for all three
 #      over a tree whose shell is only bootstrap shell, live for a tree with
 #      one migratable script, and ok:decider-retirement:3 live over this tree
 #   3  NEGATIVE CONTROL: an empty scripts/ makes every decider REFUSE, and the
@@ -21,7 +21,7 @@ set -uo pipefail
 unset TILLANDSIAS_GATE_DIFF_BASE
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-RETIRE="$ROOT/scripts/check-decider-retirement.sh"
+RETIRE="scripts/lua/check-decider-retirement.lua"
 ALLOW="$ROOT/scripts/portability/bootstrap-shell-allowlist.txt"
 W="$(mktemp -d "${TMPDIR:-/tmp}/test-decider-retirement.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
@@ -49,6 +49,9 @@ make_tree() {
 # 1384-ddua: check-bash-dialect is scripts/lua/check-bash-dialect.lua.
 PLAN="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || PLAN=""
 case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+# The retirement check is Lua (scripts/lua/check-decider-retirement.lua), run
+# from this checkout; it names the same plan binary to check-bash-dialect.lua.
+retire() { ( cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$PLAN" "$PLAN" script run "$RETIRE" "$@" ); }
 run_decider() {
     local s="$ROOT/scripts/$1.sh"
     case "$1" in
@@ -77,7 +80,7 @@ for pair in "check-bash-dialect:ok:bash-dialect-clean" \
 done
 
 # ── arm 2 ────────────────────────────────────────────────────────────────────
-out="$(bash "$RETIRE" --root "$BOOT")"; rc=$?
+out="$(retire -- --root "$BOOT")"; rc=$?
 if [ "$rc" -eq 0 ] &&
     grep -q '^retire:check-bash-dialect ' <<<"$out" &&
     grep -q '^retire:check-sigpipe-verdict-pipelines-added ' <<<"$out" &&
@@ -89,14 +92,14 @@ else
 fi
 MIXED="$W/mixed"
 make_tree "$MIXED" scripts/install.sh build.sh launch.sh scripts/migratable.sh
-out="$(bash "$RETIRE" --root "$MIXED")"; rc=$?
+out="$(retire -- --root "$MIXED")"; rc=$?
 if [ "$rc" -eq 0 ] && [ "$(tail -n 1 <<<"$out")" = "ok:decider-retirement:3 live" ] &&
     ! grep -q '^retire:' <<<"$out"; then
     ok "arm 2: one migratable script keeps all three live"
 else
     bad "arm 2 (mixed): rc=$rc [$out]"
 fi
-out="$(bash "$RETIRE")"; rc=$?
+out="$(retire)"; rc=$?
 if [ "$rc" -eq 0 ] && [ "$(tail -n 1 <<<"$out")" = "ok:decider-retirement:3 live" ]; then
     ok "arm 2: this tree: ok:decider-retirement:3 live"
 else
@@ -118,7 +121,7 @@ for pair in "check-bash-dialect:blocked:bash-dialect:scan-empty" \
         bad "arm 3: $d on an empty scripts/ said [$(cat "$W/$d.out")], want [$want]"
     fi
 done
-out="$(bash "$RETIRE" --root "$EMPTY")"; rc=$?
+out="$(retire -- --root "$EMPTY")"; rc=$?
 if [ "$rc" -eq 1 ] && ! grep -q '^retire:' <<<"$out" &&
     [ "$(grep -c '^blocked:decider-retirement:check-' <<<"$out")" = 3 ]; then
     ok "arm 3: an empty tree is blocked for all three, never retire, rc 1"
@@ -146,7 +149,7 @@ EOF
 [ -z "$missing" ] && ok "arm 4: every allowlist entry exists on disk" || bad "arm 4: dangling:$missing"
 cp "$ALLOW" "$W/dangling.txt"
 echo "scripts/no-such-bootstrap.sh" >> "$W/dangling.txt"
-out="$(TILLANDSIAS_BOOTSTRAP_ALLOWLIST="$W/dangling.txt" bash "$RETIRE" 2>/dev/null)"; rc=$?
+out="$(TILLANDSIAS_BOOTSTRAP_ALLOWLIST="$W/dangling.txt" retire 2>/dev/null)"; rc=$?
 if [ "$rc" -eq 1 ] && [ "$out" = "blocked:decider-retirement:dangling-allowlist-entry:scripts/no-such-bootstrap.sh" ]; then
     ok "arm 4: a dangling entry is refused before anything runs"
 else

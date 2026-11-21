@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: coordinator queue item 3 (shell-to-Lua ports).
+packets:
+  - packet_id: shell-to-lua-batch-1-purge-guard-stranded-plan-writes-decider-retirement
+    order: "2150-n8te"
+    status: in_progress
+    kind: debt
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, lua-door]
+    estimated_hours: 4
+    owned_files:
+      - scripts/lua/check-purge-clears-vault-credentials.lua
+      - scripts/lua/check-stranded-plan-writes.lua
+      - scripts/lua/check-decider-retirement.lua
+    title: "Port check-purge-clears-vault-credentials, check-stranded-plan-writes and check-decider-retirement to Lua"
+    context: |
+      Coordinator queue item 3. Each port deletes its .sh, keeps the verdict lines and exit codes, and
+      updates every caller and floor. Parity proven side by side on the real tree and on refusing cases.
+      The Lua runtime roots at TILLANDSIAS_REPO_ROOT, then PROJECT_ROOT, then cwd, so the fixtures set
+      TILLANDSIAS_REPO_ROOT to their scratch repos (the litmus runner exports PROJECT_ROOT).
+    exit_criteria:
+      - "Each .sh is deleted and absent from scripts/portability floors; the three fixtures pass on the Lua."
+      - "On the real tree each .lua prints the same verdict and rc as the trunk .sh."
+    unscoreable: "the fixtures and the side-by-side runs are the measure"
+    provenance: "coordinator queue item 3, 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T04:44:09Z"
+        host: yoga
+        summary: "filed and claimed"

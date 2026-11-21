@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # @trace spec:host-state-lifecycle, order:1559-2uw3, order:1437-3iux
 #
-# test-purge-guard-soft-arm.sh — check-purge-clears-vault-credentials.sh's
+# test-purge-guard-soft-arm.sh — check-purge-clears-vault-credentials.lua's
 # NEGATIVE arm (1437-3iux S4): the Windows SOFT reset body calls NO credential
 # clearer. The guard's positive arm (every path that unregisters the distro
 # must clear) is unchanged; this pins the other direction, so a later edit that
@@ -19,10 +19,15 @@
 # sabotaged body.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-GUARD="$ROOT/scripts/check-purge-clears-vault-credentials.sh"
+GUARD="scripts/lua/check-purge-clears-vault-credentials.lua"
 SRC="$ROOT/crates/tillandsias-windows-tray/src/notify_icon.rs"
 SIG='pub fn reset_state_once() -> i32 {'
-TMP="$(mktemp -d)"
+. "$ROOT/scripts/plan-binary-probe.sh"
+PLAN="$(cd "$ROOT" && resolve_plan_binary)" || { echo "could-not-run:purge-guard-soft-arm:no-plan-binary"; exit 3; }
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+# The guard reads through the Lua door, which is confined to the repository,
+# so the scratch SOFT sources live under target/, never /tmp.
+mkdir -p "$ROOT/target" && TMP="$(mktemp -d "$ROOT/target/purge-soft-arm.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 fails=0
 pass() { echo "ok:   $1"; }
@@ -30,9 +35,9 @@ bad() { echo "FAIL: $1"; fails=$((fails + 1)); }
 
 guard() { # guard [soft-src] -> sets RC, OUT
     if [ -n "${1:-}" ]; then
-        OUT="$(cd "$ROOT" && TILLANDSIAS_PURGE_GUARD_SOFT_SRC="$1" bash "$GUARD" 2>&1)"; RC=$?
+        OUT="$(cd "$ROOT" && TILLANDSIAS_PURGE_GUARD_SOFT_SRC="$1" "$PLAN" script run "$GUARD" 2>&1)"; RC=$?
     else
-        OUT="$(cd "$ROOT" && bash "$GUARD" 2>&1)"; RC=$?
+        OUT="$(cd "$ROOT" && "$PLAN" script run "$GUARD" 2>&1)"; RC=$?
     fi
 }
 inject() { # inject <line> <out> — put <line> right after the SOFT signature

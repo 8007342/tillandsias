@@ -18,7 +18,6 @@ scripts/check-credential-channel.sh
 scripts/check-cycle-flow-log-fresh.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
-scripts/check-decider-retirement.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh
@@ -56,7 +55,6 @@ scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
 scripts/check-plan-schema-divergence.sh
-scripts/check-purge-clears-vault-credentials.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
 scripts/check-release-tier-freshness.sh
@@ -72,7 +70,6 @@ scripts/check-skills-single-source.sh
 scripts/check-spec-index-resolution-agreement.sh
 scripts/check-spec-script-paths.sh
 scripts/check-stranded-in-progress.sh
-scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh

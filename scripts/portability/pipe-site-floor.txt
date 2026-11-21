@@ -359,7 +359,6 @@ scripts scripts/check-credential-channel.sh 15
 scripts scripts/check-cycle-flow-log-fresh.sh 6
 scripts scripts/check-daily-maintenance.sh 2
 scripts scripts/check-dead-env-branches.sh 41
-scripts scripts/check-decider-retirement.sh 3
 scripts scripts/check-deslop-due.sh 5
 scripts scripts/check-deslop-sweep-health.sh 4
 scripts scripts/check-enclave-network-internal.sh 5
@@ -393,7 +392,6 @@ scripts scripts/check-pickup-role-grammar.sh 3
 scripts scripts/check-plan-binary-current.sh 5
 scripts scripts/check-plan-binary-probe-usage.sh 8
 scripts scripts/check-plan-schema-divergence.sh 2
-scripts scripts/check-purge-clears-vault-credentials.sh 1
 scripts scripts/check-refusal-affordance-added.sh 3
 scripts scripts/check-release-asset-integrity.sh 12
 scripts scripts/check-release-tier-freshness.sh 7
@@ -409,7 +407,6 @@ scripts scripts/check-skills-single-source.sh 8
 scripts scripts/check-spec-index-resolution-agreement.sh 4
 scripts scripts/check-spec-script-paths.sh 7
 scripts scripts/check-stranded-in-progress.sh 5
-scripts scripts/check-stranded-plan-writes.sh 3
 scripts scripts/check-test-baseline.sh 8
 scripts scripts/check-tracked-files-unwritten.sh 4
 scripts scripts/check-unrunnable-platform-arms.sh 5

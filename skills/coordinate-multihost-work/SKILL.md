@@ -117,7 +117,7 @@ branch moving on.
 ### Which PACKETS are stranded — the same refs, read as ledger writes
 
 ```bash
-scripts/check-stranded-plan-writes.sh       # or --from <saved salvage-audit transcript>
+tillandsias-plan script run scripts/lua/check-stranded-plan-writes.lua   # or -- --from <saved salvage-audit transcript>
 ```
 
 Order 1232-av4p. The audit above lists FILES; the dangerous subset is invisible

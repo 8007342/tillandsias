@@ -706,7 +706,7 @@ carried_obligations:
       The counter reaches the backlog's floor of things that stay (for
       shell-to-lua, scripts/portability/bootstrap-shell-allowlist.txt). The
       obligation is removed from the table; the ratchet stays as the growth
-      refusal, and check-decider-retirement.sh says when its deciders retire.
+      refusal, and scripts/lua/check-decider-retirement.lua says when its deciders retire.
   governance: >
     A trigger obliges the coordinator to PROPOSE the move, as one plain ask in
     the operator queue carrying the window's numbers (paid, waived, silent,
