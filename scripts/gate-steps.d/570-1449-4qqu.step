@@ -21,3 +21,7 @@ STEP_SCRIPT="scripts/test-installer-reset-probe.sh"
 STEP_ERROR="the installer's --reset-state probe again reads a failed re-init as an old tray and would skip the repair (1449-4qqu); see which arm failed above"
 STEP_OK="installer reset probe distinguishes unsupported from ran-and-failed"
 STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:reset-probe-fixture:4"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/install-windows.ps1 scripts/test-installer-reset-probe.sh"

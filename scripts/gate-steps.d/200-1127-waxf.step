@@ -24,3 +24,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   arm5b: the partial-memo arm a
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="plan/index.d/** plan/index.yaml plan/issues/** plan/issues/research/** plan/loop_status.d/** plan/mo-full-attestations.d/** scripts/gate-stamp.sh scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh"

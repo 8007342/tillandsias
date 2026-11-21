@@ -21,3 +21,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="litmus"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="openspec/litmus-tests/** scripts/archive-plan-packets.sh scripts/bench-inference-floor.sh scripts/check-host-tools.sh scripts/gate-steps.d/** scripts/hooks/pre-push-local-gate.sh scripts/install-hooks.sh scripts/land-on-platform-branch.sh scripts/local-ci.sh scripts/lua/** scripts/lua/audit-guard-activation.lua scripts/mo-full-attest.sh scripts/release-preflight.sh scripts/run-litmus-test.sh scripts/test-image-usability-check.sh scripts/test-jq-multiline-capture.sh scripts/test-wt-reparse-scan.sh"

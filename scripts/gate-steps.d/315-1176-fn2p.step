@@ -26,3 +26,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   NC2 structurally: the driver 
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target; runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="cargo litmus"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/check-gate-memory-floor.sh scripts/land-on-platform-branch.sh scripts/lua/check-oom-postmortem.lua scripts/plan-binary-probe.sh scripts/test-gate-memory-refusal.sh"

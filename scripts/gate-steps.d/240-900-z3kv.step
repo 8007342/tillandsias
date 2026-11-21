@@ -16,3 +16,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   an empty keychain with NO fal
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman; reads host state"
 STEP_LANES="podman host"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="crates/tillandsias-headless/src/vault_bootstrap.rs scripts/probe-credential-cold-state.sh scripts/test-credential-cold-state-probe.sh"

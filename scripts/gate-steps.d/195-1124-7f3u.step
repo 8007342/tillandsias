@@ -25,3 +25,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   arm3: an issues-only push is 
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="images/default/lib-common.sh plan/index.d/** plan/index.yaml plan/issues/** scripts/hooks/** scripts/hooks/pre-push-local-gate.sh scripts/lua/** scripts/lua/check-fragment-status-loss.lua scripts/plan-binary-probe.sh scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh scripts/with-wsl2-builder.sh"

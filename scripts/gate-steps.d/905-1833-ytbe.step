@@ -8,3 +8,7 @@ STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:test-local-delegate:5"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target; binds a fixed local port"
 STEP_LANES="cargo port"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="plan/index.d/** plan/index.yaml scripts/local-delegate.sh scripts/lua/local-delegate.lua scripts/plan-binary-probe.sh scripts/test-local-delegate.sh"

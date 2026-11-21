@@ -14,3 +14,7 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:image-pins-fixtur
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
 STEP_LANES="port"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="images/flutter/Containerfile images/image-pins.yaml scripts/lua/check-image-pins.lua scripts/lua/test-image-pins.lua"

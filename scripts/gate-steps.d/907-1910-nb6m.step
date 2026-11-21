@@ -9,3 +9,7 @@ STEP_LUA="scripts/lua/test-git-mirror-seed-retries-transport-failure.lua"
 STEP_ERROR="the mirror seed no longer survives a transient transport failure, or retries an auth refusal (1910-nb6m); see the arm lines above"
 STEP_OK="Mirror seed retry fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-28 darwin ok:git-mirror-seed-retries-transport-failure:4"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="images/git/Containerfile images/git/entrypoint.sh images/git/seed-mirror.sh scripts/lua/test-git-mirror-seed-retries-transport-failure.lua"

@@ -19,3 +19,7 @@ STEP_LUA="scripts/lua/test-decode-floor-pin.lua"
 STEP_ERROR="the decode-floor pin no longer pins, or leaves num_gpu 0 behind after an opt-out (1647-fb52); see the FAIL lines above"
 STEP_OK="small models are pinned on the opt-in lane and restored without residue on opt-out"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-12 msys ok:decode-floor-pin-fixture:12"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="images/inference/decode-floor-pin.sh scripts/lua/test-decode-floor-pin.lua"

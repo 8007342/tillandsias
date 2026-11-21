@@ -15,3 +15,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:spec-index-repo-relative-rung:6"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
 STEP_LANES="podman"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="plan/index.yaml scripts/spec-index-ensure.sh scripts/test-spec-index-repo-relative-rung.sh"

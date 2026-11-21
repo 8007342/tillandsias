@@ -9,3 +9,7 @@ STEP_LUA="scripts/lua/test-bare-mktemp.lua"
 STEP_ERROR="the bare-mktemp counter or the converted site no longer does what its fixture constructs (1619-7i9r) — see the FAIL lines above"
 STEP_OK="Bare-mktemp counter and conversion fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:bare-mktemp-fixture:7 arms"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lua/check-bare-mktemp.lua scripts/lua/test-bare-mktemp.lua scripts/test-capture-helper.sh"

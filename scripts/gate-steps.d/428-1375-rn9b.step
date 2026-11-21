@@ -13,3 +13,7 @@ STEP_OK="json get is byte-identical to jq on the jq-subset corpus"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="no runnable tillandsias-plan binary resolved, so the verb could not be exercised"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:json-get-parity:79/79"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/plan-binary-probe.sh scripts/portability/jq-subset-corpus.txt scripts/portability/jq-subset-golden.txt scripts/test-json-query-jq-parity.sh"

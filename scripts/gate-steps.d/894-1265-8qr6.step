@@ -13,3 +13,7 @@ STEP_LUA="scripts/lua/test-release-freeze-landing.lua"
 STEP_ERROR="release-freeze.sh land/re-freeze let the freeze markers go empty, or status stopped naming the land (1265-8qr6) — see the FAIL lines above"
 STEP_OK="Release-freeze landing fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:release-freeze-landing:10 arms"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lib-freeze-paths.sh scripts/lua/test-release-freeze-landing.lua scripts/release-freeze.sh"

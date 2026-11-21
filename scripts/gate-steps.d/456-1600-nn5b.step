@@ -10,3 +10,7 @@ STEP_LUA="scripts/lua/check-worktree-add-cleanup.lua"
 STEP_ERROR="a fixture adds a worktree to this checkout without a cleanup that survives TERM (1600-nn5b) — see the violation lines above"
 STEP_OK="Worktree-adding fixtures clean up on every exit"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:worktree-add-cleanup"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lua/check-worktree-add-cleanup.lua scripts/portability/worktree-add-scan-exempt.txt"

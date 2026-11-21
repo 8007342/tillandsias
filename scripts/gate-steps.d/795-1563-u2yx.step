@@ -17,3 +17,7 @@ STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:wsl-capture-fixture:7/7"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
 STEP_LANES="checkout"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lib-wsl-capture.sh scripts/test-preflight-refused-name-lines-whole.sh scripts/with-wsl2-builder.sh"

@@ -15,3 +15,7 @@ STEP_LUA="scripts/lua/test-env-namespace-hygiene.lua"
 STEP_ERROR="a TILLANDSIAS_ name spelled like a credential is not a listed secret, so the Lua door would drop a variable children need, or the guard no longer refuses one (2031-z4rm) — see the FAIL lines above"
 STEP_OK="env namespace hygiene fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-08 darwin macOS 27.2 ok:env-namespace-hygiene:4 arms (work/2031-z4rm @ 1b379d38f)"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lua/check-env-namespace-hygiene.lua scripts/lua/test-env-namespace-hygiene.lua"

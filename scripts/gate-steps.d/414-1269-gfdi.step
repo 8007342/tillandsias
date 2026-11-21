@@ -69,3 +69,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:tool-materialize-litmus:arm-surf
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
 STEP_LANES="litmus"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/run-litmus-test.sh scripts/test-tool-materialize-litmus-surfaces-arm.sh scripts/test-tool-materialize.sh"

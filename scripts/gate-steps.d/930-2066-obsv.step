@@ -24,3 +24,7 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-10 darwin ok:observatorium-npm
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lua/test-observatorium-npm-test.lua"

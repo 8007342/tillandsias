@@ -8,3 +8,7 @@ STEP_SCRIPT="scripts/test-env-forward-shared.sh"
 STEP_ERROR="a dispatch boundary rolls its own TILLANDSIAS_* forward, or the forward manufactures/unquotes values (891-5shq) — see the verdict line above"
 STEP_OK="Env-forward sharing check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:env-forward-shared:10"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lib-env-forward.sh scripts/test-env-forward-shared.sh"
