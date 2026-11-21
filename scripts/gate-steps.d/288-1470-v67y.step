@@ -16,3 +16,4 @@ STEP_OK="newly-added refusals carry why and remedy; audit counts per site"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:refusal-affordance-added-fixture:8/8"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

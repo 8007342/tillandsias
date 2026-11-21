@@ -20,3 +20,4 @@ STEP_OK="Guard activation audit passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

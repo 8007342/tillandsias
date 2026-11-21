@@ -68,3 +68,4 @@ STEP_OK="Tool-materialization reds name their arm; bad regimes skip"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:tool-materialize-litmus:arm-surfaced:3/3"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

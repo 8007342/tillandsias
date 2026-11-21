@@ -14,3 +14,4 @@ STEP_OK="Clean-room credential clearer check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --dry-run removes nothing and touches no keychain item"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
+STEP_LANES="podman"

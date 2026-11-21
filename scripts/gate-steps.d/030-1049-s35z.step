@@ -10,3 +10,4 @@ STEP_OK="Missing-bound-test check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-missing-bound-test:6"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

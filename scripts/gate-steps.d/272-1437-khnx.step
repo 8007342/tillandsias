@@ -12,3 +12,4 @@ STEP_OK="Packet tier fields passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:packet-tier-fields:4/4"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target; binds a fixed local port"
+STEP_LANES="cargo port"

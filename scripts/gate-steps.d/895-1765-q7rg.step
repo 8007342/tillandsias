@@ -12,3 +12,4 @@ STEP_OK="Host-state step retry fixture passed"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-17 msys skip:gate-step-host-state-retry:MINGW64-re-execs-build-sh-into-wsl (4/4 inside tillandsias-build)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

@@ -21,3 +21,4 @@ STEP_OK="a stalled GPU runner is ended and quarantined; an unreadable one is lef
 STEP_SECOND_REGIME="yolanda-windows 2026-10-12 msys ok:gpu-stall-watchdog-fixture:11"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
+STEP_LANES="port"

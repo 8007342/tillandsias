@@ -14,3 +14,4 @@ STEP_OK="builder existence check survives a failed toolbox list"
 STEP_SECOND_REGIME="macuahuitl 2026-10-23 darwin skip:linux-only — toolbox and with-tillandsias-builder.sh are the Linux build path; darwin builds natively and never calls _toolbox_exists (1843-dex5)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
+STEP_LANES="podman"

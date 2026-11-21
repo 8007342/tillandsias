@@ -34,3 +34,4 @@ STEP_SKIP_DESC="scripts/test-litmus-budget-tally.sh is absent, so the isolation 
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:step-metrics-isolation:4"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

@@ -20,3 +20,4 @@ STEP_OK="cheatsheet INDEX is byte-ordered under C and en_US.UTF-8"
 STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:cheatsheet-index-byte-order:3"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
+STEP_LANES="podman"

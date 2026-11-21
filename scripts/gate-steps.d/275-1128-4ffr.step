@@ -13,3 +13,4 @@ STEP_OK="Pending capability row check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the tree is restored to ok:release-preflight"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

@@ -14,3 +14,4 @@ STEP_OK="expert-accuracy provenance: native /api/show, no guessing, tracked per-
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin PASS: expert-accuracy-provenance (1257-jxu9)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
+STEP_LANES="port"

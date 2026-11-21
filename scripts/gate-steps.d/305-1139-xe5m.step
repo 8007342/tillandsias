@@ -27,3 +27,4 @@ STEP_SKIP_DESC="target/debug/tillandsias is not built on this host, so the probe
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --fresh reports measured even with a warm cache"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

@@ -13,3 +13,4 @@ STEP_OK="Inference readiness names its serving lane"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:dev-inference-lane:7 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman; binds a fixed local port"
+STEP_LANES="podman port"

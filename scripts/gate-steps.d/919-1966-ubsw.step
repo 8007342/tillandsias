@@ -14,3 +14,4 @@ STEP_OK="private metrics fallback fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:gate-step-private-metrics-fallback:6 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

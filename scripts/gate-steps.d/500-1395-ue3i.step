@@ -10,3 +10,4 @@ STEP_OK="CentiColon advisory R line holds"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-ratchet:9"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

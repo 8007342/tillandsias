@@ -36,3 +36,4 @@ STEP_OK="claim-names-a-workstation refusal check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:a-claim-names-a-workstation"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

@@ -17,3 +17,4 @@ STEP_OK="exact-version literals refused unless reasoned; capability probe admits
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:exact-version-literal-added-fixture:6/6"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

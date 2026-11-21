@@ -15,3 +15,4 @@ STEP_HOST_STATE="keyring"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   an empty keychain with NO fallback still reads cold"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman; reads host state"
+STEP_LANES="podman host"

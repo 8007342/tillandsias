@@ -45,3 +45,4 @@ STEP_ERROR="the salvage no longer restores the executable bit at snapshot time, 
 STEP_OK="Work leaving a Windows host keeps the executable bit it was meant to have"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

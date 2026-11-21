@@ -12,3 +12,4 @@ STEP_OK="Main-branch affordance passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:main-branch-affordance-fixture:5/5"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

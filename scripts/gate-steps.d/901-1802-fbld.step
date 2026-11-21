@@ -10,3 +10,4 @@ STEP_OK="Build placement fixture passed"
 STEP_SECOND_REGIME="macuahuitl 2026-10-20 darwin skip:linux-only — the decider reads findmnt, GNU stat -c and /sys/block/mdN, none of which darwin has; not run on a second regime (1802-fbld)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

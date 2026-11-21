@@ -15,3 +15,4 @@ STEP_OK="an empty litmus spec name is refused"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-11 msys ok:litmus-empty-spec-refused:3"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

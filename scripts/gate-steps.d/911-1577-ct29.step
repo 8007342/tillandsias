@@ -11,3 +11,4 @@ STEP_OK="Forge-constraints cheatsheet passed"
 STEP_SECOND_REGIME="yolanda 2026-10-31 msys ok:forge-constraints-cheatsheet"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
+STEP_LANES="port"

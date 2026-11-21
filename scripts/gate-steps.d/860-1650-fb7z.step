@@ -17,3 +17,4 @@ STEP_HOST_STATE="load"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-13 msys ok:door-index-lock-sweep:8 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="reads host state"
+STEP_LANES="host"

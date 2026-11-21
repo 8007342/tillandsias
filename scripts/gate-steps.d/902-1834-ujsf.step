@@ -11,3 +11,4 @@ STEP_OK="Local-delegate ladder passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:local-delegate-ladder:29/29"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

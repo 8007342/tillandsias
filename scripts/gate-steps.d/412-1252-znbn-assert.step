@@ -63,3 +63,4 @@ STEP_OK="Structured litmus assertions decide their own verdicts"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-structured-assert:9/9"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

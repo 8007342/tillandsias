@@ -8,3 +8,4 @@ STEP_OK="tellme routing fixture passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:tellme-routes-to-expert-serve:5/5"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target; drives podman; binds a fixed local port"
+STEP_LANES="cargo podman port"

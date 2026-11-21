@@ -13,3 +13,4 @@ STEP_OK="bash-dialect checker fixture green"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: check-bash-dialect fixture 25/25"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

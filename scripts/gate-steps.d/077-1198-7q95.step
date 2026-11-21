@@ -19,3 +19,4 @@ STEP_OK="claim-expiry sweep reads the status write"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:expire-claims-reads-the-status-write"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

@@ -63,3 +63,4 @@ STEP_ERROR="the preflight's setsid probe or its isolation-mode verdict was remov
 STEP_OK="The preflight runs its guards on a host without setsid, and says so"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

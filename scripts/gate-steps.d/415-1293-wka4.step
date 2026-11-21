@@ -58,3 +58,4 @@ STEP_OK="A step's producer failure reaches its verdict"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-step-pipefail:6/6"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

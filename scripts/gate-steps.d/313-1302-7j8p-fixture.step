@@ -18,3 +18,4 @@ STEP_OK="second-regime checker discriminates (4/4)"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-step-regimes-fixture:4/4"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="drives podman"
+STEP_LANES="podman"

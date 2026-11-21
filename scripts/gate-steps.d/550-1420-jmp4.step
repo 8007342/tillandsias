@@ -25,3 +25,4 @@ STEP_OK="installer download progress is quiet and single-bar"
 STEP_SECOND_REGIME="yolanda 2026-09-27 msys ok:quiet-progress-fixture:ran=5 skipped=0"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
+STEP_LANES="port"

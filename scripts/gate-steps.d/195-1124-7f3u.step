@@ -24,3 +24,4 @@ STEP_OK="Plan-lane fail-closed check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   arm3: an issues-only push is still accepted with no plan binary (refusal stays scoped)"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

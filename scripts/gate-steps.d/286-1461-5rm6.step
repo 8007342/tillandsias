@@ -21,3 +21,4 @@ STEP_OK="land queue behaves, with its plan binary resolved from its own checkout
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-08 darwin ok:land-queue:16/16"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

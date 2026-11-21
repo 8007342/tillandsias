@@ -19,3 +19,4 @@ STEP_OK="the plan-only lane carries or refuses a claim's status fragment, never 
 STEP_SECOND_REGIME="yolanda 2026-09-29 msys ok:plan-fragments-lane-carries-status:4/4"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

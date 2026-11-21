@@ -12,3 +12,4 @@ STEP_OK="Project-discipline skill passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:project-discipline-skill:4/4"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

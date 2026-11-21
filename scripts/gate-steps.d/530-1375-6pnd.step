@@ -12,3 +12,4 @@ STEP_OK="litmus selection is byte-identical with and without jq/yq"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: litmus-runner-reads-without-jq selection=24 tests, byte-identical"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

@@ -16,3 +16,4 @@ STEP_OK="the builder hop keeps every refusal line in a same-file capture, and st
 STEP_SECOND_REGIME="yolanda-windows 2026-10-09 msys ok:wsl-capture-fixture:7/7"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

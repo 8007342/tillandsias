@@ -7,3 +7,4 @@ STEP_OK="Local delegate fixture passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:test-local-delegate:5"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="builds with cargo into the shared target; binds a fixed local port"
+STEP_LANES="cargo port"

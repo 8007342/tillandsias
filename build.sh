@@ -2999,15 +2999,69 @@ _gs_pool() {
     # An ARRAY, never a here-string: a step that reads stdin would swallow the
     # rest of a here-string list, and the gate would end green having skipped
     # the steps after it (measured: 164 of 210 ran, exit 0).
-    for _f in ${_ser[@]+"${_ser[@]}"}; do
-        _gs_one "$_f" || exit 1
-        _ran=$((_ran + 1))
-    done
+    _gs_lanes "$_jobs" ${_ser[@]+"${_ser[@]}"} || exit 1
+    _ran=$((_ran + ${#_ser[@]}))
     # The next checkpoint, not an absence: every step file ran exactly once.
     if [ "$_ran" -ne "$_total" ]; then
         _error "gate-steps pool: ran $_ran of $_total step files — refusing a gate that skipped steps (2155-gpar)"
         exit 1
     fi
+}
+
+# _gs_lanes <jobs> <step file>... — ORDER 2156-glan. The serial set, grouped by
+# the resource each step holds (STEP_LANES="cargo podman ..."): every LANE runs
+# its steps one at a time, and the lanes run beside each other, so a cargo
+# step and a podman step share the host while two cargo steps never do. A step
+# naming more than one lane, or none, runs ALONE after the lanes. Outputs
+# replay in filename order and the first refused step ends the gate, as in the
+# serial loop; a lane stops at its own first red, so any step it left unrun
+# sorts after that red and is never reported as passed.
+_gs_lanes() {
+    local _jobs="$1" _d _f _l _lanes _i=0 _n _rc _ln _t0=$SECONDS
+    shift
+    local -a _excl=() _names=()
+    [ "$#" -gt 0 ] || return 0
+    _d="$(mktemp -d "${TMPDIR:-/tmp}/gate-lanes.XXXXXX")" || { _error "gate-steps lanes: no scratch dir"; return 1; }
+    for _f in "$@"; do
+        _lanes="$(sed -n 's/^STEP_LANES="\(.*\)"$/\1/p' "$_f" | head -n 1)"
+        set -- $_lanes
+        if [ "$#" -ne 1 ]; then _excl+=("$_f"); continue; fi
+        _i=$((_i + 1)); _names+=("$_f")
+        printf '%s\t%s\n' "$_i" "$_f" >> "$_d/lane-$1.list"
+    done
+    _n=$_i
+    for _l in "$_d"/lane-*.list; do
+        [ -e "$_l" ] || continue
+        # The lane's list is loaded into an ARRAY before any step runs: not
+        # stdin (a step that reads stdin swallows it, 2155-gpar) and not a
+        # spare fd (fd 9 is the shared-target lock's, fd 8 the step tee's —
+        # measured: fd 9 died after a lane's first step).
+        ( unset TILLANDSIAS_GATE_STEP_JOBS
+          _li=(); while IFS= read -r _ln; do _li+=("$_ln"); done < "$_l"
+          for _ln in ${_li[@]+"${_li[@]}"}; do
+              _i="${_ln%%$'\t'*}"; _f="${_ln#*$'\t'}"
+              _gs_one "$_f" > "$_d/$_i.out" 2>&1; _rc=$?
+              echo "$_rc" > "$_d/$_i.rc"
+              [ "$_rc" -eq 0 ] || break
+          done ) &
+    done
+    wait
+    _i=0
+    while [ "$_i" -lt "$_n" ]; do
+        _i=$((_i + 1))
+        cat "$_d/$_i.out" 2>/dev/null
+        _rc="$(cat "$_d/$_i.rc" 2>/dev/null)"
+        if [ "$_rc" != 0 ]; then
+            _error "gate-steps lanes: $(basename "${_names[$((_i - 1))]}") refused or did not run (rc=${_rc:-none}); a step that passes alone and reds here is missing a lane (2156-glan); lane outputs kept at $_d"
+            return 1
+        fi
+    done
+    _ln="$(ls "$_d"/lane-*.list 2>/dev/null | sed 's|.*/lane-||; s|\.list$||' | tr '\n' ' ')"
+    rm -rf "$_d"
+    _info "gate-steps lanes: $_n step(s) in lanes [${_ln% }] in $((SECONDS - _t0))s; ${#_excl[@]} exclusive step(s) next"
+    for _f in ${_excl[@]+"${_excl[@]}"}; do
+        _gs_one "$_f" || return 1
+    done
 }
 
 if [ -n "$GATE_STEPS_ROOT" ]; then

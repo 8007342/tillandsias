@@ -15,3 +15,4 @@ STEP_OK="The lc-numeric fixture cleans its mutants on TERM"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-11 darwin ok:awk-float-lc-numeric-signal:3 arms"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
