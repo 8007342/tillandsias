@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-sigpipe-verdict-census-and-its-fixture-are-lua-and-both-sh-are-deleted
+    order: 2118-knjy
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 2
+    title: |
+      Port scripts/census-sigpipe-verdict-pipelines.sh (127 lines) and its fixture scripts/test-census-sigpipe-verdict-pipelines.sh (155 lines) to scripts/lua/, with parity proven on the real corpus, and delete both .sh files.
+    context: |
+      The smallest shell-to-lua candidates offered by check-carried-obligations, 2026-11-21.
+    exit_criteria:
+      - 'the Lua census prints the same verdict and --list as the .sh on the real tree; the Lua fixture keeps its five arms, including the clean-corpus negative control; both .sh files and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Land the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1354-uv4e]
+    events:
+      - {type: filed, ts: '2026-11-21T10:49:04Z', host: lenovinha, summary: filed the census port}

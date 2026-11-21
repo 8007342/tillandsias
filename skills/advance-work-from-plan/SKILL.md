@@ -385,7 +385,7 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     clean. `refused:fragments-to-trunk:trunk-fold:…` means a fragment names a
     packet trunk has never seen (you filed it on this branch): run it without
     arguments so the filing rides along. The control, from any trunk checkout
-    after `git pull`: `scripts/check-claim-confirmed.sh <order> --host <host>`
+    after `git pull`: `tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <host>`
     → `ok:claim-confirmed` (1370-tjme; `refused:claim-lost` names the earlier
     claimant, and you yield).
 
@@ -628,7 +628,7 @@ skipped it on direct knowledge, which does not scale.
 After the flip is PUSHED, run the control:
 
 ```bash
-git pull && scripts/check-claim-confirmed.sh <order> --host <your-host>   # ok:claim-confirmed:<order>:<host>@<ts>
+git pull && tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <your-host>   # ok:claim-confirmed:<order>:<host>@<ts>
 ```
 
 `refused:no-live-claim` means the claim did not take (unpushed, wrong field,

@@ -5243,9 +5243,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the tree, and merely ADDING a test can red a different one. A gate whose
     # red set moves when you add an unrelated test teaches people to re-run it
     # until it passes.
+    # ORDER 2161-ctdd (build speed, report packet 8): DO NOT RE-RUN THE DEFAULT
+    # TESTS HERE. The --workspace pass above already ran every test the default
+    # build of this binary has (1091 on 2026-11-21); this build adds the ones
+    # that only compile under tray,listen-vsock (533). Both lists come from
+    # libtest's own --list (the default build is already compiled, so it costs
+    # seconds), and this pass runs exactly the difference with --exact. Kept
+    # serial (above). A list that cannot be produced, or an empty difference,
+    # falls back to the whole set and says so: a filter must never silently
+    # run less than it claims.
+    # KNOWN LIMIT: a default test whose body has a cfg(feature = "tray") or
+    # "listen-vsock" branch is run only in its default form.
+    _fg_filter=()
+    _fg_def="$(cargo test -q -p tillandsias-headless --bin tillandsias \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_all="$(cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_new="$(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all") | grep -c .)"
+    if [[ -n "$_fg_def" && -n "$_fg_all" && "$_fg_new" -gt 0 ]]; then
+        while IFS= read -r _fg_t; do
+            [[ -n "$_fg_t" ]] && _fg_filter+=("$_fg_t")
+        done < <(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all"))
+        _info "feature-gated: $_fg_new test(s) only this build has; the $(printf '%s\n' "$_fg_def" | grep -c .) default ones ran in the --workspace pass (2161-ctdd)"
+        _fg_filter=(--exact "${_fg_filter[@]}")
+    else
+        _warn "feature-gated: could not form the default/feature test lists (default=$(printf '%s\n' "$_fg_def" | grep -c .), all=$(printf '%s\n' "$_fg_all" | grep -c .), new=$_fg_new); running the WHOLE set (2161-ctdd)"
+    fi
     _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 |
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
@@ -5722,7 +5748,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # catching hand-authored fragments that bypass set-field. Diff-scoped, so
     # the base ledger's historical closures are never re-judged.
     _step "Checking that added fragment closures carry evidence (686-7qcm)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-closure-evidence-added.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-fragment-closure-evidence-added.lua" 2>&1; then
         _error "this change adds a fragment recording a closure (completed/verified/done) with no evidence-bearing event (686-7qcm)"
         exit 1
     fi
@@ -6411,7 +6437,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Terminology gate passed"
 
     _step "Checking plan/schema status-vocab divergence (440)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-plan-schema-divergence.lua" 2>&1; then
         # Do NOT restate the cause here: the script emits one of three verdicts
         # (diverges / index-load-failed / unreadable) and this wrapper used to
         # assert "vocabularies diverge" for all of them, which sent a reader to
@@ -6431,7 +6457,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
     # (VERSION + Cargo files only) still passes.
     _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-version-bump-isolation.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-version-bump-isolation.lua" 2>&1; then
         _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
         exit 1
     fi
@@ -6756,7 +6782,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # unrelated routes before this was mechanised. Sub-second; the fixture
     # carries the real pre-fix arm from git history as its positive control.
     _step "Checking litmus steps named MUTATION/SABOTAGE actually mutate (1059-pb2j)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-mutation-arms-mutate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-litmus-mutation-arms-mutate.lua" 2>&1; then
         _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
         exit 1
     fi

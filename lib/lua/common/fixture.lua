@@ -1,4 +1,4 @@
--- @trace order:2080-zcur, order:2084-senw
+-- @trace order:2080-zcur, order:2084-senw, order:2158-vrb7
 -- common.fixture — the shared test kit for scripts/lua/test-*.lua.
 --
 --   local fixture = require "common.fixture"
@@ -37,6 +37,19 @@ end
 
 local SCRATCH = "target/plan-scratch"
 
+-- ORDER 2158-vrb7. scratch.mkdir returns a Windows verbatim path (\\?\C:\...).
+-- git reads it as //host/share ("hostname contains invalid characters") and
+-- the rm policy reads it as outside the workspace. Hand out the plain form,
+-- C:/..., the spelling repo_root() already uses. Non-verbatim paths pass as-is.
+function M.plain_path(p)
+    if type(p) ~= "string" then return p end
+    local rest = p:match("^\\\\%?\\UNC\\(.*)$")
+    if rest then return "//" .. (rest:gsub("\\", "/")) end
+    rest = p:match("^\\\\%?\\(%a:.*)$")
+    if rest then return (rest:gsub("\\", "/")) end
+    return p
+end
+
 -- Declare the kit's scratch root once (a no-op when already declared).
 local function scratch_root()
     if not scratch.root() then scratch.declare(SCRATCH) end
@@ -66,7 +79,7 @@ function T:scratch(tag)
     local leaf = self.name .. "-" .. tostring(time.now_ms())
         .. "-" .. self.seq .. (tag and ("-" .. tag) or "")
     scratch_root()
-    local d = { rel = SCRATCH .. "/" .. leaf, abs = scratch.mkdir(leaf), leaf = leaf }
+    local d = { rel = SCRATCH .. "/" .. leaf, abs = M.plain_path(scratch.mkdir(leaf)), leaf = leaf }
     self.dirs[#self.dirs + 1] = d
     return d
 end
@@ -77,7 +90,7 @@ function T:short_scratch()
     self.seq = self.seq + 1
     local leaf = "s" .. tostring(time.now_ms() % 10000000) .. self.seq
     scratch_root()
-    local d = { rel = SCRATCH .. "/" .. leaf, abs = scratch.mkdir(leaf), leaf = leaf }
+    local d = { rel = SCRATCH .. "/" .. leaf, abs = M.plain_path(scratch.mkdir(leaf)), leaf = leaf }
     self.dirs[#self.dirs + 1] = d
     return d
 end

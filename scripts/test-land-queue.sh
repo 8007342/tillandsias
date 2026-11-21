@@ -105,6 +105,8 @@ run_queue() {
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_HOST_DOOR="${HOST_DOOR_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE="" \
         TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK="${PLAN_LANE_CMD:-echo plan-lane >> $GATE_LOG.plan-lane}" \
         TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
         TILLANDSIAS_LAND_QUEUE_LOGDIR="${LOGDIR_OVERRIDE:-$TMP/logs-$$}" \
@@ -553,6 +555,8 @@ out9="$(timeout 120 env \
     TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
     TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
     TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="" \
+    TILLANDSIAS_LAND_QUEUE_HOST_DOOR="" \
+    TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE="" \
     TILLANDSIAS_LAND_QUEUE_REMOTE=origin \
     TILLANDSIAS_TRUNK_BRANCH=linux-next \
     bash -c 'cd "$1" && bash "$2"' _ "$WORK_DIR" "$QUEUE" </dev/null 2>&1)"
@@ -1407,17 +1411,20 @@ candidate arm32b 1322-aaaa a32b.txt A
 cat > "$GH_PRS" <<JSON
 [{"number":22,"headRefName":"work/1322-aaaa","isDraft":false}]
 JSON
+# 2118-tpmy: the red is the CANDIDATE's (trunk, without a32b.txt, is green),
+# so after the two candidate gates the trunk check gates once more and evicts.
 cat > "$GATE_BIN" <<GATE
 #!/usr/bin/env bash
 echo "gated" >> "$GATE_LOG"
-echo "FAIL scripts/test-other.sh: real"; exit 1
+if [ -e a32b.txt ]; then echo "FAIL scripts/test-other.sh: real"; exit 1; fi
+exit 0
 GATE
 out32b="$(run_queue)"
 if grep -q '^evicted:scripts/test-other.sh ' <<<"$out32b" && grep -q '^evict:land-queue:22:gate-failed' <<<"$out32b" \
-    && ! grep -q '^land:22 ' <<<"$out32b" && [ "$(grep -c . "$GATE_LOG")" -eq 2 ]; then
-    ok "ARM 32b: an untouched test red twice prints evicted:<test> and evicts (2 gates)"
+    && ! grep -q '^land:22 ' <<<"$out32b" && [ "$(grep -c . "$GATE_LOG")" -eq 3 ]; then
+    ok "ARM 32b: an untouched test red twice, trunk green, prints evicted:<test> and evicts (3 gates)"
 else
-    bad "ARM 32b: wanted evicted:scripts/test-other.sh, evicted, 2 gates; got gates=$(grep -c . "$GATE_LOG")
+    bad "ARM 32b: wanted evicted:scripts/test-other.sh, evicted, 3 gates; got gates=$(grep -c . "$GATE_LOG")
 $out32b"
 fi
 
@@ -1514,6 +1521,78 @@ if grep -q '^land:32 ' <<<"$out33b" && [ "$(grep -c . "$GATE_LOG")" -eq 1 ]; the
 else
     bad "ARM 33b: wanted landed on 1 full gate; got gates=$(grep -c . "$GATE_LOG")
 $out33b"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 34
+# 2118-tpmy THE HOST DOOR: could-not-run:host:<cause> evicts NOBODY and the run
+# goes on. The door stub refuses its first call (disk-low), then answers ok:
+# #41 is skipped (not gated, not evicted), #42 lands.
+scaffold arm34
+candidate arm34 1341-aaaa a34.txt A
+candidate arm34 1342-aaaa b34.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":41,"headRefName":"work/1341-aaaa","isDraft":false},
+ {"number":42,"headRefName":"work/1342-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+DOOR_BIN="$TMP/door-arm34.sh"
+cat > "$DOOR_BIN" <<DOOR
+#!/usr/bin/env bash
+echo "asked" >> "$TMP/door-arm34.log"
+if [ "\$(grep -c . "$TMP/door-arm34.log")" -eq 1 ]; then
+    echo "could-not-run:host:disk-low:3.0G free under target, floor 40G"; exit 3
+fi
+echo "ok:host-door:disk=900G tmp=6.0G swap-free=90%"
+DOOR
+out34="$(HOST_DOOR_CMD="bash $DOOR_BIN" run_queue)"
+if grep -q '^could-not-run:host:disk-low:.* #41 is not evicted' <<<"$out34" && ! grep -q '^evict' <<<"$out34" \
+    && ! grep -q '^land:41 ' <<<"$out34" && grep -q '^land:42 ' <<<"$out34" \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && ! grep -q 'land-queue:evicted' "$GH_COMMENTS" 2>/dev/null; then
+    ok "ARM 34: a host-door refusal is could-not-run:host:<cause>, evicts nobody, and the run continues (#42 lands)"
+else
+    bad "ARM 34: wanted #41 could-not-run (no eviction, no gate) and #42 landed on 1 gate; got gates=$(grep -c . "$GATE_LOG")
+$out34"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 35
+# 2118-tpmy RED ON TRUNK TOO: the untouched test is red twice on the candidate
+# AND on the bare trunk -> hold:trunk-red:<test>. Nobody is evicted, the queue
+# holds (exit 4) and #44 behind it is not gated. A second run at the same trunk
+# base reads the memo: no gate is spent on the known trunk red.
+scaffold arm35
+candidate arm35 1343-aaaa a35.txt A
+candidate arm35 1344-aaaa b35.txt B
+cat > "$GH_PRS" <<JSON
+[{"number":43,"headRefName":"work/1343-aaaa","isDraft":false},
+ {"number":44,"headRefName":"work/1344-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+echo "FAIL scripts/test-other.sh: broken on trunk"; exit 1
+GATE
+out35="$(run_queue)"; rc35=$?
+g35="$(grep -c . "$GATE_LOG")"
+if grep -q '^hold:trunk-red:scripts/test-other.sh ' <<<"$out35" && ! grep -q '^evict' <<<"$out35" \
+    && ! grep -q '^evicted:' <<<"$out35" && grep -q '^hold:land-queue:' <<<"$out35" \
+    && [ "$g35" -eq 3 ] && ! grep -q 'land-queue:evicted' "$GH_COMMENTS" 2>/dev/null; then
+    ok "ARM 35: red twice on the candidate AND on trunk is hold:trunk-red:<test>; nobody evicted; #44 not gated (3 gates)"
+else
+    bad "ARM 35: wanted hold:trunk-red, no eviction, held run, 3 gates; got gates=$g35 rc=$rc35
+$out35"
+fi
+: > "$GATE_LOG"
+out35b="$(run_queue)"
+g35b="$(grep -c . "$GATE_LOG")"
+if grep -q '^hold:trunk-red:scripts/test-other.sh ' <<<"$out35b" && [ "$g35b" -eq 2 ] && ! grep -q '^evict' <<<"$out35b"; then
+    ok "ARM 35b: at the same trunk base the trunk red is remembered: no trunk gate is spent again (2 gates)"
+else
+    bad "ARM 35b: wanted hold from the memo on 2 candidate gates; got gates=$g35b
+$out35b"
 fi
 printf '\n'
 if [ "$fail" -eq 0 ]; then
