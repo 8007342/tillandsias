@@ -1,5 +1,5 @@
 -- @trace order:2150-3j97, spec:spec-traceability
--- @env PATH HOME TMPDIR TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
+-- @env PATH HOME TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-litmus-timeout-retry.lua — priority:build-speed. A litmus step killed by
 -- its OWN timeout with no output is re-run once and announced as
@@ -33,13 +33,10 @@ fs.mkdir(REL .. "/lt")
 fs.mkdir(REL .. "/rt")
 local CNT = W .. "/count"
 -- The runner runs inside a SCRATCH PROJECT (a git repo holding a copy of
--- scripts/) OUTSIDE this checkout, as the .sh did. Measured: one runner start
--- with its project under this checkout's target/ took ~20 s; under /tmp, 0.5 s.
--- fs.* writes only inside the repository, so the project is made with mktemp
--- and cp through proc.run, and removed the same way at the end.
-local mk = run({ "mktemp", "-d", (env.get("TMPDIR") or "/tmp") .. "/litmus-timeout-retry.XXXXXX" })
-local PJ = text.trim(mk.stdout or "")
-if PJ == "" then verdict.could_not_run("litmus-timeout-retry", "mktemp -d failed") end
+-- scripts/) under target/plan-scratch, the T:scratch regime. That cost ~20 s
+-- per runner start until 2118-ywk7 (#1261) stopped the runner staging the
+-- router sidecar in a tree with no sidecar crate.
+local PJ = W .. "/project"
 run({ "git", "init", "-q", PJ })
 run({ "cp", "-R", ROOT .. "/scripts", PJ .. "/scripts" })
 
@@ -124,7 +121,6 @@ check("arm 5: LITMUS_TIMEOUT_RETRY=0 disables the re-run",
     text.contains(o, FAIL) and not text.contains(o, FLAKY) and n == 1, o, n)
 
 run({ "rm", "-rf", W })
-run({ "find", PJ, "-delete" })
 if failed > 0 then
     verdict.emit("violation:litmus-timeout-retry:" .. failed .. "-of-" .. (passed + failed) .. "-failed", 1)
 end
