@@ -5699,7 +5699,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # catching hand-authored fragments that bypass set-field. Diff-scoped, so
     # the base ledger's historical closures are never re-judged.
     _step "Checking that added fragment closures carry evidence (686-7qcm)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-closure-evidence-added.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-fragment-closure-evidence-added.lua" 2>&1; then
         _error "this change adds a fragment recording a closure (completed/verified/done) with no evidence-bearing event (686-7qcm)"
         exit 1
     fi
@@ -6388,7 +6388,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "Terminology gate passed"
 
     _step "Checking plan/schema status-vocab divergence (440)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-plan-schema-divergence.lua" 2>&1; then
         # Do NOT restate the cause here: the script emits one of three verdicts
         # (diverges / index-load-failed / unreadable) and this wrapper used to
         # assert "vocabularies diverge" for all of them, which sent a reader to
@@ -6408,7 +6408,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
     # (VERSION + Cargo files only) still passes.
     _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-version-bump-isolation.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-version-bump-isolation.lua" 2>&1; then
         _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
         exit 1
     fi

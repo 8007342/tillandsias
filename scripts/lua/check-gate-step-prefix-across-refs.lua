@@ -1,5 +1,5 @@
 -- @trace order:1512-3afc, order:1628-re39, order:1629-xtfw
--- @env TILLANDSIAS_STEP_PREFIX_TRUNK TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_STEP_PREFIX_REFS TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS
+-- @env PWD TILLANDSIAS_STEP_PREFIX_TRUNK TILLANDSIAS_GATE_DIFF_BASE TILLANDSIAS_STEP_PREFIX_REFS TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS
 --
 -- Refuse a NEWLY ADDED gate step whose numeric prefix another host already
 -- holds, on trunk or on any other unlanded work ref, before it costs a relaunch.
@@ -54,10 +54,20 @@ local WINDOW = tonumber(env_or("TILLANDSIAS_STEP_PREFIX_WINDOW_DAYS", "14")) or 
 local DIR = "scripts/gate-steps.d"
 local NAME = "gate-step-prefix-across-refs"
 
+-- 2166-zvst: git runs in the CALLER's directory, as the header says.
+-- Without a cwd the child ran in the runner's repository root, so a scratch
+-- clone run under PROJECT_ROOT/TILLANDSIAS_REPO_ROOT judged the real checkout.
+-- Inlined, not a `require` (require resolves against the process cwd).
+local function caller_dir()
+    local d = env.get("PWD")
+    if d ~= nil and d ~= "" and (d:sub(1, 1) == "/" or d:match("^%a:[/\\]")) then return d end
+    return nil  -- no usable PWD: the runner's root, as before
+end
+local CALLER = caller_dir()
 local function git(args)
     local argv = { "git" }
     for _, a in ipairs(args) do argv[#argv + 1] = a end
-    local r = proc.run({ argv = argv, timeout_ms = 60000 })
+    local r = proc.run({ argv = argv, cwd = CALLER, timeout_ms = 60000 })
     return r.status == "exited" and r.code == 0, r.stdout or ""
 end
 local function basename(p) return p:match("[^/]*$") end
