@@ -23,3 +23,10 @@ STEP_SCRIPT="scripts/test-installers-quiet-progress.sh"
 STEP_ERROR="an installer download is back to curl's raw meter or PowerShell's flickering bar (1420-jmp4); see which arm failed above"
 STEP_OK="installer download progress is quiet and single-bar"
 STEP_SECOND_REGIME="yolanda 2026-09-27 msys ok:quiet-progress-fixture:ran=5 skipped=0"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="binds a fixed local port"
+STEP_LANES="port"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="crates/tillandsias-progress-tty/** scripts/test-installers-quiet-progress.sh"

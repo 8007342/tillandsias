@@ -2759,178 +2759,308 @@ _gs_verdict_token() {
 # fixture over a scratch tree, through the SAME code. A step names STEP_SCRIPT
 # (run with bash) or STEP_LUA (run with `tillandsias-plan script run`), never
 # both; both are literals (1063-nraf).
+# _gs_one <step file> — ONE gate step, the body the loop ran inline before order
+# 2155-gpar: 0 = passed or could-not-run (named), 1 = refused. Reads _gs_root and
+# _gs_plan from its caller (bash dynamic scope; a pool worker inherits them).
+_gs_one() {
+    local _step_file="$1"
+    [ -e "$_step_file" ] || return 0
+    STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
+    STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""
+    # shellcheck disable=SC1090
+    . "$_step_file"
+    if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
+        _error "gate step ${_step_file##*/} declares no STEP_DESC, or neither STEP_SCRIPT nor STEP_LUA (1072-b7eq, 1384-bqhy)"
+        return 1
+    fi
+    # ORDER 1384-bqhy: ONE RUNNER PER STEP. A step naming both would run one
+    # and leave a reader of the .step guessing which.
+    if [ -n "$STEP_SCRIPT" ] && [ -n "$STEP_LUA" ]; then
+        _error "gate step ${_step_file##*/} names both STEP_SCRIPT and STEP_LUA — a step names exactly one (1384-bqhy)"
+        return 1
+    fi
+    _step_path="${STEP_SCRIPT:-$STEP_LUA}"
+    if [ ! -f "$_gs_root/$_step_path" ]; then
+        _error "gate step ${_step_file##*/} names $_step_path, which does not exist — a step that cannot run must refuse, not skip (1072-b7eq)"
+        return 1
+    fi
+    if [ -n "$STEP_LUA" ] && [ -z "$_gs_plan" ]; then
+        _error "gate step ${_step_file##*/} is a Lua step and no tillandsias-plan binary resolves to run it — refused, not skipped (1384-bqhy)"
+        return 1
+    fi
+    _step "$STEP_DESC..."
+    # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
+    # code that means "this check could not run here", as distinct from
+    # "this check ran and failed". Without it every non-zero exit printed
+    # STEP_ERROR, so a host merely lacking the tool was told a cheatsheet
+    # reference does not resolve — a content verdict about nothing that was
+    # examined, and it refused the land. The sibling tier check already had
+    # the right shape (it prints its own skip: line and exits 0); this
+    # gives the DATA-wired steps the same vocabulary.
+    #
+    # NEGATIVE CONTROL, load-bearing: the skip path is reached only on an
+    # EXACT match against the nominated code. Any other non-zero exit —
+    # notably exit 1, the genuine content failure — still takes the
+    # refusal branch below. A step that nominates nothing behaves exactly
+    # as it did before.
+    # ORDER 1204-3s2s — A STEP MUST NOT WRITE INTO THE SHARED METRICS PATH.
+    #
+    # A fixture that runs the litmus runner from a scratch dir is not in a
+    # git checkout, so metrics_default_log correctly falls back to /tmp —
+    # and the fallback uses the SAME BASENAME as production, so the records
+    # land in /tmp/tillandsias-timing.jsonl carrying the real host name.
+    # cycle-metrics.sh then sees two timing logs and refuses (1096-p3tn,
+    # correctly: a runs= from either half is a partition presenting as a
+    # total), the refusal emits nothing, every arm driving it observes
+    # zeros, pre-build fails, ci-full never reaches post-build, and
+    # check-release-tier-freshness.sh answers never:release-tier forever.
+    # One missing env export makes the whole release tier unmeasurable on
+    # the host that runs it.
+    #
+    # WHY THIS IS BEHAVIOURAL AND NOT A GREP. 1096-p3tn fixed this BY HAND
+    # in eleven fixtures and wrote the convention in their comments; six of
+    # sixteen did not have it and nothing enforced it, so the next fixture
+    # reintroduced it the same day without any way to know. A static scan
+    # for the export would be the ritual line the row's own negative control
+    # forbids: a fixture that produces NO timing output should not have to
+    # declare one. Observing the path is the check that distinguishes them,
+    # and it costs nothing here because the steps already run.
+    #
+    # It also catches writers a name-based scan cannot see — a step that
+    # reaches the runner indirectly, or code nobody has written yet.
+    # ORDER 1916-tsel: the shared path is overridable ONLY so the
+    # attribution fixture can drive two writers without touching the
+    # host's real fallback log.
+    _metrics_shared="${TILLANDSIAS_GATE_SHARED_TIMING_PATH:-/tmp/tillandsias-timing.jsonl}"
+    _metrics_shared_before=""
+    if [ -f "$_metrics_shared" ]; then
+        _metrics_shared_before="$(wc -l < "$_metrics_shared" 2>/dev/null || echo 0)"
+    fi
+    # ORDER 1966-ubsw: the file that decides. Only this gate's tree falls
+    # back into it (_gate_fallback_begin), so ANY new record is this step's.
+    _metrics_private="${TILLANDSIAS_METRICS_FALLBACK_DIR:-}/tillandsias-timing.jsonl"
+    _metrics_private_before=0
+    if [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ]; then
+        _metrics_private_before="$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)"
+    fi
+
+    # The output streams as before AND is kept, so a refusal can be named
+    # by the one classifier the preflight door also reads (1384-bqhy).
+    _gs_exec_step
+    # ORDER 1765-q7rg — A HOST-STATE STEP GETS ONE RETRY, NEVER A SKIP.
+    # A step that declares STEP_HOST_STATE (a keyring cold state, a lock
+    # under load) can disagree with itself on a healthy tree. It runs once
+    # more after a settle; a pass then is a pass, and a second red stays red
+    # but is named flaky:<step>:<first>,<second> instead of violation:, so
+    # the land queue re-queues it once rather than evicting a good PR. A
+    # step that declares nothing never retries, and the could-not-run code
+    # is never retried either.
+    if [ "$_step_rc" -ne 0 ] && [ -n "$STEP_HOST_STATE" ] \
+       && { [ -z "$STEP_SKIP_EXIT" ] || [ "$_step_rc" -ne "$STEP_SKIP_EXIT" ]; }; then
+        _gs_first_verdict="$(_gs_verdict_token "$_step_out" "$_step_rc")"
+        rm -f "$_step_out"
+        _info "retry:${_step_path##*/}:host-state=$STEP_HOST_STATE — first run red ($_gs_first_verdict); settling ${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}s and running it once more"
+        sleep "${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}"
+        _gs_exec_step
+        if [ "$_step_rc" -ne 0 ]; then
+            echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")"
+        fi
+    fi
+
+    # ORDER 1916-tsel — ATTRIBUTE BY RUN ID, NOT BY GROWTH. Growth alone
+    # blamed this step for records a CONCURRENT gate on the same host
+    # wrote (two land-queue evictions, 2026-10-29). Only new records
+    # stamped with THIS gate's run id are this step's; another gate's are
+    # ignored, and id-less ones are reported, not refused.
+    #
+    # ORDER 1966-ubsw: on the SHARED path an id-less record no longer
+    # refuses. This gate's own fallback writes go to its private file
+    # (checked below), so an id-less record here was written by something
+    # outside the gate (#831, #840: two different steps, one id-less line
+    # each, no gate beside them). It is reported, with the line, and only
+    # a record carrying THIS gate's run id still refuses here.
+    _metrics_ours=0
+    _metrics_leak=""
+    if [ -f "$_metrics_shared" ]; then
+        _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
+        case "$_metrics_attr" in
+            ours=0\ *verdict=refuse*)
+                _warn "the shared timing log gained id-less record(s) during ${_step_path##*/} ($_metrics_attr); this gate's own fallback is private (1966-ubsw), so they were written outside it and this step is not refused. The line(s):"
+                tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+                _metrics_attr="${_metrics_attr%verdict=refuse*}verdict=warn" ;;
+            *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
+        esac
+        [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ] && _metrics_leak="$_metrics_shared"
+    fi
+    if [ -z "$_metrics_leak" ] && [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ] \
+       && [ "$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)" -gt "${_metrics_private_before:-0}" ]; then
+        _metrics_leak="$_metrics_private"
+        _metrics_attr="private-fallback:+$(( $(wc -l < "$_metrics_private") - ${_metrics_private_before:-0} )) verdict=refuse"
+        _metrics_shared_before="$_metrics_private_before"
+    fi
+    if [ -n "$_metrics_leak" ]; then
+        if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
+            _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
+            _error "  The leaked line(s), kept so the next one is diagnosable:"
+            tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+            _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
+            _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
+            _error "  refuse to publish any number, every arm driving it reads zero, and"
+            _error "  check-release-tier-freshness.sh answers never:release-tier on this host from now on."
+            _error "  FIX: export TILLANDSIAS_TIMING_LOG (and any other TILLANDSIAS_*_LOG the step drives)"
+            _error "  to a path inside the step's own scratch dir, so a hermetic fixture cannot reach the"
+            _error "  host's metrics. See the eleven fixtures 1096-p3tn already converted for the shape."
+            return 1
+        fi
+    fi
+
+    if [ "$_step_rc" -ne 0 ] \
+       && [ -n "$STEP_SKIP_EXIT" ] \
+       && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then
+        rm -f "$_step_out"
+        _info "skip:${_step_path##*/}:could-not-run (exit $_step_rc; ${STEP_SKIP_DESC:-the step nominated this code as could-not-run}; check not run — see the reason above)"
+        return 0
+    fi
+    if [ "$_step_rc" -ne 0 ]; then
+        _step_kind="refused"
+        [ -z "$_gs_plan" ] || _step_kind="$("$_gs_plan" script classify --rc "$_step_rc" --file "$_step_out" 2>/dev/null || echo refused)"
+        rm -f "$_step_out"
+        _error "${STEP_ERROR:-$_step_path failed} — see the verdict line above (class: ${_step_kind:-refused}; 1384-bqhy)"
+        return 1
+    fi
+    rm -f "$_step_out"
+    _info "${STEP_OK:-${_step_path##*/} passed}"
+    return 0
+}
+
 _run_gate_steps() {  # $1 = root
     local _gs_root="$1" _gs_plan=""
     _gate_fallback_begin
     _gs_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gs_plan=""
     case "$_gs_plan" in ./*) _gs_plan="$SCRIPT_DIR/${_gs_plan#./}" ;; esac
-    for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
-        [ -e "$_step_file" ] || continue
-        STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
-        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""
-        # shellcheck disable=SC1090
-        . "$_step_file"
-        if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
-            _error "gate step ${_step_file##*/} declares no STEP_DESC, or neither STEP_SCRIPT nor STEP_LUA (1072-b7eq, 1384-bqhy)"
-            exit 1
-        fi
-        # ORDER 1384-bqhy: ONE RUNNER PER STEP. A step naming both would run one
-        # and leave a reader of the .step guessing which.
-        if [ -n "$STEP_SCRIPT" ] && [ -n "$STEP_LUA" ]; then
-            _error "gate step ${_step_file##*/} names both STEP_SCRIPT and STEP_LUA — a step names exactly one (1384-bqhy)"
-            exit 1
-        fi
-        _step_path="${STEP_SCRIPT:-$STEP_LUA}"
-        if [ ! -f "$_gs_root/$_step_path" ]; then
-            _error "gate step ${_step_file##*/} names $_step_path, which does not exist — a step that cannot run must refuse, not skip (1072-b7eq)"
-            exit 1
-        fi
-        if [ -n "$STEP_LUA" ] && [ -z "$_gs_plan" ]; then
-            _error "gate step ${_step_file##*/} is a Lua step and no tillandsias-plan binary resolves to run it — refused, not skipped (1384-bqhy)"
-            exit 1
-        fi
-        _step "$STEP_DESC..."
-        # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
-        # code that means "this check could not run here", as distinct from
-        # "this check ran and failed". Without it every non-zero exit printed
-        # STEP_ERROR, so a host merely lacking the tool was told a cheatsheet
-        # reference does not resolve — a content verdict about nothing that was
-        # examined, and it refused the land. The sibling tier check already had
-        # the right shape (it prints its own skip: line and exits 0); this
-        # gives the DATA-wired steps the same vocabulary.
-        #
-        # NEGATIVE CONTROL, load-bearing: the skip path is reached only on an
-        # EXACT match against the nominated code. Any other non-zero exit —
-        # notably exit 1, the genuine content failure — still takes the
-        # refusal branch below. A step that nominates nothing behaves exactly
-        # as it did before.
-        # ORDER 1204-3s2s — A STEP MUST NOT WRITE INTO THE SHARED METRICS PATH.
-        #
-        # A fixture that runs the litmus runner from a scratch dir is not in a
-        # git checkout, so metrics_default_log correctly falls back to /tmp —
-        # and the fallback uses the SAME BASENAME as production, so the records
-        # land in /tmp/tillandsias-timing.jsonl carrying the real host name.
-        # cycle-metrics.sh then sees two timing logs and refuses (1096-p3tn,
-        # correctly: a runs= from either half is a partition presenting as a
-        # total), the refusal emits nothing, every arm driving it observes
-        # zeros, pre-build fails, ci-full never reaches post-build, and
-        # check-release-tier-freshness.sh answers never:release-tier forever.
-        # One missing env export makes the whole release tier unmeasurable on
-        # the host that runs it.
-        #
-        # WHY THIS IS BEHAVIOURAL AND NOT A GREP. 1096-p3tn fixed this BY HAND
-        # in eleven fixtures and wrote the convention in their comments; six of
-        # sixteen did not have it and nothing enforced it, so the next fixture
-        # reintroduced it the same day without any way to know. A static scan
-        # for the export would be the ritual line the row's own negative control
-        # forbids: a fixture that produces NO timing output should not have to
-        # declare one. Observing the path is the check that distinguishes them,
-        # and it costs nothing here because the steps already run.
-        #
-        # It also catches writers a name-based scan cannot see — a step that
-        # reaches the runner indirectly, or code nobody has written yet.
-        # ORDER 1916-tsel: the shared path is overridable ONLY so the
-        # attribution fixture can drive two writers without touching the
-        # host's real fallback log.
-        _metrics_shared="${TILLANDSIAS_GATE_SHARED_TIMING_PATH:-/tmp/tillandsias-timing.jsonl}"
-        _metrics_shared_before=""
-        if [ -f "$_metrics_shared" ]; then
-            _metrics_shared_before="$(wc -l < "$_metrics_shared" 2>/dev/null || echo 0)"
-        fi
-        # ORDER 1966-ubsw: the file that decides. Only this gate's tree falls
-        # back into it (_gate_fallback_begin), so ANY new record is this step's.
-        _metrics_private="${TILLANDSIAS_METRICS_FALLBACK_DIR:-}/tillandsias-timing.jsonl"
-        _metrics_private_before=0
-        if [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ]; then
-            _metrics_private_before="$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)"
-        fi
+    # ORDER 2155-gpar (build speed): TILLANDSIAS_GATE_STEP_JOBS > 1 runs the steps
+    # through a worker pool; 1 (the default) is the serial loop, unchanged.
+    local _gs_jobs="${TILLANDSIAS_GATE_STEP_JOBS:-1}" _gs_f
+    case "$_gs_jobs" in ''|*[!0-9]*) _gs_jobs=1 ;; esac
+    if [ "$_gs_jobs" -le 1 ]; then
+        for _gs_f in "$_gs_root"/scripts/gate-steps.d/*.step; do
+            _gs_one "$_gs_f" || exit 1
+        done
+        return 0
+    fi
+    _gs_pool "$_gs_jobs"
+}
 
-        # The output streams as before AND is kept, so a refusal can be named
-        # by the one classifier the preflight door also reads (1384-bqhy).
-        _gs_exec_step
-        # ORDER 1765-q7rg — A HOST-STATE STEP GETS ONE RETRY, NEVER A SKIP.
-        # A step that declares STEP_HOST_STATE (a keyring cold state, a lock
-        # under load) can disagree with itself on a healthy tree. It runs once
-        # more after a settle; a pass then is a pass, and a second red stays red
-        # but is named flaky:<step>:<first>,<second> instead of violation:, so
-        # the land queue re-queues it once rather than evicting a good PR. A
-        # step that declares nothing never retries, and the could-not-run code
-        # is never retried either.
-        if [ "$_step_rc" -ne 0 ] && [ -n "$STEP_HOST_STATE" ] \
-           && { [ -z "$STEP_SKIP_EXIT" ] || [ "$_step_rc" -ne "$STEP_SKIP_EXIT" ]; }; then
-            _gs_first_verdict="$(_gs_verdict_token "$_step_out" "$_step_rc")"
-            rm -f "$_step_out"
-            _info "retry:${_step_path##*/}:host-state=$STEP_HOST_STATE — first run red ($_gs_first_verdict); settling ${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}s and running it once more"
-            sleep "${TILLANDSIAS_GATE_HOST_STATE_SETTLE_S:-10}"
-            _gs_exec_step
-            if [ "$_step_rc" -ne 0 ]; then
-                echo "flaky:${_step_path##*/}:${_gs_first_verdict},$(_gs_verdict_token "$_step_out" "$_step_rc")"
-            fi
+# _gs_pool <jobs> — ORDER 2155-gpar. Every step WITHOUT a `STEP_SERIAL="<why>"`
+# line runs in a pool of <jobs> workers, each writing its own output and exit
+# code; then the outputs are replayed IN FILENAME ORDER and the first refused
+# step ends the gate exactly as the serial loop would (a later step's output is
+# never shown ahead of an earlier one's). Then the STEP_SERIAL steps run one at
+# a time, in order: a step that builds with cargo into the shared target,
+# drives podman, binds a fixed port, runs the litmus runner (which wipes its
+# own runtime dirs) or reads host state cannot share the host with a sibling.
+#
+# The serial set is DECLARED per step file (no shared list, so two hosts adding
+# steps still touch two files). A step that is wrongly left parallel shows up
+# as a red that passes alone — the cue to add STEP_SERIAL with the reason.
+# KNOWN LIMIT: the 1204-3s2s metrics-leak check counts lines appended to a
+# shared log around each step, so in the pool a leak is still REFUSED but may
+# be named against a neighbouring step.
+# No `wait -n` (bash 4.3+): darwin's /bin/bash 3.2 runs this gate too.
+_gs_pool() {
+    local _jobs="$1" _d _f _i=0 _n _rc _t0=$SECONDS _total=0 _ran=0
+    local -a _ser=()
+    _d="$(mktemp -d "${TMPDIR:-/tmp}/gate-pool.XXXXXX")" || { _error "gate-steps pool: no scratch dir"; exit 1; }
+    for _f in "$_gs_root"/scripts/gate-steps.d/*.step; do
+        [ -e "$_f" ] || continue
+        _total=$((_total + 1))
+        if grep -q '^STEP_SERIAL=' "$_f"; then _ser+=("$_f"); continue; fi
+        while [ "$(jobs -rp | wc -l)" -ge "$_jobs" ]; do sleep 0.2; done
+        _i=$((_i + 1))
+        printf '%s\n' "$_f" > "$_d/$_i.name"
+        # A worker never inherits the pool size: a fixture that runs a nested
+        # gate (--gate-steps on a scratch tree) must run it serially.
+        { ( unset TILLANDSIAS_GATE_STEP_JOBS; _gs_one "$_f" ) > "$_d/$_i.out" 2>&1; echo $? > "$_d/$_i.rc"; } &
+    done
+    wait
+    _n=$_i; _i=0
+    while [ "$_i" -lt "$_n" ]; do
+        _i=$((_i + 1))
+        cat "$_d/$_i.out" 2>/dev/null
+        _rc="$(cat "$_d/$_i.rc" 2>/dev/null)"
+        if [ "$_rc" != 0 ]; then
+            _error "gate-steps pool: $(basename "$(cat "$_d/$_i.name")") refused (rc=${_rc:-none}); a step that passes alone and reds here is a missing STEP_SERIAL (2155-gpar)"
+            rm -rf "$_d"; exit 1
         fi
+    done
+    _ran=$_n
+    rm -rf "$_d"
+    _info "gate-steps pool: $_n step(s) in parallel (jobs=$_jobs) in $((SECONDS - _t0))s; now the serial set"
+    # An ARRAY, never a here-string: a step that reads stdin would swallow the
+    # rest of a here-string list, and the gate would end green having skipped
+    # the steps after it (measured: 164 of 210 ran, exit 0).
+    _gs_lanes "$_jobs" ${_ser[@]+"${_ser[@]}"} || exit 1
+    _ran=$((_ran + ${#_ser[@]}))
+    # The next checkpoint, not an absence: every step file ran exactly once.
+    if [ "$_ran" -ne "$_total" ]; then
+        _error "gate-steps pool: ran $_ran of $_total step files — refusing a gate that skipped steps (2155-gpar)"
+        exit 1
+    fi
+}
 
-        # ORDER 1916-tsel — ATTRIBUTE BY RUN ID, NOT BY GROWTH. Growth alone
-        # blamed this step for records a CONCURRENT gate on the same host
-        # wrote (two land-queue evictions, 2026-10-29). Only new records
-        # stamped with THIS gate's run id are this step's; another gate's are
-        # ignored, and id-less ones are reported, not refused.
-        #
-        # ORDER 1966-ubsw: on the SHARED path an id-less record no longer
-        # refuses. This gate's own fallback writes go to its private file
-        # (checked below), so an id-less record here was written by something
-        # outside the gate (#831, #840: two different steps, one id-less line
-        # each, no gate beside them). It is reported, with the line, and only
-        # a record carrying THIS gate's run id still refuses here.
-        _metrics_ours=0
-        _metrics_leak=""
-        if [ -f "$_metrics_shared" ]; then
-            _metrics_attr="$(bash "$SCRIPT_DIR/scripts/gate-step-metrics-attribution.sh" "$_metrics_shared" "${_metrics_shared_before:-0}" "${TILLANDSIAS_TIMING_RUN_ID:-none}" "$$")" || _metrics_attr="verdict=refuse could-not-attribute"
-            case "$_metrics_attr" in
-                ours=0\ *verdict=refuse*)
-                    _warn "the shared timing log gained id-less record(s) during ${_step_path##*/} ($_metrics_attr); this gate's own fallback is private (1966-ubsw), so they were written outside it and this step is not refused. The line(s):"
-                    tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_shared" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
-                    _metrics_attr="${_metrics_attr%verdict=refuse*}verdict=warn" ;;
-                *verdict=warn*) _warn "the shared timing log gained record(s) with no run id during ${_step_path##*/} while another gate is live ($_metrics_attr); they may be that gate's, so this step is not refused (1916-tsel)" ;;
-            esac
-            [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ] && _metrics_leak="$_metrics_shared"
+# _gs_lanes <jobs> <step file>... — ORDER 2156-glan. The serial set, grouped by
+# the resource each step holds (STEP_LANES="cargo podman ..."): every LANE runs
+# its steps one at a time, and the lanes run beside each other, so a cargo
+# step and a podman step share the host while two cargo steps never do. A step
+# naming more than one lane, or none, runs ALONE after the lanes. Outputs
+# replay in filename order and the first refused step ends the gate, as in the
+# serial loop; a lane stops at its own first red, so any step it left unrun
+# sorts after that red and is never reported as passed.
+_gs_lanes() {
+    local _jobs="$1" _d _f _l _lanes _i=0 _n _rc _ln _t0=$SECONDS
+    shift
+    local -a _excl=() _names=()
+    [ "$#" -gt 0 ] || return 0
+    _d="$(mktemp -d "${TMPDIR:-/tmp}/gate-lanes.XXXXXX")" || { _error "gate-steps lanes: no scratch dir"; return 1; }
+    for _f in "$@"; do
+        _lanes="$(sed -n 's/^STEP_LANES="\(.*\)"$/\1/p' "$_f" | head -n 1)"
+        set -- $_lanes
+        if [ "$#" -ne 1 ]; then _excl+=("$_f"); continue; fi
+        _i=$((_i + 1)); _names+=("$_f")
+        printf '%s\t%s\n' "$_i" "$_f" >> "$_d/lane-$1.list"
+    done
+    _n=$_i
+    for _l in "$_d"/lane-*.list; do
+        [ -e "$_l" ] || continue
+        # The lane's list is loaded into an ARRAY before any step runs: not
+        # stdin (a step that reads stdin swallows it, 2155-gpar) and not a
+        # spare fd (fd 9 is the shared-target lock's, fd 8 the step tee's —
+        # measured: fd 9 died after a lane's first step).
+        ( unset TILLANDSIAS_GATE_STEP_JOBS
+          _li=(); while IFS= read -r _ln; do _li+=("$_ln"); done < "$_l"
+          for _ln in ${_li[@]+"${_li[@]}"}; do
+              _i="${_ln%%$'\t'*}"; _f="${_ln#*$'\t'}"
+              _gs_one "$_f" > "$_d/$_i.out" 2>&1; _rc=$?
+              echo "$_rc" > "$_d/$_i.rc"
+              [ "$_rc" -eq 0 ] || break
+          done ) &
+    done
+    wait
+    _i=0
+    while [ "$_i" -lt "$_n" ]; do
+        _i=$((_i + 1))
+        cat "$_d/$_i.out" 2>/dev/null
+        _rc="$(cat "$_d/$_i.rc" 2>/dev/null)"
+        if [ "$_rc" != 0 ]; then
+            _error "gate-steps lanes: $(basename "${_names[$((_i - 1))]}") refused or did not run (rc=${_rc:-none}); a step that passes alone and reds here is missing a lane (2156-glan); lane outputs kept at $_d"
+            return 1
         fi
-        if [ -z "$_metrics_leak" ] && [ -n "${TILLANDSIAS_METRICS_FALLBACK_DIR:-}" ] && [ -f "$_metrics_private" ] \
-           && [ "$(wc -l < "$_metrics_private" 2>/dev/null || echo 0)" -gt "${_metrics_private_before:-0}" ]; then
-            _metrics_leak="$_metrics_private"
-            _metrics_attr="private-fallback:+$(( $(wc -l < "$_metrics_private") - ${_metrics_private_before:-0} )) verdict=refuse"
-            _metrics_shared_before="$_metrics_private_before"
-        fi
-        if [ -n "$_metrics_leak" ]; then
-            if [ "${_metrics_attr#*verdict=refuse}" != "$_metrics_attr" ]; then
-                _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
-                _error "  The leaked line(s), kept so the next one is diagnosable:"
-                tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
-                _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
-                _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
-                _error "  refuse to publish any number, every arm driving it reads zero, and"
-                _error "  check-release-tier-freshness.sh answers never:release-tier on this host from now on."
-                _error "  FIX: export TILLANDSIAS_TIMING_LOG (and any other TILLANDSIAS_*_LOG the step drives)"
-                _error "  to a path inside the step's own scratch dir, so a hermetic fixture cannot reach the"
-                _error "  host's metrics. See the eleven fixtures 1096-p3tn already converted for the shape."
-                exit 1
-            fi
-        fi
-
-        if [ "$_step_rc" -ne 0 ] \
-           && [ -n "$STEP_SKIP_EXIT" ] \
-           && [ "$_step_rc" -eq "$STEP_SKIP_EXIT" ]; then
-            rm -f "$_step_out"
-            _info "skip:${_step_path##*/}:could-not-run (exit $_step_rc; ${STEP_SKIP_DESC:-the step nominated this code as could-not-run}; check not run — see the reason above)"
-            continue
-        fi
-        if [ "$_step_rc" -ne 0 ]; then
-            _step_kind="refused"
-            [ -z "$_gs_plan" ] || _step_kind="$("$_gs_plan" script classify --rc "$_step_rc" --file "$_step_out" 2>/dev/null || echo refused)"
-            rm -f "$_step_out"
-            _error "${STEP_ERROR:-$_step_path failed} — see the verdict line above (class: ${_step_kind:-refused}; 1384-bqhy)"
-            exit 1
-        fi
-        rm -f "$_step_out"
-        _info "${STEP_OK:-${_step_path##*/} passed}"
+    done
+    _ln="$(ls "$_d"/lane-*.list 2>/dev/null | sed 's|.*/lane-||; s|\.list$||' | tr '\n' ' ')"
+    rm -rf "$_d"
+    _info "gate-steps lanes: $_n step(s) in lanes [${_ln% }] in $((SECONDS - _t0))s; ${#_excl[@]} exclusive step(s) next"
+    for _f in ${_excl[@]+"${_excl[@]}"}; do
+        _gs_one "$_f" || return 1
     done
 }
 

@@ -50,3 +50,10 @@ STEP_SCRIPT="scripts/test-uninstall-tray-stop-is-macos-only.sh"
 STEP_ERROR="a Linux uninstall killed a process that merely MENTIONED the tray literal (1231-cbie) — uninstall.sh is a shipped artifact; see which arm failed above"
 STEP_OK="Uninstaller tray-stop platform confinement passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: uninstall-tray-stop-is-macos-only 4/4 (1401-p3k7 in-situ: real app + live tray unchanged)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/test-uninstall-tray-stop-is-macos-only.sh scripts/uninstall.sh"

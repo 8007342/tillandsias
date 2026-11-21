@@ -13,3 +13,10 @@ STEP_SCRIPT="scripts/test-gate-step-prefix-allocation.sh"
 STEP_ERROR="land-time gate-step prefix allocation regressed — two lands choosing one prefix would collide in the gate again (1162-qbrx)"
 STEP_OK="gate-step prefix allocation holds"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   ARM 9 (executed): a refusing allocator stops the land with refused:land:gate-step-prefix and exit 8 befo"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/allocate-gate-step-prefix.sh scripts/gate-steps.d/** scripts/land-on-platform-branch.sh scripts/test-gate-step-prefix-allocation.sh"

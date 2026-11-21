@@ -27,3 +27,7 @@ STEP_OK="locked-keyring credential discriminator check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-credential-channel.sh is absent, so the discriminator could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:locked-keyring-discriminator:9"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/check-credential-channel.sh scripts/test-credential-channel-names-a-locked-keyring.sh"

@@ -11,3 +11,10 @@ STEP_SCRIPT="scripts/test-branch-discipline-verb.sh"
 STEP_ERROR="the discipline verb stopped answering from the seed, refused a level-0 project, lost the seeded message or digest, accepted a bad seed, or the MCP tool diverged (1443-w79y) — see the verdict line above"
 STEP_OK="Branch discipline verb passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:branch-discipline-verb:6/6"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="images/default/config-overlay/mcp/forge-plan.sh plan/index.yaml scripts/plan-binary-probe.sh scripts/test-branch-discipline-verb.sh"

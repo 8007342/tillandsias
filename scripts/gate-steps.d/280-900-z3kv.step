@@ -12,3 +12,10 @@ STEP_SCRIPT="scripts/test-clear-vault-host-credentials.sh"
 STEP_ERROR="the clean-room credential clearer regressed (900-z3kv) — it may now clear too little (a room that looks cold and is not) or too much (the installation anchor, making the next vault underivable); see the verdict line above"
 STEP_OK="Clean-room credential clearer check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --dry-run removes nothing and touches no keychain item"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/clear-vault-host-credentials.sh scripts/test-clear-vault-host-credentials.sh"

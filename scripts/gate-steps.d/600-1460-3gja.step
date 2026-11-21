@@ -13,3 +13,10 @@ STEP_LUA="scripts/lua/test-litmus-empty-spec-refused.lua"
 STEP_ERROR="run-litmus-test.sh again treats an explicit empty spec as no filter and runs every spec (1460-3gja)"
 STEP_OK="an empty litmus spec name is refused"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-11 msys ok:litmus-empty-spec-refused:3"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="openspec/litmus-tests/** scripts/lua/test-litmus-empty-spec-refused.lua scripts/run-litmus-test.sh"

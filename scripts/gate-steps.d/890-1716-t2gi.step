@@ -11,3 +11,10 @@ STEP_LUA="scripts/lua/check-image-pins.lua"
 STEP_ERROR="a FROM pins a digest that is not a recorded multi-arch index with amd64 and arm64 (1716-t2gi) — see the refused: lines above; pin the index digest, then run scripts/lua/refresh-image-pins.lua and commit images/image-pins.yaml"
 STEP_OK="Every image digest pin is a recorded multi-arch index"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:image-pins:from=17 pinned=3 tag=13 arg=1 stage=0"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="images/image-pins.yaml scripts/lua/check-image-pins.lua scripts/lua/refresh-image-pins.lua"

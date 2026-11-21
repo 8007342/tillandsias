@@ -10,3 +10,10 @@ STEP_SCRIPT="scripts/test-gate-step-host-state-retry.sh"
 STEP_ERROR="the gate-step runner no longer retries a STEP_HOST_STATE step exactly once, retried a step that declares none, or let a twice-red step pass (1765-q7rg) — see the FAIL lines above"
 STEP_OK="Host-state step retry fixture passed"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-17 msys skip:gate-step-host-state-retry:MINGW64-re-execs-build-sh-into-wsl (4/4 inside tillandsias-build)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/gate-steps.d/** scripts/test-gate-step-host-state-retry.sh"

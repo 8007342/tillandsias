@@ -9,3 +9,10 @@ STEP_SCRIPT="scripts/test-awk-float-lc-numeric.sh"
 STEP_ERROR="a measurement producer emits a comma decimal under a comma locale, or a mutation arm went vacuous (1254-fdsu) — see the verdict line above"
 STEP_OK="Measurement producers emit dot decimals under a comma locale"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:awk-float-lc-numeric:7"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/freshness-inventory.sh scripts/hooks/pre-commit-openspec.sh scripts/lua/test-awk-float-lc-numeric-signal.lua scripts/refusal-calibration/measure-bands.sh scripts/select-work-batch.sh scripts/test-awk-float-lc-numeric.sh"

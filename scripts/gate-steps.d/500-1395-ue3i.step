@@ -8,3 +8,10 @@ STEP_SCRIPT="scripts/test-centicolon-ratchet.sh"
 STEP_ERROR="the CentiColon R line misclassified added/retired/lost, or refused (1395-ue3i) — see the verdict line above"
 STEP_OK="CentiColon advisory R line holds"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-ratchet:9"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="openspec/changes/** openspec/litmus-bindings.yaml openspec/litmus-tests/** openspec/litmus-tests/unbound-grandfathered.txt openspec/specs/** scripts/lua/check-centicolon-ratchet.lua scripts/plan-binary-probe.sh scripts/test-centicolon-ratchet.sh"

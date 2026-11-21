@@ -19,3 +19,10 @@ STEP_LUA="scripts/lua/test-gpu-stall-watchdog.lua"
 STEP_ERROR="the GPU stall watchdog kills blindly, misses a stall, or leaves a quarantine after opt-out (1648-gy9z); see the FAIL lines above"
 STEP_OK="a stalled GPU runner is ended and quarantined; an unreadable one is left alone"
 STEP_SECOND_REGIME="yolanda-windows 2026-10-12 msys ok:gpu-stall-watchdog-fixture:11"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="binds a fixed local port"
+STEP_LANES="port"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="images/inference/decode-floor-pin.sh images/inference/gpu-stall-watchdog.sh scripts/lua/test-gpu-stall-watchdog.lua"

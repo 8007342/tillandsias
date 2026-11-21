@@ -11,3 +11,10 @@ STEP_SCRIPT="scripts/test-discipline-derive.sh"
 STEP_ERROR="discipline derive disagreed with a scratch project's observed facts, a seed ahead of reality refused, or this repository stopped refusing main (1446-664f) — see the verdict line above"
 STEP_OK="Discipline derive passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-27 darwin ok:discipline-derive:5/5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/plan-binary-probe.sh scripts/test-discipline-derive.sh"

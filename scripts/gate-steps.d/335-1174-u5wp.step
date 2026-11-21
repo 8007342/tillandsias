@@ -28,3 +28,7 @@ STEP_OK="land stamp-adoption check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="the land tool is absent or its adoption block could not be extracted"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the gate-failure branch is scoped to attempts that actually gated"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/gate-stamp.sh scripts/land-on-platform-branch.sh scripts/test-land-adopts-valid-stamp.sh"

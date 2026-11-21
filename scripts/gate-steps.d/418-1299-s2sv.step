@@ -76,3 +76,10 @@ STEP_SCRIPT="scripts/test-timing-record-carries-root.sh"
 STEP_ERROR="a timing record can again fail to say where it was written from, or an absent root reads as a value instead of as pre-field (1299-s2sv) — read which arm failed above; ARM 4b failing means the field is no longer inert for existing readers"
 STEP_OK="Timing records carry their checkout; absent reads as absent"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:timing-record-root:5/5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/cycle-metrics.sh scripts/metrics-log-path.sh scripts/test-timing-record-carries-root.sh"

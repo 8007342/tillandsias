@@ -13,3 +13,10 @@ STEP_LUA="scripts/lua/test-door-declared-artifact-sweep.lua"
 STEP_ERROR="the preflight door no longer removes a killed checkout writer's declared artifacts, or removed a tracked or undeclared file (1630-dwab) — see the FAIL lines above"
 STEP_OK="Door declared-artifact sweep fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:door-declared-artifact-sweep:6 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lua/check-bare-mktemp.lua scripts/lua/test-door-declared-artifact-sweep.lua scripts/portability/** scripts/portability/checkout-writers.txt"

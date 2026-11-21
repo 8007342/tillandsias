@@ -14,3 +14,10 @@ STEP_SCRIPT="scripts/test-refusal-affordance-added.sh"
 STEP_ERROR="the refusal-affordance guard no longer refuses a bare added verdict, or its audit stopped counting per site (1470-v67y); see which arm failed above"
 STEP_OK="newly-added refusals carry why and remedy; audit counts per site"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:refusal-affordance-added-fixture:8/8"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/check-refusal-affordance-added.sh scripts/test-refusal-affordance-added.sh"

@@ -11,3 +11,10 @@ STEP_LUA="scripts/lua/test-dev-inference-lane.lua"
 STEP_ERROR="dev-inference-ensure.sh no longer names the lane that served, or its fallback probe touched the serving engine (1249-xngp) — see the FAIL lines above"
 STEP_OK="Inference readiness names its serving lane"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-16 darwin ok:dev-inference-lane:7 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman; binds a fixed local port"
+STEP_LANES="podman port"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/dev-inference-ensure.sh scripts/lua/test-dev-inference-lane.lua"

@@ -13,3 +13,10 @@ STEP_SCRIPT="scripts/test-closure-guards-name-the-way-out.sh"
 STEP_ERROR="a closure guard no longer names the sanctioned exit or its counterpart, so a new-test packet is refused from both sides with no way out stated (1136-n8sh) — see the verdict line above"
 STEP_OK="Closure-guard way-out messages passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="crates/tillandsias-plan/** plan/index.d/** scripts/check-scorable-obligation-added.sh scripts/test-closure-guards-name-the-way-out.sh"

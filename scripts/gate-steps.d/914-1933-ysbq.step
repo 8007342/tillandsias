@@ -8,3 +8,7 @@ STEP_LUA="scripts/lua/test-check-nix-cache-installer-compatible.lua"
 STEP_ERROR="a workflow pairs cache-nix-action with an incompatible Nix installer, so the cache never saves (1933-ysbq) — see the FAIL lines above"
 STEP_OK="Nix cache installer fixture passed"
 STEP_SECOND_REGIME="yolanda 2026-10-31 msys ok:nix-cache-installer-fixture:5 arms"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/lua/check-nix-cache-installer-compatible.lua scripts/lua/test-check-nix-cache-installer-compatible.lua"

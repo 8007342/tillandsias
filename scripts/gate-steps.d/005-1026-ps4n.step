@@ -22,3 +22,10 @@ STEP_SCRIPT="scripts/test-timing-supervisor-lost.sh"
 STEP_ERROR="a killed supervisor no longer leaves a named-cause timing record (1026-ps4n) — see the verdict line above"
 STEP_OK="Supervisor-loss timing check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/test-timing-supervisor-lost.sh scripts/timing-log.sh"

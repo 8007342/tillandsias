@@ -11,3 +11,10 @@ STEP_LUA="scripts/lua/test-provider-limit-relay.lua"
 STEP_ERROR="a provider usage limit recorded on one host no longer reaches the others, or an expired one still holds (1957-msjs) — see the FAIL lines above"
 STEP_OK="provider-limit relay fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-02 darwin ok:provider-limit-relay:18 arms"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/provider_limit_relay.rs images/default/lib-provider-limit.sh scripts/check-fleet-membership.sh scripts/lua/test-provider-limit-relay.lua scripts/provider-limit-relay.sh"

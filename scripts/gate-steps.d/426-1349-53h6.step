@@ -11,3 +11,10 @@ STEP_SCRIPT="scripts/test-preflight-scratch-is-off-checkout.sh"
 STEP_ERROR="preflight scratch writes inside small checkout or disk exhaustion reported as tree refusal (1349-53h6)"
 STEP_OK="Preflight scratch is off-checkout and resource exhaustion is categorized as could-not-run"
 STEP_SECOND_REGIME="macneo 2026-09-24 darwin ok:preflight-scratch-is-off-checkout:5/5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/build-sidecar.sh scripts/push-plan-fragments-to-trunk.sh scripts/test-preflight-scratch-is-off-checkout.sh"

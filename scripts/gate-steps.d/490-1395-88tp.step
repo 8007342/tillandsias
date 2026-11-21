@@ -9,3 +9,10 @@ STEP_SCRIPT="scripts/test-centicolon-grade.sh"
 STEP_ERROR="the CentiColon grader credited an obligation it must not, or refused nothing it must (1395-88tp) — see the verdict line above"
 STEP_OK="CentiColon grader holds"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-grade:11"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="openspec/litmus-bindings.yaml openspec/litmus-tests/** openspec/litmus-tests/unbound-grandfathered.txt scripts/centicolon-grade.sh scripts/plan-binary-probe.sh scripts/test-centicolon-grade.sh"

@@ -43,3 +43,10 @@ STEP_DESC="Checking a salvage snapshot restores the exec bit for shebang files (
 STEP_SCRIPT="scripts/test-salvage-preserves-exec-bits.sh"
 STEP_ERROR="the salvage no longer restores the executable bit at snapshot time, or restores it for files that never had a shebang (1321-2ixp) — a 1/4 means the restore block is GONE and the first two arms tested nothing; a 3/4 with data.yaml named means the shebang test was dropped and the tool is now editing the copy it exists to preserve"
 STEP_OK="Work leaving a Windows host keeps the executable bit it was meant to have"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/salvage-dirty-worktree.sh scripts/test-salvage-preserves-exec-bits.sh scripts/test-windows-host-lane-refusal.sh"

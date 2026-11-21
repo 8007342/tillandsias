@@ -14,3 +14,10 @@ STEP_SCRIPT="scripts/test-native-lint-attested.sh"
 STEP_ERROR="a change to a cfg-gated platform crate can again reach trunk with no host having linted it natively (1235-rfub); see which arm failed above"
 STEP_OK="cfg-gated crates relay only with a content-bound native-lint attestation"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:native-lint-attested-fixture:8/8"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="crates/tillandsias-macos-tray/** crates/tillandsias-macos-tray/src/** crates/tillandsias-macos-tray/src/action_host.rs scripts/attest-native-lint.sh scripts/check-native-lint-attested.sh scripts/land-on-platform-branch.sh scripts/test-native-lint-attested.sh"

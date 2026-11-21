@@ -9,3 +9,10 @@ STEP_SCRIPT="scripts/test-local-delegate-ladder.sh"
 STEP_ERROR="the local-delegate token grammar or the rung arithmetic (R1-R4 thresholds, 20-outcome sample floor, demotion, supersession) drifted (1834-ujsf) — see the verdict line above"
 STEP_OK="Local-delegate ladder passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:local-delegate-ladder:29/29"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
+# skip it; that waits on an operator ruling). First cut: the step's own script
+# plus every repo path it names literally.
+STEP_INPUTS="scripts/delegate-outcome.sh scripts/local-delegate-ladder.sh scripts/lua/local-delegate-ladder.lua scripts/plan-binary-probe.sh scripts/test-local-delegate-ladder.sh"
