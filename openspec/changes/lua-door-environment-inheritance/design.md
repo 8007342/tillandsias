@@ -597,6 +597,7 @@ proxy names 3 each, `DBUS_SESSION_BUS_ADDRESS` 3, `SSL_CERT_FILE` /
 | Need | Names | Class | Where it goes |
 |---|---|---|---|
 | Find the same podman the caller uses | `CONTAINER_HOST`, `CONTAINER_CONNECTION`, `CONTAINER_SSHKEY`, `CONTAINERS_CONF`, `CONTAINERS_CONF_OVERRIDE`, `CONTAINERS_REGISTRIES_CONF`, `CONTAINERS_STORAGE_CONF`, `PODMAN_CONNECTIONS_CONF`, `STORAGE_DRIVER`, `STORAGE_OPTS`, `REGISTRY_AUTH_FILE`, `DOCKER_HOST`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME` | inherit (locators and socket URLs; podman(1) ENVIRONMENT) | profile `podman` |
+| Keep the litmus podman shim in the fixture's world (2147-amid) | `LITMUS_PODMAN_MODE`, `LITMUS_PODMAN_STATE_DIR`, `LITMUS_PODMAN_CALLS_FILE` | inherit (a mode selector and two locators; set only by the litmus runner, inert elsewhere; without the mode, fake becomes real past the door) | profile `podman` |
 | Reach the network the way the host does | `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `ALL_PROXY` and lower-case twins, `SSL_CERT_FILE`, `SSL_CERT_DIR`, `CURL_CA_BUNDLE`, `GIT_SSL_CAINFO`, `NIX_SSL_CERT_FILE`, `CARGO_HTTP_CAINFO`, `NODE_EXTRA_CA_CERTS` | inherit with value check (no userinfo in a proxy URL) | profile `net-egress` |
 | Build with the caller's toolchain location | `CARGO_HOME`, `RUSTUP_HOME`, `CARGO_BUILD_JOBS`, `CARGO_NET_OFFLINE`, `CARGO_INCREMENTAL` (`CARGO_TARGET_DIR` is base) | inherit | profile `cargo` |
 | Start the builder toolbox | `TOOLBOX_PATH`, `USER`, `LOGNAME` (`XDG_RUNTIME_DIR`, `DBUS_SESSION_BUS_ADDRESS` are base, 1838-nwyn) | inherit | profiles `toolbox`, `session` |
