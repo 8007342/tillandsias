@@ -8,3 +8,4 @@ STEP_OK="must-ship-next release advisory fixture passed"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/check-must-ship-rows.sh scripts/release-preflight.sh scripts/test-must-ship-rows.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:must-ship-rows:13"

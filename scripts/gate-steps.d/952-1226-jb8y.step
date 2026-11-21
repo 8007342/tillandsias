@@ -8,3 +8,4 @@ STEP_OK="salvage audit fixture passed"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/salvage-audit.sh scripts/test-salvage-audit.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:salvage-audit-fixture"

@@ -11,3 +11,4 @@ STEP_LANES="podman timing"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/hooks/pre-push-local-gate.sh scripts/test-pre-push-empty-ref-list.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:pre-push-empty-ref-list:11"
