@@ -273,7 +273,7 @@ $id
                 if [ "$st" = in_progress ]; then
                     echo "claimed-elsewhere:$id:$b"
                     _afford "origin/$b holds $id in_progress, and your fold has not seen that claim yet" \
-                        "do not implement $id; pick the next candidate. Arbitration is by claim timestamp: scripts/check-claim-confirmed.sh $id --host <you> says whose claim is earlier"
+                        "do not implement $id; pick the next candidate. Arbitration is by claim timestamp: tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- $id --host <you> says whose claim is earlier"
                     hits=$((hits + 1))
                 fi
             done
@@ -381,7 +381,7 @@ if [ -n "$found" ]; then
     echo "  It is NOT yours to implement. Arbitration is by claim TIMESTAMP, not push order:" >&2
     echo "  if yours is earlier you continue; if theirs is earlier you release and reroute." >&2
     _afford "a sibling branch holds $PACKET in_progress under another host's claim" \
-        "run scripts/check-claim-confirmed.sh $PACKET --host <you>: if it confirms your claim is earlier, continue; if it answers refused:claim-lost, release with set-field $PACKET status ready and take another packet"
+        "run tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- $PACKET --host <you>: if it confirms your claim is earlier, continue; if it answers refused:claim-lost, release with set-field $PACKET status ready and take another packet"
     exit 1
 fi
 # The local fold counts as existence too: a packet this host just filed is real

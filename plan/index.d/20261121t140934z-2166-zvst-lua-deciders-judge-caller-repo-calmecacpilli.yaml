@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli at macuahuitl-fedora's request, 2026-11-21.
+packets:
+  - packet_id: lua-deciders-run-git-in-the-callers-pwd
+    order: "2166-zvst"
+    status: implemented
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [lua, gate, shell-to-lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-committable-branch.lua
+      - scripts/lua/check-gate-step-prefix-across-refs.lua
+      - scripts/lua/test-lua-deciders-judge-caller-repo.lua
+      - scripts/gate-steps.d/934-2166-zvst.step
+    title: "Lua deciders that judge the current checkout run git in the caller's PWD, not the runner's repository root"
+    context: |
+      Cause: a proc.run with no cwd runs in default_cwd() = find_repo_root(), which reads TILLANDSIAS_REPO_ROOT, then
+      PROJECT_ROOT, then walks up from the process cwd (lua_predicate.rs locate_repo_root). The litmus runner exports
+      PROJECT_ROOT and land-queue sets TILLANDSIAS_REPO_ROOT, so a decider whose contract is "judge where I am run" judged
+      the tillandsias checkout instead. Found porting check-version-bump-isolation (2165-vcgh): under the litmus runner it
+      examined nothing.
+      Sweep: 99 scripts/lua files call git without a cwd. Most judge the repository root on purpose, and some callers point
+      TILLANDSIAS_REPO_ROOT at a scaffold while running from elsewhere, so a blanket switch to PWD would break them. Fixed
+      here are the deciders whose contract is the caller's checkout: check-committable-branch and
+      check-gate-step-prefix-across-refs (its header said "git runs in the caller's cwd"; it did not). Already correct:
+      check-forge-expert-base, check-hooks-armed. Fixed in their own PRs: check-version-bump-isolation (#1264),
+      check-plan-schema-divergence (#1265).
+      The helper is INLINED, not a lib/lua/common module: `require` resolves lib/lua against the process cwd, which is
+      exactly what is not the repository for these deciders (measured: a common.here require broke both scripts' fixtures).
+    exit_criteria:
+      - "scripts/lua/test-lua-deciders-judge-caller-repo.lua passes 4 arms; on the trunk scripts arms 1-3 are red (they name this checkout's branch / compare against its trunk)."
+      - "litmus:committable-branch-guard-shape and test-gate-step-prefix-across-refs.sh (11/11) still pass."
+    unscoreable: "decider-not-litmus: scored by gate step 934-2166-zvst."
+    next_action: "Land; a darwin/msys host records STEP_SECOND_REGIME for step 934. Open question for the runtime owner: whether proc.run's default cwd should be the process cwd when the repo root came from the environment."
+    provenance: "macuahuitl-fedora 2026-11-21; found during the 2165-vcgh port."
+    events:
+      - type: filed
+        ts: "2026-11-21T14:09:34Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2166-zvst"
