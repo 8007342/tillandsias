@@ -2109,9 +2109,30 @@ run_litmus_test_file() {
         # real git dir's gate files snapshotted around it.
         local _lt_gsnap=""
         _lt_gsnap="$(mktemp -d "${TMPDIR:-/tmp}/litmus-gate-snap.XXXXXX")" && _lt_gate_snapshot "$_lt_gsnap"
-        TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
-            TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
-            LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?
+        # ORDER 2150-3j97 (priority:build-speed) — A STEP KILLED BY ITS OWN
+        # TIMEOUT WITH NO ASSERTION OUTPUT IS RE-RUN ONCE. RC attempt 4 failed
+        # only on two such kills (empty stdout, empty stderr) on a loaded host.
+        # Re-run only on rc 124/137 (timeout(1)'s TERM, then its --kill-after
+        # KILL) AND an empty stdout: a step that printed anything was judging
+        # something, so its red stands, and an assertion red (any other rc)
+        # is never re-run. The re-run is announced as flaky:<test>#<step>.
+        # A second timeout stays a timeout. LITMUS_TIMEOUT_RETRY=0 disables.
+        local _lt_retried=0
+        while :; do
+            exit_code=0
+            TILLANDSIAS_POLICY_REGIME=fixture TILLANDSIAS_FIXTURE_SCOPE="$LITMUS_FIXTURE_SCOPE" \
+                TILLANDSIAS_FIXTURE_GIT_DIRS="$LITMUS_REAL_GIT_DIRS" \
+                LITMUS_STDLIB="${LITMUS_STDLIB}" timeout --kill-after=10s "${timeout_sec}s" bash -c 'source "$LITMUS_STDLIB"; '"${step_shell_prelude}${step_command}" </dev/null >"$step_capture" 2>"$step_errcap" || exit_code=$?
+            if [[ "$_lt_retried" -eq 0 && "${LITMUS_TIMEOUT_RETRY:-1}" == 1 \
+                  && ( "$exit_code" -eq 124 || "$exit_code" -eq 137 ) && ! -s "$step_capture" ]]; then
+                _lt_retried=1
+                printf ' flaky:%s#%s timed out after %ss with no output (rc=%s); re-running it once\n' \
+                    "$(basename "${test_file%.yaml}")" "$step_index" "$timeout_sec" "$exit_code" >&2
+                : >"$step_capture"; : >"$step_errcap"
+                continue
+            fi
+            break
+        done
         local _lt_tampered=""
         if [[ -n "$_lt_gsnap" ]]; then
             _lt_tampered="$(_lt_gate_restore "$_lt_gsnap")"
