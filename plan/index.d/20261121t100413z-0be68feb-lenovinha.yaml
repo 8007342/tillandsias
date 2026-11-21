@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-litmus-runner-start-in-a-scratch-project-no-longer-builds-the-router-sidecar-through-the-enclosing-checkout
+    field: status
+    value: in_progress
+    ts: "2026-11-21T10:04:13Z"
+    host: lenovinha
+    story: build-speed-lenovinha
+
+events:
+  - packet_id: a-litmus-runner-start-in-a-scratch-project-no-longer-builds-the-router-sidecar-through-the-enclosing-checkout
+    event:
+      type: note
+      ts: "2026-11-21T10:04:13Z"
+      host: lenovinha
+      summary: |-
+        claimed: runner scratch sidecar staging
