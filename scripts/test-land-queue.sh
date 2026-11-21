@@ -1594,6 +1594,73 @@ else
     bad "ARM 35b: wanted hold from the memo on 2 candidate gates; got gates=$g35b
 $out35b"
 fi
+
+# ──────────────────────────────────────────────────────────── ARM 40
+# ORDER 2152-lqrf (build speed): THE PLAN-BINARY REFRESH IS SKIPPED WHEN ITS
+# INPUTS ARE UNCHANGED. The refresh stub writes a dep-info naming base.txt (a
+# tracked file) plus a binary, and counts its runs. #40 and #41 do not touch
+# base.txt: ONE refresh, the second candidate prints the skip. #42 edits
+# base.txt: the refresh runs again. Premise first: the stub's dep-info exists
+# and names the dep after the first run.
+scaffold arm40
+candidate arm40 1040-aaaa a40.txt A
+candidate arm40 1041-bbbb b40.txt B
+candidate arm40 1042-cccc base.txt changed
+cat > "$GH_PRS" <<JSON
+[{"number":40,"headRefName":"work/1040-aaaa","isDraft":false},
+ {"number":41,"headRefName":"work/1041-bbbb","isDraft":false},
+ {"number":42,"headRefName":"work/1042-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+_d40="$TMP/arm40/tgt"; mkdir -p "$_d40"
+_r40="$TMP/arm40/refresh.count"; : > "$_r40"
+cat > "$TMP/arm40/refresh.sh" <<REFRESH
+#!/usr/bin/env bash
+echo run >> "$_r40"
+printf '%s: %s\n' "$_d40/plan" "$WORK_DIR/base.txt" > "$_d40/plan.d"
+echo built >> "$_d40/plan"
+REFRESH
+out40="$(TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="$_d40/plan.d" TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="$_d40/stamp" \
+    PLAN_REFRESH_CMD="bash '$TMP/arm40/refresh.sh'" run_queue)"; rc40=$?
+n40="$(grep -c . "$_r40")"
+if ! grep -q "base.txt" "$_d40/plan.d" 2>/dev/null; then
+    bad "ARM 40 premise: the refresh stub never wrote a dep-info naming base.txt
+$out40"
+elif grep -q '^plan-refresh:skipped:inputs-unchanged:#41:' <<<"$out40" \
+    && ! grep -q '^plan-refresh:skipped:inputs-unchanged:#42:' <<<"$out40" \
+    && [ "$n40" -eq 2 ] && [ "$rc40" -eq 0 ] && [ "$(grep -c '^land:' <<<"$out40")" -eq 3 ]; then
+    ok "ARM 40: the plan refresh runs once for two candidates that leave its inputs alone, and again for one that edits an input (2152-lqrf)"
+else
+    bad "ARM 40: wanted 2 refreshes (#40, #42), #41 skipped, 3 landed, rc=0; got refreshes=$n40 rc=$rc40
+$out40"
+fi
+# ARM 40b, NEGATIVE CONTROL: no dep-info (the refresh writes none) means no key,
+# so EVERY candidate refreshes, as before this change.
+scaffold arm40b
+candidate arm40b 1043-dddd d40.txt D
+candidate arm40b 1044-eeee e40.txt E
+cat > "$GH_PRS" <<JSON
+[{"number":43,"headRefName":"work/1043-dddd","isDraft":false},
+ {"number":44,"headRefName":"work/1044-eeee","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+exit 0
+GATE
+_r40b="$TMP/arm40b/refresh.count"; : > "$_r40b"
+out40b="$(TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="$TMP/arm40b/none.d" TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="$TMP/arm40b/stamp" \
+    PLAN_REFRESH_CMD="echo run >> '$_r40b'" run_queue)"
+if [ "$(grep -c . "$_r40b")" -eq 2 ] && ! grep -q '^plan-refresh:skipped' <<<"$out40b"; then
+    ok "ARM 40b (control): with no dep-info every candidate refreshes"
+else
+    bad "ARM 40b: wanted 2 refreshes and no skip; got $(grep -c . "$_r40b")
+$out40b"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then
