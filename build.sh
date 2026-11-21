@@ -1722,7 +1722,11 @@ if [[ "$FLAG_PREFLIGHT" != true ]]; then _report_build_root; fi
 if [[ "$FLAG_PREFLIGHT" == true ]]; then
     # The `-added` family scopes itself against origin/linux-next; without a
     # fetch it scans nothing and prints a green that means nothing.
-    git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
+    # ORDER 2176-dort: a REPLACED roster (TILLANDSIAS_PREFLIGHT_ROSTER_FILE, the
+    # 300-guard fixture's seam) runs none of that family, so it skips the fetch:
+    # the fetch writes .git/FETCH_HEAD and the remote refs, which kept the
+    # fixture off the gate pool. The real roster always fetches.
+    [ -n "${TILLANDSIAS_PREFLIGHT_ROSTER_FILE:-}" ] || git -C "$SCRIPT_DIR" fetch -q origin 2>/dev/null || true
     _freeze_gate_diff_base || exit 1
 
     # ORDER 1247-9pr8 — A STALE PLAN BINARY IS ONE CAUSE, SO SAY IT ONCE. Measured
