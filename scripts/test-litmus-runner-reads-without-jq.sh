@@ -75,13 +75,17 @@ if [ "$(selection "$scratch/split-a.log")" = "$(selection "$scratch/split-n.log"
 fi
 echo "ok:   split arm: a runtime skip is not a selection difference; Total and Executing still are"
 
+# ORDER 2159-n9sa (priority:build-speed): the live arm compares SELECTION only,
+# so it runs --select-only (the same selection path, no step executed). Two full
+# runs of the spec cost ~92 s of this fixture for output it never read. The
+# scratch ctl arm below still executes and stays the discriminating control.
 run() {   # <label> [PATH prefix]
     if [ -n "${2:-}" ]; then
         TILLANDSIAS_LITMUS_RUNTIME_DIR="$scratch/runtime-$1" PATH="$2:$PATH" timeout 900 bash "$ROOT/scripts/run-litmus-test.sh" "$SPEC" \
-            --phase pre-build --size instant --compact > "$scratch/$1.log" 2>&1
+            --phase pre-build --size instant --compact --select-only > "$scratch/$1.log" 2>&1
     else
         timeout 900 bash "$ROOT/scripts/run-litmus-test.sh" "$SPEC" \
-            --phase pre-build --size instant --compact > "$scratch/$1.log" 2>&1
+            --phase pre-build --size instant --compact --select-only > "$scratch/$1.log" 2>&1
     fi
     selection "$scratch/$1.log" > "$scratch/$1.sel"
 }
@@ -157,6 +161,26 @@ if ! cmp -s "$scratch/ctl-with-tools.sel" "$scratch/ctl-without-tools.sel"; then
     exit 1
 fi
 echo "ok:   control arm: a quoted/commented phase is selected identically with and without jq/yq (plain+quoted, runtime excluded)"
+
+# ORDER 2159-n9sa — PARITY: --select-only selects what a real run executes. The
+# ctl spec ran for real above; the same spec under --select-only must print the
+# same selection (Executing lines and Total), and must execute no step.
+PATH="$PATH" TILLANDSIAS_LITMUS_TESTS_DIR="$ctl/tests" TILLANDSIAS_LITMUS_BINDINGS="$ctl/bindings.yaml" \
+    timeout 300 bash "$ROOT/scripts/run-litmus-test.sh" fx6pnd \
+    --phase pre-build --size instant --compact --select-only > "$scratch/ctl-select-only.log" 2>&1
+selection "$scratch/ctl-select-only.log" > "$scratch/ctl-select-only.sel"
+if ! cmp -s "$scratch/ctl-with-tools.sel" "$scratch/ctl-select-only.sel"; then
+    echo "FAIL: --select-only selected a DIFFERENT set than a real run of the same spec (2159-n9sa):"
+    diff "$scratch/ctl-with-tools.sel" "$scratch/ctl-select-only.sel" | sed 's/^/  /'
+    exit 1
+fi
+_so_log="$(sed 's/\x1b\[[0-9;]*m//g' "$scratch/ctl-select-only.log")"
+if ! grep -qE '^  Total: [0-9]+ \(executed: 0, ' <<<"$_so_log"; then
+    echo "FAIL: --select-only executed a step (2159-n9sa):"
+    sed 's/\x1b\[[0-9;]*m//g' "$scratch/ctl-select-only.log" | grep -E 'Total:' | sed 's/^/  /'
+    exit 1
+fi
+echo "ok:   parity arm: --select-only prints the same selection as a real run and executes nothing (2159-n9sa)"
 
 if [ ! -s "$LITMUS_STUB_LOG" ]; then
     echo "blocked:stub-not-reached — the PATH shadow did not take, so run B proves nothing"
