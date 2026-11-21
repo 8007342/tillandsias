@@ -29,7 +29,7 @@ bad() { echo "  FAIL: $1"; fail=$((fail+1)); }
 
 # ── the grammar, because the litmus step parses ms= out of it with sed ────────
 out="$(bash "$BUDGET" 2>&1)"
-if printf '%s' "$out" | grep -qE '^freshness-budget: ms=[0-9]+ regime=(native|remote) fs=[a-z0-9-]+ source=(findmnt|path-inference|default)$'; then
+if grep -qE '^freshness-budget: ms=[0-9]+ regime=(native|remote) fs=[a-z0-9-]+ source=(findmnt|path-inference|default)$' <<<"$out"; then
     ok "output matches the pinned grammar the litmus step parses"
 else
     bad "grammar drifted — the litmus step's sed would extract nothing: $out"

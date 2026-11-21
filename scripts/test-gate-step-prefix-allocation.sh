@@ -141,8 +141,8 @@ R="$W/r6"; new_repo "$R" 110 120; cd "$R" || exit 2
 G checkout -q -b hostG; step 110-8888-aaaa.step; step 110-9999-bbbb.step; G add -A >/dev/null; G commit -q -m "hostG adds two at 110"
 h="$(git rev-parse HEAD)"
 dry="$(alloc --base main --dry-run 2>/dev/null)"
-if [ "$(printf '%s\n' "$dry" | tail -1)" = "ok:gate-step-prefix:dry-run:2" ] && printf '%s\n' "$dry" | grep -q '110-8888-aaaa.step -> 115-8888-aaaa.step' \
-   && printf '%s\n' "$dry" | grep -q '110-9999-bbbb.step -> 116-9999-bbbb.step' && [ "$(git rev-parse HEAD)" = "$h" ] && [ -z "$(git status --porcelain)" ]; then
+if [ "$(printf '%s\n' "$dry" | tail -1)" = "ok:gate-step-prefix:dry-run:2" ] && grep -q '110-8888-aaaa.step -> 115-8888-aaaa.step' <<<"$dry" \
+   && grep -q '110-9999-bbbb.step -> 116-9999-bbbb.step' <<<"$dry" && [ "$(git rev-parse HEAD)" = "$h" ] && [ -z "$(git status --porcelain)" ]; then
     real="$(alloc --base main --commit 2>/dev/null | grep '^gate-step-prefix:')"
     [ "$real" = "$(printf '%s\n' "$dry" | grep '^gate-step-prefix:')" ] && ok "ARM 6: --dry-run names 115 and 116 and moves nothing; --commit then performs exactly that plan" || bad "ARM 6: plans differ: dry='$(printf '%s' "$dry" | tr '\n' '|')' real='$(printf '%s' "$real" | tr '\n' '|')'"
 else

@@ -88,7 +88,7 @@ grammar='^(ok:engine-cpu-dispatch:[a-z0-9_,-]+|refused:engine-cpu-dispatch-basel
 gfail=0
 for stub in "$FEDORA_BASELINE" "$OLLAMA_DISPATCHED" "$NO_TABLE" ""; do
     v="$(run "avx,avx2,fma,avx_vnni" "$stub")"; v="${v#*|}"
-    printf '%s\n' "$v" | grep -qE "$grammar" || { bad "grammar violated by [$v]"; gfail=1; }
+    grep -qE "$grammar" <<<"$v" || { bad "grammar violated by [$v]"; gfail=1; }
 done
 [ "$gfail" = 0 ] && ok "every verdict matches the pinned grammar"
 
