@@ -14,3 +14,6 @@ STEP_SCRIPT="scripts/test-build-version-label.sh"
 STEP_ERROR="a local build path again stamps VERSION's stale date silently, writes VERSION, or labels a release build (1238-b825); see which arm failed above"
 STEP_OK="local builds label stale CalVer dates; VERSION untouched; releases verbatim"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:build-version-label-fixture:7/7"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

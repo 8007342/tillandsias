@@ -12,3 +12,6 @@ STEP_SCRIPT="scripts/test-status-channel-absent-is-first-class.sh"
 STEP_ERROR="the status channel substituted an integer for an absent status, or lost a real exit code (1260-2qgi) — see the FAIL lines above"
 STEP_OK="Status channel passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:status-channel:absent-distinct-from-zero:3/3 skipped=1"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

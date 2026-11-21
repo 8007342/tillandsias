@@ -15,3 +15,6 @@ STEP_SCRIPT="scripts/test-preflight-stale-plan-binary.sh"
 STEP_ERROR="preflight no longer names a stale plan binary up front, so its guards will refuse for it under unrelated names (1247-9pr8); see which arm failed above"
 STEP_OK="preflight names a stale plan binary once and runs nothing after it"
 STEP_SECOND_REGIME="yolanda 2026-09-28 msys ok:preflight-stale-plan-binary:5/5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

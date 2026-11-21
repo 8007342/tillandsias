@@ -56,3 +56,6 @@ STEP_SCRIPT="scripts/test-litmus-step-pipefail.sh"
 STEP_ERROR="a litmus step's producer can again fail into head/tee/wc and be reported green, or the pipefail gating has widened into a blanket that inverts grep-adjudicated steps (1293-wka4) — read which arm failed above; ARM 4b failing means the blanket was applied, ARM 3 failing means the fixture can no longer reproduce the defect"
 STEP_OK="A step's producer failure reaches its verdict"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:litmus-step-pipefail:6/6"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

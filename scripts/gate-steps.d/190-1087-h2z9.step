@@ -18,3 +18,6 @@ STEP_OK="Guard activation audit passed"
 # no symlink-following and no grep, which removes the regime differences the
 # .sh had (1087-h2z9), but that is an argument, not a measurement.
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="runs the litmus runner (it wipes its runtime dirs)"
+STEP_LANES="litmus"

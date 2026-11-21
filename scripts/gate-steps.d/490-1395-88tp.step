@@ -9,3 +9,6 @@ STEP_SCRIPT="scripts/test-centicolon-grade.sh"
 STEP_ERROR="the CentiColon grader credited an obligation it must not, or refused nothing it must (1395-88tp) — see the verdict line above"
 STEP_OK="CentiColon grader holds"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:centicolon-grade:11"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

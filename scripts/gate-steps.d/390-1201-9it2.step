@@ -30,3 +30,6 @@ STEP_OK="land-time litmus notice check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/land-on-platform-branch.sh or scripts/litmus-covering-specs.sh is absent, so the notice could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:land-notice:5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

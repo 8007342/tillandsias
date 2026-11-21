@@ -14,3 +14,6 @@ STEP_SCRIPT="scripts/test-native-lint-attested.sh"
 STEP_ERROR="a change to a cfg-gated platform crate can again reach trunk with no host having linted it natively (1235-rfub); see which arm failed above"
 STEP_OK="cfg-gated crates relay only with a content-bound native-lint attestation"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:native-lint-attested-fixture:8/8"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

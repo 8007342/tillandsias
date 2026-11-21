@@ -13,3 +13,6 @@ STEP_LUA="scripts/lua/check-no-python-scripts.lua"
 STEP_ERROR="a Python runtime reference entered the harness (1087-h2z9)"
 STEP_OK="No-Python check passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:no-python-scripts"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

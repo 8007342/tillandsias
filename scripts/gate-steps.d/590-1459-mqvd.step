@@ -14,3 +14,6 @@ STEP_SCRIPT="scripts/test-litmus-self-match.sh"
 STEP_ERROR="a litmus step matches its own bash -c argv with pkill/pgrep -f (1459-mqvd); bracket one character of the pattern, e.g. 'name[s]'"
 STEP_OK="no litmus step can kill its own shell"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin PASS: litmus-self-match (1459-mqvd)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

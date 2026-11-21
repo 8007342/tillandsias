@@ -15,3 +15,6 @@ STEP_SCRIPT="scripts/test-exact-version-literal-added.sh"
 STEP_ERROR="the exact-version guard no longer refuses a bare-literal version pin, or the capability probe again rejects a bumped schema (968-uhzg); see which arm failed above"
 STEP_OK="exact-version literals refused unless reasoned; capability probe admits a bumped schema"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:exact-version-literal-added-fixture:6/6"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="writes fixed-name scratch or mutant files inside the checkout"
+STEP_LANES="checkout"

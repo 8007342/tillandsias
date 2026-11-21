@@ -9,3 +9,6 @@ STEP_SCRIPT="scripts/test-local-delegate-ladder.sh"
 STEP_ERROR="the local-delegate token grammar or the rung arithmetic (R1-R4 thresholds, 20-outcome sample floor, demotion, supersession) drifted (1834-ujsf) — see the verdict line above"
 STEP_OK="Local-delegate ladder passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:local-delegate-ladder:29/29"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"

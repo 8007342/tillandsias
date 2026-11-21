@@ -11,3 +11,6 @@ STEP_SCRIPT="scripts/test-preflight-scratch-is-off-checkout.sh"
 STEP_ERROR="preflight scratch writes inside small checkout or disk exhaustion reported as tree refusal (1349-53h6)"
 STEP_OK="Preflight scratch is off-checkout and resource exhaustion is categorized as could-not-run"
 STEP_SECOND_REGIME="macneo 2026-09-24 darwin ok:preflight-scratch-is-off-checkout:5/5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"

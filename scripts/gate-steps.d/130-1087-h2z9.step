@@ -13,3 +13,6 @@ STEP_LUA="scripts/lua/check-enclave-expect-none-is-fixture-only.lua"
 STEP_ERROR="an enclave expect-none escaped its fixture (1087-h2z9)"
 STEP_OK="Enclave expect-none fixture scope passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:expect-none-fixture-only:1"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
