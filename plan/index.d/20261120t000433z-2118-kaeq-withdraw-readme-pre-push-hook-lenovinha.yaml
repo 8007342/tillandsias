@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: withdraw-the-never-wired-readme-pre-push-hook-installer-and-its-spec-requirement
+    order: 2118-kaeq
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, openspec, readme]
+    estimated_hours: 1
+    owned_files:
+      - scripts/install-readme-pre-push-hook.sh
+      - openspec/changes/withdraw-readme-pre-push-hook/
+      - cheatsheets/welcome/readme-discipline.md
+    title: |
+      Slice 3 batch 1: delete scripts/install-readme-pre-push-hook.sh, which no image, skill, crate or hook installs or calls. Withdraw "Pre-push hook auto-regenerates README" through openspec change withdraw-readme-pre-push-hook. This is its own PR, so it can be reverted alone.
+    context: |
+      Coordinator ruling 2026-11-20: the summarizer rule applies. git grep over images/ skills/ crates/ .claude/ finds only the derived cheatsheet prose; the real pre-push hook (scripts/hooks/pre-push-local-gate.sh) does not regenerate READMEs.
+    exit_criteria:
+      - 'scripts/install-readme-pre-push-hook.sh is gone; git grep for it outside plan/ and openspec/changes/ finds only the still-unarchived main spec'
+      - 'litmus for project-bootstrap-readme stays green; ./build.sh --preflight refused=0'
+    verifiable_closure: |
+      litmus:project-bootstrap-readme-shape stays green with the hook installer deleted, and git grep for install-readme-pre-push-hook outside plan/ and openspec/changes/ finds only the unarchived main spec.
+    next_action: Preflight, push work/2118-kaeq, open PR; archive the change after landing.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T00:04:33Z"
+        host: lenovinha
+        summary: Withdraw the never-wired README pre-push hook installer (own PR).

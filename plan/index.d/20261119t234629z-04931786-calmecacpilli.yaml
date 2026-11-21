@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-no-python-policy-matches-a-list-of-spellings-rather-than-the-runtime-so-a-bare-command-v-python3-and-an-env-prefixed-command-substitution-both-pass
+    field: next_action
+    value: |-
+      Reproduce first, and it needs no build beyond the policy crate: put the two lines from verifiable_closure into any file under scripts/ and run scripts/check-no-python-scripts.sh — expect `ok: no Python runtime references in scripts/harness files`. Then read fn has_python_runtime_reference in crates/tillandsias-policy/src/main.rs; the whole predicate is about twenty lines. DECIDE BETWEEN the structural discriminator and the admit-the-limits fallback BEFORE writing anything, because the two produce very different artefacts and the tempting middle (add two patterns, keep the shape) is the option this row exists to refuse. Whichever is chosen, keep the comment exemption and the @tombstone handling — both are deliberate and neither is implicated.
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-no-python-scripts.sh is now scripts/lua/check-no-python-scripts.lua (cc9ae4ff7, 1630-dwab); scripts/derive-vsock-seccomp.sh was retired into Rust derive_vsock_seccomp (9c0479ad2, 830-xsk2). Check whether the Lua checker still uses a spelling denylist. Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-no-python-policy-matches-a-list-of-spellings-rather-than-the-runtime-so-a-bare-command-v-python3-and-an-env-prefixed-command-substitution-both-pass
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

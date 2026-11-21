@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    field: next_action
+    value: |-
+      Run the three research children in parallel (b2gb on a guest host, cp93 on every substrate, zk9i anywhere); then er9t → d29n → sdgk → seg8; pj2x only after cp93 is green on the substrate it targets.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] umbrella; closes when its children close; spec delivered in fa57e0c471
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: every-launched-app-runs-on-its-own-throw-away-internal-podman-network-with-a-declared-egress-posture-none-allowlist-or-open-enforced-by-the-proxy-and-the-router-as-its-second-leg
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

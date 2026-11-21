@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: wip-limit-does-not-count-rows-whose-remaining-action-is-a-queued-non-draft-pr
+    order: 2121-dey3
+    status: ready
+    kind: process
+    priority: p3
+    pickup_role: linux
+    capability_tags: [plan, wip, claims, land-queue]
+    estimated_hours: 3
+    owned_files:
+      - crates/tillandsias-plan/src/main.rs
+    title: |
+      set-field's WIP limit counts in_progress rows whose only remaining step is a queued, non-draft PR. A host that drains a slice into PRs hits the limit and must move each row to blocked by hand ("queued as PR #n; flips on land") before it can claim again.
+    context: |
+      Measured on lenovinha 2026-11-20: the claim of 2112-3bub was refused at the WIP limit while every in_progress row was an open PR: #1172, #1173, #1174, #1176, #1177, #1178, #1179, #1180 and #1182 ready, and #1175 a draft. By coordinator ruling the nine were moved to blocked with --reopen-evidence. That is honest but manual, and it hides the rows from in_progress views.
+    exit_criteria:
+      - 'a row whose head work ref has an open, non-draft PR to linux-next does not count toward the WIP limit; a draft PR still counts. A fixture plants both and a claim past the limit succeeds only in the first case'
+    unscoreable: "unpinnable-until-the-guard-exists: the fixture for the PR-aware WIP count is this packet's own deliverable"
+    next_action: Find where set-field computes WIP; add a seam that answers open non-draft PR for an order's work ref (gh pr list --head work/<order>, cached), and a fixture with a fake answer.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T03:12:05Z"
+        host: lenovinha
+        summary: WIP limit should skip rows waiting only on a queued non-draft PR.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:47Z"
+    host: yoga
+
+events:
+  - packet_id: imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:47Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: imagegen-models-are-fetched-on-first-use-into-the-reusable-cache-by-pinned-url-and-sha256
+    event:
+      type: note
+      ts: "2026-11-20T03:11:47Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-headless --bin tillandsias imagegen_models:: - 11 passed. Candidate landing commit - 5ff1274b5.

@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-n-z-release-and-gate-path-four-files
+    order: 2118-dbuu
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, release, gate]
+    estimated_hours: 1
+    related: [2123-ivi5, 2126-4cyq]
+    owned_files:
+      - scripts/promote-stable.sh
+      - scripts/resolve-smoke-release.sh
+      - scripts/check-release-asset-integrity.sh
+      - scripts/hooks/pre-push-local-gate.sh
+    title: |
+      Last n-z sigpipe batch of 2126-4cyq: the release- and gate-path guards (promote-stable, resolve-smoke-release, check-release-asset-integrity, the pre-push local gate). One here-string line each; no other edits; verdict tokens byte-identical.
+    context: |
+      Coordinator ruling: convert now; these are the guards whose flakes would hit the RC. check-plan-binary-probe-usage.sh has no real site; its only hit is a comment about the here-string rule.
+    exit_criteria:
+      - 'each file changes exactly one line; covering tests and the smoke-release-channel litmus pass; the pipe floors drop by 4'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-dbuu, open PR with the ok lines.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T11:49:12Z"
+        host: lenovinha
+        summary: sigpipe n-z release/gate-path batch (four one-line changes).

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-failed-browser-window-launch-writes-the-opencode-web-session-cookie-to-the-event-log-via-the-unredacted-data-url
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:30Z"
+    host: yoga
+
+events:
+  - packet_id: a-failed-browser-window-launch-writes-the-opencode-web-session-cookie-to-the-event-log-via-the-unredacted-data-url
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:30Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: a-failed-browser-window-launch-writes-the-opencode-web-session-cookie-to-the-event-log-via-the-unredacted-data-url
+    event:
+      type: note
+      ts: "2026-11-20T03:11:30Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-podman redacts_data_urls_in_flag_and_bare_form - 1; invocation_line_redacts_a_data_url_before_any_truncation - 1; -p tillandsias-headless opencode_web_window_argv_redacts_the_login_otp - 1. Candidate landing commit - NONE.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    field: next_action
+    value: 'PR #1181 (work/2110-ghw2). Evidence: relay-preflight work/2110-ghw2 --keep-going -> ok:relay-preflight:b4c7bddff ... litmus=1/0, rc=0, 24 ok 0 red on yoga (Silverblue), via the builder re-exec at relay-preflight''s entry. Control on trunk f3a546f74: ci-release rc=1, 8 red, 83x rebuild-failed. Left: land via the queue, then close on the landed sha.'
+    ts: "2026-11-20T02:57:58Z"
+    host: yoga
+
+events:
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    event:
+      type: progress
+      ts: "2026-11-20T02:57:58Z"
+      host: yoga
+      summary: |-
+        status 'PR #1181 (work/2110-ghw2). Evidence: relay-preflight work/2110-ghw2 --keep-going -> ok:relay-preflight:b4c7bddff ... litmus=1/0, rc=0, 24 ok 0 red on yoga (Silverblue), via the builder re-exec at relay-preflight's entry. Control on trunk f3a546f74: ci-release rc=1, 8 red, 83x rebuild-failed. Left: land via the queue, then close on the landed sha.' (not terminal) with evidence_refs: b4c7bddff
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    event:
+      type: note
+      ts: "2026-11-20T02:57:58Z"
+      host: yoga
+      summary: |-
+        closure evidence before gh pr ready

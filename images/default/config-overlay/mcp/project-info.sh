@@ -75,6 +75,39 @@ fi
 # @trace spec:forge-environment-discoverability
 # Detects project type by examining canonical marker files.
 # Returns a list of detected types (may be multiple for polyglot projects).
+# _gc_files <path> <glob> — grep_code's file set, one path per line, spelled
+# exactly as `find <path>` would print it ("<path>/<rel>"), so callers and the
+# recall fixture see the same strings either way. Inside a git work tree: git's
+# own list (tracked + untracked-not-ignored, never ignored build output), with
+# find's -name / -path glob semantics applied in bash. Outside one: find.
+# ORDER 2151-gcls.
+_gc_files() {
+    local path="$1" glob="$2" f p
+    [ "$path" = "/" ] || path="${path%/}"
+    if git -C "$path" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        git -C "$path" ls-files -z --cached --others --exclude-standard 2>/dev/null \
+        | while IFS= read -r -d '' f; do
+            p="$path/$f"
+            [ -f "$p" ] || continue                 # tracked but deleted in the tree
+            case "/$f" in */.claude/worktrees/*) continue ;; esac
+            if [[ "$glob" == *"/"* ]]; then
+                # shellcheck disable=SC2053  # the glob is a pattern on purpose
+                [[ "$p" == */$glob ]] || continue
+            else
+                # shellcheck disable=SC2053
+                [[ "${f##*/}" == $glob ]] || continue
+            fi
+            printf '%s\n' "$p"
+        done
+        return 0
+    fi
+    if [[ "$glob" == *"/"* ]]; then
+        find "$path" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune -o -type f -path "*/$glob" -print 2>/dev/null || true
+    else
+        find "$path" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune -o -type f -name "$glob" -print 2>/dev/null || true
+    fi
+}
+
 detect_project_types() {
     local project_dir="${1:-.}"
     local types=""
@@ -1007,16 +1040,18 @@ ${preview}"
                         # worktrees, each a full copy of the repo; searching them
                         # answers about other checkouts. `-path '*/.git'` prunes a
                         # linked worktree's .git FILE, not the directory beside it.
-                        if [[ "$glob_for_find" == *"/"* ]]; then
-                            files=$(find "$path" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune -o -type f -path "*/$glob_for_find" -print 2>/dev/null || true)
-                        else
-                            files=$(find "$path" \( -path '*/.git' -o -path '*/.claude/worktrees' \) -prune -o -type f -name "$glob_for_find" -print 2>/dev/null || true)
-                        fi
+                        # ORDER 2151-gcls (build speed): inside a git work tree the
+                        # file set is git's — tracked plus untracked-not-ignored —
+                        # so target/ (106 GB on yoga) and .cache/ are never walked.
+                        # A file an agent just created is still searched; an
+                        # ignored build artefact is not. Outside a work tree
+                        # (a plain directory) it is find, as before.
+                        files=$(_gc_files "$path" "$glob_for_find")
                         file_count=$(printf '%s' "$files" | grep -c . || true)
                         if [ "${file_count:-0}" -eq 0 ]; then
                             result="grep_code: no file matches include '$include' under $path (nothing was searched)"
                         else
-                            all_hits=$(printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -InE -e "$pattern" -- 2>/dev/null || true)
+                            all_hits=$(printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 grep -HInE -e "$pattern" -- 2>/dev/null || true)
                             hit_count=$(printf '%s' "$all_hits" | grep -c . || true)
                             result=$(head -50 <<<"$all_hits")
                             if [ "${hit_count:-0}" -gt 50 ]; then

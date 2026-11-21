@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: browser-forwarders-and-networks-leak-and-pin-the-shared-stack
+    field: next_action
+    value: |-
+      Label the forwarder, add the exit watcher, exclude -fwd- from the live-lane check, then the sweeper and cap.
+
+      [2026-11-17T22:20:28Z macuahuitl] Re-implement fresh on current linux-next; do not rebase the old commit. Prior art: dea0ee6629 at refs/pull/690/head (git fetch origin pull/690/head). browser_open.rs was rewritten after it (WebKit window path, forwarder_spec), so the old diff does not apply. What is left: after a window container starts, watch for its exit, then remove its forwarder, network, profile and CDP dirs (a failed podman wait is not an exit); label the forwarder tillandsias.browser-window=<id>; stop is_active_lane_container counting a forwarder as a lane. Exit check: open and close one window on Linux; podman ps -a and podman network ls then show no tillandsias-browser-fwd-* or tillandsias-browser-net-* for it. Run it on the code before the fix first: it must find leftovers there.
+    ts: "2026-11-17T22:20:28Z"
+    host: macuahuitl

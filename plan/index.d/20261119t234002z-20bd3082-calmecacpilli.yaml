@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: github-token-rotation-reads-a-vault-that-is-not-up-yet-as-no-token-and-waits-fifteen-minutes-while-cloud-projects-fail-silently
+    field: next_action
+    value: |-
+      Make VaultGitHubTokenStore::read_bundle return Err for the three unreachable cases, the way the Cloudflare store does. Then make the gh scripts in remote_projects.rs keep stderr on the auth-login step.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock github_rotation_ (confirm the test fn). Close on green with the merge sha.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: github-token-rotation-reads-a-vault-that-is-not-up-yet-as-no-token-and-waits-fifteen-minutes-while-cloud-projects-fail-silently
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: real-web-and-rust-projects-fit-in-a-forge-without-hand-moving-build-dirs
+    event:
+      type: completed
+      ts: "2026-11-19T23:46:29Z"
+      agent_id: linux-calmecacpilli-claude-20261119t234629z
+      host: calmecacpilli
+      summary: |
+        Tech-debt triage (calmecacpilli, 2026-11-19). CLOSED on the recorded live PASS: note 2026-10-17T05:30:15Z, 'LIVE ARM PASS on yoga, published v56.10.16.2'. Fix 1c910faaa7 is an ancestor of tag v56.10.16.2. Coordinator rule 2026-11-19.

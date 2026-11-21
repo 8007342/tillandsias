@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-generic-project-discipline-skill-shipped-in-the-forge-overlay-explains-the-ladder-the-projects-current-level-and-drift-how-to-raise-it-what-each-installed-hook-refuses-and-the-work-format-each-level-needs-so-every-hook-affordance-has-a-skill-to-point-at
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:26Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-generic-project-discipline-skill-shipped-in-the-forge-overlay-explains-the-ladder-the-projects-current-level-and-drift-how-to-raise-it-what-each-installed-hook-refuses-and-the-work-format-each-level-needs-so-every-hook-affordance-has-a-skill-to-point-at
+    event:
+      type: note
+      ts: "2026-11-17T22:18:26Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1446-qkx4 commit 159e494fe9fc (1446-qkx4 in its subject) reached linux-next at be4c2ab56f60. Status moves to implemented, not completed: the exit criteria were not re-run.

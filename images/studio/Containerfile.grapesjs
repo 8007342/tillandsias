@@ -13,10 +13,14 @@ FROM ${FORGE_IMAGE}
 # 1958-yfib: an image inherits its base layer's labels, so it states its own:
 # our recipe (GPL-3.0-or-later) AND what it mostly ships. GrapesJS 0.23.8 is BSD-3-Clause (LICENSE in the npm tarball).
 # Every component's licence: docs/credits/stack.v1.json.
-LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND BSD-3-Clause"
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later AND BSD-3-Clause AND OFL-1.1 AND MIT"
 
 ARG GRAPESJS_VERSION=0.23.8
 ARG GRAPESJS_INTEGRITY=sha512-4+HvGRnWK0IbFva2FUxu6GXA3/BFGq0vRaeJ8MhhFR5O42wq9T7rKxChYLKgEmplHb2ea9HsfIzJtsEibeYv7w==
+# 2108-dptd: the icon font GrapesJS's default panels use (Font Awesome 4.7.0:
+# fonts SIL OFL 1.1, CSS MIT), vendored so the editor needs no cdnjs.
+ARG FONT_AWESOME_VERSION=4.7.0
+ARG FONT_AWESOME_INTEGRITY=sha512-U6kGnykA/6bFmg1M/oT9EkFeIYv7JlX3bozwQJWiiLz6L0w3F5vBVPxHlwyX/vtNq1ckcpRKOB9f2Qal/VtFpg==
 LABEL io.tillandsias.studio="grapesjs" \
       io.tillandsias.studio.grapesjs-version="${GRAPESJS_VERSION}" \
       io.tillandsias.studio.grapesjs-integrity="${GRAPESJS_INTEGRITY}" \
@@ -30,10 +34,13 @@ RUN node /tmp/vendor.mjs "$GRAPESJS_VERSION" "$GRAPESJS_INTEGRITY" /opt/studio/g
     && test -f /opt/studio/grapesjs/vendor/LICENSE \
     && test -f /opt/studio/grapesjs/vendor/dist/grapes.min.js \
     && test -f /opt/studio/grapesjs/vendor/dist/css/grapes.min.css \
+    && node /tmp/vendor.mjs "$FONT_AWESOME_VERSION" "$FONT_AWESOME_INTEGRITY" /opt/studio/grapesjs/vendor/font-awesome font-awesome css fonts \
+    && test -f /opt/studio/grapesjs/vendor/font-awesome/css/font-awesome.min.css \
+    && test -f /opt/studio/grapesjs/vendor/font-awesome/fonts/fontawesome-webfont.woff2 \
     && rm /tmp/vendor.mjs
 COPY studio-front.js /opt/studio/studio-front.js
 # Written by scripts/lua/build-studio-registry.lua beside data/studios.json.
 COPY studios.json /usr/local/share/tillandsias/studios.json
-COPY grapesjs/server.mjs grapesjs/editor.html /opt/studio/grapesjs/
+COPY grapesjs/server.mjs grapesjs/editor.html grapesjs/studio-page.js /opt/studio/grapesjs/
 COPY --chmod=0755 grapesjs/studio-grapesjs /usr/local/bin/studio-grapesjs
 USER 1000:1000

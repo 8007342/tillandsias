@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    field: status
+    value: completed
+    ts: "2026-11-20T16:23:41Z"
+    host: yoga
+
+events:
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    event:
+      type: completed
+      ts: "2026-11-20T16:23:41Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 18fe27945
+  - packet_id: litmus-runner-rebuilds-and-fixtures-reach-cargo-and-podman-through-the-builder-toolbox-on-an-immutable-host
+    event:
+      type: note
+      ts: "2026-11-20T16:23:41Z"
+      host: yoga
+      summary: |-
+        landed via PR #1181 as 18fe27945 (adopted over a plan-only move as 3335eb795); relay-preflight re-execs into the builder toolbox on Silverblue; trunk fixture defects fixed alongside

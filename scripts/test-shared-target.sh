@@ -25,6 +25,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 [ -f "$ROOT/scripts/shared-target.sh" ] || { echo "FAIL: scripts/shared-target.sh absent"; exit 1; }
 # shellcheck source=shared-target.sh
 . "$ROOT/scripts/shared-target.sh"
+# ORDER 2145-fexh: THIS FIXTURE BUILDS ITS OWN SHARED-TARGET WORLD, SO IT MUST
+# NOT INHERIT THE CALLER'S. Inside the gate the caller has already entered the
+# shared target, so CARGO_TARGET_DIR (and TILLANDSIAS_SHARED_TARGET_HELD) are
+# exported: shared_target_enter answers "off" for a foreign CARGO_TARGET_DIR and
+# "inherited" for a live HELD, the fixture's lock is never contended, and
+# arm1/arm6 read the admission as a broken lock (RC attempt 2, 2026-11-20).
+unset CARGO_TARGET_DIR TILLANDSIAS_SHARED_TARGET_HELD TILLANDSIAS_SHARED_TARGET
 mkdir -p "$ROOT/target"; W="$(mktemp -d "$ROOT/target/test-shared-target.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 fail=0; ok() { echo "ok: $*"; }; bad() { echo "FAIL: $*"; fail=1; }

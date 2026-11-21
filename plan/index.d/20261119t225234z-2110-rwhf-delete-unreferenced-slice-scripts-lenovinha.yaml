@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-19).
+packets:
+  - packet_id: shell-debt-batch-1-delete-unreferenced-top-level-scripts-in-the-lenovinha-slice
+    order: 2110-rwhf
+    status: in_progress
+    kind: debt
+    priority: p2
+    pickup_role: linux
+    capability_tags: [shell-to-lua, debt, scripts]
+    estimated_hours: 1
+    owned_files:
+      - scripts/with-tillandsias-process-cleanup.sh
+    title: |
+      Batch 1 of the lenovinha shell slice (lib*, litmus-* non-test, summarize-*, refusal-*, with-*, nix-*, hooks/*.sh): delete the scripts nothing executable references.
+    context: |
+      Sweep 2026-11-19 over the 45 slice scripts on linux-next: scripts/with-tillandsias-process-cleanup.sh has no caller outside plan/ ledgers and the portability floor lists (last touched 2026-06-20). scripts/nix-push-cache.sh also has no code caller but is named by the active openspec change nix-cache-build-lane, so it is left for the coordinator to rule on rather than deleted here.
+    exit_criteria:
+      - 'scripts/with-tillandsias-process-cleanup.sh is gone and git grep -F with-tillandsias-process-cleanup outside plan/ returns nothing (portability floor entries removed)'
+      - './build.sh --preflight on the merged work ref reports no refused: line'
+    verifiable_closure: |
+      litmus:smoke-lock-fd-isolation-shape is unrelated; scored by the tree: git grep -F with-tillandsias-process-cleanup outside plan/ returns nothing, and ./build.sh --preflight on the landed ref reports refused=0.
+    next_action: Delete, drop floor entries, preflight, push work/2110-rwhf, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-19, slice assigned by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-19T22:52:34Z"
+        host: lenovinha
+        summary: Batch 1 of the lenovinha shell slice — delete unreferenced scripts.

@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: a-warm-launch-does-not-reseed-a-current-mirror
+    event:
+      type: completed
+      ts: "2026-11-19T23:28:20Z"
+      agent_id: linux-calmecacpilli-claude-20261119t232820z
+      host: calmecacpilli
+      summary: |
+        Tech-debt triage (calmecacpilli, 2026-11-19). CLOSED. PR #892 merge 32f170f80f is an ancestor of origin/linux-next. test-git-mirror-warm-start-keeps-tracking-refs.lua -> ok:...:4 arms; criterion 1 was rescoped by the coordinator note 2026-11-03T17:30; the warm measurement is recorded (yoga 2026-11-03T17:00).
