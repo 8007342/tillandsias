@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story build-speed-lenovinha. Operator ruling via the coordinator (macuahuitl-fedora):
+# no feature lands until a land takes a few minutes (target under 5 min). Source:
+# build-speed-investigation.md on macuahuitl (excerpt relayed 2026-11-21).
+packets:
+  - packet_id: the-cycle-metrics-ledger-fold-moves-into-the-plan-binary-so-the-five-cycle-metrics-gate-fixtures-total-under-twenty-seconds
+    order: 2150-vf2v
+    status: ready
+    kind: chore
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, rust, plan-ledger, shell-to-rust]
+    estimated_hours: 6
+    title: |
+      scripts/cycle-metrics.sh (1,697 lines, 27 jq sites) re-folds the whole ledger (6,819 fragments, a 68,841-line index) on every call, which costs about 4.3 min across five gate fixtures. The fold moves into a tillandsias-plan subcommand, with output parity on the real ledger.
+    context: |
+      Measured (uncontended / contended seconds, #1237): test-token-instrument.sh (three full folds) 115.5/163.9; memo-hit-is-observable 61.1/82.9, which is mostly build.sh re-entry, so profile it before counting it; loop-status audit 34.0/46.2; two more steps 24.1 and 23.2, attributed by name only. On macneo, token-instrument timed out at 150 s.
+    exit_criteria:
+      - 'the five cycle-metrics gate fixtures total <= 20 s on Linux and on darwin'
+      - 'the plan-binary fold prints byte-identical output to the cycle-metrics.sh fold on the real ledger (a parity fixture)'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity fixture and the timed fixture total are written with the subcommand.'
+    next_action: 'Profile which cycle-metrics.sh functions the five fixtures spend time in, then port that fold first.'
+    provenance: coordinator build-speed queue item 1, 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [2150-3j97, 2150-6vpc]
+    events:
+      - {type: filed, ts: '2026-11-21T06:36:37Z', host: lenovinha, summary: filed p0 build-speed item 1 at the coordinator's direction}
+  - packet_id: a-gate-step-killed-by-its-own-timeout-with-no-assertion-output-is-rerun-once-and-logged-flaky-while-an-assertion-red-is-never-retried
+    order: 2150-3j97
+    status: ready
+    kind: chore
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, gate, flake]
+    estimated_hours: 3
+    title: |
+      A gate step that its own timeout killed (rc 124 or 137, no assertion output) is re-run once and logged flaky:<test>. An assertion red is never retried.
+    context: |
+      RC attempt 4 failed only on two step timeouts with empty stderr: release-gates-run-locally at 60 s, and the TERM/SIGKILL arm of no-fixture-writes-live-ledger-shape pending-capability at 120 s.
+    exit_criteria:
+      - 'a fixture step that sleeps past its timeout once is re-run, passes, and is logged flaky:<test>; a step that prints an assertion and exits 1 is not re-run; a step that times out twice stays red'
+    unscoreable: 'unpinnable-until-the-guard-exists: the three-arm fixture is the deliverable.'
+    next_action: 'Find where the gate step runner applies the step timeout and records rc.'
+    provenance: coordinator build-speed queue item 2, 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [2150-vf2v, 2150-6vpc]
+    events:
+      - {type: filed, ts: '2026-11-21T06:36:37Z', host: lenovinha, summary: filed p0 build-speed item 2 at the coordinator's direction}
+  - packet_id: run-litmus-test-runs-one-named-test-not-only-a-whole-spec
+    order: 2150-6vpc
+    status: ready
+    kind: chore
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, litmus, test-runner]
+    estimated_hours: 2
+    title: |
+      scripts/run-litmus-test.sh can run a single named test. Today a test name is refused with a hint to run its whole spec.
+    context: |
+      Measured 2026-11-21: run-litmus-test.sh project-bootstrap-readme-shape says no litmus tests matched, run its spec. Re-running one red test after a gate costs the whole spec.
+    exit_criteria:
+      - 'run-litmus-test.sh <test-name> runs exactly that test and prints its verdict; a spec name still runs the whole spec; an unknown name is still refused'
+    unscoreable: 'unpinnable-until-the-guard-exists: the runner fixture is the deliverable.'
+    next_action: 'Read how run-litmus-test.sh resolves a filter to specs.'
+    provenance: coordinator build-speed queue item 3, 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [2150-vf2v, 2150-3j97]
+    events:
+      - {type: filed, ts: '2026-11-21T06:36:37Z', host: lenovinha, summary: filed p1 build-speed item 3 at the coordinator's direction}
