@@ -3018,6 +3018,8 @@ _gs_pool() {
 # replay in filename order and the first refused step ends the gate, as in the
 # serial loop; a lane stops at its own first red, so any step it left unrun
 # sorts after that red and is never reported as passed.
+# SECOND REGIME (2156-glan): tlatoanis-macbook-air 2026-11-20 darwin ok:gate-step-lanes:jobs6:209
+# (bash 3.2 + BSD; 393 s, 2.4x darwin serial). Linux yoga: 844.8 s -> 234.3 s.
 _gs_lanes() {
     local _jobs="$1" _d _f _l _lanes _i=0 _n _rc _ln _t0=$SECONDS
     shift
