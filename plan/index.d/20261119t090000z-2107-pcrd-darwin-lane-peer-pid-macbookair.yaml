@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-19, at the coordinator's request (p1, blocks the macOS RC).
+packets:
+- packet_id: headless-lane-listener-pid-compiles-on-darwin-via-local-peerpid
+  order: 2107-pcrd
+  status: in_progress
+  kind: bug
+  priority: p1
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [rust, headless, macos]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 1
+  title: 'lane_listener_pid used nix sockopt::PeerCredentials (Linux-only), so tillandsias-headless with host-services did not compile on darwin'
+  context: >-
+    c42be7a1a added lane_listener_pid (2070-mtf9) reading SO_PEERCRED through nix PeerCredentials,
+    which nix defines only for Linux/Android. cargo check -p tillandsias-headless --features
+    tray,listen-vsock,host-services on darwin failed with E0425 twice, and every darwin preflight of a
+    change touching the crate refused at clippy. The peer lookup is now a per-OS peer_pid: Linux keeps
+    SO_PEERCRED, darwin reads LOCAL_PEERPID (nix LocalPeerPid), and any other unix answers None so the
+    lane report omits the pid. describe_lane_server's /proc exe read already degrades to no note on darwin.
+  exit_criteria:
+  - 'cargo clippy -p tillandsias-headless --features tray,listen-vsock,host-services --tests -D warnings is clean on darwin, and refused E0425 on the pre-change tree.'
+  - 'lane_server_who_tests pass on darwin: the listening socket names this process pid via LOCAL_PEERPID.'
+  verifiable_closure: 'On tlatoanis-macbook-air 2026-11-19: pre-change check gives 2x E0425; post-change clippy clean, lane_server_who_tests 2 passed.'
+  unscoreable: 'none.'
+  next_action: 'Land through the queue; then the $HOME-sandboxed fixture ports onto scratch.*.'
+  provenance: 'macbookair-macos 2026-11-19, found preflighting #1128 on darwin; coordinator (macuahuitl-fedora) asked for its own packet.'
+  events:
+  - {type: filed, ts: '2026-11-19T09:00:00Z', host: macbookair, summary: 'filed with its PR'}

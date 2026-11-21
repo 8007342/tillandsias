@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20: yoga's a-m share of 2123-ivi5 (p1), batch 7, the LAST of yoga's a-g share (batches 1-6: 2127-br92, 2130-trcy, 2131-4ibe, 2136-vsfy, 2137-it4m, 2138-chbu).
+packets:
+  - packet_id: yoga-converts-the-a-m-sigpipe-verdict-pipelines-batch-7-last-four-gate-run-files
+    order: 2139-surv
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, gate]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-deslop-sweep-health.sh
+      - scripts/test-groundtruth-corpus-declaration.sh
+      - scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
+      - scripts/check-dead-env-branches.sh
+    title: "Batch 7 (last) of yoga's a-m share of 2123-ivi5: the last four gate-run files decide no verdict through a pipeline SIGPIPE can falsify"
+    context: |
+      Split (coordinator 2026-11-20): first letter after a test-/check- prefix, else the basename; a-m is yoga, n-z is
+      lenovinha (2126-4cyq). Batch 7 is the last four a-g gate-run files of yoga's share (35 sites), none
+      touched by any open work ref (measured 2026-11-20).
+    exit_criteria:
+      - "scripts/census-sigpipe-verdict-pipelines.sh --list names none of the ten files, and the census total drops by their site count."
+      - "Each file stays green on this host or in the builder toolbox."
+    unscoreable: "the census tool is the measure"
+    provenance: "census at linux-next 2026-11-20; parent 2123-ivi5."
+    events:
+      - type: filed
+        ts: "2026-11-20T15:14:24Z"
+        host: yoga
+        summary: "filed and claimed, child of 2123-ivi5"

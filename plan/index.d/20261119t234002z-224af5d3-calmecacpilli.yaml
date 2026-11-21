@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-cli-lane-for-a-project-the-running-tray-serves-fails-raw-on-the-trays-mcp-socket-instead-of-attaching-or-refusing-by-name
+    field: next_action
+    value: |-
+      After 1779-sq9g: decide attach versus refuse (attach needs the tray's listener to serve a CLI-launched forge's lane; refuse is a preflight on the socket owner before any podman call), write the fixture red over a held listener, then fix.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: live tray: a CLI lane it serves is refused by name.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-cli-lane-for-a-project-the-running-tray-serves-fails-raw-on-the-trays-mcp-socket-instead-of-attaching-or-refusing-by-name
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

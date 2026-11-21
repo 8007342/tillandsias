@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-fresh-guest-vault-unseals-with-a-stale-host-keychain-share-and-dies-wrong-key
+    field: context
+    value: |-
+      Release smoke v56.11.17.2 (tray git 6f0f31e4e), macbookair, 2026-11-17, run_start 2026-11-17T05:26:06Z. Curl-install exit 0, cosign verified 1/1, scripts/e2e-step2-macos.sh destroyed ~/Library/Application Support/tillandsias (7.8G) and Caches (698M), --provision exit 0, fresh rootfs, --diagnose provisioned/rootfs_present/version all true. Then every guest boot (--exec-guest) shows tillandsias-vault "Exited (1)": vault-entrypoint "subsequent boot: using unseal key from secret" -> "FATAL: unseal request returned HTTP 400: wrong key" -> "cipher: message authentication failed". The host Keychain item vault-shamir-share-v1 (service tillandsias) was NOT rewritten by this provision: cdat 2026-11-01, mdat 2026-11-08 (metadata only read; the secret was not printed). So the fresh guest's Vault was initialised with a new share on its first boot and the host keeps delivering the old one (the 803-49re / keychain volume resync class). e2e-step2-macos.sh does not clear the share (reset_state.rs KEPT_CREDENTIALS keeps it by 1437-8c6p for SOFT resets), so either the macOS smoke's destroy step must clear it like Linux 900-z3kv does, or (the product bug) a guest whose Vault was freshly initialised must hand its new share back and the tray must replace the stale one, or a share that fails to unseal a fresh store must trigger re-init instead of a crash loop. An operator who deletes the VM directory hits this with no recovery path. The provision marker has no completion line (only provision-start 05:26:59Z and guest-upgrade ok 05:28:18Z).
+
+      [2026-11-17T05:45:17Z macbookair] [2026-11-17T05:45Z macbookair] CORRECTED DIAGNOSIS, measured (do not re-diagnose). The tray path HEALS; only CLI-only boots (--exec-guest, --cloud ... --opencode without the tray) lose the new share. Guest journal, every --exec-guest boot, verbatim sequence:
+        1. stale Keychain share delivered -> "[vault-entrypoint] subsequent boot: using unseal key from secret"
+        2. "[vault-entrypoint] FATAL: unseal request returned HTTP 400: wrong key"
+        3. "[tillandsias-vault] sign-in-again: the stored unseal share does not open the Vault store, so the store was wiped and Vault starts empty (1118-fqfk)"
+        4. "[vault-entrypoint] first boot: running vault operator init" -> "vault initialized (handover artifacts written to tmpfs)"
+        5. "[vault-entrypoint] vault unsealed (sealed=false)"
+        6. the CLI session runs its "before stop" exchange while that heal is still in flight, collects no handover, and stops the VM ("[vsock] vault bootstrap after DeliverCredentials failed: ... podman wait --condition=healthy"); the next boot repeats 1-6.
+      Published tray launched normally (open -a, 05:34:15Z): vault-shamir-share-v1 mdat moved to 2026-11-17T05:35:23Z (69 s, no prompt); after quitting it, --exec-guest showed "subsequent boot: using unseal key from secret" -> "vault unsealed (sealed=false)", tillandsias-vault Up. Coordinator re-scored v56.11.17.2 macOS as PASS with known defect 2094-53uw.
+      Fix (approved by the coordinator): (1) every tray site that writes a fresh rootfs (fetch_fedora_cloud_image: --provision, --provision --json, Start VM) deletes vault-shamir-share-v1 and vault-root-token-v1, keeping tillandsias-vm-uuid; (2) every CLI session's before-stop exchange first waits (bounded, 120 s) for phase Ready, which is held until Vault is unsealed (1751-ipuw), then collects.
+    ts: "2026-11-17T05:45:17Z"
+    host: macbookair
+
+events:
+  - packet_id: macos-fresh-guest-vault-unseals-with-a-stale-host-keychain-share-and-dies-wrong-key
+    event:
+      type: note
+      ts: "2026-11-17T05:45:17Z"
+      host: macbookair
+      summary: |-
+        measured correction; tray heals, CLI path loses the share

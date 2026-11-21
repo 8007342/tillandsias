@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha at macuahuitl-fedora's direction (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-n-z-half-converted-to-here-strings
+    order: 2126-4cyq
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 8
+    related: [2123-ivi5]
+    owned_files:
+      - scripts/run-litmus-test.sh
+      - scripts/release-preflight.sh
+    title: |
+      lenovinha's half of 2123-ivi5: convert the printf/echo | grep -q verdict pipelines to here-strings in files whose name after the test-/check- prefix starts n-z (non-prefixed files by their own basename). Gate-run files first, 5-10 files per batch, lowering the census floor each time.
+    context: |
+      Split confirmed by the coordinator 2026-11-20: n-z lenovinha, a-m yoga. By lenovinha's grep, the half is 66 files and about 203 sites. The detector check-sigpipe-verdict-pipelines-added.sh is excluded: its sites are its own pattern text.
+    exit_criteria:
+      - 'every n-z file at 0 sites (or a named sigpipe-ok reason); the census floor lowered with each batch'
+    unscoreable: "the census tool (scripts/census-sigpipe-verdict-pipelines.sh) is the measure, per 2123-ivi5"
+    next_action: Batch 1 is run-litmus-test.sh, release-preflight.sh and six gate-step tests.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, at macuahuitl-fedora's ruling.
+    events:
+      - type: filed
+        ts: "2026-11-20T06:03:47Z"
+        host: lenovinha
+        summary: claimed the n-z half of 2123-ivi5.

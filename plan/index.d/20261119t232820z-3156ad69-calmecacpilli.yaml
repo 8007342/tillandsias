@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-failed-browser-window-launch-writes-the-opencode-web-session-cookie-to-the-event-log-via-the-unredacted-data-url
+    field: next_action
+    value: |-
+      yoga: implemented locally (redact_data_url in tillandsias_podman::backend); push on work/2045-eqx3 after preflight.
+
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk and the test fns exist; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-podman redacts_data_urls_in_flag_and_bare_form invocation_line_redacts_a_data_url_before_any_truncation; cargo test -p tillandsias-headless opencode_web_window_argv_redacts_the_login_otp. Close on green with the merge sha.
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-failed-browser-window-launch-writes-the-opencode-web-session-cookie-to-the-event-log-via-the-unredacted-data-url
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

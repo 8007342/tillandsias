@@ -31,7 +31,7 @@ EOF
 
 # --- case 1: get returns the documented username/password pair --------------
 stub_vault "ghp_example_token"
-OUT="$(printf 'protocol=https\nhost=github.com\n\n' | "$HELPER" get 2>/dev/null)"
+OUT="$("$HELPER" get 2>/dev/null <<<$'protocol=https\nhost=github.com\n')"
 printf '%s' "$OUT" | grep -qx 'username=oauth2' || fail "case1: missing username=oauth2; got: $OUT"
 printf '%s' "$OUT" | grep -qx 'password=ghp_example_token' || fail "case1: missing password; got: $OUT"
 echo "case 1 ok: get returns username=oauth2 and the vault token"
@@ -40,7 +40,7 @@ echo "case 1 ok: get returns username=oauth2 and the vault token"
 # An empty password would make git attempt an anonymous push that fails with a
 # confusing 403 instead of naming the real cause.
 stub_vault ""
-if OUT2="$(printf 'protocol=https\nhost=github.com\n\n' | "$HELPER" get 2>/dev/null)"; then
+if OUT2="$("$HELPER" get 2>/dev/null <<<$'protocol=https\nhost=github.com\n')"; then
     fail "case2: helper must exit non-zero when no token is available"
 fi
 printf '%s' "${OUT2:-}" | grep -q 'password=' \
@@ -49,8 +49,8 @@ echo "case 2 ok: absent token fails loud with no empty password"
 
 # --- case 3: store/erase are no-ops (Vault owns the credential) -------------
 stub_vault "ghp_example_token"
-printf 'protocol=https\n\n' | "$HELPER" store >/dev/null 2>&1 || fail "case3: store must be a no-op"
-printf 'protocol=https\n\n' | "$HELPER" erase >/dev/null 2>&1 || fail "case3: erase must be a no-op"
+"$HELPER" store >/dev/null 2>&1 <<<$'protocol=https\n' || fail "case3: store must be a no-op"
+"$HELPER" erase >/dev/null 2>&1 <<<$'protocol=https\n' || fail "case3: erase must be a no-op"
 echo "case 3 ok: store/erase are no-ops, nothing cached by git"
 
 # --- case 4: the token never reaches argv ----------------------------------

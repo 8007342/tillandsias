@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: land-queue-fixture-arm-9-owns-its-stdin-so-a-gate-started-with-an-open-stdin-does-not-hang-it
+    field: status
+    value: completed
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: land-queue-fixture-arm-9-owns-its-stdin-so-a-gate-started-with-an-open-stdin-does-not-hang-it
+    event:
+      type: completed
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        status 'completed' with evidence_refs: 156a717b42 ok:land-queue:45/45; sabotage (fd-3 read reverted to stdin) FAILS ARM 9 under open and closed stdin
+  - packet_id: land-queue-fixture-arm-9-owns-its-stdin-so-a-gate-started-with-an-open-stdin-does-not-hang-it
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

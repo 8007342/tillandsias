@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction (found from #1187's eviction).
+packets:
+  - packet_id: the-sigpipe-census-also-counts-a-writer-piped-into-a-reader-that-may-not-read-stdin-under-pipefail
+    order: 2141-2m3f
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, census, gate]
+    estimated_hours: 3
+    owned_files:
+      - scripts/check-sigpipe-verdict-pipelines-added.sh
+    title: "The SIGPIPE census and decider also count `printf ... | CMD` under pipefail where CMD may exit without reading stdin"
+    context: |
+      #1187 was evicted by scripts/test-git-credential-helper.sh:53,
+      `printf 'protocol=https\n\n' | "$HELPER" erase >/dev/null 2>&1 || fail ...`: the credential helper's erase and store
+      exit WITHOUT reading stdin, so printf takes EPIPE and, under set -uo pipefail, the line fails while the helper did
+      exactly what it should. scripts/census-sigpipe-verdict-pipelines.sh (which drives
+      check-sigpipe-verdict-pipelines-added.sh) recognises only early-exiting CONSUMERS (grep -q, grep -m, head), so this
+      shape is invisible to it; 2123-ivi5's sweep therefore cannot have reached it. Fixed at that one file on #1187 (daac3a09c).
+    exit_criteria:
+      - "The decider counts `printf|echo ... | CMD` in a pipefail file where CMD is not a known full reader (cat, grep without -q/-m, awk, sed, sort, wc, tee) and the pipeline's status is decided (if/while/&&/||). Pre-fix: FAILS (test-git-credential-helper.sh:53 at its pre-fix bytes is not flagged)."
+      - "A here-string at the same site is not flagged, and a writer into a full reader (printf ... | sort) is not flagged."
+      - "The census number after widening is published, and the newly counted sites are queued as batches against 2123-ivi5's floor."
+    unscoreable: "the decider's own fixture lands with the change (1136-n8sh)"
+    provenance: "#1187 eviction 2026-11-20 relayed by the coordinator; yoga fix daac3a09c."
+    events:
+      - type: filed
+        ts: "2026-11-20T16:51:49Z"
+        host: yoga
+        summary: "filed at the coordinator's direction"
