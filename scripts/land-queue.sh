@@ -591,7 +591,7 @@ try_batch() {
     fi
     # carried obligations over every member's commits
     if [ -f methodology/convergence.yaml ]; then
-        out="$(mktemp)"; err="$(mktemp)"
+        out="$(mktemp "${TMPDIR:-/tmp}/land-queue-train-carried.XXXXXX")"; err="$(mktemp "${TMPDIR:-/tmp}/land-queue-train-carried.XXXXXX")"
         env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_CARRIED_BASE="$base" TILLANDSIAS_CARRIED_HEAD="$union" \
             "$PLAN" script run "$_SELF_DIR/lua/check-carried-obligations.lua" -- --landing \
             < /dev/null > "$out" 2> "$err"; rc=$?
