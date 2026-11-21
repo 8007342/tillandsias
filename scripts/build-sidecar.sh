@@ -45,6 +45,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# ORDER 2118-ywk7 (priority:build-speed): BOUND THE BUILD AT THIS ROOT. A
+# scratch project that copies only scripts/ (every litmus-runner fixture) has
+# no sidecar crate; cargo then walked UP to the enclosing checkout's workspace
+# and spent ~20 s there (measured under target/plan-scratch; 0.5 s under /tmp,
+# where nothing encloses it). Refuse at once, by name, instead.
+if [ ! -f "$ROOT/crates/tillandsias-router-sidecar/Cargo.toml" ]; then
+    echo "could-not-run:build-sidecar:no-sidecar-crate:$ROOT — this tree has no crates/tillandsias-router-sidecar, so there is nothing to build here (2118-ywk7)" >&2
+    exit 3
+fi
 # TARGET IS DERIVED FROM THE MACHINE, no longer pinned (order 723-ji4v).
 # The sidecar's only consumers run inside the LINUX GUEST, whose CPU is the
 # host's: podman/WSL2 guests are native, and the Apple-Silicon VZ guest is
