@@ -12,7 +12,7 @@ STEP_SCRIPT="scripts/verify-version-monotonic.sh"
 STEP_ERROR="VERSION is not monotonically >= the last release (1087-h2z9)"
 STEP_OK="Version monotonicity passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/hooks/pre-push-local-gate.sh scripts/verify-version-monotonic.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/hooks/pre-push-local-gate.sh scripts/verify-version-monotonic.sh"

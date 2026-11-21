@@ -22,7 +22,7 @@ STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-divergence-declared:18"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
 STEP_LANES="timing"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/gate-divergence-declared.txt scripts/gate-steps.d/** scripts/local-ci.sh scripts/test-gate-divergence-is-declared.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-divergence-declared.txt scripts/gate-steps.d/** scripts/local-ci.sh scripts/test-gate-divergence-is-declared.sh"

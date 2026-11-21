@@ -8,7 +8,7 @@ STEP_SCRIPT="scripts/test-land-merges-trunk.sh"
 STEP_ERROR="land-on-platform-branch.sh does not merge trunk on a platform branch, or retries a server-side refusal (1064-r8fv) — see the verdict line above"
 STEP_OK="Landing tool trunk-merge check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:land-merges-trunk:8"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/hooks/pre-push-linux-next-merged.sh scripts/land-on-platform-branch.sh scripts/test-land-merges-trunk.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/hooks/pre-push-linux-next-merged.sh scripts/land-on-platform-branch.sh scripts/test-land-merges-trunk.sh"

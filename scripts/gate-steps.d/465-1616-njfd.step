@@ -12,7 +12,7 @@ STEP_LUA="scripts/lua/test-preflight-regime-budget.lua"
 STEP_ERROR="the front door's per-regime budget no longer does what its fixture constructs (1616-njfd) — see the FAIL lines above"
 STEP_OK="Front-door per-regime budget fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-10-12 darwin ok:preflight-regime-budget:7 arms"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/lua/test-preflight-regime-budget.lua scripts/test-preflight-front-door.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-preflight-regime-budget.lua scripts/test-preflight-front-door.sh"

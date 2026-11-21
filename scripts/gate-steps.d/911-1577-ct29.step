@@ -12,7 +12,7 @@ STEP_SECOND_REGIME="yolanda 2026-10-31 msys ok:forge-constraints-cheatsheet"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
 STEP_LANES="port"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="cheatsheets/INDEX.md cheatsheets/runtime/forge-constraints.md scripts/lua/check-forge-constraints-cheatsheet.lua scripts/regenerate-cheatsheet-index.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="cheatsheets/INDEX.md cheatsheets/runtime/forge-constraints.md scripts/lua/check-forge-constraints-cheatsheet.lua scripts/regenerate-cheatsheet-index.sh"

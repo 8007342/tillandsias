@@ -17,7 +17,7 @@ STEP_SCRIPT="scripts/test-silverblue-update-skew-probe.sh"
 STEP_ERROR="the Silverblue update-skew probe regressed (1165-g6wx) — it may now report skew for any akmods host with a pending update (pending is not blocked), read an unreadable journal as no-skew, or contain a call that can mutate a deployment; see the verdict line above"
 STEP_OK="Silverblue update-skew probe check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   the probe contains no deployment-mutating rpm-ostree call"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/probe-silverblue-update-skew.sh scripts/test-silverblue-update-skew-probe.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/probe-silverblue-update-skew.sh scripts/test-silverblue-update-skew-probe.sh"

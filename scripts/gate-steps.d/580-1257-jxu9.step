@@ -15,7 +15,7 @@ STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin PASS: expert-accurac
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="binds a fixed local port"
 STEP_LANES="port"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/derive-host-identity.sh scripts/record-expert-accuracy.sh scripts/test-expert-accuracy-provenance.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/derive-host-identity.sh scripts/record-expert-accuracy.sh scripts/test-expert-accuracy-provenance.sh"

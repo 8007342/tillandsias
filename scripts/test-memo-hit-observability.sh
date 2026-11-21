@@ -22,6 +22,17 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"; cd "$ROOT"
 W="$(mktemp -d "${TMPDIR:-/tmp}/memo-hit-obs.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
+# ORDER 2150-vf2v (priority:build-speed): pin EVERY metrics log cycle-metrics.sh
+# reads to an empty scratch file. Defaulted, they are this host's real
+# .cache/metrics logs; a 95 MB usage log made this fixture 118 s instead of 3 s
+# on macuahuitl. scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua refuses a
+# cycle-metrics fixture that leaves one defaulted.
+for _pin in TILLANDSIAS_EXPERT_USAGE_LOG TILLANDSIAS_CYCLE_FLOW_LOG TILLANDSIAS_EXPERT_HEALTH_LOG; do
+    : > "$W/pinned-$_pin.jsonl"; export "$_pin=$W/pinned-$_pin.jsonl"
+done
+# 2150-vf2v: no arm here reads the expert_accuracy: line, and the groundtruth
+# grader behind it costs ~7.5 s of every report (10.1 s -> 2.6 s); 1105-h8vr's knob.
+export TILLANDSIAS_CYCLE_METRICS_SKIP_GRADE=1
 pass=0; fail=0
 ok()  { echo "ok   $1"; pass=$((pass+1)); }
 bad() { echo "FAIL $1" >&2; fail=$((fail+1)); }

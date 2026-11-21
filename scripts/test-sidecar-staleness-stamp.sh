@@ -37,6 +37,7 @@ mkdir -p "$R/crates/tillandsias-router-sidecar/src" \
          "$R/images/router" \
          "$SANDBOX/bin"
 printf 'fn main() {}\n'        > "$R/crates/tillandsias-router-sidecar/src/main.rs"
+printf '[package]\nname = "tillandsias-router-sidecar"\nversion = "0.0.0"\n' > "$R/crates/tillandsias-router-sidecar/Cargo.toml"  # build-sidecar.sh refuses a tree without it (2118-ywk7)
 printf 'pub fn otp() {}\n'     > "$R/crates/tillandsias-otp/src/lib.rs"
 printf 'pub fn wire() {}\n'    > "$R/crates/tillandsias-control-wire/src/lib.rs"
 printf '[workspace]\n'         > "$R/Cargo.toml"

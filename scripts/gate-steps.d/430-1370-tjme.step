@@ -4,13 +4,13 @@
 # claim-event ts, so the loser of a claim race is refused and told who won,
 # instead of reading `next <role> | grep -c <order>` -> 0 like the winner.
 #
-# STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
+# STEP_LUA is a LITERAL path on purpose (1063-nraf); ported from the .sh by 2165-uu9j.
 STEP_DESC="Checking claim confirmation names the earliest claimant (1370-tjme)"
-STEP_SCRIPT="scripts/test-claim-confirmation-names-the-earliest-claimant.sh"
+STEP_LUA="scripts/lua/test-claim-confirmation-names-the-earliest-claimant.lua"
 STEP_ERROR="claim confirmation cannot tell the loser of a claim race from the winner (1370-tjme)"
 STEP_OK="Claim confirmation names the earliest claimant"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-25 darwin PASS:claim-confirmation-earliest-claimant:7/7"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="plan/index.d/** plan/index.yaml scripts/check-claim-confirmed.sh scripts/plan-binary-probe.sh scripts/test-claim-confirmation-names-the-earliest-claimant.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/lua/check-claim-confirmed.lua scripts/lua/test-claim-confirmation-names-the-earliest-claimant.lua"

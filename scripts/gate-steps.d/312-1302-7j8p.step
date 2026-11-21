@@ -18,7 +18,7 @@ STEP_SCRIPT="scripts/check-gate-step-regimes.sh"
 STEP_ERROR="a gate step carries no recorded second-regime run (1302-7j8p) — it would enter the gate on one regime's word, which reddened both macOS gates twice in one day on 2026-09-20; add STEP_SECOND_REGIME to the named step, and a named skip counts"
 STEP_OK="every gate step carries a second-regime record"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:gate-step-regimes-fixture:4/4"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/check-gate-step-regimes.sh scripts/gate-steps.d/**"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/check-gate-step-regimes.sh scripts/gate-steps.d/**"

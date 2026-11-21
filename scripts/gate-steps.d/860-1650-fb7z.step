@@ -18,7 +18,7 @@ STEP_SECOND_REGIME="yolanda-windows 2026-10-13 msys ok:door-index-lock-sweep:8 a
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="reads host state"
 STEP_LANES="host"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/lua/test-door-index-lock-sweep.lua"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-door-index-lock-sweep.lua"

@@ -12,7 +12,7 @@ STEP_SCRIPT="scripts/test-gate-step-skip-exit.sh"
 STEP_ERROR="the could-not-run/content-failure distinction has regressed: a tooling gap may now read as a content verdict, or a real failure as a skip (1137-dzzu) — see the verdict line above"
 STEP_OK="Gate-step skip-exit contract passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="scripts/gate-steps.d/165-1087-h2z9.step scripts/test-gate-step-skip-exit.sh"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-steps.d/165-1087-h2z9.step scripts/test-gate-step-skip-exit.sh"

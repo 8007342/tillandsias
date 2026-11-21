@@ -14,7 +14,7 @@ STEP_LUA="scripts/lua/check-markdown-distillation.lua"
 STEP_ERROR="a markdown distillation path is broken (1087-h2z9)"
 STEP_OK="Markdown distillation passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok: markdown distillation paths"
-# ORDER 2157-ginp: the paths this step reads, RECORDED ONLY (not yet used to
-# skip it; that waits on an operator ruling). First cut: the step's own script
-# plus every repo path it names literally.
-STEP_INPUTS="images/default/cheatsheets/** images/default/config-overlay/mcp/forge-agent-guidance.md images/default/config-overlay/opencode/** images/default/startup-context-addendum.md methodology/markdown-distillation.yaml methodology/specs/** plan/archive/** scripts/local-ci.sh scripts/lua/check-markdown-distillation.lua scripts/lua/check-research-records.lua"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/default/cheatsheets/** images/default/config-overlay/mcp/forge-agent-guidance.md images/default/config-overlay/opencode/** images/default/startup-context-addendum.md methodology/markdown-distillation.yaml methodology/specs/** plan/archive/** scripts/local-ci.sh scripts/lua/check-markdown-distillation.lua scripts/lua/check-research-records.lua"
