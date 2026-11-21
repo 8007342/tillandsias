@@ -46,7 +46,7 @@ EOF
 # 1. A sibling holding the packet must REFUSE, naming the branch.
 mkstub "$W/hold" in_progress
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/hold/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^claimed-elsewhere:SOME-PKT:'; then
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:' <<<"$out"; then
     ok "a sibling branch holding the packet is reported, exit 1"
 else
     bad "a sibling holding the packet must be reported" "rc=$rc out=[$out]"
@@ -56,7 +56,7 @@ fi
 #    would be useless in the other direction: no host could ever claim anything.
 mkstub "$W/free" ready
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/free/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:cross-branch-claims:'; then
+if [ "$rc" -eq 0 ] && grep -q '^ok:cross-branch-claims:' <<<"$out"; then
     ok "a packet nobody holds is not refused, exit 0 — arm 1 is not refusing everything"
 else
     bad "an unheld packet must pass" "rc=$rc out=[$out]"
@@ -90,7 +90,7 @@ if [ -z "$_node" ]; then
 else
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
         TILLANDSIAS_XBRANCH_CLAIM_HOST="$_node" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^own-claim-reflected:SOME-PKT:'; then
+if [ "$rc" -eq 0 ] && grep -q '^own-claim-reflected:SOME-PKT:' <<<"$out"; then
     ok "a claim held only under THIS host's label is reported as the reader's own, exit 0"
 else
     bad "the reader's own reflected claim must not be reported as a sibling's" "rc=$rc out=[$out]"
@@ -104,7 +104,7 @@ fi
 #     is the one 814-iyu7 measures in duplicated hours.
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/mine/tillandsias-plan" \
         TILLANDSIAS_XBRANCH_CLAIM_HOST="some-other-host" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 1 ] && printf '%s' "$out" | grep -q '^claimed-elsewhere:SOME-PKT:'; then
+if [ "$rc" -eq 1 ] && grep -q '^claimed-elsewhere:SOME-PKT:' <<<"$out"; then
     ok "NC: a claim under another host's label still refuses, exit 1"
 else
     bad "another host's claim must still refuse" "rc=$rc out=[$out]"
@@ -174,7 +174,7 @@ mkdir -p "$W/noroot/scripts"
 cp "$CHECK" "$W/noroot/scripts/"
 cp "$ROOT/scripts/plan-binary-probe.sh" "$W/noroot/scripts/"
 out="$(env -i PATH=/usr/bin:/bin HOME="$W" bash "$W/noroot/scripts/check-claims-across-branches.sh" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '^blocked:no-plan-binary'; then
+if [ "$rc" -eq 2 ] && grep -q '^blocked:no-plan-binary' <<<"$out"; then
     ok "no plan binary BLOCKS rather than reporting the packet unclaimed"
 else
     bad "no plan binary must block, not pass" "rc=$rc out=[$out]"
@@ -212,7 +212,7 @@ mkstub_absent() { # $1=dir
 # "safe to claim" and meant only "no sibling holds it in_progress".
 mkstub_absent "$W/none"
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/none/tillandsias-plan" bash "$CHECK" NO-SUCH-PACKET-1091 --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 2 ] && printf '%s' "$out" | grep -q '^unknown-packet:'; then
+if [ "$rc" -eq 2 ] && grep -q '^unknown-packet:' <<<"$out"; then
     ok "a packet no branch and no local fold knows is reported unknown, not ok"
 else
     bad "an unknown packet must not report ok" "rc=$rc out=[$out]"
@@ -222,7 +222,7 @@ fi
 # everything, arm 5 would pass while the tool refused every real packet too.
 mkstub "$W/real" ready
 out="$(cd "$ROOT" && TILLANDSIAS_PLAN_BIN="$W/real/tillandsias-plan" bash "$CHECK" SOME-PKT --no-fetch 2>/dev/null)"; rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$out" | grep -q '^ok:cross-branch-claims:'; then
+if [ "$rc" -eq 0 ] && grep -q '^ok:cross-branch-claims:' <<<"$out"; then
     ok "a packet the fold knows still passes — arm 5 is not refusing everything"
 else
     bad "a known packet must still pass" "rc=$rc out=[$out]"

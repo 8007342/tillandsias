@@ -10,11 +10,9 @@ scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
-scripts/check-cheatsheet-sources.sh
 scripts/check-cheatsheet-tiers.sh
 scripts/check-claim-confirmed.sh
 scripts/check-claims-across-branches.sh
-scripts/check-committable-branch.sh
 scripts/check-containers-conf-proxy-env.sh
 scripts/check-credential-channel.sh
 scripts/check-cycle-flow-log-fresh.sh
@@ -53,7 +51,6 @@ scripts/check-no-competing-gate.sh
 scripts/check-no-fixture-writes-live-ledger.sh
 scripts/check-no-tracked-binaries.sh
 scripts/check-opsx-generated-dirt.sh
-scripts/check-packet-tier-declared.sh
 scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
@@ -78,7 +75,6 @@ scripts/check-stranded-in-progress.sh
 scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
-scripts/check-tray-string-corpus-drift.sh
 scripts/check-unrunnable-platform-arms.sh
 scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
@@ -91,7 +87,6 @@ scripts/test-agent-identity.sh
 scripts/test-all-fragments-intact.sh
 scripts/test-append-event-archived-refusal.sh
 scripts/test-append-vs-origin-fold.sh
-scripts/test-archiver-check-memo.sh
 scripts/test-archiver-concurrent-check.sh
 scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
@@ -108,11 +103,8 @@ scripts/test-brew-shim-tier2-warning.sh
 scripts/test-bsd-count-shapes.sh
 scripts/test-build-image-installed-version-alias.sh
 scripts/test-build-sh-ci-full-install-prep.sh
-scripts/test-build-sh-darwin-install-refusal.sh
-scripts/test-build-sh-darwin-tool-remediation.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-build-version-label.sh
-scripts/test-cache-semantics.sh
 scripts/test-capabilities-envelope-names-its-source.sh
 scripts/test-capability-manifest-guard.sh
 scripts/test-capability-routing.sh
@@ -132,7 +124,6 @@ scripts/test-check-engine-cpu-dispatch.sh
 scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-macos-stock-binaries.sh
 scripts/test-check-opsx-generated-dirt.sh
-scripts/test-check-packet-tier-declared.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
 scripts/test-claim-confirmation-names-the-earliest-claimant.sh
@@ -250,7 +241,6 @@ scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp-movers-batching-is-equivalent.sh
 scripts/test-gate-stamp-must-be-earned.sh
 scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp-portable-digest.sh
@@ -307,7 +297,6 @@ scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-hooks-refuses-global-hookspath.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-macos-swap-is-interruptible.sh
-scripts/test-install-macos-tray-stop.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
 scripts/test-installer-reports-wsl-guest-shape.sh
@@ -366,7 +355,6 @@ scripts/test-litmus-structured-assert.sh
 scripts/test-litmus-terminal-verdict.sh
 scripts/test-litmus-test-selector.sh
 scripts/test-litmus-tracked-file-kill-safety.sh
-scripts/test-locale-coverage.sh
 scripts/test-long-running-view-refuses-at-completion.sh
 scripts/test-loop-status-append-input.sh
 scripts/test-loop-status-audit-reads-current-emitter.sh
@@ -578,5 +566,4 @@ scripts/test-wsl2-builder-shell-options.sh
 scripts/test-wt-reparse-scan.sh
 scripts/test-yaml-reader-availability.sh
 scripts/verify-closure.sh
-scripts/verify-image-usable.sh
 scripts/verify-version-monotonic.sh

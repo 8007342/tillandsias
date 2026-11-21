@@ -98,6 +98,11 @@ local SURFACES = {
     -- them again would have double-run them).
     "scripts/test-jq-multiline-capture.sh",
     "scripts/test-wt-reparse-scan.sh",
+    -- 2031-zq68: lua/verify-image-usable.lua is run by build-image.sh and
+    -- with-nix-builder.sh at runtime, and in the gate by this fixture (bound
+    -- as gate step 105-1073-dqtx); the .sh it replaced was outside the
+    -- population, so the port made it countable.
+    "scripts/test-image-usability-check.sh",
 }
 
 local function ends_with(s, suffix) return suffix == "" or s:sub(-#suffix) == suffix end

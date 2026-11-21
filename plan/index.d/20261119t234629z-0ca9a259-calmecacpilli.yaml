@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: once-check-cheatsheet-refs-is-lua-decide-whether-check-ripgrep-available-and-the-rg-row-of-check-host-tools-spec-are-still-a-host-gate-prerequisite
+    field: next_action
+    value: |-
+      After 1570-k4fx lands, re-run the rg invocation census; move test-forge-config-trust-cross-platform-parity.sh off rg; then drop the SPEC row and check-ripgrep-available.sh (itself a decider, so its removal also lowers the shell floor).
+
+
+      [2026-11-19T23:46:29Z calmecacpilli] STALE PATH (triage 2026-11-19): scripts/check-ripgrep-available.sh is now scripts/lua/check-ripgrep-available.lua (41ceb3e7e). Re-read the criterion against the new path before claiming.
+    ts: "2026-11-19T23:46:29Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: once-check-cheatsheet-refs-is-lua-decide-whether-check-ripgrep-available-and-the-rg-row-of-check-host-tools-spec-are-still-a-host-gate-prerequisite
+    event:
+      type: note
+      ts: "2026-11-19T23:46:29Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli): cited file deleted on trunk

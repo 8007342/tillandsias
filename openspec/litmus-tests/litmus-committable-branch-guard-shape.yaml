@@ -15,7 +15,7 @@ name: litmus:committable-branch-guard-shape
 spec: meta-orchestration
 phase: pre-build
 description: >
-  Pin scripts/check-committable-branch.sh's committable_branch_verdict probe:
+  Pin scripts/lua/check-committable-branch.lua's verdict probe:
   the standalone verdict mode, the falsifiable verdict grammar
   ^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo|no-git-identity))$,
   the refuse-main and fail-closed detached-HEAD branches, and the
@@ -25,19 +25,19 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/check-committable-branch.sh
+  - workspace contains scripts/lua/check-committable-branch.lua
   - workspace contains skills/meta-orchestration/SKILL.md
   - workspace contains skills/advance-work-from-plan/SKILL.md
   - shell utilities (grep, bash, git, mktemp) are available in PATH
 
 critical_path:
   - step: "probe defines committable_branch_verdict, parses, and is executable"
-    command: "bash -n scripts/check-committable-branch.sh && grep -q 'committable_branch_verdict()' scripts/check-committable-branch.sh && test -x scripts/check-committable-branch.sh && echo 'ok: probe-defined'"
+    command: "test -s scripts/lua/check-committable-branch.lua && grep -q 'verdict.emit(\"ok:branch-' scripts/lua/check-committable-branch.lua && test ! -e scripts/check-committable-branch.sh && echo 'ok: probe-defined'"
     timeout_ms: 3000
     expected_behavior: "ok: probe-defined"
 
   - step: "a scratch `git init -b main` checkout is refused with the deterministic on-main verdict and a non-zero exit"
-    command: "d=$(mktemp -d); git init -q -b main \"$d/repo\"; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && bash check-committable-branch.sh ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:committable-cycle-on-main' ] && echo 'ok: main-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b main \"$d/repo\"; git -C \"$d/repo\" config user.name litmus-fixture; git -C \"$d/repo\" config user.email litmus-fixture@invalid; out=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:committable-cycle-on-main' ] && echo 'ok: main-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: main-fails-closed"
 
@@ -52,7 +52,7 @@ critical_path:
     # --global". The fixture punished compliance and was invisible to everyone
     # else (order 1109-t8kw; found on esmeraldinha, a host with no global
     # identity, then reproduced deliberately).
-    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/repo\"; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && bash check-committable-branch.sh ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:branch-linux-next' ] && echo 'ok: branch-passes-open' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b linux-next \"$d/repo\"; git -C \"$d/repo\" config user.name litmus-fixture; git -C \"$d/repo\" config user.email litmus-fixture@invalid; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; out=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:branch-linux-next' ] && echo 'ok: branch-passes-open' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: branch-passes-open"
 
@@ -70,16 +70,16 @@ critical_path:
     # (GIT_AUTHOR_*/GIT_COMMITTER_*, then EMAIL), and a forge exports them, so
     # blanking the config files alone left an identity and this step read
     # ok:branch-linux-next in every forge. env -u removes them for the probe only.
-    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/repo\"; git -C \"$d/repo\" config user.useConfigOnly true; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL -u EMAIL GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null bash check-committable-branch.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:no-git-identity' ] && echo 'ok: no-identity-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b linux-next \"$d/repo\"; git -C \"$d/repo\" config user.useConfigOnly true; out=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT HOME=\"$d\" \"$PB\" script run \"$L\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:no-git-identity' ] && echo 'ok: no-identity-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: no-identity-fails-closed"
   - step: "detached HEAD fails closed with its own grammar token (a committable cycle needs a branch to push)"
-    command: "d=$(mktemp -d); git init -q -b scratch \"$d/repo\"; git -C \"$d/repo\" -c user.email=litmus@tillandsias -c user.name=litmus commit -q --allow-empty -m fixture; git -C \"$d/repo\" checkout -q --detach; cp scripts/check-committable-branch.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && bash check-committable-branch.sh ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:detached-head' ] && echo 'ok: detached-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b scratch \"$d/repo\"; git -C \"$d/repo\" config user.name litmus-fixture; git -C \"$d/repo\" config user.email litmus-fixture@invalid; git -C \"$d/repo\" -c user.email=litmus@tillandsias -c user.name=litmus commit -q --allow-empty -m fixture; git -C \"$d/repo\" checkout -q --detach; out=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:detached-head' ] && echo 'ok: detached-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: detached-fails-closed"
 
   - step: "the probe emits exactly one well-formed verdict line"
-    command: "d=$(mktemp -d); git init -q -b main \"$d/repo\"; cp scripts/check-committable-branch.sh \"$d/repo/\"; n=$( cd \"$d/repo\" && bash check-committable-branch.sh | grep -cE '^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo|no-git-identity))$' ); rm -rf \"$d\"; [ \"$n\" = \"1\" ] && echo \"ok: well-formed verdict ($n line)\" || { echo \"FAIL: $n lines\"; exit 1; }"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b main \"$d/repo\"; git -C \"$d/repo\" config user.name litmus-fixture; git -C \"$d/repo\" config user.email litmus-fixture@invalid; n=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" | grep -cE '^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo|no-git-identity))$' ); rm -rf \"$d\"; [ \"$n\" = \"1\" ] && echo \"ok: well-formed verdict ($n line)\" || { echo \"FAIL: $n lines\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: well-formed verdict"
 
@@ -88,22 +88,22 @@ critical_path:
   # and detached-head, the remedy is EXECUTED (git switch -c <topic>) and must
   # clear the refusal: an affordance that cannot clear its refusal is a lie.
   - step: "on main, the refusal says why and names git switch -c, and running it clears the refusal"
-    command: "d=$(mktemp -d); git init -q -b main \"$d/repo\"; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; cp scripts/check-committable-branch.sh \"$d/repo/\"; err=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>&1 >/dev/null ); git -C \"$d/repo\" switch -q -c topic-1247; out=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>/dev/null ); rm -rf \"$d\"; case \"$err\" in *'why: '*'remedy: '*'git switch -c'*) ;; *) echo \"FAIL: on-main carries no why/remedy naming git switch -c: $err\"; exit 1 ;; esac; [ \"$out\" = 'ok:branch-topic-1247' ] && echo 'ok: main-remedy-clears' || { echo \"FAIL: the on-main remedy did not clear it: $out\"; exit 1; }"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b main \"$d/repo\"; git -C \"$d/repo\" config user.name litmus-fixture; git -C \"$d/repo\" config user.email litmus-fixture@invalid; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; err=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" 2>&1 >/dev/null ); git -C \"$d/repo\" switch -q -c topic-1247; out=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" 2>/dev/null ); rm -rf \"$d\"; case \"$err\" in *'why: '*'remedy: '*'git switch -c'*) ;; *) echo \"FAIL: on-main carries no why/remedy naming git switch -c: $err\"; exit 1 ;; esac; [ \"$out\" = 'ok:branch-topic-1247' ] && echo 'ok: main-remedy-clears' || { echo \"FAIL: the on-main remedy did not clear it: $out\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: main-remedy-clears"
 
   - step: "on a detached HEAD, the refusal says why and names git switch -c, and running it clears the refusal"
-    command: "d=$(mktemp -d); git init -q -b scratch \"$d/repo\"; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; git -C \"$d/repo\" commit -q --allow-empty -m fixture; git -C \"$d/repo\" checkout -q --detach; cp scripts/check-committable-branch.sh \"$d/repo/\"; err=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>&1 >/dev/null ); git -C \"$d/repo\" switch -q -c topic-1247; out=$( cd \"$d/repo\" && bash check-committable-branch.sh 2>/dev/null ); rm -rf \"$d\"; case \"$err\" in *'why: '*'remedy: '*'git switch -c'*) ;; *) echo \"FAIL: detached-head carries no why/remedy naming git switch -c: $err\"; exit 1 ;; esac; [ \"$out\" = 'ok:branch-topic-1247' ] && echo 'ok: detached-remedy-clears' || { echo \"FAIL: the detached-head remedy did not clear it: $out\"; exit 1; }"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); git init -q -b scratch \"$d/repo\"; git -C \"$d/repo\" config user.name litmus-fixture; git -C \"$d/repo\" config user.email litmus-fixture@invalid; git -C \"$d/repo\" config user.email litmus@tillandsias; git -C \"$d/repo\" config user.name litmus; git -C \"$d/repo\" commit -q --allow-empty -m fixture; git -C \"$d/repo\" checkout -q --detach; err=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" 2>&1 >/dev/null ); git -C \"$d/repo\" switch -q -c topic-1247; out=$( cd \"$d/repo\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" 2>/dev/null ); rm -rf \"$d\"; case \"$err\" in *'why: '*'remedy: '*'git switch -c'*) ;; *) echo \"FAIL: detached-head carries no why/remedy naming git switch -c: $err\"; exit 1 ;; esac; [ \"$out\" = 'ok:branch-topic-1247' ] && echo 'ok: detached-remedy-clears' || { echo \"FAIL: the detached-head remedy did not clear it: $out\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: detached-remedy-clears"
 
   - step: "outside a git checkout, the refusal says why and what to do"
-    command: "d=$(mktemp -d); cp scripts/check-committable-branch.sh \"$d/\"; out=$( cd \"$d\" && env GIT_CEILING_DIRECTORIES=\"$d\" bash check-committable-branch.sh 2>/dev/null ); err=$( cd \"$d\" && env GIT_CEILING_DIRECTORIES=\"$d\" bash check-committable-branch.sh 2>&1 >/dev/null ); rm -rf \"$d\"; [ \"$out\" = 'blocked:not-a-git-repo' ] || { echo \"FAIL: premise: $out\"; exit 1; }; case \"$err\" in *'why: '*'remedy: '*) echo 'ok: not-a-repo-affords' ;; *) echo \"FAIL: not-a-git-repo carries no why/remedy: $err\"; exit 1 ;; esac"
+    command: "PB=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; case \"$PB\" in ./*) PB=\"$PWD/${PB#./}\" ;; esac; L=\"$PWD/scripts/lua/check-committable-branch.lua\";  d=$(mktemp -d); printf 'gitdir: /nonexistent-litmus-not-a-repo' > \"$d/.git\"; if git -C \"$d\" rev-parse --git-dir >/dev/null 2>&1; then rm -rf \"$d\"; echo \"FAIL: premise: the probe dir resolves to a git repository\"; exit 1; fi; out=$( cd \"$d\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" 2>/dev/null ); err=$( cd \"$d\" && env -u PROJECT_ROOT -u TILLANDSIAS_REPO_ROOT \"$PB\" script run \"$L\" 2>&1 >/dev/null ); rm -rf \"$d\"; [ \"$out\" = 'blocked:not-a-git-repo' ] || { echo \"FAIL: premise: $out\"; exit 1; }; case \"$err\" in *'why: '*'remedy: '*) echo 'ok: not-a-repo-affords' ;; *) echo \"FAIL: not-a-git-repo carries no why/remedy: $err\"; exit 1 ;; esac"
     timeout_ms: 5000
     expected_behavior: "ok: not-a-repo-affords"
 
   - step: "the meta-orchestration and advance-work-from-plan bootstraps consult the probe (wiring is real, not prose)"
-    command: "[ \"$(grep -c 'check-committable-branch.sh' skills/meta-orchestration/SKILL.md)\" -ge 1 ] && [ \"$(grep -c 'check-committable-branch.sh' skills/advance-work-from-plan/SKILL.md)\" -ge 1 ] && echo 'ok: skills-consult-probe'"
+    command: "[ \"$(grep -c 'check-committable-branch.lua' skills/meta-orchestration/SKILL.md)\" -ge 1 ] && [ \"$(grep -c 'check-committable-branch.lua' skills/advance-work-from-plan/SKILL.md)\" -ge 1 ] && echo 'ok: skills-consult-probe'"
     timeout_ms: 3000
     expected_behavior: "ok: skills-consult-probe"
 
@@ -114,16 +114,16 @@ observability:
   log_fields:
     spec: "meta-orchestration"
     test: "committable-branch-guard-shape"
-    artifact: "scripts/check-committable-branch.sh + skills/meta-orchestration/SKILL.md + skills/advance-work-from-plan/SKILL.md"
+    artifact: "scripts/lua/check-committable-branch.lua + skills/meta-orchestration/SKILL.md + skills/advance-work-from-plan/SKILL.md"
 
 rollback:
   on_failure: >
-    The committable-branch probe drifted. Restore committable_branch_verdict()
-    in scripts/check-committable-branch.sh emitting exactly one line matching
+    The committable-branch probe drifted. Restore the verdict logic
+    in scripts/lua/check-committable-branch.lua emitting exactly one line matching
     ^(ok:branch-[A-Za-z0-9._/-]+|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo|no-git-identity))$
     with a pass/fail exit code (0 on a non-main branch, 1 on main, detached
-    HEAD, or a non-repo — fail closed), keep the file executable, and restore
+    HEAD, or a non-repo — fail closed), and restore
     the Committable Branch Guard consultation of
-    `scripts/check-committable-branch.sh` in skills/meta-orchestration/SKILL.md
+    `scripts/lua/check-committable-branch.lua` in skills/meta-orchestration/SKILL.md
     and skills/advance-work-from-plan/SKILL.md.
-  command: "grep -nE 'committable_branch_verdict|ok:branch-|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo|no-git-identity)' scripts/check-committable-branch.sh | head -20"
+  command: "grep -nE 'committable_branch_verdict|ok:branch-|blocked:(committable-cycle-on-main|detached-head|not-a-git-repo|no-git-identity)' scripts/lua/check-committable-branch.lua | head -20"

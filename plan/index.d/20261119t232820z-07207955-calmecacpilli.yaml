@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    field: next_action
+    value: |-
+      Nothing is done. Write the dispatch fixture first, then the tool.
+
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk and the test fns exist; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless --features host-services --bin tillandsias image_generate_is_listed. Close on green with the merge sha.
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: image-generate-on-the-host-mcp-socket-returns-a-saved-path-and-metadata-for-claude-opencode-and-codex
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

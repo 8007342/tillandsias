@@ -1,0 +1,101 @@
+# @trace order:2097-kdur, order:2096-pq2g, spec:ci-release
+name: litmus:unreferenced-guard-fixtures-run
+spec: ci-release
+description: >
+  ORDER 2097-kdur (family A of 2096-pq2g). Fourteen hermetic shell fixtures
+  were green and meaningful, but nothing that runs on its own ever ran them:
+  scripts/check-added-test-is-referenced.sh counted them in standing=43. Each
+  one pins a guard, a hook or a launcher against a regression it names in its
+  header, so a fixture that cannot fail a gate is a guard nobody is told has
+  broken. This litmus runs each one and requires its own verdict line.
+  Measured green on macuahuitl 2026-11-17, one at a time under a 6 GiB cap.
+severity: high
+size: quick
+phase: pre-build
+preconditions:
+  - workspace contains scripts/check-added-test-is-referenced.sh
+critical_path:
+  - step: "bash composition-hazard lint names the pre-fix pipeline and not the comment"
+    command: "bash scripts/test-bash-composition-hazards.sh 2>&1"
+    expected_behavior: "ok:bash-composition-hazards:"
+    assert_exit: 0
+    assert_output_contains: "ok:bash-composition-hazards:"
+    timeout_ms: 120000
+  - step: "carry-forward guard names an open touch and exempts closures"
+    command: "bash scripts/test-check-carry-forward.sh 2>&1"
+    expected_behavior: "carry-forward-fixture: 9/9"
+    assert_exit: 0
+    assert_output_contains: "carry-forward-fixture: 9/9"
+    timeout_ms: 120000
+  - step: "a new packet missing size/implementer_tier is flagged"
+    command: "P=$(. scripts/plan-binary-probe.sh && resolve_plan_binary) && TILLANDSIAS_PLAN_BIN=\"$P\" \"$P\" script run scripts/lua/test-check-packet-tier-declared.lua 2>&1"
+    expected_behavior: "ok:packet-tier-fixture:4 arms"
+    assert_exit: 0
+    assert_output_contains: "ok:packet-tier-fixture:4 arms"
+    timeout_ms: 120000
+  - step: "cycle driver passes outcomes through and skips on overlap"
+    command: "bash scripts/test-cycle-driver.sh 2>&1"
+    expected_behavior: "PASS: cycle-driver fixture"
+    assert_exit: 0
+    assert_output_contains: "PASS: cycle-driver fixture"
+    timeout_ms: 120000
+  - step: "e2e preflight refuses a live runtime"
+    command: "bash scripts/test-e2e-preflight-live-runtime.sh 2>&1"
+    expected_behavior: "PASS: e2e-preflight refuses live runtime"
+    assert_exit: 0
+    assert_output_contains: "PASS: e2e-preflight refuses live runtime"
+    timeout_ms: 120000
+  - step: "embed endpoint derivation"
+    command: "bash scripts/test-embed-endpoint-derivation.sh 2>&1"
+    expected_behavior: "PASS: embed-endpoint derivation"
+    assert_exit: 0
+    assert_output_contains: "PASS: embed-endpoint derivation"
+    timeout_ms: 120000
+  - step: "enclave network guard discovers its launchers"
+    command: "bash scripts/test-enclave-network-internal-discovery.sh 2>&1"
+    expected_behavior: "PASS: enclave network discovery"
+    assert_exit: 0
+    assert_output_contains: "PASS: enclave network discovery"
+    timeout_ms: 120000
+  - step: "exec-bits guard end to end"
+    command: "bash scripts/test-exec-bits-guard-end-to-end.sh 2>&1"
+    expected_behavior: "ok:exec-bits-guard-end-to-end:"
+    assert_exit: 0
+    assert_output_contains: "ok:exec-bits-guard-end-to-end:"
+    timeout_ms: 120000
+  - step: "fragment batch never collapses verdicts"
+    command: "bash scripts/test-fragment-batch-never-collapses-verdicts.sh 2>&1"
+    expected_behavior: "ok:fragment-batch-never-collapses-verdicts:all"
+    assert_exit: 0
+    assert_output_contains: "ok:fragment-batch-never-collapses-verdicts:all"
+    timeout_ms: 120000
+  - step: "status-loss gate row boundary"
+    command: "bash scripts/test-fragment-status-loss-row-boundary.sh 2>&1"
+    expected_behavior: "ok:fragment-status-loss-row-boundary:"
+    assert_exit: 0
+    assert_output_contains: "ok:fragment-status-loss-row-boundary:"
+    timeout_ms: 120000
+  - step: "every resident process keeps the token due-check"
+    command: "bash scripts/test-github-token-rotation-entry-points.sh 2>&1"
+    expected_behavior: "PASS: github-token-rotation-entry-points"
+    assert_exit: 0
+    assert_output_contains: "PASS: github-token-rotation-entry-points"
+    timeout_ms: 120000
+  - step: "guest staging refuses a binary without the control wire"
+    command: "bash scripts/test-guest-staging-refuses-a-wireless-binary.sh 2>&1"
+    expected_behavior: "ok:guest-staging-refuses-a-wireless-binary:all"
+    assert_exit: 0
+    assert_output_contains: "ok:guest-staging-refuses-a-wireless-binary:all"
+    timeout_ms: 120000
+  - step: "pre-push mover enumeration is batched"
+    command: "bash scripts/test-hook-mover-enumeration-is-batched.sh 2>&1"
+    expected_behavior: "ok:hook-mover-enumeration-is-batched:all"
+    assert_exit: 0
+    assert_output_contains: "ok:hook-mover-enumeration-is-batched:all"
+    timeout_ms: 120000
+  - step: "host slug resolves without the hostname executable"
+    command: "bash scripts/test-host-slug-resolution.sh 2>&1"
+    expected_behavior: "ok:host-slug-resolution:"
+    assert_exit: 0
+    assert_output_contains: "ok:host-slug-resolution:"
+    timeout_ms: 120000

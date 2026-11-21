@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-forge-claude-pretooluse-hook-calls-tillandsias-plan-which-the-forge-image-never-ships-so-the-command-policy-is-silently-off-in-every-non-tillandsias-forge
+    field: next_action
+    value: |-
+      Ship a prebuilt tillandsias-plan (the host build's own artifact, as the guest binary is staged) at a fixed path in the forge image, and point settings.json at that absolute path. Or ship a tiny classifier stub that fails closed with a message when the binary is missing.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: released forge on a non-Tillandsias project: pkill -f x exits 2.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: the-forge-claude-pretooluse-hook-calls-tillandsias-plan-which-the-forge-image-never-ships-so-the-command-policy-is-silently-off-in-every-non-tillandsias-forge
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

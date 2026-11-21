@@ -1,0 +1,9 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Event for the packet filed in 20261117t195939z-2095-kgdj-queue-affordances-freeze-and-embedded-script-ratchet-macuahuitl.yaml.
+events:
+  - packet_id: an-embedded-script-ratchet-counts-heredoc-to-interpreter-sites-and-inline-awk-jq-python-bodies-and-its-counter-only-falls
+    event:
+      type: note
+      ts: "2026-11-17T20:03:16Z"
+      host: macuahuitl
+      summary: "CORRECTED BASELINE, from the coordinator 2026-11-17; the filing session has not reproduced it. The earlier figure in this row's context (192 heredoc-to-interpreter sites in 97 shell files, and 75 inline bodies) was WRONG: the pattern behind 192 mostly matched false positives, namely heredocs that write a file (cat > x.sh <<EOF) and herestrings. The corrected baseline on linux-next has four categories: (1) about 4 true heredoc-to-interpreter sites; (2) 91 heredocs that write generated .sh or .lua stubs, mostly test fixtures, which ARE in scope as embedded scripts; (3) 33 multi-line sh -c or bash -c bodies; (4) 76 multi-line inline awk, jq, python or lua bodies. Read this row's title, context and first exit criterion with these four categories in place of the two it names: the guard pins one pattern per category, counts each, and its count line is compared with these four figures, not with 192 in 97 and 75."

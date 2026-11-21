@@ -30,24 +30,24 @@ severity: high
 size: long
 
 preconditions:
-  - workspace contains images/studio/Containerfile.grapesjs and scripts/test-studio-grapesjs.sh
+  - workspace contains images/studio/Containerfile.grapesjs and scripts/lua/test-studio-grapesjs.lua
   - a local localhost/tillandsias-forge image; localhost/tillandsias-chromium-framework for the browser arm
 
 critical_path:
-  - step: "the suite parses and carries its exec bit"
-    command: "bash -n scripts/test-studio-grapesjs.sh && test -x scripts/test-studio-grapesjs.sh && echo 'ok: studio-grapesjs-suite-parses'"
+  - step: "the suite is the Lua port (the .sh is gone)"
+    command: "test -f scripts/lua/test-studio-grapesjs.lua && ! test -e scripts/test-studio-grapesjs.sh && echo 'ok: studio-grapesjs-suite-present'"
     timeout_ms: 3000
-    expected_behavior: "ok: studio-grapesjs-suite-parses"
+    expected_behavior: "ok: studio-grapesjs-suite-present"
 
   - step: "the lane saves through the shared endpoint as a commit, refuses outside its allowlist, no egress"
-    command: "bash scripts/test-studio-grapesjs.sh"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-studio-grapesjs.lua"
     timeout_ms: 900000
-    expected_behavior: "PASS: the GrapesJS lane saves through the shared endpoint as a commit, refuses outside its allowlist, no egress"
+    expected_behavior: "ok:studio-grapesjs:lane"
 
 observability:
   traces:
     - "@trace spec:local-web-preview"
-  expected_log: "PASS: the GrapesJS lane saves through the shared endpoint as a commit, refuses outside its allowlist, no egress"
+  expected_log: "ok:studio-grapesjs:lane"
   log_fields:
     spec: local-web-preview
     test: studio-grapesjs-saves-through-the-shared-endpoint

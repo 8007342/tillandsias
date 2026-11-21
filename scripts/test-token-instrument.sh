@@ -38,6 +38,14 @@ CM="scripts/cycle-metrics.sh"
 
 W="$(mktemp -d "${TMPDIR:-/tmp}/token-instr.XXXXXX")"
 trap 'rm -rf "$W"' EXIT INT TERM
+# ORDER 2150-vf2v (priority:build-speed): pin EVERY metrics log cycle-metrics.sh
+# reads to an empty scratch file. Defaulted, they are this host's real
+# .cache/metrics logs; a 95 MB usage log made this fixture 118 s instead of 3 s
+# on macuahuitl. scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua refuses a
+# cycle-metrics fixture that leaves one defaulted.
+for _pin in TILLANDSIAS_EXPERT_USAGE_LOG TILLANDSIAS_CYCLE_FLOW_LOG TILLANDSIAS_EXPERT_HEALTH_LOG; do
+    : > "$W/pinned-$_pin.jsonl"; export "$_pin=$W/pinned-$_pin.jsonl"
+done
 LOG="$W/tokens.jsonl"
 # A timing log that exists and is empty: the reporting path only needs it NAMED.
 : > "$W/timing.jsonl"

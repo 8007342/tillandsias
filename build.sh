@@ -185,7 +185,14 @@ elif [[ "$(uname -s)" == "Darwin" ]]; then
     # unpacked (2026-10-29), so the edit loop keeps unpacked and every build
     # prunes the objects no linked binary can read (~0.1 s steady state).
     _deps_dir="${CARGO_TARGET_DIR:-$SCRIPT_DIR/target}/debug/deps"
-    "$SCRIPT_DIR/scripts/prune-darwin-stale-objects.sh" "$_deps_dir" >&2 || true
+    # Lua since 2106-scrt (scratch.* reaches a CARGO_TARGET_DIR outside the
+    # repo). With no runnable plan binary yet the prune waits for a later build.
+    _prune_bin="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _prune_bin=""
+    if [[ -n "$_prune_bin" ]]; then
+        (cd "$SCRIPT_DIR" && "$_prune_bin" script run scripts/lua/prune-darwin-stale-objects.lua "$_deps_dir") >&2 || true
+    else
+        echo "skipped:darwin-stale-objects:no runnable plan binary yet" >&2
+    fi
     # Hold a SHARED lock for the rest of this run, so another build.sh's
     # prune skips while this one's cargo writes into the target. fd 7 stays
     # open in this shell and every cargo it spawns; the lock goes with it.
@@ -2760,7 +2767,7 @@ _run_gate_steps() {  # $1 = root
     for _step_file in "$_gs_root"/scripts/gate-steps.d/*.step; do
         [ -e "$_step_file" ] || continue
         STEP_DESC=""; STEP_SCRIPT=""; STEP_LUA=""; STEP_ERROR=""; STEP_OK=""
-        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""
+        STEP_SKIP_EXIT=""; STEP_SKIP_DESC=""; STEP_HOST_STATE=""; STEP_INPUTS=""
         # shellcheck disable=SC1090
         . "$_step_file"
         if [ -z "$STEP_DESC" ] || { [ -z "$STEP_SCRIPT" ] && [ -z "$STEP_LUA" ]; }; then
@@ -2783,6 +2790,28 @@ _run_gate_steps() {  # $1 = root
             exit 1
         fi
         _step "$STEP_DESC..."
+        # ORDER 2118-tnut (operator 2026-11-20, P10 item a): a step may declare
+        # STEP_INPUTS — the class selector's grammar (765-xpct): gate-stamp
+        # classes and path:<glob> narrowings. When none of the changed paths
+        # intersect them (and the selector's own fail-closed rules allow it:
+        # recent FULL gate, readable class set, not on the keep-unconditional
+        # list), the step is SKIPPED and says so on its own line. Only over the
+        # real checkout: the fixture's scratch roots always run every step.
+        # A step without STEP_INPUTS runs, as before.
+        # IMPLICIT INPUTS, always added: the step's own .step file and script,
+        # and what decides what runs (build.sh, the selector, the classifier).
+        # A declaration cannot leave them out, so editing a step or the gate
+        # always runs it.
+        if [ -n "$STEP_INPUTS" ] && [ "$_gs_root" = "$SCRIPT_DIR" ]; then
+            _gs_id="gate-step:${_step_file##*/}"; _gs_id="${_gs_id%.step}"
+            _gs_inputs="$STEP_INPUTS path:scripts/gate-steps.d/${_step_file##*/} path:$_step_path path:build.sh path:scripts/change-class.sh path:scripts/gate-stamp.sh"
+            # shellcheck disable=SC2086 — the declared inputs are words by design.
+            if _class_may_skip "$_gs_id" $_gs_inputs; then
+                # shellcheck disable=SC2086
+                _class_skip_line "$_gs_id" $_gs_inputs
+                continue
+            fi
+        fi
         # STEP_SKIP_EXIT (1087-h2z9 follow-up): a step may nominate ONE exit
         # code that means "this check could not run here", as distinct from
         # "this check ran and failed". Without it every non-zero exit printed
@@ -3889,6 +3918,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
 
     if ! _run_lua_decider "scripts/lua/check-unique-bin-names.lua" 2>&1; then
         _error "two workspace crates declare the same [[bin]] name — they overwrite each other in target/ and tests run the wrong binary (1043-kvvn)"
+        exit 1
+    fi
+
+    if ! _run_lua_decider "scripts/lua/check-workspace-members-used.lua" 2>&1; then
+        _error "a workspace member has no dependent, no binary and no allowlist reason, or a crates/ directory has no Cargo.toml (2080-8i25)"
         exit 1
     fi
 
@@ -5160,9 +5194,35 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # the tree, and merely ADDING a test can red a different one. A gate whose
     # red set moves when you add an unrelated test teaches people to re-run it
     # until it passes.
+    # ORDER 2161-ctdd (build speed, report packet 8): DO NOT RE-RUN THE DEFAULT
+    # TESTS HERE. The --workspace pass above already ran every test the default
+    # build of this binary has (1091 on 2026-11-21); this build adds the ones
+    # that only compile under tray,listen-vsock (533). Both lists come from
+    # libtest's own --list (the default build is already compiled, so it costs
+    # seconds), and this pass runs exactly the difference with --exact. Kept
+    # serial (above). A list that cannot be produced, or an empty difference,
+    # falls back to the whole set and says so: a filter must never silently
+    # run less than it claims.
+    # KNOWN LIMIT: a default test whose body has a cfg(feature = "tray") or
+    # "listen-vsock" branch is run only in its default form.
+    _fg_filter=()
+    _fg_def="$(cargo test -q -p tillandsias-headless --bin tillandsias \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_all="$(cargo test -q -p tillandsias-headless --bin tillandsias --features tray,listen-vsock \
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --list 2>/dev/null | sed -n 's/: test$//p' | LC_ALL=C sort)"
+    _fg_new="$(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all") | grep -c .)"
+    if [[ -n "$_fg_def" && -n "$_fg_all" && "$_fg_new" -gt 0 ]]; then
+        while IFS= read -r _fg_t; do
+            [[ -n "$_fg_t" ]] && _fg_filter+=("$_fg_t")
+        done < <(LC_ALL=C comm -13 <(printf '%s\n' "$_fg_def") <(printf '%s\n' "$_fg_all"))
+        _info "feature-gated: $_fg_new test(s) only this build has; the $(printf '%s\n' "$_fg_def" | grep -c .) default ones ran in the --workspace pass (2161-ctdd)"
+        _fg_filter=(--exact "${_fg_filter[@]}")
+    else
+        _warn "feature-gated: could not form the default/feature test lists (default=$(printf '%s\n' "$_fg_def" | grep -c .), all=$(printf '%s\n' "$_fg_all" | grep -c .), new=$_fg_new); running the WHOLE set (2161-ctdd)"
+    fi
     _run cargo test -p tillandsias-headless --bin tillandsias \
         --features tray,listen-vsock --no-fail-fast \
-        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 2>&1 |
+        --manifest-path "$SCRIPT_DIR/Cargo.toml" -- --test-threads=1 ${_fg_filter[@]+"${_fg_filter[@]}"} 2>&1 |
         tee "$_fg_transcript" || _fg_rc="${PIPESTATUS[0]}"
     if [[ $_fg_rc -ne 0 ]]; then
         _error "the tray/listen-vsock test set failed (cargo rc=$_fg_rc) — transcript: $_fg_transcript"
@@ -5838,6 +5898,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Cheatsheet-reference fixture passed"
 
+    # Locale bundles and help scripts are complete and parse (2096-pq2g; the
+    # Lua port of the never-run scripts/test-locale-coverage.sh).
+    _step "Checking locale bundle coverage and help-script syntax (2096-pq2g)..."
+    if ! _run_lua_decider "scripts/lua/check-locale-coverage.lua" 2>&1; then
+        _error "a full locale bundle lacks an L_* name en.sh defines, or a bundle/help script does not parse (2096-pq2g)"
+        exit 1
+    fi
+    _info "Locale coverage check passed"
+
     # The forge browser-claim guard's own fixture (1746-2szd): this tree, the
     # pre-fix forge-quick-intro refused, negations, an image that ships a
     # browser, and no Containerfile.
@@ -6509,7 +6578,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 911-m7js: the archiver-check memo hits only on an unchanged ledger AND
     # unchanged instrument; a fragment written or removed flips it.
     _step "Checking the archiver-check memo keys on the ledger and the instrument (911-m7js)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-check-memo.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-archiver-check-memo.lua" 2>&1; then
         _error "the archiver-check memo does not miss on a ledger or instrument change (911-m7js) — see the verdict line above"
         exit 1
     fi

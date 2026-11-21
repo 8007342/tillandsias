@@ -1,0 +1,12 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: authenticated-forge-write-transport-impl
+    field: next_action
+    value: 'blind-design triage 2026-11-11 (2080-294s): the anonymous receive-pack daemon is still live while this waits on a parked row; 2080-2wwn (per-project networks) shrinks who can reach a mirror meanwhile, and the credential audit order 2080-yvby covers the credential side. Unpark the blocker or land 2080-2wwn first.'
+    ts: "2026-11-11T19:03:05Z"
+    host: macuahuitl-fedora

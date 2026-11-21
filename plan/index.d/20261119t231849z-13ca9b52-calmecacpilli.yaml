@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: observatorium-deploys-only-on-stable-promotion
+    field: status
+    value: obsoleted
+    ts: "2026-11-19T23:18:49Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: observatorium-deploys-only-on-stable-promotion
+    event:
+      type: note
+      ts: "2026-11-19T23:18:49Z"
+      host: calmecacpilli
+      summary: |-
+        superseded by 2066-obsv 565da9c5c

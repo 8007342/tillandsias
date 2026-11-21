@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: yoga-ports-five-check-a-m-shell-deciders-to-lua-batch-1
+    field: next_action
+    value: |-
+      Batch 1 ships with 2 ports (coordinator ruling 2026-11-20: small PRs land faster): check-fragment-ts-skew.sh and check-gate-step-regimes.sh (plus its fixture test-gate-step-regimes.sh) are now Lua. Three owned files are NOT ported. NONE is a runner-door gap (verified 2026-11-20 in crates/tillandsias-plan/src: proc.run takes stdin = <string>, lua_predicate.rs:416; `-- @read-env NAME` widens fs.read/fs.walk beyond the repo, script_run.rs:168; /proc is readable through proc.run cat). The real reasons:
+      - scripts/check-gate-memory-floor.sh: blocked: runs at the top of build.sh, before a fresh clone has a plan binary; a Lua port would turn a seconds-long memory refusal into could-not-run exactly when the gate is starved. Needs a bootstrap ruling (keep shell, or add it to scripts/portability/bootstrap-shell-allowlist.txt).
+      - scripts/check-claim-confirmed.sh: blocked: agents type it by name from skills/advance-work-from-plan, skills/join-the-fleet and skills/meta-orchestration and from check-claims-across-branches.sh's refusal remedies; the port is a coordinated rename of those. Its fixture's out-of-repo --plan-dir is served by -- @read-env.
+      - scripts/check-enclave-ca-consistency.sh: not blocked, deferred: 4 callers (cycle-preflight.sh, check-enclave-service-health.sh with its TILLANDSIAS_CA_CONSISTENCY_CHECK stub path, litmus-ca-ephemeral.yaml, test-enclave-service-health.sh's stub). Pipe the secret with proc.run{stdin=...}; take it in a later batch.
+    ts: "2026-11-20T05:18:38Z"
+    host: yoga
+
+events:
+  - packet_id: yoga-ports-five-check-a-m-shell-deciders-to-lua-batch-1
+    event:
+      type: progress
+      ts: "2026-11-20T05:18:38Z"
+      host: yoga
+      summary: |-
+        status 'Batch 1 ships with 2 ports (coordinator ruling 2026-11-20: small PRs land faster): check-fragment-ts-skew.sh and check-gate-step-regimes.sh (plus its fixture test-gate-step-regimes.sh) are now Lua. Three owned files are NOT ported. NONE is a runner-door gap (verified 2026-11-20 in crates/tillandsias-plan/src: proc.run takes stdin = <string>, lua_predicate.rs:416; `-- @read-env NAME` widens fs.read/fs.walk beyond the repo, script_run.rs:168; /proc is readable through proc.run cat). The real reasons:
+        - scripts/check-gate-memory-floor.sh: blocked: runs at the top of build.sh, before a fresh clone has a plan binary; a Lua port would turn a seconds-long memory refusal into could-not-run exactly when the gate is starved. Needs a bootstrap ruling (keep shell, or add it to scripts/portability/bootstrap-shell-allowlist.txt).
+        - scripts/check-claim-confirmed.sh: blocked: agents type it by name from skills/advance-work-from-plan, skills/join-the-fleet and skills/meta-orchestration and from check-claims-across-branches.sh's refusal remedies; the port is a coordinated rename of those. Its fixture's out-of-repo --plan-dir is served by -- @read-env.
+        - scripts/check-enclave-ca-consistency.sh: not blocked, deferred: 4 callers (cycle-preflight.sh, check-enclave-service-health.sh with its TILLANDSIAS_CA_CONSISTENCY_CHECK stub path, litmus-ca-ephemeral.yaml, test-enclave-service-health.sh's stub). Pipe the secret with proc.run{stdin=...}; take it in a later batch.' (not terminal) with evidence_refs: 6f155cf8c
+  - packet_id: yoga-ports-five-check-a-m-shell-deciders-to-lua-batch-1
+    event:
+      type: note
+      ts: "2026-11-20T05:18:38Z"
+      host: yoga
+      summary: |-
+        batch 1 scope, true blocker reasons
