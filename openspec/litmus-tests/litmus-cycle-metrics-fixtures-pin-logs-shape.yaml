@@ -1,0 +1,44 @@
+# @trace spec:ci-release
+name: litmus:cycle-metrics-fixtures-pin-logs-shape
+spec: ci-release
+phase: pre-build
+description: >
+  Order 2150-vf2v (priority:build-speed). A fixture that runs
+  scripts/cycle-metrics.sh pins every metrics log the script reads
+  (TILLANDSIAS_EXPERT_USAGE_LOG, TILLANDSIAS_CYCLE_FLOW_LOG,
+  TILLANDSIAS_EXPERT_HEALTH_LOG). Defaulted, each one is the host's real
+  .cache/metrics log, and the fixture's cost grows with the host's history.
+  Measured on macuahuitl: test-token-instrument took 118 s against a 95 MB usage
+  log and 3 s pinned.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua
+
+critical_path:
+  - step: "every cycle-metrics fixture pins all three metrics logs"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua 2>&1"
+    timeout_ms: 30000
+    expected_behavior: "ok:cycle-metrics-fixtures-pin-logs:"
+
+  - step: "negative control: a planted fixture that runs cycle-metrics.sh with the logs defaulted must FAIL"
+    command: "mkdir -p target/plan-scratch; d=$(mktemp -d target/plan-scratch/cmpin.XXXXXX); printf 'bash scripts/cycle-metrics.sh --no-repo-scan\\n' > \"$d/test-planted.sh\"; out=$(\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua -- \"$d/test-planted.sh\" 2>&1); rc=$?; rm -rf \"$d\"; case \"$out\" in *violation:cycle-metrics-fixtures-pin-logs:1-unpinned*) [ \"$rc\" -ne 0 ] && echo 'planted unpinned fixture refused' ;; *) echo \"not refused: $out\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "planted unpinned fixture refused"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "ok:cycle-metrics-fixtures-pin-logs:"
+  log_fields:
+    spec: "ci-release"
+    test: "cycle-metrics-fixtures-pin-logs-shape"
+    artifact: "scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua"
+
+rollback:
+  on_failure: >
+    Pin the named variables to empty scratch files in the fixture (see
+    scripts/test-token-instrument.sh), or exempt it in the checker with the
+    reason it never reports.
+  command: "tillandsias-plan script run scripts/lua/check-cycle-metrics-fixtures-pin-logs.lua"

@@ -27,7 +27,11 @@ local function bad(m) out.line("FAIL: " .. m); failed = failed + 1 end
 local function timing(name, jsonl)
     fs.write(REL .. "/" .. name, jsonl)
     local r = proc.run({ argv = { "bash", "scripts/cycle-metrics.sh", "--experts-only", "--no-experts" },
-        env = { TILLANDSIAS_TIMING_LOG = ROOT .. "/" .. REL .. "/" .. name }, timeout_ms = 120000 })
+        env = { TILLANDSIAS_TIMING_LOG = ROOT .. "/" .. REL .. "/" .. name,
+            -- 2150-vf2v: every metrics log pinned; a defaulted one is the host's real log
+            TILLANDSIAS_EXPERT_USAGE_LOG = ROOT .. "/" .. REL .. "/pinned-usage.jsonl",
+            TILLANDSIAS_CYCLE_FLOW_LOG = ROOT .. "/" .. REL .. "/pinned-flow.jsonl",
+            TILLANDSIAS_EXPERT_HEALTH_LOG = ROOT .. "/" .. REL .. "/pinned-health.jsonl" }, timeout_ms = 120000 })
     for _, l in ipairs(text.lines(r.stdout or "")) do
         if l:sub(1, 7) == "timing:" then return l end
     end
