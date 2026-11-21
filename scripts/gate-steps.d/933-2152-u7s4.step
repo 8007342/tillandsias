@@ -1,0 +1,9 @@
+# Gate step 2152-u7s4 — `tillandsias-plan next-order` never mints a prefix
+# trunk already carries, even from a checkout whose fold is behind trunk.
+# Offline: builds its own origin and a second clone in plan-scratch.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking next-order mints above trunk's highest fragment prefix (2152-u7s4)"
+STEP_LUA="scripts/lua/test-next-order-skips-trunk.lua"
+STEP_ERROR="next-order minted a prefix trunk already carries, or read an event fragment's hash as an order (2152-u7s4) — see the FAIL lines above"
+STEP_OK="next-order trunk-skip fixture passed"
