@@ -73,7 +73,7 @@ G add -A >/dev/null; G commit -q -m "work to land"
 out="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"; rc=$?
 
 # ── 1. It still refuses, with the same verdict token ───────────────────────
-[ "$rc" -eq 3 ] && printf '%s' "$out" | grep -q '^refused:land:gate-failed' \
+[ "$rc" -eq 3 ] && grep -q '^refused:land:gate-failed' <<<"$out" \
     && ok "a failing gate still refuses with refused:land:gate-failed" \
     || bad "the refusal token or exit code changed (rc=$rc)"
 
@@ -93,7 +93,7 @@ fi
 # ── 3. IT NAMES THE FAILING STEP, which is the part a reader needs ─────────
 # The FIRST failing line, not the last: build.sh prints its verdict after the
 # failure, so a tail would show the summary and not the cause.
-if printf '%s' "$out" | grep -q 'first failing line:.*violation:invented-guard-tripped'; then
+if grep -q 'first failing line:.*violation:invented-guard-tripped' <<<"$out"; then
     ok "the refusal quotes the first failing line, not the trailing summary"
 else
     bad "the refusal does not quote the failing step: $(printf '%s' "$out" | grep -m1 'first failing')"
@@ -102,7 +102,7 @@ fi
 # ── 4. It warns AGAINST the old remedy ────────────────────────────────────
 # "run ./build.sh --check to see why" is what made the one real instance
 # irreproducible; the tool must not send the next reader down it.
-printf '%s' "$out" | grep -q 'Do NOT re-run' \
+grep -q 'Do NOT re-run' <<<"$out" \
     && ok "the refusal warns that a standalone re-run is a different invocation" \
     || bad "the refusal still points at a re-run as the diagnosis path"
 
@@ -124,7 +124,7 @@ STUB
 chmod +x build.sh
 G add -A >/dev/null; G commit -q -m "a gate whose passing arms quote the markers"
 out3="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"
-if printf '%s' "$out3" | grep -q 'first failing line: FAIL: the arm that actually failed'; then
+if grep -q 'first failing line: FAIL: the arm that actually failed' <<<"$out3"; then
     ok "a marker inside an ok row is skipped; the real FAIL line is named"
 else
     bad "the diagnostic named a passing arm: $(printf '%s' "$out3" | grep -m1 'first failing')"
@@ -155,12 +155,12 @@ STUB
 chmod +x build.sh
 G add -A >/dev/null; G commit -q -m "a gate whose advisory warning quotes a violation count"
 out4c="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"
-if printf '%s' "$out4c" | grep -q 'first failing line: FAIL: expected measured-clean'; then
+if grep -q 'first failing line: FAIL: expected measured-clean' <<<"$out4c"; then
     ok "an advisory _warn quoting violation: is skipped; the real FAIL is named"
 else
     bad "the diagnostic named the advisory: $(printf '%s' "$out4c" | grep -m1 'first failing')"
 fi
-printf '%s' "$out4c" | grep -q 'declared-closure-unresolvable' \
+grep -q 'declared-closure-unresolvable' <<<"$out4c" \
     && bad "the advisory line is still being reported as the cause" \
     || ok "the advisory line does not appear in the refusal at all"
 
@@ -175,7 +175,7 @@ STUB
 chmod +x build.sh
 G add -A >/dev/null; G commit -q -m "a gate whose only failure is a red _error line"
 out4d="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"
-printf '%s' "$out4d" | grep -q 'first failing line: \[build\] the gate refused for a reason only _error names' \
+grep -q 'first failing line: \[build\] the gate refused for a reason only _error names' <<<"$out4d" \
     && ok "a red _error line is named when it is the first real failure" \
     || bad "the severity rule swallowed a genuine _error: $(printf '%s' "$out4d" | grep -m1 'first failing')"
 
@@ -193,7 +193,7 @@ STUB
 chmod +x build.sh
 G add -A >/dev/null; G commit -q -m "a gate log with no colour at all"
 out4e="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"
-printf '%s' "$out4e" | grep -q 'severity was unavailable' \
+grep -q 'severity was unavailable' <<<"$out4e" \
     && ok "a colourless log names its fallback instead of degrading silently" \
     || bad "the fallback did not announce itself: $(printf '%s' "$out4e" | grep -m1 'first failing')"
 
@@ -207,14 +207,14 @@ STUB
 chmod +x build.sh
 G add -A >/dev/null; G commit -q -m "make the gate pass"
 out2="$(bash scripts/land-on-platform-branch.sh linux-next 1 2>&1)"; rc2=$?
-if [ "$rc2" -eq 0 ] && ! printf '%s' "$out2" | grep -q 'refused:land:gate-failed'; then
+if [ "$rc2" -eq 0 ] && ! grep -q 'refused:land:gate-failed' <<<"$out2"; then
     ok "CONTROL: a passing gate lands without a refusal"
 else
     bad "CONTROL: a passing gate did not land (rc=$rc2)"
     printf '%s\n' "$out2" | tail -4 | sed 's/^/      /' >&2
 fi
 # And it must not leave a scary log line on the happy path.
-printf '%s' "$out2" | grep -q 'first failing line' \
+grep -q 'first failing line' <<<"$out2" \
     && bad "a passing gate printed a failing-line note" \
     || ok "CONTROL: a passing gate names no failing line"
 

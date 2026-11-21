@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-n-z-batch-2-seven-fixtures
+    order: 2118-wtrw
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 2
+    related: [2123-ivi5, 2126-4cyq]
+    owned_files:
+      - scripts/test-pre-push-work-ref-lane.sh
+      - scripts/test-seam-writers-canonical.sh
+      - scripts/test-plan-orders-fragment-fold.sh
+      - scripts/test-salvage-net.sh
+      - scripts/test-silverblue-update-skew-probe.sh
+      - scripts/test-ssh-lane-sidecar.sh
+      - scripts/test-spec-index-staging-capacity.sh
+    title: |
+      Batch 2 of 2126-4cyq (the n-z half of 2123-ivi5): convert 41 printf/echo | grep -q verdicts in seven fixtures to here-strings.
+    context: |
+      Each batch is its own work ref, so queued PR #1193 (batch 1) stays unchanged. Exclusions:
+      - test-sigpipe-verdict-pipelines.sh and test-portability-idioms.sh carry the pattern as detector subjects;
+      - one site in test-ssh-lane-sidecar.sh is inside a script string run by a container shell, so it stays.
+    exit_criteria:
+      - 'the seven fixtures pass with 0 converted sites left (one container-side site excepted); the pipe floors drop by 41'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-wtrw, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20.
+    events:
+      - type: filed
+        ts: "2026-11-20T07:40:06Z"
+        host: lenovinha
+        summary: sigpipe n-z batch 2 (seven fixtures, 41 sites).

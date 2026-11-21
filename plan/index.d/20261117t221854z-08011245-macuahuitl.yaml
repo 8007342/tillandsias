@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+    field: status
+    value: implemented
+    ts: "2026-11-17T22:18:54Z"
+    host: macuahuitl
+
+events:
+  - packet_id: a-generated-size-bounded-expert-context-pack-built-at-forge-launch-from-the-projects-own-declarations-leads-every-synthesis-prompt-byte-identical
+    event:
+      type: note
+      ts: "2026-11-17T22:18:54Z"
+      host: macuahuitl
+      summary: |-
+        landed by ancestry, 2103-pxq4 reconciliation: work/1815-tei4 commit 129282bca46a (1815-tei4 in its subject) reached linux-next at 4c8c2ccc42bc. Status moves to implemented, not completed: the exit criteria were not re-run.

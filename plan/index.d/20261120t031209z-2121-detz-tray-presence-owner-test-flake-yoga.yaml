@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 from the coordinator's verify batch: the one red run in 2000-envt's 50 repeats.
+packets:
+  - packet_id: tray-presence-the-enclave-owner-is-the-lock-holder-flakes-because-the-released-lock-is-still-read-as-owned
+    order: 2121-detz
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [tray, tests, flake]
+    estimated_hours: 2
+    owned_files:
+      - crates/tillandsias-headless/src/tray_presence.rs
+    title: "tray_presence::tests::the_enclave_owner_is_the_lock_holder fails about 1 run in 50: after drop(lock) and wait_released, owner_elsewhere still answers Some(Some(1))"
+    context: |
+      MEASURED 2026-11-20 on yoga, builder toolbox, linux-next 3506fab7f: cargo test -p tillandsias-headless --bin
+      tillandsias repeated 50 times (2000-envt's criterion) gave 49 green, 1 red. Run 32 failed only this test:
+      panicked at crates/tillandsias-headless/src/tray_presence.rs:339:9, "released: nobody owns it",
+      left Some(Some(1)), right None. The test writes pid 1 into the lock file, drops the lock, calls wait_released,
+      then expects no owner. wait_released returned while the file still named pid 1 (order 1946-shsc's test).
+    exit_criteria:
+      - "cargo test -p tillandsias-headless --bin tillandsias tray_presence:: repeated 200 times under the full suite's parallel load is 200/200 green. Pre-fix: FAILS (about 1 in 50)."
+    unscoreable: "unpinnable-until-the-guard-exists: the repeat harness lands with the fix (1136-n8sh)"
+    provenance: "yoga verify batch 2026-11-20, log 2000-envt.a.32.log."
+    events:
+      - type: filed
+        ts: "2026-11-20T03:12:09Z"
+        host: yoga
+        summary: "filed from the verify batch"

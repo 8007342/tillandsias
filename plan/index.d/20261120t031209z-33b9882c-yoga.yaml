@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    field: next_action
+    value: |-
+      List the tests touching the variable and see which do not share a lock.
+
+      [2026-11-20T03:12:09Z yoga] Verify batch (yoga, builder toolbox, linux-next 3506fab7f): cargo test -p tillandsias-headless --bin tillandsias repeated 50 times gave 49/50. The 1 red is NOT this row's forge-instance env race; it is tray_presence::tests::the_enclave_owner_is_the_lock_holder, filed as 2121-detz. Left: close this row once 2121-detz lands and 50/50 holds, or close now if the coordinator judges the race itself proven by 49/50 with no FORGE_INSTANCE failure.
+    ts: "2026-11-20T03:12:09Z"
+    host: yoga
+
+events:
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    event:
+      type: progress
+      ts: "2026-11-20T03:12:09Z"
+      host: yoga
+      summary: |-
+        status 'List the tests touching the variable and see which do not share a lock.
+        
+        [2026-11-20T03:12:09Z yoga] Verify batch (yoga, builder toolbox, linux-next 3506fab7f): cargo test -p tillandsias-headless --bin tillandsias repeated 50 times gave 49/50. The 1 red is NOT this row's forge-instance env race; it is tray_presence::tests::the_enclave_owner_is_the_lock_holder, filed as 2121-detz. Left: close this row once 2121-detz lands and 50/50 holds, or close now if the coordinator judges the race itself proven by 49/50 with no FORGE_INSTANCE failure.' (not terminal) with evidence_refs: 3506fab7f
+  - packet_id: tests-that-read-tillandsias-forge-instance-do-not-race-on-process-environment
+    event:
+      type: note
+      ts: "2026-11-20T03:12:09Z"
+      host: yoga
+      summary: |-
+        verify batch red, re-shaped

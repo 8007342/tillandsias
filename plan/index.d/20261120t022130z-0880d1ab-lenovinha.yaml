@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (orders 699-usxc, 966-7umc).
+#
+# Events go to the OVERLAY, never to plan/index.yaml: a base write falls
+# outside the plan-only push lane and would oblige the writer to pass a full
+# ./build.sh --check, which is precisely the gate a floor host or a forge may
+# not be able to run. The fold reads events from fragments, so every reader
+# sees this exactly as it would a base append; `compact` folds it into the
+# base later, on a host that can afford the gate.
+events:
+  - packet_id: precommit-zero-trace-scan-scope-fixture-treats-worktrees-under-target-work-as-build-output
+    event:
+      type: progress
+      ts: "2026-11-20T02:21:30Z"
+      agent_id: linux-lenovinha-claude-20261120t022130z
+      host: lenovinha
+      summary: |-
+        Host state confirmed (2026-11-20, lenovinha): after pruning 109 clean, landed worktrees (disk-preflight evicted 54, git worktree remove 55), every spec:windows-wsl-runtime hit under target/ comes from the 5 worktrees kept as dirty or unlanded (wt-9xix, wt-inst, wt-live, wt-lrdy, wt-wqmt; 9 files each). Nothing else under target/ references it. The fixture stays red on this host while they exist, which is the defect: nested checkouts are not build output.

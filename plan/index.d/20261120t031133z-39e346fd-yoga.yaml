@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:33Z"
+    host: yoga
+
+events:
+  - packet_id: webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:33Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls
+    event:
+      type: note
+      ts: "2026-11-20T03:11:33Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-headless --features listen-vsock webstudio_open_launches_from_the_lane_once_and_returns_its_urls - 1 passed (0 without the feature). Candidate landing commit - c68f4f82f.

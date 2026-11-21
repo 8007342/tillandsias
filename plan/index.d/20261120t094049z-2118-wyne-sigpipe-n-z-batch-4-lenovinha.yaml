@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha (tech-debt session, 2026-11-20).
+packets:
+  - packet_id: sigpipe-verdict-pipelines-n-z-batch-4-eight-files
+    order: 2118-wyne
+    status: in_progress
+    kind: debt
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixtures, sigpipe, ratchet]
+    estimated_hours: 2
+    related: [2123-ivi5, 2126-4cyq]
+    owned_files:
+      - scripts/test-no-stale-base-revert.sh
+      - scripts/test-nix-toolbox.sh
+      - scripts/scan-litmus-expression-pinning.sh
+      - scripts/test-tracked-files-unwritten-guard.sh
+      - scripts/test-toolbox-refusal-wsl-exception.sh
+      - scripts/test-token-instrument.sh
+      - scripts/test-secrets.sh
+      - scripts/test-script-exec-bits.sh
+    title: |
+      Batch 4 of 2126-4cyq (the n-z half of 2123-ivi5): convert 20 printf/echo | grep -q verdicts in eight files to here-strings.
+    context: |
+      Skipped:
+      - test-sigpipe-guard-sees-paths-and-continuations.sh: detector subject;
+      - test-salvage-audit.sh: its two sites are a comment and a deliberate hazard-exempt (1306-ifhv) reproduction.
+      Batch 4 first rewrote both of those lines; the converter now skips comments and exempt-marked lines, and batches 1-3 were re-checked clean.
+      test-toolbox-refusal-wsl-exception.sh fails 5/1 on unchanged linux-next too (pre-existing, reported); its two conversions do not change that.
+    exit_criteria:
+      - 'the eight files keep their trunk verdicts; the pipe floors drop by 20'
+    unscoreable: "the census tool is the measure, per 2123-ivi5"
+    next_action: Preflight, push work/2118-wyne, open PR.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20.
+    events:
+      - type: filed
+        ts: "2026-11-20T09:40:49Z"
+        host: lenovinha
+        summary: sigpipe n-z batch 4 (eight files, 20 sites).

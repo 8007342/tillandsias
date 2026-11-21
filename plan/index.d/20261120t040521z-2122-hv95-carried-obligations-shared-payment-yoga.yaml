@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-20 at macuahuitl-fedora's direction (Family D rescue, item 1).
+packets:
+  - packet_id: check-carried-obligations-counts-a-deletion-a-stacked-ref-inherited-from-this-change-as-the-same-payment-not-a-taken-item
+    order: 2122-hv95
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, carried-obligations, lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/lua/check-carried-obligations.lua
+    title: "check-carried-obligations treats an item deleted by a commit HEAD already contains as this change's own payment, even when git picks a merge base that predates it"
+    context: |
+      MEASURED 2026-11-20 on yoga: #1149 (work/2105-bb2e), #1150 and #1152 refused
+      refused:carried:paid-but-taken-by:work/2106-scrt:scripts/test-archiver-check-memo.sh. #1156 (2106-scrt) is stacked
+      on #1149 and holds the SAME deleting commit 847eff4b3. With trunk merged into both, merge-base --all(HEAD, scrt)
+      is {24bfb0ea5, 847eff4b3}; git picks 24bfb0ea5 (a trunk commit not containing 847eff4b3), and the 2044-kx7e diff
+      from it reports the inherited deletion as scrt's, while no commit in HEAD..scrt deletes the file (0).
+      Coordinator waiver commits on #1149/#1150 did not clear it.
+    exit_criteria:
+      - "A fixture arm builds a payer ref and a ref stacked on it, both later merging a newer trunk commit (two merge bases), and the payer's change is not refused paid-but-taken-by. Pre-fix: FAILS."
+      - "An unrelated ref that deletes the same item in its OWN commit is still reported taken-by. Pre-fix: PASSES; post-fix: PASSES."
+    unscoreable: "unpinnable-until-the-guard-exists: the arm lands in the same commit (1136-n8sh)"
+    provenance: "yoga reproduction on origin/work/2105-bb2e and origin/work/2106-scrt, 2026-11-20."
+    events:
+      - type: filed
+        ts: "2026-11-20T04:05:21Z"
+        host: yoga
+        summary: "filed and claimed at the coordinator's direction"

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-antigravity-forge-lane-spills-raw-escape-sequences-into-the-terminal-instead-of-taking-keystrokes
+    field: status
+    value: completed
+    ts: "2026-11-20T03:11:36Z"
+    host: yoga
+
+events:
+  - packet_id: an-antigravity-forge-lane-spills-raw-escape-sequences-into-the-terminal-instead-of-taking-keystrokes
+    event:
+      type: completed
+      ts: "2026-11-20T03:11:36Z"
+      host: yoga
+      summary: |-
+        status 'completed' with evidence_refs: 3506fab7f
+  - packet_id: an-antigravity-forge-lane-spills-raw-escape-sequences-into-the-terminal-instead-of-taking-keystrokes
+    event:
+      type: note
+      ts: "2026-11-20T03:11:36Z"
+      host: yoga
+      summary: |-
+        verify batch (yoga, builder toolbox) at linux-next 3506fab7f - cargo test -p tillandsias-headless --features tray tests::an_interactive_sign_in_gets_the_terminal_not_the_output_only_stream --exact - 1 passed. Candidate landing commit - a95940991.
