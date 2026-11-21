@@ -2,7 +2,7 @@
 # @trace spec:methodology-accountability
 # @trace order:723-b9cn
 #
-# Fixture for the DEFAULT SCOPE of scripts/check-version-bump-isolation.sh.
+# Fixture for the DEFAULT SCOPE of scripts/lua/check-version-bump-isolation.lua.
 #
 # THE BUG THIS EXISTS TO PREVENT (measured live on osx-next 2026-08-13): the
 # guard's default range was `@{upstream}..HEAD`. A platform branch must merge
@@ -29,7 +29,14 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-version-bump-isolation.sh"
+GUARD="$ROOT/scripts/lua/check-version-bump-isolation.lua"
+# Ported to Lua (2165-vcgh); it runs on the plan binary's `script run`.
+# shellcheck source=scripts/plan-binary-probe.sh
+. "$ROOT/scripts/plan-binary-probe.sh"
+PLAN="$(cd "$ROOT" && resolve_plan_binary 2>/dev/null)" || PLAN=""
+case "$PLAN" in ./*) PLAN="$ROOT/${PLAN#./}" ;; esac
+[ -n "$PLAN" ] || { echo "could-not-run:version-bump-isolation-scope:no-plan-binary"; exit 3; }
+guard() { "$PLAN" script run "$GUARD" -- "$@"; }
 WORK="$(mktemp -d)"
 FAILURES=0
 
@@ -77,14 +84,14 @@ git update-ref refs/remotes/origin/main "$FOREIGN"
 
 # Sanity: the guard must still SEE this as a sweep when asked directly.
 # Without this, case 1 could pass because the commit is not a sweep at all.
-if bash "$GUARD" --commit "$FOREIGN" >/dev/null 2>&1; then
+if guard --commit "$FOREIGN" >/dev/null 2>&1; then
     fail "precondition: the fixture's 'foreign' commit is not actually a sweep"
 else
     ok "precondition — the published commit IS a sweep when asked explicitly"
 fi
 
 # --- case 1: a PUBLISHED sweep must NOT be re-policed by default -------------
-out="$(bash "$GUARD" 2>&1)"
+out="$(guard 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then
     fail "a sweep already published on origin was refused by the default range (rc=$rc) — the mandated merge makes the branch unpushable: $out"
@@ -101,7 +108,7 @@ printf 'more\n' > src/main.rs
 git add -A
 git commit -qm "sweep authored HERE, unpublished"
 LOCAL="$(git rev-parse HEAD)"
-out="$(bash "$GUARD" 2>&1)"
+out="$(guard 2>&1)"
 rc=$?
 if [ "$rc" -eq 0 ]; then
     fail "a locally-authored, unpublished sweep was ALLOWED (rc=0) — the scope narrowing has repealed the guard instead of narrowing it"
@@ -120,7 +127,7 @@ printf 'v9\n' > VERSION
 printf 'y\n' > Cargo.toml
 git add -A
 git commit -qm "clean release bump"
-out="$(bash "$GUARD" 2>&1)"
+out="$(guard 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then
     fail "a clean VERSION+Cargo.toml bump was refused (rc=$rc) — releases become impossible: $out"
@@ -135,7 +142,7 @@ printf 'work\n' > platform.txt
 git add -A
 git commit -qm "platform work"
 git merge -q --no-ff --no-edit "$FOREIGN" -m "merge: integration catch-up" 2>/dev/null
-out="$(bash "$GUARD" 2>&1)"
+out="$(guard 2>&1)"
 rc=$?
 if [ "$rc" -ne 0 ]; then
     fail "a merge inheriting a foreign VERSION was refused (rc=$rc): $out"

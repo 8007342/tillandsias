@@ -99,12 +99,19 @@ candidate() {
     git -C "$WORK_DIR" checkout -q linux-next
 }
 
+# 2152-lqrf: the refresh key reads a dep-info and writes a stamp, by default
+# under the GATE's CARGO_TARGET_DIR, i.e. the real shared target. A fixture must
+# never read or write production state, so both are pinned to scratch unless an
+# arm names its own (ARM 40). Measured: unpinned, ARM 22b stamped the target and
+# the NEXT gate's ARM 22 skipped its failing refresh and gated #22 (red).
 run_queue() {
     ( cd "$WORK_DIR" && env \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="${TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO:-$TMP/no-plan-depinfo.d}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP:-$TMP/plan-refresh-stamp.$$}" \
         TILLANDSIAS_LAND_QUEUE_HOST_DOOR="${HOST_DOOR_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE="" \
         TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK="${PLAN_LANE_CMD:-echo plan-lane >> $GATE_LOG.plan-lane}" \

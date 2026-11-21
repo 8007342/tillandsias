@@ -3303,7 +3303,12 @@ main() {
     # then fail with build.rs's own diagnostic, which already tells the reader
     # exactly what to do. Refusing the whole run here would trade 29 confusing
     # failures for a total outage on hosts that have no stake in them.
-    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" ]]; then
+    # ORDER 2118-ywk7 (priority:build-speed): ONLY A TREE THAT CAN COMPILE IT.
+    # A fixture's scratch project (a copy of scripts/, no crates/) has nothing
+    # that compiles tillandsias-headless and nothing to build the sidecar from;
+    # staging there cost ~20 s per runner start under target/plan-scratch.
+    if [[ ! -f "$PROJECT_ROOT/images/router/tillandsias-router-sidecar" \
+          && -f "$PROJECT_ROOT/crates/tillandsias-router-sidecar/Cargo.toml" ]]; then
         if [[ -f "$PROJECT_ROOT/scripts/build-sidecar.sh" ]]; then
             log_info "Staging router sidecar (build artifact, absent — 871-wrmv)..."
             if bash "$PROJECT_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1; then
@@ -3466,6 +3471,8 @@ main() {
             owner_spec="$(grep -m1 -F 'spec: ' "$resolved_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
             if [[ -n "$owner_spec" ]]; then
                 log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+                # ORDER 2150-6vpc: one test alone is --test (1465-ijv3).
+                log_warn "hint: or run that test alone: scripts/run-litmus-test.sh ${owner_spec} --test litmus:${FILTER_SPEC#litmus:}"
             fi
         fi
         exit 1
