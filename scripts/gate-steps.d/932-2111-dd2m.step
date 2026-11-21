@@ -9,3 +9,4 @@ STEP_LUA="scripts/lua/test-query-full.lua"
 STEP_ERROR="plan query --full lost a row or its text (2111-dd2m) — see the FAIL lines above"
 STEP_OK="plan query --full fixture passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:query-full:6"
+# msys record: yolanda 2026-11-20 msys ok:query-full:6 arms (native tillandsias-plan.exe built from this branch)
