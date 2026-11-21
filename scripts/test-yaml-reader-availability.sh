@@ -47,7 +47,7 @@ run malformed-via-get        'blocked:yaml-load-failed:*' "$READER" yaml-get "$W
 # 5. And the same control one layer up, through the gate that had the defect:
 #    a malformed index must report index-load-failed, NOT status-vocab-diverges.
 run gate-load-vs-divergence 'blocked:index-load-failed:*' \
-    scripts/check-plan-schema-divergence.sh "$W/bad.yaml" plan/schema.yaml
+    "$READER" script run scripts/lua/check-plan-schema-divergence.lua -- "$W/bad.yaml" plan/schema.yaml
 
 # 6. A missing key is EMPTY, not an error — matches the `// []` in the yq
 #    exprs this replaced, and keeps "loads but empty" distinct from "broken".
@@ -65,7 +65,7 @@ run absent-file 'blocked:yaml-unreadable:*' "$READER" validate-yaml "$W/nope.yam
 #    reads like a corrupt ledger and sends the first responder to the ledger.
 mkdir -p "$W/empty"
 run reader-absent-is-named 'blocked:index-load-failed:*sanctioned YAML reader*' \
-    env TILLANDSIAS_PLAN_BIN="$W/no-such-binary" scripts/check-plan-schema-divergence.sh
+    env TILLANDSIAS_PLAN_BIN="$W/no-such-binary" "$READER" script run scripts/lua/check-plan-schema-divergence.lua
 
 # 9/10/11. yaml-type, in yq's own spelling — the pre-push lane compares
 #          against '!!map' literally, so the vocabulary must match yq's.
@@ -84,7 +84,7 @@ run type-of-broken-is-load-failed 'blocked:yaml-load-failed:*' "$READER" yaml-ty
 #        and each arm then EXECUTES the remedy and requires the check to answer
 #        ok:status-vocab-in-sync (1247-amcu criterion 5). The reader is made
 #        absolute so an arm run from a scratch directory resolves the same one.
-GATE="$ROOT/scripts/check-plan-schema-divergence.sh"
+GATE="$ROOT/scripts/lua/check-plan-schema-divergence.lua"   # ported (2165-ryfg); runs on `script run`
 case "$READER" in (/*) ABS_READER="$READER" ;; (*) ABS_READER="$ROOT/${READER#./}" ;; esac
 good_index() { printf 'plan_index:\n  default_status_values: [pending, ready, done]\n' > "$1"; }
 good_schema() { printf 'statuses: [pending, ready, done]\n' > "$1"; }
@@ -120,49 +120,49 @@ good_index "$W/v/index.yaml"; good_schema "$W/v/schema.yaml"
 #     paths; passing them clears it.
 afford missing-inputs-affordance 'blocked:status-vocab-diverges: could not read*' \
     '*plan/index.yaml and plan/schema.yaml is not a file*name both files*' \
-    sh -c 'cd "$1" && exec bash "$2"' _ "$W/empty" "$GATE"
-cleared missing-inputs-remedy bash "$GATE" "$W/v/index.yaml" "$W/v/schema.yaml"
+    sh -c 'cd "$1" && exec "$3" script run "$2"' _ "$W/empty" "$GATE" "$ABS_READER"
+cleared missing-inputs-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/index.yaml" "$W/v/schema.yaml"
 
 # 13. No reader: remedy is to build one or point TILLANDSIAS_PLAN_BIN at one.
 afford reader-absent-affordance 'blocked:index-load-failed:*sanctioned YAML reader*' \
     '*remedy: cargo build --release -p tillandsias-plan, or set TILLANDSIAS_PLAN_BIN*' \
-    env TILLANDSIAS_PLAN_BIN="$W/no-such-binary" bash "$GATE" "$W/v/index.yaml" "$W/v/schema.yaml"
-cleared reader-absent-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/index.yaml" "$W/v/schema.yaml"
+    env TILLANDSIAS_PLAN_BIN="$W/no-such-binary" "$ABS_READER" script run "$GATE" -- "$W/v/index.yaml" "$W/v/schema.yaml"
+cleared reader-absent-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/index.yaml" "$W/v/schema.yaml"
 
 # 14. Unparseable index: the why says it is NOT a divergence; fixing the YAML
 #     (and the validate-yaml it names) clears it.
 printf 'plan_index:\n  default_status_values: [pending, ready, done\n' > "$W/v/broken.yaml"
 afford malformed-affordance "blocked:index-load-failed: $W/v/broken.yaml: *" \
     '*not a vocabulary divergence*validate-yaml*' \
-    env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/broken.yaml" "$W/v/schema.yaml"
+    env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/broken.yaml" "$W/v/schema.yaml"
 good_index "$W/v/broken.yaml"
 run malformed-remedy-validates "ok:yaml-loads:$W/v/broken.yaml" "$ABS_READER" validate-yaml "$W/v/broken.yaml"
-cleared malformed-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/broken.yaml" "$W/v/schema.yaml"
+cleared malformed-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/broken.yaml" "$W/v/schema.yaml"
 
 # 15. A real divergence names the statuses on each side only.
 printf 'plan_index:\n  default_status_values: [pending, ready, archived]\n' > "$W/v/drift.yaml"
 afford divergence-names-the-difference 'blocked:status-vocab-diverges: *' \
     "*only in $W/v/drift.yaml: (archived); only in $W/v/schema.yaml: (done)*remedy: make*" \
-    env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/drift.yaml" "$W/v/schema.yaml"
+    env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/drift.yaml" "$W/v/schema.yaml"
 good_index "$W/v/drift.yaml"
-cleared divergence-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/drift.yaml" "$W/v/schema.yaml"
+cleared divergence-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/drift.yaml" "$W/v/schema.yaml"
 
 # 16. Same statuses, different order, is still a divergence and says so.
 printf 'plan_index:\n  default_status_values: [ready, pending, done]\n' > "$W/v/order.yaml"
 afford order-only-divergence 'blocked:status-vocab-diverges: *' '*same statuses, in a different order*' \
-    env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/order.yaml" "$W/v/schema.yaml"
+    env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/order.yaml" "$W/v/schema.yaml"
 
 # 17. Both vocabularies ABSENT used to answer ok:status-vocab-in-sync
 #     (yaml-get is empty, rc=0, for a missing key). Absent is refused.
 printf 'plan_index:\n  other: 1\n' > "$W/v/novocab.yaml"; printf 'other: 1\n' > "$W/v/noschema.yaml"
 afford absent-vocab-refused "blocked:status-vocab-absent: $W/v/novocab.yaml: plan_index.default_status_values" \
     '*no vocabulary to compare*remedy: add plan_index.default_status_values*' \
-    env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/novocab.yaml" "$W/v/noschema.yaml"
+    env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/novocab.yaml" "$W/v/noschema.yaml"
 good_index "$W/v/novocab.yaml"
 afford absent-schema-vocab-refused "blocked:status-vocab-absent: $W/v/noschema.yaml: statuses" '*remedy: add statuses*' \
-    env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/novocab.yaml" "$W/v/noschema.yaml"
+    env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/novocab.yaml" "$W/v/noschema.yaml"
 good_schema "$W/v/noschema.yaml"
-cleared absent-vocab-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" bash "$GATE" "$W/v/novocab.yaml" "$W/v/noschema.yaml"
+cleared absent-vocab-remedy env TILLANDSIAS_PLAN_BIN="$ABS_READER" "$ABS_READER" script run "$GATE" -- "$W/v/novocab.yaml" "$W/v/noschema.yaml"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -55,7 +55,6 @@ scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
-scripts/check-plan-schema-divergence.sh
 scripts/check-purge-clears-vault-credentials.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
