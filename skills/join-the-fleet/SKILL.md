@@ -296,7 +296,10 @@ there.
      FULL tier; the light and scoped tiers (proportional to the paths a PR
      touches: plan and docs are light, one crate or one lane is scoped,
      anything wider is full) are 765-xpct's selector, approved by the operator
-     on 2026-09-20 and activating when that row closes;
+     on 2026-09-20 and activating when that row closes. Since 2026-11-20
+     (operator) a plan-ledger-only PR lands on the plan-lane checks with no
+     build-check; `land:priority` is gated next and `land:hold` is skipped
+     and named (methodology → landing_queue, 2143-z5uj);
   6. close by order (`set-field <order> status completed …`) after the landing
      proves — after the merge is on `origin/linux-next`, not after the PR is
      opened. The evidence SHA on the closing event is the LANDED commit on

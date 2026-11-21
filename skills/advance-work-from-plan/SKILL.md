@@ -373,7 +373,8 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
     through the plan-only lane. The order of the whole flow, from
     join-the-fleet §3: claim by order → `git switch -c work/<order>` from
     `origin/linux-next` → commit and push to `work/<order>` freely → open the
-    PR (draft until the closure evidence is on the row) → the landing queue
+    PR (label `land:hold` until the closure evidence is on the row; a draft
+    is never landed either, but the label is the named hold, 2143-z5uj) → the landing queue
     integrates once → close by order after the landing proves.
 
     `push-plan-fragments-to-trunk.sh` builds one commit parented on
