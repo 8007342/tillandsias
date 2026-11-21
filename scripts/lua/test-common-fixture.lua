@@ -1,4 +1,4 @@
--- @trace order:2080-zcur, order:2084-senw
+-- @trace order:2080-zcur, order:2084-senw, order:2158-vrb7
 --
 -- test-common-fixture.lua — the shared Lua test kit resolves through the
 -- runner's `require` and does what its users rely on.
@@ -8,6 +8,10 @@
 --   3 repo_root() is absolute and accepted as a proc.run cwd
 --   4 git_repo() builds a repo with one commit on main and a local identity
 --   5 scratch dirs are gone after cleanup
+--   6 T:scratch().abs works as a git remote (init --bare, remote add, push)
+--   7 T:scratch().abs is accepted by rm -rf
+--     (6, 7 pre-2158-vrb7 on msys: .abs was \\?\C:\..., refused by both)
+--   8 plain_path strips \\?\ and \\?\UNC\, leaves other paths unchanged
 --
 -- Usage: tillandsias-plan script run scripts/lua/test-common-fixture.lua
 -- Verdict: ok:common-fixture:<n> arms | violation:common-fixture:<n>-failed
@@ -32,6 +36,31 @@ local repo = T:git_repo()
 local log = T:run{ "git", "log", "--format=%an %s", "main", cwd = repo.abs }
 T:arm("4 git_repo has one commit on main by the fixture identity",
     log.code == 0 and text.trim(log.stdout) == "fixture init", log.stdout .. log.stderr)
+
+-- 2158-vrb7: .abs goes straight to git and rm. Pre-fix on msys it was
+-- \\?\C:\..., which git reads as a //host/share and the rm policy refuses.
+local function try(argv)
+    local ok, res = pcall(T.run, T, argv)
+    if not ok then return { code = -1, stdout = "", stderr = tostring(res) } end
+    return res
+end
+local O, W = T:scratch("origin"), T:git_repo("work")
+local i = try{ "git", "init", "-q", "--bare", O.abs }
+local a = try{ "git", "-C", W.abs, "remote", "add", "origin", O.abs }
+local p = try{ "git", "-C", W.abs, "push", "-q", "origin", "main" }
+local c = try{ "git", "-C", O.abs, "rev-parse", "--verify", "-q", "refs/heads/main" }
+T:arm("6 scratch .abs works as a git remote: init, remote add, push",
+    i.code == 0 and a.code == 0 and p.code == 0 and c.code == 0,
+    O.abs .. " | " .. (p.stderr or "") .. (a.stderr or ""))
+local J = T:scratch("junk")
+fs.write(J.rel .. "/f", "z")
+local rm = try{ "rm", "-rf", J.abs .. "/" }
+T:arm("7 scratch .abs is accepted by rm -rf", rm.code == 0 and not fs.exists(J.rel .. "/f"), J.abs .. " | " .. (rm.stderr or ""))
+T:arm("8 plain_path strips the verbatim prefix and leaves other paths alone",
+    fixture.plain_path("\\\\?\\C:\\a\\b") == "C:/a/b"
+        and fixture.plain_path("\\\\?\\UNC\\srv\\s\\x") == "//srv/s/x"
+        and fixture.plain_path("/home/x") == "/home/x" and fixture.plain_path("C:/a") == "C:/a",
+    fixture.plain_path("\\\\?\\C:\\a\\b"))
 
 local d = T:scratch()
 fs.write(d.rel .. "/x", "y")
