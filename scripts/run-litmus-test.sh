@@ -601,6 +601,10 @@ _lt_gate_restore() {
 TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
+# ORDER 2159-n9sa (priority:build-speed): --select-only walks the SAME selection
+# path as a real run and prints the same "Executing" lines and Total, but
+# executes no step. Each selected test is counted as a SKIP named select-only.
+SELECT_ONLY=0
 
 # ORDER 956-llei. CPU stall accounting for the kill-time adjudicator, read
 # from THIS cgroup's pressure file so a step run inside a container is
@@ -2535,6 +2539,14 @@ run_tests_for_spec() {
             fi
         fi
 
+        # ORDER 2159-n9sa: everything above is selection, shared with a real
+        # run; from here on is execution, which --select-only does not do.
+        if [[ "$SELECT_ONLY" -eq 1 ]]; then
+            printf '%bℹ%b Executing %s...\n' "${BLUE}" "${NC}" "$test_name" >&2
+            log_test_result "$spec_id" "$test_name" "SKIP" "select-only (2159-n9sa): selected, not executed"
+            test_count=$((test_count+1))
+            continue
+        fi
         litmus_refresh_stale_podman_cli
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
@@ -2911,6 +2923,10 @@ parse_args() {
         case "$1" in
             --list)
                 LIST_ONLY=1
+                shift
+                ;;
+            --select-only)
+                SELECT_ONLY=1
                 shift
                 ;;
             --parse-only)
