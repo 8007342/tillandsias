@@ -189,8 +189,8 @@ EOF
     local un=""
     [ "$n_scoring" -ge 2 ] || un="$un,kill-rule(needs-2-scoring-sweeps-have-$n_scoring)"
     [ "$band_n" -ge "$BAND_WINDOW" ] || un="$un,refutation-band(needs-$BAND_WINDOW-with-findings-have-$band_n)"
-    printf '%s\n' "$recs" | awk '$9 != "-"' | grep -q . || un="$un,net-negative(no-record-carries-net_lines)"
-    printf '%s\n' "$recs" | awk '$8 != "-"' | grep -q . || un="$un,filing-cap(no-record-carries-filed)"
+    awk 'length($0) && $9 != "-" {f = 1} END {exit !f}' <<<"$recs" || un="$un,net-negative(no-record-carries-net_lines)"
+    awk 'length($0) && $8 != "-" {f = 1} END {exit !f}' <<<"$recs" || un="$un,filing-cap(no-record-carries-filed)"
 
     if [ -n "$un" ]; then
         echo "unknown:deslop-health:sweeps=$total unscoreable:${un#,} — no rule fired, but these could not be evaluated; that is not a pass"
