@@ -202,6 +202,7 @@ specs:
   - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
   - litmus:cycle-metrics-fixtures-pin-logs-shape
+  - litmus:runner-scratch-skips-sidecar-shape
   - litmus:seam-writer-canonical-lock-shape
   - litmus:bash-composition-hazards-advisory-shape
   # 1137-da83. scripts/test-*.sh is not globbed by build.sh, so a fixture runs
