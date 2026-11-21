@@ -1,5 +1,5 @@
 -- @trace order:1356-u6xe, spec:git-mirror-service, order:2168-dqph
--- @env PATH HOME XDG_RUNTIME_DIR
+-- @env PATH HOME XDG_RUNTIME_DIR TILLANDSIAS_PLAN_BIN TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-bare-metal-lane-command-is-runnable.lua — the substrate checker's
 -- mirror todo: line prints a command a worker COPIES AND RUNS; it must be the
@@ -16,15 +16,17 @@
 --   skip:bare-metal-lane-command:no-podman | :enclave-down           exit 0
 --   violation:bare-metal-lane-command:<why>                          exit 1
 
-local CHECKER = "scripts/check-bare-metal-host-initialized.sh"
+local CHECKER = "scripts/lua/check-bare-metal-host-initialized.lua"
 local function bad(why) verdict.emit("violation:bare-metal-lane-command:" .. why, 1) end
 
-local x = proc.run({ argv = { "test", "-x", CHECKER }, timeout_ms = 10000 })
-if x.code ~= 0 then bad("checker-not-executable:" .. CHECKER) end
+if not fs.read(CHECKER) then bad("checker-absent:" .. CHECKER) end
+local PLAN = env.get("TILLANDSIAS_SCRIPT_RUNNER_BIN")
+if PLAN == nil or PLAN == "" then PLAN = env.get("TILLANDSIAS_PLAN_BIN") end
+if PLAN == nil or PLAN == "" then PLAN = "tillandsias-plan" end
 
 -- Name a project no container serves: the ONLY branch that prints the lane
 -- command, and it prints it without touching anything.
-local r = proc.run({ argv = { "bash", CHECKER }, timeout_ms = 120000, env = {
+local r = proc.run({ argv = { PLAN, "script", "run", CHECKER }, timeout_ms = 120000, env = {
     PATH = env.get("PATH"), HOME = env.get("HOME"), XDG_RUNTIME_DIR = env.get("XDG_RUNTIME_DIR"),
     TILLANDSIAS_PROJECT = "definitely-no-such-project-1356u6xe" } })
 local line = text.lines(r.stdout or "")[1] or ""

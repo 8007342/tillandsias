@@ -5,7 +5,6 @@ scripts/check-append-vs-origin-fold.sh
 scripts/check-approved-ux-strings.sh
 scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
-scripts/check-bare-metal-host-initialized.sh
 scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
