@@ -236,6 +236,7 @@ specs:
   - litmus:installer-swap-atomicity
   - litmus:installer-reprovisions-on-install
   - litmus:validator-surface-currency
+  - litmus:plan-binary-refresh-clears-stale
   - litmus:fragment-ts-skew
   - litmus:preflight-front-door
   - litmus:preflight-declarations-host-sed
