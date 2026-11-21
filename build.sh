@@ -6408,7 +6408,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
     # (VERSION + Cargo files only) still passes.
     _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-version-bump-isolation.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-version-bump-isolation.lua" 2>&1; then
         _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
         exit 1
     fi
