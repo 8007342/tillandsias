@@ -3429,6 +3429,8 @@ main() {
             owner_spec="$(grep -m1 -F 'spec: ' "$resolved_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
             if [[ -n "$owner_spec" ]]; then
                 log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+                # ORDER 2150-6vpc: one test alone is --test (1465-ijv3).
+                log_warn "hint: or run that test alone: scripts/run-litmus-test.sh ${owner_spec} --test litmus:${FILTER_SPEC#litmus:}"
             fi
         fi
         exit 1
