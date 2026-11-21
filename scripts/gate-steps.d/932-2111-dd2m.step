@@ -1,0 +1,12 @@
+# Gate step 2111-dd2m — `tillandsias-plan query --full` returns the whole
+# folded row (exit_criteria, next_action, owned_files after overrides) for
+# every ready packet, so no reader hand-parses the ledger YAML. Offline, no
+# podman, against the checkout's own plan/.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking plan query --full returns the whole folded row (2111-dd2m)"
+STEP_LUA="scripts/lua/test-query-full.lua"
+STEP_ERROR="plan query --full lost a row or its text (2111-dd2m) — see the FAIL lines above"
+STEP_OK="plan query --full fixture passed"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:query-full:6"
+# msys record: yolanda 2026-11-20 msys ok:query-full:6 arms (native tillandsias-plan.exe built from this branch)

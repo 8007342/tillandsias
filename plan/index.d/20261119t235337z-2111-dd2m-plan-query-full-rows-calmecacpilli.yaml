@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli (floor host) at the coordinator's request
+# (macuahuitl-fedora, 2026-11-19), from the tech-debt triage read-path finding.
+packets:
+- packet_id: plan-query-emits-the-full-folded-row-so-no-reader-hand-parses-the-ledger-yaml
+  order: 2111-dd2m
+  status: ready
+  kind: enhancement
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags:
+  - plan
+  - rust
+  - expert
+  estimated_hours: 3
+  title: tillandsias-plan query can emit the full folded row (exit_criteria, verifiable_closure, next_action, owned_files after every LWW override), so a triage that reads row text never hand-parses the ledger YAML and silently misses rows
+  context: |
+    The fold sees every row: `tillandsias-plan query --status ready --json --limit 0`
+    returned 1378 ready rows on 2026-11-19. But its --json projection carries only
+    packet_id, order, title, status, kind, pickup_role, desired_release,
+    release_target, capability_tags, deliverable, depends_on, lease and priority.
+    A stale-path triage needs exit_criteria, verifiable_closure, next_action and
+    owned_files. With no fold-backed way to read them, the triage hand-parsed the
+    YAML and MISSED 389 of 1378 ready rows (28%), for three reasons:
+    (a) base plan/index.yaml nests packets under plan_index:, not packets:;
+    (b) rows also live in plan/archive/*.yaml;
+    (c) bare numeric orders (e.g. 141, 145, 150) parse as YAML ints, not strings.
+    Example ids the hand parser missed and the fold sees: 1004-7vcc (base, under
+    plan_index), 1001-7fd9 (plan/archive/packets-2026-09.yaml), 141 (numeric order).
+    A hand parser also ignores set-field/list-replace overrides, so even a found row
+    shows a stale next_action or exit_criteria. Seven rows this pass missed cited
+    deleted scripts (1014-xf2u 1037-x5mk 1144-jfr5 833-ecdg 858-h7ke 956-llei 964-zgga).
+  exit_criteria:
+  - '`tillandsias-plan query --status ready --json --full --limit 0` emits, for every ready row, the folded exit_criteria, verifiable_closure, next_action and owned_files, with set-field and list-replace overrides applied.'
+  - 'A fixture plants three rows (one under base plan_index:, one in plan/archive/, one with a bare numeric order) plus a set-field next_action override, and asserts --full returns all three with the overridden value. It fails today (no --full flag).'
+  - 'The project-info and forge-plan plan_query MCP tools accept the same full projection, so an agent asks instead of reading files (CLAUDE.md mcp_first_read_path).'
+  verifiable_closure: 'The fixture above passes, is named by a litmus, and fails against today''s binary (unknown query constraint: --full).'
+  unscoreable: 'unpinnable-until-the-guard-exists: the claimer writes the fixture and names its litmus in the same commit (1136-n8sh).'
+  next_action: 'Add --full to query in crates/tillandsias-plan (reuse the fold already used by set-field), fixture red first, then expose it through plan_query.'
+  provenance: 'calmecacpilli tech-debt triage 2026-11-19; coordinator macuahuitl-fedora asked for a packet if the read path, not the fold, was at fault.'
+  events:
+  - type: filed
+    ts: '2026-11-19T23:53:37Z'
+    host: calmecacpilli
+    summary: filed from the triage read-path finding (389 of 1378 ready rows invisible to a hand parser)

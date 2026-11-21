@@ -1,0 +1,35 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:2111-dd2m
+#
+# A reader that needs a row's TEXT (exit_criteria, next_action, owned_files)
+# asks the fold with `query --full` instead of hand-parsing the ledger YAML.
+# Measured 2026-11-19: a hand parser missed 389 of 1378 ready rows (base nests
+# under plan_index:, bare numeric orders parse as ints) and every set-field
+# override. Red before 2111-dd2m: "unknown query constraint: --full".
+name: litmus:plan-query-full-row
+spec: forge-environment-discoverability
+phase: pre-build
+description: tillandsias-plan query --full returns the whole folded row for every ready packet, including rows a hand parser misses
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary) and the checkout's plan/ ledger; offline
+
+critical_path:
+  - step: "--full returns 1004-7vcc, 1001-7fd9 and 141 with exit_criteria, drops no row, leaves the plain projection unchanged, refuses a doubled flag"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-query-full.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:query-full:6 arms"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "six arms: three example ids with text, row-count parity, plain projection unchanged, doubled flag refused"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "plan-query-full-row"
+
+rollback:
+  on_failure: "read the FAIL lines; the flag is parsed in parse_query_options and emitted by query_full_projection in crates/tillandsias-plan/src/main.rs"
+  command: "grep -n 'query_full_projection\\|\"--full\"' crates/tillandsias-plan/src/main.rs"

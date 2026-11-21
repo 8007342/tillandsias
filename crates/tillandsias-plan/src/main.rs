@@ -374,7 +374,7 @@ const USAGE: &str = concat!(
     "                                     jq; satisfying that dependency per host repeats the yq/ruby\n",
     "                                     exposure, so the projection moves to the binary that already\n",
     "                                     owns the ledger.\n",
-    "           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json]\n",
+    "           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json] [--full]\n",
     "                                     ORDER 582-26mm. THE generic filtered reader over the\n",
     "                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only\n",
     "                                     correct way to enumerate packets by status / pickup_role /\n",
@@ -384,7 +384,9 @@ const USAGE: &str = concat!(
     "                                     both route here; a reader that forgets fragments reports a\n",
     "                                     stale ledger with total confidence. TSV by default\n",
     "                                     (order<TAB>packet_id<TAB>desired_release<TAB>tags); --json\n",
-    "                                     emits the plan_query projection array.\n",
+    "                                     emits the plan_query projection array; --full (implies\n",
+    "                                     --json) adds the whole FOLDED row (exit_criteria,\n",
+    "                                     next_action, owned_files, context; 2111-dd2m).\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
     "           disk-preflight [--repo D] [--target D] [--l0] [--dry-run]\n",
@@ -1749,6 +1751,8 @@ struct QueryOptions {
     implementer_tier: Option<String>,
     limit: usize,
     json: bool,
+    // ORDER 2111-dd2m: --full emits the whole FOLDED row (implies --json).
+    full: bool,
 }
 
 impl Default for QueryOptions {
@@ -1762,6 +1766,7 @@ impl Default for QueryOptions {
             implementer_tier: None,
             limit: 20,
             json: false,
+            full: false,
         }
     }
 }
@@ -1851,6 +1856,20 @@ fn parse_query_options(args: &[String]) -> Result<QueryOptions, String> {
                 if options.json {
                     return Err("--json may be specified only once".to_string());
                 }
+                options.json = true;
+                i += 1;
+            }
+            // ORDER 2111-dd2m. The projection above carries no row TEXT, so a
+            // reader that needs exit_criteria / next_action / owned_files had to
+            // hand-parse the YAML. Measured 2026-11-19: such a parser missed 389
+            // of 1378 ready rows (base nests under plan_index:, rows in
+            // plan/archive/, bare numeric orders parse as ints) and ignored every
+            // set-field override. --full emits the FOLDED row instead.
+            "--full" => {
+                if options.full {
+                    return Err("--full may be specified only once".to_string());
+                }
+                options.full = true;
                 options.json = true;
                 i += 1;
             }
@@ -1969,6 +1988,26 @@ pub fn dependencies_are_clear(
     terminal: &std::collections::BTreeSet<String>,
 ) -> bool {
     deps.iter().all(|d| terminal.contains(d))
+}
+
+/// ORDER 2111-dd2m. The FULL folded row: the projection's keys (lease, tier
+/// scalars, string order) first, then every other field of the folded packet,
+/// so set-field and list-replace overrides are what a reader sees.
+fn query_full_projection(packet: &serde_yaml::Value) -> serde_json::Value {
+    let mut proj = query_json_projection(packet);
+    if let (Some(obj), Some(map)) = (proj.as_object_mut(), packet.as_mapping()) {
+        for (k, v) in map {
+            if let Some(key) = k.as_str()
+                && !obj.contains_key(key)
+            {
+                obj.insert(
+                    key.to_string(),
+                    serde_json::to_value(v).unwrap_or(serde_json::Value::Null),
+                );
+            }
+        }
+    }
+    proj
 }
 
 fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
@@ -9243,8 +9282,16 @@ If this test is THIS packet's deliverable, do not delete the pin (977-448j then 
                 options.limit,
             );
             if options.json {
-                let arr: Vec<serde_json::Value> =
-                    matched.iter().map(|p| query_json_projection(p)).collect();
+                let arr: Vec<serde_json::Value> = matched
+                    .iter()
+                    .map(|p| {
+                        if options.full {
+                            query_full_projection(p)
+                        } else {
+                            query_json_projection(p)
+                        }
+                    })
+                    .collect();
                 println!(
                     "{}",
                     serde_json::to_string(&serde_json::Value::Array(arr))
@@ -13516,6 +13563,31 @@ mod tests {
                     .to_string()
             })
             .collect()
+    }
+
+    /// ORDER 2111-dd2m: --full carries the row TEXT the plain projection drops,
+    /// keeps the projection's keys, and parses as a once-only flag implying --json.
+    #[test]
+    fn query_full_projection_carries_row_text() {
+        let raw = concat!(
+            "packet_id: full-sample\n",
+            "order: 141\n",
+            "status: ready\n",
+            "exit_criteria:\n  - \"a criterion\"\n",
+            "next_action: \"do the thing\"\n",
+            "owned_files:\n  - scripts/x.sh\n",
+        );
+        let val: serde_yaml::Value = serde_yaml::from_str(raw).unwrap();
+        let plain = query_json_projection(&val);
+        assert!(plain.get("exit_criteria").is_none());
+        let full = query_full_projection(&val);
+        assert_eq!(full["exit_criteria"][0], "a criterion");
+        assert_eq!(full["next_action"], "do the thing");
+        assert_eq!(full["owned_files"][0], "scripts/x.sh");
+        assert!(full.get("lease").is_some());
+        let opts = parse_query_options(&["--full".to_string()]).unwrap();
+        assert!(opts.full && opts.json);
+        assert!(parse_query_options(&["--full".to_string(), "--full".to_string()]).is_err());
     }
 
     #[test]
