@@ -634,7 +634,7 @@ multi_host_development:
         --reason "claimed by <agent_id>"`, commit ONLY that fragment, push it:
         `git push origin HEAD:linux-next` (the plan-only lane admits a
         fragment-only commit with no gate stamp). Then
-        `bash scripts/check-claim-confirmed.sh <order>` MUST print a win; a
+        `tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <host>` MUST print a win; a
         `refused:claim-lost:` means another agent holds it — append a note
         that you yielded and pick another packet.
       3_work: >
