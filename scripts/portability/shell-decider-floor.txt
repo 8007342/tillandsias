@@ -18,7 +18,6 @@ scripts/check-credential-channel.sh
 scripts/check-cycle-flow-log-fresh.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
-scripts/check-decider-retirement.sh
 scripts/check-deslop-due.sh
 scripts/check-deslop-sweep-health.sh
 scripts/check-enclave-ca-consistency.sh

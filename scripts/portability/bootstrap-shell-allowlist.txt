@@ -3,11 +3,11 @@
 # Source: plan/issues/scripting-runtime-lua-no-pipes-design-2026-09-26.md §6.5,
 # "What stays shell", resolved to the tracked paths it names. Everything else
 # under scripts/ migrates to scripts/lua; as it does, each bash decider's
-# population shrinks toward this list, and scripts/check-decider-retirement.sh
+# population shrinks toward this list, and scripts/lua/check-decider-retirement.lua
 # prints retire:<decider> when a decider's population EQUALS its bootstrap count.
 #
 # One repo-relative path per line; `#` starts a comment. Every entry must exist
-# on disk: check-decider-retirement.sh refuses a dangling one. Do not add a
+# on disk: check-decider-retirement.lua refuses a dangling one. Do not add a
 # path here to make a decider retire; add it only if §6.5 says it cannot move.
 #
 # Runs before any of our binaries exist: installers, the curl-install path, and

@@ -83,7 +83,7 @@ population() {
 files="$(population)"
 # ORDER 1443-xkwb. The population against the bootstrap-shell allowlist (the
 # shell that must stay, design §6.5), on STDERR: the stdout verdict is an
-# interface. scripts/check-decider-retirement.sh reads it. Litmus yaml counts
+# interface. scripts/lua/check-decider-retirement.lua reads it. Litmus yaml counts
 # toward the population and is never bootstrap, so this ratchet retires only
 # when no migratable shell AND no litmus site is left for it to guard.
 _jq_allowlist="${TILLANDSIAS_BOOTSTRAP_ALLOWLIST:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/portability/bootstrap-shell-allowlist.txt}"
