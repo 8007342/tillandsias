@@ -170,6 +170,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:release-is-one-cloud-build
+  - litmus:common-fixture
   - litmus:gate-step-private-metrics-fallback
   - litmus:prebuilt-resolver-refuses-stale
   - litmus:promote-stable-refusals-carry-affordance
