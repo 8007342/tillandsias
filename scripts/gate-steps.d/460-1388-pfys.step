@@ -7,4 +7,4 @@ STEP_DESC="Checking project-info grep_code recall: no false negatives, no stale 
 STEP_SCRIPT="scripts/test-project-info-grep-code-recall.sh"
 STEP_ERROR="grep_code answered a false negative or a stale result (1388-pfys) — see the verdict line above"
 STEP_OK="grep_code recall holds"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:grep-code-recall:13"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:grep-code-recall:14"
