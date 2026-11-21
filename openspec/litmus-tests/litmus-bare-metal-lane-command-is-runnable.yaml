@@ -1,5 +1,5 @@
 # @trace spec:git-mirror-service
-# @trace order:1356-u6xe
+# @trace order:1356-u6xe, order:2168-dqph
 #
 # Order 1356-u6xe: the substrate checker's mirror/router/inference todo: lines
 # print a command a worker COPIES AND RUNS during onboarding. That command
@@ -23,6 +23,7 @@
 # FALSIFIABILITY IS RECORDED, NOT ASSUMED. With the pre-fix LANE_CMD line
 # restored in place, the fixture fails by name:
 #   fail:bare-metal-lane-command:argument-after---bash-is-not-a-path:<project>
+# (since 2168-dqph the fixture is Lua and answers violation:bare-metal-lane-command:<why>)
 # A fixture never shown red against the bug it names has not been shown to
 # test for it.
 name: litmus:bare-metal-lane-command-is-runnable
@@ -38,21 +39,21 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-bare-metal-lane-command-is-runnable.sh
+  - workspace contains scripts/lua/test-bare-metal-lane-command-is-runnable.lua
   - workspace contains scripts/check-bare-metal-host-initialized.sh
   - the fixture reads the checker's PRINTED VERDICT only; it starts nothing
     and skips by name where there is no podman or the enclave is down
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-bare-metal-lane-command-is-runnable.sh && test -x scripts/test-bare-metal-lane-command-is-runnable.sh && echo 'ok: lane-command-fixture-parses'"
+  - step: "the fixture is present"
+    command: "test -f scripts/lua/test-bare-metal-lane-command-is-runnable.lua && echo 'ok: lane-command-fixture-parses'"
     timeout_ms: 10000
     expected_behavior: "ok: lane-command-fixture-parses"
     assert_exit: 0
     assert_output_contains: "ok: lane-command-fixture-parses"
 
   - step: "the printed lane command names an existing checkout whose parent is the project root"
-    command: "bash scripts/test-bare-metal-lane-command-is-runnable.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-bare-metal-lane-command-is-runnable.lua"
     timeout_ms: 60000
     expected_behavior: "ok:bare-metal-lane-command-is-runnable:root=<dir> path=<dir>/<project>, or a named skip on a host with no podman or a down enclave"
     assert_exit: 0

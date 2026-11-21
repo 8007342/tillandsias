@@ -85,7 +85,6 @@ scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
 scripts/test-archiver-ruby-could-not-run.sh
 scripts/test-awk-float-lc-numeric.sh
-scripts/test-bare-metal-lane-command-is-runnable.sh
 scripts/test-base-ledger-status-loss.sh
 scripts/test-bash-composition-hazards.sh
 scripts/test-bench-prompt-uniqueness.sh
