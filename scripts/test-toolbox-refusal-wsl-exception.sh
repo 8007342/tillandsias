@@ -82,7 +82,7 @@ else
     bad "WSL2 kernel + no toolbox -> exit $rc (the Windows lane is blocked again)"
     echo "$out" | sed 's/^/    /' >&2
 fi
-if printf '%s' "$out" | grep -q "FATAL: 'toolbox' is not installed"; then
+if grep -q "FATAL: 'toolbox' is not installed" <<<"$out"; then
     bad "WSL2 kernel still printed the toolbox FATAL"
 else
     ok "WSL2 kernel does not print the toolbox FATAL"
@@ -98,7 +98,7 @@ if [ "$rc" -ne 0 ]; then
 else
     bad "non-WSL Linux + no toolbox -> exit 0; the no-host-native-fallback ruling has been silently repealed"
 fi
-if printf '%s' "$out" | grep -q "FATAL: 'toolbox' is not installed"; then
+if grep -q "FATAL: 'toolbox' is not installed" <<<"$out"; then
     ok "non-WSL Linux still prints the toolbox FATAL"
 else
     bad "non-WSL Linux lost the toolbox FATAL message"

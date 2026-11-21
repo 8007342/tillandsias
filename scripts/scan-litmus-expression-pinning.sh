@@ -86,7 +86,7 @@ for f in "$LITMUS_DIR"/*.yaml; do
                 signals=""
 
                 # literal-grep: grep -F, or grep -q with no regex metacharacters.
-                if printf '%s' "$cmd" | grep -qE 'grep [^|]*-[A-Za-z]*F'; then
+                if grep -qE 'grep [^|]*-[A-Za-z]*F' <<<"$cmd"; then
                     score=$((score + 1)); signals="${signals},literal-grep"
                 fi
 
@@ -101,12 +101,12 @@ for f in "$LITMUS_DIR"/*.yaml; do
                 fi
 
                 # src-pinned: greps a source file rather than produced output.
-                if printf '%s' "$cmd" | grep -qE '\.(sh|rs|ps1|yml|yaml|toml)([^a-z]|$)'; then
+                if grep -qE '\.(sh|rs|ps1|yml|yaml|toml)([^a-z]|$)' <<<"$cmd"; then
                     score=$((score + 1)); signals="${signals},src-pinned"
                 fi
 
                 # long-literal: any quoted literal >= 40 chars.
-                if printf '%s' "$cmd" | grep -qE "'[^']{40,}'"; then
+                if grep -qE "'[^']{40,}'" <<<"$cmd"; then
                     score=$((score + 1)); signals="${signals},long-literal"
                 fi
 
