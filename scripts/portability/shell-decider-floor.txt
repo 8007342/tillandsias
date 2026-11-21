@@ -161,7 +161,6 @@ scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh
 scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-decider-retirement.sh
-scripts/test-deciders-within-door-deadline.sh
 scripts/test-default-vault-cli-security.sh
 scripts/test-derive-host-identity.sh
 scripts/test-dev-inference-start-refusal-names-cause.sh
@@ -396,7 +395,6 @@ scripts/test-plan-binary-copy-refresh.sh
 scripts/test-plan-binary-freshness.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
-scripts/test-plan-binary-probe-usage-determinism-corpus.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
