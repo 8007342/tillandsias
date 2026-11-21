@@ -13,7 +13,7 @@ packets:
     owned_files:
       - scripts/gate-tree-hygiene.sh
       - scripts/lua/test-gate-tree-hygiene.lua
-      - scripts/gate-steps.d/932-2150-qd38.step
+      - scripts/gate-steps.d/935-2150-qd38.step
       - build.sh
     title: "The gate logs host PSI at start and end, and warns (or with opt-in refuses) on >1 GB of untracked scratch in the checkout"
     context: |
@@ -24,8 +24,8 @@ packets:
     exit_criteria:
       - "scripts/lua/test-gate-tree-hygiene.lua passes 7 arms; at trunk the probe does not exist and every arm fails."
       - "a ./build.sh --check log on a Linux host shows psi:gate-start, psi:gate-end and a tree-scratch verdict line."
-    unscoreable: "decider-not-litmus: scored by the gate step 932-2150-qd38, not a litmus binding."
-    next_action: "Land; then a darwin/msys host records STEP_SECOND_REGIME for step 932 (the psi:unavailable arm is their path)."
+    unscoreable: "decider-not-litmus: scored by the gate step 935-2150-qd38, not a litmus binding."
+    next_action: "Land; then a darwin/msys host records STEP_SECOND_REGIME for step 935 (the psi:unavailable arm is their path)."
     provenance: "macuahuitl-fedora build-speed queue, 2026-11-20, item (2)."
     events:
       - type: filed
