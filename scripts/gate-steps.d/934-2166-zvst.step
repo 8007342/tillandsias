@@ -5,6 +5,7 @@
 # STEP_LUA is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking Lua deciders judge the caller's repository, not the runner's root (2166-zvst)"
 STEP_LUA="scripts/lua/test-lua-deciders-judge-caller-repo.lua"
+STEP_SECOND_REGIME="yolanda 2026-11-21 msys ok:lua-deciders-judge-caller-repo:4 arms"
 STEP_ERROR="a Lua decider judged the runner's repository root instead of the checkout it was run from (2166-zvst) — see the FAIL lines above"
 STEP_OK="Lua deciders judge the caller's repository"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:lua-deciders-judge-caller-repo:4(TILLANDSIAS_PLAN_BIN=target/release)"
