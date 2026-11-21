@@ -6733,7 +6733,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # unrelated routes before this was mechanised. Sub-second; the fixture
     # carries the real pre-fix arm from git history as its positive control.
     _step "Checking litmus steps named MUTATION/SABOTAGE actually mutate (1059-pb2j)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-mutation-arms-mutate.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-litmus-mutation-arms-mutate.lua" 2>&1; then
         _error "a litmus step named for a mutation performs none (1059-pb2j) — rename it to what it asserts; see the verdict line above"
         exit 1
     fi
