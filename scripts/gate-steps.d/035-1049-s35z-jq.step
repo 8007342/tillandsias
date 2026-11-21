@@ -32,3 +32,7 @@ STEP_SCRIPT="scripts/test-jq-multiline-capture.sh"
 STEP_ERROR="a multi-line jq capture does not strip CR, or the checker enforcing it cannot fail (1049-s35z) — see the verdict line above"
 STEP_OK="Multi-line jq capture check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:jq-multiline-capture:7"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/check-jq-multiline-capture-strips-cr.lua scripts/plan-binary-probe.sh scripts/test-jq-multiline-capture.sh"

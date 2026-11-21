@@ -26,3 +26,7 @@ STEP_OK="Cheatsheet references passed"
 # been run on darwin or msys (pure fs reads, no spawn: an argument, not a
 # measurement).
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/default/** scripts/lua/check-cheatsheet-refs.lua"
