@@ -4934,7 +4934,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # those checks and a binary built for another checkout; this fixture pins
     # the contract hermetically.
     _step "Checking point-of-use instrument freshness (851-cduu)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-freshness.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-freshness.lua" 2>&1; then
         _error "ensure_fresh_plan_binary broke its contract — a stale instrument could pass for HEAD"
         exit 1
     fi
@@ -5075,7 +5075,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Order 1442-wyf9: the same invariant from the installer's side — run in a
     # clone whose core.hooksPath is GLOBAL (any second clone inside a forge),
     # scripts/install-hooks.sh must refuse rather than arm the guards box-wide.
-    if ! _run bash "$SCRIPT_DIR/scripts/test-install-hooks-refuses-global-hookspath.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-install-hooks-refuses-global-hookspath.lua" 2>&1; then
         _error "scripts/install-hooks.sh wrote into a GLOBAL core.hooksPath — that arms the guards in every repo on the box"
         exit 1
     fi
@@ -6925,7 +6925,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # boundary of that admission runs INSIDE the gate. Half a second, and a
     # negative control nothing executes cannot protect the hole it names.
     _step "Checking the issue-capture fast lane keeps its boundaries (889-twhe)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-issue-capture-lane.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-pre-push-issue-capture-lane.lua" 2>&1; then
         _error "the plan-only lane's plan/issues admission lost a boundary (889-twhe) — see the verdict line above"
         exit 1
     fi

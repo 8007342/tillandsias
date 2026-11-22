@@ -270,7 +270,6 @@ scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-inference-pull-failure-classification.sh
 scripts/test-inference.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
-scripts/test-install-hooks-refuses-global-hookspath.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-path.sh
 scripts/test-installer-probes-by-attempt-not-by-help.sh
@@ -375,7 +374,6 @@ scripts/test-packet-tier-fields.sh
 scripts/test-pending-capability-row-does-not-wedge.sh
 scripts/test-pilot-lua-ports.sh
 scripts/test-plan-binary-copy-refresh.sh
-scripts/test-plan-binary-freshness.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
@@ -397,7 +395,6 @@ scripts/test-portability-idioms.sh
 scripts/test-pre-push-deletion-only.sh
 scripts/test-pre-push-empty-ref-list.sh
 scripts/test-pre-push-honours-a-live-freeze.sh
-scripts/test-pre-push-issue-capture-lane.sh
 scripts/test-pre-push-linux-next-merged.sh
 scripts/test-pre-push-main-branch-affordance.sh
 scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh

@@ -648,7 +648,6 @@ scripts scripts/test-image-build-convergence.sh 2
 scripts scripts/test-image-usability-check.sh 1
 scripts scripts/test-inference-pull-failure-classification.sh 4
 scripts scripts/test-inference.sh 2
-scripts scripts/test-install-hooks-refuses-global-hookspath.sh 2
 scripts scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts scripts/test-installers-quiet-progress.sh 3
 scripts scripts/test-join-the-fleet-idempotent.sh 8
@@ -720,7 +719,6 @@ scripts scripts/test-order-citations-resolve.sh 7
 scripts scripts/test-packet-tier-fields.sh 4
 scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
-scripts scripts/test-plan-binary-freshness.sh 2
 scripts scripts/test-plan-binary-probe-release-over-debug.sh 2
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10
@@ -734,7 +732,6 @@ scripts scripts/test-portability-idioms.sh 13
 scripts scripts/test-pre-push-deletion-only.sh 1
 scripts scripts/test-pre-push-empty-ref-list.sh 6
 scripts scripts/test-pre-push-honours-a-live-freeze.sh 11
-scripts scripts/test-pre-push-issue-capture-lane.sh 2
 scripts scripts/test-pre-push-linux-next-merged.sh 3
 scripts scripts/test-pre-push-plan-lane-fails-closed-without-binary.sh 7
 scripts scripts/test-pre-push-trailer-states-what-it-saw.sh 2
