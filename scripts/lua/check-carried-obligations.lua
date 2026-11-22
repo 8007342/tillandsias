@@ -459,8 +459,17 @@ local function taken_items()
             mbr = text.trim(mbr)
             if mbr ~= "" then
                 local _, del = git({ "diff", "--name-only", "--diff-filter=D", mbr, ref })
+                -- ORDER 2122-hv95. ONE PAYMENT, ONE COMMIT. When both refs
+                -- later merge newer trunk, merge-base --all(HEAD, ref) has two
+                -- answers and git may pick the trunk one, from which our OWN
+                -- inherited deletion shows again (#1149/#1150/#1152 evicted by
+                -- #1156, 2026-11-19). A deletion is the other ref's only if a
+                -- commit HEAD does not already contain performs it.
+                local _, own_del = git({ "log", "--format=", "--name-only", "--diff-filter=D", HEAD .. ".." .. ref })
+                local by_ref = {}
+                for _, f in ipairs(lines(own_del)) do by_ref[f] = true end
                 for _, f in ipairs(lines(del)) do
-                    if not taken_cache[f] then taken_cache[f] = ref:gsub("^origin/", "") end
+                    if by_ref[f] and not taken_cache[f] then taken_cache[f] = ref:gsub("^origin/", "") end
                 end
             end
         end
@@ -549,6 +558,12 @@ for _, b in ipairs(backlogs) do
             log.raw("  " .. removed .. " is already deleted by another open work ref (" .. paid_by .. ", snapshot=" .. snapshot() ..
                 "): two changes paid with the same item. Land one; on this one write `Carried-Waiver: " .. name ..
                 " conflict:" .. removed .. " (#<pr>)` in the message's last paragraph.")
+            -- 2152-t5p9: the waiver as its OWN line, at column 0, keyed by the
+            -- BACKLOG name. land-queue copies the first such line into its
+            -- eviction hint; without it the queue fell back to the verdict's
+            -- third field and told people to write `Carried-Waiver:
+            -- paid-but-taken-by <reason>`, which no backlog answers to.
+            log.raw("Carried-Waiver: " .. name .. " conflict:" .. removed .. " (#<pr>)")
         elseif #head_pop < #base_pop and removed and not paid_by then
             out.line("carried:" .. name .. ":paid:" .. removed)
         elseif waivers[name] then

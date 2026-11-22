@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: check-n-z-lua-port-batch-2-stranded-plan-writes-purge-vault-tracked-files-unwritten
+    field: context
+    value: |-
+      Continues 2118-9awa (PR #1190). Runtime facts from batch 1:
+      - lua fs is checkout-confined, so fixtures go under target/;
+      - text.lines raises on non-UTF-8, so use gmatch for byte scans;
+      - verdict.emit accepts only house prefixes.
+
+
+      [2026-11-20T05:32:00Z lenovinha] Scope ruling (coordinator, 2026-11-20). Batch 2 is check-unrunnable-platform-arms, check-native-lint-attested, check-no-tracked-binaries and check-opsx-generated-dirt.
+      Skipped, each with its reason:
+      - check-purge-clears-vault-credentials: a Windows guard (.ps1 purge paths, windows-tray soft reset), so it is a yolanda pair;
+      - check-tracked-files-unwritten: build.sh gate start/end calls it and its state lives in TMPDIR, so it is held by the build-path freeze until after the stable promotion;
+      - check-stranded-plan-writes: needs git archive|tar plus per-packet plan-binary calls from Lua; deferred as a heavy port.
+      check-yaml-reader-availability was already in the bootstrap allowlist (1627-hg3t); no change.
+    ts: "2026-11-20T05:32:00Z"
+    host: lenovinha
+
+events:
+  - packet_id: check-n-z-lua-port-batch-2-stranded-plan-writes-purge-vault-tracked-files-unwritten
+    event:
+      type: note
+      ts: "2026-11-20T05:32:00Z"
+      host: lenovinha
+      summary: |-
+        batch 2 scope ruling

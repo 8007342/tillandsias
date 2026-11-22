@@ -15,3 +15,7 @@ STEP_SCRIPT="scripts/test-purge-guard-soft-arm.sh"
 STEP_ERROR="the purge guard's SOFT arm no longer refuses a clearer in --reset-state (1559-2uw3); see which arm failed above"
 STEP_OK="the Windows SOFT reset calls no Vault credential clearer"
 STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:purge-guard-soft-arm:4 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="crates/tillandsias-windows-tray/src/notify_icon.rs scripts/check-purge-clears-vault-credentials.sh scripts/test-purge-guard-soft-arm.sh"

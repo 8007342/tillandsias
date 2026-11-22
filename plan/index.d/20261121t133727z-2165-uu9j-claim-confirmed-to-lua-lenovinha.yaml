@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-21).
+packets:
+  - packet_id: the-claim-confirmation-check-and-its-fixture-are-lua-and-both-sh-are-deleted
+    order: 2165-uu9j
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 3
+    title: |
+      Port scripts/check-claim-confirmed.sh (133 lines) and its fixture scripts/test-claim-confirmation-names-the-earliest-claimant.sh (154 lines) to scripts/lua/, repoint the skills, methodology and check-claims-across-branches hints, and delete both .sh files.
+    context: |
+      Next shell-to-lua candidate after 2118-knjy. The Lua port reads fragments with yaml.parse, which also retires one jq caller (914-ahsy).
+    exit_criteria:
+      - 'the Lua check gives the same verdict line and exit code as the .sh on all eight fixture arms (race lost, race won, release resets, no claim, push refused, push accepted, origin unreachable); both .sh files and their floor lines are gone and every live caller names the Lua path'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [1354-uv4e, 1370-tjme, 1493-d93i]
+    events:
+      - {type: filed, ts: '2026-11-21T13:37:27Z', host: lenovinha, summary: filed the claim-confirmed port}

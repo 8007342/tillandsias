@@ -114,6 +114,46 @@ function git(checkout, args) {
     return execFileSync('git', ['-C', checkout, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+// 2108-dptd: the project's default branch, as the checkout knows it: the
+// remote's HEAD, else init.defaultBranch, else main or master if present.
+function defaultBranch(checkout) {
+    try {
+        return git(checkout, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']).trim().replace(/^origin\//, '');
+    } catch (_) { /* no remote HEAD */ }
+    try {
+        const d = git(checkout, ['config', '--get', 'init.defaultBranch']).trim();
+        if (d) return d;
+    } catch (_) { /* unset */ }
+    for (const b of ['main', 'master']) {
+        try { git(checkout, ['rev-parse', '--verify', '--quiet', `refs/heads/${b}`]); return b; } catch (_) { /* absent */ }
+    }
+    return 'main';
+}
+
+function currentBranch(checkout) {
+    try { return git(checkout, ['symbolic-ref', '--short', 'HEAD']).trim(); } catch (_) { return ''; }
+}
+
+function slug(s) {
+    return String(s || 'site').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'site';
+}
+
+// The studio never commits on the default branch (operator ruling: main
+// changes only through a PR). On it, or detached, the checkout switches to
+// the studio's work branch, `<studio>/<project>-work/<date>` (2095-6cwr), or
+// STUDIO_WORK_BRANCH when the launcher names one. Uncommitted work moves with
+// the switch, so nothing the agent had in progress is lost.
+function ensureWorkBranch(cfg) {
+    const cur = currentBranch(cfg.checkout);
+    if (cur && cur !== defaultBranch(cfg.checkout)) return cur;
+    const name = cfg.workBranch;
+    let exists = true;
+    try { git(cfg.checkout, ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`]); } catch (_) { exists = false; }
+    git(cfg.checkout, exists ? ['switch', '-q', name] : ['switch', '-q', '-c', name]);
+    event('studio.work_branch', { studio: cfg.id, branch: name, from: cur || 'detached' });
+    return name;
+}
+
 // Guard, write, commit. Every accepted save is a commit (operator ruling
 // 2026-10-25): concurrent edits are ordered by commit, never last-write-wins.
 function save(cfg, requested, content) {
@@ -122,6 +162,7 @@ function save(cfg, requested, content) {
         event('studio.save_refused', { studio: cfg.id, path: requested, reason: g.reason });
         return { status: 403, body: { refused: g.reason } };
     }
+    ensureWorkBranch(cfg);
     fs.mkdirSync(path.dirname(g.abs), { recursive: true });
     fs.writeFileSync(g.abs, content);
     git(cfg.checkout, ['add', '--', g.rel]);
@@ -190,6 +231,7 @@ function sweep(cfg, before) {
             refused.push(rel);
             continue;
         }
+        ensureWorkBranch(cfg);
         git(cfg.checkout, ['add', '-A', '--', g.rel]);
         const staged = git(cfg.checkout, ['diff', '--cached', '--name-only', '--', g.rel]).trim();
         if (!staged) continue;
@@ -208,11 +250,13 @@ function loadConfig(env) {
         env.STUDIO_REGISTRY || '/usr/local/share/tillandsias/studios.json', 'utf8'));
     const studio = (registry.studios || []).find((s) => s.id === id);
     if (!studio) throw new Error(`studio ${JSON.stringify(id)} is not in the registry`);
+    const day = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     return {
         id,
         allowlist: studio.write_allowlist,
         ownWriter: studio.save_adapter === 'own-writer',
         checkout: env.STUDIO_CHECKOUT || `/home/forge/src/${env.TILLANDSIAS_PROJECT || ''}`,
+        workBranch: env.STUDIO_WORK_BRANCH || `${slug(id)}/${slug(env.TILLANDSIAS_PROJECT)}-work/${day}`,
     };
 }
 
@@ -232,6 +276,9 @@ function readBody(req, limit) {
 
 function start(env) {
     const cfg = loadConfig(env);
+    // Off the default branch before the editor loads, so even the first
+    // save cannot land there (2108-dptd).
+    try { ensureWorkBranch(cfg); } catch (e) { event('studio.work_branch_failed', { studio: cfg.id, why: e.message }); }
     const [upHost, upPortStr] = (env.UPSTREAM || '127.0.0.1:4097').split(':');
     const upPort = Number(upPortStr);
     const keepaliveMs = Number(env.KEEPALIVE_MS || 5000);
@@ -299,6 +346,6 @@ function start(env) {
     return server;
 }
 
-module.exports = { guard, save, sweep, changedPaths, globToRegExp, loadConfig, start };
+module.exports = { guard, save, sweep, changedPaths, globToRegExp, loadConfig, start, ensureWorkBranch, defaultBranch };
 
 if (require.main === module) start(process.env);

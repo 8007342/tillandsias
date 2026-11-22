@@ -5,17 +5,14 @@ scripts/check-append-vs-origin-fold.sh
 scripts/check-approved-ux-strings.sh
 scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
-scripts/check-bare-metal-host-initialized.sh
 scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
 scripts/check-carry-forward.sh
 scripts/check-cheatsheet-tiers.sh
-scripts/check-claim-confirmed.sh
 scripts/check-claims-across-branches.sh
 scripts/check-containers-conf-proxy-env.sh
 scripts/check-credential-channel.sh
-scripts/check-cycle-flow-log-fresh.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
 scripts/check-decider-retirement.sh
@@ -27,15 +24,12 @@ scripts/check-enclave-service-health.sh
 scripts/check-engine-cpu-dispatch.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
-scripts/check-fragment-closure-evidence-added.sh
 scripts/check-fragment-ts-skew.sh
-scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-regimes.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
-scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
 scripts/check-long-running-view.sh
 scripts/check-macos-only-sources-verified.sh
@@ -55,7 +49,6 @@ scripts/check-pickup-role-grammar.sh
 scripts/check-plan-binary-current.sh
 scripts/check-plan-binary-probe-usage.sh
 scripts/check-plan-ledger-readers.sh
-scripts/check-plan-schema-divergence.sh
 scripts/check-purge-clears-vault-credentials.sh
 scripts/check-refusal-affordance-added.sh
 scripts/check-release-asset-integrity.sh
@@ -76,7 +69,6 @@ scripts/check-stranded-plan-writes.sh
 scripts/check-test-baseline.sh
 scripts/check-tracked-files-unwritten.sh
 scripts/check-unrunnable-platform-arms.sh
-scripts/check-version-bump-isolation.sh
 scripts/check-windows-only-sources-verified.sh
 scripts/check-windows-tray-clippy.sh
 scripts/check-windows-tray-diagnose-surface.sh
@@ -92,7 +84,6 @@ scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
 scripts/test-archiver-ruby-could-not-run.sh
 scripts/test-awk-float-lc-numeric.sh
-scripts/test-bare-metal-lane-command-is-runnable.sh
 scripts/test-base-ledger-status-loss.sh
 scripts/test-bash-composition-hazards.sh
 scripts/test-bench-prompt-uniqueness.sh
@@ -106,12 +97,10 @@ scripts/test-build-sh-ci-full-install-prep.sh
 scripts/test-build-step-timing-attribution.sh
 scripts/test-build-version-label.sh
 scripts/test-capabilities-envelope-names-its-source.sh
-scripts/test-capability-manifest-guard.sh
 scripts/test-capability-routing.sh
 scripts/test-capability-row-check.sh
 scripts/test-capture-helper.sh
 scripts/test-census-admitted-missing-evidence.sh
-scripts/test-census-sigpipe-verdict-pipelines.sh
 scripts/test-centicolon-extract.sh
 scripts/test-centicolon-grade.sh
 scripts/test-centicolon-ratchet.sh
@@ -125,7 +114,6 @@ scripts/test-check-jq-callsite-ratchet.sh
 scripts/test-check-opsx-generated-dirt.sh
 scripts/test-check-stranded-in-progress.sh
 scripts/test-check-test-baseline.sh
-scripts/test-claim-confirmation-names-the-earliest-claimant.sh
 scripts/test-claim-wip-limit.sh
 scripts/test-claims-across-branches.sh
 scripts/test-claims-affordance.sh
@@ -171,7 +159,6 @@ scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh
 scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-decider-retirement.sh
-scripts/test-deciders-within-door-deadline.sh
 scripts/test-default-vault-cli-security.sh
 scripts/test-derive-host-identity.sh
 scripts/test-dev-inference-start-refusal-names-cause.sh
@@ -198,7 +185,6 @@ scripts/test-expire-claims-list-live-rows.sh
 scripts/test-expire-claims-reads-the-status-write.sh
 scripts/test-expire-claims-write-is-opt-in.sh
 scripts/test-fake-cloudflare.sh
-scripts/test-finalize-cycle-affordances.sh
 scripts/test-fixture-git-dir-scope.sh
 scripts/test-fleet-activity.sh
 scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh
@@ -216,7 +202,6 @@ scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
 scripts/test-forge-packed-refs-split-brain.sh
-scripts/test-forge-policy-binary-discoverability.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
@@ -265,7 +250,6 @@ scripts/test-git-mirror-vault-agent-auto-auth.sh
 scripts/test-github-token-auto-rotation.sh
 scripts/test-github-token-rotation-entry-points.sh
 scripts/test-groundtruth-corpus-declaration.sh
-scripts/test-groundtruth-regime-fails-closed.sh
 scripts/test-guest-binaries-nix-lane.sh
 scripts/test-guest-crashloop-detection.sh
 scripts/test-guest-staging-refuses-a-wireless-binary.sh
@@ -306,7 +290,6 @@ scripts/test-json-get-help-names-its-subset.sh
 scripts/test-json-query-jq-parity.sh
 scripts/test-land-adopts-valid-stamp.sh
 scripts/test-land-affordance.sh
-scripts/test-land-auth-retry.sh
 scripts/test-land-gate-refusal-names-its-step.sh
 scripts/test-land-merges-trunk.sh
 scripts/test-land-notice-names-unrun-litmus.sh
@@ -405,7 +388,6 @@ scripts/test-plan-binary-copy-refresh.sh
 scripts/test-plan-binary-freshness.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
-scripts/test-plan-binary-probe-usage-determinism-corpus.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
@@ -456,7 +438,6 @@ scripts/test-refusal-affordance-added.sh
 scripts/test-refusal-names-the-ungated-lane.sh
 scripts/test-relay-preflight.sh
 scripts/test-release-asset-integrity.sh
-scripts/test-release-preflight-affordances.sh
 scripts/test-release-runbook-tag-order.sh
 scripts/test-release-tier-freshness-reads-ci-full.sh
 scripts/test-release-tier-freshness.sh
@@ -546,7 +527,6 @@ scripts/test-vault-shutdown-fixture-classifier.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
-scripts/test-vsock-handshake-wire-v2.sh
 scripts/test-warm-tier-model.sh
 scripts/test-windows-host-lane-refusal-controls.sh
 scripts/test-windows-host-lane-refusal.sh

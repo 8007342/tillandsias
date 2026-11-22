@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    field: next_action
+    value: |-
+      REVISED 2026-10-24 per operator flow; ignore the earlier skill-run-task design. Nothing is built. Step 1: on a real host, run the existing `tillandsias --cloud <repo> --opencode --prompt "echo done and exit"` headless and record whether the launcher returns and the container is gone when the agent exits — that decides whether (a) is reuse or new work. Step 2: add the generic default prompt and the wall-clock backstop with its failed:timeout queue post. Step 3: add the completion-report instruction to the forge start context (1828's step). Blocked on 1828 and 1826 landing for the queue arms.
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk and the test fns exist; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless --bin tillandsias --features tray,listen-vsock one_shot:: (arm 4 is still a NoQueue stub until 1826). Close on green with the merge sha.
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: a-forge-started-for-a-project-with-a-pending-coordinator-task-runs-it-with-a-non-claude-headless-agent-and-that-projects-named-skill-to-completion-reports-back-and-exits
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

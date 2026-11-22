@@ -1319,7 +1319,10 @@ attempt_plan_only_lane() {
             # advice — and only because it has been DIAGNOSED rather than
             # guessed. The reason travels with the verb, or it reads like the
             # rm-the-ledger advice this fleet refused twice today.
-            if [[ -n "$_ctd" && "${_fresher#$_ctd}" != "$_fresher" ]]; then
+            # 2068-9789: only when the RESOLVED copy lies OUTSIDE the redirected
+            # target dir. On yolanda both sat under $CARGO_TARGET_DIR, and the
+            # hint called a copy orphaned that every build still writes.
+            if [[ -n "$_ctd" && "${_fresher#$_ctd}" != "$_fresher" && "${plan_bin#$_ctd}" == "$plan_bin" ]]; then
                 echo "  The resolved copy is ORPHANED: CARGO_TARGET_DIR is redirected to" >&2
                 echo "  $_ctd, so no build writes $plan_bin any more and rebuilding cannot" >&2
                 echo "  refresh it in place. Removing it is safe for that reason, not merely to" >&2
@@ -2334,9 +2337,9 @@ fi
 # ORDER 1577-g96z — A WORK PUSH IS TOLD WHAT IT OWES. On a work/<order> push,
 # a change that is DUE to a carried obligation (methodology/convergence.yaml
 # carried_obligations) and neither pays an item nor carries a Carried-Waiver
-# trailer gets ONE warn:pre-push:carried-obligations line naming the offered
-# item and the waiver line, and the push goes on (gentle stage: silence is
-# refused only at landing). Outside the work lane it is not run at all.
+# trailer is REFUSED here (2194-cspr; it was one warn line until 2026-11-22), naming the offered
+# item and the waiver line, because the land queue refuses the same silence at
+# landing an hour later. Outside the work lane it is not run at all.
 if [[ "$WORK_REF_LANE" == "1" && -f scripts/lua/check-carried-obligations.lua ]]; then
     _co_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _co_plan=""
     if [[ -n "$_co_plan" ]] && grep -qx script <<<"$("$_co_plan" capabilities 2>/dev/null)"; then
@@ -2345,9 +2348,20 @@ if [[ "$WORK_REF_LANE" == "1" && -f scripts/lua/check-carried-obligations.lua ]]
         while IFS= read -r _co_line; do
             case "$_co_line" in
                 carried:*:due:*)
-                    TILLANDSIAS_HOOK_DECIDER="carried-obligations" \
-                    refuse "${_co_line} — this change touches the backlog's area and neither pays an item nor waives (1577-g96z)" \
-                           "$(grep -E '^    |^Carried-Waiver:' <<<"$_co_err")" ;;
+                    # ORDER 2194-cspr (coordinator 2026-11-22): REFUSED HERE, not
+                    # warned. `refuse` degrades to a warning on the work lane, so a
+                    # carried-silent change was pushed, queued, and evicted by the
+                    # land queue's --landing check an hour later: about 8 gate
+                    # slots in one day. The remedy costs one commit, so the author
+                    # gets it now. `due:` is printed only when the change neither
+                    # pays an item nor carries a waiver git can read.
+                    echo "" >&2
+                    echo "${RED}✗ pre-push refused: ${_co_line} — this change touches the backlog's area and neither pays an item nor waives (1577-g96z, 2194-cspr)${RST}" >&2
+                    grep -E '^    |^Carried-Waiver:' <<<"$_co_err" | sed 's/^/  /' >&2
+                    echo "  why: the land queue evicts a carried-silent change at --landing, after it has waited its turn" >&2
+                    echo "  remedy: port the offered item, or add the Carried-Waiver line above to the LAST paragraph of a commit message (git reads trailers only there), then push again" >&2
+                    echo "" >&2
+                    exit 1 ;;
             esac
         done <<<"$_co_out"
     fi

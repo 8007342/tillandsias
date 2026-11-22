@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: an-empty-project-forge-agent-onboards-the-user-with-openspec-flutter-and-flame-and-a-plan-path
+    field: next_action
+    value: |-
+      macuahuitl writes the skill in skills/ (single source, harness symlinks per HARNESS-SCOPED.txt) and an empty-project trigger for Claude Code and Codex equivalent to OpenCode's /startup. A fixture runs the skill's scaffolding step in a scratch empty repo and asserts the created tree and the vocabulary guard. The Flutter step stays honest until 1637-5765 lands.
+
+
+      [2026-11-19T23:20:34Z calmecacpilli] blocked on operator: empty-project test on the next stable
+    ts: "2026-11-19T23:20:34Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: an-empty-project-forge-agent-onboards-the-user-with-openspec-flutter-and-flame-and-a-plan-path
+    event:
+      type: note
+      ts: "2026-11-19T23:20:34Z"
+      host: calmecacpilli
+      summary: |-
+        coordinator ruling 2026-11-19

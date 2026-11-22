@@ -439,11 +439,21 @@ local rl = run({ PLAN, "script", "run", GUARD, "--", "--landing" }, { cwd = R, e
 check("PAID-BUT-TAKEN at landing: refused, exit 1",
     rl.status == "exited" and rl.code == 1 and text.contains(rl.stdout or "", "paid-but-taken-by:work/9996-dup:scripts/check-w.sh"),
     "rc=" .. tostring(rl.code) .. " out=[" .. (rl.stdout or "") .. "]")
--- The remedy: a conflict: waiver trailer turns the refusal into waived, exit 0.
-G({ "commit", "-q", "--allow-empty", "-m", "duplicate of 9996-dup", "-m", "Carried-Waiver: shell-to-lua conflict:scripts/check-w.sh (#9996)" })
+-- The remedy, COPIED (2152-t5p9): land-queue's eviction hint is the guard's first
+-- column-0 `Carried-Waiver:` line. It must name the BACKLOG, and pasting it
+-- verbatim as a trailer must be admitted. Before 2152-t5p9 there was no such line,
+-- and the queue told people to write `Carried-Waiver: paid-but-taken-by ...`.
+local hint = nil
+for l in (rl.stderr or ""):gmatch("[^\n]+") do
+    if l:match("^Carried%-Waiver: ") then hint = l; break end
+end
+check("PAID-BUT-TAKEN hint: the guard prints a column-0 waiver line keyed by the backlog",
+    hint ~= nil and text.starts_with(hint, "Carried-Waiver: shell-to-lua conflict:scripts/check-w.sh"),
+    "hint=[" .. tostring(hint) .. "] err=[" .. (rl.stderr or "") .. "]")
+G({ "commit", "-q", "--allow-empty", "-m", "duplicate of 9996-dup", "-m", hint or "Carried-Waiver: paid-but-taken-by <reason>" })
 rc, o, e = judge_with(GUARD)
-check("PAID-BUT-TAKEN remedy: a Carried-Waiver conflict: trailer clears the refusal (waived, exit 0)",
-    rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#9996)"),
+check("PAID-BUT-TAKEN remedy: the copied hint, pasted verbatim as a trailer, is admitted (waived, exit 0)",
+    rc == 0 and has_line(o, "carried:shell-to-lua:waived:conflict:scripts/check-w.sh (#<pr>)"),
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
 
 -- 18. STACKED (2044-kx7e, measured: #1002 evicted 2026-11-08). A change ports
@@ -469,6 +479,43 @@ check("STACKED: a work ref stacked ON the change does not take the change's own 
     rc == 0 and has_line(o, "carried:shell-to-lua:paid:scripts/check-x.sh")
         and not text.contains(o, "paid-but-taken-by:work/1005-stack"),
     "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+
+-- 18b. STACKED AFTER A TRUNK MERGE (2122-hv95, measured: #1149/#1150/#1152
+-- evicted 2026-11-19 by #1156, stacked on #1149). Both the change and the ref
+-- stacked on it later merge a NEWER trunk commit, so merge-base --all(HEAD,
+-- stack) is {our port, the trunk commit}, and git picks the trunk one: the
+-- 2044-kx7e diff from it shows our own inherited deletion as the stacked ref's.
+-- The same payment is one payment when the deleting commit is already in HEAD.
+local base_before = text.trim(G({ "rev-parse", "base" }).stdout or "")
+-- Arm 18's refs also delete check-x.sh, independently of this arm: gone first,
+-- so a refusal here can only name this arm's stacked ref.
+G({ "push", "-q", "origin", "--delete", "work/1004-own", "work/1005-stack" })
+G({ "fetch", "-q", "--prune", "origin" })
+change("work/1006-own")
+G({ "rm", "-q", "scripts/check-x.sh" })
+fs.mkdir(REL .. "/scripts/lua")
+write("scripts/lua/check-x.lua", "verdict.emit('ok:x', 0)\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "our port of check-x (18b)" })
+G({ "push", "-q", "origin", "work/1006-own" })
+G({ "checkout", "-q", "-b", "work/1007-stack" })
+write("crates/s.rs", "fn s() {}\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "work stacked on 1006-own" })
+G({ "checkout", "-q", "base" })
+write("crates/t.rs", "fn t() {}\n")
+G({ "add", "-A" }); G({ "commit", "-qm", "a newer trunk commit" })
+G({ "checkout", "-q", "work/1007-stack" }); G({ "merge", "-q", "--no-edit", "base" })
+G({ "push", "-q", "origin", "work/1007-stack" })
+G({ "checkout", "-q", "work/1006-own" }); G({ "merge", "-q", "--no-edit", "base" })
+local bases = G({ "merge-base", "--all", "HEAD", "work/1007-stack" }).stdout or ""
+check("STACKED-AFTER-MERGE premise: the change and the stacked ref have two merge bases",
+    #text.lines(text.trim(bases)) == 2, "merge-base --all=[" .. bases .. "]")
+rc, o, e = judge_with(GUARD)
+check("STACKED-AFTER-MERGE: a ref stacked on the change, both merged with newer trunk, does not take the change's own paid item",
+    rc == 0 and has_line(o, "carried:shell-to-lua:paid:scripts/check-x.sh")
+        and not text.contains(o, "paid-but-taken-by:work/1007-stack"),
+    "rc=" .. rc .. " out=[" .. o .. "] err=[" .. e .. "]")
+G({ "push", "-q", "origin", "--delete", "work/1006-own", "work/1007-stack" })
+G({ "checkout", "-q", "base" }); G({ "reset", "-q", "--hard", base_before })
 G({ "checkout", "-q", "base" })
 G({ "remote", "remove", "origin" })
 

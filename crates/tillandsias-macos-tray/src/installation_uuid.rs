@@ -249,6 +249,29 @@ pub fn delete_credential_string(target: &str) -> std::io::Result<()> {
     delete_credential_string_in(KEYCHAIN_SERVICE, target)
 }
 
+/// Order 2094-53uw: a freshly written rootfs holds no Vault store, so any
+/// Keychain share and root token belong to a store that no longer exists.
+/// Delivering them made the new guest's Vault reject the key, wipe and re-init
+/// (1118-fqfk) on every boot whose session ended before the new share was
+/// collected. Forgetting them lets the first boot initialise cleanly and hand
+/// its own share back. `tillandsias-vm-uuid` (the installation anchor) is kept.
+/// Nothing is read or written in plaintext: this only deletes the two items.
+pub fn forget_vault_credentials_for_fresh_guest() -> Result<(), String> {
+    forget_vault_credentials_for_fresh_guest_in(KEYCHAIN_SERVICE)
+}
+
+pub(crate) fn forget_vault_credentials_for_fresh_guest_in(service: &str) -> Result<(), String> {
+    for target in ["vault-shamir-share-v1", "vault-root-token-v1"] {
+        delete_credential_string_in(service, target)
+            .map_err(|e| format!("could not forget the stale {target}: {e}"))?;
+    }
+    eprintln!(
+        "[tillandsias-tray] fresh VM disk: forgot the previous Vault share and root token \
+         (the new guest initialises its own; 2094-53uw)"
+    );
+    Ok(())
+}
+
 pub(crate) fn delete_credential_string_in(service: &str, target: &str) -> std::io::Result<()> {
     let _status = security_bounded(&["delete-generic-password", "-a", target, "-s", service]);
     // Already-absent, successfully deleted, and a bound that fired are all Ok
@@ -907,6 +930,35 @@ pub(crate) mod tests {
         fn drop(&mut self) {
             sweep_scratch(Some(&self.0));
         }
+    }
+
+    /// 2094-53uw: a fresh rootfs forgets the share and root token (so the new
+    /// guest is never handed a stale share) and keeps the installation anchor.
+    /// Idempotent on an empty service. Red before the fix: the function did not
+    /// exist, and the fetch sites delivered the old share to the new guest.
+    #[test]
+    fn a_fresh_guest_forgets_the_stale_share_and_token_but_keeps_the_anchor() {
+        let scratch = ScratchService::new();
+        let svc = scratch.0.as_str();
+        write_credential_string_in(svc, "vault-shamir-share-v1", "c3RhbGU=").unwrap();
+        write_credential_string_in(svc, "vault-root-token-v1", "stale-token").unwrap();
+        write_credential_string_in(svc, KEYCHAIN_ACCOUNT, "anchor").unwrap();
+        forget_vault_credentials_for_fresh_guest_in(svc).unwrap();
+        assert_eq!(
+            read_credential_string_in(svc, "vault-shamir-share-v1").unwrap(),
+            None
+        );
+        assert_eq!(
+            read_credential_string_in(svc, "vault-root-token-v1").unwrap(),
+            None
+        );
+        assert_eq!(
+            read_credential_string_in(svc, KEYCHAIN_ACCOUNT)
+                .unwrap()
+                .as_deref(),
+            Some("anchor")
+        );
+        forget_vault_credentials_for_fresh_guest_in(svc).unwrap();
     }
 
     /// The guest's side of deliver-then-handover. Answers DeliverCredentials

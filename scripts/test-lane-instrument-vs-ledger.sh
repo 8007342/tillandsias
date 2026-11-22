@@ -123,7 +123,7 @@ mkdir -p plan/index.d
 printf 'packets: [unclosed\n' > plan/index.d/20260905t000001z-malformed.yaml
 G add -A >/dev/null; G commit -q -m "a malformed fragment"
 out="$(run_guard "$_real")"
-if printf '%s' "$out" | grep -q 'validation FAILED'; then
+if grep -q 'validation FAILED' <<<"$out"; then
     ok "CONTROL: a malformed fragment is still refused by the lane"
 else
     bad "CONTROL: a malformed fragment was NOT refused — the lane's validation is gone"

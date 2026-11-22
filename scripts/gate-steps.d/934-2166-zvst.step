@@ -1,0 +1,15 @@
+# Gate step 2166-zvst — Lua deciders that judge "the checkout I am run from"
+# run git in the caller's PWD, even when TILLANDSIAS_REPO_ROOT / PROJECT_ROOT
+# name another repository (the runner's default cwd). Offline; one scratch repo.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking Lua deciders judge the caller's repository, not the runner's root (2166-zvst)"
+STEP_LUA="scripts/lua/test-lua-deciders-judge-caller-repo.lua"
+STEP_ERROR="a Lua decider judged the runner's repository root instead of the checkout it was run from (2166-zvst) — see the FAIL lines above"
+STEP_OK="Lua deciders judge the caller's repository"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:lua-deciders-judge-caller-repo:4(TILLANDSIAS_PLAN_BIN=target/release)"
+# msys record: yolanda 2026-11-21 msys ok:lua-deciders-judge-caller-repo:4 arms (native .exe built from this branch over linux-next with #1252)
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/** scripts/lua/test-lua-deciders-judge-caller-repo.lua"

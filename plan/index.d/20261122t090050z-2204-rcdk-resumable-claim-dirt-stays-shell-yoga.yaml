@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: coordinator ruling, recorded so nobody re-attempts the port.
+packets:
+  - packet_id: check-resumable-claim-dirt-stays-shell-because-its-stale-binary-self-repair-is-a-bootstrap
+    order: "2204-rcdk"
+    status: implemented
+    kind: decision
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [shell-to-lua, decision]
+    estimated_hours: 0
+    owned_files:
+      - scripts/check-resumable-claim-dirt.sh
+    title: "check-resumable-claim-dirt stays shell: its stale-plan-binary self-repair is a bootstrap"
+    context: |
+      DO NOT PORT scripts/check-resumable-claim-dirt.sh to Lua (coordinator ruling 2026-11-22). When the plan
+      binary is stale, it calls ensure_fresh_plan_binary (scripts/plan-binary-probe.sh), which REBUILDS the plan
+      binary with cargo and switches to the fresh copy. A .lua runs INSIDE the binary being judged, so it cannot
+      repair itself; a port would leave unattributable:stale-plan-binary as the only outcome. A stale-binary
+      self-repair is a bootstrap, like check-gate-memory-floor.sh's, and bootstraps belong outside the binary.
+      Secondary: it prints resumable:<orders> with rc 0, a word verdict.emit's table lacks. If it is ever
+      ported anyway, ok:clean-tree should take rc 0 to match check-opsx-generated-dirt (#1313); today it is rc 4.
+      A change touching this file waives shell-to-lua with this order as the true reason.
+    exit_criteria:
+      - "The decision is recorded; the carried-obligations offer for this file is answered by a waiver citing 2204-rcdk."
+    unscoreable: "a decision row"
+    provenance: "coordinator 2026-11-22, after yoga found the port would drop the self-repair."
+    events:
+      - type: filed
+        ts: "2026-11-22T09:00:50Z"
+        host: yoga
+        summary: "filed as a decision (implemented on filing)"

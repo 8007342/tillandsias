@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: build-speed row, assigned by macuahuitl-fedora 2026-11-22 (the narrow-seam pattern, second step).
+packets:
+  - packet_id: tool-materialize-litmus-step-narrow-seam-and-inputs
+    order: "2185-tmls"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, class-selector]
+    estimated_hours: 2
+    owned_files:
+      - scripts/test-tool-materialize-litmus-surfaces-arm.sh
+      - scripts/gate-steps.d/414-1269-gfdi.step
+    title: "Gate step 414-1269-gfdi runs its litmus step's own command, not the runner, and declares STEP_INPUTS"
+    context: |
+      ARM 1 judged the litmus step's command (the defect was its `| tail -1`) by going through run-litmus-test.sh. The
+      runner's preamble builds tillandsias-podman-cli and the router sidecar with cargo and reads the live timing logs,
+      which put the step on lane=litmus and made its closure the whole scripts/ tree (over 8 minutes on a cold worktree).
+      ARM 1 now reads the arms step's command from the YAML and runs it with bash in the checkout, as the runner does.
+      The runner's own pass-through and adjudication stay covered by its own fixtures, which declare nothing and always run.
+      The new closure: a static scan plus an atime trace of tracked files on a real run read exactly the YAML, three
+      scripts/lib files, loop-success-probe.sh, the subject and the fixture. No Lua runtime and no plan binary. The step
+      drops STEP_SERIAL/STEP_LANES and declares those paths.
+    exit_criteria:
+      - "Fixture 5/5 (1 named skip: no comma-decimal locale); with `| tail -1` put back on the YAML's arms command, ARMs 1, 1b and 3 fail (measured 2026-11-22)."
+      - "test-gate-step-inputs: 25 arms ok, every declared and implicit input makes it run, the docs+test tree skips it."
+      - "Of the last 40 first-parent landings on linux-next, 35 touch none of its inputs."
+    unscoreable: "a fixture seam and a declaration: scored by the fixture's arms and test-gate-step-inputs."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-22: do 414-1269-gfdi next, same method as 860-1650-fb7z."
+    events:
+      - type: filed
+        ts: "2026-11-22T03:27:14Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2185-tmls"

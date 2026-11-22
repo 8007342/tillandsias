@@ -12,3 +12,10 @@ STEP_SCRIPT="scripts/check-cheatsheet-tiers.sh"
 STEP_ERROR="a cheatsheet declares no valid tier (1087-h2z9)"
 STEP_OK="Cheatsheet tiers passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="cheatsheets/license-allowlist.toml scripts/check-cheatsheet-tiers.sh scripts/lib-cargo-sites.sh scripts/lua/check-cheatsheet-sources.lua scripts/plan-binary-probe.sh"

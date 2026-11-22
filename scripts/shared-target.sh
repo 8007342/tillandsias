@@ -100,7 +100,15 @@ shared_target_enter() { # ROOT ; exports CARGO_TARGET_DIR, takes the lock, touch
     printf 'pid %s %s\n' "$$" "$(ps -o args= -p $$ 2>/dev/null | cut -c1-80)" > "$canon/.shared-target-holder" 2>/dev/null || true
     digest="$(shared_target_digest "$root")"
     prev="$(cat "$owner" 2>/dev/null || true)"
-    if [ "$prev" != "$root $digest" ]; then
+    # ORDER 2162-bpqz: the SAME checkout with a new index (every new commit) is
+    # not an owner change: nothing another checkout built is in the target, and
+    # build.sh's gate touch handles what changed in this one (precisely, from its
+    # last gated tree). Only a different CHECKOUT, whose builds bake their own
+    # CARGO_MANIFEST_DIR, needs every file touched.
+    if [ "${prev%% *}" = "$root" ] && [ "$prev" != "$root $digest" ]; then
+        printf '%s %s\n' "$root" "$digest" > "$owner"
+        echo "shared-target: same checkout, new index; no touch here (the gate touches what differs, 2162-bpqz)" >&2
+    elif [ "$prev" != "$root $digest" ]; then
         # Not a ledger of intent: cargo trusts mtime alone, so make every
         # tracked file newer than whatever the previous owner built.
         git -C "$root" ls-files -z --full-name -- ":/" | (cd "$(git -C "$root" rev-parse --show-toplevel)" && xargs -0 touch -c 2>/dev/null) || true

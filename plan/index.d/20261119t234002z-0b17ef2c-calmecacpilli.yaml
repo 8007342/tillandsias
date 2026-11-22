@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    field: next_action
+    value: |-
+      Confirm the source read: build tillandsias-headless with --features listen-vsock and check that start_mcp_socket_server_for_lane is absent, or that the forge spec path skips it. Then move the lane listener out of the tray-only module (or enable it under listen-vsock), and write the feature-set test red first.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: macOS-tray forge: claude mcp list shows host-browser connected; record WSL2 too.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: forges-in-the-macos-and-windows-vm-get-an-empty-lane-mcp-socket-dir-because-the-guest-binary-is-built-without-the-tray-feature-that-holds-the-listener
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

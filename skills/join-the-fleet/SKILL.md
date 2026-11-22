@@ -136,7 +136,7 @@ The enclave and this host's own per-project git mirror are brought up,
 rebuilt and troubleshot by the standalone skill
 **/initialize-bare-metal-host** (1312-i6da; `skills/initialize-bare-metal-host`).
 This page never duplicates it. Its checker,
-`scripts/check-bare-metal-host-initialized.sh`, is what the fleet-membership
+`scripts/lua/check-bare-metal-host-initialized.lua`, is what the fleet-membership
 checker calls for the substrate line. It never seeds a token: the GitHub
 credential is the operator's per-host act.
 
@@ -165,7 +165,7 @@ there.
   the answer.
 - **Claims are by order, through the plan lane**: `tillandsias-plan set-field
   <order> status in_progress --host <host> --reason …`, pushed, then, after
-  `git pull`, `scripts/check-claim-confirmed.sh <order> --host <host>` →
+  `git pull`, `tillandsias-plan script run scripts/lua/check-claim-confirmed.lua -- <order> --host <host>` →
   `ok:claim-confirmed`. On `refused:claim-lost:…:earlier=<host>@<ts>` you LOST
   a race: yield and take the next item. The earliest claim-event `ts` wins,
   never push or commit order, because a claim can sit unpushed for minutes
@@ -296,7 +296,10 @@ there.
      FULL tier; the light and scoped tiers (proportional to the paths a PR
      touches: plan and docs are light, one crate or one lane is scoped,
      anything wider is full) are 765-xpct's selector, approved by the operator
-     on 2026-09-20 and activating when that row closes;
+     on 2026-09-20 and activating when that row closes. Since 2026-11-20
+     (operator) a plan-ledger-only PR lands on the plan-lane checks with no
+     build-check; `land:priority` is gated next and `land:hold` is skipped
+     and named (methodology → landing_queue, 2143-z5uj);
   6. close by order (`set-field <order> status completed …`) after the landing
      proves — after the merge is on `origin/linux-next`, not after the PR is
      opened. The evidence SHA on the closing event is the LANDED commit on

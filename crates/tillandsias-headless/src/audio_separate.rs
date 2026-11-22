@@ -37,7 +37,10 @@ use crate::restricted_fetch::{self, Ask, Fetch};
 pub const WEIGHTS_TSV: &str = include_str!("../../../images/audio-studio/weights.tsv");
 /// The cache subdirectory under the models dir: `<models_dir>/audio/demucs/<file>`.
 pub const CACHE_SUBDIR: &str = "audio/demucs";
-/// The models audio.separate offers, with their stem counts.
+/// The models audio.separate offers, with their stem counts. Both are the
+/// adefossez HTDemucs weights, whose licence obligations (attribution,
+/// non-commercial, review) this spec records.
+// @trace spec:third-party-licence-demucs-weights-unstated
 pub const MODELS: &[(&str, u8)] = &[("htdemucs", 4), ("htdemucs_6s", 6)];
 
 /// Parse weights.tsv: `model repo revision file sha256 bytes licence source`.

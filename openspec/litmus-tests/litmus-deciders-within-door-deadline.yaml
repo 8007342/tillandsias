@@ -14,23 +14,23 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-deciders-within-door-deadline.sh
+  - workspace contains scripts/lua/test-deciders-within-door-deadline.lua
 
 critical_path:
   - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-deciders-within-door-deadline.sh && test -x scripts/test-deciders-within-door-deadline.sh && echo 'ok: parse'"
+    command: "test -f scripts/lua/test-deciders-within-door-deadline.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "each of the six deciders finishes inside the door's deadline"
-    command: "bash scripts/test-deciders-within-door-deadline.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-deciders-within-door-deadline.lua 2>&1"
     timeout_ms: 120000
-    expected_behavior: "PASS: deciders-within-door-deadline"
+    expected_behavior: "ok:deciders-within-door-deadline:"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "PASS: deciders-within-door-deadline"
+  expected_log: "ok:deciders-within-door-deadline:6/6"
   log_fields:
     spec: "ci-release"
     test: "deciders-within-door-deadline"
@@ -40,4 +40,4 @@ rollback:
   on_failure: >
     The named decider grew past the door's deadline: find the per-file spawn or
     serial work that came back, rather than raising the deadline.
-  command: "bash scripts/test-deciders-within-door-deadline.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-deciders-within-door-deadline.lua 2>&1"

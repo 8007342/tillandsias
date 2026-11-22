@@ -25,3 +25,10 @@ STEP_OK="capability envelope source check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="target/debug/tillandsias is not built on this host, so the probe could not be asked"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   --fresh reports measured even with a warm cache"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="timing"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/plan-binary-probe.sh scripts/test-capabilities-envelope-names-its-source.sh"

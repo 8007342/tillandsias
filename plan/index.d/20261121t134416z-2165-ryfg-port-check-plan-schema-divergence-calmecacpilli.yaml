@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua backlog port, assigned by macuahuitl-fedora 2026-11-21.
+packets:
+  - packet_id: port-check-plan-schema-divergence-to-lua
+    order: "2165-ryfg"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, gate, plan]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-plan-schema-divergence.lua
+      - scripts/check-plan-schema-divergence.sh
+      - scripts/test-yaml-reader-availability.sh
+      - openspec/litmus-tests/litmus-added-fragment-parse-gate-shape.yaml
+      - build.sh
+    title: "Port scripts/check-plan-schema-divergence.sh to scripts/lua (shell-to-lua)"
+    context: |
+      Same four verdicts, why/remedy text and exit codes. Output was compared byte-for-byte with the .sh on five
+      cases (live ledger, unparseable, divergent, absent, missing file) and matched once the script's own name was normalised. It reads YAML through
+      `tillandsias-plan yaml-get` as a child (the files may be outside the repository, where fs.* refuses). The reader is
+      named by --plan, TILLANDSIAS_PLAN_BIN or TILLANDSIAS_SCRIPT_RUNNER_BIN; build.sh's _run_lua_decider sets the last.
+      why/remedy ride as verdict detail, so they still print after the verdict line (callers read `2>&1 | head -n 1`).
+      Callers moved: build.sh, litmus added-fragment-parse-gate-shape (steps 1, 5, 8), litmus macos-portability-residuals,
+      test-yaml-reader-availability.sh (arms 5, 8, 12-17) and check-plan-ledger-readers.sh's allowlist.
+    exit_criteria:
+      - "scripts/check-plan-schema-divergence.sh does not exist; scripts/lua/check-plan-schema-divergence.lua does (on trunk the reverse)."
+      - "test-yaml-reader-availability.sh passes 25/25 and litmus:added-fragment-parse-gate-shape passes 8/8 on the Lua."
+    unscoreable: "a port: scored by the fixture and the litmus named above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21 shell-to-lua queue."
+    events:
+      - type: filed
+        ts: "2026-11-21T13:44:16Z"
+        host: calmecacpilli
+        summary: "filed and ported on work/2165-ryfg"

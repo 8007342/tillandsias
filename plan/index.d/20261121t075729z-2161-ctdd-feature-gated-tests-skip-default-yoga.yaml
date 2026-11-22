@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: build-speed report packet 8 (cargo test dedupe), first slice.
+packets:
+  - packet_id: the-feature-gated-test-pass-runs-only-the-tests-the-default-build-lacks
+    order: "2161-ctdd"
+    status: in_progress
+    kind: perf
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, cargo]
+    estimated_hours: 2
+    owned_files:
+      - build.sh
+    title: "The feature-gated test pass runs only the tests the default build lacks"
+    context: |
+      The tray,listen-vsock pass re-ran all 1624 tests of the headless binary, 1091 of which the --workspace
+      pass had just run with default features. It now runs the 533 that only that build has, named from
+      libtest's own --list with --exact; a list that cannot be formed falls back to the whole set and says so.
+      Measured on yoga, same compiled build: full 95 s (1580 passed, 44 ignored) vs deduped 64 s (516 passed,
+      17 ignored, 1091 filtered). The guest-feature-set pass already runs only guest_feature_set_ tests; its
+      cost is the listen-vsock compile. Known limit: a default test with a cfg(feature) branch runs only in its
+      default form.
+    exit_criteria:
+      - "The feature-gated pass reports 533-ish executed tests and 1091 filtered out, and refuses zero as before."
+    unscoreable: "the pass's wall time on a host is the measure"
+    provenance: "coordinator build-speed queue (report packet 8), 2026-11-21."
+    events:
+      - type: filed
+        ts: "2026-11-21T07:57:29Z"
+        host: yoga
+        summary: "filed and claimed"

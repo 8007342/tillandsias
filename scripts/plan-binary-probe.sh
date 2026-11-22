@@ -8,7 +8,7 @@
 # `[ -x ./target/release/tillandsias-plan ]`, first match wins — and all three
 # failed the same way on a shared Windows/WSL checkout, where a WSL build leaves
 # a **Linux ELF** at exactly that path beside the usable `.exe`. Two of them
-# (check-stranded-in-progress.sh, check-fragment-closure-evidence-added.sh) were
+# (check-stranded-in-progress.sh, check-fragment-closure-evidence-added.sh, since ported to scripts/lua) were
 # fixed in place under 702-68zj; select-work-batch.sh then arrived from another
 # host carrying a fresh copy of the same bug, which is the signal that fixing
 # instances is not enough.
