@@ -10986,7 +10986,34 @@ fn is_active_lane_container(name: &str, state: &str) -> bool {
     alive
         && (name.contains("-forge")
             || name.contains("-login-")
-            || name.starts_with("tillandsias-browser-"))
+            || (name.starts_with("tillandsias-browser-")
+                // 1911-3gqy: a forwarder serves a window and is not a lane; a
+                // leaked one used to hold the shared stack up forever.
+                && !name.starts_with("tillandsias-browser-fwd-")))
+}
+
+#[cfg(test)]
+mod browser_forwarder_lane_tests {
+    use super::is_active_lane_container;
+
+    /// Order 1911-3gqy: a forwarder serves a window and is not a lane. A
+    /// leaked `tillandsias-browser-fwd-*` used to count as live, so the
+    /// last-lane teardown never ran and the shared stack stayed up forever.
+    #[test]
+    fn a_forwarder_alone_is_not_a_live_lane_but_a_window_is() {
+        assert!(!is_active_lane_container(
+            "tillandsias-browser-fwd-0123456789ab",
+            "running"
+        ));
+        assert!(is_active_lane_container(
+            "tillandsias-browser-acme-0123456789ab",
+            "running"
+        ));
+        assert!(!is_active_lane_container(
+            "tillandsias-browser-acme-0123456789ab",
+            "exited"
+        ));
+    }
 }
 
 /// Tear the shared stack down IFF this is the LAST forge anywhere and no
