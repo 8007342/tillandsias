@@ -284,6 +284,21 @@ while read -r _l _ls _remote_ref _rs; do
             # passing the gate it exists to protect is not a mechanism.
             _all_salvage=0; _all_work=0
             ;;
+        refs/attest/daily-full/*|refs/attest/daily-red/*)
+            # ORDER 2209-dfix. The daily full-gate verdict that
+            # `land-queue.sh --daily-full` publishes: a name for a trunk commit
+            # the remote already has, minted AFTER a full gate of that commit
+            # ran, so it uploads nothing and the local tree's stamp measures the
+            # wrong subject. Without this the hook refused the first live run's
+            # publish as "the tree changed since ./build.sh --check last passed"
+            # (macuahuitl 2026-11-22). Only <epoch> leaves, only creation: a
+            # deletion or a non-numeric name falls through to the gate.
+            _e="${_remote_ref##*/}"
+            if [[ "$_ls" =~ ^0+$ || -z "$_e" || "$_e" == *[!0-9]* ]]; then
+                _all_marker=0
+            fi
+            _all_salvage=0; _all_work=0
+            ;;
         refs/attest/native-lint/*)
             # NATIVE-LINT ATTESTATION REFS (order 2112-nlrf). Written by
             # scripts/attest-native-lint.sh --ref after its clippy run passes: a
@@ -331,7 +346,7 @@ if [[ "$_any_ref" -eq 1 && "$_all_work" -eq 1 ]]; then
     WORK_REF_LANE=1
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
-    echo "${GRN}✓ local gate: coordination marker ref (refs/tillandsias/, 1176-9vqn) or self-verifying native-lint attestation (refs/attest/native-lint/, 2112-nlrf) — exempt by design; it is not a branch and moves none${RST}" >&2
+    echo "${GRN}✓ local gate: coordination marker ref (refs/tillandsias/*, refs/attest/daily-*/<epoch>; 1176-9vqn, 2209-dfix) or self-verifying native-lint attestation (refs/attest/native-lint/, 2112-nlrf) — exempt by design; it is not a branch and moves none${RST}" >&2
     exit 0
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
