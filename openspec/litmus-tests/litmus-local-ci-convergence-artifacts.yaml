@@ -1,0 +1,35 @@
+# @trace spec:ci-release
+# @trace order:2224-x32n
+#
+# local-ci.sh to Lua, slice 4: write_convergence_artifacts is
+# scripts/lua/local-ci-convergence-artifacts.lua. Red with a mutant that
+# writes percent_closed as a float (arm 4), overwrites the signature log
+# instead of appending (arms 2, 3), or stops tracking the heaviest residual
+# (arm 6).
+name: litmus:local-ci-convergence-artifacts
+spec: ci-release
+phase: pre-build
+description: local-ci's convergence writer appends one scored signature record per run, rebuilds the delta, and writes an evidence bundle whose hashes and counts match the files it names
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary, with score-checks); fixture inputs under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "one failure; append; evidence-bundle hashes; all passing; no plan binary; heaviest residual among several"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-local-ci-convergence-artifacts.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:local-ci-convergence-artifacts-fixture:6 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "six arms"
+  log_fields:
+    spec: "ci-release"
+    test: "local-ci-convergence-artifacts"
+
+rollback:
+  on_failure: "read the FAIL lines; the writer is scripts/lua/local-ci-convergence-artifacts.lua and its caller is write_convergence_artifacts in scripts/local-ci.sh"
+  command: "grep -n '2224-x32n' scripts/local-ci.sh scripts/lua/local-ci-convergence-artifacts.lua"

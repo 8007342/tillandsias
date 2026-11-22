@@ -9,7 +9,8 @@
 --   <id> TAB <weight> TAB <spec ref> TAB <failure reason>
 -- in catalog order, then the default row for an id the catalog does not
 -- name, whose id is `*` and whose reason carries `%s` where the id goes.
--- local-ci.sh loads the rows once and looks ids up in them.
+-- The convergence writer (local-ci-convergence-artifacts.lua, 2224-x32n)
+-- reads the rows and looks ids up in them.
 
 local CATALOG = {
     { "spec-cheatsheet-binding", 100, "spec:spec-traceability", "Spec-cheatsheet binding below 90% (see /tmp/binding-check.log)" },

@@ -8,7 +8,7 @@
 name: litmus:local-ci-check-catalog
 spec: ci-release
 phase: pre-build
-description: local-ci's check catalog prints one row per check plus a default row, and local-ci.sh's lookups answer from it for known and unknown ids
+description: local-ci's check catalog prints one row per check plus a default row, with the weight, spec ref and reason of each
 severity: medium
 size: instant
 
@@ -16,7 +16,7 @@ preconditions:
   - the plan binary (resolve_plan_binary); bash; no network, no podman
 
 critical_path:
-  - step: "row shape; a known id through local-ci.sh; an unknown id; positive weights and unique ids"
+  - step: "row shape; a known id's row; the default row; positive weights and unique ids"
     command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-local-ci-check-catalog.lua 2>&1"
     timeout_ms: 60000
     expected_behavior: "ok:local-ci-check-catalog:4 arms"
@@ -30,5 +30,5 @@ observability:
     test: "local-ci-check-catalog"
 
 rollback:
-  on_failure: "read the FAIL lines; the catalog is scripts/lua/local-ci-check-catalog.lua and its lookups are load_check_catalog and the three functions after it in scripts/local-ci.sh"
+  on_failure: "read the FAIL lines; the catalog is scripts/lua/local-ci-check-catalog.lua and its reader is scripts/lua/local-ci-convergence-artifacts.lua"
   command: "grep -n '2223-bzsn' scripts/local-ci.sh scripts/lua/local-ci-check-catalog.lua"

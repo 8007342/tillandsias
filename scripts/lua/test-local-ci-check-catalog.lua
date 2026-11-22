@@ -2,14 +2,14 @@
 -- @env TILLANDSIAS_SCRIPT_RUNNER_BIN
 --
 -- test-local-ci-check-catalog.lua — pins scripts/lua/local-ci-check-catalog.lua
--- and local-ci.sh's three lookups over it (2223-bzsn). Expectations are written
+-- (2223-bzsn). Expectations are written
 -- out by hand, so the fixture keeps its meaning after the bash case tables it
 -- replaced are gone. At port time the lookups were also compared with those
 -- tables for all sixteen ids and three unknown ones (recorded on the PR).
 --
 --   1 the helper prints sixteen catalog rows then the default row `*`, four tab-separated fields each
---   2 a known id: local-ci.sh's lookups give its weight, spec ref and reason
---   3 an unknown id: weight 0, spec:unknown, "Check failed: <id>"
+--   2 a known id's row gives its weight, spec ref and reason
+--   3 the default row `*`: weight 0, spec:unknown, "Check failed: %s"
 --   4 every catalog weight is a positive integer and every id is unique
 --
 -- Verdict: ok:local-ci-check-catalog:4 arms | violation:local-ci-check-catalog:<n> failed
@@ -45,24 +45,22 @@ for _, row in ipairs(rows) do if not row.id then shape = false end end
 if shape and rows[17].id == "*" then ok("1 sixteen catalog rows then the default row, four fields each")
 else bad("1 rc=" .. tostring(r.code) .. " rows=" .. tostring(#rows)) end
 
--- 2 / 3 through local-ci.sh's own lookups, extracted from the script
-fs.write(rel .. "/lookup.sh", table.concat({
-    "REPO_ROOT=\"$(pwd -P)\"",
-    "eval \"$(sed -n '/^_CATALOG_LOADED=0/,/^litmus_args_for_phase() {/p' scripts/local-ci.sh | sed '$d')\"",
-    "load_check_catalog",
-    "for id in \"$@\"; do printf '%s|%s|%s\\n' \"$(check_weight \"$id\")\" \"$(check_spec_ref \"$id\")\" \"$(failed_reason_for_check \"$id\")\"; done",
-}, "\n") .. "\n")
-local function lookup(id)
-    local x = proc.run{ argv = { "bash", root .. "/" .. rel .. "/lookup.sh", id }, timeout_ms = 60000 }
-    return text.trim(x.stdout or ""), x.stderr or ""
+-- 2 / 3 the rows themselves. local-ci.sh no longer looks ids up in bash: the
+-- convergence writer (local-ci-convergence-artifacts.lua, 2224-x32n) reads
+-- these rows, and its own fixture pins the id substituted into `%s`.
+local function row_text(id)
+    for _, row in ipairs(rows) do
+        if row.id == id then return row.w .. "|" .. row.s .. "|" .. row.why end
+    end
+    return "(absent)"
 end
-local got = lookup("rust-clippy-all-features")
+local got = row_text("rust-clippy-all-features")
 local want = "180|spec:dev-build|All-features clippy warnings: run 'cargo clippy --workspace --all-targets --all-features -- -D warnings' (see /tmp/clippy-all-features-check.log)"
-if got == want then ok("2 a known id gives its weight, spec ref and reason through local-ci.sh")
+if got == want then ok("2 a known id's row gives its weight, spec ref and reason")
 else bad("2 got [" .. got .. "]") end
 
-got = lookup("no-such-check")
-if got == "0|spec:unknown|Check failed: no-such-check" then ok("3 an unknown id: 0, spec:unknown, and the reason names it")
+got = row_text("*")
+if got == "0|spec:unknown|Check failed: %s" then ok("3 the default row: 0, spec:unknown, and a reason with %s where the id goes")
 else bad("3 got [" .. got .. "]") end
 
 -- 4 weights and uniqueness

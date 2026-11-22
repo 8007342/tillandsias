@@ -398,59 +398,6 @@ case "$CI_PHASE" in
         ;;
 esac
 
-# 2223-bzsn (local-ci.sh to Lua, slice 3): the check catalog — weight, spec
-# ref and failure reason per check id — is ONE table in
-# scripts/lua/local-ci-check-catalog.lua. It replaced three bash case tables
-# keyed by the same ids. load_check_catalog reads its rows once per shell;
-# the three lookups below keep their old names and answers. Without a plan
-# binary there is no catalog: every check then weighs 0 against spec:unknown,
-# and the warning names why.
-_CATALOG_LOADED=0
-_CATALOG_IDS=(); _CATALOG_WEIGHTS=(); _CATALOG_SPECS=(); _CATALOG_REASONS=()
-load_check_catalog() {
-    [[ "$_CATALOG_LOADED" == 1 ]] && return 0
-    _CATALOG_LOADED=1
-    local _cc_plan _cc_rows _cc_id _cc_w _cc_s _cc_r
-    _cc_plan="$(cd "$REPO_ROOT" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _cc_plan=""
-    [[ "$_cc_plan" == ./* ]] && _cc_plan="$REPO_ROOT/${_cc_plan#./}"
-    if [[ -n "$_cc_plan" ]]; then
-        _cc_rows="$(cd "$REPO_ROOT" && "$_cc_plan" script run --helper scripts/lua/local-ci-check-catalog.lua)" || _cc_rows=""
-    else
-        _cc_rows=""
-    fi
-    if [[ -z "$_cc_rows" ]]; then
-        echo "warn:local-ci:check-catalog-unavailable — no runnable tillandsias-plan answered scripts/lua/local-ci-check-catalog.lua; convergence weights are 0 and spec refs unknown (2223-bzsn)" >&2
-        return 0
-    fi
-    while IFS=$'\t' read -r _cc_id _cc_w _cc_s _cc_r; do
-        [[ -n "$_cc_id" ]] || continue
-        _CATALOG_IDS+=("$_cc_id"); _CATALOG_WEIGHTS+=("$_cc_w")
-        _CATALOG_SPECS+=("$_cc_s"); _CATALOG_REASONS+=("$_cc_r")
-    done <<< "$_cc_rows"
-}
-# Index of <id> in the catalog, else of its default row `*`, else empty.
-_catalog_index() {
-    load_check_catalog
-    local i fallback=""
-    for i in "${!_CATALOG_IDS[@]}"; do
-        [[ "${_CATALOG_IDS[i]}" == "$1" ]] && { echo "$i"; return 0; }
-        [[ "${_CATALOG_IDS[i]}" == "*" ]] && fallback="$i"
-    done
-    echo "$fallback"
-}
-check_weight() {
-    local i; i="$(_catalog_index "$1")"
-    if [[ -n "$i" ]]; then echo "${_CATALOG_WEIGHTS[i]}"; else echo 0; fi
-}
-check_spec_ref() {
-    local i; i="$(_catalog_index "$1")"
-    if [[ -n "$i" ]]; then echo "${_CATALOG_SPECS[i]}"; else echo "spec:unknown"; fi
-}
-failed_reason_for_check() {
-    local i r; i="$(_catalog_index "$1")"
-    if [[ -n "$i" ]]; then r="${_CATALOG_REASONS[i]}"; echo "${r//%s/$1}"; else echo "Check failed: $1"; fi
-}
-
 litmus_args_for_phase() {
     local phase="$1"
     local -a args=(--phase "$phase" --compact)
@@ -519,300 +466,40 @@ run_litmus_phase() {
 }
 
 write_convergence_artifacts() {
-    load_check_catalog
-    mkdir -p "$SIGNATURE_DIR"
-
-    local total_cc=0
-    local residual_cc=0
-    local passed_cc=0
-    local total_checks=$((CHECKS_PASSED + CHECKS_FAILED))
-    local pass_rate=0
-    if [[ $total_checks -gt 0 ]]; then
-        pass_rate=$((CHECKS_PASSED * 100 / total_checks))
-    fi
-    local failed_specs=()
-    local failed_weights=()
-    local failed_reasons_file
-    local failed_checks_file
-    local failed_reasons_list_file
-    failed_reasons_file="$(mktemp)"
-    failed_checks_file="$(mktemp)"
-    failed_reasons_list_file="$(mktemp)"
-    trap 'rm -f "$failed_reasons_file" "$failed_checks_file" "$failed_reasons_list_file"' RETURN
-
-    for check_id in "${CHECK_IDS[@]}"; do
-        local weight
-        weight="$(check_weight "$check_id")"
-        total_cc=$((total_cc + weight))
-        if [[ " ${FAILED_CHECKS[*]} " == *" ${check_id} "* ]]; then
-            residual_cc=$((residual_cc + weight))
-            failed_specs+=("$(check_spec_ref "$check_id")")
-            failed_weights+=("$weight")
-            "$JQ" -nc \
-                --arg reason "$(failed_reason_for_check "$check_id")" \
-                --arg spec "$(check_spec_ref "$check_id")" \
-                --argjson cc "$weight" \
-                '{spec_or_obligation_id:$spec, reason:$reason, cc:$cc}' \
-                >>"$failed_reasons_file"
-        else
-            passed_cc=$((passed_cc + weight))
-        fi
-    done
-
-
-    # ── ORDER 977-j6qu: THE SCORE COMES FROM THE MODEL, NOT FROM THIS LOOP ────
-    #
-    # The loop above still classifies each check and builds the residual detail
-    # (which spec failed, why, at what weight) — that is reporting, and it stays
-    # here. What LEFT is the arithmetic: earned/denominator/residual are now
-    # computed by `tillandsias-plan score-checks`, which runs
-    # obligation::centicolon_function over a SpecState.
-    #
-    # WHY THIS MATTERS beyond tidiness. methodology/math-foundations.yaml
-    # describes a centicolon_function over the obligation lattice; this script
-    # accumulated `total_cc` itself. Two objects under one name, and the
-    # methodology's qualifier — monotone ONLY while obligation IDs are preserved
-    # and the denominator scope is unchanged — had nowhere to live, because a
-    # bare integer cannot say which side of that line it is on.
-    #
-    # THE NUMBERS ARE UNCHANGED TODAY, deliberately, and that is the evidence
-    # this wiring is faithful rather than a redefinition: a passing check
-    # establishes PositivelyTested, each weight is earned at exactly that bar,
-    # so the model reproduces what the loop computed. A green check witnesses
-    # that a test passed — it says nothing about RuntimeObserved or
-    # EvidenceBundled, and scoring it as though it did would be the model
-    # agreeing with whatever the shell already believed.
-    #
-    # FAIL LOUD, NEVER FALL BACK. An unavailable or refusing scorer must not
-    # silently restore the local arithmetic: that would be two scorers again,
-    # with the second one invisible and only reachable on the unhappy path.
-    local _score_json _score_rc=0
-    local _plan_bin=""
+    # 2224-x32n (local-ci.sh to Lua, slice 4): the three convergence artifacts
+    # are written by scripts/lua/local-ci-convergence-artifacts.lua. This
+    # function hands it the run's state in one input file. The score still
+    # comes from `tillandsias-plan score-checks` (977-j6qu), and a missing or
+    # refusing scorer is still a refusal, never a second score computed here.
+    local _wc_plan="" _wc_in _wc_rc=0 _wc_item
     if [[ -f "$REPO_ROOT/scripts/plan-binary-probe.sh" ]]; then
         # shellcheck source=scripts/plan-binary-probe.sh
         . "$REPO_ROOT/scripts/plan-binary-probe.sh" 2>/dev/null || true
     fi
-    if ! command -v resolve_plan_binary &>/dev/null || ! _plan_bin="$(resolve_plan_binary)" || [[ -z "$_plan_bin" ]]; then
+    if ! command -v resolve_plan_binary &>/dev/null || ! _wc_plan="$(cd "$REPO_ROOT" && resolve_plan_binary)" || [[ -z "$_wc_plan" ]]; then
         echo "blocked:local-ci:no-plan-binary — the centicolon scorer lives in tillandsias-plan (977-j6qu); refusing to compute a second score here" >&2
         return 1
     fi
-    _score_json="$(
-        for check_id in "${CHECK_IDS[@]}"; do
-            local _w _st
-            _w="$(check_weight "$check_id")"
-            if [[ " ${FAILED_CHECKS[*]} " == *" ${check_id} "* ]]; then _st=fail; else _st=pass; fi
-            printf '%s %s %s\n' "$check_id" "$_w" "$_st"
-        done | "$_plan_bin" score-checks
-    )" || _score_rc=$?
-    if [[ $_score_rc -ne 0 || -z "$_score_json" ]]; then
-        echo "blocked:local-ci:scorer-refused (rc=$_score_rc) — see the score-checks verdict above" >&2
-        return 1
-    fi
-    total_cc="$("$JQ" -r '.denominator' <<<"$_score_json")"
-    passed_cc="$("$JQ" -r '.earned' <<<"$_score_json")"
-    residual_cc="$("$JQ" -r '.residual' <<<"$_score_json")"
-    local cc_regime
-    cc_regime="$("$JQ" -r '.regime' <<<"$_score_json")"
-    # THE REGIME IS REPORTED, NOT IMPLIED. Outside the monotone band a rise or
-    # fall must not be read as progress or regress, and a consumer that only
-    # sees the number has no way to know.
-    if [[ "$cc_regime" != monotone ]]; then
-        echo "note:local-ci:centicolon-regime:$cc_regime — this score is NOT comparable with the previous run" >&2
-    fi
-    local failed_reasons_json
-    if [[ -s "$failed_reasons_file" ]]; then
-        failed_reasons_json="$("$JQ" -sc '.' "$failed_reasons_file")"
-    else
-        failed_reasons_json='[]'
-    fi
-
-    local max_residual_spec="n/a"
-    local max_residual_reason="n/a"
-    local max_residual_cc=0
-    if [[ ${#failed_specs[@]} -gt 0 ]]; then
-        max_residual_spec="${failed_specs[0]}"
-        max_residual_reason="$(failed_reason_for_check "${FAILED_CHECKS[0]}")"
-        max_residual_cc="${failed_weights[0]}"
-        local i
-        for i in "${!failed_specs[@]}"; do
-            if (( failed_weights[i] > max_residual_cc )); then
-                max_residual_spec="${failed_specs[i]}"
-                max_residual_reason="$(failed_reason_for_check "${FAILED_CHECKS[i]}")"
-                max_residual_cc="${failed_weights[i]}"
-            fi
-        done
-    fi
-
-    if [[ ${#FAILED_CHECKS[@]} -gt 0 ]]; then
-        printf '%s\n' "${FAILED_CHECKS[@]}" >"$failed_checks_file"
-    else
-        : >"$failed_checks_file"
-    fi
-
-    if [[ ${#FAILED_REASONS[@]} -gt 0 ]]; then
-        printf '%s\n' "${FAILED_REASONS[@]}" >"$failed_reasons_list_file"
-    else
-        : >"$failed_reasons_list_file"
-    fi
-
-    local ci_result="FAIL"
-    if [[ $CHECKS_FAILED -eq 0 ]]; then
-        ci_result="PASS"
-    fi
-
-    local signature_hash="n/a"
-    local delta_hash="n/a"
-    local check_log_hash="n/a"
-    local check_log_records=0
-    if [[ -f "$CHECK_LOG_INDEX" ]]; then
-        check_log_records="$(wc -l < "$CHECK_LOG_INDEX")"
-        if command -v sha256sum >/dev/null 2>&1; then
-            check_log_hash="$(sha256sum "$CHECK_LOG_INDEX" | awk '{print $1}')"
-        elif command -v shasum >/dev/null 2>&1; then
-            check_log_hash="$(shasum -a 256 "$CHECK_LOG_INDEX" | awk '{print $1}')"
-        fi
-    fi
-
-    local signature_tmp
-    signature_tmp="$(mktemp)"
-    "$JQ" -nc \
-        --arg timestamp "$CI_TIMESTAMP" \
-        --arg version "$VERSION_VALUE" \
-        --arg source_commit "$SOURCE_COMMIT" \
-        --arg source_namespace "local_development" \
-        --arg ci_run_id "$CI_RUN_ID" \
-        --arg ci_phase "$CI_PHASE" \
-        --argjson litmus_tests_run "${TESTS_RUN:-0}" \
-        --argjson litmus_passed "${TESTS_PASSED:-0}" \
-        --argjson litmus_failed "${TESTS_FAILED:-0}" \
-        --argjson litmus_skipped "${TESTS_SKIPPED:-0}" \
-        --argjson project_cc_earned "$passed_cc" \
-        --argjson project_cc_total "$total_cc" \
-        --argjson residual_cc "$residual_cc" \
-        --argjson pass_rate "$pass_rate" \
-        --arg ci_result "$ci_result" \
-        --arg evidence_bundle_ref "target/convergence/evidence-bundle.json" \
-        --arg projection_ref "target/convergence/centicolon-dashboard.md" \
-        --argjson top_residual_reasons "$failed_reasons_json" \
-        --arg max_residual_spec "$max_residual_spec" \
-        --arg max_residual_reason "$max_residual_reason" \
-        --argjson max_residual_cc "$max_residual_cc" \
-        --rawfile failed_checks "$failed_checks_file" \
-        --rawfile failed_reasons "$failed_reasons_list_file" \
-        '{
-          timestamp:$timestamp,
-          version:$version,
-          source_commit:$source_commit,
-          source_namespace:$source_namespace,
-          ci_run_id:$ci_run_id,
-          ci_phase:$ci_phase,
-          release_date:$timestamp,
-          expected_total_cc:$project_cc_total,
-          actual_earned_cc:$project_cc_earned,
-          residual_cc:$residual_cc,
-          percent_closed:(if $project_cc_total > 0 then (($project_cc_earned / $project_cc_total) * 100) else 0 end),
-          litmus_tests_run:$litmus_tests_run,
-          litmus_passed:$litmus_passed,
-          litmus_failed:$litmus_failed,
-          litmus_skipped:$litmus_skipped,
-          project_cc_earned:$project_cc_earned,
-          project_cc_total:$project_cc_total,
-          ci_result:$ci_result,
-          max_residual_spec:$max_residual_spec,
-          max_residual_reason:$max_residual_reason,
-          max_residual_cc:$max_residual_cc,
-          evidence_bundle_ref:$evidence_bundle_ref,
-          centicolon_projection_ref:$projection_ref,
-          top_residual_reasons:$top_residual_reasons,
-          failed_checks:($failed_checks|split("\n")[:-1]),
-          failed_reasons:($failed_reasons|split("\n")[:-1])
-        }' >"$signature_tmp"
-
-    if [[ -f "$SIGNATURE_JSONL" ]]; then
-        cat "$SIGNATURE_JSONL" "$signature_tmp" >"$SIGNATURE_JSONL.new"
-    else
-        cat "$signature_tmp" >"$SIGNATURE_JSONL.new"
-    fi
-    mv "$SIGNATURE_JSONL.new" "$SIGNATURE_JSONL"
-    rm -f "$signature_tmp"
-
-    if command -v sha256sum >/dev/null 2>&1; then
-        signature_hash="$(sha256sum "$SIGNATURE_JSONL" | awk '{print $1}')"
-    elif command -v shasum >/dev/null 2>&1; then
-        signature_hash="$(shasum -a 256 "$SIGNATURE_JSONL" | awk '{print $1}')"
-    fi
-
-    local signature_history_file
-    local signature_latest_file
-    signature_history_file="$(mktemp)"
-    signature_latest_file="$(mktemp)"
-    trap 'rm -f "$failed_reasons_file" "$failed_checks_file" "$failed_reasons_list_file" "$signature_history_file" "$signature_latest_file"' RETURN
-    "$JQ" -s '.' "$SIGNATURE_JSONL" >"$signature_history_file"
-    "$JQ" '.[-1]' "$signature_history_file" >"$signature_latest_file"
-
-    "$JQ" -nc \
-        --arg generated_at "$CI_TIMESTAMP" \
-        --arg source_file "target/convergence/centicolon-signature.jsonl" \
-        --argjson record_count "$(wc -l < "$SIGNATURE_JSONL")" \
-        --slurpfile latest "$signature_latest_file" \
-        --slurpfile history "$signature_history_file" \
-        --arg signature_hash "$signature_hash" \
-        '{
-          generated_at:$generated_at,
-          source_file:$source_file,
-          record_count:$record_count,
-          signature_hash:$signature_hash,
-          latest:$latest[0],
-          history:$history[0]
-        }' >"$DELTA_JSON"
-
-    if command -v sha256sum >/dev/null 2>&1; then
-        delta_hash="$(sha256sum "$DELTA_JSON" | awk '{print $1}')"
-    elif command -v shasum >/dev/null 2>&1; then
-        delta_hash="$(shasum -a 256 "$DELTA_JSON" | awk '{print $1}')"
-    fi
-
-    "$JQ" -nc \
-        --arg timestamp "$CI_TIMESTAMP" \
-        --arg version "$VERSION_VALUE" \
-        --arg source_commit "$SOURCE_COMMIT" \
-        --arg source_namespace "local_development" \
-        --arg ci_phase "$CI_PHASE" \
-        --arg signature_hash "$signature_hash" \
-        --arg delta_hash "$delta_hash" \
-        --arg check_log_index_ref "${CHECK_LOG_INDEX#"$REPO_ROOT"/}" \
-        --arg check_log_index_hash "$check_log_hash" \
-        --arg dashboard_hash "n/a" \
-        --arg ci_run_id "$CI_RUN_ID" \
-        --argjson signature_records "$(wc -l < "$SIGNATURE_JSONL")" \
-        --argjson delta_records 1 \
-        --argjson check_log_records "$check_log_records" \
-        --argjson project_cc_total "$total_cc" \
-        --argjson project_cc_earned "$passed_cc" \
-        --argjson residual_cc "$residual_cc" \
-        --argjson check_count "${#CHECK_IDS[@]}" \
-        '{
-          generated_at:$timestamp,
-          version:$version,
-          source_commit:$source_commit,
-          source_namespace:$source_namespace,
-          ci_phase:$ci_phase,
-          ci_run_id:$ci_run_id,
-          signature_hash:$signature_hash,
-          delta_hash:$delta_hash,
-          check_log_index_ref:$check_log_index_ref,
-          check_log_index_hash:$check_log_index_hash,
-          centicolon_dashboard_hash:$dashboard_hash,
-          signature_records:$signature_records,
-          delta_records:$delta_records,
-          check_log_records:$check_log_records,
-          project_cc_total:$project_cc_total,
-          project_cc_earned:$project_cc_earned,
-          residual_cc:$residual_cc,
-          check_count:$check_count
-        }' >"$EVIDENCE_BUNDLE"
-
-    return 0
+    [[ "$_wc_plan" == ./* ]] && _wc_plan="$REPO_ROOT/${_wc_plan#./}"
+    mkdir -p "$REPO_ROOT/target/plan-scratch"
+    _wc_in="$(mktemp "$REPO_ROOT/target/plan-scratch/convergence-input.XXXXXX")"
+    {
+        printf 'DIR=%s\n' "${SIGNATURE_DIR#"$REPO_ROOT"/}"
+        printf 'REPO_ROOT=%s\n' "$REPO_ROOT"
+        printf 'CHECK_LOG_INDEX=%s\n' "$CHECK_LOG_INDEX"
+        printf 'CHECKS_PASSED=%s\nCHECKS_FAILED=%s\n' "${CHECKS_PASSED:-0}" "${CHECKS_FAILED:-0}"
+        printf 'TESTS_RUN=%s\nTESTS_PASSED=%s\nTESTS_FAILED=%s\nTESTS_SKIPPED=%s\n' \
+            "${TESTS_RUN:-0}" "${TESTS_PASSED:-0}" "${TESTS_FAILED:-0}" "${TESTS_SKIPPED:-0}"
+        printf 'CI_TIMESTAMP=%s\nVERSION_VALUE=%s\nSOURCE_COMMIT=%s\nCI_RUN_ID=%s\nCI_PHASE=%s\n' \
+            "$CI_TIMESTAMP" "$VERSION_VALUE" "$SOURCE_COMMIT" "$CI_RUN_ID" "$CI_PHASE"
+        for _wc_item in ${CHECK_IDS[@]+"${CHECK_IDS[@]}"}; do printf 'CHECK_IDS[]=%s\n' "$_wc_item"; done
+        for _wc_item in ${FAILED_CHECKS[@]+"${FAILED_CHECKS[@]}"}; do printf 'FAILED_CHECKS[]=%s\n' "$_wc_item"; done
+        for _wc_item in ${FAILED_REASONS[@]+"${FAILED_REASONS[@]}"}; do printf 'FAILED_REASONS[]=%s\n' "$_wc_item"; done
+    } > "$_wc_in"
+    (cd "$REPO_ROOT" && "$_wc_plan" script run scripts/lua/local-ci-convergence-artifacts.lua -- \
+        --input "${_wc_in#"$REPO_ROOT"/}" --plan-bin "$_wc_plan") || _wc_rc=$?
+    rm -f "$_wc_in"
+    return "$_wc_rc"
 }
 
 # Logging
