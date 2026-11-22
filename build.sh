@@ -987,10 +987,11 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # above, which a check-* may not use: this token is honoured only for a
     # check-* that NO pre-push hook runs (the push lane keeps every decider it
     # has), only with a reason, and the full gate still runs it.
-    if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+    # ORDER 2220-gtri: a Lua decider declares it with `-- preflight:`.
+    if [ -n "$(sed -En '1,40{/^(#|--) preflight: gate-only-decider/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
+        _reason="$(sed -En '1,40{s/^(#|--) preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
         case "$_p" in
-            scripts/check-*)
+            scripts/check-*|scripts/lua/check-*)
                 if grep -qF "${_p##*/}" "$SCRIPT_DIR"/scripts/hooks/* 2>/dev/null; then
                     echo "note:preflight:$_l:gate-only-decider-ignored — a pre-push hook runs it, so the door must too; running it (1518-8p5k)"
                 elif [ -n "$_reason" ]; then
@@ -5103,7 +5104,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # regimes and names any case whose verdict moves. ~4s; the deterministic
     # engines never touch the network.
     _step "Checking groundtruth cases grade the same with inference up or down (928-qm8k)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-regime-invariance.sh" --strict 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-groundtruth-regime-invariance.lua" --strict 2>&1; then
         _error "a groundtruth case grades differently by inference regime — its verdict is a property of the host (928-qm8k)"
         exit 1
     fi

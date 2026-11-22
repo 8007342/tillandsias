@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua row, assigned by macuahuitl-fedora 2026-11-22 (next free counted check-*.sh past 128 lines).
+packets:
+  - packet_id: groundtruth-regime-invariance-to-lua
+    order: "2220-gtri"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, lua, groundtruth]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-groundtruth-regime-invariance.sh
+      - scripts/lua/check-groundtruth-regime-invariance.lua
+      - scripts/lua/test-groundtruth-regime-fails-closed.lua
+      - scripts/lua/test-deciders-within-door-deadline.lua
+      - build.sh
+      - openspec/litmus-tests/litmus-groundtruth-regime-fails-closed.yaml
+      - scripts/portability/shell-decider-floor.txt
+      - scripts/portability/pipe-site-floor.txt
+    title: "check-groundtruth-regime-invariance is Lua, with the same grammar, concurrency and fail-closed rule; the .sh is deleted"
+    context: |
+      The eight grades (each set live and dead) run concurrently through proc.spawn and are compared in set order. An
+      incomplete grade (no groundtruth-result line) is unavailable:grade-incomplete:<set>:<regime>, exit 2. The runner
+      scrubs FORGE_SPEC_INDEX_DIR, FORGE_SPEC_INDEX_ROOT, PROJECT_ROOT and XDG_CACHE_HOME, so they are forwarded to both
+      regimes. The preflight door now honours a Lua decider's "-- preflight: gate-only-decider" line, as it did the .sh's
+      "#" line; test-deciders-within-door-deadline reads either form. The fails-closed fixture's fake grader now reads
+      TILLANDSIAS_TEST_GT_* names, because the runner passes only TILLANDSIAS_* through to the grades the check spawns.
+    exit_criteria:
+      - "Live tree: the .sh and the Lua both print ok:groundtruth-regime-invariant:30-cases, rc 0 (measured 2026-11-22 on calmecacpilli; .sh 8.4 s, Lua 6.7 s)."
+      - "test-groundtruth-regime-fails-closed.lua 3/3 on the Lua; test-deciders-within-door-deadline 6/6; audit-guard-activation names lua/check-groundtruth-regime-invariance.lua <- build.sh."
+      - "Mutant parity: with the incomplete-grade check disabled, the fixture reds 2/3 with the same arm-2 line (violation:groundtruth-regime-dependent:forge-run-container-here-no-docker rc=1) on the .sh mutant and on the Lua mutant."
+    unscoreable: "a port: scored by the fixture, the live-tree agreement and the mutant parity above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-22: continue past 128 lines with the next free counted check-*.sh."
+    events:
+      - type: filed
+        ts: "2026-11-22T13:19:16Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2220-gtri"

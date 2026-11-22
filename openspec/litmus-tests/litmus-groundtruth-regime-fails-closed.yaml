@@ -35,7 +35,7 @@ observability:
   log_fields:
     spec: "ci-release"
     test: "groundtruth-regime-fails-closed"
-    artifact: "scripts/check-groundtruth-regime-invariance.sh"
+    artifact: "scripts/lua/check-groundtruth-regime-invariance.lua"
 
 rollback:
   on_failure: >
