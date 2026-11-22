@@ -20,6 +20,7 @@ STEP_DESC="Checking the end-user installers add no interactive prompt (1560-g5d9
 STEP_LUA="scripts/lua/test-check-installer-prompts.lua"
 STEP_ERROR="an end-user installer gained an interactive prompt, or the prompt ratchet broke (1560-g5d9); see the file:line above"
 STEP_OK="the end-user installers are at or below the prompt floor"
+STEP_SECOND_REGIME="yolanda 2026-10-08 msys ok:installer-prompts-fixture:6 arms"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-20 darwin ok:installer-prompts-fixture:6 arms (2111-inst Lua port)"
 STEP_SERIAL="builds with cargo into the shared target"
 STEP_LANES="cargo"
