@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: carried-obligations-counts-any-script-removal
+    order: "2219-crmv"
+    status: ready
+    kind: chore
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [carried-obligations, shell-to-lua, friction]
+    estimated_hours: 1
+    owned_files:
+      - scripts/lua/check-carried-obligations.lua
+      - methodology/convergence.yaml
+    title: "carried-obligations counts the removal of any top-level scripts/*.sh as a paid shell-to-lua item"
+    context: |
+      The shell-to-lua population is scripts/{check,test,verify,guard,audit,census,preflight}-*.sh. Deleting any other
+      top-level script (a wrapper or tombstone, e.g. local-delegate-ladder.sh in #1326, the two tombstones in 2217-tmbs)
+      lowers no counter, so the change needs a Carried-Waiver for an "uncounted item". That is friction for exactly the
+      cleanup the backlog wants. Count a removed top-level scripts/*.sh outside bootstrap-shell-allowlist.txt as a paid
+      item, or widen the population, keeping the counter's definition in methodology/convergence.yaml in step.
+    exit_criteria:
+      - "A change whose only shell effect is deleting a non-population scripts/*.sh passes check-carried-obligations --landing with no waiver."
+      - "A change adding a scripts/*.sh still counts as before (the counter cannot be paid by renaming)."
+    next_action: "Pick up."
+    provenance: "macuahuitl-fedora 2026-11-22: uncounted non-test wrappers need a waiver today, which is friction."
+    events:
+      - type: filed
+        ts: "2026-11-22T13:01:42Z"
+        host: calmecacpilli
+        summary: "filed"
