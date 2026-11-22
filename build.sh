@@ -5305,7 +5305,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # records carrying ITS gate's run id; two concurrent writers prove a
     # concurrent gate no longer gets the running step blamed and evicted.
     _step "Checking the timing-log leak check blames only its own gate (1916-tsel)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-gate-step-metrics-attribution.sh" 2>&1; then
+    # 2233-vxu9: the fixture is Lua (gate B is a proc.spawn'ed writer). No
+    # runnable plan binary is a failed check, never a pass.
+    _gsma_plan="$(cd "$SCRIPT_DIR" && . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" || _gsma_plan=""
+    case "$_gsma_plan" in ./*) _gsma_plan="$SCRIPT_DIR/${_gsma_plan#./}" ;; esac
+    if [[ -z "$_gsma_plan" ]]; then
+        _error "could-not-run:gate-step-metrics-attribution:no-plan-binary — scripts/lua/test-gate-step-metrics-attribution.lua needs tillandsias-plan script run (1916-tsel)"
+        exit 1
+    fi
+    if ! (cd "$SCRIPT_DIR" && _run "$_gsma_plan" script run scripts/lua/test-gate-step-metrics-attribution.lua) 2>&1; then
         _error "the shared-timing-log leak check attributes records by growth again, or no longer names a leaking step (1916-tsel)"
         exit 1
     fi
