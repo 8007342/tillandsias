@@ -13,7 +13,12 @@ STEP_OK="Metrics log path agreement passed"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-28 darwin ok:metrics-log-path-agreement:18"
 # ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
 STEP_SERIAL="watches the shared timing or metrics log, or runs a nested gate"
-STEP_LANES="timing"
+# 2192-excl: EXCLUSIVE, not just the timing lane. It writes the fixed
+# /tmp/tillandsias-timing.jsonl and counts lines of the fixed
+# /tmp/forge-expert-usage.jsonl before and after a run (its own header), so ANY
+# concurrent writer, a step in another lane or a live expert, breaks its count.
+# Deterministic under JOBS=6 on macuahuitl (run 27: #1248 and #1287 evicted).
+STEP_LANES="timing exclusive"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.

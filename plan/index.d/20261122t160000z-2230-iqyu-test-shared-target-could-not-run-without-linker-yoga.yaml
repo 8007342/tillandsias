@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22 at the coordinator's direction (macuahuitl-fedora).
+packets:
+  - packet_id: test-shared-target-reports-could-not-run-without-a-linker
+    order: "2230-iqyu"
+    status: ready
+    kind: defect
+    priority: p2
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [litmus, fixtures]
+    estimated_hours: 1
+    owned_files:
+      - scripts/test-shared-target.sh
+    title: "test-shared-target.sh fails arms 2/3 when the host has no `cc` linker instead of reporting could-not-run"
+    context: |
+      On yoga's bare host (no cc; cargo lives in the toolbox), relay-preflight of work/2209-dfix@1a2955455 went red on
+      litmus:unreferenced-lane-fixtures-run step 10 (bash scripts/test-shared-target.sh):
+        FAIL: arm2 naive run did not show A: error: linker `cc` not found
+        FAIL: arm3 guarded run did not show B: error: linker `cc` not found
+      The fixture's `run()` (scripts/test-shared-target.sh:49) does `cargo run` on a probe crate; a missing linker is an
+      environment fact, not the 1807-shtg defect, yet it reads as a failed arm. macuahuitl's gate has a linker and is green.
+    exit_criteria:
+      - "When the probe cannot link (no cc), test-shared-target.sh prints could-not-run:no-linker and does not report arm2/arm3 as FAIL."
+      - "With a linker present the arms run and assert exactly as before."
+    unscoreable: "host-dependent: the no-linker branch is only reachable on a host without cc; prove with PATH stripped of cc in the fixture"
+    provenance: "coordinator 2026-11-22 after yoga's preflight red on #1324"
+    events:
+      - type: filed
+        ts: "2026-11-22T16:00:00Z"
+        host: yoga
+        summary: "filed: missing linker reads as a failed arm in test-shared-target"

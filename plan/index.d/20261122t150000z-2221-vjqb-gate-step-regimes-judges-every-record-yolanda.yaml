@@ -1,0 +1,26 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yolanda 2026-11-22 at macuahuitl-fedora's direction.
+packets:
+  - packet_id: check-gate-step-regimes-judges-every-second-regime-record-not-only-the-first
+    order: 2221-vjqb
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    capability_tags: [gate, regimes, ci]
+    estimated_hours: 2
+    title: "scripts/check-gate-step-regimes.sh reads only head -1 of STEP_SECOND_REGIME, so a second platform's record is never judged (a malformed or Linux-host second line passes)"
+    context: |
+      check-gate-step-regimes.sh:77 takes grep '^STEP_SECOND_REGIME=' | head -1. Steps now carry both a darwin
+      and an msys record (790-1560-g5d9 has two STEP_SECOND_REGIME lines; 886, 932-2111, 934 carry msys as a
+      comment because only the first line is read). The second record is unjudged: its form, its regime field
+      (darwin|msys), and the rule that a Linux host does not satisfy it are never checked.
+    exit_criteria:
+      - "every STEP_SECOND_REGIME line of a step is checked for form and regime; a malformed or linux-host SECOND line is refused by name. Pre-fix: passes."
+      - "a step with one valid darwin and one valid msys line passes, and the checker reports both regimes."
+      - "the comment-form msys records (886-2186-x5kv, 932-2111-dd2m, 934-2166-zvst) are promoted to STEP_SECOND_REGIME lines once the checker judges them."
+    unscoreable: "unpinnable-until-the-guard-exists: the checker's own fixture arm (a sabotaged second line) lands with the fix"
+    provenance: "macuahuitl-fedora 2026-11-22; yolanda's msys records written as comments on 886/932/934 because only the first line is read."
+    related: [2111-inst, 965-sxec]
+    events:
+      - {type: filed, ts: '2026-11-22T15:00:00Z', host: yolanda, summary: filed the head -1 regime-record gap}

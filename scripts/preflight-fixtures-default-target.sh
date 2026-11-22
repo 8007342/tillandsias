@@ -132,6 +132,15 @@ while IFS= read -r f; do
     # Its own fixture drives copies of this decider in scratch repos; running it
     # here would only nest the same runs. Gate step 530 runs it.
     [ "$f" = "scripts/test-preflight-fixtures-default-target.sh" ] && continue
+    # ORDER 2207-v7x2: a fixture that drives LIVE host state (a running
+    # container) declares `# @live-fixture <OPT-IN-VAR>` (`-- @live-fixture`
+    # in a Lua fixture) and is never run from here: a land gate that ran
+    # test-vault-shutdown-forwards-sigterm.sh as a "changed fixture" stopped
+    # yoga's live vault (2026-11-21).
+    if grep -qE '^(#|--) @live-fixture ' "$ROOT/$f" 2>/dev/null; then
+        echo "skip:fixture-default-target:live-fixture:$f" >&2
+        continue
+    fi
     if [ "$kind" = lua ] && [ -z "$runner_n" ]; then
         echo "note:fixture-default-target:no-lua-runner-in-caller-regime:$f" >&2
         continue
