@@ -21,11 +21,11 @@ description: >
 
 preconditions:
   - workspace contains crates/tillandsias-headless/src/main.rs
-  - workspace contains scripts/test-forge-packed-refs-split-brain.sh
+  - workspace contains scripts/lua/test-forge-packed-refs-split-brain.lua
 
 critical_path:
   - step: "copied packed-refs loses refs on host gc; shared survives and keeps ancestry"
-    command: "scripts/test-forge-packed-refs-split-brain.sh"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-forge-packed-refs-split-brain.lua 2>&1 | grep '^PASS'"
     timeout_ms: 120000
     expected_behavior: "PASS: forge packed-refs split-brain fixture (order 432)"
 

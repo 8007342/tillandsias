@@ -71,7 +71,6 @@ scripts/test-credential-verdict-script.sh 1
 scripts/test-cycle-checkout-lock.sh 1
 scripts/test-cycle-lock-attested-release.sh 1
 scripts/test-default-vault-cli-security.sh 1
-scripts/test-drain-queue-bare-refuses.sh 1
 scripts/test-e2e-preflight-live-runtime.sh 2
 scripts/test-enclave-network-internal-discovery.sh 2
 scripts/test-env-forward-shared.sh 1
@@ -85,7 +84,6 @@ scripts/test-fleet-msg-store.sh 1
 scripts/test-forge-git-index-materialization.sh 1
 scripts/test-forge-gitconfig-bidirectional-quarantine.sh 1
 scripts/test-forge-launch-openspec-init-clean.sh 1
-scripts/test-forge-packed-refs-split-brain.sh 1
 scripts/test-forge-runtime-ca-trust.sh 1
 scripts/test-forge-seeds-from-salvage-ref.sh 1
 scripts/test-forge-standard-gitconfig-path.sh 1

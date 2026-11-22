@@ -166,7 +166,6 @@ scripts/test-dev-inference-start-refusal-names-cause.sh
 scripts/test-discipline-derive.sh
 scripts/test-discipline-install-hooks.sh
 scripts/test-dispatch-reap.sh
-scripts/test-drain-queue-bare-refuses.sh
 scripts/test-e2e-preflight-live-runtime.sh
 scripts/test-e2e-step2-macos.sh
 scripts/test-embed-endpoint-derivation.sh
@@ -203,7 +202,6 @@ scripts/test-forge-gitconfig-bidirectional-quarantine.sh
 scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
-scripts/test-forge-packed-refs-split-brain.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
@@ -350,7 +348,6 @@ scripts/test-macos-vsock-inference-closure.sh
 scripts/test-macos-vz-orphan-diagnosis.sh
 scripts/test-mcp-plan-resolver-pinning.sh
 scripts/test-mcp-run-command-tool.sh
-scripts/test-mcp-server-resilience.sh
 scripts/test-mcp-transport-death-trace.sh
 scripts/test-memo-hit-observability.sh
 scripts/test-meta-orchestration-opsx-sync-merge.sh
