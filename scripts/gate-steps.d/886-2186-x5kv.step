@@ -13,3 +13,4 @@ STEP_OK="Preflight door rebuilds a stale plan binary once"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/lua/test-preflight-rebuilds-stale-plan-binary.lua"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:preflight-rebuilds-stale-plan-binary:4"
