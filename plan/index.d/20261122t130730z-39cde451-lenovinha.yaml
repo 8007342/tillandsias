@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# the-door-deadline-and-probe-usage-corpus-fixtures-are-lua-and-both-sh-are-deleted.status was ALREADY 'completed', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: the-door-deadline-and-probe-usage-corpus-fixtures-are-lua-and-both-sh-are-deleted
+    event:
+      type: note
+      ts: "2026-11-22T13:07:30Z"
+      host: lenovinha
+      summary: |-
+        landed via PR #1287: gated merge 62cc3b5f8, adopted onto origin/linux-next as 43270640e over a plan-only move
