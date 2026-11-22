@@ -454,7 +454,9 @@ GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 # gate, then test-land-queue.sh, then its inner queues, and redded run 26's train;
 # ARM 22's stamp leak was the same class. Called first in every gate subshell, so
 # the queue keeps its settings and the gate (and its fixtures) inherits none.
-_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; }
+# 2215-trad: nor GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE — a caller inside a git hook exports them, and a
+# fixture following them writes the REAL .git/config (calmecacpilli 2026-11-22, #1338).
+_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; }
 DAILY_SKIP="${TILLANDSIAS_LAND_QUEUE_DAILY_SKIP:-1}"
 DAILY_NS="refs/attest/daily-full"
 DAILY_RED_NS="refs/attest/daily-red"
