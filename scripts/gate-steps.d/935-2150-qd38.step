@@ -1,0 +1,14 @@
+# Gate step 2150-qd38 (priority:build-speed) — the gate's tree-hygiene probe
+# logs host PSI and warns, or with TILLANDSIAS_GATE_SCRATCH_REFUSE=1 refuses,
+# on >1 GB of untracked scratch. Offline; builds its own scaffold repo.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the gate tree-hygiene probe (PSI + untracked scratch) (2150-qd38)"
+STEP_LUA="scripts/lua/test-gate-tree-hygiene.lua"
+STEP_ERROR="the gate tree-hygiene probe regressed (2150-qd38) — a slow gate can no longer say whether the host or the tree was the cause; see the FAIL lines above"
+STEP_OK="gate tree-hygiene fixture passed"
+STEP_SECOND_REGIME="yolanda 2026-11-20 msys ok:gate-tree-hygiene:7 arms"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/gate-tree-hygiene.sh scripts/lua/test-gate-tree-hygiene.lua"

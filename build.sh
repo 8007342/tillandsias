@@ -3804,7 +3804,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _CHECK_T0="$(timing_now_ms)"
     # 1915-gtph: a FAILED gate flushes its phase rows too — the gate that died
     # at minute 20 is the one whose minutes most need attributing.
-    trap '_gate_rc=$?; _phase_emit_timing; timing_emit build-check check "$_CHECK_T0" "$_gate_rc"' EXIT
+    trap '_gate_rc=$?; _phase_emit_timing; timing_emit build-check check "$_CHECK_T0" "$_gate_rc"; bash "$SCRIPT_DIR/scripts/gate-tree-hygiene.sh" psi gate-end 2>/dev/null || true' EXIT
+    # ORDER 2150-qd38 (priority:build-speed): host pressure at both ends of the gate
+    # and the checkout's untracked scratch, so a slow gate can say whether the
+    # HOST or the TREE was the cause. ~0.1 s; a warning never blocks, and only
+    # TILLANDSIAS_GATE_SCRATCH_REFUSE=1 turns >1 GB of scratch into a refusal.
+    bash "$SCRIPT_DIR/scripts/gate-tree-hygiene.sh" psi gate-start 2>/dev/null || true
+    if ! _hygiene_out="$(bash "$SCRIPT_DIR/scripts/gate-tree-hygiene.sh" scratch 2>&1)"; then
+        printf '%s\n' "$_hygiene_out"
+        _error "the checkout carries more untracked scratch than TILLANDSIAS_GATE_SCRATCH_REFUSE allows (2150-qd38) — see the line above"
+        exit 1
+    fi
+    printf '%s\n' "$_hygiene_out"
     # 1826-gi8e: hold the coordinator lane marker while the gate runs, so the
     # `coord heartbeat` stands down. The reader checks the pid, so an aborted
     # gate leaves a marker that no longer holds anything, and the EXIT trap
