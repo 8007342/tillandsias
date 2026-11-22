@@ -284,6 +284,22 @@ while read -r _l _ls _remote_ref _rs; do
             # passing the gate it exists to protect is not a mechanism.
             _all_salvage=0; _all_work=0
             ;;
+        refs/attest/native-lint/*)
+            # NATIVE-LINT ATTESTATION REFS (order 2112-nlrf). Written by
+            # scripts/attest-native-lint.sh --ref after its clippy run passes: a
+            # PARENTLESS commit whose tree IS the linted crate subtree, named for
+            # that subtree's sha. It is not a branch and moves no branch, so the
+            # tree stamp measures the wrong subject. Exempt ONLY when the pushed
+            # object proves that shape; anything else under this name is gated.
+            _att_name="${_remote_ref##*/}"
+            _att_tree="$(git rev-parse --verify --quiet "$_ls^{tree}" 2>/dev/null)" || _att_tree=""
+            _att_parents="$(git rev-list --parents -n 1 "$_ls" 2>/dev/null)" || _att_parents=""
+            if [[ -n "$_att_tree" && "$_att_tree" == "$_att_name" && "$_att_parents" == "$_ls" ]]; then
+                _all_salvage=0; _all_work=0
+            else
+                _all_salvage=0; _all_marker=0; _all_work=0
+            fi
+            ;;
         refs/heads/salvage/*)
             _all_marker=0; _all_work=0   # a salvage ref is not the work lane (1315-4a7j regression caught by litmus:salvage-net-roundtrip, 2026-09-21)
             # DELETION PROTECTION (874-w2gc). The exemption used to wave
@@ -315,7 +331,7 @@ if [[ "$_any_ref" -eq 1 && "$_all_work" -eq 1 ]]; then
     WORK_REF_LANE=1
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
-    echo "${GRN}✓ local gate: coordination marker ref under refs/tillandsias/ — exempt by design (1176-9vqn); it is not a branch, no gate reads it and no release ships it${RST}" >&2
+    echo "${GRN}✓ local gate: coordination marker ref (refs/tillandsias/, 1176-9vqn) or self-verifying native-lint attestation (refs/attest/native-lint/, 2112-nlrf) — exempt by design; it is not a branch and moves none${RST}" >&2
     exit 0
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
