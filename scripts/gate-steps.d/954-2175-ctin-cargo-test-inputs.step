@@ -16,4 +16,4 @@ STEP_READS="scripts/lua/test-scan-cargo-test-repo-roots.lua scripts/lua/scan-car
 # ORDER 2239-5gb5: the step now runs the fixture, whose arm 1 IS the former
 # bare `--check` on the real tree; arms 2-4 add the exec-gap, read-gap and
 # net-less-mutant controls. The second-regime record below is the bare scanner's.
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:cargo-test-inputs:45:files=278"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:scan-cargo-test-repo-roots:4 (2239-5gb5 fixture)"
