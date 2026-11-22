@@ -2979,6 +2979,14 @@ _gs_one() {
             _error "gate step ${_step_path##*/} leaked record(s) into $_metrics_leak — $_metrics_attr (1204-3s2s; 1966-ubsw: the gate's private fallback, or the shared path under this gate's run id)"
             _error "  The leaked line(s), kept so the next one is diagnosable:"
             tail -n "+$(( ${_metrics_shared_before:-0} + 1 ))" "$_metrics_leak" 2>/dev/null | head -n 5 | sed 's/^/    /' >&2
+            # ORDER 2189-lktp: and the WHOLE log, copied aside now. Under the pool or
+            # lanes a concurrent step can rotate or truncate the shared file before
+            # anyone reads it (yoga 2026-11-22: the lines above printed nothing and
+            # the file was gone), and the record's own fields name its real writer.
+            _leak_keep="${TMPDIR:-/tmp}/gate-leak-$$-${_step_path##*/}.jsonl"
+            if cp -p "$_metrics_leak" "$_leak_keep" 2>/dev/null; then
+                _error "  the whole log at refusal time is kept at $_leak_keep (line $(( ${_metrics_shared_before:-0} + 1 )) on is this step's window)"
+            fi
             _error "  That path is the NON-CHECKOUT FALLBACK and it shares production's basename, so those"
             _error "  records carry this host's real name and split the timing log. cycle-metrics.sh will then"
             _error "  refuse to publish any number, every arm driving it reads zero, and"
