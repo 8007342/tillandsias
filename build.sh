@@ -46,6 +46,16 @@ trap '{
     kill -TERM $$
 }' TERM
 
+# ORDER 2224-gdir — NO INHERITED REPO LOCATION. Git exports GIT_DIR (and in
+# some hooks GIT_WORK_TREE / GIT_INDEX_FILE) to every hook; a hook-launched
+# build.sh handed it to every guard and fixture, and a fixture's
+# `git -C <scratch> ...` then followed it to the REAL repo:
+# test-check-credential-channel.sh rewrote this checkout's origin and set
+# credential.helper=manager (calmecacpilli 2026-11-22). build.sh names its
+# checkout with -C "$SCRIPT_DIR", and a hook runs from the repo root, so git
+# rediscovers the same repository without them.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 # On Fedora Silverblue (immutable), transparently re-exec inside the
 # tillandsias-builder toolbox where Rust/gcc/ruby/etc are available.
 # Non-Silverblue hosts skip with zero overhead.
@@ -5804,7 +5814,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 2026-08-12. Diff-scoped like 634-39ik's enforcement, so a fragment
     # inherited from a sibling only warns and can never red-gate this host.
     _step "Checking that fragments added by this change parse..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-added-fragments-parse.lua" 2>&1; then
         _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host; the offending file and reason are named on the check's own output above, and the fragment format is documented in plan/index.d/README.md"
         exit 1
     fi

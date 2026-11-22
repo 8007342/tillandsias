@@ -425,7 +425,6 @@ scripts/test-release-tier-timer-render.sh
 scripts/test-reopen-is-history-not-loss.sh
 scripts/test-repeat-model-flag.sh
 scripts/test-requirement-ids.sh
-scripts/test-rerun-failed-rust-tests.sh
 scripts/test-reset-flags-are-accepted.sh
 scripts/test-reset-state-contract.sh
 scripts/test-resolve-open-pr.sh

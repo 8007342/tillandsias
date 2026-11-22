@@ -1086,6 +1086,86 @@ fn watch_window_exit(handle: &ContainerHandle, debug: bool) {
     );
 }
 
+/// Order 1911-3gqy (slice 3). The window suffixes whose forwarder or network
+/// survives with NO window container. A window is
+/// `tillandsias-browser-<project>-<suffix>`, its forwarder
+/// `tillandsias-browser-fwd-<suffix>` and its network
+/// `tillandsias-browser-net-<suffix>`; the suffix is the join. Liveness is the
+/// window container itself, never a registry: a plain tray exit leaves forges
+/// and their windows running for the next tray to adopt (1988-trkp), so a
+/// sweep by label alone would close windows an agent is still using.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn orphan_window_suffixes(containers: &[String], networks: &[String]) -> Vec<String> {
+    let mut windows = std::collections::BTreeSet::new();
+    let mut leftovers = std::collections::BTreeSet::new();
+    for name in containers {
+        let Some(rest) = name.strip_prefix("tillandsias-browser-") else {
+            continue;
+        };
+        if let Some(suffix) = rest.strip_prefix("fwd-") {
+            leftovers.insert(suffix.to_string());
+        } else if let Some((_, suffix)) = rest.rsplit_once('-') {
+            windows.insert(suffix.to_string());
+        }
+    }
+    for name in networks {
+        if let Some(suffix) = name.strip_prefix("tillandsias-browser-net-") {
+            leftovers.insert(suffix.to_string());
+        }
+    }
+    leftovers
+        .into_iter()
+        .filter(|s| !s.is_empty() && !windows.contains(s))
+        .collect()
+}
+
+/// Remove every orphaned forwarder and window network (see
+/// [`orphan_window_suffixes`]). Called on tray start and on Quit; `--reset`
+/// already removes every Tillandsias network. Returns how many windows' worth
+/// of leftovers it reaped. A podman listing that fails reaps nothing.
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
+pub(crate) fn sweep_orphan_windows(debug: bool) -> usize {
+    let filter = "label=tillandsias.browser-window";
+    let Ok(containers) = podman(&["ps", "-a", "--format", "{{.Names}}"], network_budget()) else {
+        return 0;
+    };
+    let Ok(networks) = podman(
+        &["network", "ls", "--filter", filter, "--format", "{{.Name}}"],
+        network_budget(),
+    ) else {
+        return 0;
+    };
+    let lines = |s: &str| {
+        s.lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    let orphans = orphan_window_suffixes(&lines(&containers), &lines(&networks));
+    for suffix in &orphans {
+        let fwd = format!("tillandsias-browser-fwd-{suffix}");
+        let net = format!("tillandsias-browser-net-{suffix}");
+        for args in [
+            &["rm", "-f", "-t", "0", fwd.as_str()][..],
+            &["network", "rm", "-f", net.as_str()][..],
+        ] {
+            if let Err(err) = podman(args, network_budget())
+                && debug
+            {
+                eprintln!("[tillandsias] browser sweep: {err}");
+            }
+        }
+    }
+    if debug && !orphans.is_empty() {
+        eprintln!(
+            "[tillandsias] browser sweep: reaped {} orphaned window(s) (1911-3gqy)",
+            orphans.len()
+        );
+    }
+    orphans.len()
+}
+
 #[cfg(test)]
 mod tests {
     /// 1795-rtfy, red first: on the rootful macOS guest the relay died with
@@ -2792,5 +2872,29 @@ mod tests {
         assert!(ps.is_empty());
         assert!(!nets.lines().any(|n| n == net));
         assert!(!router_nets.split_whitespace().any(|n| n == net));
+    }
+
+    /// 1911-3gqy slice 3: a forwarder or network whose window container is
+    /// gone is an orphan; one whose window still runs (an adopted lane's) is
+    /// not, and an unrelated container never matters.
+    #[test]
+    fn orphan_sweep_takes_leftovers_whose_window_is_gone_and_spares_live_windows() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let containers = s(&[
+            "tillandsias-browser-my-proj-aaaa11112222",
+            "tillandsias-browser-fwd-aaaa11112222",
+            "tillandsias-browser-fwd-bbbb33334444",
+            "tillandsias-forge-my-proj",
+        ]);
+        let networks = s(&[
+            "tillandsias-browser-net-aaaa11112222",
+            "tillandsias-browser-net-bbbb33334444",
+            "tillandsias-browser-net-cccc55556666",
+        ]);
+        assert_eq!(
+            orphan_window_suffixes(&containers, &networks),
+            vec!["bbbb33334444".to_string(), "cccc55556666".to_string()]
+        );
+        assert!(orphan_window_suffixes(&containers[..1], &networks[..1]).is_empty());
     }
 }

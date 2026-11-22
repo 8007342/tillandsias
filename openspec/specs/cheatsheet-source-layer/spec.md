@@ -97,11 +97,11 @@ This allows maintainers to `cat cheatsheet-sources/...` to re-verify offline.
 - **AND** the sidecar (`.meta.yaml`) still exists in `cheatsheet-sources/`
 
 #### Scenario: bind-provenance-local-paths.sh is idempotent
-- **WHEN** `scripts/bind-provenance-local-paths.sh` is run twice
+- **WHEN** `scripts/bind-provenance-local-paths.sh` is run twice <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 - **THEN** the second run makes no modifications (detects existing `local:` fields)
 
 #### Scenario: last_verified bumped on rewrite
-- **WHEN** `scripts/bind-provenance-local-paths.sh` injects `local:` lines into a cheatsheet
+- **WHEN** `scripts/bind-provenance-local-paths.sh` injects `local:` lines into a cheatsheet <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 - **AND** the cheatsheet's frontmatter `last_verified` date is older than the fetch date
 - **THEN** `last_verified` is bumped to the fetch date
 
@@ -167,24 +167,24 @@ markers in `INDEX.md`, never the verbatim source bytes.
 ### Requirement: Refresh behaviour
 <!-- req-id: f8db9a1e -->
 
-`scripts/refresh-cheatsheet-sources.sh` SHALL re-fetch stored sources and
+`scripts/refresh-cheatsheet-sources.sh` SHALL re-fetch stored sources and <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 surface drift (SHA mismatch) or removal (HTTP 404) by updating the sidecar's
 `staleness` field. It MUST never delete the last known good bytes — drift is
 human-triaged, not auto-resolved.
 
 #### Scenario: Drift detection on re-fetch
-- **WHEN** `scripts/refresh-cheatsheet-sources.sh` runs and re-fetches a URL
+- **WHEN** `scripts/refresh-cheatsheet-sources.sh` runs and re-fetches a URL <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 - **AND** the new content's SHA-256 differs from the stored SHA-256
 - **THEN** the sidecar's `staleness` field is set to `drift`
 - **AND** the maintainer is shown both SHAs for comparison
 
 #### Scenario: 404 on re-fetch
-- **WHEN** `scripts/refresh-cheatsheet-sources.sh` encounters an HTTP 404
+- **WHEN** `scripts/refresh-cheatsheet-sources.sh` encounters an HTTP 404 <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 - **THEN** the sidecar's `staleness` field is set to `gone`
 - **AND** the last known good bytes remain on disk (not deleted)
 
 #### Scenario: --max-age-days filters refreshes
-- **WHEN** `scripts/refresh-cheatsheet-sources.sh --max-age-days 90` runs
+- **WHEN** `scripts/refresh-cheatsheet-sources.sh --max-age-days 90` runs <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 - **THEN** only sources with `fetched` date older than 90 days are re-fetched
 
 
@@ -200,7 +200,7 @@ Smallest actionable boundary:
 
 Sibling tests:
 - `bash scripts/regenerate-source-index.sh --check`
-- `bash scripts/refresh-cheatsheet-sources.sh --max-age-days 90`
+- `bash scripts/refresh-cheatsheet-sources.sh --max-age-days 90` <!-- spec-path-absent: ok (tombstone deleted, 2217-tmbs; superseded by cheatsheets-license-tiered) -->
 
 Scoped follow-up:
 ```bash
