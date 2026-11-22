@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shell-to-Lua backlog (coordinator direction, 2026-11-22).
+packets:
+  - packet_id: the-fragments-intact-memory-floor-and-litmus-budget-fixtures-are-lua-and-the-sh-are-deleted
+    order: 2183-mfbn
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua]
+    estimated_hours: 3
+    title: |
+      Port scripts/test-all-fragments-intact.sh (76 lines), scripts/test-gate-memory-floor-consumer.sh (75 lines) and scripts/test-litmus-budget-negative-control.sh (78 lines) to scripts/lua/, repoint build.sh, gate step 067 and the timing-telemetry litmus, and delete the three .sh files.
+    context: |
+      Next shell-to-lua candidates (coordinator: three more). No open work ref touches any of them (checked).
+    exit_criteria:
+      - 'each Lua fixture reaches the same outcome as its .sh on this host, and a mutation fails it; every caller runs the Lua; the three .sh files and their floor lines are gone'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity run is recorded in the PR.'
+    next_action: 'Port, prove parity, open the PR.'
+    provenance: shell-to-lua backlog; filed by lenovinha.
+    depends_on: []
+    related: [846-idhn, 1176-fn2p, 1233-jqp4]
+    events:
+      - {type: filed, ts: '2026-11-22T02:51:21Z', host: lenovinha, summary: filed the fragments-intact, memory-floor and litmus-budget ports}

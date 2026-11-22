@@ -37,8 +37,19 @@
 -- identity supplied ONLY through those variables is not seen here; a repo or
 -- global config identity is.
 
+-- 2166-zvst: git runs in the CALLER's directory. Without a cwd the child
+-- ran in the runner's repository root (TILLANDSIAS_REPO_ROOT, then
+-- PROJECT_ROOT, when set), so this judged that checkout's branch instead.
+-- Inlined, not a `require`: require resolves lib/lua against the process
+-- cwd, which is exactly what is not the repository here.
+local function caller_dir()
+    local d = env.get("PWD")
+    if d ~= nil and d ~= "" and (d:sub(1, 1) == "/" or d:match("^%a:[/\\]")) then return d end
+    return nil  -- no usable PWD: the runner's root, as before
+end
+local CALLER = caller_dir()
 local function git(...)
-    return proc.run({ argv = { "git", ... }, timeout_ms = 30000 })
+    return proc.run({ argv = { "git", ... }, cwd = CALLER, timeout_ms = 30000 })
 end
 
 local function afford(why, remedy)

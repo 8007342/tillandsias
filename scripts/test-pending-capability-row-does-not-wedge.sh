@@ -26,7 +26,7 @@
 # REGIME (order 1320-44rs). Every arm plants a real fragment and runs the REAL
 # release-preflight, but in a SCAFFOLD: a scratch git repo holding a copy of this
 # checkout's plan/, scripts/, .github/ and VERSION (hardlinked where `cp -Rl`
-# works, copied where it does not), under the ignored target/plan-scratch/. The
+# works, copied where it does not), under a scratch base OUTSIDE the checkout. The
 # corpus is the same one, byte for byte, so the fold classifies the same real
 # ledger plus the probe; only the directory the probe lands in is not the live
 # one. It used to be the live plan/index.d, relying on an exit trap, and the
@@ -39,7 +39,18 @@
 # before and after). ARM 7 TERMs this fixture mid-run, after a probe is planted:
 # rc 143, the scaffold gone, the live plan/ unchanged. ARM 8 SIGKILLs it: no
 # trap runs, the live plan/ is STILL unchanged (the only residue is an ignored
-# scaffold under target/, which the next run sweeps by its dead owner pid).
+# scaffold under the scratch base, which the next run sweeps by its dead
+# owner pid).
+#
+# ORDER 2175-capw (priority:build-speed). NOTHING IN THE CHECKOUT IS WRITTEN,
+# so this step holds no checkout lane and runs in the gate pool. Measured on
+# calmecacpilli 2026-11-21, the step wrote three things in the checkout:
+# target/plan-scratch/ (the scaffolds), .git/index (`git status` refreshes the
+# stat cache under index.lock, which a sibling git step can collide with) and
+# .cache/metrics/forge-expert-usage.jsonl (the plan binary's usage log). Now
+# the scaffolds live under TILLANDSIAS_PLAN_SCRATCH_BASE (default
+# ${TMPDIR:-/tmp}/tillandsias-plan-scratch-<uid>), every live read runs with
+# GIT_OPTIONAL_LOCKS=0, and the usage and timing logs point into the scaffold.
 #
 # Prints one PASS/FAIL summary line and exits 0/1.
 set -uo pipefail
@@ -70,7 +81,7 @@ ok()  { echo "ok:   $*"; pass=$((pass + 1)); }
 could_not_run() { echo "could-not-run: $*"; cnr=$((cnr + 1)); }
 bad() { echo "FAIL: $*" >&2; fail=$((fail + 1)); }
 
-SCRATCH_BASE="$ROOT/target/plan-scratch"
+SCRATCH_BASE="${TILLANDSIAS_PLAN_SCRATCH_BASE:-${TMPDIR:-/tmp}/tillandsias-plan-scratch-$(id -u)}"
 mkdir -p "$SCRATCH_BASE"
 # Sweep scaffolds a SIGKILLed run left behind: the owner pid is in the name.
 sweep_dead_scaffolds() {
@@ -88,6 +99,9 @@ for _p in plan scripts .github VERSION; do
     cp -Rl "$ROOT/$_p" "$S/" 2>/dev/null || cp -R "$ROOT/$_p" "$S/"
 done
 git -C "$S" init -q . || { echo "FAIL: scaffold git init"; exit 2; }
+export TILLANDSIAS_EXPERT_USAGE_LOG="$S/metrics/forge-expert-usage.jsonl"
+export TILLANDSIAS_TIMING_LOG="$S/metrics/tillandsias-timing.jsonl"
+export TILLANDSIAS_PLAN_SCRATCH_BASE="$SCRATCH_BASE"
 # ORDER 2161-jtam (priority:build-speed, coordinator 2026-11-21): ONE arm, the
 # closure (arm 1), folds this copy of the REAL ledger, so "a pending row does
 # not wedge the real ledger" is still asserted once per gate. Every other arm
@@ -104,7 +118,7 @@ for _p in scripts .github VERSION; do
 done
 printf 'packets:\n  - packet_id: a-one-row-fixture-ledger\n    order: 9999-aaaa\n    status: ready\n    title: one row\n' > "$T/plan/index.yaml"
 git -C "$T" init -q . || { echo "FAIL: trimmed scaffold git init"; exit 2; }
-live_state() { git -C "$ROOT" status --porcelain --untracked-files=all -- plan/; ls "$ROOT/plan/index.d"; }
+live_state() { GIT_OPTIONAL_LOCKS=0 git -C "$ROOT" status --porcelain --untracked-files=all -- plan/; ls "$ROOT/plan/index.d"; }
 LIVE_BEFORE="$(live_state)"
 
 PEND="plan/index.d/20990101t000000z-1128-probe-pending.yaml"

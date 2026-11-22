@@ -99,12 +99,19 @@ candidate() {
     git -C "$WORK_DIR" checkout -q linux-next
 }
 
+# 2152-lqrf: the refresh key reads a dep-info and writes a stamp, by default
+# under the GATE's CARGO_TARGET_DIR, i.e. the real shared target. A fixture must
+# never read or write production state, so both are pinned to scratch unless an
+# arm names its own (ARM 40). Measured: unpinned, ARM 22b stamped the target and
+# the NEXT gate's ARM 22 skipped its failing refresh and gated #22 (red).
 run_queue() {
     ( cd "$WORK_DIR" && env \
         TILLANDSIAS_LAND_QUEUE_GH="$GH_BIN" \
         TILLANDSIAS_LAND_QUEUE_GATE="bash $GATE_BIN" \
         TILLANDSIAS_LAND_QUEUE_PREFLIGHT="${PREFLIGHT_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH="${PLAN_REFRESH_CMD:-}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="${TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO:-$TMP/no-plan-depinfo.d}" \
+        TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="${TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP:-$TMP/plan-refresh-stamp.$$}" \
         TILLANDSIAS_LAND_QUEUE_HOST_DOOR="${HOST_DOOR_CMD:-}" \
         TILLANDSIAS_LAND_QUEUE_SIDECAR_STAGE="" \
         TILLANDSIAS_LAND_QUEUE_PLAN_LANE_CHECK="${PLAN_LANE_CMD:-echo plan-lane >> $GATE_LOG.plan-lane}" \
@@ -1594,6 +1601,158 @@ else
     bad "ARM 35b: wanted hold from the memo on 2 candidate gates; got gates=$g35b
 $out35b"
 fi
+
+# ──────────────────────────────────────────────────────────── ARM 40
+# ORDER 2152-lqrf (build speed): THE PLAN-BINARY REFRESH IS SKIPPED WHEN ITS
+# INPUTS ARE UNCHANGED. The refresh stub writes a dep-info naming base.txt (a
+# tracked file) plus a binary, and counts its runs. #40 and #41 do not touch
+# base.txt: ONE refresh, the second candidate prints the skip. #42 edits
+# base.txt: the refresh runs again. Premise first: the stub's dep-info exists
+# and names the dep after the first run.
+scaffold arm40
+candidate arm40 1040-aaaa a40.txt A
+candidate arm40 1041-bbbb b40.txt B
+candidate arm40 1042-cccc base.txt changed
+cat > "$GH_PRS" <<JSON
+[{"number":40,"headRefName":"work/1040-aaaa","isDraft":false},
+ {"number":41,"headRefName":"work/1041-bbbb","isDraft":false},
+ {"number":42,"headRefName":"work/1042-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+_d40="$TMP/arm40/tgt"; mkdir -p "$_d40"
+_r40="$TMP/arm40/refresh.count"; : > "$_r40"
+cat > "$TMP/arm40/refresh.sh" <<REFRESH
+#!/usr/bin/env bash
+echo run >> "$_r40"
+printf '%s: %s\n' "$_d40/plan" "$WORK_DIR/base.txt" > "$_d40/plan.d"
+echo built >> "$_d40/plan"
+REFRESH
+out40="$(TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="$_d40/plan.d" TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="$_d40/stamp" \
+    PLAN_REFRESH_CMD="bash '$TMP/arm40/refresh.sh'" run_queue)"; rc40=$?
+n40="$(grep -c . "$_r40")"
+if ! grep -q "base.txt" "$_d40/plan.d" 2>/dev/null; then
+    bad "ARM 40 premise: the refresh stub never wrote a dep-info naming base.txt
+$out40"
+elif grep -q '^plan-refresh:skipped:inputs-unchanged:#41:' <<<"$out40" \
+    && ! grep -q '^plan-refresh:skipped:inputs-unchanged:#42:' <<<"$out40" \
+    && [ "$n40" -eq 2 ] && [ "$rc40" -eq 0 ] && [ "$(grep -c '^land:' <<<"$out40")" -eq 3 ]; then
+    ok "ARM 40: the plan refresh runs once for two candidates that leave its inputs alone, and again for one that edits an input (2152-lqrf)"
+else
+    bad "ARM 40: wanted 2 refreshes (#40, #42), #41 skipped, 3 landed, rc=0; got refreshes=$n40 rc=$rc40
+$out40"
+fi
+# ARM 40b, NEGATIVE CONTROL: no dep-info (the refresh writes none) means no key,
+# so EVERY candidate refreshes, as before this change.
+scaffold arm40b
+candidate arm40b 1043-dddd d40.txt D
+candidate arm40b 1044-eeee e40.txt E
+cat > "$GH_PRS" <<JSON
+[{"number":43,"headRefName":"work/1043-dddd","isDraft":false},
+ {"number":44,"headRefName":"work/1044-eeee","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+exit 0
+GATE
+_r40b="$TMP/arm40b/refresh.count"; : > "$_r40b"
+out40b="$(TILLANDSIAS_LAND_QUEUE_PLAN_DEPINFO="$TMP/arm40b/none.d" TILLANDSIAS_LAND_QUEUE_PLAN_REFRESH_STAMP="$TMP/arm40b/stamp" \
+    PLAN_REFRESH_CMD="echo run >> '$_r40b'" run_queue)"
+if [ "$(grep -c . "$_r40b")" -eq 2 ] && ! grep -q '^plan-refresh:skipped' <<<"$out40b"; then
+    ok "ARM 40b (control): with no dep-info every candidate refreshes"
+else
+    bad "ARM 40b: wanted 2 refreshes and no skip; got $(grep -c . "$_r40b")
+$out40b"
+fi
+
+# ──────────────────────────────────────────────────────────── ARM 41
+# ORDER 2153-trn1: A BATCH TRAIN GATES THE UNION ONCE AND LANDS ONE COMMIT.
+# Three candidates, K=4: exactly ONE gate; the trunk advances by ONE
+# first-parent commit whose parents are the old trunk plus the three heads, and
+# whose tree holds all three files; every member prints land:; the train log
+# records it. Premise first: three distinct heads were pushed.
+scaffold arm41
+candidate arm41 1051-aaaa a41.txt A
+candidate arm41 1052-bbbb b41.txt B
+candidate arm41 1053-cccc c41.txt C
+cat > "$GH_PRS" <<JSON
+[{"number":51,"headRefName":"work/1051-aaaa","isDraft":false},
+ {"number":52,"headRefName":"work/1052-bbbb","isDraft":false},
+ {"number":53,"headRefName":"work/1053-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+_b41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+_t41="$TMP/arm41/trains.log"
+if [ "$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' 'refs/heads/work/*' | sort -u | grep -c .)" -ne 3 ]; then
+    bad "ARM 41 premise: three distinct work heads were not pushed"
+else
+    out41="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
+    _h41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+    _np41="$(git -C "$REMOTE_DIR" rev-list --parents -n 1 "$_h41" | wc -w)"
+    _fp41="$(git -C "$REMOTE_DIR" rev-list --first-parent --count "$_b41..$_h41")"
+    _files41="$(git -C "$REMOTE_DIR" ls-tree --name-only "$_h41" | grep -c '^[abc]41\.txt$')"
+    if [ "$rc41" -eq 0 ] && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && [ "$_np41" -eq 5 ] && [ "$_fp41" -eq 1 ] \
+        && [ "$_files41" -eq 3 ] && [ "$(grep -c '^land:5[123] .*train=' <<<"$out41")" -eq 3 ] \
+        && grep -q 'result=landed:' "$_t41" 2>/dev/null; then
+        ok "ARM 41: a train of 3 gates the union ONCE and lands ONE first-parent commit with 4 parents carrying all three trees (2153-trn1)"
+    else
+        bad "ARM 41: wanted rc=0, 1 gate, 1 first-parent commit with 4 parents (5 words), 3 files, 3 land: lines, a landed train-log line; got rc=$rc41 gates=$(grep -c . "$GATE_LOG") words=$_np41 fp=$_fp41 files=$_files41
+$out41"
+    fi
+fi
+# ARM 41b: a RED train evicts nobody; the members go one at a time and land.
+scaffold arm41b
+candidate arm41b 1054-dddd d41.txt D
+candidate arm41b 1055-eeee e41.txt E
+cat > "$GH_PRS" <<JSON
+[{"number":54,"headRefName":"work/1054-dddd","isDraft":false},
+ {"number":55,"headRefName":"work/1055-eeee","isDraft":false}]
+JSON
+_m41b="$TMP/arm41b/red-once"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ ! -e "$_m41b" ]; then : > "$_m41b"; echo "FAIL: scripts/test-flaky-train.sh"; exit 1; fi
+exit 0
+GATE
+_t41b="$TMP/arm41b/trains.log"
+out41b="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$_t41b" run_queue)"
+if grep -q '^train:red:' <<<"$out41b" && ! grep -q '^evict' <<<"$out41b" \
+    && [ "$(grep -c '^land:5[45] ' <<<"$out41b")" -eq 2 ] && ! grep -q 'train=' <<<"$(grep '^land:' <<<"$out41b")" \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 3 ] && grep -q 'result=red:' "$_t41b" 2>/dev/null; then
+    ok "ARM 41b: a red train evicts nobody; its members land one at a time (1 train gate + 2 member gates)"
+else
+    bad "ARM 41b: wanted train:red, no evict, #54 and #55 landed singly, 3 gates, a red train-log line; got gates=$(grep -c . "$GATE_LOG")
+$out41b"
+fi
+# ARM 41c, NEGATIVE CONTROL: K unset (the default) runs no train at all.
+scaffold arm41c
+candidate arm41c 1056-ffff f41.txt F
+candidate arm41c 1057-gggg g41.txt G
+cat > "$GH_PRS" <<JSON
+[{"number":56,"headRefName":"work/1056-ffff","isDraft":false},
+ {"number":57,"headRefName":"work/1057-gggg","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out41c="$(run_queue)"
+if ! grep -q '^train' <<<"$out41c" && [ "$(grep -c . "$GATE_LOG")" -eq 2 ] && [ "$(grep -c '^land:5[67] ' <<<"$out41c")" -eq 2 ]; then
+    ok "ARM 41c (control): with BATCH_K unset there is no train; one gate per candidate"
+else
+    bad "ARM 41c: wanted no train, 2 gates, 2 landed; got gates=$(grep -c . "$GATE_LOG")
+$out41c"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

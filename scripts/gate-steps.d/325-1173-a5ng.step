@@ -21,3 +21,7 @@ STEP_OK="salvage-refs ledger trunk fallback check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/check-salvage-refs-ledger.sh is absent, so the fallback could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   sweep-salvage-refs.sh states the one-pass-after-the-marker deletion rule"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/salvage-refs.d/** scripts/check-salvage-refs-ledger.sh scripts/sweep-salvage-refs.sh scripts/test-salvage-refs-ledger.sh"

@@ -12,3 +12,7 @@ STEP_SCRIPT="scripts/test-credential-and-proxy-confinement.sh"
 STEP_ERROR="a GitHub token can reach a non-GitHub host or travel over http, or the permissive proxy port is reachable from the enclave again (1118-bscs) — see the verdict line above"
 STEP_OK="Credential and proxy confinement passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:   CONTROL: the strict port 3128 still binds for the enclave (confinement did not break the allowlisted pat"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/git/git-credential-tillandsias.sh images/proxy/squid.conf scripts/test-credential-and-proxy-confinement.sh"

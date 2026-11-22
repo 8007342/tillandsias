@@ -30262,10 +30262,16 @@ mod tests {
             .output_bounded(OperationKind::Inspect.default_budget())
             .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
             .unwrap_or_default();
+        // ORDER 2171-qimg: never another TEST's image. keepid-warm-test builds
+        // `FROM scratch` (no `true`, no /bin/sh) and is left behind when its run
+        // is killed between build and rmi; listed first, it made this test run
+        // `true` in a scratch image and red every gate on yoga with exit 127
+        // ("crun: exec"), a verdict about a stray image, not about the options.
         let images: Vec<&str> = images
             .lines()
             .map(str::trim)
             .filter(|l| !l.is_empty() && !l.contains("<none>"))
+            .filter(|l| !l.contains("-test:") && !l.contains("keepid-warm"))
             .collect();
         let forge = images.iter().find(|i| i.contains("tillandsias-forge"));
         let Some(image) = forge.or(images.first()) else {

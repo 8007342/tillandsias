@@ -34,6 +34,13 @@ STEP_SCRIPT="scripts/test-a-claim-names-a-workstation.sh"
 STEP_ERROR="the claim-names-a-workstation refusal regressed (1201-hsf9) — either a claim with no --host is being written again as the compiled platform (so two hosts on one platform are indistinguishable exactly when a sweep must name one, and the coordinator asks the wrong host), or the refusal has widened and is now catching an explicit --host or a non-claim write, or it prints an objection while still writing the fragment; see the failing arm above"
 STEP_OK="claim-names-a-workstation refusal check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:a-claim-names-a-workstation"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.d/20260915t073636z-35bca30d-linux.yaml plan/index.yaml scripts/plan-binary-probe.sh scripts/test-a-claim-names-a-workstation.sh"
 # ORDER 2118-tnut (operator 2026-11-20, P10 item a): DECLARED INPUTS. The
 # fixture drives the plan binary over a SCRATCH ledger, so what it reads is
 # the plan binary (rust: every crate, Cargo.*, the toolchain), the one repo

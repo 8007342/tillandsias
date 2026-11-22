@@ -11,3 +11,10 @@ STEP_SCRIPT="scripts/test-check-bash-dialect.sh"
 STEP_ERROR="check-bash-dialect.sh no longer does what its fixture pins (1374-4u6i)"
 STEP_OK="bash-dialect checker fixture green"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin PASS: check-bash-dialect fixture 25/25"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target"
+STEP_LANES="cargo"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/hooks/** scripts/lua/** scripts/lua/check-bash-dialect.lua scripts/plan-binary-probe.sh scripts/test-check-bash-dialect.sh"
