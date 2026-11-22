@@ -36,11 +36,13 @@
 -- Default (no args, as the gate step runs it): --check _CARGO_FEATURE_TEST_INPUTS
 -- against the tillandsias-headless closure. --list prints the scanned roots.
 local check, only, declvar = true, "tillandsias-headless", "_CARGO_FEATURE_TEST_INPUTS"
+local showwhy = false
 do
     local i = 1
     while arg and arg[i] do
         if arg[i] == "--check" then check = true; i = i + 1
         elseif arg[i] == "--list" then check = false; i = i + 1
+        elseif arg[i] == "--why" then check = false; showwhy = true; i = i + 1
         elseif arg[i] == "--workspace" then only = nil; i = i + 1
         elseif arg[i] == "--crate" then only = arg[i + 1]; i = i + 2
         elseif arg[i] == "--var" then declvar = arg[i + 1]; i = i + 2
@@ -86,7 +88,7 @@ end
 local function split(s) local t = {}; for p in s:gmatch("[^/]+") do t[#t + 1] = p end; return t end
 local function join(a, b) local t = {}; for _, x in ipairs(a) do t[#t + 1] = x end; for _, x in ipairs(b) do t[#t + 1] = x end; return t end
 
-local need = {}
+local need, why, cur = {}, {}, ""  -- why[root] = first "file: literal" that produced it (--why)
 local function add(parts)
     if not parts or #parts == 0 then return end
     local top = parts[1]
@@ -96,7 +98,7 @@ local function add(parts)
     -- that does not exist as a file: a scratch name, a prefix) widens to the
     -- deepest existing directory on its path, never narrower.
     if #parts > 1 and fs.exists(p) and not isdir(p) then
-        need["path:" .. p] = true
+        need["path:" .. p] = true; why["path:" .. p] = why["path:" .. p] or cur
         return
     end
     local d = parts[1]
@@ -106,7 +108,7 @@ local function add(parts)
     end
     -- both forms: `case p in X/**)` never matches X itself, and X may be a file
     -- the probe could not classify (a dot path), so name it exactly too.
-    need["path:" .. d .. "/**"] = true
+    need["path:" .. d .. "/**"] = true; why["path:" .. d .. "/**"] = why["path:" .. d .. "/**"] or cur
     need["path:" .. d] = true
 end
 
@@ -122,10 +124,12 @@ for _, f in ipairs(fs.walk("crates", { suffix = ".rs" })) do
         for lit in body:gmatch('"([^"\n]+)"') do
             if lit:match("^%.%./") then
                 local rel = split(lit)
+                cur = f .. ": " .. lit
                 add(norm(join(fdir, rel)))
                 add(norm(join(cdir, rel)))
             elseif rooted then
                 local parts = split(lit)
+                cur = f .. ": " .. lit
                 if #parts > 0 and tops[parts[1]] and not lit:find("%s") then add(parts) end
             end
         end
@@ -146,7 +150,7 @@ end
 table.sort(list)
 
 if not check then
-    for _, k in ipairs(list) do out.line(k) end
+    for _, k in ipairs(list) do out.line(showwhy and (k .. "  <- " .. (why[k] or "?")) or k) end
     verdict.emit("ok:cargo-test-inputs:" .. #list .. ":files=" .. files, 0)
 end
 
