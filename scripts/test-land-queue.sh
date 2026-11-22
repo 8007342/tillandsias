@@ -1573,6 +1573,19 @@ else
 $out34"
 fi
 
+# ──────────────────────────────────────────────────────────── ARM 34b
+# 2238-gpxz WHERE THE WALL CLOCK GOES: a landed candidate prints one
+# timing:land-queue:#N:<stage>=<s>s line per stage, in stage order, and a
+# candidate that stopped at the host door prints none past where it stopped.
+t34="$(grep -o '^timing:land-queue:#42:[a-z+-]*=[0-9]*s$' <<<"$out34" | sed -E 's/^timing:land-queue:#42:([a-z+-]*)=.*/\1/' | tr '\n' ' ')"
+if [ "$t34" = "merge+door plan-refresh preflight gate post-gate+push " ] \
+    && ! grep -q '^timing:land-queue:#41:' <<<"$out34"; then
+    ok "ARM 34b: a landed candidate times every stage in order; one stopped at the door times none"
+else
+    bad "ARM 34b: wanted #42 stages 'merge+door plan-refresh preflight gate post-gate+push' and none for #41; got '$t34'
+$out34"
+fi
+
 # ──────────────────────────────────────────────────────────── ARM 35
 # 2118-tpmy RED ON TRUNK TOO: the untouched test is red twice on the candidate
 # AND on the bare trunk -> hold:trunk-red:<test>. Nobody is evicted, the queue

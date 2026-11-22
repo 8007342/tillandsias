@@ -265,7 +265,6 @@ scripts/test-image-usability-check.sh
 scripts/test-inference-engine-pinned-and-npu-honest.sh
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh
 scripts/test-inference-pull-failure-classification.sh
-scripts/test-inference.sh
 scripts/test-initialize-bare-metal-host-idempotent.sh
 scripts/test-install-macos-announces-its-pin.sh
 scripts/test-install-path.sh

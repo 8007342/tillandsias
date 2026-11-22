@@ -213,6 +213,14 @@ done
 landed=0; evicted=0; requeued=0; skipped=0; _held=0  # the 2118-tpmy trunk-red FLAG (0|1); the freeze check's path list is _frz_paths (2152-lqrf: one name for both erased a hold)
 
 say() { printf '%s\n' "$*"; }
+# ORDER 2238-gpxz: WHERE A LAND'S WALL CLOCK GOES. One line per stage of each
+# candidate, seconds since the previous mark: merge+door (merge, sidecar, host
+# door), plan-refresh, preflight, gate, post-gate+push (a flaky re-run, the
+# trunk-red check, the push and its retries). Measured
+# 2026-11-22 on macuahuitl: the gate averaged ~13 min while a land took ~30, and
+# nothing said where the other ~17 went. A stage a candidate never reaches
+# prints nothing, so the last line names where it stopped.
+_lq_mark() { say "timing:land-queue:#$1:$2=$((SECONDS - ${_LQ_T:-$SECONDS}))s"; _LQ_T=$SECONDS; }
 
 # ORDER 1375-2x4e: the queue JSON is read with `tillandsias-plan json get`, the jq
 # subset on the binary every gate host already has, not with jq. Resolved from
@@ -875,6 +883,7 @@ while next_candidate; do
         esac
     fi
 
+    _LQ_T=$SECONDS  # ORDER 2238-gpxz: the clock _lq_mark reads
     # ── MERGE TARGET + CANDIDATE ─────────────────────────────────────────────
     git checkout -q --detach "$base_sha" 2>/dev/null || {
         say "skip:land-queue:$num:cannot-detach"; skipped=$((skipped + 1)); continue
@@ -1098,6 +1107,7 @@ $_nlwhy
                 continue ;;
         esac
     fi
+    _lq_mark "$num" merge+door
     # ── ORDER 1992-lqpb: A CURRENT PLAN BINARY BEFORE ANY DOOR ───────────────
     # The binary's state is this HOST's, never the candidate's: a refresh that
     # cannot make it current stops the run and evicts nobody.
@@ -1131,6 +1141,7 @@ $_nlwhy
         fi
         rm -f "$_rlog"
     fi
+    _lq_mark "$num" plan-refresh
     # ── ORDER 1765-q7rg: THE PREFLIGHT DOOR BEFORE THE FULL GATE ─────────────
     # The tree-only deciders answer in about a minute; a decider-level red
     # (exit 1) here is the same red the full gate would reach after ~21 min.
@@ -1154,6 +1165,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
         rm -f "$_plog"
     fi
 
+    _lq_mark "$num" preflight
     _glog="$_RUNDIR/pr-$num-gate.log"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
@@ -1163,6 +1175,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
     ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
+    _lq_mark "$num" gate
     grep -o 'skip:class-selector:[^ ]*' "$_glog" > "$_RUNDIR/pr-$num-skips" 2>/dev/null || : > "$_RUNDIR/pr-$num-skips"  # 2174-dail: the gate log is removed on a green land
     # ── ORDER 2143-z5uj: A RED IN A TEST THE CANDIDATE DID NOT TOUCH IS RE-RUN
     # ONCE, ON THE IDENTICAL TREE, BEFORE IT EVICTS ANYONE. Measured 2026-11-20:
@@ -1357,6 +1370,7 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     done
     if [ "$_landed_ok" -eq 1 ]; then
         say "land:$num tier=full gate=green base=${base_sha:0:9} head=${head_sha:0:9} merge=${merge_sha:0:9}"
+        _lq_mark "$num" post-gate+push
         not_run_line "$_RUNDIR/pr-$num-skips"
         landed=$((landed + 1))
         continue
