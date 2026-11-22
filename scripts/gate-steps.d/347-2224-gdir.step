@@ -8,3 +8,4 @@ STEP_ERROR="a fixture run under an inherited GIT_DIR wrote that repository, or b
 STEP_OK="Fixtures ignore an inherited GIT_DIR"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY.
 STEP_READS="scripts/test-fixtures-ignore-inherited-git-dir.sh scripts/test-check-credential-channel.sh build.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:fixtures-ignore-inherited-git-dir:3"
