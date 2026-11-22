@@ -278,11 +278,21 @@ _install_host_escape_shims() {
 # Host-escape shim (934-7jd4): TOOL_NAME does not exist in this toolbox; run
 # the HOST's binary via flatpak-spawn, which forwards stdio/cwd/exit code
 # exactly. Env does not cross by default — forward the control namespaces.
+# ORDER 2227-shu8: flatpak-spawn (glib) refuses a non-UTF-8 --env value with
+# "Invalid byte sequence in conversion input", naming neither the variable nor
+# this shim, and TOOL_NAME never runs. Forwarding is best-effort, so such a
+# value is SKIPPED, by name, on stderr. In C.UTF-8, `.` does not match an
+# invalid byte, so ^.*$ fails exactly on a non-UTF-8 value.
+_is_utf8() { local LC_ALL=C.UTF-8; [[ $1 =~ ^.*$ ]]; }
 _fs_args=()
 for _v in $(compgen -e); do
     case "$_v" in
         TILLANDSIAS_*|LITMUS_*|FORGE_*|NIX_*|CONTAINER_HOST|DOCKER_HOST)
-            _fs_args+=("--env=$_v=${!_v}") ;;
+            if _is_utf8 "${!_v}"; then
+                _fs_args+=("--env=$_v=${!_v}")
+            else
+                echo "note:host-escape-shim:TOOL_NAME:skipped-non-utf8-env:$_v — flatpak-spawn refuses a value that is not UTF-8; $_v is not forwarded to the host TOOL_NAME (2227-shu8)" >&2
+            fi ;;
     esac
 done
 exec flatpak-spawn --host "${_fs_args[@]}" TOOL_NAME "$@"
