@@ -1,0 +1,14 @@
+# Gate step 877-mynm — data, not code (order 1072-b7eq). Moved out of inline build.sh
+# by 2173-inst so the pool and lanes can run it (build speed).
+STEP_DESC="Checking the pre-push empty-ref-list fixture (877-mynm)"
+STEP_SCRIPT="scripts/test-pre-push-empty-ref-list.sh"
+STEP_ERROR="the empty-ref-list lane fixture regressed — the plan-only fast lane's acceptance path is unproven"
+STEP_OK="pre-push empty-ref-list fixture passed"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman; watches the shared timing or metrics log, or runs a nested gate"
+STEP_LANES="podman timing"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/hooks/pre-push-local-gate.sh scripts/test-pre-push-empty-ref-list.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:pre-push-empty-ref-list:11"
