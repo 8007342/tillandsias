@@ -22,12 +22,14 @@ packets:
       redirection sits right after grep's flags, which bash accepts anywhere in a simple command). Sites whose
       flags include -v or -x are left alone: a here-string feeds one empty line where printf '%s' "" fed none,
       which can flip `grep -qv` and `grep -qx ''`. Comment lines are untouched.
-      Not swept here: pipes from other producers (git, cat, command output), and the -v/-x sites.
+      Not swept here: pipes from other producers (git, cat, command output), the -v/-x sites, and the one
+      hazard-exempt:1306-ifhv line in test-salvage-audit.sh that reproduces the pipe on purpose. Stale
+      "# sigpipe-ok" markers on rewritten lines are dropped.
     exit_criteria:
-      - "No scripts/*.sh or build.sh that sets pipefail pipes `printf '%s' \"$v\"` or `echo \"$v\"` into a grep -q whose flags lack v and x."
+      - "No scripts/*.sh or build.sh that sets pipefail pipes `printf '%s' \"$v\"` or `echo \"$v\"` into a grep -q whose flags lack v and x, except a line marked hazard-exempt."
       - "bash -n passes on every touched file; ./build.sh --preflight refused=0."
-    unscoreable: "unpinnable-until-the-guard-exists: the follow-up decider that flags a NEW producer-into-grep-q pipe in pipefail scope pins this; until then the sweep is checked by the exit criteria's grep."
-    next_action: "Land the sweep; then file the decider (diff-scoped, pipefail-aware) as its own row."
+    unscoreable: "pinned-elsewhere: scripts/check-sigpipe-verdict-pipelines-added.sh (792-ksr8) already refuses a NEW producer-into-grep-q pipe under pipefail (diff-scoped); this row only clears the standing corpus it deliberately leaves alone."
+    next_action: "Land the sweep. No new decider: 792-ksr8 covers added lines."
     provenance: "macuahuitl-fedora 2026-11-22: file and take it; fix with a here-string and sweep scripts/*.sh in the same PR."
     events:
       - type: filed
