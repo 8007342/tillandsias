@@ -8,3 +8,7 @@ STEP_LUA="scripts/lua/test-next-order-skips-trunk.lua"
 STEP_SECOND_REGIME="yolanda 2026-11-21 msys ok:next-order-skips-trunk:4 arms"
 STEP_ERROR="next-order minted a prefix trunk already carries, or read an event fragment's hash as an order (2152-u7s4) — see the FAIL lines above"
 STEP_OK="next-order trunk-skip fixture passed"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-next-order-skips-trunk.lua"
