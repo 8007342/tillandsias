@@ -16,9 +16,16 @@
 # No dirt is ever an ok: verdict; the old opsx-only ok (rc=0) is retired (1440-w8g8).
 set -euo pipefail
 
-ROOT="$(git rev-parse --show-toplevel)"
+# 1401-x76w: from the script's own checkout, not the caller's cwd (a scratch cwd made this rc 128).
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Order 2201-opsx: the checker is the Lua port, run by the plan binary.
-PLAN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null && resolve_plan_binary 2>/dev/null)}"
+# 1401-x76w / 84f37ff24: resolve the plan binary from the CHECKOUT, not the caller's cwd,
+# and absolutise it before any cd. An explicit TILLANDSIAS_PLAN_BIN keeps its meaning.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    PLAN="$TILLANDSIAS_PLAN_BIN"
+else
+    PLAN="$(cd "$ROOT" && _p="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf %s "$_p" ;; (*) printf %s/%s "$PWD" "${_p#./}" ;; esac)" || PLAN=""
+fi
 [ -n "$PLAN" ] || { echo "could-not-run:test-check-opsx-generated-dirt:no-plan-binary"; exit 3; }
 CHECKER() { env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT "$PLAN" script run "$ROOT/scripts/lua/check-opsx-generated-dirt.lua"; }
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/check-opsx-dirt.XXXXXX")"
