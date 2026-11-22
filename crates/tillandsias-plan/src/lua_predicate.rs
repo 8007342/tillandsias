@@ -143,6 +143,7 @@ pub const PROC_RUN_FIELDS: &[&str] = &[
     "argv",
     "cwd",
     "env",
+    "unset",
     "stdin",
     "timeout_ms",
     "group",
@@ -164,7 +165,19 @@ pub(crate) fn base_env_command(
     argv: Vec<String>,
     call: &[(String, String)],
 ) -> Result<tillandsias_exec::Command, crate::child_env::EnvRefusal> {
-    Ok(crate::child_env::ChildEnv::for_call(call)?.command(argv))
+    base_env_command_without(argv, call, &[])
+}
+
+/// `base_env_command`, then the door's `unset` names removed as the LAST step
+/// (order 2110-unst), so nothing the builder adds can put them back.
+pub(crate) fn base_env_command_without(
+    argv: Vec<String>,
+    call: &[(String, String)],
+    unset: &[String],
+) -> Result<tillandsias_exec::Command, crate::child_env::EnvRefusal> {
+    Ok(crate::child_env::ChildEnv::for_call(call)?
+        .without(unset)
+        .command(argv))
 }
 
 /// The cwd a door runs in when the call names none: the repository root, else
@@ -407,9 +420,36 @@ pub(crate) fn validate_proc(
             )));
         }
     }
+    // ORDER 2110-unst: names the child must NOT have, removed after every
+    // merge step. A name both set in `env` and unset is a contradiction.
+    let mut unset: Vec<String> = Vec::new();
+    match spec.get::<LuaValue>("unset")? {
+        LuaValue::Nil => {}
+        LuaValue::Table(t) => {
+            for v in t.sequence_values::<LuaValue>() {
+                let LuaValue::String(s) = v? else {
+                    return Err(err("unset must be a list of variable names".into()));
+                };
+                let n = s.to_str()?.to_string();
+                if n.is_empty() || n.contains(['\0', '=']) {
+                    return Err(err("unset names must be nonempty without NUL or '='".into()));
+                }
+                if env_added.iter().any(|(k, _)| *k == n) {
+                    return Err(err(format!("'{n}' is both set in env and unset")));
+                }
+                unset.push(n);
+            }
+        }
+        other => {
+            return Err(err(format!(
+                "unset must be a list of names, not a {}",
+                other.type_name()
+            )));
+        }
+    }
     // ORDER 2031-dwwy: the one builder; a per-call class-A literal is a
     // programmer error and raises before anything is authorised or spawned.
-    let mut cmd = base_env_command(argv.clone(), &env_added)
+    let mut cmd = base_env_command_without(argv.clone(), &env_added, &unset)
         .map_err(|r| err(r.lines()))?
         .current_dir(&cwd);
 

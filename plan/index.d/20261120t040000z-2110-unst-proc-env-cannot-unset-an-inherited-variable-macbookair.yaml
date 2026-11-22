@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-20, at the coordinator's request (p2, found porting 2109-umac).
+packets:
+- packet_id: lua-proc-run-and-spawn-can-unset-an-inherited-variable-so-omit-home-means-omit
+  order: 2110-unst
+  status: ready
+  kind: bug
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua, script-runner, fixtures, fail-loud]
+  size: S
+  implementer_tier: sonnet
+  estimated_hours: 2
+  title: "proc.run/proc.spawn's env table MERGES into an inherited base that always carries HOME, and there is no way to unset a variable, so a fixture that omits HOME still passes it (silent pass)"
+  context: >-
+    MEASURED on tlatoanis-macbook-air 2026-11-20 while porting test-reset-state-no-home-refusal (2109-umac).
+    proc.run{argv={"/usr/bin/env"}, env={PATH="/usr/bin:/bin"}} prints HOME=... The child env comes from
+    ChildEnv::build (crates/tillandsias-plan/src/child_env.rs): the runner's inherited base, then the
+    declared set, then ENV_FIXED, then the call's literals upserted on top. Nothing removes a key. A port
+    that leaves HOME out of env to test the HOME-unset path therefore runs with HOME set. Its arm 1 read
+    red, so this one was caught. A negative arm that expects "unset" to change nothing would pass
+    silently. The workaround in 2109-umac launches through /usr/bin/env -u HOME.
+    Fix direction, per the coordinator: an explicit unset = {"HOME", ...} on proc.run and proc.spawn, or
+    env_clear = true with a base allowlist. The removal must happen after every merge step, so a fixed or
+    declared key cannot put it back.
+  exit_criteria:
+  - 'A tillandsias-plan integration test runs proc.run{argv={"/usr/bin/env"}, unset={"HOME"}} (or the chosen spelling) and asserts the child sees no HOME. It FAILS on today''s binary: the key is unknown, or HOME is still present.'
+  - 'The same holds for proc.spawn.'
+  - 'Unsetting a key that ENV_FIXED or the declared set would add removes it too, or is refused by name. It is never silently put back.'
+  - 'scripts/lua/test-reset-state-no-home-refusal.lua drops its env -u HOME launcher for the new option, and ARM 1 stays green.'
+  verifiable_closure: 'cargo test -p tillandsias-plan covers the unset arms, and the reset-state port is green on darwin without env -u.'
+  unscoreable: 'none.'
+  next_action: 'macbookair takes it after fixture batch 3. Add the option in lua_process.rs (proc.run and proc.spawn spec parsing) and ChildEnv (a final remove step), plus the integration test.'
+  provenance: 'macbookair-macos 2026-11-20. Found porting 2109-umac; the coordinator (macuahuitl-fedora) asked for this packet at p2.'
+  events:
+  - {type: filed, ts: '2026-11-20T04:00:00Z', host: macbookair, summary: 'filed at the coordinator''s request'}
