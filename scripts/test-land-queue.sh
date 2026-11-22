@@ -1851,6 +1851,31 @@ else
 $out50d
 $out50e"
 fi
+# ARM 52 (coordinator 2026-11-22): A GATE NEVER SEES THE QUEUE'S KNOBS. run_queue
+# hands the queue a dozen TILLANDSIAS_LAND_QUEUE_* settings, and the host may
+# export more (BATCH_K=4 redded run 26's train through this very fixture). The
+# gate stub records every such name it can see: there must be none. PREMISE:
+# the queue itself really was given them (BATCH_K exported here too).
+scaffold arm52
+candidate arm52 1070-aaaa a52.txt A
+cat > "$GH_PRS" <<JSON
+[{"number":70,"headRefName":"work/1070-aaaa","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+compgen -v TILLANDSIAS_LAND_QUEUE_ >> "$GATE_LOG.knobs" 2>/dev/null
+: >> "$GATE_LOG.knobs"
+exit 0
+GATE
+out52="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 run_queue)"
+if [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && [ ! -s "$GATE_LOG.knobs" ] && grep -q '^land:70 ' <<<"$out52"; then
+    ok "ARM 52: the gate inherits no TILLANDSIAS_LAND_QUEUE_* knob, even with BATCH_K exported by the host (2174-dail)"
+else
+    bad "ARM 52: wanted 1 gate, no queue knobs visible to it, #70 landed; gates=$(grep -c . "$GATE_LOG") knobs=$(tr '\n' ' ' < "$GATE_LOG.knobs" 2>/dev/null)
+$out52"
+fi
+
 # ARM 51: THE REAL SELECTOR against a proof (scripts/change-class.sh may-skip,
 # its own repo). A step whose declared input changed since the proved commit is
 # NOT skipped; a docs-only change is; a stale proof runs everything.

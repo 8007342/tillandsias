@@ -428,6 +428,12 @@ GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 #     reads (TILLANDSIAS_FULL_GATE_MARKER), never this host's local marker;
 #   - main and release trunks never skip;
 #   - every skipped step is named on the land's not-run: line.
+# ORDER 2174-dail (coordinator 2026-11-22): A GATE NEVER SEES THE QUEUE'S KNOBS. The
+# host's TILLANDSIAS_LAND_QUEUE_* settings (BATCH_K=4 on macuahuitl) reached the
+# gate, then test-land-queue.sh, then its inner queues, and redded run 26's train;
+# ARM 22's stamp leak was the same class. Called first in every gate subshell, so
+# the queue keeps its settings and the gate (and its fixtures) inherits none.
+_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; }
 DAILY_SKIP="${TILLANDSIAS_LAND_QUEUE_DAILY_SKIP:-1}"
 DAILY_NS="refs/attest/daily-full"
 DAILY_RED_NS="refs/attest/daily-red"
@@ -489,7 +495,7 @@ if [ "$DAILY_FULL" -eq 1 ]; then
     _dsha="$(git rev-parse "$REMOTE/$TRUNK")"
     git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; exit 3; }
     rm -f "$_RUNDIR/no-daily-proof"
-    ( export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"; eval "$GATE" ) \
+    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"; eval "$GATE" ) \
         < /dev/null > "$_RUNDIR/daily-full-gate.log" 2>&1
     _drc=$?
     _dns="$DAILY_NS"; [ "$_drc" -eq 0 ] || _dns="$DAILY_RED_NS"
@@ -723,12 +729,12 @@ try_batch() {
         fi
     fi
     if [ -n "$PREFLIGHT" ]; then
-        ( eval "$PREFLIGHT" ) < /dev/null > "$_RUNDIR/train-preflight.log" 2>&1 || { abandon preflight-red; return 0; }
+        ( _gate_clean_env; eval "$PREFLIGHT" ) < /dev/null > "$_RUNDIR/train-preflight.log" 2>&1 || { abandon preflight-red; return 0; }
     fi
     # THE ONE GATE
     t0=$SECONDS
     gate_env_for "$base"
-    ( eval "$GATE" ) < /dev/null > "$_RUNDIR/train-gate.log" 2>&1; rc=$?
+    ( _gate_clean_env; eval "$GATE" ) < /dev/null > "$_RUNDIR/train-gate.log" 2>&1; rc=$?
     gs=$((SECONDS - t0))
     if [ "$rc" -ne 0 ]; then
         say "train:red:rc=$rc — nobody is evicted by a train; members $ids go one at a time (log: $_RUNDIR/train-gate.log)"
@@ -1112,7 +1118,7 @@ $_nlwhy
     # the full gate, which decides as it always did.
     if [ -n "$PREFLIGHT" ] && [ "$_lane" = full ]; then
         _plog="$_RUNDIR/pr-$num-preflight.log"
-        ( eval "$PREFLIGHT" ) < /dev/null > "$_plog" 2>&1
+        ( _gate_clean_env; eval "$PREFLIGHT" ) < /dev/null > "$_plog" 2>&1
         _prc_pf=$?
         if [ "$_prc_pf" -eq 1 ] && ! grep -q 'refused:preflight:stale-plan-binary' "$_plog"; then
             say "evict:land-queue:$num:preflight-failed:rc=1 — full log kept at $_plog"
@@ -1134,7 +1140,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     gate_env_for "$base_sha"
     _gcmd="$GATE"
     [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
-    ( eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
+    ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
     grep -o 'skip:class-selector:[^ ]*' "$_glog" > "$_RUNDIR/pr-$num-skips" 2>/dev/null || : > "$_RUNDIR/pr-$num-skips"  # 2174-dail: the gate log is removed on a green land
     # ── ORDER 2143-z5uj: A RED IN A TEST THE CANDIDATE DID NOT TOUCH IS RE-RUN
@@ -1164,7 +1170,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             if [ "$_touched" -eq 0 ]; then
                 _flaky_test="$(head -n 1 <<<"$_ftests")"
                 say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
-                ( eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
+                ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
                 _grc=$?
                 if [ "$_grc" -eq 0 ]; then
                     say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
@@ -1181,7 +1187,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                             _tr_verdict="${_memo#* }"
                         else
                             git checkout -q --detach "$base_sha" 2>/dev/null
-                            ( eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
+                            ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
                             _trc=$?
                             git checkout -q --detach "$merge_sha" 2>/dev/null
                             _tr_verdict="green"
