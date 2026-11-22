@@ -13,3 +13,4 @@ STEP_OK="cargo test skip declaration covers every scanned path"
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
 STEP_READS="scripts/lua/scan-cargo-test-repo-roots.lua build.sh crates/**"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:cargo-test-inputs:45:files=278"
