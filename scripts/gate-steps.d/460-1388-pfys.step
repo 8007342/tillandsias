@@ -8,3 +8,7 @@ STEP_SCRIPT="scripts/test-project-info-grep-code-recall.sh"
 STEP_ERROR="grep_code answered a false negative or a stale result (1388-pfys) — see the verdict line above"
 STEP_OK="grep_code recall holds"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:grep-code-recall:13"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="images/default/config-overlay/mcp/project-info.sh scripts/test-project-info-grep-code-recall.sh"

@@ -175,8 +175,22 @@ fi
 printf 'packets: []\n' > plan/index.d/20200101t000001z-fixture.yaml
 G add -A >/dev/null; G commit -q -m "plan(fixture): a second ledger record, no stamp"
 rm -f "$(git rev-parse --absolute-git-dir)/tillandsias-gate-stamp"
+# 2160-mhsm: A STALE VALIDATOR IS HOST STATE, NOT A PROPERTY OF THE CHANGE.
+# The lane refuses a binary whose embedded validator-surface hash does not
+# match this tree ("the resolved plan binary is STALE (full gate required)"),
+# which is correct for the lane and says nothing about the freeze. Measured on
+# macbookair and linux-next: arm 3b went red on exactly that and evicted an
+# innocent candidate. Ask the binary the lane's own first question, in the
+# checkout it is measured against, and skip by name when it answers stale.
+_validator_stale=""
+if [ -n "$_validator" ]; then
+    _vs="$(cd "$ROOT" && "$_validator" validator-surface-hash --check 2>&1)"
+    case "$_vs" in stale:validator-surface*) _validator_stale="${_vs%%$'\n'*}" ;; esac
+fi
 if [ -z "$_validator" ]; then
     skip "ARM 3b: no runnable tillandsias-plan on this host, so the plan-only lane cannot validate fragments and the stamp-free route cannot be constructed here — the lane is stamp-free, NOT validator-free (1124-7f3u). Build one: cargo build --release -p tillandsias-plan"
+elif [ -n "$_validator_stale" ]; then
+    skip "ARM 3b: the resolved tillandsias-plan ($_validator) is stale for this tree ($_validator_stale), so the plan-only lane would refuse it before reaching the freeze — host state, not this change (2160-mhsm). Rebuild: cargo build --release -p tillandsias-plan"
 else
     before="$(tip linux-next)"
     rc=0; out="$(G push origin linux-next 2>&1)" || rc=$?

@@ -1,0 +1,30 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-21: a workspace test red on every yoga gate.
+packets:
+  - packet_id: the-forge-quarantine-tmpfs-test-never-runs-another-tests-scratch-image
+    order: "2171-qimg"
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [test, podman, flake]
+    estimated_hours: 1
+    owned_files:
+      - crates/tillandsias-headless/src/main.rs
+    title: "forge_quarantine_tmpfs_options_are_accepted_by_podman never runs another test's scratch image"
+    context: |
+      Red in three consecutive yoga gates (exit 127, "crun: exec"). With no tillandsias-forge image the test
+      ran `true` in images.first(); that was localhost/tillandsias-keepid-warm-test:<pid>, a FROM scratch image
+      the keep-id warm test leaves behind when its run is killed between build and rmi. The test now ignores
+      test-built images (`-test:` tags, keepid-warm). Measured: a planted scratch image tagged like the leak
+      reds trunk's test and passes the fixed one.
+    exit_criteria:
+      - "With a leaked keepid-warm-test scratch image present, the test passes (or skips by name); at trunk it fails exit 127."
+    unscoreable: "the planted-image run is the measure"
+    provenance: "yoga gates 2026-11-21 (#1278 measurement runs)."
+    events:
+      - type: filed
+        ts: "2026-11-21T20:04:00Z"
+        host: yoga
+        summary: "filed, claimed and fixed in the same PR"

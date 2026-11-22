@@ -409,15 +409,19 @@ fn register(
                 // forge image's meta-orchestration skill. classify() keys on the
                 // exit code first, so degraded: with 0 books as Ok and down: with
                 // 1 as Refused, exactly as the .sh did.
+                // todo: (order 2169-tdop): the fleet's todo-shaped deciders
+                // (check-bare-metal-host-initialized, read by check-fleet-membership)
+                // print one `todo:<checker>:<what>:<cmd>` line with rc 1; it books
+                // as Refused through the same exit-code-first classify().
                 let kind_ok = [
                     "ok:", "skip:", "refused:", "blocked:", "could-not-run:", "violation:",
-                    "degraded:", "down:",
+                    "degraded:", "down:", "todo:",
                 ]
                 .iter()
                 .any(|k| line.starts_with(k));
                 if !kind_ok || !(0..=3).contains(&code) {
                     return Err(LuaError::RuntimeError(format!(
-                        "verdict.emit: '{line}' with code {code} — the line must start with ok:/skip:/refused:/blocked:/could-not-run:/violation:/degraded:/down: and the code be 0-3"
+                        "verdict.emit: '{line}' with code {code} — the line must start with ok:/skip:/refused:/blocked:/could-not-run:/violation:/degraded:/down:/todo: and the code be 0-3"
                     )));
                 }
                 slot.lock().unwrap().get_or_insert(Verdict {

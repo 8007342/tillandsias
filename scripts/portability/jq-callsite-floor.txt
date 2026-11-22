@@ -27,7 +27,6 @@
 14 scripts/bench-accel-lane.sh
 9 scripts/bench-inference-floor.sh
 1 scripts/build-image.sh
-1 scripts/check-bare-metal-host-initialized.sh
 18 scripts/check-mcp-expert-health.sh
 2 scripts/check-must-ship-rows.sh
 2 scripts/check-nix-deps-stability.sh

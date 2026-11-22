@@ -12,23 +12,18 @@ severity: high
 size: quick
 
 preconditions:
-  - workspace contains scripts/test-litmus-timeout-retry.sh
+  - workspace contains scripts/lua/test-litmus-timeout-retry.lua
 
 critical_path:
-  - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-litmus-timeout-retry.sh && test -x scripts/test-litmus-timeout-retry.sh && echo 'ok: parse'"
-    timeout_ms: 2000
-    expected_behavior: "ok: parse"
-
   - step: "silent timeout re-run once and named flaky; negative control: an assertion red is never re-run; output-then-timeout and a double timeout stay red"
-    command: "out=$(bash scripts/test-litmus-timeout-retry.sh 2>&1); rc=$?; printf '%s\\n' \"$out\"; exit $rc"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-timeout-retry.lua 2>&1"
     timeout_ms: 180000
-    expected_behavior: "PASS: litmus-timeout-retry 5/5"
+    expected_behavior: "ok:litmus-timeout-retry:5/5"
 
 observability:
   traces:
     - "@trace spec:spec-traceability"
-  expected_log: "PASS: litmus-timeout-retry"
+  expected_log: "ok:litmus-timeout-retry:"
   log_fields:
     spec: "spec-traceability"
     test: "litmus-timeout-retry-shape"
@@ -38,4 +33,4 @@ rollback:
   on_failure: >
     The re-run must stay limited to an empty-stdout rc 124/137 kill, once.
     Restore that condition in run-litmus-test.sh's step loop before anything else.
-  command: "bash scripts/test-litmus-timeout-retry.sh"
+  command: "tillandsias-plan script run scripts/lua/test-litmus-timeout-retry.lua"

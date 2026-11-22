@@ -12,3 +12,10 @@ STEP_LUA="scripts/lua/test-builder-toolbox-exists.lua"
 STEP_ERROR="with-tillandsias-builder.sh can again read a transient toolbox-list failure as an absent builder and try to recreate it (1843-dex5); see which arm failed above"
 STEP_OK="builder existence check survives a failed toolbox list"
 STEP_SECOND_REGIME="macuahuitl 2026-10-23 darwin skip:linux-only — toolbox and with-tillandsias-builder.sh are the Linux build path; darwin builds natively and never calls _toolbox_exists (1843-dex5)"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="drives podman"
+STEP_LANES="podman"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-builder-toolbox-exists.lua scripts/with-tillandsias-builder.sh"

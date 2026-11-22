@@ -2004,8 +2004,8 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # repository, including files nobody has identified? ~66 s here, ~99 s on a
     # floor host, which is why it is daily and not per-land.
     # Declared in scripts/gate-divergence-declared.txt as `excluded`.
-    if [[ -f "scripts/test-plan-binary-probe-usage-determinism-corpus.sh" ]]; then
-        if bash scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2>&1 | tee /tmp/probe-usage-determinism-corpus.log; then
+    if [[ -f "scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua" ]]; then
+        if "$(. scripts/plan-binary-probe.sh && resolve_plan_binary)" script run scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua 2>&1 | tee /tmp/probe-usage-determinism-corpus.log; then
             log_pass "Probe-usage guard deterministic over the full corpus"
             archive_check_log "probe-usage-determinism-corpus" "pass" /tmp/probe-usage-determinism-corpus.log
         else
@@ -2014,7 +2014,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "probe-usage-determinism-corpus" "fail" /tmp/probe-usage-determinism-corpus.log
         fi
     else
-        log_fail_missing_guard "probe-usage-determinism-corpus" "scripts/test-plan-binary-probe-usage-determinism-corpus.sh"
+        log_fail_missing_guard "probe-usage-determinism-corpus" "scripts/lua/test-plan-binary-probe-usage-determinism-corpus.lua"
         archive_check_log "probe-usage-determinism-corpus" "skipped"
     fi
 

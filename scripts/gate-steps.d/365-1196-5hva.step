@@ -26,3 +26,7 @@ STEP_OK="fleet-heartbeat ledger-blocker classification check passed"
 STEP_SKIP_EXIT=3
 STEP_SKIP_DESC="scripts/fleet-heartbeat.sh is absent, so the classification could not be exercised"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:fleet-heartbeat-ledger-blocker:11"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/issues/** plan/mo-full-attestations.d/** scripts/fleet-heartbeat.sh scripts/plan-binary-probe.sh scripts/test-fleet-heartbeat-sees-a-ledger-filed-blocker.sh"

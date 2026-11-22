@@ -5,7 +5,6 @@ scripts/check-append-vs-origin-fold.sh
 scripts/check-approved-ux-strings.sh
 scripts/check-archive-answerability.sh
 scripts/check-arrival-routing.sh
-scripts/check-bare-metal-host-initialized.sh
 scripts/check-base-ledger-status-loss.sh
 scripts/check-build-cache-sweep.sh
 scripts/check-capability-row.sh
@@ -14,7 +13,6 @@ scripts/check-cheatsheet-tiers.sh
 scripts/check-claims-across-branches.sh
 scripts/check-containers-conf-proxy-env.sh
 scripts/check-credential-channel.sh
-scripts/check-cycle-flow-log-fresh.sh
 scripts/check-daily-maintenance.sh
 scripts/check-dead-env-branches.sh
 scripts/check-decider-retirement.sh
@@ -27,13 +25,11 @@ scripts/check-engine-cpu-dispatch.sh
 scripts/check-fleet-membership.sh
 scripts/check-forge-findings-persisted.sh
 scripts/check-fragment-ts-skew.sh
-scripts/check-gate-memory-floor.sh
 scripts/check-gate-step-regimes.sh
 scripts/check-groundtruth-regime-invariance.sh
 scripts/check-host-tools.sh
 scripts/check-issue-citation-convention.sh
 scripts/check-jq-callsite-ratchet.sh
-scripts/check-litmus-mutation-arms-mutate.sh
 scripts/check-litmus-pin-claims.sh
 scripts/check-long-running-view.sh
 scripts/check-macos-only-sources-verified.sh
@@ -88,7 +84,6 @@ scripts/test-archiver-could-not-run-is-self-naming.sh
 scripts/test-archiver-could-not-run-verdict.sh
 scripts/test-archiver-ruby-could-not-run.sh
 scripts/test-awk-float-lc-numeric.sh
-scripts/test-bare-metal-lane-command-is-runnable.sh
 scripts/test-base-ledger-status-loss.sh
 scripts/test-bash-composition-hazards.sh
 scripts/test-bench-prompt-uniqueness.sh
@@ -166,7 +161,6 @@ scripts/test-cycle-metrics-recurrence.sh
 scripts/test-cycle-preflight-cargo-resolution.sh
 scripts/test-daily-maintenance-day-boundary.sh
 scripts/test-decider-retirement.sh
-scripts/test-deciders-within-door-deadline.sh
 scripts/test-default-vault-cli-security.sh
 scripts/test-derive-host-identity.sh
 scripts/test-dev-inference-start-refusal-names-cause.sh
@@ -212,7 +206,6 @@ scripts/test-forge-launch-openspec-init-clean.sh
 scripts/test-forge-liveness-probe.sh
 scripts/test-forge-localization-staged.sh
 scripts/test-forge-packed-refs-split-brain.sh
-scripts/test-forge-policy-binary-discoverability.sh
 scripts/test-forge-project-guard-hooks.sh
 scripts/test-forge-project-trust-seeds.sh
 scripts/test-forge-runtime-ca-trust.sh
@@ -402,7 +395,6 @@ scripts/test-plan-binary-copy-refresh.sh
 scripts/test-plan-binary-freshness.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
-scripts/test-plan-binary-probe-usage-determinism-corpus.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
 scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
@@ -547,7 +539,6 @@ scripts/test-vault-shutdown-fixture-classifier.sh
 scripts/test-vault-shutdown-forwards-sigterm.sh
 scripts/test-verify-closure.sh
 scripts/test-version-bump-isolation-scope.sh
-scripts/test-vsock-handshake-wire-v2.sh
 scripts/test-warm-tier-model.sh
 scripts/test-windows-host-lane-refusal-controls.sh
 scripts/test-windows-host-lane-refusal.sh

@@ -346,7 +346,6 @@ scripts scripts/check-append-vs-origin-fold.sh 15
 scripts scripts/check-approved-ux-strings.sh 5
 scripts scripts/check-archive-answerability.sh 5
 scripts scripts/check-arrival-routing.sh 3
-scripts scripts/check-bare-metal-host-initialized.sh 3
 scripts scripts/check-base-ledger-status-loss.sh 7
 scripts scripts/check-build-cache-sweep.sh 3
 scripts scripts/check-capability-row.sh 17
@@ -354,7 +353,6 @@ scripts scripts/check-carry-forward.sh 6
 scripts scripts/check-claims-across-branches.sh 5
 scripts scripts/check-containers-conf-proxy-env.sh 4
 scripts scripts/check-credential-channel.sh 15
-scripts scripts/check-cycle-flow-log-fresh.sh 6
 scripts scripts/check-daily-maintenance.sh 2
 scripts scripts/check-dead-env-branches.sh 41
 scripts scripts/check-decider-retirement.sh 3
@@ -366,13 +364,11 @@ scripts scripts/check-engine-cpu-dispatch.sh 6
 scripts scripts/check-fleet-membership.sh 8
 scripts scripts/check-forge-findings-persisted.sh 3
 scripts scripts/check-fragment-ts-skew.sh 4
-scripts scripts/check-gate-memory-floor.sh 3
 scripts scripts/check-gate-step-regimes.sh 1
 scripts scripts/check-groundtruth-regime-invariance.sh 3
 scripts scripts/check-host-tools.sh 105
 scripts scripts/check-issue-citation-convention.sh 8
 scripts scripts/check-jq-callsite-ratchet.sh 17
-scripts scripts/check-litmus-mutation-arms-mutate.sh 3
 scripts scripts/check-litmus-pin-claims.sh 5
 scripts scripts/check-long-running-view.sh 21
 scripts scripts/check-mcp-expert-health.sh 46
@@ -541,7 +537,6 @@ scripts scripts/test-archiver-could-not-run-is-self-naming.sh 1
 scripts scripts/test-archiver-could-not-run-verdict.sh 2
 scripts scripts/test-archiver-ruby-could-not-run.sh 8
 scripts scripts/test-awk-float-lc-numeric.sh 6
-scripts scripts/test-bare-metal-lane-command-is-runnable.sh 1
 scripts scripts/test-base-ledger-status-loss.sh 7
 scripts scripts/test-bash-composition-hazards.sh 2
 scripts scripts/test-bench-prompt-uniqueness.sh 1
@@ -735,7 +730,6 @@ scripts scripts/test-pending-capability-row-does-not-wedge.sh 1
 scripts scripts/test-plan-binary-copy-refresh.sh 1
 scripts scripts/test-plan-binary-freshness.sh 2
 scripts scripts/test-plan-binary-probe-release-over-debug.sh 2
-scripts scripts/test-plan-binary-probe-usage-determinism-corpus.sh 2
 scripts scripts/test-plan-binary-probe-usage-determinism.sh 2
 scripts scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh 2
 scripts scripts/test-plan-binary-runnability-precondition.sh 10

@@ -110,6 +110,60 @@ else
     bad("control: a no-op touch was not caught, out=" .. (nr.stdout or ""):gsub("\n", " | "))
 end
 
+-- 4-6 (2162-bpqz): the PRECISE touch, build.sh's own three functions.
+-- A green gate records the tree it built; the next touch moves only what
+-- differs, and falls back to every file when it cannot prove the target holds
+-- this checkout's last gated tree.
+local snapfn = block:match("(_gate_tree_snapshot%(%) {.-\n})")
+local recfn = block:match("(_record_gate_tree_snapshot%(%) {.-\n})")
+if not (snapfn and recfn and fn) then
+    bad("precise: build.sh lacks _gate_tree_snapshot / _record_gate_tree_snapshot / _touch_gating_checkout")
+else
+    local TGT = S .. "/tgt"
+    fs.mkdir(REL .. "/tgt/debug/.fingerprint/x-1")
+    fs.write(REL .. "/tgt/debug/.fingerprint/x-1/lib", "fp\n")
+    local function arm(setup_sh)
+        local argv = { "touch", "-t", "200101010000" }
+        for _, f in ipairs(AGED) do argv[#argv + 1] = S .. "/repo/" .. f end
+        argv[#argv + 1] = TGT .. "/debug/.fingerprint/x-1/lib"
+        proc.run({ argv = argv })
+        fs.write(REL .. "/run2.sh", "SCRIPT_DIR=\"$1\"; export CARGO_TARGET_DIR=\"$2\"\n"
+            .. snapfn .. "\n" .. fn .. "\n" .. recfn .. "\n"
+            .. "mt() { stat -c '%Y' \"$1\" 2>/dev/null || stat -f '%m' \"$1\"; }\n"
+            .. "cd \"$1\" && _record_gate_tree_snapshot\n"
+            .. setup_sh .. "\n"
+            .. "_touch_gating_checkout\n"
+            .. "for f in " .. table.concat(AGED, " ") .. "; do echo \"$(mt \"$f\") $f\"; done\n")
+        local rr = proc.run({ argv = { "bash", S .. "/run2.sh", S .. "/repo", TGT }, timeout_ms = 30000 })
+        local mm = {}
+        for t, n in (rr.stdout or ""):gmatch("(%d+) ([^\n]+)") do mm[n] = tonumber(t) end
+        return mm, rr
+    end
+    -- 4 PRECISE: one tracked file changes after the recorded gate; only it moves.
+    local m4, r4 = arm("printf 'pub fn changed_body() {}\\n' > crates/x/src/lib.rs; touch -t 200101010000 crates/x/src/lib.rs")
+    if m4[AGED[1]] and m4[AGED[1]] > old and m4[AGED[2]] and m4[AGED[2]] < old and has(r4.stderr or "", "gate-touch:precise:1 path") then
+        ok("PRECISE: after a recorded gate, only the one changed tracked file is touched (2162-bpqz)")
+    else
+        bad("precise: out=" .. (r4.stdout or ""):gsub("\n", " | ") .. " err=" .. (r4.stderr or ""):sub(1, 200))
+    end
+    git({ "checkout", "-q", "--", "crates/x/src/lib.rs" })
+    -- 5 FOREIGN BUILD: a fingerprint newer than the snapshot (a bare cargo built
+    -- here since) means the target may hold another tree: every file moves.
+    local m5, r5 = arm("sleep 1; touch \"$CARGO_TARGET_DIR/debug/.fingerprint/x-1/lib\"")
+    if moved_tracked_only(m5, r5) and not has(r5.stderr or "", "gate-touch:precise") then
+        ok("FOREIGN BUILD: a fingerprint newer than the snapshot falls back to touching every tracked file")
+    else
+        bad("foreign build: out=" .. (r5.stdout or ""):gsub("\n", " | ") .. " err=" .. (r5.stderr or ""):sub(1, 200))
+    end
+    -- 6 OTHER CHECKOUT: a snapshot that names another checkout: every file moves.
+    local m6, r6 = arm("sed -i.bak '1s|.*|checkout /elsewhere|' \"$CARGO_TARGET_DIR/.gate-tree-snapshot\"")
+    if moved_tracked_only(m6, r6) and not has(r6.stderr or "", "gate-touch:precise") then
+        ok("OTHER CHECKOUT: a snapshot of another checkout falls back to touching every tracked file")
+    else
+        bad("other checkout: out=" .. (r6.stdout or ""):gsub("\n", " | ") .. " err=" .. (r6.stderr or ""):sub(1, 200))
+    end
+end
+
 proc.run({ argv = { "rm", "-rf", S } })
 if failed == 0 then verdict.emit("ok:gate-touch-fixture:" .. passed, 0) end
 verdict.emit("refused:gate-touch-fixture:" .. failed, 1)
