@@ -1,0 +1,35 @@
+# @trace spec:dev-build
+# @trace order:2228-vt2z
+#
+# build.sh's ensure_dev_cache must not leave a RETURN trap behind when CA
+# generation fails: left set, it fires at the next top-level sourced file with
+# ca_lock gone, and set -u aborts the build. Red before the 2228-vt2z fix
+# (arm 1: ca_lock: unbound variable); red with a mutant that clears the trap
+# but drops the rmdir (arm 2).
+name: litmus:build-dev-cache-ca-trap-cleared
+spec: dev-build
+phase: pre-build
+description: ensure_dev_cache's CA-generation failure path releases its lock and clears its RETURN trap, so a later top-level source still runs
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary); bash; an openssl stub under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "a failed CA generation, then a top-level source; the lock is gone; the failure path really ran"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-build-dev-cache-ca-trap-cleared.lua 2>&1"
+    timeout_ms: 60000
+    expected_behavior: "ok:build-dev-cache-ca-trap-cleared:3 arms"
+
+observability:
+  traces:
+    - "@trace spec:dev-build"
+  expected_log: "three arms"
+  log_fields:
+    spec: "dev-build"
+    test: "build-dev-cache-ca-trap-cleared"
+
+rollback:
+  on_failure: "read the FAIL lines; the function is ensure_dev_cache in build.sh, and the sweep record is plan/issues/return-trap-source-sweep-2026-11-22-lenovinha.md"
+  command: "grep -n '2228-vt2z' build.sh"
