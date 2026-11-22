@@ -652,7 +652,7 @@ for v in blocked:credential-rejected-by-github \
          blocked:credential-unretrievable-keyring-locked \
          blocked:credential-plaintext-token-rejected \
          blocked:credential-accepted-but-push-refused; do
-    printf '%s\n' "$v" | grep -qE '^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$' \
+    grep -qE <<<"$v" '^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$' \
         || bad "verdict breaks litmus:credential-channel-check-shape: $v"
 done
 ok "all five 894-scxy verdicts match the pinned grammar"

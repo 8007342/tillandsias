@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: asked for by macuahuitl-fedora 2026-11-22 after a test-gate-step-skip-exit flake on #1331's preflight.
+packets:
+  - packet_id: grep-q-pipe-sigpipe-under-pipefail
+    order: "2238-gqpf"
+    status: claimed
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [bash, flake, hermetic]
+    estimated_hours: 2
+    title: "`printf|echo \"$var\" | grep -q` under pipefail fails a successful match when grep exits first; use a here-string"
+    context: |
+      Under `set -o pipefail`, `printf '%s' "$v" | grep -q PAT` can report failure on a MATCH: grep -q exits at the
+      first match, the producer's next write gets SIGPIPE (exit 141), and pipefail makes 141 the pipeline's status.
+      It needs a write still pending when grep exits, so it is load- and size-dependent: a flake. Seen on
+      calmecacpilli 2026-11-22: scripts/test-gate-step-skip-exit.sh ARM 4 refused "STEP_SKIP_EXIT is not reset
+      between steps" on a tree where build.sh's _gs_one carries the reset; the guard passed 5/5 alone.
+      Fix (this change): every `printf '%s[\n]' "$v" | grep -q...` and `echo "$v" | grep -q...` line in a
+      scripts/*.sh or build.sh that sets pipefail becomes `grep -q... <<<"$v"` (381 sites, 104 files; the
+      redirection sits right after grep's flags, which bash accepts anywhere in a simple command). Sites whose
+      flags include -v or -x are left alone: a here-string feeds one empty line where printf '%s' "" fed none,
+      which can flip `grep -qv` and `grep -qx ''`. Comment lines are untouched.
+      Not swept here: pipes from other producers (git, cat, command output), and the -v/-x sites.
+    exit_criteria:
+      - "No scripts/*.sh or build.sh that sets pipefail pipes `printf '%s' \"$v\"` or `echo \"$v\"` into a grep -q whose flags lack v and x."
+      - "bash -n passes on every touched file; ./build.sh --preflight refused=0."
+    unscoreable: "unpinnable-until-the-guard-exists: the follow-up decider that flags a NEW producer-into-grep-q pipe in pipefail scope pins this; until then the sweep is checked by the exit criteria's grep."
+    next_action: "Land the sweep; then file the decider (diff-scoped, pipefail-aware) as its own row."
+    provenance: "macuahuitl-fedora 2026-11-22: file and take it; fix with a here-string and sweep scripts/*.sh in the same PR."
+    events:
+      - type: filed
+        ts: "2026-11-22T21:05:09Z"
+        host: calmecacpilli
+        summary: "filed and claimed; sweep in the same change"

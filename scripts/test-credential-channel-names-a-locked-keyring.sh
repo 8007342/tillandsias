@@ -121,9 +121,9 @@ run_guard "$D" "$W/bin-locked"
 # unreachable and asserting it would pin a probe that aborts its own subject.
 # What 1189-2ra5 actually protects is the REMEDY, and that survives: a service
 # on the bus means the channel EXISTS, so the verdict must not be missing:.
-if [ "$RC" -ne 0 ] && printf '%s' "$OUT" | grep -q '^unknown:secret-service-unprobed$'; then # sigpipe-ok: safe pipeline
+if [ "$RC" -ne 0 ] && grep -q <<<"$OUT" '^unknown:secret-service-unprobed$'; then # sigpipe-ok: safe pipeline
     ok "unknown:secret-service-unprobed at rc=$RC — present, unopenable, not absent"
-elif printf '%s' "$OUT" | grep -q '^missing:no-credential-channel$'; then # sigpipe-ok: safe pipeline
+elif grep -q <<<"$OUT" '^missing:no-credential-channel$'; then # sigpipe-ok: safe pipeline
     bad "REGRESSION 1189-2ra5: a service ON THE BUS read as missing: — that verdict invites the fleet-evicting re-auth that 1025-a896 forbids"
 else
     bad "expected unknown:secret-service-unprobed, got rc=$RC out='$OUT'"
@@ -237,9 +237,9 @@ run_guard "$D" "$W/bin-unlocked"
 # answer: that is unknown:, the same as arm 1 — this arm no longer discriminates
 # locked from unlocked, because the guard cannot, and saying so is the honest
 # form. What it still pins is that neither state is ever reported as a lock.
-if printf '%s' "$OUT" | grep -qi 'locked'; then # sigpipe-ok: safe pipeline
+if grep -qi <<<"$OUT" 'locked'; then # sigpipe-ok: safe pipeline
     bad "an unlocked collection must not read as locked, got '$OUT'"
-elif printf '%s' "$OUT" | grep -q '^unknown:secret-service-unprobed$'; then # sigpipe-ok: safe pipeline
+elif grep -q <<<"$OUT" '^unknown:secret-service-unprobed$'; then # sigpipe-ok: safe pipeline
     ok "unlocked + no token reads unknown:, with no lock claim"
 else
     bad "expected unknown:secret-service-unprobed with no lock claim, got '$OUT'"

@@ -154,10 +154,10 @@ b="$(refbytes "$W/wc" origin linux-next)"   # $W/wc has NOT fetched since
 out="$(printf '' | bash "$GUARD" origin "$W/bare.git" 2>&1)"; rc=$?
 [ "$rc" -eq 0 ] && ok "the guard exits 0 on an empty ref list (rc=$rc)" \
     || bad "the guard must not gate a push that sends nothing (rc=$rc): $out"
-printf '%s' "$out" | grep -q 'fetch and rebase' \
+grep -q <<<"$out" 'fetch and rebase' \
     && ok "the message names the real remedy (fetch and rebase)" \
     || bad "the message must not send the reader to ./build.sh --check: $out"
-printf '%s' "$out" | grep -q 'build.sh --check' \
+grep -q <<<"$out" 'build.sh --check' \
     && bad "the empty-list path must not mention the gate as the remedy" \
     || ok "no misleading gate remedy on the empty-list path"
 

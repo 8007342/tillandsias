@@ -193,7 +193,7 @@ ok "arm0: the premise holds — no plan binary resolves under the scrubbed envir
 printf 'packets: []\n' > plan/index.d/20260912t000000z-arm1.yaml
 G add -A >/dev/null; G commit -q -m "arm1: a fragment-only push"
 out="$(_run_push)"; rc=$?
-if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'full gate required'; then
+if [ "$rc" -ne 0 ] && grep -q <<<"$out" 'full gate required'; then
     ok "arm1: a fragment-bearing push with no runnable plan binary is REFUSED (full gate required)"
 else
     bad "arm1: the lane admitted a fragment-bearing push it could not fold (rc=$rc)"
@@ -201,13 +201,13 @@ else
 fi
 # The refusal must not read as a verdict about the DATA (923-ws3r / 1060-6fx7):
 # the instrument is missing, not the ledger.
-if printf '%s' "$out" | grep -qiE 'cannot (run|fold)|no runnable tillandsias-plan|does NOT run here'; then
+if grep -qiE <<<"$out" 'cannot (run|fold)|no runnable tillandsias-plan|does NOT run here'; then
     ok "arm1: the refusal names the missing INSTRUMENT, not a defect in the ledger"
 else
     bad "arm1: refusal does not say the instrument is what is missing"
 fi
 # And it must NOT have been a LANE_NOTE beside a success — the exact old shape.
-if printf '%s' "$out" | grep -qiE 'checks skipped'; then
+if grep -qiE <<<"$out" 'checks skipped'; then
     bad "arm1: the lane still prints 'checks skipped' — the 531 shape survives"
 else
     ok "arm1: no 'checks skipped' note (a skip here is a refusal, 1124-7f3u)"
@@ -223,7 +223,7 @@ if [ -n "$_probe_bin" ] && "$_probe_bin" capabilities >/dev/null 2>&1; then
         bash scripts/hooks/pre-push-local-gate.sh origin "$W/bare.git" 2>&1 <<< \
         "refs/heads/linux-next $(git rev-parse HEAD) refs/heads/linux-next $(git rev-parse origin/linux-next)")"
     rc2=$?
-    if [ "$rc2" -eq 0 ] && printf '%s' "$out2" | grep -q 'plan-only lane'; then
+    if [ "$rc2" -eq 0 ] && grep -q <<<"$out2" 'plan-only lane'; then
         ok "arm2 (negative control): with a runnable binary the fast lane still accepts the same push"
     else
         bad "arm2 (negative control): the fast lane no longer accepts a valid fragment push (rc=$rc2) — the fix would have destroyed the lane"

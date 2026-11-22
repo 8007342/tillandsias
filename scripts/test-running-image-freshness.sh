@@ -98,9 +98,9 @@ set +e
 OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 1 ] || fail "case3: gate did not detect a stale running image (exit $RC). Output: $OUT"
-printf '%s' "$OUT" | grep -q "STALE" \
+grep -q <<<"$OUT" "STALE" \
     || fail "case3: gate exited 1 but did not name the staleness. Output: $OUT"
-printf '%s' "$OUT" | grep -q "$C_NAME" \
+grep -q <<<"$OUT" "$C_NAME" \
     || fail "case3: gate did not name the offending container. Output: $OUT"
 echo "case 3 ok: stale running image is DETECTED and named"
 
@@ -139,9 +139,9 @@ set +e
 OUT="$("$GATE" --name "$C_NAME" git 2>&1)"; RC=$?
 set -e
 [ "$RC" -eq 0 ] || fail "case5: an unidentifiable image must not be reported as drift (exit $RC). Output: $OUT"
-printf '%s' "$OUT" | grep -qi "indeterminate" \
+grep -qi <<<"$OUT" "indeterminate" \
     || fail "case5: expected an indeterminate verdict. Output: $OUT"
-printf '%s' "$OUT" | grep -q "STALE" \
+grep -q <<<"$OUT" "STALE" \
     && fail "case5: must NOT claim STALE without positive evidence. Output: $OUT"
 echo "case 5 ok: unidentifiable image is INDETERMINATE, not stale"
 

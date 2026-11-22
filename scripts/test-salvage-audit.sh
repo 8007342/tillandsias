@@ -312,7 +312,7 @@ _arm7_payload="$_pat_txt
 $(head -c 200000 /dev/zero | tr '\0' 'x')"
 
 _old_rc=0
-( set -o pipefail; printf '%s' "$_arm7_payload" | grep -qi "$_pat_txt" ) || _old_rc=$?  # hazard-exempt:1306-ifhv
+( set -o pipefail; grep -qi <<<"$_arm7_payload" "$_pat_txt" ) || _old_rc=$?  # hazard-exempt:1306-ifhv
 _new_rc=0
 shopt -s nocasematch
 line_matches "$_arm7_payload" "*${_pat_txt}*" || _new_rc=$?

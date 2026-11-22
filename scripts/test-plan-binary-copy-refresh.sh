@@ -105,7 +105,7 @@ case "$_pf" in
     *refresh_plan_binary_copy*) ok "cycle-preflight refreshes through the guarded function" ;;
     *) bad "cycle-preflight no longer calls refresh_plan_binary_copy" ;;
 esac
-if printf '%s' "$_pf" | grep -qE 'install -m0755 .*expert_bin'; then
+if grep -qE <<<"$_pf" 'install -m0755 .*expert_bin'; then
     bad "cycle-preflight installs over the expert copy directly, bypassing the runnability check"
 else
     ok "cycle-preflight has no direct install over the expert copy"
