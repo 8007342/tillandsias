@@ -2913,6 +2913,17 @@ _gs_one() {
     if [ -n "$STEP_INPUTS" ] && [ "$_gs_root" = "$SCRIPT_DIR" ]; then
         _gs_id="gate-step:${_step_file##*/}"; _gs_id="${_gs_id%.step}"
         _gs_inputs="$STEP_INPUTS path:scripts/gate-steps.d/${_step_file##*/} path:$_step_path path:build.sh path:scripts/change-class.sh path:scripts/gate-stamp.sh"
+        # ORDER 2178-luai: A STEP THAT RUNS ON THE PLAN BINARY ALSO READS WHAT THE
+        # RUNTIME READS. lenovinha's atime traces (2026-11-22): every STEP_LUA step
+        # read .tillandsias/command-policies.yaml, .tillandsias/branch-discipline.yaml
+        # and .gitignore through proc.run's policy, and none declared them, so a
+        # policy change could skip the very steps it changes. The runtime's own
+        # source and the methodology file it consults are inputs the same way: a
+        # Lua step judged by a changed runtime is a different check. Added for a
+        # STEP_LUA step, and for a script step whose script names the plan binary.
+        if [ -n "$STEP_LUA" ] || grep -qE 'tillandsias-plan|resolve_plan_binary|TILLANDSIAS_PLAN_BIN' "$_gs_root/$_step_path" 2>/dev/null; then
+            _gs_inputs="$_gs_inputs path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:VERSION path:flake.nix path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
+        fi
         # shellcheck disable=SC2086 — the declared inputs are words by design.
         if _class_may_skip "$_gs_id" $_gs_inputs; then
             # shellcheck disable=SC2086

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: gap found by lenovinha's atime traces, routed by the coordinator.
+packets:
+  - packet_id: a-step-on-the-plan-binary-gets-the-runtimes-reads-as-implicit-inputs
+    order: "2178-luai"
+    status: in_progress
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, class-selector, lua-door]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/lua/test-gate-step-inputs.lua
+    title: "A gate step that runs on the plan binary gets the runtime's reads as implicit inputs"
+    context: |
+      lenovinha's atime traces: every STEP_LUA step read .tillandsias/command-policies.yaml,
+      .tillandsias/branch-discipline.yaml and .gitignore through proc.run's policy, undeclared, so a policy
+      change could be skipped by exactly the steps it changes. build.sh now adds those, the methodology file the
+      runtime consults (distributed-work.yaml), the runtime's own crates (tillandsias-plan, tillandsias-exec)
+      and Cargo.lock to the implicit inputs of a STEP_LUA step and of a script step that names the plan binary.
+    exit_criteria:
+      - "test-gate-step-inputs: build.sh pins the runtime line; PREMISE a policy change is skipped without it; a .tillandsias/command-policies.yaml change makes a STEP_LUA step run."
+    unscoreable: "the fixture is the measure"
+    provenance: "lenovinha atime traces 2026-11-22; coordinator request."
+    events:
+      - type: filed
+        ts: "2026-11-22T03:22:41Z"
+        host: yoga
+        summary: "filed, claimed and fixed"
