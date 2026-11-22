@@ -184,15 +184,30 @@ resolve_plan_binary() {
 # Never blocks: a canonical copy that stays PUT is the safe outcome, and the
 # caller's contract is that a failed refresh is a report, not a refusal to start.
 #
+# ORDER 2217-ab8h: TRUNK ONLY, when the caller names its checkout ($3). The
+# copy is the HOST's PATH binary, and fixtures that cannot find one in their
+# scratch tree fall through to it. Installing a WORK-BRANCH build there turned
+# a trunk fixture red on one host only (lenovinha 2026-11-22: a 2213-ag5u build
+# whose validator surface differed from trunk's, so the pre-push lane refused
+# it as STALE inside test-pre-push-plan-lane-fails-closed-without-binary).
+# With $3 the copy is refreshed only when that checkout's HEAD is contained in
+# ${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-origin/linux-next}; otherwise it is left
+# as it is and the answer says why. Without $3 the old contract holds.
+#
 # Prints exactly one token: absent | current | refreshed |
-# refresh-refused-not-runnable | refresh-failed
+# refresh-refused-not-runnable | refresh-failed | refresh-skipped-off-trunk
 refresh_plan_binary_copy() {
-    local src="$1" dest="$2"
+    local src="$1" dest="$2" root="${3:-}"
     [ -e "$dest" ] || { printf 'absent
 '; return 0; }
     if cmp -s "$src" "$dest"; then
         printf 'current
 '
+        return 0
+    fi
+    if [ -n "$root" ] && ! git -C "$root" merge-base --is-ancestor HEAD \
+            "${TILLANDSIAS_PLAN_COPY_TRUNK_REF:-origin/linux-next}" 2>/dev/null; then
+        printf '%s\n' refresh-skipped-off-trunk
         return 0
     fi
     if ! "$src" capabilities >/dev/null 2>&1; then
