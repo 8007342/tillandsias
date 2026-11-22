@@ -1035,15 +1035,20 @@ GATE
 o18a="$(run_queue)"
 trunk_push plan/index.d/20261017t000000z-probe.yaml 'packets: []'
 o18b="$(run_queue)"; g18="$(gates)"
-if grep -q 'reason=gate-aborted:rc=255' "$GH_COMMENTS" && ! grep -q 'reason=gate-failed' "$GH_COMMENTS" \
+# ORDER 2234-a964 supersedes the comment half: an aborted gate is now
+# could-not-run:host, so it posts NO eviction comment at all (macuahuitl run 29:
+# 14 PRs falsely evicted rc=255 by a keyring quota), and the PR is simply gated
+# again on the next run. What ARM 18 protected still holds: never stale-skipped.
+if ! grep -q 'land-queue:evicted' "$GH_COMMENTS" 2>/dev/null \
+   && grep -q 'could-not-run:host:gate-aborted:rc=255' <<<"$o18a" \
    && [ "$g18" -eq 2 ] && ! grep -q stale-head <<<"$o18b"; then
-    ok "ARM 18: an aborted gate (rc=255) is recorded as gate-aborted and re-gated after a plan-only move, never stale-skipped"
+    ok "ARM 18: an aborted gate (rc=255) is could-not-run:host, evicts and comments nobody, and is re-gated on the next run, never stale-skipped"
 else
-    bad "ARM 18: wanted reason=gate-aborted:rc=255 and a second gate; gates=$g18
+    bad "ARM 18: wanted could-not-run:host:gate-aborted:rc=255, no eviction comment, and a second gate; gates=$g18
 $o18a
 ---
 $o18b
-comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS")"
+comments: $(grep -o 'land-queue:evicted[^>]*' "$GH_COMMENTS" 2>/dev/null)"
 fi
 
 # ── ARM 19 — A CFG-GATED macOS CRATE LANDS ONLY WITH A NATIVE LINT (1235-rfub).
