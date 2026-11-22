@@ -2867,7 +2867,7 @@ _gs_one() {
         # Lua step judged by a changed runtime is a different check. Added for a
         # STEP_LUA step, and for a script step whose script names the plan binary.
         if [ -n "$STEP_LUA" ] || grep -qE 'tillandsias-plan|resolve_plan_binary|TILLANDSIAS_PLAN_BIN' "$_gs_root/$_step_path" 2>/dev/null; then
-            _gs_inputs="$_gs_inputs path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
+            _gs_inputs="$_gs_inputs path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:VERSION path:flake.nix path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
         fi
         # shellcheck disable=SC2086 — the declared inputs are words by design.
         if _class_may_skip "$_gs_id" $_gs_inputs; then

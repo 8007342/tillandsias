@@ -111,7 +111,7 @@ end
 -- driven through the real rule: a .tillandsias/command-policies.yaml change
 -- selects a Lua step. PREMISE first: without the runtime inputs the same
 -- change is skipped, so the arm is about the added inputs and nothing else.
-local RUNTIME_INPUTS = "path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
+local RUNTIME_INPUTS = "path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:VERSION path:flake.nix path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
 T:arm("build.sh adds the plan runtime's reads to a STEP_LUA step's implicit inputs",
     build:find('_gs_inputs="$_gs_inputs ' .. RUNTIME_INPUTS .. '"', 1, true) ~= nil,
     "the runtime implicit-input line changed; update RUNTIME_INPUTS here too")
