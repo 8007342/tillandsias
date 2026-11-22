@@ -1668,6 +1668,91 @@ else
 $out40b"
 fi
 
+# ──────────────────────────────────────────────────────────── ARM 41
+# ORDER 2153-trn1: A BATCH TRAIN GATES THE UNION ONCE AND LANDS ONE COMMIT.
+# Three candidates, K=4: exactly ONE gate; the trunk advances by ONE
+# first-parent commit whose parents are the old trunk plus the three heads, and
+# whose tree holds all three files; every member prints land:; the train log
+# records it. Premise first: three distinct heads were pushed.
+scaffold arm41
+candidate arm41 1051-aaaa a41.txt A
+candidate arm41 1052-bbbb b41.txt B
+candidate arm41 1053-cccc c41.txt C
+cat > "$GH_PRS" <<JSON
+[{"number":51,"headRefName":"work/1051-aaaa","isDraft":false},
+ {"number":52,"headRefName":"work/1052-bbbb","isDraft":false},
+ {"number":53,"headRefName":"work/1053-cccc","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+_b41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+_t41="$TMP/arm41/trains.log"
+if [ "$(git -C "$REMOTE_DIR" for-each-ref --format='%(objectname)' 'refs/heads/work/*' | sort -u | grep -c .)" -ne 3 ]; then
+    bad "ARM 41 premise: three distinct work heads were not pushed"
+else
+    out41="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$_t41" run_queue)"; rc41=$?
+    _h41="$(git -C "$REMOTE_DIR" rev-parse linux-next)"
+    _np41="$(git -C "$REMOTE_DIR" rev-list --parents -n 1 "$_h41" | wc -w)"
+    _fp41="$(git -C "$REMOTE_DIR" rev-list --first-parent --count "$_b41..$_h41")"
+    _files41="$(git -C "$REMOTE_DIR" ls-tree --name-only "$_h41" | grep -c '^[abc]41\.txt$')"
+    if [ "$rc41" -eq 0 ] && [ "$(grep -c . "$GATE_LOG")" -eq 1 ] && [ "$_np41" -eq 5 ] && [ "$_fp41" -eq 1 ] \
+        && [ "$_files41" -eq 3 ] && [ "$(grep -c '^land:5[123] .*train=' <<<"$out41")" -eq 3 ] \
+        && grep -q 'result=landed:' "$_t41" 2>/dev/null; then
+        ok "ARM 41: a train of 3 gates the union ONCE and lands ONE first-parent commit with 4 parents carrying all three trees (2153-trn1)"
+    else
+        bad "ARM 41: wanted rc=0, 1 gate, 1 first-parent commit with 4 parents (5 words), 3 files, 3 land: lines, a landed train-log line; got rc=$rc41 gates=$(grep -c . "$GATE_LOG") words=$_np41 fp=$_fp41 files=$_files41
+$out41"
+    fi
+fi
+# ARM 41b: a RED train evicts nobody; the members go one at a time and land.
+scaffold arm41b
+candidate arm41b 1054-dddd d41.txt D
+candidate arm41b 1055-eeee e41.txt E
+cat > "$GH_PRS" <<JSON
+[{"number":54,"headRefName":"work/1054-dddd","isDraft":false},
+ {"number":55,"headRefName":"work/1055-eeee","isDraft":false}]
+JSON
+_m41b="$TMP/arm41b/red-once"
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+if [ ! -e "$_m41b" ]; then : > "$_m41b"; echo "FAIL: scripts/test-flaky-train.sh"; exit 1; fi
+exit 0
+GATE
+_t41b="$TMP/arm41b/trains.log"
+out41b="$(TILLANDSIAS_LAND_QUEUE_BATCH_K=4 TILLANDSIAS_LAND_QUEUE_TRAIN_LOG="$_t41b" run_queue)"
+if grep -q '^train:red:' <<<"$out41b" && ! grep -q '^evict' <<<"$out41b" \
+    && [ "$(grep -c '^land:5[45] ' <<<"$out41b")" -eq 2 ] && ! grep -q 'train=' <<<"$(grep '^land:' <<<"$out41b")" \
+    && [ "$(grep -c . "$GATE_LOG")" -eq 3 ] && grep -q 'result=red:' "$_t41b" 2>/dev/null; then
+    ok "ARM 41b: a red train evicts nobody; its members land one at a time (1 train gate + 2 member gates)"
+else
+    bad "ARM 41b: wanted train:red, no evict, #54 and #55 landed singly, 3 gates, a red train-log line; got gates=$(grep -c . "$GATE_LOG")
+$out41b"
+fi
+# ARM 41c, NEGATIVE CONTROL: K unset (the default) runs no train at all.
+scaffold arm41c
+candidate arm41c 1056-ffff f41.txt F
+candidate arm41c 1057-gggg g41.txt G
+cat > "$GH_PRS" <<JSON
+[{"number":56,"headRefName":"work/1056-ffff","isDraft":false},
+ {"number":57,"headRefName":"work/1057-gggg","isDraft":false}]
+JSON
+cat > "$GATE_BIN" <<GATE
+#!/usr/bin/env bash
+echo "gated" >> "$GATE_LOG"
+exit 0
+GATE
+out41c="$(run_queue)"
+if ! grep -q '^train' <<<"$out41c" && [ "$(grep -c . "$GATE_LOG")" -eq 2 ] && [ "$(grep -c '^land:5[67] ' <<<"$out41c")" -eq 2 ]; then
+    ok "ARM 41c (control): with BATCH_K unset there is no train; one gate per candidate"
+else
+    bad "ARM 41c: wanted no train, 2 gates, 2 landed; got gates=$(grep -c . "$GATE_LOG")
+$out41c"
+fi
+
 printf '\n'
 if [ "$fail" -eq 0 ]; then
     if [ "$skipped" -gt 0 ]; then

@@ -524,6 +524,153 @@ next_candidate() {
     done <<< "$_p2"
     return 1
 }
+# ── ORDER 2153-trn1: THE BATCH TRAIN — ONE GATE, ONE MERGE COMMIT ─────────────
+# Operator ruling 2026-11-20 (trains gate the union tree once) and the
+# build-speed ruling 2026-11-21. Up to BATCH_K ready full-lane candidates are
+# merged onto the trunk in queue order (a member that conflicts with the union
+# so far is left out, for the one-at-a-time loop). The union passes the SAME
+# doors the loop asks per candidate, asked ONCE of the union: freeze, carried
+# obligations (--landing over base..union reads every member's commits), native
+# lint, host door, plan refresh, preflight. Each is at least as strict on the
+# union as on any member, since any member's violation reds it.
+#
+# GREEN: the union's tree lands as ONE commit whose first parent is the trunk
+# and whose other parents are the member heads, so every first-parent commit on
+# the trunk is a tree that gated (and GitHub marks each member merged).
+# RED, or any door refusing: the train is ABANDONED and nobody is evicted by
+# it; the members go through the one-at-a-time loop below, whose own gates
+# attribute the red. That fallback is the honest simple form of the design's
+# halving bisect: it costs one gate per member after a red train, never an
+# innocent eviction. A per-train line goes to TRAIN_LOG so the flake rate can be
+# measured before K is widened (coordinator 2026-11-20).
+# BATCH_K < 2 (the default until the coordinator sets it: 4 for full trains)
+# leaves the queue exactly as it was.
+BATCH_K="${TILLANDSIAS_LAND_QUEUE_BATCH_K:-1}"
+TRAIN_LOG="${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LOGROOT/trains.log}"
+train_log() { # <members> <base> <union> <result> <gate_s>
+    mkdir -p "$(dirname "$TRAIN_LOG")" 2>/dev/null
+    printf '%s members=%s base=%s union=%s result=%s gate_s=%s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:0:9}" "${3:0:9}" "$4" "$5" >> "$TRAIN_LOG" 2>/dev/null || true
+}
+try_batch() {
+    [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
+    [ "$DRY_RUN" -eq 1 ] && return 0
+    local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
+    local -a nums=() heads=() parents=()
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
+    base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
+    git checkout -q --detach "$base" 2>/dev/null || return 0
+    while IFS=$'\t' read -r n h; do
+        [ -n "$n" ] || continue
+        [ "${#nums[@]}" -lt "$BATCH_K" ] || break
+        [[ "$h" =~ $WORK_RE ]] || continue
+        git fetch -q "$REMOTE" "$h" 2>/dev/null || continue
+        hs="$(git rev-parse FETCH_HEAD)"
+        lm="$(last_eviction "$n")"
+        if [ -n "$lm" ] && [ "$(marker_field "$lm" head)" = "$hs" ]; then continue; fi
+        mb="$(git merge-base "$base" "$hs" 2>/dev/null)" || continue
+        if [ "$PLAN_ONLY_LANE" = 1 ] && delta_plan_only "$mb" "$hs"; then continue; fi  # the plan lane is already cheap
+        pre="$(git rev-parse HEAD)"
+        if git -c user.name=land-queue -c user.email=land-queue@localhost \
+                merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
+            nums+=("$n"); heads+=("$hs"); ids="$ids#$n,"
+        else
+            git merge --abort >/dev/null 2>&1 || true
+            git reset -q --hard "$pre"
+        fi
+    done <<< "$_cands"
+    ids="${ids%,}"
+    if [ "${#nums[@]}" -lt 2 ]; then git checkout -q --detach "$base" 2>/dev/null; return 0; fi
+    union="$(git rev-parse HEAD)"
+    say "train: ${#nums[@]} members $ids base=${base:0:9} union=${union:0:9}"
+    abandon() { say "train:abandoned:$1 — members $ids go one at a time"; train_log "$ids" "$base" "$union" "abandoned:$1" -; git checkout -q --detach "$base" 2>/dev/null; }
+    # freeze
+    if [ -n "$(freeze_held_paths "$base" "$union" | head -n 1)" ]; then
+        out="$(freeze_markers "$REMOTE" "$TRUNK")" || { abandon freeze-unknown; return 0; }
+        [ -z "$out" ] || { abandon frozen; return 0; }
+    fi
+    # carried obligations over every member's commits
+    if [ -f methodology/convergence.yaml ]; then
+        out="$(mktemp "${TMPDIR:-/tmp}/land-queue-train-carried.XXXXXX")"; err="$(mktemp "${TMPDIR:-/tmp}/land-queue-train-carried.XXXXXX")"
+        env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_CARRIED_BASE="$base" TILLANDSIAS_CARRIED_HEAD="$union" \
+            "$PLAN" script run "$_SELF_DIR/lua/check-carried-obligations.lua" -- --landing \
+            < /dev/null > "$out" 2> "$err"; rc=$?
+        carried="$(sed -n 's/^carried:\([^:]*\):\([^:]*\):\{0,1\}\(.*\)$/Carried: \1 \2 \3/p' "$out" | sed 's/ *$//')"
+        rm -f "$out" "$err"
+        [ "$rc" -eq 0 ] || { abandon "carried-rc-$rc"; return 0; }
+    fi
+    # native lint (a recorded unlinted debt is a per-member decision: abandon)
+    if [ -f "$_SELF_DIR/check-native-lint-attested.sh" ]; then
+        out="$(env -u TILLANDSIAS_NATIVE_LINT_UNATTESTED -u TILLANDSIAS_NATIVE_LINT_BASE \
+            bash "$_SELF_DIR/check-native-lint-attested.sh" --base "$base" < /dev/null 2>/dev/null)"; rc=$?
+        [ "$rc" -eq 0 ] || { abandon "native-lint-rc-$rc"; return 0; }
+        case "$out" in *override:native-lint:*) abandon native-lint-debt; return 0 ;; esac
+    fi
+    # host door
+    if [ -n "$HOST_DOOR" ]; then
+        if [ -n "$SIDECAR_STAGE" ]; then ( eval "$SIDECAR_STAGE" ) < /dev/null > "$_RUNDIR/train-sidecar.log" 2>&1 || true; fi
+        out="$( ( eval "$HOST_DOOR" ) < /dev/null 2>/dev/null | grep -m 1 -E '^(ok:host-door|could-not-run:host:)' )"
+        case "$out" in ok:host-door*) ;; *) abandon "host-door:${out:-no-answer}"; return 0 ;; esac
+    fi
+    # plan refresh (same dep-info key as the loop, 2152-lqrf)
+    if [ -n "$PLAN_REFRESH" ]; then
+        key="$(plan_refresh_key)" || key=""
+        if [ -n "$key" ] && [ "$key" = "$(cat "$PLAN_REFRESH_STAMP" 2>/dev/null)" ]; then
+            say "plan-refresh:skipped:inputs-unchanged:train:${key:0:12}"
+        else
+            ( eval "$PLAN_REFRESH" ) < /dev/null > "$_RUNDIR/train-plan-refresh.log" 2>&1 || { abandon plan-refresh-failed; return 0; }
+            if key="$(plan_refresh_key)"; then
+                mkdir -p "$(dirname "$PLAN_REFRESH_STAMP")" 2>/dev/null
+                printf '%s\n' "$key" > "$PLAN_REFRESH_STAMP" 2>/dev/null || true
+            fi
+        fi
+    fi
+    if [ -n "$PREFLIGHT" ]; then
+        ( eval "$PREFLIGHT" ) < /dev/null > "$_RUNDIR/train-preflight.log" 2>&1 || { abandon preflight-red; return 0; }
+    fi
+    # THE ONE GATE
+    t0=$SECONDS
+    ( eval "$GATE" ) < /dev/null > "$_RUNDIR/train-gate.log" 2>&1; rc=$?
+    gs=$((SECONDS - t0))
+    if [ "$rc" -ne 0 ]; then
+        say "train:red:rc=$rc — nobody is evicted by a train; members $ids go one at a time (log: $_RUNDIR/train-gate.log)"
+        train_log "$ids" "$base" "$union" "red:rc=$rc" "$gs"
+        git checkout -q --detach "$base" 2>/dev/null
+        return 0
+    fi
+    # The tree that ships is the tree that gated: re-read the trunk.
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
+    now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
+    if [ "$now" != "$base" ]; then
+        say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} — nothing pushed; members $ids go one at a time"
+        train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
+        return 0
+    fi
+    parents=(-p "$base")
+    for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
+    c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
+        | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
+          GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
+          git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
+    git push -q "$REMOTE" "$c:refs/heads/$TRUNK" >/dev/null 2>&1
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
+    if ! git merge-base --is-ancestor "$c" "$REMOTE/$TRUNK" 2>/dev/null; then
+        say "train:push-did-not-land — nothing landed; members $ids go one at a time"
+        train_log "$ids" "$base" "$union" "green:push-did-not-land" "$gs"
+        git checkout -q --detach "$base" 2>/dev/null
+        return 0
+    fi
+    train_log "$ids" "$base" "$union" "landed:${c:0:9}" "$gs"
+    local i=0
+    for n in "${nums[@]}"; do
+        say "land:$n tier=full gate=green train=${c:0:9} base=${base:0:9} head=${heads[$i]:0:9}"
+        landed=$((landed + 1)); _seen="$_seen$n "; i=$((i + 1))
+    done
+    git checkout -q --detach "$c" 2>/dev/null
+    return 0
+}
+try_batch
+
 for _pass in 1 2; do
 if [ "$_pass" -eq 2 ]; then
     [ -n "$_deferred" ] || break
