@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
-# @trace order:861-n7f5
+# @trace order:861-n7f5, order:2199-luab
 #
 # test-check-engine-cpu-dispatch.sh — pin the 861-n7f5 grammar and the one
 # verdict that matters: a BASELINE build on a VECTOR host must be refused, not
 # quietly benchmarked.
 #
-# Hermetic: every arm uses a stubbed engine (ENGINE_DISPATCH_SYSINFO_CMD) and a
-# stubbed host feature set (ENGINE_DISPATCH_HOST_FLAGS). No real engine binary,
-# no model, no network, no capability matrix.
+# Hermetic: every arm uses a stubbed engine output (ENGINE_DISPATCH_SYSINFO_FILE,
+# a file whose contents stand in for the engine's) and a stubbed host feature
+# set (ENGINE_DISPATCH_HOST_FLAGS). No real engine binary, no model, no
+# network, no capability matrix. The guard is the Lua port (2199-luab), run
+# through the plan binary's script runner.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GUARD="$ROOT/scripts/check-engine-cpu-dispatch.sh"
+LUA="$ROOT/scripts/lua/check-engine-cpu-dispatch.lua"
+PLAN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null && resolve_plan_binary 2>/dev/null)}"
+[ -n "$PLAN" ] || { echo "could-not-run:test-check-engine-cpu-dispatch:no-plan-binary"; exit 3; }
+GUARD() { "$PLAN" script run "$LUA" -- "$@"; }
+SCR="$(mktemp -d "${TMPDIR:-/tmp}/engine-dispatch.XXXXXX")" || exit 2
+trap 'rm -rf "$SCR"' EXIT
 fail=0
 pass=0
 ok()  { echo "ok: $1"; pass=$((pass+1)); }
@@ -25,10 +32,10 @@ NO_TABLE='version: 6153 (b6153-3.fc44) built with gcc 15.2.1'
 
 run() { # run <host-flags> <stub-stdout> ; echoes "<rc>|<verdict>"
     local out rc
+    printf '%s' "$2" > "$SCR/sysinfo"
     out="$(ENGINE_DISPATCH_HOST_FLAGS="$1" \
-           ENGINE_DISPATCH_SYSINFO_CMD="printf '%s\n' \"\$STUB\"" \
-           STUB="$2" \
-           "$GUARD" /nonexistent-engine 2>/dev/null)"
+           ENGINE_DISPATCH_SYSINFO_FILE="$SCR/sysinfo" \
+           GUARD /nonexistent-engine 2>/dev/null)"
     rc=$?
     printf '%s|%s' "$rc" "$out"
 }
@@ -93,7 +100,7 @@ done
 [ "$gfail" = 0 ] && ok "every verdict matches the pinned grammar"
 
 # 9. No engine argument at all is a usage error, not a silent pass.
-out="$("$GUARD" 2>/dev/null)"; rc=$?
+out="$(GUARD 2>/dev/null)"; rc=$?
 [ "$rc" = 2 ] && [ "$out" = "unavailable:no-engine-given" ] \
     && ok "missing engine argument is unavailable" \
     || bad "missing engine argument — want [2|unavailable:no-engine-given] got [$rc|$out]"
