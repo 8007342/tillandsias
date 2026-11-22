@@ -14,8 +14,10 @@
 --   3 serial is read (run alone, rc 12)
 --   4 NEGATIVE CONTROL: an undeclared guard is run (rc 0, nothing printed)
 --   5 the host sed accepted every program the door reads headers with
+--   6 under LC_ALL=C the em dash is stripped whole, not its first byte
+--     (2236-rdj7: a bracket expression [—-] is three bytes in C)
 --
--- Verdict: ok:preflight-declarations-host-sed:5 | violation:preflight-declarations-host-sed:<n> failed
+-- Verdict: ok:preflight-declarations-host-sed:6 | violation:preflight-declarations-host-sed:<n> failed
 
 local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
 local pass, failn = 0, 0
@@ -48,14 +50,16 @@ fs.write(rel .. "/decide.sh", table.concat({
     "p=\"$3\"",
     "_pf_predecide \"$p\" \"${p##*/}\" 2>>\"$2/err\"",
 }, "\n") .. "\n")
--- The door runs in the CALLER's locale, as the .sh ran it: proc.run gives a
--- child LC_ALL=C, and under C the door's `sed 's/^[—-]...'` strips only the
--- first byte of the em dash (row 2236-rdj7; this port keeps parity).
+-- Arms 1-5 run the door in the CALLER's locale, as the .sh ran it; arm 6
+-- runs it under C, where a `[—-]` bracket once stripped only the em dash's
+-- first byte (2236-rdj7).
 local LOCALE = { LC_ALL = "", LANG = env.get("LANG") or "C.UTF-8" }
-local function decide(path)
+local function decide(path, locale)
     local r = proc.run{ argv = { "bash", S .. "/decide.sh", root .. "/build.sh", S, path }, cwd = root,
-        env = LOCALE, timeout_ms = 30000 }
-    return tostring(r.code) .. "|" .. text.trim(r.stdout or "")
+        env = locale or LOCALE, timeout_ms = 30000 }
+    -- byte-level trim: under C a garbled reason is not valid UTF-8
+    local o = (r.stdout or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    return tostring(r.code) .. "|" .. o
 end
 
 local got = decide("scripts/test-zz-go.sh")
@@ -79,6 +83,11 @@ else bad("an undeclared guard was not run plainly: got '" .. got .. "'") end
 local err = fs.exists(rel .. "/err") and fs.read(rel .. "/err") or ""
 if err ~= "" then bad("the host sed complained while the door read headers: " .. (text.lines(err)[1] or ""))
 else ok("the host sed accepted every program the door reads headers with") end
+
+got = decide("scripts/test-zz-go.sh", { LC_ALL = "C", LANG = "C" })
+if got == "10|skip:preflight:test-zz-go.sh:gate-only — drives the litmus runner end to end" then
+    ok("under LC_ALL=C the em dash is stripped whole")
+else bad("under LC_ALL=C the reason was garbled: got '" .. got:gsub("[\128-\255]", function(c) return string.format("\\x%02x", c:byte()) end) .. "'") end
 
 local flavour = proc.run{ argv = { "sed", "--version" } }.code == 0 and "gnu-sed" or "bsd-sed"
 cleanup()

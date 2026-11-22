@@ -983,7 +983,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # (`gate-only-decider`, 1518-8p5k below, is a different token: excluded here.)
     _go="$(sed -n '1,40{/^# preflight: gate-only-decider/d;s/^# preflight: gate-only[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1)"
     if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/d;/^# preflight: gate-only/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(printf '%s' "$_go" | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(printf '%s' "$_go" | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         case "$_p" in
             scripts/test-*)
                 if [ -n "$_reason" ]; then
@@ -1007,7 +1007,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # check-* that NO pre-push hook runs (the push lane keeps every decider it
     # has), only with a reason, and the full gate still runs it.
     if [ -n "$(sed -n '1,40{/^# preflight: gate-only-decider/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: gate-only-decider[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         case "$_p" in
             scripts/check-*)
                 if grep -qF "${_p##*/}" "$SCRIPT_DIR"/scripts/hooks/* 2>/dev/null; then
@@ -1035,7 +1035,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # left a Lua guard no way to run alone: the lc-numeric signal fixture
     # (step 455) wrote the same checkout paths as step 450 concurrently.
     if [ -n "$(sed -n '1,40{/^# preflight: serial/p;/^-- preflight: serial/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: serial[[:space:]]*//p;s/^-- preflight: serial[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 12
         fi
@@ -1049,7 +1049,7 @@ _pf_predecide() {  # $1 = roster path, $2 = label
     # whole budget, so it neither waits behind the roster nor extends it. A kill
     # is still a deadline skip. The reason is required, as for serial.
     if [ -n "$(sed -n '1,40{/^# preflight: own-deadline/p;/^-- preflight: own-deadline/p;}' "$SCRIPT_DIR/$_p" | head -n 1)" ]; then
-        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed 's/^[—-][[:space:]]*//')"
+        _reason="$(sed -n '1,40{s/^# preflight: own-deadline[[:space:]]*//p;s/^-- preflight: own-deadline[[:space:]]*//p;}' "$SCRIPT_DIR/$_p" | head -n 1 | sed -e 's/^—[[:space:]]*//' -e 's/^-[[:space:]]*//')"
         if [ -n "$_reason" ]; then
             return 13
         fi
