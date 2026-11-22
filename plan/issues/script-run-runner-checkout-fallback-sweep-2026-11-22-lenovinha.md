@@ -46,12 +46,15 @@ under `target/plan-scratch` is inside the checkout by construction.
 | `scripts/test-relay-preflight.sh` | 0 | no | clean |
 | `scripts/test-script-run-verb.sh` | 0 | no | clean |
 | `scripts/test-plan-binary-runnability-precondition.sh` | — | — | FIXED in 2212-2m8s (PR #1323): `git init` of its scratch checkout |
+| `scripts/test-preflight-fixtures-default-target.sh` (arms 8-9) | 1 | yes | FIXED in 2213-ag5u: `git init` of its stand-in checkout; arm 9 now also refuses a "red in both regimes" note, because it had passed vacuously on the refusal |
 | every `scripts/lua/test-*.lua` with scratch under `target/plan-scratch` | — | — | clean by construction: the scratch is inside the checkout |
 
 ## Not covered
 
 - Litmus commands run from the checkout root, so they are outside this shape.
-- The narrowing in step 2 is a text match. A fixture that writes a `.lua` into
-  a temp tree in some other way (for example a heredoc through a variable it
-  builds) would be missed by it, but not by the runner: it now refuses by name
-  at run time instead of passing on the real tree.
+- The narrowing in step 2 is a text match, and it MISSED one:
+  `scripts/test-preflight-fixtures-default-target.sh` writes its `.lua`
+  fixtures with `printf` into a `mktemp` tree. `./build.sh --preflight` caught
+  it, because the runner refused by name at run time instead of passing on
+  the real tree. That is the point of fixing the runner rather than each
+  fixture: a fixture the text match misses still fails loudly.
