@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540, reversed by 1440-w8g8)
+# @trace plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md (order 540, reversed by 1440-w8g8), order:2201-opsx
 # test-check-opsx-generated-dirt.sh — fixture proof for the deterministic
 # launch-generated opsx-dirt detector.
 #
@@ -10,14 +10,17 @@
 #   1d. non-opsx:<path>   — the widened set still fails closed on real dirt
 #   2.  non-opsx:<path>   — ANY real dirt fails closed (tracked edit, untracked,
 #                          and the untracked-vs-tracked mix)
-#   3.  ok:clean-tree     — no dirt at all (exit 4, distinct from a sync)
+#   3.  ok:clean-tree     — no dirt at all (exit 0; it was 4 until 2201-opsx)
 #
 # Grammar pinned: ^(launch-dirt:opsx-only|ok:clean-tree|non-opsx:[a-z0-9._/-]+)$
 # No dirt is ever an ok: verdict; the old opsx-only ok (rc=0) is retired (1440-w8g8).
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-CHECKER="$ROOT/scripts/check-opsx-generated-dirt.sh"
+# Order 2201-opsx: the checker is the Lua port, run by the plan binary.
+PLAN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null && resolve_plan_binary 2>/dev/null)}"
+[ -n "$PLAN" ] || { echo "could-not-run:test-check-opsx-generated-dirt:no-plan-binary"; exit 3; }
+CHECKER() { env -u TILLANDSIAS_REPO_ROOT -u PROJECT_ROOT "$PLAN" script run "$ROOT/scripts/lua/check-opsx-generated-dirt.lua"; }
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/check-opsx-dirt.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -52,7 +55,7 @@ for sk in apply-change archive-change bulk-archive-change continue-change explor
     printf '%s\n' "openspec-$sk v2" >"$repo/.opencode/skills/openspec-$sk/SKILL.md"
 done
 
-if verdict="$(cd "$repo" && "$CHECKER")"; then
+if verdict="$(cd "$repo" && CHECKER)"; then
     code=0
 else
     code=$?
@@ -88,7 +91,7 @@ for sk in apply-change archive-change bulk-archive-change continue-change explor
     printf '%s\n' "openspec-$sk v2" >"$repo/.claude/skills/openspec-$sk/SKILL.md"
 done
 
-if verdict="$(cd "$repo" && "$CHECKER")"; then
+if verdict="$(cd "$repo" && CHECKER)"; then
     code=0
 else
     code=$?
@@ -103,7 +106,7 @@ echo "ok: branch1b launch-dirt:opsx-only rc=5 (.claude locus)"
 for cmd in apply archive bulk-archive continue explore ff new onboard propose sync verify; do
     printf '%s\n' "opsx-$cmd v3" >"$repo/.opencode/commands/opsx-$cmd.md"
 done
-if verdict="$(cd "$repo" && "$CHECKER")"; then
+if verdict="$(cd "$repo" && CHECKER)"; then
     code=0
 else
     code=$?
@@ -117,7 +120,7 @@ echo "ok: branch1c launch-dirt:opsx-only rc=5 (both loci)"
 # ── branch 1d: real dirt alongside .claude locus dirt → still fails closed ───
 # The widened set must not weaken the refusal: one non-generated path is enough.
 printf 'real operator edit\n' >"$repo/base.txt"
-if verdict="$(cd "$repo" && "$CHECKER")"; then
+if verdict="$(cd "$repo" && CHECKER)"; then
     code=0
 else
     code=$?
@@ -131,7 +134,7 @@ git -C "$repo" checkout -q -- .
 
 # ── branch 2a: a tracked non-opsx edit → non-opsx, fail closed ───────────────
 printf 'real operator edit\n' >"$repo/base.txt"
-if verdict="$(cd "$repo" && "$CHECKER")"; then
+if verdict="$(cd "$repo" && CHECKER)"; then
     code=0
 else
     code=$?
@@ -146,7 +149,7 @@ echo "ok: branch2a non-opsx on tracked edit, rc=3"
 git -C "$repo" checkout -q -- base.txt
 mkdir -p "$repo/plan/issues"
 printf 'scratch packet\n' >"$repo/plan/issues/operator-scratch.md"
-if verdict="$(cd "$repo" && "$CHECKER")"; then
+if verdict="$(cd "$repo" && CHECKER)"; then
     code=0
 else
     code=$?
@@ -157,26 +160,26 @@ fi
 }
 echo "ok: branch2b non-opsx on untracked file, rc=3"
 
-# ── branch 3: clean tree → ok:clean-tree rc=4 ────────────────────────────────
+# ── branch 3: clean tree → ok:clean-tree rc=0 (was 4; 2201-opsx) ────────────────────────────────
 git -C "$repo" checkout -q -- .
 rm -f "$repo/plan/issues/operator-scratch.md"
-if verdict="$(cd "$repo" && "$CHECKER")"; then
+if verdict="$(cd "$repo" && CHECKER)"; then
     code=0
 else
     code=$?
 fi
-[[ "$verdict" == "ok:clean-tree" && $code -eq 4 ]] || {
-    echo "FAIL branch3: expected ok:clean-tree rc=4, got '$verdict' rc=$code" >&2
+[[ "$verdict" == "ok:clean-tree" && $code -eq 0 ]] || {
+    echo "FAIL branch3: expected ok:clean-tree rc=0, got '$verdict' rc=$code" >&2
     exit 1
 }
-echo "ok: branch3 ok:clean-tree rc=4"
+echo "ok: branch3 ok:clean-tree rc=0"
 
 # ── the live worktree must currently be clean or fail with honest verdict ────
 # The checker exits nonzero BY CONTRACT for every verdict
-# (3=non-opsx, 4=clean-tree, 5=launch-dirt); under set -e the bare assignment died on a
+# (3=non-opsx, 5=launch-dirt; clean-tree was 4 until 2201-opsx); under set -e the bare assignment died on a
 # clean tree before the PASS line ever printed. Tolerate the rc, judge the
 # verdict string — the case below is the assertion.
-live="$(cd "$ROOT" && "$CHECKER")" || true
+live="$(cd "$ROOT" && CHECKER)" || true
 case "$live" in
     ok:clean-tree) echo "ok: live worktree verdict '$live'" ;;
     *) echo "WARN: live worktree is not clean: '$live' (expected during active work)" ;;
