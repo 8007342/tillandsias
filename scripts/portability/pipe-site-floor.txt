@@ -528,7 +528,6 @@ scripts scripts/summarize-pyproject.sh 3
 scripts scripts/terminology-check-memo.sh 3
 scripts scripts/test-a-claim-names-a-workstation.sh 5
 scripts scripts/test-agent-identity.sh 4
-scripts scripts/test-all-fragments-intact.sh 1
 scripts scripts/test-append-event-archived-refusal.sh 4
 scripts scripts/test-append-vs-origin-fold.sh 7
 scripts scripts/test-archiver-concurrent-check.sh 2

@@ -297,7 +297,7 @@ _INSTALL_STAGE=""
 # record of what the reset kept and removed. TILLANDSIAS_DESTRUCTIVE_RESET_OK
 # and TILLANDSIAS_RESET_KEEP_MODELS reach the tray through the environment;
 # there is no installer-level variable (tillandsias-core says why).
-# BEGIN-SETUP-RESET (scripts/test-install-macos-setup-is-quiet.sh runs this block)
+# BEGIN-SETUP-RESET (scripts/lua/test-install-macos-setup-is-quiet.lua runs this block)
 SETUP_LOG_DIR="$HOME/Library/Logs/Tillandsias"
 SETUP_LOG="$SETUP_LOG_DIR/setup.log"
 mkdir -p "$SETUP_LOG_DIR" 2>/dev/null || true

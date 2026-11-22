@@ -94,7 +94,6 @@ scripts/test-fragment-batch-never-collapses-verdicts.sh 1
 scripts/test-fragment-status-loss.sh 1
 scripts/test-gate-fast-refusals.sh 1
 scripts/test-gate-host-memory-figure.sh 1
-scripts/test-gate-memory-floor-consumer.sh 1
 scripts/test-gate-memory-wsl2-guest.sh 1
 scripts/test-gate-stamp-memoization.sh 1
 scripts/test-gate-stamp-must-be-earned.sh 1
@@ -125,8 +124,6 @@ scripts/test-image-build-convergence.sh 1
 scripts/test-inference-mkdir-fatal-1183-j9dk.sh 1
 scripts/test-inference-pull-failure-classification.sh 1
 scripts/test-inference.sh 1
-scripts/test-install-macos-setup-is-quiet.sh 1
-scripts/test-install-macos-swap-is-interruptible.sh 2
 scripts/test-install-path.sh 3
 scripts/test-installer-probes-by-attempt-not-by-help.sh 2
 scripts/test-installer-provisions-once.sh 1
