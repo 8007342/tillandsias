@@ -14,7 +14,13 @@
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 . "$ROOT/scripts/plan-binary-probe.sh"
-BIN="$(resolve_plan_binary)" || BIN=""
+# 1401-x76w: resolve from the CHECKOUT, not the caller's cwd, and make it
+# absolute (pattern of 84f37ff24): the probe's fallback is cwd-relative.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    BIN="$(resolve_plan_binary)" || BIN=""
+else
+    BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || BIN=""
+fi
 if [ -z "$BIN" ]; then
     echo "skip:no-plan-binary"
     exit 0

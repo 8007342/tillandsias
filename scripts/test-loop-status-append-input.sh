@@ -29,7 +29,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # 721-nyev: resolve through the SHARED probe, never a hardcoded target/ path.
 # An executable bit is a claim; running the binary is evidence.
 . "$ROOT/scripts/plan-binary-probe.sh"
-BIN="$(resolve_plan_binary)" || { echo "blocked:no-plan-binary"; exit 2; }
+# 1401-x76w: resolve from the CHECKOUT, not the caller's cwd, and make it
+# absolute before the `cd` below: resolve_plan_binary's fallback is the
+# cwd-relative ./target/release path (pattern of 84f37ff24).
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    BIN="$(resolve_plan_binary)" || { echo "blocked:no-plan-binary"; exit 2; }
+else
+    BIN="$(cd "$ROOT" && _p="$(resolve_plan_binary 2>/dev/null)" && case "$_p" in /*) printf '%s' "$_p" ;; *) printf '%s/%s' "$PWD" "${_p#./}" ;; esac)" || { echo "blocked:no-plan-binary"; exit 2; }
+fi
 case "$BIN" in /*) ;; *) BIN="$ROOT/${BIN#./}" ;; esac
 [ -x "$BIN" ] || { echo "blocked:no-plan-binary:$BIN"; exit 2; }
 
