@@ -11,4 +11,4 @@ STEP_OK="Live vault fixture is opt-in"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut).
 STEP_READS="scripts/lua/test-live-vault-fixture-is-opt-in.lua scripts/test-vault-shutdown-forwards-sigterm.sh scripts/preflight-fixtures-default-target.sh"
-STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:live-vault-fixture-is-opt-in:4(arm2-no-live-vault-skip)"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-22 darwin ok:live-vault-fixture-is-opt-in:4 (Lua port; arm2-no-live-vault-skip)"
