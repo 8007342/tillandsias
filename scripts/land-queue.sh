@@ -766,17 +766,35 @@ try_batch() {
     # The tree that ships is the tree that gated: re-read the trunk.
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
-    if [ "$now" != "$base" ]; then
-        say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} — nothing pushed; members $ids go one at a time"
-        train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
-        return 0
-    fi
     parents=(-p "$base")
     for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
     c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
         | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
           GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
           git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
+    # ORDER 2215-trad: A PLAN-ONLY MOVE DOES NOT VOID A TRAIN. Run 29's 4-member
+    # train gated ~25 min and pushed nothing because ledger fragments moved
+    # $TRUNK mid-gate; with an active fleet that is nearly every train. The
+    # singles' adopt rule applies unchanged: when EVERY class between the gated
+    # base and the new tip is plan-ledger (delta_plan_only, the same classifier),
+    # merge the train onto the new tip and push without re-gating. Any other
+    # class, an unreadable answer, or a conflict still sends members one at a time.
+    if [ "$now" != "$base" ]; then
+        if git merge-base --is-ancestor "$base" "$now" 2>/dev/null && delta_plan_only "$base" "$now" \
+            && git checkout -q --detach "$c" 2>/dev/null \
+            && GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
+               GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
+               git merge --no-ff -q -m "land-train($ids): adopted over a plan-only move ${base:0:9}..${now:0:9}" "$now" >/dev/null 2>&1; then
+            c="$(git rev-parse HEAD)"
+            say "train:adopt:plan-only-move:gated-on=${base:0:9} now=${now:0:9} classes=plan-ledger — the gate's verdict still describes this code"
+        else
+            git merge --abort 2>/dev/null || true
+            say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} classes=$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//') — nothing pushed; members $ids go one at a time"
+            train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
+            git checkout -q --detach "$base" 2>/dev/null
+            return 0
+        fi
+    fi
     git push -q "$REMOTE" "$c:refs/heads/$TRUNK" >/dev/null 2>&1
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     if ! git merge-base --is-ancestor "$c" "$REMOTE/$TRUNK" 2>/dev/null; then
