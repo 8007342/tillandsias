@@ -23,9 +23,10 @@ packets:
       Not a bootstrap decider: with no plan binary the .sh already refused (blocked:added-fragments-parse:no-validator)
       unless tillandsias-policy or yq existed, and the plan-only lane fixture's ARM 3 does not copy it. The Lua validates
       with the runner's own validate-yaml. The .sh shim execs the Lua when a plan binary resolves and otherwise keeps the
-      refusal, so the plan lane stays fail-closed. The shim pins TILLANDSIAS_REPO_ROOT to its own checkout: the litmus runner
-      exports the real checkout's, which rooted script run there (litmus step 3 judged 123 real fragments and passed a bare
-      timestamp). build.sh calls the Lua directly; the litmus tests, test-claims-fleet-visible and test-relay-preflight copy
+      refusal, so the plan lane stays fail-closed. The shim pins TILLANDSIAS_REPO_ROOT to its own checkout: without it, litmus
+      step 3 judged the real checkout (123 real fragments) and passed a bare timestamp. The mechanism is not yet
+      identified: no script on trunk exports the variable, and a nested scratch repo roots correctly when run by hand; an
+      inherited TILLANDSIAS_REPO_ROOT does override the caller's cwd (measured), so the pin closes that door either way. build.sh calls the Lua directly; the litmus tests, test-claims-fleet-visible and test-relay-preflight copy
       the .lua beside the shim. Slice 2: rebind scripts/hooks/pre-push-local-gate.sh and relay-preflight.sh, delete the shim.
     exit_criteria:
       - "Live tree: old .sh and Lua both ok:added-fragments-parse:0 checked; scratch repos give identical verdicts for a bare timestamp (violation:added-fragment-bare-timestamp:1), an unparseable fragment (violation:added-fragment-unparseable:1) and a quoted one (ok:...:1 checked)."
