@@ -1247,6 +1247,16 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             rm -f "$_glog"
             continue
         fi
+        # ORDER 2234-a964: rc=255 (podman/crun could not start the gate, a host
+        # going down) or 128+ (a signal) is THIS HOST's state, not a verdict on
+        # the tree, so it is could-not-run:host like the host door (ARM 34):
+        # nobody is evicted, nobody is commented, the run goes on. Measured on
+        # macuahuitl run 29: crun "join keyctl: Disk quota exceeded" from leaked
+        # builder exec sessions evicted 14 PRs with rc=255.
+        if [ "$_grc" -ge 128 ]; then
+            say "could-not-run:host:gate-aborted:rc=$_grc — #$num is not evicted; next candidate (log: $_glog)"
+            continue
+        fi
         say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky} — full gate log kept at $_glog"
         # Only rc=1 is the gate's verdict on the tree. Any other code (255 is a host
         # going down mid-run, 137 a kill) says nothing about the candidate, so it
