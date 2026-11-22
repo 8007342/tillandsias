@@ -1,0 +1,30 @@
+# @trace order:2187-sdtz
+name: litmus:plan-binary-rebuild-while-running
+spec: ci-release
+phase: pre-build
+description: scripts/plan-binary-probe.sh rebuilds a stale tillandsias-plan.exe while that image is running (the Lua runner sourcing the probe) by renaming it aside before cargo links, restores it when the build fails, and sweeps exited set-aside copies; on msys the pre-fix probe fails with cargo's os error 5
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/plan-binary-probe.sh and scripts/lua/test-plan-binary-rebuild-while-running.lua
+  - git and bash in PATH (Git Bash on Windows, derived from git --exec-path)
+
+critical_path:
+  - step: "three arms against a running native image and a stub cargo that deletes the artifact the way cargo does"
+    command: "MFPLAN=$(mf_plan_binary) || { echo \"FAIL: no runnable tillandsias-plan\"; exit 1; }; \"$MFPLAN\" script run scripts/lua/test-plan-binary-rebuild-while-running.lua"
+    timeout_ms: 300000
+    expected_behavior: "ok:plan-binary-rebuild-while-running:3 arms"
+
+observability:
+  traces:
+    - "@trace order:2187-sdtz"
+  expected_log: "ok:plan-binary-rebuild-while-running:3 arms"
+  log_fields:
+    spec: "ci-release"
+    test: "plan-binary-rebuild-while-running"
+    artifact: "scripts/plan-binary-probe.sh _pbp_cargo_build"
+
+rollback:
+  on_failure: "read the FAIL line's got: rc/content/olds triple; arm 1 rc=1 content=old is the pre-fix os error 5"
+  command: "sed -n '/2187-sdtz/,/^}/p' scripts/plan-binary-probe.sh"

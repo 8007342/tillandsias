@@ -268,9 +268,38 @@ plan_binary_is_stale() {   # $1 = binary path; true when any source FILE is newe
     [ -n "$(find crates/tillandsias-plan Cargo.lock -type f -newer "$1" -print -quit 2>/dev/null)" ]
 }
 
+# 2187-sdtz: on Windows the stale binary is often the image RUNNING the caller
+# (a Lua runner's script sourcing this probe). Windows refuses to delete or
+# overwrite a running image (cargo: "failed to remove file ... Access is denied
+# (os error 5)"), but it does allow RENAMING one. So move the old .exe aside
+# before cargo links, put it back if the build produced nothing, and sweep
+# earlier set-aside copies whose process has since exited. A no-op off Windows:
+# only a .exe artifact is set aside.
+_PBP_EXE="target/release/tillandsias-plan.exe"
+_pbp_cargo_build() {
+    local _pbp_aside="" _pbp_rc _pbp_old
+    for _pbp_old in "$_PBP_EXE".old-*; do
+        [ -e "$_pbp_old" ] && rm -f "$_pbp_old" 2>/dev/null
+    done
+    if [ -f "$_PBP_EXE" ]; then
+        _pbp_aside="$_PBP_EXE.old-$$"
+        mv -f "$_PBP_EXE" "$_pbp_aside" 2>/dev/null || _pbp_aside=""
+    fi
+    _pbp_cargo_build_inner
+    _pbp_rc=$?
+    if [ -n "$_pbp_aside" ]; then
+        if [ -f "$_PBP_EXE" ]; then
+            rm -f "$_pbp_aside" 2>/dev/null   # still running: the next build sweeps it
+        else
+            mv -f "$_pbp_aside" "$_PBP_EXE" 2>/dev/null
+        fi
+    fi
+    return $_pbp_rc
+}
+
 # 1804-sccl: build the plan binary; a failing ambient compiler wrapper (sccache)
 # must never become "no fresh tillandsias-plan". Retry once without the wrapper.
-_pbp_cargo_build() {
+_pbp_cargo_build_inner() {
     local _pbp_log
     _pbp_log="$(mktemp "${TMPDIR:-/tmp}/pbp-build.XXXXXX" 2>/dev/null || echo /dev/null)"
     if cargo build --release -p tillandsias-plan >"$_pbp_log" 2>&1; then rm -f "$_pbp_log"; return 0; fi
