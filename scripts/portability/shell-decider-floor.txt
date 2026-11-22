@@ -101,7 +101,6 @@ scripts/test-centicolon-extract.sh
 scripts/test-centicolon-grade.sh
 scripts/test-centicolon-ratchet.sh
 scripts/test-change-class.sh
-scripts/test-cheatsheet-source-anchors.sh
 scripts/test-check-bash-dialect.sh
 scripts/test-check-carry-forward.sh
 scripts/test-check-credential-channel.sh
@@ -134,7 +133,6 @@ scripts/test-compaction-coverage.sh
 scripts/test-competing-gate-consumer.sh
 scripts/test-competing-gate-no-dispatch-cause.sh
 scripts/test-concurrent-forge-shared-stack.sh
-scripts/test-convergence-dashboard-locale.sh
 scripts/test-convergence-dashboard.sh
 scripts/test-credential-and-proxy-confinement.sh
 scripts/test-credential-channel-affordances.sh
@@ -215,7 +213,6 @@ scripts/test-gate-memory-refusal.sh
 scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
-scripts/test-gate-stamp-must-be-earned.sh
 scripts/test-gate-stamp-names-content-movers.sh
 scripts/test-gate-stamp-portable-digest.sh
 scripts/test-gate-stamp-scope.sh
@@ -312,7 +309,6 @@ scripts/test-litmus-retired-phase-skip.sh
 scripts/test-litmus-runner-reads-without-jq.sh
 scripts/test-litmus-runner-reports-rc.sh
 scripts/test-litmus-scalar-unescape.sh
-scripts/test-litmus-self-match.sh
 scripts/test-litmus-stdin-does-not-eat-the-spec-list.sh
 scripts/test-litmus-step-model.sh
 scripts/test-litmus-step-pipefail.sh
@@ -344,7 +340,6 @@ scripts/test-mirror-healthcheck-quiet.sh
 scripts/test-mirror-host-cert-and-sshd.sh
 scripts/test-mirror-receive-wrapper.sh
 scripts/test-mirror-refuses-when-broken.sh
-scripts/test-mirror-relay-state.sh
 scripts/test-mirror-sshd-posture.sh
 scripts/test-mirror-sync-state.sh
 scripts/test-mo-full-attest.sh
@@ -360,7 +355,6 @@ scripts/test-no-stale-base-revert.sh
 scripts/test-nvidia-cdi-stale-hostpath.sh
 scripts/test-opencode-entrypoint-prompt.sh
 scripts/test-opencode-render-probe.sh
-scripts/test-opencode-tool-start-follower.sh
 scripts/test-opencode-vault-auth-content.sh
 scripts/test-openspec-pin.sh
 scripts/test-orchestrate-enclave.sh

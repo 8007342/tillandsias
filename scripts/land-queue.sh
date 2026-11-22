@@ -454,7 +454,9 @@ GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 # gate, then test-land-queue.sh, then its inner queues, and redded run 26's train;
 # ARM 22's stamp leak was the same class. Called first in every gate subshell, so
 # the queue keeps its settings and the gate (and its fixtures) inherits none.
-_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; }
+# 2215-trad: nor GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE — a caller inside a git hook exports them, and a
+# fixture following them writes the REAL .git/config (calmecacpilli 2026-11-22, #1338).
+_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY; }
 DAILY_SKIP="${TILLANDSIAS_LAND_QUEUE_DAILY_SKIP:-1}"
 DAILY_NS="refs/attest/daily-full"
 DAILY_RED_NS="refs/attest/daily-red"
@@ -766,17 +768,35 @@ try_batch() {
     # The tree that ships is the tree that gated: re-read the trunk.
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
-    if [ "$now" != "$base" ]; then
-        say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} — nothing pushed; members $ids go one at a time"
-        train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
-        return 0
-    fi
     parents=(-p "$base")
     for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
     c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
         | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
           GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
           git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
+    # ORDER 2215-trad: A PLAN-ONLY MOVE DOES NOT VOID A TRAIN. Run 29's 4-member
+    # train gated ~25 min and pushed nothing because ledger fragments moved
+    # $TRUNK mid-gate; with an active fleet that is nearly every train. The
+    # singles' adopt rule applies unchanged: when EVERY class between the gated
+    # base and the new tip is plan-ledger (delta_plan_only, the same classifier),
+    # merge the train onto the new tip and push without re-gating. Any other
+    # class, an unreadable answer, or a conflict still sends members one at a time.
+    if [ "$now" != "$base" ]; then
+        if git merge-base --is-ancestor "$base" "$now" 2>/dev/null && delta_plan_only "$base" "$now" \
+            && git checkout -q --detach "$c" 2>/dev/null \
+            && GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
+               GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
+               git merge --no-ff -q -m "land-train($ids): adopted over a plan-only move ${base:0:9}..${now:0:9}" "$now" >/dev/null 2>&1; then
+            c="$(git rev-parse HEAD)"
+            say "train:adopt:plan-only-move:gated-on=${base:0:9} now=${now:0:9} classes=plan-ledger — the gate's verdict still describes this code"
+        else
+            git merge --abort 2>/dev/null || true
+            say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} classes=$(printf '%s' "${_delta_classes:-unreadable}" | tr '\n' ',' | sed 's/,$//') — nothing pushed; members $ids go one at a time"
+            train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
+            git checkout -q --detach "$base" 2>/dev/null
+            return 0
+        fi
+    fi
     git push -q "$REMOTE" "$c:refs/heads/$TRUNK" >/dev/null 2>&1
     git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
     if ! git merge-base --is-ancestor "$c" "$REMOTE/$TRUNK" 2>/dev/null; then
@@ -1245,6 +1265,16 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             _deferred="${_deferred}${num}	${head}"$'\n'
             requeued=$((requeued + 1))
             rm -f "$_glog"
+            continue
+        fi
+        # ORDER 2234-a964: rc=255 (podman/crun could not start the gate, a host
+        # going down) or 128+ (a signal) is THIS HOST's state, not a verdict on
+        # the tree, so it is could-not-run:host like the host door (ARM 34):
+        # nobody is evicted, nobody is commented, the run goes on. Measured on
+        # macuahuitl run 29: crun "join keyctl: Disk quota exceeded" from leaked
+        # builder exec sessions evicted 14 PRs with rc=255.
+        if [ "$_grc" -ge 128 ]; then
+            say "could-not-run:host:gate-aborted:rc=$_grc — #$num is not evicted; next candidate (log: $_glog)"
             continue
         fi
         say "evict:land-queue:$num:gate-failed:rc=$_grc${_flaky:+:$_flaky} — full gate log kept at $_glog"
