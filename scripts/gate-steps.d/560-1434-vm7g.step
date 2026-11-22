@@ -1,6 +1,6 @@
 # Gate step 1434-vm7g — data, not code (order 1072-b7eq).
 #
-# WHAT IT GUARDS. scripts/check-windows-tray-clippy.sh, which the pre-push hook
+# WHAT IT GUARDS. scripts/lua/check-windows-tray-clippy.lua, which the pre-push hook
 # runs natively on a Windows host (the only gate that reaches the real
 # cfg(windows) sources: ./build.sh re-execs inside the WSL2 builder there).
 # This step runs its fixture, which is portable: scratch crates through the
@@ -33,4 +33,4 @@ STEP_LANES="cargo"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="scripts/check-windows-tray-clippy.sh scripts/test-windows-tray-clippy.sh"
+STEP_READS="scripts/lua/check-windows-tray-clippy.lua scripts/test-windows-tray-clippy.sh"

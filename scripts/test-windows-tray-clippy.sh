@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# @trace order:1434-vm7g
+# @trace order:1434-vm7g, order:2203-wclp
 #
-# Fixture for scripts/check-windows-tray-clippy.sh. Portable: it lints tiny
+# Fixture for scripts/lua/check-windows-tray-clippy.lua (the .sh until 2203-wclp). Portable: it lints tiny
 # scratch crates through the decider's manifest seam, and fakes the platform
 # through its uname seam, so every arm runs on any host with cargo clippy.
 #
@@ -16,7 +16,12 @@ set -uo pipefail
 # the gated checkout) is not its base; its scratch origin/linux-next is.
 unset TILLANDSIAS_GATE_DIFF_BASE
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEC="$ROOT/scripts/check-windows-tray-clippy.sh"
+DEC="$ROOT/scripts/lua/check-windows-tray-clippy.lua"
+# Order 2203-wclp: the decider is the Lua port, run by the plan binary, which
+# is resolved and absolutised BEFORE any cd into a scratch repo.
+PLAN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null && resolve_plan_binary 2>/dev/null)}"
+[ -n "$PLAN" ] || { echo "could-not-run:windows-tray-clippy-fixture:no-plan-binary"; exit 3; }
+export PLAN
 [ -f "$DEC" ] || { echo "skip:windows-tray-clippy-fixture:decider-absent"; exit 0; }
 command -v cargo >/dev/null 2>&1 && cargo clippy --version >/dev/null 2>&1 \
     || { echo "skip:windows-tray-clippy-fixture:no-cargo-clippy"; exit 0; }
@@ -29,7 +34,7 @@ bad() { echo "FAIL: $1"; fail=$((fail+1)); }
 
 R="$W/repo"
 mkdir -p "$R/scripts" "$R/crate/src"
-cp "$DEC" "$R/scripts/"
+mkdir -p "$R/scripts/lua"; cp "$DEC" "$R/scripts/lua/"
 cat > "$R/crate/Cargo.toml" <<'EOF'
 [package]
 name = "clippy-fixture"
@@ -59,7 +64,7 @@ run() { (cd "$R" && TILLANDSIAS_WINDOWS_CLIPPY_MANIFEST=crate/Cargo.toml "$@" 2>
 
 # ARM 1: the lint (clippy::needless_return) is refused.
 printf '%s' "$lint_src" > "$R/crate/src/lib.rs"
-o1="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT bash scripts/check-windows-tray-clippy.sh --all)"; rc1=$?
+o1="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT "$PLAN" script run scripts/lua/check-windows-tray-clippy.lua -- --all)"; rc1=$?
 if [ "$rc1" -eq 1 ] && [ "$(printf '%s' "$o1" | tail -1)" = "refused:windows-tray-clippy:1-errors" ]; then
     ok "ARM 1 a clippy warning is refused by name"
 else
@@ -68,7 +73,7 @@ fi
 
 # ARM 2: negative control.
 printf '%s' "$clean_src" > "$R/crate/src/lib.rs"
-o2="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT bash scripts/check-windows-tray-clippy.sh --all)"; rc2=$?
+o2="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT "$PLAN" script run scripts/lua/check-windows-tray-clippy.lua -- --all)"; rc2=$?
 if [ "$rc2" -eq 0 ] && [ "$(printf '%s' "$o2" | tail -1)" = "ok:windows-tray-clippy:clean" ]; then
     ok "ARM 2 the same crate without the warning is clean"
 else
@@ -78,7 +83,7 @@ fi
 # ARM 3: off Windows, skip by name without running cargo (a cargo that would
 # fail is first on PATH, so a run would not read as a skip).
 mkdir -p "$W/nocargo"; printf '#!/bin/sh\necho ran >> "%s/cargo.ran"\nexit 1\n' "$W" > "$W/nocargo/cargo"; chmod +x "$W/nocargo/cargo"
-o3="$(run env PATH="$W/nocargo:$PATH" TILLANDSIAS_WINDOWS_CLIPPY_UNAME=Linux bash scripts/check-windows-tray-clippy.sh --all)"; rc3=$?
+o3="$(run env PATH="$W/nocargo:$PATH" TILLANDSIAS_WINDOWS_CLIPPY_UNAME=Linux "$PLAN" script run scripts/lua/check-windows-tray-clippy.lua -- --all)"; rc3=$?
 if [ "$rc3" -eq 0 ] && [ "$(printf '%s' "$o3" | tail -1)" = "skip:windows-tray-clippy:not-windows:Linux" ] && [ ! -e "$W/cargo.ran" ]; then
     ok "ARM 3 off Windows it skips by name and never runs cargo"
 else
@@ -87,9 +92,9 @@ fi
 
 # ARM 4: scope. Clean tree against the base -> untouched; then an untracked
 # file under the crate plus the lint -> runs and refuses.
-o4a="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT bash scripts/check-windows-tray-clippy.sh)"
+o4a="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT "$PLAN" script run scripts/lua/check-windows-tray-clippy.lua --)"
 printf '%s' "$lint_src" > "$R/crate/src/lib.rs"
-o4b="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT bash scripts/check-windows-tray-clippy.sh)"; rc4b=$?
+o4b="$(run env TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT "$PLAN" script run scripts/lua/check-windows-tray-clippy.lua --)"; rc4b=$?
 if [ "$(printf '%s' "$o4a" | tail -1)" = "skip:windows-tray-clippy:crate-untouched" ] \
    && [ "$rc4b" -eq 1 ] && [ "$(printf '%s' "$o4b" | tail -1)" = "refused:windows-tray-clippy:1-errors" ]; then
     ok "ARM 4 an untouched crate skips; a changed one runs and refuses"
@@ -106,7 +111,7 @@ fi
 # refuse it); touching clean alone is ok; touching winlint too refuses.
 # PRE-FIX RESULT: FAILS, the decider ignores the crates root and lints only
 # the tray.
-R5="$W/repo5"; mkdir -p "$R5/scripts"; cp "$DEC" "$R5/scripts/"
+R5="$W/repo5"; mkdir -p "$R5/scripts/lua"; cp "$DEC" "$R5/scripts/lua/"
 mk_crate() { # <name> <lib.rs body>
     mkdir -p "$R5/crates/$1/src"
     printf '[package]\nname = "%s"\nversion = "0.1.0"\nedition = "2021"\n[workspace]\n' "$1" > "$R5/crates/$1/Cargo.toml"
@@ -134,7 +139,7 @@ git -C "$R5" init -q 2>/dev/null
 git -C "$R5" config user.email f@x.invalid; git -C "$R5" config user.name f
 git -C "$R5" add -A >/dev/null 2>&1; git -C "$R5" commit -qm base
 git -C "$R5" update-ref refs/remotes/origin/linux-next HEAD
-run5() { (cd "$R5" && TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT bash scripts/check-windows-tray-clippy.sh 2>/dev/null); }
+run5() { (cd "$R5" && TILLANDSIAS_WINDOWS_CLIPPY_UNAME=MINGW64_NT "$PLAN" script run scripts/lua/check-windows-tray-clippy.lua -- 2>/dev/null); }
 echo '// touched' >> "$R5/crates/comment/src/lib.rs"
 o5a="$(run5)"
 echo '// touched' >> "$R5/crates/clean/src/lib.rs"

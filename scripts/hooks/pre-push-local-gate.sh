@@ -2318,9 +2318,17 @@ fi
 # by name off Windows and when the change does not touch the crate. A
 # could-not-run (no cargo) is noted, not refused: a host without a toolchain
 # cannot have built the change it is pushing either.
-if [[ -f scripts/check-windows-tray-clippy.sh ]]; then
-    _wtc_out="$(bash scripts/check-windows-tray-clippy.sh 2>&1)"
-    _wtc_rc=$?
+if [[ -f scripts/lua/check-windows-tray-clippy.lua ]]; then
+    # ORDER 2203-wclp: the checker is the Lua port, run by the plan binary. No
+    # runnable plan binary is a could-not-run (rc 3), noted like a missing cargo.
+    _wtc_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _wtc_plan=""
+    if [[ -n "$_wtc_plan" ]]; then
+        _wtc_out="$("$_wtc_plan" script run scripts/lua/check-windows-tray-clippy.lua 2>&1)"
+        _wtc_rc=$?
+    else
+        _wtc_out="could-not-run:windows-tray-clippy:no-plan-binary"
+        _wtc_rc=3
+    fi
     _wtc_verdict="$(printf '%s\n' "$_wtc_out" | tail -1)"
     case "$_wtc_rc:$_wtc_verdict" in
         0:ok:*) echo "${GRN}✓ ${_wtc_verdict}${RST}" >&2 ;;
