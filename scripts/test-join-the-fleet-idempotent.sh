@@ -135,13 +135,13 @@ fi
 # ---- arms 7-8 (ORDER 1255-s4im: the hook git will RUN, not .git/hooks) -------
 # git runs hooks from core.hooksPath when it is set. The checker read
 # .git/hooks/pre-push unconditionally, which is wrong in BOTH directions.
-fake_hook() { mkdir -p "$1"; printf '#!/bin/sh\n# tillandsias-pre-push-v8\nexit 0\n' > "$1/pre-push"; }
+fake_hook() { mkdir -p "$1"; printf '#!/bin/sh\n# tillandsias-pre-push-v9\nexit 0\n' > "$1/pre-push"; }
 
 echo "arm 7 — MASKED: a hook in .git/hooks but core.hooksPath at an empty dir runs NO hook"
 # The 1255-s4im disclosure: commits made with core.hooksPath pointing at a
 # directory with no hooks are functionally --no-verify. A checker that read
 # .git/hooks said ok while nothing would have run.
-# PRE-FIX: FAILS (ok:join-the-fleet:hooks:tillandsias-pre-push-v8).
+# PRE-FIX: FAILS (ok:join-the-fleet:hooks:tillandsias-pre-push-v9).
 fake_hook "$scratch/.git/hooks"
 mkdir -p "$W/empty-hooks"
 git -C "$scratch" config core.hooksPath "$W/empty-hooks"
@@ -160,7 +160,7 @@ rm -f "$scratch/.git/hooks/pre-push"
 fake_hook "$W/shared-hooks"
 git -C "$scratch" config core.hooksPath "$W/shared-hooks"
 o8="$(JOIN_FLEET_ROOT="$scratch" JOIN_FLEET_PROBES=0 bash "$CHECKER" 2>&1)"
-if grep -q -e '^ok:join-the-fleet:hooks:tillandsias-pre-push-v8$' <<<"$o8"; then
+if grep -q -e '^ok:join-the-fleet:hooks:tillandsias-pre-push-v9$' <<<"$o8"; then
     good "a shared core.hooksPath with the hook is ok"
 else
     bad "arm8: a shared core.hooksPath hook was not ok: $(printf '%s\n' "$o8" | grep -e hooks | tr '\n' ' ')"

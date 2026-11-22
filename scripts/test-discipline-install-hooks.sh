@@ -200,7 +200,7 @@ else
 fi
 P7="$(new_project tillandsias-like)"
 mkdir -p "$P7/.git/hooks"
-printf '#!/usr/bin/env bash\n# tillandsias-pre-push-v8\nexit 0\n' > "$P7/.git/hooks/pre-push"
+printf '#!/usr/bin/env bash\n# tillandsias-pre-push-v9\nexit 0\n' > "$P7/.git/hooks/pre-push"
 chmod +x "$P7/.git/hooks/pre-push"
 gate="$(cksum < "$P7/.git/hooks/pre-push")"
 out="$(cd "$P7" && "$PLAN" discipline install-hooks 2>&1)"
