@@ -122,7 +122,7 @@ fi
 # --- Install pre-push hook -------------------------------------------------
 
 PREPUSH_TARGET="$GIT_HOOKS_DIR/pre-push"
-PREPUSH_MARKER="# tillandsias-pre-push-v8"
+PREPUSH_MARKER="# tillandsias-pre-push-v9"
 
 MAIN_AFFORD_REL="scripts/hooks/pre-push-main-branch-affordance.sh"
 MERGE_GATE_REL="scripts/hooks/pre-push-linux-next-merged.sh"

@@ -13,7 +13,7 @@ packets:
     owned_files:
       - scripts/hooks/pre-push-local-gate.sh
       - scripts/test-pre-push-refuses-carried-silent.sh
-      - scripts/gate-steps.d/955-2194-cspr-pre-push-carried.step
+      - scripts/gate-steps.d/958-2194-cspr-pre-push-carried.step
     title: "The pre-push hook refuses a carried-silent work push instead of warning"
     context: |
       On the work lane `refuse` degrades to a warning, so a carried-silent change (due, neither paying an item
@@ -23,7 +23,7 @@ packets:
       checks carried obligations before preflight and the gate, so no queue change is needed.
     exit_criteria:
       - "test-pre-push-refuses-carried-silent 4/4 (refused on due, passes waived and not-due, not run off the work lane); trunk's hook reds arm A."
-      - "Gate step 955 has a darwin second regime."
+      - "Gate step 958 has a darwin second regime."
     unscoreable: "carried-silent evictions in the queue logs are the measure"
     provenance: "coordinator, 2026-11-22."
     events:
