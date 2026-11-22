@@ -181,7 +181,6 @@ scripts/test-repeat-model-flag.sh 1
 scripts/test-requirement-ids.sh 1
 scripts/test-rerun-failed-rust-tests.sh 1
 scripts/test-reset-state-contract.sh 2
-scripts/test-reset-state-no-home-refusal.sh 1
 scripts/test-resumable-claim-dirt.sh 1
 scripts/test-running-image-freshness.sh 1
 scripts/test-salvage-audit.sh 1
@@ -208,7 +207,6 @@ scripts/test-trace-coverage.sh 1
 scripts/test-tray-asset-placeholder-refused.sh 1
 scripts/test-uninstall-matcher-spares-bystanders.sh 1
 scripts/test-uninstall-path-block.sh 1
-scripts/test-uninstall-tray-stop-is-macos-only.sh 1
 scripts/test-validator-surface-currency.sh 1
 scripts/test-vault-shutdown-forwards-sigterm.sh 1
 scripts/test-version-bump-isolation-scope.sh 1
