@@ -365,6 +365,7 @@ specs:
 - spec_id: dev-build
   status: active
   litmus_tests:
+  - litmus:build-dev-cache-ca-trap-cleared
   - litmus:environment-isolation
   - litmus:binary-e2e-smoke
   - litmus:headless-init-status-check-source-built

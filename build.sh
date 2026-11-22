@@ -2269,6 +2269,12 @@ ensure_dev_cache() {
             else
                 rm -f "$tmp_cert" "$tmp_key"
                 _warn "Failed to generate CA cert for dev proxy"
+                # 2228-vt2z: release the lock and CLEAR the RETURN trap before
+                # this early return. Left set, the trap outlives the function
+                # and fires again at the next top-level sourced file, where
+                # ca_lock is gone: `unbound variable` under set -u.
+                rmdir "$ca_lock" 2>/dev/null || true
+                trap - RETURN
                 return 0
             fi
         fi
