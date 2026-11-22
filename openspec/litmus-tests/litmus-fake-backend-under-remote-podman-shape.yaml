@@ -14,16 +14,16 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-litmus-fake-backend-under-remote-podman.sh
+  - workspace contains scripts/lua/test-litmus-fake-backend-under-remote-podman.lua
 
 critical_path:
   - step: "fixture parses and is executable"
-    command: "bash -n scripts/test-litmus-fake-backend-under-remote-podman.sh && test -x scripts/test-litmus-fake-backend-under-remote-podman.sh && echo 'ok: parse'"
+    command: "test -f scripts/lua/test-litmus-fake-backend-under-remote-podman.lua && echo 'ok: parse'"
     timeout_ms: 2000
     expected_behavior: "ok: parse"
 
   - step: "a fake-backend test under a remote podman is refused by name; the negative controls hold"
-    command: "bash scripts/test-litmus-fake-backend-under-remote-podman.sh 2>&1 | tail -n 1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-fake-backend-under-remote-podman.lua 2>&1"
     timeout_ms: 300000
     expected_behavior: "PASS: litmus-fake-backend-under-remote-podman"
 
@@ -40,4 +40,4 @@ rollback:
   on_failure: >
     A fake-backend fixture that runs under a remote podman exercises the real
     one while reporting a fake's verdict; restore the up-front refusal.
-  command: "bash scripts/test-litmus-fake-backend-under-remote-podman.sh"
+  command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-litmus-fake-backend-under-remote-podman.lua"

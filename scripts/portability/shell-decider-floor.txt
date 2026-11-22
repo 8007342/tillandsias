@@ -222,7 +222,6 @@ scripts/test-gate-fast-refusals.sh
 scripts/test-gate-host-memory-figure.sh
 scripts/test-gate-memory-floor-consumer.sh
 scripts/test-gate-memory-refusal.sh
-scripts/test-gate-memory-wsl2-guest.sh
 scripts/test-gate-stamp-does-not-memoize-guard-owned-paths.sh
 scripts/test-gate-stamp-memoization.sh
 scripts/test-gate-stamp-must-be-earned.sh
@@ -310,7 +309,6 @@ scripts/test-litmus-budget-negative-control.sh
 scripts/test-litmus-budget-tally.sh
 scripts/test-litmus-covering-relay-scope.sh
 scripts/test-litmus-diff-scope.sh
-scripts/test-litmus-fake-backend-under-remote-podman.sh
 scripts/test-litmus-fake-podman-hermetic.sh
 scripts/test-litmus-grep-escapes.sh
 scripts/test-litmus-item-opener-refused.sh

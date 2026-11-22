@@ -78,7 +78,6 @@ litmus openspec/litmus-tests/litmus-expert-serve-refusal-not-fallback.yaml 4
 litmus openspec/litmus-tests/litmus-expire-claims-reads-the-status-write.yaml 1
 litmus openspec/litmus-tests/litmus-external-logs-manifest-shape.yaml 2
 litmus openspec/litmus-tests/litmus-external-logs-producer-manifests-shape.yaml 1
-litmus openspec/litmus-tests/litmus-fake-backend-under-remote-podman-shape.yaml 1
 litmus openspec/litmus-tests/litmus-fake-cloudflare.yaml 1
 litmus openspec/litmus-tests/litmus-fake-podman-direct-invocation-safety.yaml 1
 litmus openspec/litmus-tests/litmus-fix-windows-image-routing-helper-shape.yaml 1
@@ -670,7 +669,6 @@ scripts scripts/test-ledger-prose-roundtrip.sh 8
 scripts scripts/test-ledger-ts-guard.sh 2
 scripts scripts/test-ledger-write-reaches-its-reader.sh 22
 scripts scripts/test-litmus-binding-truth.sh 8
-scripts scripts/test-litmus-fake-backend-under-remote-podman.sh 1
 scripts scripts/test-litmus-fake-podman-hermetic.sh 1
 scripts scripts/test-litmus-grep-escapes.sh 1
 scripts scripts/test-litmus-item-opener-refused.sh 5
