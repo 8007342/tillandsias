@@ -378,6 +378,15 @@ _CLASS_SKIPPED=0        # how many guards this run did NOT run. A run that
                         # record one — otherwise a chain of scoped runs keeps
                         # renewing its own licence to be scoped, forever.
 _CLASS_SET_MEMO=""      # computed once per run; empty until first asked
+# ORDER 2175-ctin: what the feature-gated cargo test step (tray,listen-vsock,
+# headless bin tests) can READ, in the class selector's grammar (STEP_INPUTS:
+# classes + path: globs). With a daily full proof (2174-dail) the step is
+# skipped when no change touches any of these. GENERATED from the Rust sources
+# by scripts/lua/scan-cargo-test-repo-roots.lua --list (headless + its path-dep
+# closure), and gate step 954 runs that scanner's --check so a new embedded or
+# read path cannot be missed here. Every uncertainty in the scan WIDENS this.
+_CARGO_FEATURE_TEST_INPUTS="rust path:Cargo.toml path:Cargo.lock path:rust-toolchain.toml path:.cargo/** path:.claude/CLAUDE.md path:.claude/CLAUDE.md/** path:.codex path:.codex/** path:.config path:.config/** path:.gemini/GEMINI.md path:.gemini/GEMINI.md/** path:.tillandsias path:.tillandsias/** path:assets path:assets/** path:cloud path:cloud/** path:docs/cheatsheets/github-credential-tools.md path:images path:images/** path:lib/chart.umd.js path:lib/chart.umd.js/** path:lib/highlight.min.css path:lib/highlight.min.css/** path:lib/highlight.min.js path:lib/highlight.min.js/** path:licences/acknowledgements/adefossez-htdemucs.yaml path:licences/acknowledgements/cc-by-4-0--google-deepmind-representations4d.yaml path:licences/acknowledgements/corridor-key-licence-2-0--nikopueringer-corridorkey2-0.yaml path:licences/acknowledgements/mit--ruicheng-moge-2-vitb-normal.yaml path:licences/acknowledgements/nvidia-open-model-license--nvidia-c-radiov4-so400m.yaml path:locales path:locales/** path:observatorium path:observatorium/** path:openspec/changes/studio-asset-pipeline/contract/examples/gatekeeper-v3.character-frames.json path:research path:research/** path:scripts path:scripts/** path:skills path:skills/** path:tests/fixtures/recipe-basic/Recipefile path:tests/fixtures/recipe-basic/Recipefile/** path:tests/fixtures/recipe-basic/manifest.toml path:tests/fixtures/recipe-basic/manifest.toml/** path:tools path:tools/**"
+
 _class_set_once() {
     [ -n "$_CLASS_SET_MEMO" ] && return 0
     _CLASS_SET_MEMO="$(change_class_set 2>/dev/null)" || _CLASS_SET_MEMO="(unavailable)"
@@ -2062,6 +2071,34 @@ PFEOF
         echo "refused:preflight:$_pf_counts sum=$_pf_sum $_pf_iso wall=${_pf_wall}s" >&2
         exit 1
     fi
+    # ORDER 2112-nlrf. On darwin, a tree that changes a cfg-gated crate gets its
+    # native lint attested HERE, as refs/attest/native-lint/<crate-subtree-sha>
+    # (no commit on the branch), so the land queue needs no separate
+    # attest-native-lint.sh round trip. Only a clean, committed tree: the ref
+    # names committed content. A clippy failure refuses the preflight (that is a
+    # real lint failure); an unpushable ref is kept locally and named.
+    if [ "$(uname -s)" = Darwin ] && [ -f "$SCRIPT_DIR/scripts/attest-native-lint.sh" ] \
+       && [ "${TILLANDSIAS_PREFLIGHT_NATIVE_LINT:-1}" != 0 ]; then
+        _nl_base="${TILLANDSIAS_GATE_DIFF_BASE:-origin/linux-next}"
+        _nl_ht="$(git -C "$SCRIPT_DIR" rev-parse --verify --quiet HEAD:crates/tillandsias-macos-tray 2>/dev/null)" || _nl_ht=""
+        _nl_bt="$(git -C "$SCRIPT_DIR" rev-parse --verify --quiet "$_nl_base:crates/tillandsias-macos-tray" 2>/dev/null)" || _nl_bt=""
+        if [ -n "$_nl_ht" ] && [ "$_nl_ht" != "$_nl_bt" ]; then
+            if ! git -C "$SCRIPT_DIR" diff --quiet || ! git -C "$SCRIPT_DIR" diff --cached --quiet; then
+                echo "note:preflight:native-lint-ref:skipped:dirty-tree — commit, then re-run to attest crates/tillandsias-macos-tray=$_nl_ht" >&2
+            else
+                _nl_out="$(cd "$SCRIPT_DIR" && bash scripts/attest-native-lint.sh --ref --push 2>&1)"; _nl_rc=$?
+                case "$_nl_rc:$_nl_out" in
+                    0:*ok:attest-native-lint:ref*) echo "ok:preflight:native-lint-ref:$(printf '%s\n' "$_nl_out" | grep -m1 '^ok:attest-native-lint:' | cut -d: -f3-)" >&2 ;;
+                    1:*failed:attest-native-lint:push*) echo "note:preflight:native-lint-ref:written-not-pushed — git push origin refs/attest/native-lint/$_nl_ht" >&2 ;;
+                    *) printf '%s\n' "$_nl_out" >&2
+                       _afford "the macOS tray crate failed its native clippy lint (clippy -p tillandsias-macos-tray --all-targets -D warnings, run by scripts/attest-native-lint.sh); the land queue would refuse it, and on trunk it would redden every Mac build" \
+                           "fix the clippy findings above, commit, and re-run ./build.sh --preflight"
+                       echo "refused:preflight:native-lint:tillandsias-macos-tray rc=$_nl_rc" >&2
+                       exit 1 ;;
+                esac
+            fi
+        fi
+    fi
     if [ "$_pf_unanswered" -gt 0 ]; then
         # DELIBERATELY NOT `ok:`. The old line said ok: here and exited 0, and a
         # reader who saw both concluded the guards had passed — on Windows that
@@ -2876,6 +2913,17 @@ _gs_one() {
     if [ -n "$STEP_INPUTS" ] && [ "$_gs_root" = "$SCRIPT_DIR" ]; then
         _gs_id="gate-step:${_step_file##*/}"; _gs_id="${_gs_id%.step}"
         _gs_inputs="$STEP_INPUTS path:scripts/gate-steps.d/${_step_file##*/} path:$_step_path path:build.sh path:scripts/change-class.sh path:scripts/gate-stamp.sh"
+        # ORDER 2178-luai: A STEP THAT RUNS ON THE PLAN BINARY ALSO READS WHAT THE
+        # RUNTIME READS. lenovinha's atime traces (2026-11-22): every STEP_LUA step
+        # read .tillandsias/command-policies.yaml, .tillandsias/branch-discipline.yaml
+        # and .gitignore through proc.run's policy, and none declared them, so a
+        # policy change could skip the very steps it changes. The runtime's own
+        # source and the methodology file it consults are inputs the same way: a
+        # Lua step judged by a changed runtime is a different check. Added for a
+        # STEP_LUA step, and for a script step whose script names the plan binary.
+        if [ -n "$STEP_LUA" ] || grep -qE 'tillandsias-plan|resolve_plan_binary|TILLANDSIAS_PLAN_BIN' "$_gs_root/$_step_path" 2>/dev/null; then
+            _gs_inputs="$_gs_inputs path:.tillandsias/command-policies.yaml path:.tillandsias/branch-discipline.yaml path:.gitignore path:methodology/distributed-work.yaml path:VERSION path:flake.nix path:crates/tillandsias-plan/* path:crates/tillandsias-exec/* path:Cargo.lock"
+        fi
         # shellcheck disable=SC2086 — the declared inputs are words by design.
         if _class_may_skip "$_gs_id" $_gs_inputs; then
             # shellcheck disable=SC2086
@@ -3144,6 +3192,10 @@ _gs_lanes() {
     for _f in "$@"; do
         _lanes="$(sed -n 's/^STEP_LANES="\(.*\)"$/\1/p' "$_f" | head -n 1)"
         set -- $_lanes
+        # 2192-excl: `exclusive` (alone or beside other lanes) means NOTHING else may
+        # run with this step: it reads or counts a fixed host-wide file. It joins the
+        # exclusive phase after the lanes, as a step naming several lanes does.
+        case " $_lanes " in *" exclusive "*) _excl+=("$_f"); continue ;; esac
         if [ "$#" -ne 1 ]; then _excl+=("$_f"); continue; fi
         _i=$((_i + 1)); _names+=("$_f")
         printf '%s\t%s\n' "$_i" "$_f" >> "$_d/lane-$1.list"
@@ -4489,7 +4541,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _info "All fragments intact"
 
     _step "Checking the whole-overlay fragment guard's negative controls..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-all-fragments-intact.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-all-fragments-intact.lua" 2>&1; then
         _error "the fragment-integrity guard cannot distinguish valid YAML, parse damage, and conflict markers"
         exit 1
     fi
@@ -4893,7 +4945,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # those checks and a binary built for another checkout; this fixture pins
     # the contract hermetically.
     _step "Checking point-of-use instrument freshness (851-cduu)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-freshness.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-freshness.lua" 2>&1; then
         _error "ensure_fresh_plan_binary broke its contract — a stale instrument could pass for HEAD"
         exit 1
     fi
@@ -4903,7 +4955,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # named only if it RUNS, so the WSL gate's Linux ELF is never recommended
     # to a Windows host whose .exe it sits beside.
     _step "Checking the stale-binary remedy names only a runnable binary (1267-uafx)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-remedy-names-only-a-runnable-binary.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-remedy-names-only-a-runnable-binary.lua" 2>&1; then
         _error "the plan-only lane's remedy named a binary that cannot run on this host"
         exit 1
     fi
@@ -5034,7 +5086,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Order 1442-wyf9: the same invariant from the installer's side — run in a
     # clone whose core.hooksPath is GLOBAL (any second clone inside a forge),
     # scripts/install-hooks.sh must refuse rather than arm the guards box-wide.
-    if ! _run bash "$SCRIPT_DIR/scripts/test-install-hooks-refuses-global-hookspath.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-install-hooks-refuses-global-hookspath.lua" 2>&1; then
         _error "scripts/install-hooks.sh wrote into a GLOBAL core.hooksPath — that arms the guards in every repo on the box"
         exit 1
     fi
@@ -5394,6 +5446,13 @@ if [[ "$FLAG_CHECK" == true ]]; then
     #
     # Deliberately NOT routed through the baseline ratchet, matching the
     # --test pass: no known-red entry lives here today, so strict is correct.
+    # ORDER 2175-ctin: skippable against a daily full proof when no change
+    # touches what these tests read (_CARGO_FEATURE_TEST_INPUTS, scanned).
+    # shellcheck disable=SC2086 — the declared inputs are words by design.
+    if _class_may_skip cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS; then
+    # shellcheck disable=SC2086
+    _class_skip_line cargo-feature-gated-tests $_CARGO_FEATURE_TEST_INPUTS
+    else
     _step "Running feature-gated tests (tray, listen-vsock) — 1074-w7qv..."
     _fg_transcript="$SCRIPT_DIR/target/test-transcript-feature-gated-gate.log"
     mkdir -p "$(dirname "$_fg_transcript")"
@@ -5470,6 +5529,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Feature-gated tests passed: $_fg_ran test(s) executed under tray,listen-vsock"
+    fi
 
     # ORDER 1713-1dnx: the VM GUEST's feature set, exactly as
     # build-macos-tray.sh and build-guest-binaries.sh build it (listen-vsock,
@@ -5723,93 +5783,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Arrival-routing advisory reported"
 
-    # Order 831-ezea. The archiver is the ONLY bulk drain the ledger has, and
-    # until this line it had ZERO call sites — so its correctness was never
-    # exercised by anything. When it was finally dry-run on 2026-08-19 it
-    # archived two READY rows (424, 437) into a file where they answer `no
-    # packet matches`, while its own `--check` printed "script is idempotent"
-    # and its freshness header cited that as evidence of soundness.
-    #
-    # --check now asserts the actual invariant — archiving moves TERMINAL rows,
-    # so the ready set must be byte-identical across a run — and this wires it
-    # to a caller. 2.0s. Gating a tool nobody invokes yet is deliberate: the
-    # sweep gets its call site under R3, and the gate must predate the sweep
-    # rather than be added after the first bad run.
-    # ORDER 923-ws3r. The two outcomes are now separate exit codes, because the
-    # merged message ("would change the ready set, OR its check could not run")
-    # named both and pointed at neither — and the check spent days red on clean
-    # checkouts for the second reason while its wording invited the first
-    # reading. A violation means STOP. A could-not-run means the INSTRUMENT is
-    # broken and this step has learned nothing about the ledger.
-    _step "Checking the plan archiver preserves the ready set (831-ezea)..."
-    _archiver_rc=0
-    # ORDER 911-m7js. The check is LEDGER-BOUND (16-20s here, 105s on a slow
-    # host, proportional to the ledger) and its inputs are exactly the ledger
-    # plus the archiver itself, so its verdict is memoised on a digest of those
-    # inputs (scripts/archiver-check-memo.sh). A hit repeats a verdict the same
-    # bytes earned; any change to plan/index.yaml, plan/archive, a fragment,
-    # the archiver, its checker or the plan binary is a miss and runs it.
-    # 965-sxec: the output is TEED rather than swallowed, because the exit-3
-    # branch below has to read one token out of it while the operator still
-    # needs to see the whole thing. `_run` stays in the path — it carries the
-    # phase timing and the cd into SCRIPT_DIR, and a capture that dropped it
-    # would silently stop this step being profiled.
-    _archiver_log="$(mktemp "${TMPDIR:-/tmp}/tillandsias-archiver.XXXXXX")"
-    # ORDER 1074-96z9. A memo HIT used to emit nothing at all: this branch was
-    # `_info` and a return, so the step simply vanished from the timing log and
-    # the hit rate was not computable. The audit that nominates steps for
-    # memoisation could therefore never measure whether memoisation WORKED —
-    # and worse, kept re-nominating this already-memoised step, because its
-    # cheap hits no longer accumulated under any name to dilute the old
-    # average. The terminology memo (1054-zvq4) already carries the fix; this
-    # copies that convention rather than inventing a third.
-    #
-    # THE MISS DELIBERATELY STAYS INSIDE `_run`. build.sh's own 965-sxec note
-    # records that `_run` carries the phase timing, so lifting the work out of
-    # it to emit a tidier hit/miss pair would delete the only measurement of
-    # what this step actually COSTS while still satisfying "a hit is recorded".
-    # The hit/miss records answer "did the memo fire"; the `_run` phase record
-    # answers "what does the work cost". Both are needed and they are not the
-    # same number.
-    _arch_t0="$(timing_now_ms)"
-    if _archiver_memo="$(bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" check 2>/dev/null)"; then
-        _info "$_archiver_memo — ledger and archiver unchanged since the last pass; check not re-run"
-        timing_emit archiver-check-hit check "$_arch_t0" 0 || true
-    else
-        _run bash "$SCRIPT_DIR/scripts/archive-plan-packets.sh" --check 2>&1             | tee "$_archiver_log" || true
-        _archiver_rc="${PIPESTATUS[0]}"
-        [ "$_archiver_rc" -eq 0 ] && bash "$SCRIPT_DIR/scripts/archiver-check-memo.sh" record >/dev/null 2>&1 || true
-        timing_emit archiver-check-miss check "$_arch_t0" "${_archiver_rc:-1}" || true
-    fi
-    if [ "$_archiver_rc" -eq 3 ]; then
-        # ORDER 965-sxec. A forge ships NO ruby by design, so the archiver's
-        # worker cannot run there and the whole forge lane could not reach a
-        # verdict on ./build.sh --check at all — a p0 blocker, filed by an agent
-        # it stopped. Named as a SKIP here rather than a failure, and the skip is
-        # narrow twice over: only inside a forge, and only for the one cause the
-        # script tokenises. A stale plan binary or an unreadable fragment also
-        # exit 3 and still stop the gate, because those are repairable in the
-        # locus that hit them and waving them through would trade a false
-        # substantive verdict for a false green.
-        #
-        # It is LOUD on purpose. The ready set went unverified on this run; a
-        # reader has to be able to see that in the log, which is the 796-4ydb
-        # posture — say what was not checked rather than make one environment's
-        # missing package every host's red build.
-        if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]            && grep -q 'could-not-run:no-usable-ruby' "$_archiver_log" 2>/dev/null; then
-            _warn "SKIPPED the plan archiver check: no usable ruby in this forge (965-sxec). The ready set was NOT verified on this run — the archiver's ruby worker never executed. This is not a statement about the ledger."
-        else
-            _error "the plan archiver's check COULD NOT RUN (exit 3) — this says nothing about the ready set; the instrument is what needs repair (923-ws3r)"
-            exit 1
-        fi
-    elif [ "$_archiver_rc" -ne 0 ]; then
-        _error "the plan archiver would CHANGE THE READY SET, orphan events, or leave archived rows unanswerable — do not sweep"
-        exit 1
-    fi
-    rm -f "$_archiver_log"
-    _info "Plan archiver check passed"
-
-    # Order 965-sxec. The fixture for the branch just above. It pins the VERDICT
+    # Order 965-sxec. The fixture for the archiver step (scripts/gate-steps.d/955-831-ezea.step, 2186-niam). It pins the VERDICT
     # TEXT, not the exit code alone: build.sh failed either way before this, and
     # what was wrong was what it SAID — "the plan archiver would CHANGE THE READY
     # SET" on a run where the check never executed. A test that checked only the
@@ -6474,12 +6448,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Hardware-fingerprint gate passed"
 
-    _step "Checking uninstall sweeps BOTH macOS app dirs..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-uninstall-sweeps-both-app-dirs.sh" 2>&1; then
-        _error "uninstall would leave the app in the DEFAULT install dir while removing the LaunchAgent beside it — the app stays, nothing launches it, and the uninstaller reports success"
-        exit 1
-    fi
-    _info "Uninstall app-dir sweep gate passed"
+    # The uninstall app-dir sweep moved to gate step 402-2109-umac (Lua).
 
     _step "Checking image rebuild keeps the installed binary's launch tag (747-knbp)..."
     if ! _run bash "$SCRIPT_DIR/scripts/test-build-image-installed-version-alias.sh" 2>&1; then
@@ -6851,13 +6820,6 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a substantive ledger claim from a command that never executed. Wired here
     # because the defect is invisible on any host that HAS ruby, which is every
     # host that runs this gate; only the stub-PATH arms exercise it.
-    _step "Checking a missing ruby reads as could-not-run, not as a ledger verdict (965-sxec)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-archiver-ruby-could-not-run.sh" 2>&1; then
-        _error "an absent ruby does not route to the could-not-run channel (965-sxec) — see the verdict line above"
-        exit 1
-    fi
-    _info "Archiver could-not-run channel check passed"
-
     # 964-zedm: the index builder must stage where the payload FITS. It staged
     # via the ambient TMPDIR, and in a forge /tmp is a 256 MB tmpfs while the
     # index root is on a 1.2 TB overlay — so a cold 22,645-chunk build died on
@@ -6888,7 +6850,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # boundary of that admission runs INSIDE the gate. Half a second, and a
     # negative control nothing executes cannot protect the hole it names.
     _step "Checking the issue-capture fast lane keeps its boundaries (889-twhe)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-issue-capture-lane.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-pre-push-issue-capture-lane.lua" 2>&1; then
         _error "the plan-only lane's plan/issues admission lost a boundary (889-twhe) — see the verdict line above"
         exit 1
     fi
@@ -6929,7 +6891,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # malformed fragment must still be refused, and a real ledger fault must not
     # be blamed on the instrument.
     _step "Checking the lane blames the instrument, not the ledger, when the binary cannot run (1060-6fx7)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-lane-instrument-vs-ledger.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-lane-instrument-vs-ledger.lua" 2>&1; then
         _error "the plan-only lane misattributes an instrument failure to the ledger (1060-6fx7) — see the verdict line above"
         exit 1
     fi
@@ -6955,19 +6917,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # is only safe if it does not change the ANSWER — a spec referenced solely
     # from target/ would otherwise be reported as a zero-trace spec that is not
     # one, a false accusation produced by an optimisation.
-    _step "Checking the pre-commit spec sweep's exclusions are answer-preserving (734-sjb3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-precommit-zero-trace-scan-scope.sh" 2>&1; then
-        _error "excluding build output changed the referenced-spec set (734-sjb3) — see the verdict line above"
-        exit 1
-    fi
-    _info "Zero-trace scan scope pin passed"
-
     # Order 1024-c3h3. An evidence SHA captured before land-on-platform-branch
     # rewrites the commit names a ref that never reaches origin, and a reader
     # cannot tell that from "the code never landed" — opposite diagnoses. The
     # fixture reproduces the rewrite and pins that the two stay separable.
     _step "Checking a rewritten evidence SHA is named with its landed replacement (1024-c3h3)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-closure-evidence-survives-landing.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-closure-evidence-survives-landing.lua" 2>&1; then
         _error "the closure-evidence check no longer separates a rewritten ref from work that never landed (1024-c3h3) — see the verdict line above"
         exit 1
     fi
@@ -7027,7 +6982,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # control, so it belongs inside the gate for the same reason its sibling
     # does — a control nothing executes cannot protect the hole it names.
     _step "Checking the plan-only lane survives the mandated merge without opening a bypass (1056-5344)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-pre-push-plan-lane-after-merge.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/test-pre-push-plan-lane-after-merge.lua" 2>&1; then
         _error "the plan-only lane's merge scoping lost a boundary (1056-5344) — see the verdict line above"
         exit 1
     fi

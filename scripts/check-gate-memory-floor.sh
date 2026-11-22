@@ -20,8 +20,25 @@ _gmf_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)" || exit 3
 
 # shellcheck source=/dev/null
 . "$_gmf_root/scripts/plan-binary-probe.sh" 2>/dev/null || true
+# Resolve from the CHECKOUT and absolutise (84f37ff24, class 1401-x76w):
+# resolve_plan_binary falls back to a cwd-relative ./target/release, so a caller
+# in another cwd (the host-memory fixture's driver) found none unless it handed
+# down its own TILLANDSIAS_PLAN_BIN. An explicit one keeps its caller-relative
+# meaning.
+_gmf_resolve_plan() {
+    local _p
+    if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+        resolve_plan_binary 2>/dev/null
+        return
+    fi
+    _p="$(cd "$_gmf_root" && resolve_plan_binary 2>/dev/null)" || return 1
+    case "$_p" in
+        /*) printf '%s' "$_p" ;;
+        *) printf '%s/%s' "$_gmf_root" "${_p#./}" ;;
+    esac
+}
 if command -v resolve_plan_binary >/dev/null 2>&1 \
-    && _gmf_plan="$(resolve_plan_binary 2>/dev/null)" && [ -n "$_gmf_plan" ]; then
+    && _gmf_plan="$(_gmf_resolve_plan)" && [ -n "$_gmf_plan" ]; then
     TILLANDSIAS_REPO_ROOT="$_gmf_root" exec "$_gmf_plan" script run \
         "$_gmf_root/scripts/lua/check-gate-memory-floor.lua" -- "$@"
 fi

@@ -38,7 +38,11 @@ if PLAN == nil or PLAN == "" then PLAN = env.get("TILLANDSIAS_PLAN_BIN") end
 if PLAN == nil or PLAN == "" then PLAN = "tillandsias-plan" end
 local E = { PATH = env.get("PATH"), HOME = env.get("HOME") }
 local function run(argv, ms) return proc.run({ argv = argv, env = E, timeout_ms = ms or 60000 }) end
-local setsid = run({ "sh", "-c", "command -v setsid" }).code == 0
+-- Probe setsid by running it: proc.run denies `sh -c`, so a `command -v`
+-- probe through sh reads "absent" on every host and silently drops the
+-- session the door runs each guard in.
+local setsid = run({ "setsid", "--version" }).status == "exited"
+out.line("note: setsid=" .. tostring(setsid))
 
 local fail, n = 0, 0
 for _, d in ipairs(DECIDERS) do
@@ -55,7 +59,7 @@ for _, d in ipairs(DECIDERS) do
     local r = run(argv, (tonumber(DEADLINE) + 5) * 1000)
     local took = math.floor((time.now_ms() - t0) / 1000)
     if r.code == 124 or r.code == 137 then
-        log.raw("FAIL: " .. d .. " outlived the " .. DEADLINE .. "s door deadline (" .. took .. "s) — the door would skip it, not refuse\n")
+        log.raw("FAIL: " .. d .. " outlived the " .. DEADLINE .. "s door deadline (" .. took .. "s) — the door would skip it, not refuse")
         fail = fail + 1
     else
         out.line("ok:   " .. d .. " finished inside the door deadline (" .. took .. "s, rc=" .. tostring(r.code) .. ")")
@@ -73,10 +77,10 @@ for _, d in ipairs(DECLARED) do
         if m then decl = m:gsub("^—%s*", ""):gsub("^%-%s*", ""); break end
     end
     if decl == nil or decl == "" then
-        log.raw("FAIL: " .. d .. " is neither timed nor declared — it lost its '# preflight: gate-only-decider — <reason>' line, so the door would deadline-skip it in silence (1518-8p5k)\n")
+        log.raw("FAIL: " .. d .. " is neither timed nor declared — it lost its '# preflight: gate-only-decider — <reason>' line, so the door would deadline-skip it in silence (1518-8p5k)")
         fail = fail + 1
     elseif text.contains(hooks, d .. ".sh") then
-        log.raw("FAIL: " .. d .. " declares gate-only-decider but a pre-push hook runs it; the door ignores the declaration and deadline-skips it (1518-8p5k)\n")
+        log.raw("FAIL: " .. d .. " declares gate-only-decider but a pre-push hook runs it; the door ignores the declaration and deadline-skips it (1518-8p5k)")
         fail = fail + 1
     else
         out.line("ok:   " .. d .. " is declared gate-only-decider (the door names it; the gate runs it): " .. decl)
