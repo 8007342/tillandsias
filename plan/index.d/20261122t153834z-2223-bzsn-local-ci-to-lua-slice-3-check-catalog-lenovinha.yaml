@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: local-ci-to-lua-slice-3-check-catalog
+    order: 2223-bzsn
+    status: ready
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      local-ci.sh to Lua, slice 3: the check catalog (check_weight, check_spec_ref, failed_reason_for_check) becomes one table in scripts/lua/local-ci-check-catalog.lua, loaded once by local-ci.sh.
+    context: |
+      Coordinator direction 2026-11-22: slices 2-4 of local-ci.sh to Lua, stacked as drafts until their base lands. The three functions are three parallel case tables keyed by the same sixteen check ids; write_convergence_artifacts calls them per check. One helper call emits every row; bash looks them up from that output.
+    exit_criteria:
+      - "for every catalog id and an unknown id, the Lua rows give the same weight, spec ref and reason as the three bash functions; a mutant reds it"
+      - "local-ci.sh's three functions read the Lua catalog; the case tables are gone"
+    unscoreable: "unpinnable-until-the-guard-exists: the parity fixture is the deliverable."
+    next_action: "Port, parity-test against the bash functions, rewire, open a draft PR stacked on #1337."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: [local-ci-to-lua-slice-2-strict-spec-selection]
+    related: [2220-yj8f]
+    events:
+      - {type: filed, ts: '2026-11-22T15:38:34Z', host: lenovinha, summary: local-ci.sh slice 3 filed}

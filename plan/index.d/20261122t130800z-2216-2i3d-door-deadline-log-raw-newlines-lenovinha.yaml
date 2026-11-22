@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: door-deadline-fixture-prints-no-doubled-blank-lines
+    order: 2216-2i3d
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture]
+    estimated_hours: 1
+    title: |
+      scripts/lua/test-deciders-within-door-deadline.lua passes "...\\n" to log.raw, which appends its own newline, so each FAIL diagnostic is followed by a blank line.
+    context: |
+      Found 2026-11-22 (2209-jw2t): log.raw appends a newline (measured with od -c). Fixed then in the 2209-jw2t ports and the groundtruth port; this file was held until PR #1287 (2181-dlcp) landed, at the coordinator's ruling. Cosmetic: no arm reads stderr.
+    exit_criteria:
+      - "no log.raw call in the fixture passes a trailing newline; the fixture's verdict and arms are unchanged"
+    unscoreable: "cosmetic output; the arms are unchanged by construction"
+    next_action: "Drop the trailing \\n from the three log.raw calls."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [2209-jw2t, 2181-dlcp]
+    events:
+      - {type: filed, ts: '2026-11-22T13:08:00Z', host: lenovinha, summary: doubled newlines in a fixture}

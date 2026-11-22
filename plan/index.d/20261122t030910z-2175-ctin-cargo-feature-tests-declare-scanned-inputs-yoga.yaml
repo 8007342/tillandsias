@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: coordinator option (A) after the cargo-test input scan.
+packets:
+  - packet_id: the-feature-gated-cargo-test-step-declares-its-scanned-inputs-so-docs-only-prs-skip-it
+    order: "2175-ctin"
+    status: in_progress
+    kind: perf
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, cargo, class-selector]
+    estimated_hours: 3
+    owned_files:
+      - build.sh
+      - scripts/lua/scan-cargo-test-repo-roots.lua
+      - scripts/gate-steps.d/954-2175-ctin-cargo-test-inputs.step
+    title: "The feature-gated cargo test step declares its scanned inputs, so docs-only PRs skip it"
+    context: |
+      "rust only" was unsafe: headless embeds ~650 repo files and tests read plan/, assets/, locales/,
+      openspec/ at runtime. scan-cargo-test-repo-roots.lua derives the readable roots from crates/**/*.rs
+      (include_str!, ../ literals against file and crate dir, top-dir literals in rooted files: joins,
+      read_dir, rerun-if-changed); exact files where literal, else the deepest dir/** plus the bare path.
+      _CARGO_FEATURE_TEST_INPUTS in build.sh is generated from it (headless closure, 278 files, 45 roots)
+      and gate step 954 refuses a scanned root the declaration lacks. With a daily proof (2174-dail): an
+      unrelated docs file SKIPS; the one doc the tests read, images/, scripts/lua and crates/ RUN.
+      Workspace tests stay unskippable until lua_source_agreements' repo walk moves to its own step.
+    exit_criteria:
+      - "954 refuses when a scanned root is removed from the declaration; ok on the tree."
+      - "Against a proof, a docs-only change skips cargo-feature-gated-tests; images/, scripts/, crates/ changes run it."
+      - "Step 954 has a darwin second regime."
+    unscoreable: "the land wall time of a docs-only PR is the measure"
+    provenance: "coordinator decision (A), 2026-11-22."
+    events:
+      - type: filed
+        ts: "2026-11-22T03:09:10Z"
+        host: yoga
+        summary: "filed and claimed"
