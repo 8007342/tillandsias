@@ -9,11 +9,11 @@
 #
 # STEP_SCRIPT is a LITERAL path on purpose (1063-nraf).
 STEP_DESC="Checking the opencode tool-start follower (1385-h6uz)"
-STEP_SCRIPT="scripts/test-opencode-tool-start-follower.sh"
+STEP_LUA="scripts/lua/test-opencode-tool-start-follower.lua"
 STEP_ERROR="the prompted opencode lane no longer announces tool calls at start (1385-h6uz)"
 STEP_OK="opencode tool-start follower announces calls at start and fails loud without a log"
 STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-09-26 darwin ok:opencode-tool-start-follower:7/7"
 # ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
 # consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
 # cut: the step's own script plus every repo path it names literally.
-STEP_READS="images/default/Containerfile images/default/entrypoint-forge-opencode.sh images/default/opencode-tool-start-follower.sh scripts/test-opencode-tool-start-follower.sh"
+STEP_READS="images/default/Containerfile images/default/entrypoint-forge-opencode.sh images/default/opencode-tool-start-follower.sh scripts/lua/test-opencode-tool-start-follower.lua"
