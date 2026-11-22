@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by yoga 2026-11-22: found during a shell-to-lua port attempt (batch 2).
+packets:
+  - packet_id: check-tracked-files-unwritten-silently-skips-every-tracked-symlink-to-a-directory
+    order: "2188-qaaj"
+    status: ready
+    kind: bug
+    priority: p3
+    desired_release: v0.5
+    pickup_role: any
+    capability_tags: [gate, guard]
+    estimated_hours: 1
+    owned_files:
+      - scripts/check-tracked-files-unwritten.sh
+    title: "check-tracked-files-unwritten silently skips every tracked symlink to a directory"
+    context: |
+      The guard hashes `git ls-files -z | xargs -0 -r sha256sum 2>/dev/null`. Measured on yoga's main checkout:
+      15,500 tracked paths, 15,406 hashed. The 94 missing are ALL symlinks to directories (the .claude/skills/*
+      and .agents/skills/* links): sha256sum fails with EISDIR and the 2>/dev/null hides it. The 3 symlinks to
+      files are hashed through their targets; nothing is missing or broken. Effect: retargeting one of those
+      94 symlinks is not detected (their contents are covered through the real paths). Fix: record a symlink
+      by its target (`readlink`) instead of hashing through it, and refuse, never swallow, an unhashable path.
+    exit_criteria:
+      - "Every tracked path is in the snapshot (a symlink by its link target); retargeting a tracked dir symlink is reported; an unhashable path refuses instead of being dropped."
+    unscoreable: "the fixture is the measure"
+    provenance: "yoga batch-2 port attempt 2026-11-22; coordinator asked for the row."
+    events:
+      - type: filed
+        ts: "2026-11-22T06:26:01Z"
+        host: yoga
+        summary: "filed"

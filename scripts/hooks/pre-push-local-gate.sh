@@ -284,6 +284,22 @@ while read -r _l _ls _remote_ref _rs; do
             # passing the gate it exists to protect is not a mechanism.
             _all_salvage=0; _all_work=0
             ;;
+        refs/attest/native-lint/*)
+            # NATIVE-LINT ATTESTATION REFS (order 2112-nlrf). Written by
+            # scripts/attest-native-lint.sh --ref after its clippy run passes: a
+            # PARENTLESS commit whose tree IS the linted crate subtree, named for
+            # that subtree's sha. It is not a branch and moves no branch, so the
+            # tree stamp measures the wrong subject. Exempt ONLY when the pushed
+            # object proves that shape; anything else under this name is gated.
+            _att_name="${_remote_ref##*/}"
+            _att_tree="$(git rev-parse --verify --quiet "$_ls^{tree}" 2>/dev/null)" || _att_tree=""
+            _att_parents="$(git rev-list --parents -n 1 "$_ls" 2>/dev/null)" || _att_parents=""
+            if [[ -n "$_att_tree" && "$_att_tree" == "$_att_name" && "$_att_parents" == "$_ls" ]]; then
+                _all_salvage=0; _all_work=0
+            else
+                _all_salvage=0; _all_marker=0; _all_work=0
+            fi
+            ;;
         refs/heads/salvage/*)
             _all_marker=0; _all_work=0   # a salvage ref is not the work lane (1315-4a7j regression caught by litmus:salvage-net-roundtrip, 2026-09-21)
             # DELETION PROTECTION (874-w2gc). The exemption used to wave
@@ -315,7 +331,7 @@ if [[ "$_any_ref" -eq 1 && "$_all_work" -eq 1 ]]; then
     WORK_REF_LANE=1
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_marker" -eq 1 ]]; then
-    echo "${GRN}✓ local gate: coordination marker ref under refs/tillandsias/ — exempt by design (1176-9vqn); it is not a branch, no gate reads it and no release ships it${RST}" >&2
+    echo "${GRN}✓ local gate: coordination marker ref (refs/tillandsias/, 1176-9vqn) or self-verifying native-lint attestation (refs/attest/native-lint/, 2112-nlrf) — exempt by design; it is not a branch and moves none${RST}" >&2
     exit 0
 fi
 if [[ "$_any_ref" -eq 1 && "$_all_salvage" -eq 1 ]]; then
@@ -2337,9 +2353,9 @@ fi
 # ORDER 1577-g96z — A WORK PUSH IS TOLD WHAT IT OWES. On a work/<order> push,
 # a change that is DUE to a carried obligation (methodology/convergence.yaml
 # carried_obligations) and neither pays an item nor carries a Carried-Waiver
-# trailer gets ONE warn:pre-push:carried-obligations line naming the offered
-# item and the waiver line, and the push goes on (gentle stage: silence is
-# refused only at landing). Outside the work lane it is not run at all.
+# trailer is REFUSED here (2194-cspr; it was one warn line until 2026-11-22), naming the offered
+# item and the waiver line, because the land queue refuses the same silence at
+# landing an hour later. Outside the work lane it is not run at all.
 if [[ "$WORK_REF_LANE" == "1" && -f scripts/lua/check-carried-obligations.lua ]]; then
     _co_plan="$( . scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null )" || _co_plan=""
     if [[ -n "$_co_plan" ]] && grep -qx script <<<"$("$_co_plan" capabilities 2>/dev/null)"; then
@@ -2348,9 +2364,20 @@ if [[ "$WORK_REF_LANE" == "1" && -f scripts/lua/check-carried-obligations.lua ]]
         while IFS= read -r _co_line; do
             case "$_co_line" in
                 carried:*:due:*)
-                    TILLANDSIAS_HOOK_DECIDER="carried-obligations" \
-                    refuse "${_co_line} — this change touches the backlog's area and neither pays an item nor waives (1577-g96z)" \
-                           "$(grep -E '^    |^Carried-Waiver:' <<<"$_co_err")" ;;
+                    # ORDER 2194-cspr (coordinator 2026-11-22): REFUSED HERE, not
+                    # warned. `refuse` degrades to a warning on the work lane, so a
+                    # carried-silent change was pushed, queued, and evicted by the
+                    # land queue's --landing check an hour later: about 8 gate
+                    # slots in one day. The remedy costs one commit, so the author
+                    # gets it now. `due:` is printed only when the change neither
+                    # pays an item nor carries a waiver git can read.
+                    echo "" >&2
+                    echo "${RED}✗ pre-push refused: ${_co_line} — this change touches the backlog's area and neither pays an item nor waives (1577-g96z, 2194-cspr)${RST}" >&2
+                    grep -E '^    |^Carried-Waiver:' <<<"$_co_err" | sed 's/^/  /' >&2
+                    echo "  why: the land queue evicts a carried-silent change at --landing, after it has waited its turn" >&2
+                    echo "  remedy: port the offered item, or add the Carried-Waiver line above to the LAST paragraph of a commit message (git reads trailers only there), then push again" >&2
+                    echo "" >&2
+                    exit 1 ;;
             esac
         done <<<"$_co_out"
     fi

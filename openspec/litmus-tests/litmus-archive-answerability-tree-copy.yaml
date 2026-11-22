@@ -1,0 +1,35 @@
+# @trace spec:ci-release
+# @trace order:2187-9cws, order:1392-6tbs
+#
+# MEASURED on yolanda-windows 2026-11-21 (msys regime run of step 955-831-ezea):
+# the archiver's answerability check copies the working tree, and an IGNORED
+# nix `result` symlink pointing at a missing /nix/store path made MSYS tar fail
+# (fail:archive-answerability:tree-copy-failed) before anything was judged.
+# Red before 2187-9cws: the copy carries the dangling link (the MUTANT arm).
+name: litmus:archive-answerability-tree-copy
+spec: ci-release
+phase: pre-build
+description: The archive-answerability tree copy skips an ignored dangling symlink on both the cp and the tar path, and still copies tracked symlinks
+severity: medium
+size: instant
+
+preconditions:
+  - the plan binary (resolve_plan_binary), bash, git; scratch repo under target/plan-scratch; no network, no podman
+
+critical_path:
+  - step: "an ignored dangling result symlink is pruned from the cp and the tar copy; a tracked link is kept; removing the prune loop copies it again"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-archive-answerability-tree-copy.lua 2>&1"
+    timeout_ms: 120000
+    expected_behavior: "ok:archive-answerability-tree-copy:4 arms"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "four arms: premise, cp, tar, mutant"
+  log_fields:
+    spec: "ci-release"
+    test: "archive-answerability-tree-copy"
+
+rollback:
+  on_failure: "read the FAIL lines; the block is BEGIN-TREE-COPY..END-TREE-COPY in scripts/check-archive-answerability.sh"
+  command: "grep -n 'BEGIN-TREE-COPY\\|2187-9cws\\|END-TREE-COPY' scripts/check-archive-answerability.sh"

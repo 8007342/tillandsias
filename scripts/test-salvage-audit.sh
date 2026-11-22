@@ -57,7 +57,7 @@ line_matches() {
 have_refs=$(git -C "$ROOT" for-each-ref --format='%(refname)' refs/remotes/origin/salvage 2>/dev/null | wc -l)
 
 TMPDIR_ARM2B="$(mktemp -d)"
-trap 'rm -rf "$TMPDIR_ARM2B"; git -C "$ROOT" update-ref -d "refs/remotes/${SALVAGE_PROBE_REMOTE:-origin}/arm2probe-1226/stale" 2>/dev/null || true' EXIT
+trap 'rm -rf "$TMPDIR_ARM2B"' EXIT
 # ── THE CEILING (order 1672-8i7t) ───────────────────────────────────────────
 # This was a fixed `timeout 300`, and the arms below then read `tail -1` of the
 # capture as the verdict. On yolanda-windows 2026-10-13 (tillandsias-build,
@@ -207,36 +207,34 @@ _probe_ref="refs/remotes/${SALVAGE_PROBE_REMOTE:-origin}/arm2probe-1226/stale"
 #      `<branch>-is-AHEAD` over `ref-may-be-AHEAD`. A commit created now is
 #      newer than any branch edit, so the probe commit is dated deliberately.
 #
-# Built with plumbing (hash-object / write-tree / commit-tree) against a
-# TEMPORARY index, so the working tree and the real index are never touched.
+# ORDER 2197-hgit: BUILT IN A SCRATCH REPO, never the real checkout. The arm
+# used to read the real HEAD's history of VERSION and write a probe ref and
+# objects into the real .git, so its answer depended on which branch the host
+# had checked out. Now a two-commit scratch repo carries the three properties
+# above by construction, and a copy of the audit runs there (it binds to the
+# repo its own file sits in).
 _probe_file="VERSION"
-_probe_tip="$(git -C "$ROOT" rev-list -n1 HEAD -- "$_probe_file" 2>/dev/null || true)"
-_probe_base="$(git -C "$ROOT" rev-parse --verify -q "${_probe_tip}^" 2>/dev/null || true)"
-_probe_new="$(git -C "$ROOT" rev-parse --verify -q HEAD 2>/dev/null || true)"
-_branch_edit="$(git -C "$ROOT" log -1 --format=%ct HEAD -- "$_probe_file" 2>/dev/null || echo 0)"
 _probe_commit=""
-if [ -n "$_probe_base" ] && [ -n "$_probe_new" ] && [ "${_branch_edit:-0}" -gt 0 ]; then
-    _tmpidx="$TMPDIR_ARM2B/index"
-    _blob="$(printf 'arm2probe-1226\n' | git -C "$ROOT" hash-object -w --stdin 2>/dev/null || true)"
-    if [ -n "$_blob" ]; then
-        GIT_INDEX_FILE="$_tmpidx" git -C "$ROOT" read-tree "$_probe_base" 2>/dev/null
-        GIT_INDEX_FILE="$_tmpidx" git -C "$ROOT" update-index --cacheinfo "100644,$_blob,$_probe_file" 2>/dev/null
-        _tree="$(GIT_INDEX_FILE="$_tmpidx" git -C "$ROOT" write-tree 2>/dev/null || true)"
-        if [ -n "$_tree" ]; then
-            _when=$(( _branch_edit - 60 ))
-            _probe_commit="$(GIT_AUTHOR_DATE="$_when +0000" GIT_COMMITTER_DATE="$_when +0000" \
-                GIT_AUTHOR_NAME=arm2probe GIT_AUTHOR_EMAIL=arm2probe@invalid \
-                GIT_COMMITTER_NAME=arm2probe GIT_COMMITTER_EMAIL=arm2probe@invalid \
-                git -C "$ROOT" commit-tree "$_tree" -p "$_probe_base" -m 'arm2probe-1226 stale snapshot' 2>/dev/null || true)"
-        fi
-    fi
-fi
+_sr="$TMPDIR_ARM2B/scratch"
+_sg() { git -C "$_sr" -c user.name=arm2probe -c user.email=arm2probe@invalid -c commit.gpgsign=false "$@"; }
+mkdir -p "$_sr/scripts" && git -C "$_sr" init -q 2>/dev/null \
+    && cp "$CHECK" "$_sr/scripts/salvage-audit.sh" \
+    && printf 'v1\n' > "$_sr/$_probe_file" && _sg add -A \
+    && GIT_AUTHOR_DATE="1700000000 +0000" GIT_COMMITTER_DATE="1700000000 +0000" _sg commit -qm base \
+    && _probe_base="$(_sg rev-parse HEAD)" \
+    && printf 'v2\n' > "$_sr/$_probe_file" && _sg add -A \
+    && GIT_AUTHOR_DATE="1700001000 +0000" GIT_COMMITTER_DATE="1700001000 +0000" _sg commit -qm 'branch edit' \
+    && _probe_new="$(_sg rev-parse HEAD)" \
+    && _sg checkout -q "$_probe_base" 2>/dev/null \
+    && printf 'arm2probe-1226\n' > "$_sr/$_probe_file" && _sg add -A \
+    && GIT_AUTHOR_DATE="1700000940 +0000" GIT_COMMITTER_DATE="1700000940 +0000" _sg commit -qm 'arm2probe-1226 stale snapshot' \
+    && _probe_commit="$(_sg rev-parse HEAD)" \
+    && _sg checkout -q "$_probe_new" 2>/dev/null || _probe_commit=""
 if [ -z "$_probe_commit" ]; then
     bad "ARM 2b: could not construct a stale snapshot — the positive path is UNTESTED, which is the condition this arm exists to remove"
 else
-    git -C "$ROOT" update-ref "$_probe_ref" "$_probe_commit"
-    _out2b="$(timeout 120 bash "$CHECK" --branch "$_probe_new" --pattern 'refs/heads/arm2probe-1226/' 2>&1)"
-    git -C "$ROOT" update-ref -d "$_probe_ref" 2>/dev/null || true
+    _sg update-ref "$_probe_ref" "$_probe_commit"
+    _out2b="$(timeout 120 bash "$_sr/scripts/salvage-audit.sh" --branch "$_probe_new" --pattern 'refs/heads/arm2probe-1226/' 2>&1)"
     _hit2b="$(printf '%s' "$_out2b" | grep -c 'is-AHEAD' || true)"
     if [ "${_hit2b:-0}" -gt 0 ]; then
         ok "ARM 2b: a CONSTRUCTED stale snapshot is labelled is-AHEAD — the positive path ran on this host"

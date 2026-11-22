@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: on-darwin-build-sh-preflight-crashes-bash-3-2-with-heap-corruption-once-the-gate-roster-reaches-260-guards-so-one-more-gate-step-turns-every-mac-preflight-into-exit-133
+    field: next_action
+    value: 'Criteria 1 and 2 are MET on darwin (tlatoanis-macbook-air, /bin/bash 3.2.57, linux-next 24bfb0ea5, 2026-11-19): test-preflight-door-many-guards.lua gives ok:2 arms, N=300, with rc=0 and no new bash crash report. Real ./build.sh --preflight runs at sum=298 and 299 exited 0. LEFT, criterion 3 only: build.sh still has no named verdict for a crashed door, so a signal death of the door still surfaces as a bare 128+N. Add a refused:preflight:door-crashed:<signal> line on the exit path, plus a fixture that kills the door. Then close. The p1 impact is gone, so this is p3 hardening.'
+    ts: "2026-11-19T23:51:22Z"
+    host: macbookair
+    replaces_sha256: "cd3a5d0bdb1685a1e1d44b0d6d0bbd66b20b81dd5d099173107f83d8d514be5b"

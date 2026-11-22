@@ -38,7 +38,11 @@ if PLAN == nil or PLAN == "" then PLAN = env.get("TILLANDSIAS_PLAN_BIN") end
 if PLAN == nil or PLAN == "" then PLAN = "tillandsias-plan" end
 local E = { PATH = env.get("PATH"), HOME = env.get("HOME") }
 local function run(argv, ms) return proc.run({ argv = argv, env = E, timeout_ms = ms or 60000 }) end
-local setsid = run({ "sh", "-c", "command -v setsid" }).code == 0
+-- Probe setsid by running it: proc.run denies `sh -c`, so a `command -v`
+-- probe through sh reads "absent" on every host and silently drops the
+-- session the door runs each guard in.
+local setsid = run({ "setsid", "--version" }).status == "exited"
+out.line("note: setsid=" .. tostring(setsid))
 
 local fail, n = 0, 0
 for _, d in ipairs(DECIDERS) do

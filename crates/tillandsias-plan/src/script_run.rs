@@ -104,6 +104,29 @@ fn runner_not_found(text: &str) -> bool {
 /// a named `skip:` wins over `could-not-run:` (check-gate-memory-floor prints
 /// both and RAN); the guard's own words win over the runner's rc; rc 124 is a
 /// deadline only when the guard said neither.
+/// Order 2193-vtbl: verdict words outside the house grammar that the remaining
+/// shell deciders print today, each with the ONLY exit codes their .sh pairs it
+/// with (derived 2026-11-22 from every `echo "<word>:` in scripts/check-*,
+/// verify-*, guard-*.sh and the `exit N` that follows it). verdict.emit accepts
+/// a line starting with one of these only with one of its codes, so a port is
+/// byte-identical and classify() books it as it books the .sh. Words seen only
+/// as diagnostics (note:, usage:, summary:) are deliberately absent.
+pub(crate) const LEGACY_VERDICT_WORDS: &[(&str, &[i32])] = &[
+    ("unavailable:", &[2]),
+    ("stale:", &[0, 1, 2]),
+    ("due:", &[1]),
+    ("fail:", &[0, 1, 2]),
+    ("red:", &[1]),
+    ("skipped:", &[0]),
+    ("advisory:", &[0]),
+    ("unattributable:", &[2, 3]),
+    ("non-opsx:", &[2, 3]),
+    ("launch-dirt:", &[5]),
+    ("never:", &[1]),
+    ("drift:", &[1]),
+    ("missing:", &[0, 1]),
+];
+
 pub fn classify(rc: i32, status: Option<&str>, text: &str) -> Kind {
     // Advisory lines are deliberately verbatim legacy interfaces rather than a
     // new prefix. Only a successful, non-timeout run may report one: otherwise
@@ -413,15 +436,31 @@ fn register(
                 // (check-bare-metal-host-initialized, read by check-fleet-membership)
                 // print one `todo:<checker>:<what>:<cmd>` line with rc 1; it books
                 // as Refused through the same exit-code-first classify().
+                // order 2193-vtbl: LEGACY_VERDICT_WORDS — a reviewed table of the
+                // other verdict words the remaining shell deciders print, each with
+                // the exit codes its .sh actually pairs it with. A port stays
+                // byte-identical (same line, same rc), and classify() books it by
+                // that rc exactly as it books the .sh today, so no class changes.
+                // A code outside a word's set is refused: the table is the
+                // interface, not a licence to invent a new pairing.
                 let kind_ok = [
                     "ok:", "skip:", "refused:", "blocked:", "could-not-run:", "violation:",
                     "degraded:", "down:", "todo:",
                 ]
                 .iter()
                 .any(|k| line.starts_with(k));
-                if !kind_ok || !(0..=3).contains(&code) {
+                let legacy = LEGACY_VERDICT_WORDS.iter().find(|(w, _)| line.starts_with(w));
+                let allowed = match legacy {
+                    Some((_, codes)) => codes.contains(&code),
+                    None => kind_ok && (0..=3).contains(&code),
+                };
+                if !allowed {
+                    let why = match legacy {
+                        Some((w, codes)) => format!("'{w}' is a legacy word whose callers pair it only with exit {codes:?}"),
+                        None => "the line must start with ok:/skip:/refused:/blocked:/could-not-run:/violation:/degraded:/down:/todo: (or a word in LEGACY_VERDICT_WORDS) and the code be 0-3".to_string(),
+                    };
                     return Err(LuaError::RuntimeError(format!(
-                        "verdict.emit: '{line}' with code {code} — the line must start with ok:/skip:/refused:/blocked:/could-not-run:/violation:/degraded:/down:/todo: and the code be 0-3"
+                        "verdict.emit: '{line}' with code {code} — {why}"
                     )));
                 }
                 slot.lock().unwrap().get_or_insert(Verdict {

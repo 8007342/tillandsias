@@ -1,0 +1,37 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: systemic row assigned by macuahuitl-fedora 2026-11-21 after yoga's step 885 red.
+packets:
+  - packet_id: preflight-rebuilds-stale-plan-binary
+    order: "2186-x5kv"
+    status: implemented
+    kind: fix
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed, gate, plan-binary]
+    estimated_hours: 1
+    owned_files:
+      - build.sh
+      - scripts/lua/test-preflight-rebuilds-stale-plan-binary.lua
+      - scripts/gate-steps.d/886-2186-x5kv.step
+      - scripts/lua/test-preflight-door-many-guards.lua
+    title: "The preflight door rebuilds a stale plan binary once and re-checks it, refusing only if it is still stale"
+    context: |
+      Every host hit refused:preflight:stale-plan-binary several times on 2026-11-21. On yoga it surfaced as step
+      885-1753-p925 failing with "rc=1 (no verdict)", read as a content red. The remedy was always the same incremental
+      cargo build. The door now runs it once (build.sh already runs inside the builder toolbox on Silverblue, so the cargo
+      is the toolbox's) and asks the binary again; a still-stale binary or a failed build refuses as before. The --ci-full
+      twin (1925-77h4) already did this. TILLANDSIAS_PREFLIGHT_CARGO is the fixture's seam, because build.sh puts
+      ~/.cargo/bin first on PATH. Step 885's fixture now reports the nested door's stale-binary refusal as could-not-run
+      and prints the door's own line for any other early stop.
+    exit_criteria:
+      - "Step 886-2186-x5kv: a stale binary is rebuilt once and the door proceeds (ok:preflight:ran=1); a still-stale or failed rebuild refuses; a current binary is never rebuilt."
+      - "Mutant: with the rebuild removed, arms 1-3 fail (measured 2026-11-21)."
+    unscoreable: "a gate-door change: scored by the fixture's four arms and the mutant above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-21: when the door or gate finds the binary stale, rebuild it and re-check, refusing only if the rebuild fails."
+    events:
+      - type: filed
+        ts: "2026-11-22T05:30:41Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2186-x5kv"

@@ -18,15 +18,10 @@ severity: high
 size: instant
 
 preconditions:
-  - workspace contains scripts/test-e2e-step2-macos.sh
+  - workspace contains scripts/lua/test-e2e-step2-macos.lua
 
 critical_path:
-  - step: "the fixture parses and carries its exec bit"
-    command: "bash -n scripts/test-e2e-step2-macos.sh && test -x scripts/test-e2e-step2-macos.sh && echo 'ok: reset-keeps-models-macos-fixture-parses'"
-    timeout_ms: 3000
-    expected_behavior: "ok: reset-keeps-models-macos-fixture-parses"
-
   - step: "flag set spares models/ and names it; flag unset destroys everything; the stripped mutant destroys models under the flag"
-    command: "bash scripts/test-e2e-step2-macos.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-e2e-step2-macos.lua 2>&1"
     timeout_ms: 60000
-    expected_behavior: "PASS: test-e2e-step2-macos"
+    expected_behavior: "ok:e2e-step2-macos:5"

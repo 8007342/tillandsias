@@ -1,0 +1,14 @@
+# Gate step 2194-cspr — data, not code (order 1072-b7eq).
+#
+# A carried-silent work/<order> push is REFUSED by the pre-push hook, so the
+# author sees it at push time instead of a land-queue eviction an hour later.
+# The fixture runs the hook's own carried block against a stub plan binary.
+STEP_DESC="Checking the pre-push hook refuses a carried-silent work push (2194-cspr)"
+STEP_SCRIPT="scripts/test-pre-push-refuses-carried-silent.sh"
+STEP_ERROR="the pre-push hook no longer refuses a carried-silent work push, or refuses a waived one (2194-cspr) — see the FAIL lines above"
+STEP_OK="pre-push carried-silent refusal holds"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/test-pre-push-refuses-carried-silent.sh scripts/hooks/pre-push-local-gate.sh scripts/plan-binary-probe.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:pre-push-refuses-carried-silent:4"

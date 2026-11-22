@@ -176,15 +176,26 @@ specs:
   last_verified: '2026-09-20'
 YAML
 
+# ORDER 2178-tmls (priority:build-speed). THE STEP'S OWN COMMAND, NOT THE
+# RUNNER. This arm judges the litmus step's COMMAND (the defect was its
+# `| tail -1`), so it runs that command, read from the YAML, exactly as the
+# runner would: bash, cwd = the checkout. It used to go through
+# run-litmus-test.sh, whose preamble builds tillandsias-podman-cli and the
+# router sidecar with cargo and reads the live timing logs: 21 s on yoga, over
+# 8 minutes on a cold tree, and a closure of the whole scripts/ tree. The
+# runner's own pass-through and adjudication are pinned by its own fixtures
+# (test-litmus-step-pipefail, test-litmus-step-timing, ...), which still run.
+arms_cmd="$(sed -n 's/^[[:space:]]*command: "\(bash scripts\/test-tool-materialize\.sh[^"]*\)"$/\1/p' "$STEP_FILE" | head -1)"
 step_out="$TMP/arm1.out"
-TILLANDSIAS_TOOL_MATERIALIZE_FORCE_MARGIN_FAIL=1 \
-TILLANDSIAS_TOOL_MATERIALIZE_LOADAVG=0.01 \
-TILLANDSIAS_TOOL_MATERIALIZE_AVAIL_KB=99999999 \
-TILLANDSIAS_LITMUS_BINDINGS="$TMP/bindings.yaml" \
-TILLANDSIAS_LITMUS_TESTS_DIR="$TMP/tests" \
-    scripts/run-${LIT}-test.sh ci-release --phase pre-build --size instant --compact \
-    > "$step_out" 2>&1
-step_rc=$?
+if [ -z "$arms_cmd" ]; then
+    echo "no step in $STEP_FILE runs scripts/test-tool-materialize.sh" > "$step_out"; step_rc=0
+else
+    TILLANDSIAS_TOOL_MATERIALIZE_FORCE_MARGIN_FAIL=1 \
+    TILLANDSIAS_TOOL_MATERIALIZE_LOADAVG=0.01 \
+    TILLANDSIAS_TOOL_MATERIALIZE_AVAIL_KB=99999999 \
+        bash -c "$arms_cmd" > "$step_out" 2>&1
+    step_rc=$?
+fi
 
 if [ "$step_rc" -eq 0 ]; then
     bad "ARM 1: the litmus step PASSED while an arm was forced to fail — the step is not adjudicating on the fixture's verdict at all"

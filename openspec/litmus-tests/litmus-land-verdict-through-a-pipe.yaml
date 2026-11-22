@@ -57,6 +57,6 @@ critical_path:
     expected_behavior: "ok:land-verdict-pipe-fixture:all"
 
   - step: "auth-failed retry (1164-cftu): one auth failure then success lands, two refuse as before, no gh auth command on either path"
-    command: "bash scripts/test-land-auth-retry.sh | tail -1"
+    command: "\"$(. scripts/plan-binary-probe.sh && resolve_plan_binary)\" script run scripts/lua/test-land-auth-retry.lua 2>/dev/null | tail -1"
     timeout_ms: 120000
     expected_behavior: "ok:land-auth-retry-fixture:all"
