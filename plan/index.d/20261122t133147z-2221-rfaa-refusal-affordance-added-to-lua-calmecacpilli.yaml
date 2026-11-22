@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by calmecacpilli: shell-to-lua row, assigned by macuahuitl-fedora 2026-11-22.
+packets:
+  - packet_id: refusal-affordance-added-to-lua
+    order: "2221-rfaa"
+    status: implemented
+    kind: chore
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [shell-to-lua, lua]
+    estimated_hours: 2
+    owned_files:
+      - scripts/check-refusal-affordance-added.sh
+      - scripts/lua/check-refusal-affordance-added.lua
+      - scripts/test-refusal-affordance-added.sh
+      - build.sh
+      - scripts/relay-preflight.sh
+      - scripts/test-relay-preflight.sh
+      - scripts/rank-refusal-hits.sh
+      - scripts/test-credential-channel-affordances.sh
+      - scripts/lua/test-finalize-cycle-affordances.lua
+      - scripts/lua/test-release-preflight-affordances.lua
+    title: "check-refusal-affordance-added is Lua, with the same windows, grammar and stderr; the .sh is deleted and every caller rebound"
+    context: |
+      The ERE tests go through expect.matches (Rust regex) with the .sh's own patterns, tested LINE BY LINE as grep
+      did. A first cut joined each window into one string; [[:space:]] then crossed the newline, and fixture arm 5 caught
+      an empty affordance-ok: marker being admitted. The repo is the caller's checkout (git in its PWD), so the fixture's
+      scratch repos no longer copy the guard in. --audit keeps the .sh's summary line verbatim (rank-refusal-hits.sh greps
+      for it) and then prints the house verdict ok:refusal-affordance-audit:<n> sites; no caller reads the summary as the
+      last line. Rebound: build.sh (_run_lua_decider), relay-preflight.sh (_lua_runner, as for its other Lua deciders) and
+      its fixture's seed, rank-refusal-hits.sh, test-credential-channel-affordances.sh, the finalize-cycle and
+      release-preflight affordance fixtures, and four STEP_READS.
+    exit_criteria:
+      - "Live tree: --audit is identical site for site to the .sh's (514 sites: covered=328 bare=186), plus the trailing ok: line; the default mode gives ok:refusal-affordance-added:0 checked on both (Lua 1.5 s vs 7.2 s for the audit)."
+      - "test-refusal-affordance-added 8/8; test-relay-preflight 11/11; test-rank-refusal-hits PASS; test-credential-channel-affordances, test-finalize-cycle-affordances and test-release-preflight-affordances green."
+      - "Mutant parity: with the why+remedy rule removed, the fixture reds 7/8 on arm 4 with the same REFUSED line through the .sh before and the Lua after (measured 2026-11-22)."
+    unscoreable: "a port: scored by the fixtures, the audit agreement and the mutant parity above."
+    next_action: "Land."
+    provenance: "macuahuitl-fedora 2026-11-22: take refusal-affordance-added next."
+    events:
+      - type: filed
+        ts: "2026-11-22T13:31:47Z"
+        host: calmecacpilli
+        summary: "filed and implemented on work/2221-rfaa"

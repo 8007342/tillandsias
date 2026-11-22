@@ -12,7 +12,7 @@
 # notes quote the verdict. That corpus is the rank. Logs given with --logs are
 # reported in their own column and NEVER enter the rank.
 #
-# Input: the per-site audit of scripts/check-refusal-affordance-added.sh
+# Input: the per-site audit of scripts/lua/check-refusal-affordance-added.lua
 # (slice 4, 1470-v67y): `bare <file>:<line> <token>` lines.
 #
 # Usage: rank-refusal-hits.sh [--top N] [--ledger DIR]... [--audit-file F] [--logs F...]
@@ -42,14 +42,18 @@ trap 'rm -rf "$work"' EXIT
 if [ -n "$audit_file" ]; then
     cp "$audit_file" "$work/audit"
 else
-    bash "$ROOT/scripts/check-refusal-affordance-added.sh" --audit > "$work/audit" 2>/dev/null
+    # 2221-rfaa: the audit is Lua. No runner means no audit, and the empty
+    # audit is refused by name just below (no-bare-sites), never ranked.
+    _pb="$(cd "$ROOT" && . scripts/plan-binary-probe.sh && resolve_plan_binary 2>/dev/null)" || _pb=""
+    case "$_pb" in ./*) _pb="$ROOT/${_pb#./}" ;; esac
+    (cd "$ROOT" && "$_pb" script run scripts/lua/check-refusal-affordance-added.lua -- --audit) > "$work/audit" 2>/dev/null
 fi
 grep '^bare ' "$work/audit" > "$work/bare" || true
 _afford() { printf '  why: %s\n  remedy: %s\n' "$1" "$2" >&2; }
 if [ ! -s "$work/bare" ]; then
     echo "blocked:rank-refusal-hits:no-bare-sites"
     _afford "the audit listed no bare verdict sites, which is either a broken audit or a finished conversion, and a rank cannot tell which" \
-        "run scripts/check-refusal-affordance-added.sh --audit and read its summary line: sites=0 means the audit found nothing to scan (fix the audit); bare=0 with sites>0 means the conversion is done"
+        "run tillandsias-plan script run scripts/lua/check-refusal-affordance-added.lua -- --audit and read its summary line: sites=0 means the audit found nothing to scan (fix the audit); bare=0 with sites>0 means the conversion is done"
     exit 1
 fi
 

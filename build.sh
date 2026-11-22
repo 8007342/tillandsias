@@ -5910,10 +5910,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # verdict (refused:/blocked:/violation:) that ships without its
     # affordance: why it refused and what clears it (operator ruling
     # 2026-09-17). Diff-scoped like the two above, so the ~500 bare standing
-    # sites (`check-refusal-affordance-added.sh --audit`, per site) are
+    # sites (`check-refusal-affordance-added.lua --audit`, per site) are
     # converted by the 1247 slices rather than blocking every push.
     _step "Checking newly-added refusals carry an affordance (1470-v67y)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/check-refusal-affordance-added.sh" 2>&1; then
+    if ! _run_lua_decider "scripts/lua/check-refusal-affordance-added.lua" 2>&1; then
         _error "a newly-added refusal says neither why it refused nor what clears it (1247-amcu); the site and the remedy are printed above"
         exit 1
     fi
