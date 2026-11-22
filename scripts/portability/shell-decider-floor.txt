@@ -368,7 +368,6 @@ scripts/test-plan-binary-copy-refresh.sh
 scripts/test-plan-binary-locus-native.sh
 scripts/test-plan-binary-probe-release-over-debug.sh
 scripts/test-plan-binary-probe-usage-determinism.sh
-scripts/test-plan-binary-probe-usage-population.sh
 scripts/test-plan-binary-probe.sh
 scripts/test-plan-binary-runnability-precondition.sh
 scripts/test-plan-field-get.sh

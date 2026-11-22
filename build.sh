@@ -7220,8 +7220,8 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _step "Checking the probe-usage guard walks its whole population (1128-j9fc)..."
-    if ! _run bash "$SCRIPT_DIR/scripts/test-plan-binary-probe-usage-population.sh" 2>&1; then
-        _error "scripts/test-plan-binary-probe-usage-population.sh failed — this fixture asserts that check-plan-binary-probe-usage.sh WALKS repo-root *.sh and scripts/gate-steps.d/*.step, not merely that it passes. An unwalked surface and a clean surface produce the same verdict, which is how that guard was found too narrow three times; read which arm failed rather than assuming the binding is at fault"
+    if ! _run_lua_decider "scripts/lua/test-plan-binary-probe-usage-population.lua" 2>&1; then
+        _error "scripts/lua/test-plan-binary-probe-usage-population.lua failed — this fixture asserts that check-plan-binary-probe-usage.sh WALKS repo-root *.sh and scripts/gate-steps.d/*.step, not merely that it passes. An unwalked surface and a clean surface produce the same verdict, which is how that guard was found too narrow three times; read which arm failed rather than assuming the binding is at fault"
         exit 1
     fi
     _step "Checking test-podman-sync-budgets (1063-nraf; 116ms)..."
