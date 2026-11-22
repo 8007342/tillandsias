@@ -18,17 +18,16 @@
 -- tillandsias-headless matches file names only, and signature_hash is a hash
 -- of the whole file, which nothing recomputes per line or chains.
 --
--- KNOWN BUG CARRIED ON PURPOSE (row 2226): max_residual_reason is read from
--- failed_checks[i] with the index of the catalog-ordered failure list, as the
--- bash writer did, so this slice's parity evidence stays pure. Its fix is its
--- own PR.
---
--- SECOND KNOWN BUG CARRIED (row 2227): the bash writer set `trap ... RETURN`
--- to delete its temp files, then SOURCED plan-binary-probe.sh. A RETURN trap
--- also fires when a sourced file finishes, so the file of residual reasons was
--- deleted before it was read and top_residual_reasons was always []. This
--- writer still builds the list and writes [] while CARRY_EMPTY_TOP_RESIDUAL
--- is set; the fix PR drops the flag.
+-- TWO BEHAVIOUR CHANGES from the bash writer, both bug fixes (2226-63ta,
+-- 2227-rqgw; slice 4 carried them so its parity evidence stayed pure):
+--   * max_residual_reason is the heaviest failure's OWN reason. The bash
+--     writer read FAILED_CHECKS[i] with the index of the catalog-ordered
+--     failure list, so when failures arrived out of catalog order the spec
+--     and the reason could belong to two different checks.
+--   * top_residual_reasons lists every failure. The bash writer set
+--     `trap 'rm -f …' RETURN` and then SOURCED plan-binary-probe.sh; a RETURN
+--     trap also fires when a sourced file finishes, so its residual-reasons
+--     file was deleted before it was read and the list was always [].
 --
 -- Usage: script run scripts/lua/local-ci-convergence-artifacts.lua
 --          -- --input <repo-relative file> --plan-bin <path>
@@ -85,15 +84,16 @@ local function spec_ref(id) return entry(id).spec end
 local function reason(id) return (entry(id).why:gsub("%%s", function() return id end)) end
 
 
-local CARRY_EMPTY_TOP_RESIDUAL = true -- row 2227
 local failed = {}
 for _, id in ipairs(L.FAILED_CHECKS) do failed[id] = true end
 
-local failed_specs, failed_weights, top = {}, {}, {}
+-- failed_ids, failed_specs and failed_weights share one index (catalog order)
+local failed_ids, failed_specs, failed_weights, top = {}, {}, {}, {}
 local score_in = {}
 for _, id in ipairs(L.CHECK_IDS) do
     local w = weight(id)
     if failed[id] then
+        failed_ids[#failed_ids + 1] = id
         failed_specs[#failed_specs + 1] = spec_ref(id)
         failed_weights[#failed_weights + 1] = w
         top[#top + 1] = { spec_or_obligation_id = spec_ref(id), reason = reason(id), cc = w }
@@ -113,13 +113,13 @@ if score.regime ~= "monotone" then
 end
 
 
--- carried as-is: index i of the catalog-ordered list into FAILED_CHECKS (2226)
+-- the heaviest failure; ties keep the first in catalog order (2226)
 local max_spec, max_reason, max_cc = "n/a", "n/a", 0
 if #failed_specs > 0 then
-    max_spec, max_reason, max_cc = failed_specs[1], reason(L.FAILED_CHECKS[1]), failed_weights[1]
+    max_spec, max_reason, max_cc = failed_specs[1], reason(failed_ids[1]), failed_weights[1]
     for k = 1, #failed_specs do
         if failed_weights[k] > max_cc then
-            max_spec, max_reason, max_cc = failed_specs[k], reason(L.FAILED_CHECKS[k] or ""), failed_weights[k]
+            max_spec, max_reason, max_cc = failed_specs[k], reason(failed_ids[k]), failed_weights[k]
         end
     end
 end
@@ -148,8 +148,7 @@ local record = {
     max_residual_spec = max_spec, max_residual_reason = max_reason, max_residual_cc = max_cc,
     evidence_bundle_ref = "target/convergence/evidence-bundle.json",
     centicolon_projection_ref = "target/convergence/centicolon-dashboard.md",
-    -- carried as-is (row 2227): the bash writer always wrote [] here; see the header
-    top_residual_reasons = json.array(CARRY_EMPTY_TOP_RESIDUAL and {} or top),
+    top_residual_reasons = json.array(top),
     failed_checks = json.array(L.FAILED_CHECKS),
     failed_reasons = json.array(L.FAILED_REASONS),
 }

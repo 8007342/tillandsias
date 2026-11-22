@@ -16,8 +16,10 @@
 --   4 every check passing: PASS, residual 0, no residual spec, percent_closed the integer 100
 --   5 no plan binary: blocked, a non-zero exit, and no signature file written
 --   6 several failures: the heaviest is the reported residual, not the first
+--   7 failures out of catalog order: the heaviest residual carries its own reason (2226-63ta)
+--   8 a failing run lists its failures in top_residual_reasons (2227-rqgw)
 --
--- Verdict: ok:local-ci-convergence-artifacts-fixture:6 arms
+-- Verdict: ok:local-ci-convergence-artifacts-fixture:8 arms
 --        | violation:local-ci-convergence-artifacts-fixture:<n> failed
 
 local root = text.trim(proc.run{ argv = { "pwd", "-P" } }.stdout or "")
@@ -131,6 +133,27 @@ if rec6.max_residual_spec == "spec:litmus-convergence" and rec6.max_residual_cc 
     ok("6 several failures: the heaviest (litmus-tests, 140) is the reported residual")
 else bad("6 rc=" .. tostring(r6.code) .. " record=" .. json.encode(rec6)) end
 
+-- 7 (2226-63ta) failure order differs from catalog order: litmus-tests failed
+-- before rust-tests, but the catalog lists rust-tests first. The heaviest
+-- residual's reason must be litmus-tests' own, not rust-tests'.
+local r7, dir7 = run("order", { "litmus-tests", "rust-tests" })
+local rec7 = (r7.code == 0 and fs.exists(dir7 .. "/centicolon-signature.jsonl"))
+    and json.parse(lines_of(dir7 .. "/centicolon-signature.jsonl")[1]) or {}
+if rec7.max_residual_spec == "spec:litmus-convergence" and rec7.max_residual_cc == 140
+    and (rec7.max_residual_reason or ""):find("Litmus test failures detected", 1, true) then
+    ok("7 failures out of catalog order: the heaviest residual carries its own reason (2226)")
+else bad("7 spec=" .. tostring(rec7.max_residual_spec) .. " reason=" .. tostring(rec7.max_residual_reason)) end
+
+-- 8 (2227-rqgw) a failing run lists its failures in top_residual_reasons
+local r8, dir8 = run("top", { "rust-tests" })
+local rec8 = (r8.code == 0 and fs.exists(dir8 .. "/centicolon-signature.jsonl"))
+    and json.parse(lines_of(dir8 .. "/centicolon-signature.jsonl")[1]) or {}
+local top8 = rec8.top_residual_reasons or {}
+if #top8 == 1 and top8[1].spec_or_obligation_id == "spec:testing" and top8[1].cc == 80
+    and (top8[1].reason or ""):find("Test failures detected", 1, true) then
+    ok("8 a failing run lists its failure in top_residual_reasons (2227)")
+else bad("8 top_residual_reasons=" .. json.encode(top8)) end
+
 cleanup()
-if failn == 0 then verdict.ok("local-ci-convergence-artifacts-fixture:6 arms") end
+if failn == 0 then verdict.ok("local-ci-convergence-artifacts-fixture:8 arms") end
 verdict.emit("violation:local-ci-convergence-artifacts-fixture:" .. failn .. " failed", 1)
