@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tillandsias-cloudflare-login-uses-the-rfc-8628-device-grant-when-discovery-lists-it-showing-the-user-code-and-a-qr-of-the-complete-verification-uri-and-polling-cloudflare-directly-with-no-callback-and-no-storage
+    field: next_action
+    value: |-
+      Read cloudflare_oauth.rs begin/discovery and the fake; add the device endpoint to Discovery, the device authorization + poll over HttpClient, Via::Device and its default; extend the fake and test-cloudflare-login.sh with the arms above.
+
+
+      [2026-11-19T23:40:02Z calmecacpilli] Verify on next stable (live checks run on stable releases). Live check: operator completes a Cloudflare RFC 8628 device-grant login on macOS.
+    ts: "2026-11-19T23:40:02Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: tillandsias-cloudflare-login-uses-the-rfc-8628-device-grant-when-discovery-lists-it-showing-the-user-code-and-a-qr-of-the-complete-verification-uri-and-polling-cloudflare-directly-with-no-callback-and-no-storage
+    event:
+      type: note
+      ts: "2026-11-19T23:40:02Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

@@ -1,0 +1,16 @@
+# Gate step 2186-x5kv — the preflight door rebuilds a stale plan binary ONCE
+# and re-asks it before refusing. A planted stub answers stale: until a planted
+# cargo (TILLANDSIAS_PREFLIGHT_CARGO) "rebuilds" it; the door must proceed. A
+# still-stale or failed rebuild must refuse, and a current binary must never be
+# rebuilt. The real cargo is never run.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the preflight door rebuilds a stale plan binary once (2186-x5kv)"
+STEP_LUA="scripts/lua/test-preflight-rebuilds-stale-plan-binary.lua"
+STEP_ERROR="the preflight door did not rebuild a stale plan binary once before refusing, or rebuilt a current one (2186-x5kv) — see the FAIL lines above"
+STEP_OK="Preflight door rebuilds a stale plan binary once"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="scripts/lua/test-preflight-rebuilds-stale-plan-binary.lua"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:preflight-rebuilds-stale-plan-binary:4"

@@ -1,0 +1,24 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: answerability-tree-copy-dangling-symlink-regressed
+    order: 2187-9cws
+    status: ready
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: windows
+    capability_tags: [plan-ledger, portability]
+    estimated_hours: 2
+    title: |
+      The archiver's answerability tree copy still dies on an ignored, dangling nix result symlink under MSYS (fail:archive-answerability:tree-copy-failed). 1392-6tbs is closed, but the failure reproduces; copy git's tracked set instead of the directory.
+    context: |
+      yolanda-windows, 2026-11-21, on work/2186-niam @ 0dfb03fe1 (PR #1301, msys regime run of step 955-831-ezea): ready set and orphans clean, then fail:archive-answerability:tree-copy-failed; copy.err "tar: ./result: Cannot create symlink to '/nix/store/...-tillandsias-0.0.0': No such file or directory". The result symlink is ignored (.gitignore /result). The inline build.sh block had the same exposure; it is not caused by the move to a Lua step. Same class as #1297's sweep: walk the tracked set (git ls-files / git archive), not the directory.
+    exit_criteria:
+      - 'a checkout carrying an ignored dangling result symlink passes archive-plan-packets.sh --check under msys; a fixture plants one and stays green, and fails if the copy reverts to the directory walk'
+    unscoreable: 'unpinnable-until-the-guard-exists: the fixture named in exit_criteria is the deliverable and lands with the fix.'
+    next_action: 'Find why the 1392-6tbs fix does not cover this tree, then switch the copy to the tracked set.'
+    provenance: msys regime run reported by yolanda-windows; filed by lenovinha.
+    depends_on: []
+    related: [1392-6tbs, 2186-niam, 831-ezea]
+    events:
+      - {type: filed, ts: '2026-11-22T06:04:30Z', host: lenovinha, summary: filed the answerability tree-copy regression seen on msys}

@@ -51,6 +51,30 @@ bad() { echo "FAIL: $1" >&2; fail=1; }
 W="$(mktemp -d "${TMPDIR:-/tmp}/exec-bit-fixture.XXXXXX")"
 trap 'rm -rf "$W"' EXIT
 
+# ORDER 2197-hgit: THE ARMS RUN IN A SCRATCH REPO. They used to chmod the real
+# scripts/check-credential-channel.sh and flip its mode in the REAL index, then
+# restore both; a killed run left the checkout regressed, and every answer read
+# the host's own checkout. The scratch repo holds copies of the two guards, the
+# awk filter they need, the victim, and one caller that invokes it by path.
+# SRC_ROOT is the real checkout, read only by arm 6 (below).
+SRC_ROOT="$REPO_ROOT"
+REPO_ROOT="$W/repo"
+mkdir -p "$REPO_ROOT/scripts/lib" \
+    && cp -p "$SRC_ROOT/scripts/check-script-exec-bits.sh" "$SRC_ROOT/scripts/gate-stamp.sh" \
+             "$SRC_ROOT/scripts/check-credential-channel.sh" "$REPO_ROOT/scripts/" \
+    && cp -p "$SRC_ROOT/scripts/lib/exec-bits-filter.awk" "$REPO_ROOT/scripts/lib/" \
+    && printf '#!/usr/bin/env bash\nscripts/check-credential-channel.sh\n' > "$REPO_ROOT/scripts/caller.sh" \
+    && chmod +x "$REPO_ROOT/scripts/caller.sh" "$REPO_ROOT/scripts/check-credential-channel.sh" \
+    && git -C "$REPO_ROOT" init -q \
+    && git -C "$REPO_ROOT" add -A \
+    && git -C "$REPO_ROOT" -c user.name=t -c user.email=t@invalid -c commit.gpgsign=false commit -qm scratch \
+    || { echo "could-not-run:mode-only-regression-fixture:scratch-repo"; exit 3; }
+MODES_REPRESENTABLE=1
+case "$(git -C "$REPO_ROOT" config --get core.fileMode 2>/dev/null)" in
+    false|False|FALSE) MODES_REPRESENTABLE=0 ;;
+esac
+cd "$REPO_ROOT" || exit 2
+
 # ── 1. NEGATIVE CONTROL: a clean tree passes both checks. ────────────────────
 # An assertion that only ever fires is indistinguishable from one that always
 # fires; the green path is what proves the arms below mean something.
@@ -216,7 +240,9 @@ else
 fi
 
 # ── 6. the specific regression stays repaired on the tracked tree. ───────────
-mode="$(git -C "$REPO_ROOT" ls-files -s -- scripts/check-credential-channel.sh | cut -d' ' -f1)"
+# This arm reads the REAL checkout ON PURPOSE (2197-hgit): it is a census of
+# the committed tree, and a branch that drops the bit SHOULD red here.
+mode="$(git -C "$SRC_ROOT" ls-files -s -- scripts/check-credential-channel.sh | cut -d' ' -f1)"
 [ "$mode" = "100755" ] \
     && ok "scripts/check-credential-channel.sh is 100755 in the index" \
     || bad "the 887-bz88 regression is back: mode=$mode"

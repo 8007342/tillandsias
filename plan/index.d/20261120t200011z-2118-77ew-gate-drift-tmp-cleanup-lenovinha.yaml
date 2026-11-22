@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha. Source: the landing-pipeline redesign (operator 2026-11-20), P2, relayed by macuahuitl-fedora.
+packets:
+  - packet_id: gate-drift-a-gate-leaves-nothing-in-tmp-and-its-phases-are-attributed
+    order: 2118-77ew
+    status: in_progress
+    kind: bug
+    priority: p1
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, build, resources, observability]
+    estimated_hours: 6
+    owned_files:
+      - scripts/gate-tmpdir.sh
+      - scripts/lua/test-gate-tmpdir.lua
+      - build.sh
+    title: |
+      Gate drift: a gate leaves 0 new /tmp entries, and per-phase timing is attributed in the timing ledger.
+    context: |
+      Operator P2, 2026-11-20. Green build-check drifted from 28-31 min (Nov 18) to 50-53 min, with every step proportionally slower.
+      Suspects on macuahuitl: /tmp tmpfs at 22 of 32 GB (about 16k entries, 7.7k of them tillandsias-test-cache-*), swap, and a 378 GB target/.
+      Leak source: crates/tillandsias-headless test_cache_root makes about 58 cache dirs per test process and never removes them.
+      Fix: build.sh runs gate modes under ONE private TMPDIR (scripts/gate-tmpdir.sh) and removes it at exit, whatever the outcome.
+      Per-phase timing already reaches the ledger (1915-gtph, implemented 2026-11-17). One lenovinha gate (run gate-1795138247572-2794550) left 435 phase rows. Top steps: workspace cargo test 357 s, archiver check 316 s (memo miss under load, median miss 5.8 s), tray/vsock tests 152 s, litmus-runner selection equivalence 143 s. The archiver memo is per worktree (absolute-git-dir), so a fresh gate worktree always misses (31 hits out of 424 runs here).
+    exit_criteria:
+      - 'one real ./build.sh --check leaves 0 new /tmp entries (ls -A /tmp before and after, recorded on this row)'
+      - 'litmus:gate-leaves-nothing-in-tmp: 0 new entries after success, failure and TERM; the negative control leaks'
+      - 'per-phase rows: one gate run carries at least 40 phase rows in .cache/metrics/tillandsias-timing.jsonl (already true, 435 rows)'
+    verifiable_closure: |
+      litmus:gate-leaves-nothing-in-tmp (10 arms) plus the recorded before and after /tmp listing of one real gate on lenovinha.
+    next_action: Record the real gate's /tmp delta, then land. Follow-up candidate is a worktree-shared archiver memo keyed on the plan binary's validator surface rather than its path.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20; operator landing-pipeline redesign P2, relayed by macuahuitl-fedora.
+    events:
+      - type: filed
+        ts: "2026-11-20T20:00:11Z"
+        host: lenovinha
+        summary: P2 gate drift; private gate TMPDIR implemented, real-gate measurement running.

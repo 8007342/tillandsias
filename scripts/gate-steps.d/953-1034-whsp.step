@@ -1,0 +1,11 @@
+# Gate step 1034-whsp — data, not code (order 1072-b7eq). Moved out of inline build.sh
+# by 2173-inst so the pool and lanes can run it (build speed).
+STEP_DESC="Checking cross-branch claim visibility refuses a packet held elsewhere (1034-whsp)"
+STEP_SCRIPT="scripts/test-claims-across-branches.sh"
+STEP_ERROR="the cross-branch claim check is unsound (1034-whsp) — a false 'nobody holds this' hands a claimed packet to a second host, which is the 814-iyu7 duplication"
+STEP_OK="Cross-branch claim visibility passed"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.d/README.md plan/index.yaml scripts/check-claims-across-branches.sh scripts/plan-binary-probe.sh scripts/test-claims-across-branches.sh"
+STEP_SECOND_REGIME="tlatoanis-macbook-air 2026-11-21 darwin ok:claims-across-branches:15"

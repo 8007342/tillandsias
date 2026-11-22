@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls
+    field: next_action
+    value: |-
+      Nothing is done. Write the fixture first on work/2025-e6mi and watch it fail, then wire webstudio.open to the tray launcher. Also repoint openspec/changes/host-tool-discovery/tasks.md 2.3 and the studio::call refusal from 1859-57mi to this order.
+
+
+      [2026-11-19T23:28:20Z calmecacpilli] LEFT (triage 2026-11-19): merge is on trunk and the test fns exist; the only proof left is a cargo run on a capable host: cargo test -p tillandsias-headless webstudio_open_launches_from_the_lane_once_and_returns_its_urls. Close on green with the merge sha.
+    ts: "2026-11-19T23:28:20Z"
+    host: calmecacpilli
+
+events:
+  - packet_id: webstudio-open-launches-the-studio-from-the-lane-and-returns-its-urls
+    event:
+      type: note
+      ts: "2026-11-19T23:28:20Z"
+      host: calmecacpilli
+      summary: |-
+        tech-debt triage 2026-11-19 (calmecacpilli)

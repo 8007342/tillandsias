@@ -429,7 +429,7 @@ if [ -f "$_bmt" ]; then
         | awk -F'|' '$4 ~ /macos/ {print $1}' | sort -u)"
     _undeclared=""
     for _n in $_script_needs $_script_targets; do
-        printf '%s\n' "$_declared_tray" | grep -qx "$_n" || _undeclared="${_undeclared:+$_undeclared,}$_n"
+        grep -qx "$_n" <<<"$_declared_tray" || _undeclared="${_undeclared:+$_undeclared,}$_n"
     done
     if [ -z "$_undeclared" ]; then
         check ok "1004-cp6p: every prerequisite build-macos-tray.sh invokes is declared at tray-build scope"

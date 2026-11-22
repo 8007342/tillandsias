@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Coordinator (macuahuitl-fedora) 2026-11-21: make the enclave nix cache live on
+# the hosts where gates build. (a) and (b) are build-speed now; (d) is post-stable.
+packets:
+  - packet_id: the-tray-resolves-the-nix-cache-checkout-from-configuration-never-cwd-and-names-the-skip
+    order: 2118-u675
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, nix, tray, rust]
+    estimated_hours: 2
+    title: |
+      ensure_nix_cache_running resolved scripts/nix-cache-service.sh relative to the tray's cwd. An installed tray is not started from a checkout, so it skipped silently on every launch (debug-only output), and the cache was never live on macuahuitl or lenovinha.
+    context: |
+      Found 2026-11-21 (main.rs:9468). The coordinator ruled: resolve from a configured project root, never cwd, and make the skip a visible named state.
+    exit_criteria:
+      - 'the checkout resolves from TILLANDSIAS_ROOT, then [dev] checkout in config.toml, then <watch_path>/tillandsias; never cwd; unit-tested in that order with a negative control'
+      - 'an unresolved or invalid checkout prints skip:nix-cache:no-checkout or skip:nix-cache:checkout-invalid on every ensure, naming what to set; prepare skips print outside debug too'
+    unscoreable: 'unpinnable-until-the-guard-exists: the unit test is written with the fix.'
+    next_action: 'Land the PR.'
+    provenance: coordinator 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [801-vm4p, 801-kqme, 2162-evv5, 2162-r2ut]
+    events:
+      - {type: filed, ts: '2026-11-21T09:21:57Z', host: lenovinha, summary: filed p0 under build-speed-lenovinha}
+  - packet_id: the-start-of-day-gate-reads-has-nix-from-the-toolbox-capability-probe-not-command-v-nix
+    order: 2162-evv5
+    status: ready
+    kind: bug
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, nix, daily-maintenance, docs]
+    estimated_hours: 1
+    title: |
+      The Start Of Day gate runs the nix steps (toolbox gc, nix guards, nix-cache-service ensure and test) only on hosts with nix. Read as command -v nix, that skips every host where nix exists only through the toolbox rung, which is lenovinha and macuahuitl.
+    context: |
+      lenovinha stamped nix-gc:skipped-absent on 2026-11-21 although scripts/nix-toolbox.sh capability answers ok:nix-capability:toolbox.
+    exit_criteria:
+      - 'skills/meta-orchestration and methodology.yaml define has-nix as scripts/nix-toolbox.sh capability answering ok:nix-capability:*'
+    unscoreable: 'docs-only: no executable decider reads the prose; the litmus that pins the skill text is the check.'
+    next_action: 'Edit the skill and methodology text.'
+    provenance: coordinator 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [2118-u675, 801-kqme]
+    events:
+      - {type: filed, ts: '2026-11-21T09:21:57Z', host: lenovinha, summary: filed p0 under build-speed-lenovinha}
+  - packet_id: forges-consume-the-enclave-nix-cache-when-it-answers-and-stay-silent-when-it-does-not
+    order: 2162-r2ut
+    status: ready
+    kind: feature
+    priority: p2
+    desired_release: v0.6
+    pickup_role: linux
+    capability_tags: [nix, forge, post-stable]
+    estimated_hours: 4
+    title: |
+      No forge-side wiring points a forge's nix at the enclave cache (no extra-substituters, trusted-public-keys or stack CA in images/default or the forge launch), so only the builder lane uses it. Post-stable at the coordinator's ruling.
+    context: |
+      Found 2026-11-21. The cache spec's degrade-to-silence rule applies: inject only when substituter-args is non-empty.
+    exit_criteria:
+      - 'with the cache running, a forge nix build substitutes from nix-cache:5000 with require-sigs; with the cache down, the forge nix config carries no substituter flags'
+    unscoreable: 'unpinnable-until-the-guard-exists: a forge-side fixture is part of the work.'
+    next_action: 'Post-stable. Find where the forge launch can pass nix config, then add it behind substituter-args.'
+    provenance: coordinator 2026-11-21 (post-stable); filed by lenovinha.
+    depends_on: []
+    related: [2118-u675, 801-x1nx]
+    events:
+      - {type: filed, ts: '2026-11-21T09:21:57Z', host: lenovinha, summary: filed p2 post-stable at the coordinator's ruling}

@@ -18,11 +18,11 @@ description: >
   invoked by nothing in the salvage snapshot; an unbound fixture proves nothing).
 preconditions:
   - workspace contains scripts/test-initialize-bare-metal-host-idempotent.sh
-  - workspace contains scripts/check-bare-metal-host-initialized.sh
+  - workspace contains scripts/lua/check-bare-metal-host-initialized.lua
   - workspace contains skills/initialize-bare-metal-host/SKILL.md
 critical_path:
   - step: "the checker and the fixture parse and carry their exec bits"
-    command: "bash -n scripts/check-bare-metal-host-initialized.sh && bash -n scripts/test-initialize-bare-metal-host-idempotent.sh && test -x scripts/check-bare-metal-host-initialized.sh && test -x scripts/test-initialize-bare-metal-host-idempotent.sh && echo ok:bare-metal-host-scripts-parse"
+    command: "test -f scripts/lua/check-bare-metal-host-initialized.lua && bash -n scripts/test-initialize-bare-metal-host-idempotent.sh && test -x scripts/test-initialize-bare-metal-host-idempotent.sh && echo ok:bare-metal-host-scripts-parse"
     expected_behavior: "ok:bare-metal-host-scripts-parse"
     assert_exit: 0
     timeout_ms: 5000

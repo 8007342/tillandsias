@@ -1,0 +1,22 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: the-pending-capability-fixture-folds-the-real-ledger-once-and-a-trimmed-scaffold-for-every-other-arm
+    field: status
+    value: in_progress
+    ts: "2026-11-21T09:10:20Z"
+    host: lenovinha
+    story: build-speed-lenovinha
+
+events:
+  - packet_id: the-pending-capability-fixture-folds-the-real-ledger-once-and-a-trimmed-scaffold-for-every-other-arm
+    event:
+      type: note
+      ts: "2026-11-21T09:10:20Z"
+      host: lenovinha
+      summary: |-
+        claimed: build-speed round 3

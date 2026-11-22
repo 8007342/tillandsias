@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by lenovinha, found while measuring P2 (2118-77ew).
+packets:
+  - packet_id: embed-regime-test-counts-binaries-the-gate-stages-into-images
+    order: 2146-4svj
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [gate, build, flaky]
+    estimated_hours: 2
+    title: |
+      tillandsias-embed's embedded_regime test counts binaries the gate stages into images/ after the crate was compiled, so a fresh worktree's gate goes red.
+    context: |
+      Two real ./build.sh --check runs in a fresh worktree (target/work/wt-2118-77ew, lenovinha, 2026-11-20) each failed tillandsias_embed::tests::embedded_regime_serves_every_asset_without_the_source_tree with "embedded count differs from the tree: left 651, right 653".
+      The gate's preamble stages images/default/policy-bin/{tillandsias-plan,.stamp} and images/router/{tillandsias-router-sidecar,.sidecar.stamp} (git-ignored) into images/.
+      collect::collect_all walks images/ at test time. The compile-time embed did not include the two staged files.
+      Re-running cargo test -p tillandsias-embed afterwards passes. That made it a new-red in the test baseline (scripts/test-known-red.txt) for an unrelated change (PR #1226).
+    exit_criteria:
+      - 'collect_all (build time and test time) skips the git-ignored staged artefacts in images/, or the gate stages them before the workspace build; a fresh-worktree gate no longer reds this test'
+      - 'a fixture puts an ignored staged file under images/ after the build and the test still passes'
+    unscoreable: 'unpinnable-until-the-guard-exists: the fixture named in the exit criteria lands with the fix (1136-n8sh).'
+    next_action: Decide between excluding git-ignored staged artefacts from collect_all, or ordering the staging before the workspace build. Read crates/tillandsias-embed/src/collect.rs and the build.sh preamble staging.
+    provenance: |
+      Filed by lenovinha-silverblue, 2026-11-20, while measuring P2 (2118-77ew) on two real gates.
+    events:
+      - type: filed
+        ts: "2026-11-20T20:46:56Z"
+        host: lenovinha
+        summary: embed test counts binaries the gate stages into images/ after compile; fresh-worktree gates go red.

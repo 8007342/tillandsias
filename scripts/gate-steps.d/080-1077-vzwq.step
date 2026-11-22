@@ -36,3 +36,7 @@ STEP_SCRIPT="scripts/test-trace-coverage.sh"
 STEP_ERROR="the trace-coverage validator mis-handles a threshold, mis-reports its failure path, or its denominator disagrees with the specs on disk (1077-vzwq) — see the verdict line above"
 STEP_OK="Trace-coverage validator check passed"
 STEP_SECOND_REGIME="macneo 2026-09-22 darwin ok:rc0-no-verdict-line"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="openspec/specs/** scripts/lib/tool-dispatch.sh scripts/refusal-calibration/** scripts/test-trace-coverage.sh scripts/validate-traces.sh"

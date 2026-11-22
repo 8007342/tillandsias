@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Story build-speed-lenovinha (coordinator, 2026-11-21).
+packets:
+  - packet_id: the-jq-selection-fixture-selects-without-executing-and-the-tool-materialization-fixture-runs-its-live-subject-once
+    order: 2159-n9sa
+    status: ready
+    kind: chore
+    priority: p0
+    desired_release: v0.5
+    pickup_role: linux
+    story: build-speed-lenovinha
+    capability_tags: [build-speed, litmus, test-runner]
+    estimated_hours: 3
+    title: |
+      Two gate fixtures spend minutes executing work they do not judge. test-litmus-runner-reads-without-jq runs the real git-mirror-service spec twice (46 s each) only to compare the selection. test-tool-materialize-litmus-surfaces-arm runs its 24 s live-toolbox subject three times.
+    context: |
+      Measured on lenovinha 2026-11-21: 154 s and 72 s (the report had 99.9 s and 66.3 s). Coordinator rulings: --select-only prints exactly the selection lines a real run prints, from the same code path; the scratch ctl arm stays the discriminating control; exactly one live toolbox run stays for ARM 0.
+    exit_criteria:
+      - 'run-litmus-test.sh --select-only prints the same Executing lines and Total as a real run of the same spec, and executes no step'
+      - 'the jq-selection fixture still fails when selection diverges with and without jq (ctl arm), and takes under 30 s'
+      - 'the tool-materialization fixture runs its live subject once and takes under 35 s'
+    unscoreable: 'unpinnable-until-the-guard-exists: the parity arm for --select-only is written with the mode.'
+    next_action: 'Find where the runner prints Executing and Total; add --select-only there.'
+    provenance: coordinator build-speed follow-up, 2026-11-21; filed by lenovinha.
+    depends_on: []
+    related: [2150-vf2v, 1375-6pnd, 1269-gfdi]
+    events:
+      - {type: filed, ts: '2026-11-21T07:40:55Z', host: lenovinha, summary: filed p0 under build-speed-lenovinha at the coordinator's direction}

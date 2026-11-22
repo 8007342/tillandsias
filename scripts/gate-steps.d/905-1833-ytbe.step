@@ -5,3 +5,10 @@ STEP_SCRIPT="scripts/test-local-delegate.sh"
 STEP_ERROR="the local delegate no longer behaves as pinned (1833-ytbe) — see the FAIL lines above"
 STEP_OK="Local delegate fixture passed"
 STEP_SECOND_REGIME="macbookair 2026-10-23 darwin ok:test-local-delegate:5"
+# ORDER 2155-gpar: runs alone, never beside a sibling step in the gate pool.
+STEP_SERIAL="builds with cargo into the shared target; binds a fixed local port"
+STEP_LANES="cargo port"
+# ORDER 2157-ginp: STEP_READS, the paths this step reads, RECORDED ONLY: never
+# consulted by the class-selector skip (that is STEP_INPUTS, 2118-tnut). First
+# cut: the step's own script plus every repo path it names literally.
+STEP_READS="plan/index.d/** plan/index.yaml scripts/local-delegate.sh scripts/lua/local-delegate.lua scripts/plan-binary-probe.sh scripts/test-local-delegate.sh"

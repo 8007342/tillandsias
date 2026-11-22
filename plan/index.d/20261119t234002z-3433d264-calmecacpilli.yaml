@@ -1,0 +1,18 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan list-replace (order 1601-398e).
+#
+# The WHOLE new list for one field. The fold takes the latest replace
+# by (ts, host) as the field's value; the declaration is never edited.
+events:
+  - packet_id: a-provider-usage-limit-is-reported-as-itself-and-stops-the-lane-until-retry-after
+    event:
+      type: list-replace
+      ts: "2026-11-19T23:40:02Z"
+      agent_id: linux-calmecacpilli-claude-20261119t234002z
+      host: calmecacpilli
+      field: exit_criteria
+      items:
+        - "The forge or lane wrapper recognises a provider 429 (and the usage-limit body) and prints `provider usage limit reached, retry after <UTC time>`, then stops the lane cleanly with a distinct verdict."
+        - "A launch before the deadline refuses with the same message instead of calling the provider."
+      summary: |-
+        criterion 2 (cross-host deadline) moved to its owner 1957-msjs; coordinator ruling 2026-11-19

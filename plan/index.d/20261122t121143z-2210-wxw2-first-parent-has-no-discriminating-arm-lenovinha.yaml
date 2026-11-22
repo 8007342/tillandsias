@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: plan-lane-first-parent-scoping-has-no-arm-that-reds-without-it
+    order: 2210-wxw2
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [fixture]
+    estimated_hours: 2
+    title: |
+      The plan-only lane's --first-parent scoping (pre-push-local-gate.sh, git log --first-parent --no-merges) has no fixture arm that reds when it is removed.
+    context: |
+      Measured 2026-11-22 while porting test-pre-push-plan-lane-after-merge to Lua (2209-jw2t, PR #1322). Deleting --first-parent from the hook's only code use (the git log over remote..local) left the fixture 8/8 green in both the .sh and the Lua port. Its own header says the naive --no-merges reading "returned the foreign README alongside the ledger fragment" and that "Arm 1 fails against the naive reading"; today it does not, so either another path scopes the diff or the arm no longer reaches this one. Coordinator macuahuitl-fedora asked for this row.
+    exit_criteria:
+      - "an arm (or a new fixture) reds when --first-parent is removed from the hook's scoping, and passes with it; the PR shows both runs"
+      - "if the scoping is now redundant, the row says which path makes it so and removes the dead code instead"
+    unscoreable: "unpinnable-until-the-guard-exists: the discriminating arm is the deliverable."
+    next_action: "Find which path admits arm 1 without --first-parent; then pin the scoping or remove it."
+    provenance: coordinator direction; filed by lenovinha.
+    depends_on: []
+    related: [1056-5344, 2209-jw2t]
+    events:
+      - {type: filed, ts: '2026-11-22T12:11:43Z', host: lenovinha, summary: first-parent scoping has no discriminating arm}
