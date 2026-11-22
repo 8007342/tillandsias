@@ -14,6 +14,8 @@
 --     (RED before 2187-sdtz on msys: the stub's rm is refused, rc 1)
 --   2 a failed build puts the old binary back (nothing is lost)
 --   3 a set-aside copy left by an earlier run is swept once its process exited
+--   4 while cargo runs, a binary is still at the real path (a reap mid-build
+--     left only .old-<pid> in the first version of this fix)
 -- Off Windows a running file can be removed anyway, so arms 1-3 pass there
 -- for the trivial reason; the regime that matters is msys.
 --
@@ -46,7 +48,7 @@ if [ -f /c/Windows/System32/PING.EXE ]; then SLEEP=/c/Windows/System32/PING.EXE;
 else SLEEP="$(command -v sleep)"; ARGS=30; fi
 cp "$SLEEP" "$EXE"
 case "$2" in
-  1|2) "./$EXE" $ARGS >/dev/null 2>&1 & PID=$! ; sleep 1 ;;
+  1|2|4) "./$EXE" $ARGS >/dev/null 2>&1 & PID=$! ; sleep 1 ;;
   3)   cp "$SLEEP" "$EXE.old-424242" ; PID="" ;;
 esac
 # Remove the artifact the way cargo does. msys rm uses POSIX-delete semantics,
@@ -58,7 +60,9 @@ rm_like_cargo() {
     powershell -NoProfile -c "[IO.File]::Delete('$(cygpath -w "$PWD/$EXE")')" >/dev/null 2>&1
   else rm -f "$EXE"; fi
 }
-if [ "$2" = 2 ]; then
+if [ "$2" = 4 ]; then
+  cargo() { [ -f "$EXE" ] && echo present > during; return 1; }
+elif [ "$2" = 2 ]; then
   cargo() { rm_like_cargo; return 1; }
 else
   cargo() { rm_like_cargo || return 1; printf 'NEW' > "$EXE"; }
@@ -67,7 +71,7 @@ _pbp_cargo_build >/dev/null 2>&1; rc=$?
 if [ ! -f "$EXE" ]; then content=none; elif [ "$(head -c 3 "$EXE")" = NEW ]; then content=NEW; else content=old; fi
 olds="$(ls "$EXE".old-* 2>/dev/null | wc -l | tr -d ' ')"
 [ -n "$PID" ] && kill "$PID" 2>/dev/null; wait 2>/dev/null
-echo "rc=$rc content=$content olds=$olds"
+echo "rc=$rc content=$content olds=$olds during=$(cat during 2>/dev/null || echo absent)"; rm -f during
 ]=]
 fs.write(S.rel .. "/arm.sh", BODY)
 
@@ -84,5 +88,8 @@ T:arm("2 a failed build puts the old binary back",
     o2:find("rc=1 content=old olds=0", 1, true) ~= nil, o2)
 local o3 = arm(3)
 T:arm("3 an exited set-aside copy is swept", o3:find("rc=0 content=NEW olds=0", 1, true) ~= nil, o3)
+local o4 = arm(4)
+T:arm("4 while cargo runs, a runnable binary is still at the real path (a kill mid-build loses nothing)",
+    o4:find("during=present", 1, true) ~= nil, o4)
 
 T:finish()

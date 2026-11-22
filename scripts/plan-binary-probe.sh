@@ -283,7 +283,15 @@ _pbp_cargo_build() {
     done
     if [ -f "$_PBP_EXE" ]; then
         _pbp_aside="$_PBP_EXE.old-$$"
-        mv -f "$_PBP_EXE" "$_pbp_aside" 2>/dev/null || _pbp_aside=""
+        # Rename the (possibly running) image aside, then put a COPY back under
+        # the real name: the copy is not running, so cargo may delete it, and a
+        # build killed at any point still leaves a runnable binary where every
+        # resolver looks (measured: a memory reap mid-build left only .old-<pid>).
+        if mv -f "$_PBP_EXE" "$_pbp_aside" 2>/dev/null; then
+            cp -p "$_pbp_aside" "$_PBP_EXE" 2>/dev/null || true
+        else
+            _pbp_aside=""
+        fi
     fi
     _pbp_cargo_build_inner
     _pbp_rc=$?
