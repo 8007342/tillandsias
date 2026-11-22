@@ -15,6 +15,16 @@ set -uo pipefail
 # host-push lane (if one is wired here) from answering instead.
 export TILLANDSIAS_CCC_NO_LANE=1
 
+# ORDER 2224-gdir — NEVER INHERIT A REPO LOCATION. Git exports GIT_DIR (and,
+# in some hooks, GIT_WORK_TREE / GIT_INDEX_FILE) to every hook it runs. The
+# pre-push hook runs the preflight door, the door runs this fixture, and every
+# `git -C "$d" ...` below then followed GIT_DIR to the REAL checkout: on
+# calmecacpilli 2026-11-22 it rewrote the real repo's origin to
+# $W/does-not-exist.git (the next push failed with "does not appear to be a
+# git repository") and set credential.helper=manager. Each scratch repo here
+# is named by path; no inherited location may override that.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX
+
 REAL_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GUARD="$REAL_ROOT/scripts/check-credential-channel.sh"
 fail=0
