@@ -14,7 +14,13 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LUA="$ROOT/scripts/lua/check-engine-cpu-dispatch.lua"
-PLAN="${TILLANDSIAS_PLAN_BIN:-$(. "$ROOT/scripts/plan-binary-probe.sh" 2>/dev/null && resolve_plan_binary 2>/dev/null)}"
+# 1401-x76w / 84f37ff24: resolve the plan binary from the CHECKOUT, not the caller's cwd,
+# and absolutise it before any cd. An explicit TILLANDSIAS_PLAN_BIN keeps its meaning.
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    PLAN="$TILLANDSIAS_PLAN_BIN"
+else
+    PLAN="$(cd "$ROOT" && _p="$(. scripts/plan-binary-probe.sh 2>/dev/null && resolve_plan_binary 2>/dev/null)" && case "$_p" in (/*) printf %s "$_p" ;; (*) printf %s/%s "$PWD" "${_p#./}" ;; esac)" || PLAN=""
+fi
 [ -n "$PLAN" ] || { echo "could-not-run:test-check-engine-cpu-dispatch:no-plan-binary"; exit 3; }
 GUARD() { "$PLAN" script run "$LUA" -- "$@"; }
 SCR="$(mktemp -d "${TMPDIR:-/tmp}/engine-dispatch.XXXXXX")" || exit 2
