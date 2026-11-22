@@ -1,0 +1,25 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+  - packet_id: gate-leak-report-keeps-nothing
+    order: 2238-3skn
+    status: ready
+    kind: bug
+    priority: p2
+    desired_release: v0.5
+    pickup_role: linux
+    capability_tags: [build-speed]
+    estimated_hours: 2
+    title: |
+      build.sh's timing-leak refusal can print an EMPTY "leaked line(s)" block and keep no copy of the log: it attributes the leak from one read of the file, then re-reads it with tail and cp, and by then a concurrent step has rotated or removed it, so the refusal names no writer.
+    context: |
+      #1349 (2225-prrt), evicted 2026-11-22 on macuahuitl: step check-no-python-scripts.lua "leaked record(s) into /tmp/tillandsias-timing.jsonl". The header printed and then nothing; no gate-leak-*.jsonl copy existed, and /tmp/tillandsias-timing.jsonl was already gone. So nobody can tell whether the PR caused it or a concurrent writer did, and the only next step is a re-gate. 2189-lktp added the cp after the tail, but both run after the attribution read, against a file another step may already have replaced. The refusal has to keep what it judged, taken in the same read as the attribution.
+    exit_criteria:
+      - "the attribution and the kept copy come from ONE snapshot: the step window is copied (or read into the refusal) before attribution, and the refusal prints from that copy"
+      - "an arm that removes or truncates the shared log between attribution and report still prints the leaked line(s) and keeps the file, red against today's build.sh"
+      - "a refusal whose snapshot is empty says so by name (could-not-keep:<reason>) instead of printing an empty block"
+    unscoreable: "unpinnable-until-the-guard-exists: the remove-between-attribute-and-report arm is the deliverable."
+    next_action: "Snapshot the window into the step's scratch before calling gate-step-metrics-attribution.sh; attribute and print from the snapshot."
+    provenance: coordinator direction (macuahuitl-fedora, 2026-11-22); filed by lenovinha.
+    related: [2189-lktp, 2225-prrt, 1966-ubsw]
+    events:
+      - {type: filed, ts: '2026-11-22T22:55:04Z', host: lenovinha, summary: gate leak report keeps nothing filed}
