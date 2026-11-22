@@ -1,0 +1,11 @@
+# Gate step 2239-rmun — the remote-unreachable probe names why a host cannot
+# reach the remote (gh not logged in, gh or ls-remote hung, git credentials
+# refused) inside a bounded timeout, never retries, and never runs gh auth
+# login/refresh. Stub gh and git only; no network, no real login.
+#
+# STEP_LUA is a LITERAL path on purpose (1063-nraf).
+STEP_DESC="Checking the remote-unreachable probe stops a host that cannot push (2239-rmun)"
+STEP_LUA="scripts/lua/test-probe-remote-reachable.lua"
+STEP_ERROR="the remote-unreachable probe misnamed a cause, retried, overran its timeout, or ran gh auth login/refresh (2239-rmun) — see the FAIL lines above"
+STEP_OK="Remote-unreachable probe stops a host that cannot push"
+STEP_READS="scripts/lua/test-probe-remote-reachable.lua scripts/lua/probe-remote-reachable.lua"
