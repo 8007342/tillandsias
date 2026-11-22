@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macbookair-macos, 2026-11-20, at the coordinator's request (shell-halving drive).
+packets:
+- packet_id: home-sandboxed-macos-installer-and-reset-fixtures-run-on-the-scratch-door-in-lua
+  order: 2108-hmfx
+  status: in_progress
+  kind: chore
+  priority: p2
+  desired_release: v0.5
+  pickup_role: any
+  capability_tags: [lua, shell-burn-down, macos, installer]
+  size: M
+  implementer_tier: sonnet
+  estimated_hours: 3
+  title: 'The three $HOME-sandboxed macOS fixtures (reset keeps models, quiet installer, interruptible swap) are Lua on scratch.*, and scratch.* gains rename'
+  context: >-
+    Stacked on work/2106-scrt (#1156). These fixtures built their own HOME or /Applications stand-in with
+    mktemp, which is outside the repo-rooted fs.* doors. They now use common.fixture's T:scratch and the
+    scratch.* verbs. The fixture code is Lua; only the code under test is shell. e2e-step2-macos.sh and
+    install-macos.sh's marked reset block are still run with bash, because they are the products being
+    tested. The swap contract is two adjacent renames, so scratch.* gains rename(from, to, {replace}):
+    both ends must be inside the root, neither final component is followed, the root is never moved, and
+    an existing target is refused unless replace is set. The three .sh files are deleted, along with
+    their floor lines. The litmus steps of installer-swap-atomicity, reset-keeps-models-macos and
+    reset-state-contract now run the Lua ports. reset-keeps-models-macos's parse-and-exec-bit step is
+    dropped: a Lua file has no exec bit, and the next step runs the fixture.
+  exit_criteria:
+  - 'scripts/lua/test-e2e-step2-macos.lua gives ok:e2e-step2-macos:5 on darwin. Its mutation arms (sparing stripped, cache rm dropped) red the properties they guard.'
+  - 'scripts/lua/test-install-macos-setup-is-quiet.lua gives ok:install-macos-setup-is-quiet:8 on darwin. Arm 6 scans a non-empty say/die population, 17 lines, the same set the shell scanned.'
+  - 'scripts/lua/test-install-macos-swap-is-interruptible.lua gives ok:install-macos-swap-is-interruptible:6. ARM 5, the old ordering, leaves the destination ABSENT.'
+  - 'crates/tillandsias-plan/tests/lua_scratch_root.rs rename_stays_inside_the_root_and_never_clobbers_by_default passes. It fails on the pre-change binary, because scratch.rename is nil.'
+  - 'The three .sh files are deleted, and no floor, litmus or script references them.'
+  verifiable_closure: 'On tlatoanis-macbook-air 2026-11-20 every port printed its ok line, and cargo test --test lua_scratch_root gave 7 passed. The shell originals gave PASS 5/5, ok 7 arms (1b unnumbered) and PASS 6/6 on the same tree before deletion.'
+  unscoreable: 'none.'
+  next_action: 'Land after #1156. Next batch: further $HOME/$TMPDIR-sandboxed darwin fixtures onto scratch.*.'
+  provenance: 'macbookair-macos 2026-11-20, coordinator request (macuahuitl-fedora).'
+  events:
+  - {type: filed, ts: '2026-11-20T00:00:00Z', host: macbookair, summary: 'filed with its PR'}
