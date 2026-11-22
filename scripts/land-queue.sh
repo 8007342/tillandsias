@@ -197,6 +197,7 @@ WORK_RE='^work/[0-9]{3,4}-[a-z0-9]{4}$'
 
 LIMIT=0
 DRY_RUN=0
+DAILY_FULL=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --limit)   LIMIT="${2:-0}"; shift 2 ;;
@@ -204,6 +205,7 @@ while [ $# -gt 0 ]; do
         --base)    TRUNK="${2:-$TRUNK}"; shift 2 ;;
         --base=*)  TRUNK="${1#*=}"; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
+        --daily-full) DAILY_FULL=1; shift ;;
         *) echo "fail:land-queue:unknown-argument:$1" >&2; exit 1 ;;
     esac
 done
@@ -411,6 +413,107 @@ GH_LIST_LIMIT="${TILLANDSIAS_LAND_QUEUE_GH_LIST_LIMIT:-500}"
 # ORDER, operator 2026-11-20: `land:priority` first, then PR number. A
 # `land:hold` PR is never a candidate and is named every run; it replaces
 # draft-as-hold, so a draft is still skipped but the advisory names the label.
+# ── ORDER 2174-dail: SMALL GATES PIGGYBACK ON A DAILY FULL RUN ──────────────
+# Operator, 2026-11-22: "I approve the small gates piggybacking into a daily
+# run for proof." A land gate may SKIP a gate step whose STEP_INPUTS (the class
+# selector's grammar, 2118-tnut; never STEP_READS) no change touches — but only
+# against a PROOF: a green, unskipped full gate on a trunk commit, published by
+# `land-queue.sh --daily-full` as refs/attest/daily-full/<epoch> -> <commit>.
+#   - the newest proof must be under DAILY_MAX_AGE_S (24 h) old, an ancestor of
+#     the base being gated, and newer than any red daily run
+#     (refs/attest/daily-red/<epoch>); otherwise EVERY step runs;
+#   - the changed-path set is taken against the PROVED commit
+#     (TILLANDSIAS_CLASS_BASE), so changes that landed after the proof count;
+#   - the proof's epoch is the "last full gate" the selector's freshness test
+#     reads (TILLANDSIAS_FULL_GATE_MARKER), never this host's local marker;
+#   - main and release trunks never skip;
+#   - every skipped step is named on the land's not-run: line.
+# ORDER 2174-dail (coordinator 2026-11-22): A GATE NEVER SEES THE QUEUE'S KNOBS. The
+# host's TILLANDSIAS_LAND_QUEUE_* settings (BATCH_K=4 on macuahuitl) reached the
+# gate, then test-land-queue.sh, then its inner queues, and redded run 26's train;
+# ARM 22's stamp leak was the same class. Called first in every gate subshell, so
+# the queue keeps its settings and the gate (and its fixtures) inherits none.
+_gate_clean_env() { local _v; for _v in $(compgen -v TILLANDSIAS_LAND_QUEUE_); do unset "$_v"; done; }
+DAILY_SKIP="${TILLANDSIAS_LAND_QUEUE_DAILY_SKIP:-1}"
+DAILY_NS="refs/attest/daily-full"
+DAILY_RED_NS="refs/attest/daily-red"
+DAILY_MAX_AGE_S="${TILLANDSIAS_LAND_QUEUE_DAILY_MAX_AGE_S:-86400}"
+_daily_why=""; _daily_proof=""; _daily_note=""
+_newest_attest() { # <namespace> -> "<epoch> <sha>" of the newest, or nothing
+    local _r _s _e _best=""
+    while read -r _r _s; do
+        _e="${_r##*/}"
+        case "$_e" in ''|*[!0-9]*) continue ;; esac
+        if [ -z "$_best" ] || [ "$_e" -gt "${_best%% *}" ]; then _best="$_e $_s"; fi
+    done < <(git for-each-ref --format='%(refname) %(objectname)' "$1/" 2>/dev/null)
+    [ -n "$_best" ] && printf '%s\n' "$_best"
+}
+daily_proof() { # <base sha> -> sets _daily_proof="<epoch> <sha>", or rc 1 with _daily_why set (no subshell: both must reach the caller)
+    local _g _red _age
+    _daily_why=""; _daily_proof=""
+    [ "$DAILY_SKIP" = 1 ] || { _daily_why="daily-skip-off"; return 1; }
+    case "$TRUNK" in main|release|release/*) _daily_why="trunk-$TRUNK-always-full"; return 1 ;; esac
+    git fetch -q "$REMOTE" "+$DAILY_NS/*:$DAILY_NS/*" "+$DAILY_RED_NS/*:$DAILY_RED_NS/*" 2>/dev/null || true
+    _g="$(_newest_attest "$DAILY_NS")" || { _daily_why="no-daily-run"; return 1; }
+    _red="$(_newest_attest "$DAILY_RED_NS")" || _red=""
+    if [ -n "$_red" ] && [ "${_red%% *}" -gt "${_g%% *}" ]; then _daily_why="daily-run-red:${_red#* }"; return 1; fi
+    _age=$(( $(date -u +%s) - ${_g%% *} ))
+    [ "$_age" -le "$DAILY_MAX_AGE_S" ] || { _daily_why="daily-run-stale:$((_age / 3600))h"; return 1; }
+    git merge-base --is-ancestor "${_g#* }" "$1" 2>/dev/null || { _daily_why="daily-run-not-on-$TRUNK"; return 1; }
+    _daily_proof="$_g"
+}
+# gate_env_for <base sha> — exports what the gate's class selector reads, and
+# sets _daily_note. With no proof the marker points at a file that does not
+# exist, so the selector reads "never" and skips nothing (fail closed).
+gate_env_for() {
+    local _p
+    if daily_proof "$1"; then
+        _p="$_daily_proof"
+        printf '%s\n' "${_p%% *}" > "$_RUNDIR/daily-full-marker"
+        export TILLANDSIAS_CLASS_BASE="${_p#* }" TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/daily-full-marker"
+        _daily_note="against daily proof ${_p#* }"
+    else
+        rm -f "$_RUNDIR/no-daily-proof"
+        unset TILLANDSIAS_CLASS_BASE
+        export TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"
+        _daily_note="full: $_daily_why"
+    fi
+}
+# not_run_line <gate log> — the land's not-run: line, naming every skipped step.
+not_run_line() {
+    local _sk
+    _sk="$(grep -o 'skip:class-selector:[^ ]*' "$1" 2>/dev/null | sed 's/^skip:class-selector://' | LC_ALL=C sort -u | tr '\n' ' ')"
+    if [ -n "$_sk" ]; then
+        printf '  not-run: %s(class-selector skip, %s)\n' "$_sk" "$_daily_note"
+    else
+        printf '  not-run: nothing — tier=full runs the whole gate (%s)\n' "${_daily_note:-full}"
+    fi
+}
+# --daily-full: gate the trunk tip with the selector OFF and publish the result.
+if [ "$DAILY_FULL" -eq 1 ]; then
+    git fetch -q "$REMOTE" "$TRUNK" || { say "could-not-run:host:daily-full:fetch-failed"; exit 3; }
+    _dsha="$(git rev-parse "$REMOTE/$TRUNK")"
+    git checkout -q --detach "$_dsha" || { say "could-not-run:host:daily-full:checkout-failed"; exit 3; }
+    rm -f "$_RUNDIR/no-daily-proof"
+    ( _gate_clean_env; export TILLANDSIAS_CLASS_SELECTOR=off TILLANDSIAS_FULL_GATE_MARKER="$_RUNDIR/no-daily-proof"; eval "$GATE" ) \
+        < /dev/null > "$_RUNDIR/daily-full-gate.log" 2>&1
+    _drc=$?
+    _dns="$DAILY_NS"; [ "$_drc" -eq 0 ] || _dns="$DAILY_RED_NS"
+    _dref="$_dns/$(date -u +%s)"
+    if [ "$DRY_RUN" -eq 1 ]; then
+        say "dry-run: would publish $_dref -> ${_dsha:0:9} (gate rc=$_drc)"
+    elif ! git push -q "$REMOTE" "$_dsha:$_dref" 2>/dev/null; then
+        say "could-not-run:host:daily-full:push-failed:$_dref (gate rc=$_drc; log $_RUNDIR/daily-full-gate.log)"
+        exit 3
+    fi
+    if [ "$_drc" -eq 0 ]; then
+        say "ok:land-queue:daily-full:${_dsha:0:9}:$_dref — land gates may skip unchanged steps against it for ${DAILY_MAX_AGE_S}s"
+        exit 0
+    fi
+    say "red:land-queue:daily-full:${_dsha:0:9}:rc=$_drc:$_dref — scoped lands freeze back to full until a green daily run (log $_RUNDIR/daily-full-gate.log)"
+    exit 1
+fi
+
 read_queue() { # <first>
     local _qjson _qrc _qlen _all _prio _hold _drafts n h
     _qjson="$(mktemp)"
@@ -524,6 +627,155 @@ next_candidate() {
     done <<< "$_p2"
     return 1
 }
+# ── ORDER 2153-trn1: THE BATCH TRAIN — ONE GATE, ONE MERGE COMMIT ─────────────
+# Operator ruling 2026-11-20 (trains gate the union tree once) and the
+# build-speed ruling 2026-11-21. Up to BATCH_K ready full-lane candidates are
+# merged onto the trunk in queue order (a member that conflicts with the union
+# so far is left out, for the one-at-a-time loop). The union passes the SAME
+# doors the loop asks per candidate, asked ONCE of the union: freeze, carried
+# obligations (--landing over base..union reads every member's commits), native
+# lint, host door, plan refresh, preflight. Each is at least as strict on the
+# union as on any member, since any member's violation reds it.
+#
+# GREEN: the union's tree lands as ONE commit whose first parent is the trunk
+# and whose other parents are the member heads, so every first-parent commit on
+# the trunk is a tree that gated (and GitHub marks each member merged).
+# RED, or any door refusing: the train is ABANDONED and nobody is evicted by
+# it; the members go through the one-at-a-time loop below, whose own gates
+# attribute the red. That fallback is the honest simple form of the design's
+# halving bisect: it costs one gate per member after a red train, never an
+# innocent eviction. A per-train line goes to TRAIN_LOG so the flake rate can be
+# measured before K is widened (coordinator 2026-11-20).
+# BATCH_K < 2 (the default until the coordinator sets it: 4 for full trains)
+# leaves the queue exactly as it was.
+BATCH_K="${TILLANDSIAS_LAND_QUEUE_BATCH_K:-1}"
+TRAIN_LOG="${TILLANDSIAS_LAND_QUEUE_TRAIN_LOG:-$_LOGROOT/trains.log}"
+train_log() { # <members> <base> <union> <result> <gate_s>
+    mkdir -p "$(dirname "$TRAIN_LOG")" 2>/dev/null
+    printf '%s members=%s base=%s union=%s result=%s gate_s=%s\n' \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "${2:0:9}" "${3:0:9}" "$4" "$5" >> "$TRAIN_LOG" 2>/dev/null || true
+}
+try_batch() {
+    [ "$BATCH_K" -ge 2 ] 2>/dev/null || return 0
+    [ "$DRY_RUN" -eq 1 ] && return 0
+    local base union n h hs lm mb pre ids="" carried="" out err rc key t0 gs c now
+    local -a nums=() heads=() parents=()
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null || return 0
+    base="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)" || return 0
+    git checkout -q --detach "$base" 2>/dev/null || return 0
+    while IFS=$'\t' read -r n h; do
+        [ -n "$n" ] || continue
+        [ "${#nums[@]}" -lt "$BATCH_K" ] || break
+        [[ "$h" =~ $WORK_RE ]] || continue
+        git fetch -q "$REMOTE" "$h" 2>/dev/null || continue
+        hs="$(git rev-parse FETCH_HEAD)"
+        lm="$(last_eviction "$n")"
+        if [ -n "$lm" ] && [ "$(marker_field "$lm" head)" = "$hs" ]; then continue; fi
+        mb="$(git merge-base "$base" "$hs" 2>/dev/null)" || continue
+        if [ "$PLAN_ONLY_LANE" = 1 ] && delta_plan_only "$mb" "$hs"; then continue; fi  # the plan lane is already cheap
+        pre="$(git rev-parse HEAD)"
+        if git -c user.name=land-queue -c user.email=land-queue@localhost \
+                merge --no-ff -q --no-edit -m "train: #$n $h" "$hs" >/dev/null 2>&1; then
+            nums+=("$n"); heads+=("$hs"); ids="$ids#$n,"
+        else
+            git merge --abort >/dev/null 2>&1 || true
+            git reset -q --hard "$pre"
+        fi
+    done <<< "$_cands"
+    ids="${ids%,}"
+    if [ "${#nums[@]}" -lt 2 ]; then git checkout -q --detach "$base" 2>/dev/null; return 0; fi
+    union="$(git rev-parse HEAD)"
+    say "train: ${#nums[@]} members $ids base=${base:0:9} union=${union:0:9}"
+    abandon() { say "train:abandoned:$1 — members $ids go one at a time"; train_log "$ids" "$base" "$union" "abandoned:$1" -; git checkout -q --detach "$base" 2>/dev/null; }
+    # freeze
+    if [ -n "$(freeze_held_paths "$base" "$union" | head -n 1)" ]; then
+        out="$(freeze_markers "$REMOTE" "$TRUNK")" || { abandon freeze-unknown; return 0; }
+        [ -z "$out" ] || { abandon frozen; return 0; }
+    fi
+    # carried obligations over every member's commits
+    if [ -f methodology/convergence.yaml ]; then
+        out="$(mktemp "${TMPDIR:-/tmp}/land-queue-train-carried.XXXXXX")"; err="$(mktemp "${TMPDIR:-/tmp}/land-queue-train-carried.XXXXXX")"
+        env TILLANDSIAS_REPO_ROOT="$ROOT" TILLANDSIAS_CARRIED_BASE="$base" TILLANDSIAS_CARRIED_HEAD="$union" \
+            "$PLAN" script run "$_SELF_DIR/lua/check-carried-obligations.lua" -- --landing \
+            < /dev/null > "$out" 2> "$err"; rc=$?
+        carried="$(sed -n 's/^carried:\([^:]*\):\([^:]*\):\{0,1\}\(.*\)$/Carried: \1 \2 \3/p' "$out" | sed 's/ *$//')"
+        rm -f "$out" "$err"
+        [ "$rc" -eq 0 ] || { abandon "carried-rc-$rc"; return 0; }
+    fi
+    # native lint (a recorded unlinted debt is a per-member decision: abandon)
+    if [ -f "$_SELF_DIR/check-native-lint-attested.sh" ]; then
+        out="$(env -u TILLANDSIAS_NATIVE_LINT_UNATTESTED -u TILLANDSIAS_NATIVE_LINT_BASE \
+            bash "$_SELF_DIR/check-native-lint-attested.sh" --base "$base" < /dev/null 2>/dev/null)"; rc=$?
+        [ "$rc" -eq 0 ] || { abandon "native-lint-rc-$rc"; return 0; }
+        case "$out" in *override:native-lint:*) abandon native-lint-debt; return 0 ;; esac
+    fi
+    # host door
+    if [ -n "$HOST_DOOR" ]; then
+        if [ -n "$SIDECAR_STAGE" ]; then ( eval "$SIDECAR_STAGE" ) < /dev/null > "$_RUNDIR/train-sidecar.log" 2>&1 || true; fi
+        out="$( ( eval "$HOST_DOOR" ) < /dev/null 2>/dev/null | grep -m 1 -E '^(ok:host-door|could-not-run:host:)' )"
+        case "$out" in ok:host-door*) ;; *) abandon "host-door:${out:-no-answer}"; return 0 ;; esac
+    fi
+    # plan refresh (same dep-info key as the loop, 2152-lqrf)
+    if [ -n "$PLAN_REFRESH" ]; then
+        key="$(plan_refresh_key)" || key=""
+        if [ -n "$key" ] && [ "$key" = "$(cat "$PLAN_REFRESH_STAMP" 2>/dev/null)" ]; then
+            say "plan-refresh:skipped:inputs-unchanged:train:${key:0:12}"
+        else
+            ( eval "$PLAN_REFRESH" ) < /dev/null > "$_RUNDIR/train-plan-refresh.log" 2>&1 || { abandon plan-refresh-failed; return 0; }
+            if key="$(plan_refresh_key)"; then
+                mkdir -p "$(dirname "$PLAN_REFRESH_STAMP")" 2>/dev/null
+                printf '%s\n' "$key" > "$PLAN_REFRESH_STAMP" 2>/dev/null || true
+            fi
+        fi
+    fi
+    if [ -n "$PREFLIGHT" ]; then
+        ( _gate_clean_env; eval "$PREFLIGHT" ) < /dev/null > "$_RUNDIR/train-preflight.log" 2>&1 || { abandon preflight-red; return 0; }
+    fi
+    # THE ONE GATE
+    t0=$SECONDS
+    gate_env_for "$base"
+    ( _gate_clean_env; eval "$GATE" ) < /dev/null > "$_RUNDIR/train-gate.log" 2>&1; rc=$?
+    gs=$((SECONDS - t0))
+    if [ "$rc" -ne 0 ]; then
+        say "train:red:rc=$rc — nobody is evicted by a train; members $ids go one at a time (log: $_RUNDIR/train-gate.log)"
+        train_log "$ids" "$base" "$union" "red:rc=$rc" "$gs"
+        git checkout -q --detach "$base" 2>/dev/null
+        return 0
+    fi
+    # The tree that ships is the tree that gated: re-read the trunk.
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
+    now="$(git rev-parse "$REMOTE/$TRUNK" 2>/dev/null)"
+    if [ "$now" != "$base" ]; then
+        say "train:target-moved:gated-on=${base:0:9} now=${now:0:9} — nothing pushed; members $ids go one at a time"
+        train_log "$ids" "$base" "$union" "green:target-moved" "$gs"
+        return 0
+    fi
+    parents=(-p "$base")
+    for hs in "${heads[@]}"; do parents+=(-p "$hs"); done
+    c="$(printf 'land-train(%s): %d members into %s, one gate on the union\n\n%s\n' "$ids" "${#nums[@]}" "$TRUNK" "$carried" \
+        | GIT_AUTHOR_NAME=land-queue GIT_AUTHOR_EMAIL=land-queue@localhost \
+          GIT_COMMITTER_NAME=land-queue GIT_COMMITTER_EMAIL=land-queue@localhost \
+          git commit-tree "$union^{tree}" "${parents[@]}")" || { abandon commit-tree-failed; return 0; }
+    git push -q "$REMOTE" "$c:refs/heads/$TRUNK" >/dev/null 2>&1
+    git fetch -q "$REMOTE" "$TRUNK" 2>/dev/null
+    if ! git merge-base --is-ancestor "$c" "$REMOTE/$TRUNK" 2>/dev/null; then
+        say "train:push-did-not-land — nothing landed; members $ids go one at a time"
+        train_log "$ids" "$base" "$union" "green:push-did-not-land" "$gs"
+        git checkout -q --detach "$base" 2>/dev/null
+        return 0
+    fi
+    train_log "$ids" "$base" "$union" "landed:${c:0:9}" "$gs"
+    local i=0
+    for n in "${nums[@]}"; do
+        say "land:$n tier=full gate=green train=${c:0:9} base=${base:0:9} head=${heads[$i]:0:9}"
+        not_run_line "$_RUNDIR/train-gate.log"
+        landed=$((landed + 1)); _seen="$_seen$n "; i=$((i + 1))
+    done
+    git checkout -q --detach "$c" 2>/dev/null
+    return 0
+}
+try_batch
+
 for _pass in 1 2; do
 if [ "$_pass" -eq 2 ]; then
     [ -n "$_deferred" ] || break
@@ -866,7 +1118,7 @@ $_nlwhy
     # the full gate, which decides as it always did.
     if [ -n "$PREFLIGHT" ] && [ "$_lane" = full ]; then
         _plog="$_RUNDIR/pr-$num-preflight.log"
-        ( eval "$PREFLIGHT" ) < /dev/null > "$_plog" 2>&1
+        ( _gate_clean_env; eval "$PREFLIGHT" ) < /dev/null > "$_plog" 2>&1
         _prc_pf=$?
         if [ "$_prc_pf" -eq 1 ] && ! grep -q 'refused:preflight:stale-plan-binary' "$_plog"; then
             say "evict:land-queue:$num:preflight-failed:rc=1 — full log kept at $_plog"
@@ -884,10 +1136,13 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
     _glog="$_RUNDIR/pr-$num-gate.log"
     # No pipeline: a `$GATE | tee` would hand us tee's status, which is the
     # 859-4jny bug one layer over.
+    # 2174-dail: the class selector may skip unchanged steps only against a daily proof.
+    gate_env_for "$base_sha"
     _gcmd="$GATE"
     [ "$_lane" = plan-only ] && _gcmd="$PLAN_LANE_CHECK"
-    ( eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
+    ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog" 2>&1
     _grc=$?
+    grep -o 'skip:class-selector:[^ ]*' "$_glog" > "$_RUNDIR/pr-$num-skips" 2>/dev/null || : > "$_RUNDIR/pr-$num-skips"  # 2174-dail: the gate log is removed on a green land
     # ── ORDER 2143-z5uj: A RED IN A TEST THE CANDIDATE DID NOT TOUCH IS RE-RUN
     # ONCE, ON THE IDENTICAL TREE, BEFORE IT EVICTS ANYONE. Measured 2026-11-20:
     # eight evictions in one day were one SIGPIPE flake class in fixtures the
@@ -915,7 +1170,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
             if [ "$_touched" -eq 0 ]; then
                 _flaky_test="$(head -n 1 <<<"$_ftests")"
                 say "land-queue: #$num red in $_flaky_test, which its diff does not touch — re-running the gate once on the identical tree"
-                ( eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
+                ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.rerun" 2>&1
                 _grc=$?
                 if [ "$_grc" -eq 0 ]; then
                     say "flaky:$_flaky_test — #$num red then green on the identical tree ${merge_sha:0:9}; landing"
@@ -932,7 +1187,7 @@ Full preflight log kept on the landing host at \`$_plog\`.$(evict_marker "$num" 
                             _tr_verdict="${_memo#* }"
                         else
                             git checkout -q --detach "$base_sha" 2>/dev/null
-                            ( eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
+                            ( _gate_clean_env; eval "$_gcmd" ) < /dev/null > "$_glog.trunk" 2>&1
                             _trc=$?
                             git checkout -q --detach "$merge_sha" 2>/dev/null
                             _tr_verdict="green"
@@ -1081,7 +1336,7 @@ Full gate log kept on the landing host at \`$_glog\`.$(evict_marker "$num" "$hea
     done
     if [ "$_landed_ok" -eq 1 ]; then
         say "land:$num tier=full gate=green base=${base_sha:0:9} head=${head_sha:0:9} merge=${merge_sha:0:9}"
-        say "  not-run: nothing — tier=full runs the whole gate"
+        not_run_line "$_RUNDIR/pr-$num-skips"
         landed=$((landed + 1))
         continue
     fi
