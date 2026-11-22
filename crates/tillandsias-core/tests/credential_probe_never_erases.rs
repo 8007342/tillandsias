@@ -157,7 +157,10 @@ fn the_guards_refused_probe_leaves_the_store_byte_identical() {
         "stderr={}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!out.status.success(), "a plaintext store must exit non-zero");
+    assert!(
+        !out.status.success(),
+        "a plaintext store must exit non-zero"
+    );
     assert_eq!(
         before, after,
         "the guard's probe changed the credential store"
