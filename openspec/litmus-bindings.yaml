@@ -171,6 +171,7 @@ specs:
   litmus_tests:
   - litmus:archive-answerability-tree-copy
   - litmus:local-ci-strict-specs
+  - litmus:local-ci-check-catalog
   - litmus:land-queue-host-door-names-its-cause
   - litmus:gate-step-declared-inputs-are-mutation-proven
   - litmus:release-is-one-cloud-build
